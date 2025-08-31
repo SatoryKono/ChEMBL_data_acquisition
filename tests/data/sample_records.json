@@ -1,0 +1,2 @@
+{"ids": {"pmid": "1"}, "publication_types": {"pubmed": ["Systematic Review"], "crossref": ["journal-article"]}, "mesh_terms": {"pubmed": {"descriptors": ["systematic reviews as topic"], "qualifiers": []}}}
+{"ids": {"pmid": "2"}, "publication_types": {"pubmed": ["Clinical Trial"], "openalex": ["review"]}, "mesh_terms": {"pubmed": {"descriptors": ["double-blind method", "treatment outcome"], "qualifiers": ["methods"]}}}
