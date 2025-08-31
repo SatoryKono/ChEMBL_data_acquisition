@@ -20,16 +20,24 @@ pip install black ruff mypy
 ## Usage
 
 ```bash
-python classify.py --input /mnt/data/all_documents.csv --output out.csv --log logs.jsonl
+python classify_documents.py \
+  --input-all all_documents.csv \
+  --input-mesh experimental_mesh.csv \
+  --output result.csv
 ```
 
 ### Command line options
 
-- `--input` – path to the source CSV/TSV file.
-- `--output` – destination CSV with classification results.
-- `--log` – optional JSONL log file with detailed decision traces.
-- `--chunk-size` – number of rows to process at once (default 1000).
-- `--threshold` – decision margin threshold (default 1.0).
+- `--input-all` – path to the `all_documents.csv` file.
+- `--input-mesh` – path to `experimental_mesh.csv` with term probabilities.
+- `--output` – destination path for results (CSV or Parquet).
+- `--delta` – MeSH score difference required for a confident decision (default 0.5).
+- `--k-min` – minimum number of MeSH terms for refinement (default 3).
+- `--sep-list` – separators for list-like fields (default `|;,/`).
+- `--unknown-mode` – output `unknown` when MeSH signal is weak.
+- `--prefer-pubmed-epsilon` – optional extra weight when only PubMed votes review.
+- `--chunksize` – read input in chunks of this size.
+- `--output-format` – `csv` (default) or `parquet`.
 - `--log-level` – logging verbosity (default INFO).
 
 ## Testing
@@ -50,8 +58,14 @@ mypy .
 
 ## Algorithm Notes
 
-The classifier normalises text to lower case, replaces known synonyms and
-extracts signals indicating review or non-review nature. Each source and
-signal type has configurable weights. Scores are aggregated and compared
-with a configurable threshold. Details for each processed record can be
-logged in JSONL format for full traceability.
+1. Publication types from PubMed, OpenAlex and Google Scholar are
+   normalised and mapped to canonical labels. If at least two sources
+   mark the record as a review, the final label is ``review``; if none do,
+   it is ``non-review``.
+2. Records with exactly one review vote or missing data are refined using
+   MeSH terms. Experimental probabilities for each term are summed to
+   produce scores for experimental vs review articles. A difference above
+   ``delta`` determines the label; otherwise the record defaults to
+   ``non-review`` or ``unknown`` depending on the CLI flags.
+3. The output contains provenance columns with individual source votes,
+   MeSH terms used and top contributing terms.
