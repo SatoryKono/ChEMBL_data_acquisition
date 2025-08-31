@@ -474,13 +474,23 @@ def run_all(args: argparse.Namespace) -> int:
         uniprot_df = pd.read_csv(
             uniprot_out, sep=args.sep, encoding=args.encoding, dtype=str
         )
-        if args.uniprot_column != "uniprot_id":
-            uniprot_df[args.uniprot_column] = uniprot_df["uniprot_id"]
+        # The uids list holds the original identifiers used to query UniProt,
+        # and uniprot_df contains the corresponding results in the same order.
+        # We add the original IDs to uniprot_df to allow merging with chembl_df.
+        uniprot_df["original_id"] = uids
+
+        # To avoid column name collisions during the merge, we drop 'uniprot_id'
+        # from chembl_df and rely on the canonical 'uniprot_id' from uniprot_df.
+        chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
 
         # Prepare combined input for IUPHAR containing ChEMBL and UniProt data
-        combined_df = chembl_df.merge(
-            uniprot_df, on=args.uniprot_column, how="left"
-        )
+        combined_df = pd.merge(
+            chembl_for_merge,
+            uniprot_df,
+            left_on=args.uniprot_column,
+            right_on="original_id",
+            how="left",
+        ).drop(columns=["original_id"])
         
         # Consolidate synonym and EC number information for classification
         combined_df["synonyms"] = combined_df.apply(
