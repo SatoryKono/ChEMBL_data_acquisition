@@ -479,8 +479,26 @@ def run_all(args: argparse.Namespace) -> int:
 
         # Prepare combined input for IUPHAR containing ChEMBL and UniProt data
         combined_df = chembl_df.merge(
-            uniprot_df, on=args.uniprot_column, how="left"
+            uniprot_df,
+            on=args.uniprot_column,
+            how="left",
+            suffixes=("_chembl", ""),
         )
+        # Ensure a single 'uniprot_id' column is present after the merge. When
+        # ``args.uniprot_column`` is not ``"uniprot_id"`` both input frames may
+        # contribute a column with that name, resulting in suffixed variants
+        # such as ``uniprot_id_chembl``.  IUPHAR processing requires a unified
+        # ``uniprot_id`` column, so we coalesce any duplicated columns here.
+        if "uniprot_id" not in combined_df.columns:
+            uid_cols = [c for c in combined_df.columns if c.startswith("uniprot_id")]
+            if not uid_cols:
+                raise ValueError("Merged data frame lacks 'uniprot_id' column")
+            combined_df["uniprot_id"] = combined_df[uid_cols[0]]
+        if "uniprot_id_chembl" in combined_df.columns:
+            combined_df["uniprot_id"] = combined_df["uniprot_id"].fillna(
+                combined_df["uniprot_id_chembl"]
+            )
+            combined_df.drop(columns=["uniprot_id_chembl"], inplace=True)
         
         # Consolidate synonym and EC number information for classification
         combined_df["synonyms"] = combined_df.apply(
