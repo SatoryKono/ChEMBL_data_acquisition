@@ -1,0 +1,4 @@
+record_id,doi,pmid,pmcid,openalex_id,pubmed_publication_types,crossref_type,openalex_type,scholar_type,pubmed_mesh_descriptors,pubmed_mesh_qualifiers,openalex_mesh_descriptors,openalex_mesh_qualifiers,title,abstract,year,venue
+1,10.1000/1,123,,OA1,Meta-Analysis,,,,review literature as topic,,,,Example meta analysis,Abstract,2020,Journal A
+2,10.1000/2,124,,OA2,Randomized Controlled Trial,,,,animals,,animal,,Trial study,Abstract,2021,Journal B
+3,10.1000/3,125,,OA3,,,,,,,,,No signals,Abstract,2022,Journal C
