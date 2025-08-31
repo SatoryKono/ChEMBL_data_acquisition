@@ -83,7 +83,19 @@ def get_cid_from_smiles(smiles: str) -> Optional[str]:
 
 
 def get_cid_from_inchi(inchi: str) -> Optional[str]:
-    """Retrieve PubChem CID(s) for an InChI string."""
+    """Retrieve PubChem CID(s) for an InChI string.
+
+    Parameters
+    ----------
+    inchi:
+        InChI representation of a compound.
+
+    Returns
+    -------
+    str or None
+        Pipe-separated list of CIDs or ``None`` if the structure is
+        unknown to PubChem.
+    """
 
     safe_inchi = url_encode(inchi)
     url = (

@@ -38,10 +38,14 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 import logging
+import time
+
 import pandas as pd
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from .mapper_library import map_chembl_to_uniprot
 
 # Configure module level logger
 logger = logging.getLogger(__name__)
@@ -70,6 +74,7 @@ TARGET_FIELDS = [
     "relationship",
     "gene",
     "uniprot_id",
+    "mapping_uniprot_id",
     "chembl_alternative_name",
     "ec_code",
     "hgnc_name",
@@ -103,21 +108,37 @@ def _parse_alt_names(synonyms: list[dict[str, str]]) -> str:
     return "|".join(sorted(names))
 
 
-def _parse_uniprot_id(xrefs: list[dict[str, str]]) -> str:
-    """Extract a UniProt accession from a list of cross references.
+def _parse_uniprot_id(xrefs: list[dict[str, str]], chembl_id: str) -> tuple[str, str]:
+    """Return UniProt IDs from cross references and mapping.
 
-    The ChEMBL API may label UniProt references with slightly different
-    source database names; the check therefore normalises the label to
-    upper case and matches common variants.
+    Parameters
+    ----------
+    xrefs:
+        Cross references returned by the ChEMBL API.
+    chembl_id:
+        ChEMBL target identifier used for UniProt mapping.
+
+    Returns
+    -------
+    tuple[str, str]
+        A pair ``(uniprot_id, mapping_uniprot_id)``.
     """
 
+    uniprot_id = ""
     for x in xrefs:
         src = (x.get("xref_src_db") or "").upper()
         if src in {"UNIPROT", "UNIPROT ACCESSION", "UNIPROT ACC", "UNIPROTKB"}:
             ident = x.get("xref_id", "")
             if ident:
-                return ident
-    return ""
+                uniprot_id = ident
+                break
+    try:
+        mapping_uniprot_id = map_chembl_to_uniprot(chembl_id)
+    except Exception as exc:  # pragma: no cover - network failure paths
+        logger.warning("UniProt mapping request failed for %s: %s", chembl_id, exc)
+        mapping_uniprot_id = ""
+    return uniprot_id, mapping_uniprot_id
+
 
 
 def _parse_hgnc(xrefs: list[dict[str, str]]) -> tuple[str, str]:
@@ -183,7 +204,9 @@ def _parse_target_record(data: dict[str, Any]) -> dict[str, Any]:
     gene = _parse_gene_synonyms(synonyms)
     ec_code = _parse_ec_codes(synonyms)
     alt_name = _parse_alt_names(synonyms)
-    uniprot_id = _parse_uniprot_id(xrefs)
+    uniprot_id, mapping_uniprot_id = _parse_uniprot_id(
+        xrefs, data.get("target_chembl_id", "")
+    )
     hgnc_name, hgnc_id = _parse_hgnc(xrefs)
 
     return {
@@ -194,6 +217,7 @@ def _parse_target_record(data: dict[str, Any]) -> dict[str, Any]:
         "relationship": comp.get("relationship", ""),
         "gene": gene,
         "uniprot_id": uniprot_id,
+        "mapping_uniprot_id": mapping_uniprot_id,
         "chembl_alternative_name": alt_name,
         "ec_code": ec_code,
         "hgnc_name": hgnc_name,
@@ -213,8 +237,10 @@ def get_target(chembl_target_id: str) -> dict[str, Any]:
     -------
     dict
         A dictionary containing information about the target, including
-        a ``uniprot_id`` when a UniProt cross reference is present. If the
-        request fails an empty dictionary with pre-defined keys is returned.
+        both a ``uniprot_id`` parsed from cross references and a
+        ``mapping_uniprot_id`` obtained via the UniProt ID mapping service.
+        If the request fails an empty dictionary with pre-defined keys is
+        returned.
     """
     if chembl_target_id in {"", "#N/A"}:
         return dict(EMPTY_TARGET)
@@ -475,17 +501,29 @@ ACTIVITY_COLUMNS = [
     "assay_chembl_id",
     "document_chembl_id",
     "molecule_chembl_id",
+    "record_id",
+    "assay_description",
+    "bao_label",
+    "bao_format",
     "standard_type",
     "standard_value",
     "standard_units",
     "standard_relation",
+    "type",
+    "value",
+    "units",
+    "relation"
+    "qudt_units"
     "pchembl_value",
     "activity_comment",
     "data_validity_comment",
+    "data_validity_description"
     "potential_duplicate",
     "bao_label",
     "src_id",
     "src_assay_id",
+    "assay_variant_accession",
+    "assay_variant_mutation",  
 ]
 
 
