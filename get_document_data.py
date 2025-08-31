@@ -282,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chembl.add_argument("output_csv", type=Path, help="Destination CSV file")
     chembl.add_argument(
-        "--column", default="chembl_id", help="Column name containing identifiers"
+        "--column", default="document_chembl_id", help="Column name containing identifiers"
     )
     chembl.add_argument("--sep", default=",", help="CSV delimiter")
     chembl.add_argument("--encoding", default="utf8", help="File encoding")
@@ -297,7 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     all_cmd.add_argument("output_csv", type=Path, help="Destination CSV file")
     all_cmd.add_argument(
-        "--column", default="chembl_id", help="Column in the input CSV"
+        "--column", default="document_chembl_id", help="Column in the input CSV"
     )
     all_cmd.add_argument("--sep", default=",", help="CSV delimiter")
     all_cmd.add_argument("--encoding", default="utf8", help="File encoding")

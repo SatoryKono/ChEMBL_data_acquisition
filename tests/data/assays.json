@@ -1,0 +1,9 @@
+{
+  "assays": [
+    {
+      "assay_chembl_id": "CHEMBL123",
+      "assay_type": "B",
+      "description": "dummy assay"
+    }
+  ]
+}

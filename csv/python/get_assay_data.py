@@ -87,7 +87,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    df = cl.get_assays_all(ids, chunk_size=args.chunk_size)
+    df = cl.get_assays(ids, chunk_size=args.chunk_size)
     try:
         df.to_csv(args.output_csv, index=False, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), args.output_csv)
