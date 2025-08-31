@@ -18,7 +18,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, type=Path, help="Path to input CSV/TSV file")
     parser.add_argument("--output-dir", required=True, type=Path, help="Directory to store artifacts")
     parser.add_argument("--sep", default=",", help="Field separator of the input file")
-    parser.add_argument("--encoding", default="utf-8", help="File encoding")
+    parser.add_argument(
+        "--encoding",
+        default=None,
+        help="File encoding (auto-detected if omitted)",
+    )
     parser.add_argument("--batch-size", type=int, default=1000, help="Number of rows per batch")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     return parser.parse_args()

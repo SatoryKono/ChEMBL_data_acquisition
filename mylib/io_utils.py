@@ -6,9 +6,11 @@ Parquet files in batches.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
+import chardet
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -55,8 +57,35 @@ class ParquetBatchWriter:
             self._writer = None
 
 
-def read_input(path: Path, sep: str, encoding: str) -> pd.DataFrame:
-    """Read the input CSV/TSV file into a DataFrame.
+def _detect_encoding(path: Path) -> str:
+    """Detect the encoding of ``path`` using :mod:`chardet`.
+
+    Parameters
+    ----------
+    path:
+        File to analyse.
+
+    Returns
+    -------
+    str
+        Detected encoding or ``"utf-8"`` as a fallback.
+    """
+
+    with path.open("rb") as fh:
+        raw = fh.read(100_000)
+    result = chardet.detect(raw)
+    encoding = result.get("encoding") or "utf-8"
+    logging.debug(
+        "Detected encoding %s for %s (confidence %.2f)",
+        encoding,
+        path,
+        result.get("confidence", 0.0),
+    )
+    return encoding
+
+
+def read_input(path: Path, sep: str, encoding: Optional[str] = None) -> pd.DataFrame:
+    """Read the input CSV/TSV file into a :class:`~pandas.DataFrame`.
 
     Parameters
     ----------
@@ -65,12 +94,25 @@ def read_input(path: Path, sep: str, encoding: str) -> pd.DataFrame:
     sep:
         Field separator.
     encoding:
-        File encoding.
+        File encoding. If ``None`` the encoding is auto-detected.
 
     Returns
     -------
     pd.DataFrame
         Loaded data with all columns as strings.
+
+    Raises
+    ------
+    ValueError
+        If the file cannot be decoded with the detected/specified encoding.
     """
 
-    return pd.read_csv(path, sep=sep, encoding=encoding, dtype=str).fillna("")
+    if encoding is None:
+        encoding = _detect_encoding(path)
+    try:
+        return pd.read_csv(path, sep=sep, encoding=encoding, dtype=str).fillna("")
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"Could not decode {path} with encoding {encoding}. "
+            "Pass a valid encoding via --encoding."
+        ) from exc
