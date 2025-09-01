@@ -13,6 +13,7 @@ import pandas as pd
 from library import chembl_library as cl
 from library import iuphar_library as ii
 from library import uniprot_library as uu
+from library import target_postprocessing as tp
 
 logger = logging.getLogger(__name__)
 
@@ -545,6 +546,9 @@ def run_all(args: argparse.Namespace) -> int:
         iuphar_df = iuphar_df[["uniprot_id", *classification_cols]]
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+
+        # Apply final normalisation and column ordering
+        merged = tp.postprocess_targets(merged)
 
         merged.to_csv(
             args.output_csv, index=False, sep=args.sep, encoding=args.encoding

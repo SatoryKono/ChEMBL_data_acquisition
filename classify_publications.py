@@ -13,8 +13,8 @@ from typing import Sequence
 
 import pandas as pd
 
-from doc_classifier.classifier import compute_scores, decide_label
-from doc_classifier.terms import parse_terms
+from library.doc_classifier.classifier import compute_scores, decide_label
+from library.doc_classifier.terms import parse_terms
 
 REQUIRED_COLUMNS = [
     "title",
