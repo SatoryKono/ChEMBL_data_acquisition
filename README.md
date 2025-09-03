@@ -1,9 +1,9 @@
 # ChEMBL data acquisition
 
 Utilities for working with ChEMBL related documents. This repository now
-includes a document classifier that assigns records to `review`,
-`non-review` or `unknown` categories based on PublicationType and MeSH
-information from multiple sources.
+includes a publication classifier that assigns records to `review`,
+`experimental` or `unknown` categories based on publication type metadata from
+multiple sources.
 
 ## Installation
 
@@ -20,25 +20,24 @@ pip install black ruff mypy
 ## Usage
 
 ```bash
-python classify_documents.py \
-  --input-all all_documents.csv \
-  --input-mesh experimental_mesh.csv \
-  --output result.csv
+
+python classify_publications.py --input all_documents.csv --output out.csv
+
 ```
 
 ### Command line options
 
-- `--input-all` – path to the `all_documents.csv` file.
-- `--input-mesh` – path to `experimental_mesh.csv` with term probabilities.
-- `--output` – destination path for results (CSV or Parquet).
-- `--delta` – MeSH score difference required for a confident decision (default 0.5).
-- `--k-min` – minimum number of MeSH terms for refinement (default 3).
-- `--sep-list` – separators for list-like fields (default `|;,/`).
-- `--unknown-mode` – output `unknown` when MeSH signal is weak.
-- `--prefer-pubmed-epsilon` – optional extra weight when only PubMed votes review.
-- `--chunksize` – read input in chunks of this size.
-- `--output-format` – `csv` (default) or `parquet`.
-- `--log-level` – logging verbosity (default INFO).
+
+- `--input` – path to the source CSV file.
+- `--output` – destination CSV with classification results.
+- `--min-review-score` – minimum score for the `review` class (default 1).
+- `--min-unknown-score` – minimum score for the `unknown` class (default 2).
+- `--min-experimental-score` – minimum score for the `experimental` class (default 1).
+- `--encoding-fallbacks` – comma separated list of encodings to try (default `utf-8-sig,cp1251,latin1`).
+- `--delimiters` – delimiters to try when reading the input (default `,;|\t`).
+- `--log-level` – logging verbosity (default `INFO`).
+
+The script prints class distribution to stdout and logs diagnostics to stderr.
 
 ## Testing
 
@@ -58,14 +57,11 @@ mypy .
 
 ## Algorithm Notes
 
-1. Publication types from PubMed, OpenAlex and Google Scholar are
-   normalised and mapped to canonical labels. If at least two sources
-   mark the record as a review, the final label is ``review``; if none do,
-   it is ``non-review``.
-2. Records with exactly one review vote or missing data are refined using
-   MeSH terms. Experimental probabilities for each term are summed to
-   produce scores for experimental vs review articles. A difference above
-   ``delta`` determines the label; otherwise the record defaults to
-   ``non-review`` or ``unknown`` depending on the CLI flags.
-3. The output contains provenance columns with individual source votes,
-   MeSH terms used and top contributing terms.
+
+Publication type fields from PubMed, Google Scholar and OpenAlex are
+normalised: text is lower‑cased, split on common delimiters and mapped to
+canonical forms (e.g. “mini review” → “review”). Weighted signals from the three
+sources are accumulated for `review`, `experimental` and `unknown` term sets. If
+`review` has the highest score it is selected. Otherwise `unknown` is chosen
+when its score is highest and ≥2, followed by `experimental` when its score is
+highest and ≥1. Records without signals fall back to `unknown`.
