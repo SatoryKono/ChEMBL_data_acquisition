@@ -1,9 +1,9 @@
 # ChEMBL data acquisition
 
 Utilities for working with ChEMBL related documents. This repository now
-includes a document classifier that assigns records to `review`,
-`non-review` or `unknown` categories based on PublicationType and MeSH
-information from multiple sources.
+includes a publication classifier that assigns records to `review`,
+`experimental` or `unknown` categories based on publication type metadata from
+multiple sources.
 
 ## Installation
 
@@ -20,17 +20,21 @@ pip install black ruff mypy
 ## Usage
 
 ```bash
-python classify.py --input /mnt/data/all_documents.csv --output out.csv --log logs.jsonl
+python classify_publications.py --input all_documents.csv --output out.csv
 ```
 
 ### Command line options
 
-- `--input` – path to the source CSV/TSV file.
+- `--input` – path to the source CSV file.
 - `--output` – destination CSV with classification results.
-- `--log` – optional JSONL log file with detailed decision traces.
-- `--chunk-size` – number of rows to process at once (default 1000).
-- `--threshold` – decision margin threshold (default 1.0).
-- `--log-level` – logging verbosity (default INFO).
+- `--min-review-score` – minimum score for the `review` class (default 1).
+- `--min-unknown-score` – minimum score for the `unknown` class (default 2).
+- `--min-experimental-score` – minimum score for the `experimental` class (default 1).
+- `--encoding-fallbacks` – comma separated list of encodings to try (default `utf-8-sig,cp1251,latin1`).
+- `--delimiters` – delimiters to try when reading the input (default `,;|\t`).
+- `--log-level` – logging verbosity (default `INFO`).
+
+The script prints class distribution to stdout and logs diagnostics to stderr.
 
 ## Testing
 
@@ -50,8 +54,10 @@ mypy .
 
 ## Algorithm Notes
 
-The classifier normalises text to lower case, replaces known synonyms and
-extracts signals indicating review or non-review nature. Each source and
-signal type has configurable weights. Scores are aggregated and compared
-with a configurable threshold. Details for each processed record can be
-logged in JSONL format for full traceability.
+Publication type fields from PubMed, Google Scholar and OpenAlex are
+normalised: text is lower‑cased, split on common delimiters and mapped to
+canonical forms (e.g. “mini review” → “review”). Weighted signals from the three
+sources are accumulated for `review`, `experimental` and `unknown` term sets. If
+`review` has the highest score it is selected. Otherwise `unknown` is chosen
+when its score is highest and ≥2, followed by `experimental` when its score is
+highest and ≥1. Records without signals fall back to `unknown`.
