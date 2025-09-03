@@ -20,10 +20,13 @@ pip install black ruff mypy
 ## Usage
 
 ```bash
+
 python classify_publications.py --input all_documents.csv --output out.csv
+
 ```
 
 ### Command line options
+
 
 - `--input` – path to the source CSV file.
 - `--output` – destination CSV with classification results.
@@ -53,6 +56,7 @@ mypy .
 ```
 
 ## Algorithm Notes
+
 
 Publication type fields from PubMed, Google Scholar and OpenAlex are
 normalised: text is lower‑cased, split on common delimiters and mapped to
