@@ -24,7 +24,6 @@ The input file must contain a ``PMID`` column.
 from __future__ import annotations
 
 import argparse
-import csv
 import logging
 from pathlib import Path
 from typing import Sequence
@@ -37,51 +36,9 @@ from library import chembl_library as cl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
+from library import io
 
 logger = logging.getLogger(__name__)
-
-
-def read_ids(
-    path: str | Path,
-    column: str = "document_chembl_id",
-    sep: str = ",",
-    encoding: str = "utf8",
-) -> list[str]:
-    """Read identifier values from a CSV file.
-
-    Parameters
-    ----------
-    path:
-        CSV file path.
-    column:
-        Name of the column containing identifiers.
-    sep:
-        Field delimiter used in the CSV file.
-    encoding:
-        File encoding of the CSV file.
-
-    Returns
-    -------
-    list[str]
-        Identifier values in the order they appear. Empty strings and ``"#N/A"``
-        entries are discarded.
-    """
-
-    try:
-        with Path(path).open("r", encoding=encoding, newline="") as fh:
-            reader = csv.DictReader(fh, delimiter=sep)
-            if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(f"column '{column}' not found in {path}")
-            ids: list[str] = []
-            for row in reader:
-                value = (row.get(column) or "").strip()
-                if value and value != "#N/A":
-                    ids.append(value)
-            return ids
-    except FileNotFoundError as exc:  # pragma: no cover - trivial
-        raise FileNotFoundError(f"input file not found: {path}") from exc
-    except csv.Error as exc:  # pragma: no cover - malformed CSV
-        raise ValueError(f"malformed CSV in file: {path}: {exc}") from exc
 
 
 def fetch_pubmed_records(
@@ -123,23 +80,25 @@ def fetch_pubmed_records(
             with requests.Session() as session:
                 pubmed_list = pl.fetch_pubmed_batch(session, batch, sleep)
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
-                
+
                 # Fetch Semantic Scholar data in a single batch
-                semsch_list = ssl.fetch_semantic_scholar_batch(session, pmids_in_batch, sleep)
-                
+                semsch_list = ssl.fetch_semantic_scholar_batch(
+                    session, pmids_in_batch, sleep
+                )
+
                 # Create a map for easy lookup
                 semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
-                
+
                 combined_records: list[dict[str, str]] = []
                 for pubmed in pubmed_list:
                     pmid = pubmed.get("PubMed.PMID", "")
                     semsch = semsch_map.get(pmid, {})
-                    
+
                     # Still fetching these individually for now
                     openalex = ocl.fetch_openalex(session, pmid, sleep)
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
                     crossref = ocl.fetch_crossref(session, doi, sleep)
-                    
+
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
                     combined.update(semsch)
@@ -165,9 +124,7 @@ def fetch_pubmed_records(
             records.extend(future.result())
             processed += batch_len
             percent = processed / total * 100
-            logger.info(
-                "Processed %d/%d documents (%.1f%%)", processed, total, percent
-            )
+            logger.info("Processed %d/%d documents (%.1f%%)", processed, total, percent)
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
@@ -177,10 +134,16 @@ def run_pubmed(args: argparse.Namespace) -> int:
     """Execute the ``pubmed`` sub-command."""
 
     try:
-        pmids = pl.read_pmids(args.input_csv)
+        pmids = io.read_ids(
+            args.input_csv,
+            column=args.column,
+            sep=args.sep,
+            encoding=args.encoding,
+        )
         df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
-        df.to_csv(args.output_csv, index=False)
-        logger.info("Wrote %d rows to %s", len(df), args.output_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv)
+        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        logger.info("Wrote %d rows to %s", len(df), output)
         return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
@@ -191,7 +154,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
 
     try:
-        ids = read_ids(
+        ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
         )
     except (FileNotFoundError, ValueError) as exc:
@@ -199,9 +162,10 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     df = cl.get_documents(ids, chunk_size=args.chunk_size)
+    output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        df.to_csv(args.output_csv, index=False)
-        logger.info("Wrote %d rows to %s", len(df), args.output_csv)
+        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        logger.info("Wrote %d rows to %s", len(df), output)
         return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -212,7 +176,7 @@ def run_all(args: argparse.Namespace) -> int:
     """Run ChEMBL and PubMed pipelines and merge their outputs."""
 
     try:
-        ids = read_ids(
+        ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
         )
     except (FileNotFoundError, ValueError) as exc:
@@ -220,10 +184,11 @@ def run_all(args: argparse.Namespace) -> int:
         return 1
 
     doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)
+    output = args.output_csv or io.default_output_path(args.input_csv)
     if doc_df.empty or "pubmed_id" not in doc_df:
         try:
-            doc_df.to_csv(args.output_csv, index=False)
-            logger.info("Wrote %d rows to %s", len(doc_df), args.output_csv)
+            io.write_csv(doc_df, output, sep=args.sep, encoding=args.encoding)
+            logger.info("Wrote %d rows to %s", len(doc_df), output)
             return 0
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
@@ -246,8 +211,8 @@ def run_all(args: argparse.Namespace) -> int:
     else:
         merged = doc_df
     try:
-        merged.to_csv(args.output_csv, index=False)
-        logger.info("Wrote %d rows to %s", len(merged), args.output_csv)
+        io.write_csv(merged, output, sep=args.sep, encoding=args.encoding)
+        logger.info("Wrote %d rows to %s", len(merged), output)
         return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -260,8 +225,25 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
-    pubmed.add_argument("input_csv", type=Path, help="CSV with a PMID column")
-    pubmed.add_argument("output_csv", type=Path, help="Destination CSV file")
+    pubmed.add_argument(
+        "--input",
+        dest="input_csv",
+        type=Path,
+        default=Path("input.csv"),
+        help="CSV with a PMID column",
+    )
+    pubmed.add_argument(
+        "--output",
+        dest="output_csv",
+        type=Path,
+        default=None,
+        help="Destination CSV file (default: auto-generate)",
+    )
+    pubmed.add_argument(
+        "--column", default="PMID", help="Column name containing identifiers"
+    )
+    pubmed.add_argument("--sep", default=",", help="CSV delimiter")
+    pubmed.add_argument("--encoding", default="utf8", help="File encoding")
     pubmed.add_argument(
         "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
     )
@@ -278,9 +260,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     chembl = sub.add_parser("chembl", help="Fetch document information from ChEMBL")
     chembl.add_argument(
-        "input_csv", type=Path, help="CSV with document_chembl_id column"
+        "--input",
+        dest="input_csv",
+        type=Path,
+        default=Path("input.csv"),
+        help="CSV with document_chembl_id column",
     )
-    chembl.add_argument("output_csv", type=Path, help="Destination CSV file")
+    chembl.add_argument(
+        "--output",
+        dest="output_csv",
+        type=Path,
+        default=None,
+        help="Destination CSV file (default: auto-generate)",
+    )
     chembl.add_argument(
         "--column", default="chembl_id", help="Column name containing identifiers"
     )
@@ -293,9 +285,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     all_cmd = sub.add_parser("all", help="Run both ChEMBL and PubMed pipelines")
     all_cmd.add_argument(
-        "input_csv", type=Path, help="CSV with document_chembl_id column"
+        "--input",
+        dest="input_csv",
+        type=Path,
+        default=Path("input.csv"),
+        help="CSV with document_chembl_id column",
     )
-    all_cmd.add_argument("output_csv", type=Path, help="Destination CSV file")
+    all_cmd.add_argument(
+        "--output",
+        dest="output_csv",
+        type=Path,
+        default=None,
+        help="Destination CSV file (default: auto-generate)",
+    )
     all_cmd.add_argument(
         "--column", default="chembl_id", help="Column in the input CSV"
     )

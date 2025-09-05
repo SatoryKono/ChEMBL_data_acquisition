@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import logging
 from pathlib import Path
 from typing import Sequence
@@ -12,56 +11,9 @@ import pandas as pd
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
+from library import io
 
 logger = logging.getLogger(__name__)
-
-
-def read_ids(
-    path: str | Path,
-    column: str = "molecule_chembl_id",
-    sep: str = ",",
-    encoding: str = "utf8",
-) -> list[str]:
-    """Read ChEMBL molecule identifiers from a CSV file.
-
-    Parameters
-    ----------
-    path : str or Path
-        Path to the CSV file.
-    column : str, optional
-        Name of the column containing molecule identifiers. Defaults to
-        ``"molecule_chembl_id"``.
-    sep : str, optional
-        Field delimiter, by default a comma.
-    encoding : str, optional
-        File encoding, by default ``"utf8"``.
-
-    Returns
-    -------
-    list[str]
-        Identifier values in the order they appear. Empty strings and
-        ``"#N/A"`` markers are discarded.
-
-    Raises
-    ------
-    ValueError
-        If ``column`` is not present in the input file.
-    """
-    try:
-        with Path(path).open("r", encoding=encoding, newline="") as fh:
-            reader = csv.DictReader(fh, delimiter=sep)
-            if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(f"column '{column}' not found in {path}")
-            ids: list[str] = []
-            for row in reader:
-                value = (row.get(column) or "").strip()
-                if value and value != "#N/A":
-                    ids.append(value)
-            return ids
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"input file not found: {path}") from exc
-    except csv.Error as exc:
-        raise ValueError(f"malformed CSV in file: {path}: {exc}") from exc
 
 
 def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -153,7 +105,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
     """
     try:
-        ids = read_ids(
+        ids = io.read_ids(
             args.input_csv,
             column=args.column,
             sep=args.sep,
@@ -170,9 +122,10 @@ def run_chembl(args: argparse.Namespace) -> int:
     logger.info("Augmenting results with PubChem data")
     df = add_pubchem_data(df)
     logger.info("PubChem augmentation completed")
+    output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        df.to_csv(args.output_csv, index=False, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), args.output_csv)
+        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        logger.info("Wrote %d rows to %s", len(df), output)
         return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -186,9 +139,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
-        "input_csv", type=Path, help="CSV file containing molecule identifiers"
+        "--input",
+        dest="input_csv",
+        type=Path,
+        default=Path("input.csv"),
+        help="CSV file containing molecule identifiers",
     )
-    parser.add_argument("output_csv", type=Path, help="Destination CSV file")
+    parser.add_argument(
+        "--output",
+        dest="output_csv",
+        type=Path,
+        default=None,
+        help="Destination CSV file (default: auto-generate)",
+    )
     parser.add_argument(
         "--column",
         default="molecule_chembl_id",

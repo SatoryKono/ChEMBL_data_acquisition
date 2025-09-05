@@ -13,8 +13,10 @@ import pandas as pd
 from library import chembl_library as cl
 from library import iuphar_library as ii
 from library import uniprot_library as uu
+from library import io
 
 logger = logging.getLogger(__name__)
+
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
     """Return a ``"|"``-joined string of unique, non-empty tokens.
@@ -46,51 +48,6 @@ def _first_token(value: str | None) -> str:
         return value.split("|")[0]
     return ""
 
-def read_ids(
-    path: str | Path,
-    column: str = "chembl_id",
-    sep: str = ",",
-    encoding: str = "utf8",
-) -> list[str]:
-    """Read identifier values from a CSV file.
-
-    Parameters
-    ----------
-    path : str or Path
-        Path to the CSV file.
-    column : str, optional
-        Name of the column containing identifiers. Defaults to ``"chembl_id"``.
-    sep : str, optional
-        Field delimiter, by default a comma.
-    encoding : str, optional
-        File encoding, by default ``"utf8"``.
-
-    Returns
-    -------
-    list of str
-        Identifier values in the order they appear. Empty strings and ``"#N/A"``
-        markers are discarded.
-
-    Raises
-    ------
-    ValueError
-        If ``column`` is not present in the input file.
-    """
-    try:
-        with Path(path).open("r", encoding=encoding, newline="") as fh:
-            reader = csv.DictReader(fh, delimiter=sep)
-            if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(f"column '{column}' not found in {path}")
-            ids: list[str] = []
-            for row in reader:
-                value = (row.get(column) or "").strip()
-                if value and value != "#N/A":
-                    ids.append(value)
-            return ids
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"input file not found: {path}") from exc
-    except csv.Error as exc:
-        raise ValueError(f"malformed CSV in file: {path}: {exc}") from exc
 
 def build_parser() -> argparse.ArgumentParser:
     """Create and return the top-level CLI argument parser.
@@ -117,14 +74,18 @@ def build_parser() -> argparse.ArgumentParser:
         "uniprot", help="Extract information for UniProt accessions"
     )
     uniprot.add_argument(
-        "input_csv",
+        "--input",
+        dest="input_csv",
         type=Path,
+        default=Path("input.csv"),
         help="CSV file containing a 'uniprot_id' column",
     )
     uniprot.add_argument(
-        "output_csv",
+        "--output",
+        dest="output_csv",
         type=Path,
-        help="Destination CSV file for the extracted information",
+        default=None,
+        help="Destination CSV file for the extracted information (default: auto-generate)",
     )
     uniprot.add_argument(
         "--column",
@@ -156,14 +117,18 @@ def build_parser() -> argparse.ArgumentParser:
         "chembl", help="Retrieve target information from ChEMBL"
     )
     chembl.add_argument(
-        "input_csv",
+        "--input",
+        dest="input_csv",
         type=Path,
+        default=Path("input.csv"),
         help="CSV file containing ChEMBL target identifiers",
     )
     chembl.add_argument(
-        "output_csv",
+        "--output",
+        dest="output_csv",
         type=Path,
-        help="Destination CSV file for target information",
+        default=None,
+        help="Destination CSV file for target information (default: auto-generate)",
     )
     chembl.add_argument(
         "--column",
@@ -185,14 +150,18 @@ def build_parser() -> argparse.ArgumentParser:
         "iuphar", help="Map UniProt accessions to IUPHAR classifications"
     )
     iuphar.add_argument(
-        "input_csv",
+        "--input",
+        dest="input_csv",
         type=Path,
+        default=Path("input.csv"),
         help="CSV file containing a 'uniprot_id' column",
     )
     iuphar.add_argument(
-        "output_csv",
+        "--output",
+        dest="output_csv",
         type=Path,
-        help="Destination CSV file for the mapping results",
+        default=None,
+        help="Destination CSV file for the mapping results (default: auto-generate)",
     )
     iuphar.add_argument(
         "--target-csv",
@@ -222,14 +191,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
     )
     all_cmd.add_argument(
-        "input_csv",
+        "--input",
+        dest="input_csv",
         type=Path,
+        default=Path("input.csv"),
         help="CSV with a 'chembl_id' column",
     )
     all_cmd.add_argument(
-        "output_csv",
+        "--output",
+        dest="output_csv",
         type=Path,
-        help="Destination CSV file for the merged table",
+        default=None,
+        help="Destination CSV file for the merged table (default: auto-generate)",
     )
     all_cmd.add_argument(
         "--chembl-out",
@@ -282,6 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     return parser
 
+
 def configure_logging(level: str) -> None:
     """Configure basic logging.
 
@@ -313,13 +287,14 @@ def run_uniprot(args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
     """
     try:
-        df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding, dtype=str)
+        df = pd.read_csv(
+            args.input_csv, sep=args.sep, encoding=args.encoding, dtype=str
+        )
         if args.column not in df.columns:
             raise ValueError(f"column '{args.column}' not found in {args.input_csv}")
         df = df.fillna("")
         df = df[
-            (df[args.column].str.strip() != "")
-            & (df[args.column] != "#N/A")
+            (df[args.column].str.strip() != "") & (df[args.column] != "#N/A")
         ].reset_index(drop=True)
         ids = df[args.column].tolist()
 
@@ -334,10 +309,11 @@ def run_uniprot(args: argparse.Namespace) -> int:
                 writer.writerow({"uniprot_id": uid})
             tmp_path = Path(tmp.name)
 
+        output = args.output_csv or io.default_output_path(args.input_csv)
         try:
             uu.process(
                 input_csv=str(tmp_path),
-                output_csv=str(args.output_csv),
+                output_csv=str(output),
                 data_dir=str(args.data_dir),
                 sep=args.sep,
                 encoding=args.encoding,
@@ -345,14 +321,10 @@ def run_uniprot(args: argparse.Namespace) -> int:
         finally:
             tmp_path.unlink(missing_ok=True)
 
-        out_df = pd.read_csv(
-            args.output_csv, sep=args.sep, encoding=args.encoding, dtype=str
-        )
+        out_df = pd.read_csv(output, sep=args.sep, encoding=args.encoding, dtype=str)
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
-        out_df.to_csv(
-            args.output_csv, index=False, sep=args.sep, encoding=args.encoding
-        )
+        io.write_csv(out_df, output, sep=args.sep, encoding=args.encoding)
         return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
@@ -363,7 +335,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
 
     try:
-        ids = read_ids(
+        ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
         )
     except (FileNotFoundError, ValueError) as exc:
@@ -371,8 +343,9 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     df = cl.get_targets(ids)
+    output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        df.to_csv(args.output_csv, index=False, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -388,9 +361,10 @@ def run_iuphar(args: argparse.Namespace) -> int:
             family_path=args.family_csv,
             encoding=args.encoding,
         )
+        output = args.output_csv or io.default_output_path(args.input_csv)
         data.map_uniprot_file(
             input_path=args.input_csv,
-            output_path=args.output_csv,
+            output_path=output,
             encoding=args.encoding,
             sep=args.sep,
         )
@@ -415,16 +389,10 @@ def run_all(args: argparse.Namespace) -> int:
     """
 
     try:
-        # Determine intermediate output paths
-        chembl_out = args.chembl_out or args.output_csv.with_name(
-            args.output_csv.stem + "_chembl.csv"
-        )
-        uniprot_out = args.uniprot_out or args.output_csv.with_name(
-            args.output_csv.stem + "_uniprot.csv"
-        )
-        iuphar_out = args.iuphar_out or args.output_csv.with_name(
-            args.output_csv.stem + "_iuphar.csv"
-        )
+        output = args.output_csv or io.default_output_path(args.input_csv)
+        chembl_out = args.chembl_out or output.with_name(output.stem + "_chembl.csv")
+        uniprot_out = args.uniprot_out or output.with_name(output.stem + "_uniprot.csv")
+        iuphar_out = args.iuphar_out or output.with_name(output.stem + "_iuphar.csv")
 
         # Run ChEMBL retrieval and capture results
         chembl_args = argparse.Namespace(
@@ -448,7 +416,9 @@ def run_all(args: argparse.Namespace) -> int:
         ]
         from tempfile import NamedTemporaryFile
 
-        with NamedTemporaryFile("w", delete=False, encoding=args.encoding, newline="") as tmp:
+        with NamedTemporaryFile(
+            "w", delete=False, encoding=args.encoding, newline=""
+        ) as tmp:
             writer = csv.DictWriter(tmp, fieldnames=["uniprot_id"], delimiter=args.sep)
             writer.writeheader()
             for uid in uids:
@@ -491,7 +461,7 @@ def run_all(args: argparse.Namespace) -> int:
             right_on="original_id",
             how="left",
         ).drop(columns=["original_id"])
-        
+
         # Consolidate synonym and EC number information for classification
         combined_df["synonyms"] = combined_df.apply(
             lambda r: _pipe_merge(
@@ -511,7 +481,9 @@ def run_all(args: argparse.Namespace) -> int:
             axis=1,
         )
         combined_df["gene_name"] = combined_df["gene"].apply(_first_token)
-        combined_df = combined_df.drop(columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore")
+        combined_df = combined_df.drop(
+            columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
+        )
 
         with NamedTemporaryFile(
             "w", delete=False, encoding=args.encoding, newline=""
@@ -546,9 +518,7 @@ def run_all(args: argparse.Namespace) -> int:
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
 
-        merged.to_csv(
-            args.output_csv, index=False, sep=args.sep, encoding=args.encoding
-        )
+        io.write_csv(merged, output, sep=args.sep, encoding=args.encoding)
         return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
