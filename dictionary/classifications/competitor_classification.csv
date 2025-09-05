@@ -1,0 +1,1723 @@
+CID, standart_name, ligand_name
+0000000043, 2-hydroxyglutarate, [3c]2-hydroxyglutarate
+0000000051, 2-oxoglutarate, 2-oxoglutarate
+0000000051, 2-oxoglutarate, alpha-ketoglutarate
+0000000051, 2-oxoglutarate, 2-oxoglutarate
+0000000051, 2-oxoglutarate, alpha-ketoglutarate
+0000000175, acetate, [14c]acetate
+0000000177, acetaldehyde, acetaldehyde
+0000000240, benzaldehyde, benzaldehyde
+0000000263, 1-butanol, 1-butanol
+0000000271, 45ca2+, [45]ca2+
+0000000271, 45ca2+, 45ca2+
+0000000273, diaminopentane, diaminopentane
+0000000280, carbon-dioxide, carbon-dioxide
+0000000289, catechol, catechol
+0000000305, choline, [3h]choline
+0000000378, p-nitrophenyl phosphate, p-nitrophenyl phosphate
+0000000378, p-nitrophenyl phosphate, 4-nitrophenyl phosphate
+0000000378, p-nitrophenyl phosphate, p-nitrophenylphosphate
+0000000378, p-nitrophenyl phosphate, para-nitrophenyl phosphate
+0000000378, p-nitrophenyl phosphate, pnnp
+0000000378, p-nitrophenyl phosphate, 4-nitrophenylphosphate
+0000000378, p-nitrophenyl phosphate, nitrophenylphosphate
+0000000527, propionaldehyde, propionaldehyde
+0000000647, dmapp, dmapp
+0000000648, dl-dihydroorotic acid, dl-dihydroorotic acid
+0000000648, dl-dihydroorotic acid, dihydroorotate
+0000000681, dopamine, dopamine
+0000000724, 3-pga, 3-phosphoglycerate
+0000000724, 3-pga, 3-pga
+0000000724, 3-pga, 3-pg
+0000000750, glycine, [3h]glycine
+0000000750, glycine, [14c]glycine
+0000000750, glycine, glycine
+0000000751, d,l-glyceraldehyde, glyceraldehyde
+0000000751, d,l-glyceraldehyde, d,l-glyceraldehyde
+0000000751, d,l-glyceraldehyde, dl-glyceraldehyde
+0000000753, glycerol, [3h]glycerol
+0000000753, glycerol, [3h]glycerol
+0000000753, glycerol, [14c]glycerol
+0000000753, glycerol, [14c]glycerol
+0000000769, bicarbonate, [14c]bicarbonate
+0000000774, histamine, histamine
+0000000774, histamine, histamine
+0000000774, histamine, [3h]histamine
+0000000774, histamine, [3h]histamine
+0000000778, dl-homocysteine, dl-homocysteine
+0000000846, kynurenine, kynurenine
+0000000880, methylglyoxal, methylglyoxal
+0000000892, myo-inositol, [3h]inositol
+0000000892, myo-inositol, [3h]inositol
+0000000892, myo-inositol, [3h]myo-inositol
+0000000892, myo-inositol, [3h]myo-inositol
+0000000896, melatonin, melatonin
+0000000896, melatonin, [3h]melatonin
+0000000896, melatonin, melatonin
+0000000896, melatonin, [3h]melatonin
+0000000910, n-formylkynurenine, n-formylkynurenine
+0000000938, nicotinic acid, nicotinic acid
+0000000938, nicotinic acid, [3h]nicotinic acid
+0000000938, nicotinic acid, [3h]niacin
+0000000938, nicotinic acid, [3h]-nicotinic acid
+0000000942, nicotine, [3h]nicotine
+0000000944, nitric acid, nitric acid
+0000000951, ne, [3h]ne
+0000000977, oxy, [125i]oxy
+0000000979, 4-hydroxyphenylpyruvic acid, hppa
+0000000979, 4-hydroxyphenylpyruvic acid, 4-hydroxyphenylpyruvic acid
+0000000979, 4-hydroxyphenylpyruvic acid, 4-hydroxyphenylpyruvic acid
+0000000979, 4-hydroxyphenylpyruvic acid, hppa
+0000000985, palmitate, palmitate
+0000000985, palmitate, [14c]palmitic acid
+0000000985, palmitate, [14c]palmitic acid
+0000000985, palmitate, palmitate
+0000000997, ppy, [125i]ppy
+0000000998, phenylacetaldehyde, [14c]phenylacetaldehyde
+0000001005, phosphoenolpyruvate, phosphoenolpyruvate
+0000001005, phosphoenolpyruvate, pep
+0000001005, phosphoenolpyruvate, pep
+0000001005, phosphoenolpyruvate, phosphoenolpyruvate
+0000001045, putrescine, putrescine
+0000001061, phosphate, phosphate
+0000001123, taurine, taurine
+0000001175, uric acid, [14c]uric acid
+0000001175, uric acid, urate
+0000001175, uric acid, [14c]urate
+0000001183, vanillin, vanillin
+0000001188, xanthine, xanthine
+0000001195, ipp, ipp
+0000001195, ipp, [14c]ipp
+0000001198, isocitrate, isocitrate
+0000001204, epibatidine, [3h]epibatidine
+0000001219, 7-oh-dpat, [3h]-7-oh-dpat
+0000001219, 7-oh-dpat, 7-oh-dpat
+0000001219, 7-oh-dpat, [3h]7-oh-dpat
+0000001220, 8ohdpat, dpat
+0000001220, 8ohdpat, [3h]8ohdpat
+0000001220, 8ohdpat, [3h]-8-oh-dpat
+0000001220, 8ohdpat, 8ohdpat
+0000001220, 8ohdpat, [3h]8-hydroxy-2-(di-n-propylamino)tetralin
+0000001220, 8ohdpat, 8-oh-dpat
+0000001220, 8ohdpat, [3h]dpat
+0000001228, cpp, [3h]cpp
+0000001242, skf 38393, skf38393
+0000001242, skf 38393, skf 38393
+0000001254, menthol, menthol
+0000001329, dpcpx, [125i]dpcpx
+0000001329, dpcpx, [3h]8-cyclopentyl-1,3-dipropylxanthine
+0000001329, dpcpx, dpcpx
+0000001345, pk11195, [3h]pk11195
+0000001345, pk11195, [3h]pk11195
+0000001345, pk11195, pk11195
+0000001345, pk11195, pk11195
+0000001388, 1-methyl-4-phenyl-1,2,3,6-tetrahydropyridine, 1-methyl-4-phenyl-1,2,3,6-tetrahydropyridine
+0000001464, hoechst 33342, hoechst 33342
+0000001517, gw 2433, [3h]gw2433
+0000001517, gw 2433, gw2433
+0000001517, gw 2433, [3h]gw 2433
+0000001598, 2-apb, 2-apb
+0000001688, ro5-4864, [3h]ro5-4864
+0000001688, ro5-4864, ro5-4864
+0000001688, ro5-4864, [3h]ro 5-4864
+0000001688, ro5-4864, [3h]ro-5-4864
+0000001734, 4-damp, [3h]4-damp
+0000002107, alpha-methylserotonin, alpha-methylserotonin
+0000002247, astemizole, [3h]astemizole
+0000002247, astemizole, astemizole
+0000002247, astemizole, [3h]astemizole
+0000002247, astemizole, astemizole
+0000002249, atenolol, atenolol
+0000002551, carbamoylcholine, carbamoylcholine
+0000002687, cgp12177, (-)cgp12177
+0000002687, cgp12177, [3h]cgp12177
+0000002687, cgp12177, [3h]cgp-12177
+0000002687, cgp12177, [3h]-cgp12177
+0000002755, cimaterol, cimaterol
+0000002756, cimetidine, [3h]cimetidine
+0000002756, cimetidine, [3h]cimetidine
+0000002756, cimetidine, cimetidine
+0000002756, cimetidine, cimetidine
+0000002771, citalopram, [3h]-citalopram
+0000002771, citalopram, [3h]citalopram
+0000002771, citalopram, [3h]citalopram
+0000002771, citalopram, [3h]-citalopram
+0000002803, clonidine, [3h]clonidine
+0000002803, clonidine, [125i]clonidine
+0000002803, clonidine, [125i]clonidine
+0000002803, clonidine, [3h]clonidine
+0000002971, decylubiquinone, decylubiquinone
+0000003077, dimaprit, dimaprit
+0000003104, (alpha,beta)me-atp, (alpha,beta)me-atp
+0000003151, domperidone, [3h]domperidone
+0000003290, ethopropazine, ethopropazine
+0000003294, 7-ethoxyresorufin, ethoxyresorufin
+0000003294, 7-ethoxyresorufin, 7-ethoxyresorufin
+0000003294, 7-ethoxyresorufin, ethoxyresorufin
+0000003294, 7-ethoxyresorufin, 7-ethoxyresorufin
+0000003341, fenoldopam, [3h]fenoldopam
+0000003373, ro15-1788, [3h]flumazenil
+0000003373, ro15-1788, [3h]flumazenil
+0000003373, ro15-1788, [3h]ro15-1788
+0000003373, ro15-1788, [3h]ro15-1788
+0000003380, flunitrazepam, [3h]flunitrazepam
+0000003446, gabapentin, [3h]gabapentin
+0000003456, gbr-12935, [3h]gbr-12935
+0000003510, granisetron, [3h]granisetron
+0000003559, haloperidol, [3h]haloperidol
+0000003614, n-methylhistamine, n-[3h]methylhistamine
+0000003689, ifenprodil, ifenprodil
+0000003689, ifenprodil, ifenprodil
+0000003689, ifenprodil, [3h]ifenprodil
+0000003689, ifenprodil, [3h]ifenprodil
+0000003692, imetit, imetit
+0000003696, imipramine, imipramine
+0000003696, imipramine, [3h]imipramin
+0000003696, imipramine, imipramine
+0000003696, imipramine, [3h]imipramin
+0000003779, isoproterenol, isoproterenol
+0000003822, ketanserin, [3h]ketanserin
+0000003822, ketanserin, [3h]-ketanserin
+0000003822, ketanserin, [3h]ketanserin
+0000003822, ketanserin, [3h]-ketanserin
+0000003822, ketanserin, ketanserin
+0000003822, ketanserin, [3h]ketanserine
+0000003822, ketanserin, [3h]ketanserine
+0000003822, ketanserin, ketanserin
+0000003922, lg-100268, lg-100268
+0000003970, ly278584, ly278584
+0000004020, mazindol, [3h]-mazindol
+0000004020, mazindol, [3h]-mazindol
+0000004020, mazindol, [3h]mazindol
+0000004020, mazindol, [3h]mazindol
+0000004055, menadione, menadione
+0000004081, mesulergine, [3h]mesulergine
+0000004106, methiothepin, methiothepin
+0000004192, midazolam, midazolam
+0000004212, mitoxantrone, mitoxantrone
+0000004380, clorgyline, clorgyline
+0000004397, apnea, [125i]apnea
+0000004485, nifedipine, nifedipine
+0000004500, nisoxetine, [125i]nisoxetine
+0000004515, no-711, no-711
+0000004629, oxo-m, [3h]oxotremorine-m
+0000004629, oxo-m, [3h]oxo-m
+0000004629, oxo-m, oxo-m
+0000004629, oxo-m, [3h]oxotremorine m
+0000004661, 4-nitrophenylacetate, 4-nitrophenylacetate
+0000004688, pargyline, pargyline
+0000004690, probe, probe
+0000004766, phenolred, phenolred
+0000004848, pirenzepine, pirenzepine
+0000004893, prazosin, [3h]-prazosin
+0000004893, prazosin, [3h]prazosin
+0000004893, prazosin, [3h]prazosine
+0000004893, prazosin, prazosin
+0000004916, procaterol, procaterol
+0000004976, protriptyline, protriptyline
+0000004992, pyrilamine, pyrilamine
+0000005018, sch-23390, [3h]-sch23390
+0000005018, sch-23390, [3h]sch-23390
+0000005018, sch-23390, [3h]sch-23390
+0000005018, sch-23390, [3h]-sch23390
+0000005022, r-pia, r-pia
+0000005022, r-pia, r-pia
+0000005022, r-pia, [3h]r-pia
+0000005022, r-pia, [3h]r-pia
+0000005202, 5-hydroxytryptamine, 5-hydroxy[3h]tryptamine
+0000005202, 5-hydroxytryptamine, [3h]5-hydroxytryptamine
+0000005202, 5-hydroxytryptamine, [3h]serotonin
+0000005202, 5-hydroxytryptamine, 5-ht
+0000005202, 5-hydroxytryptamine, serotonin
+0000005265, spiperone, [3h]-spiperone
+0000005265, spiperone, [3h]spiperone
+0000005265, spiperone, spiperone
+0000005265, spiperone, [3h]spiroperidol
+0000005265, spiperone, [3h]-spiroperidol
+0000005281, stearic acid, [14c]stearic acid
+0000005281, stearic acid, [14c]stearic acid
+0000005578, trimethoprim, trimethoprim
+0000005610, p-tyramine, tyramine
+0000005610, p-tyramine, p-tyramine
+0000005610, p-tyramine, p-tyramine
+0000005610, p-tyramine, tyramine
+0000005662, vesamicol, vesamicol
+0000005662, vesamicol, vesamicol
+0000005662, vesamicol, (-)-[3h]vesamicol
+0000005662, vesamicol, (-)-[3h]vesamicol
+0000005684, way-100635, [3h]way100635
+0000005684, way-100635, [3h]way-100635
+0000005684, way-100635, [3h]way100635
+0000005684, way-100635, [3h]way-100635
+0000005685, wb-4101, wb-4101
+0000005685, wb-4101, [3h]wb-4101
+0000005685, wb-4101, wb-4101
+0000005685, wb-4101, [3h]wb-4101
+0000005689, win55212-2, [3h]win55212-2
+0000005743, fluormone, dexamethasone
+0000005743, fluormone, [3h]-dexamethasone
+0000005743, fluormone, fluormone
+0000005743, fluormone, [3h]dexamethasone
+0000005744, cortic, cortic
+0000005754, 3h-cortisol, [3h]cortisol
+0000005754, 3h-cortisol, 3h-cortisol
+0000005754, 3h-cortisol, cortisol
+0000005756, estriol, estriol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [3h]17-beta-estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [2,4,6,7-3h]-e2
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [2,4,6,7-3h]-17beta-estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [3h]-estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [3h]e2
+0000005757, [2,4,6,7-3h]-17beta-estradiol, estrogen
+0000005757, [2,4,6,7-3h]-17beta-estradiol, 17-beta-estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, 17beta-estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, e2
+0000005757, [2,4,6,7-3h]-17beta-estradiol, beta-estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [3h]estradiol
+0000005757, [2,4,6,7-3h]-17beta-estradiol, [3h]17beta-estradiol
+0000005761, [n-methyl-3h]lsd, {RADIOLABEL} lsd
+0000005761, [n-methyl-3h]lsd, [3h]d-lysergic acid diethylamide
+0000005761, [n-methyl-3h]lsd, [3h]-lsd
+0000005761, [n-methyl-3h]lsd, [n-methyl-3h]lsd
+0000005789, thymidine, [3h]thymidine
+0000005789, thymidine, [14c]thymidine
+0000005789, thymidine, [3h]-thymidine
+0000005789, thymidine, thymidine
+0000005789, thymidine, dthd
+0000005793, glucose, glucose
+0000005793, glucose, d-glucose
+0000005793, glucose, d-glucose
+0000005793, glucose, glucose
+0000005816, epinephrine, epinephrine
+0000005818, histamine dihydrochloride, [3h]histamine dihydrochloride
+0000005831, carbachol, carbachol
+0000005839, aldosterone, [3h]-aldosterone
+0000005839, aldosterone, [3h]aldosterone
+0000005839, aldosterone, aldosterone
+0000005862, cysteine, cysteine
+0000005862, cysteine, l-cys
+0000005862, cysteine, cysteine
+0000005862, cysteine, l-cys
+0000005870, [2,4,6,7-3h]-e1, [3h]estrone
+0000005870, [2,4,6,7-3h]-e1, [2,4,6,7-3h]-estrone
+0000005870, [2,4,6,7-3h]-e1, [14c]estrone
+0000005870, [2,4,6,7-3h]-e1, estrone
+0000005870, [2,4,6,7-3h]-e1, [2,4,6,7-3h]-e1
+0000005884, nadph, nadph
+0000005886, nadp+, nadp+
+0000005886, nadp+, nadp+
+0000005961, glutamine, glutamine
+0000005961, glutamine, [3h]-glutamine
+0000005961, glutamine, glutamine
+0000005961, glutamine, [3h]-glutamine
+0000005971, allylisothiocyanate, allylisothiocyanate
+0000005971, allylisothiocyanate, aitc
+0000005971, allylisothiocyanate, allyl isothiocyanate
+0000005978, vincristine, vincristine
+0000005988, sucrose, sucrose
+0000005994, progesterone, progesterone
+0000005994, progesterone, [3h]progesterone
+0000005994, progesterone, [3h]progesterone
+0000005994, progesterone, progesterone
+0000005995, androgen, androgen
+0000005997, cholesterol, [3h]cholesterol
+0000006005, apomorphine, apomorphine
+0000006013, testosterone, [3h]testosterone
+0000006013, testosterone, testosterone
+0000006013, testosterone, testosterone
+0000006013, testosterone, [3h]testosterone
+0000006022, adp, adp
+0000006022, adp, [33p]adp
+0000006029, uridine, [3h]uridine
+0000006047, l-dihydroxyphenylalanine, l-dopa
+0000006047, l-dihydroxyphenylalanine, l-dihydroxyphenylalanine
+0000006047, l-dihydroxyphenylalanine, l-dopa
+0000006047, l-dihydroxyphenylalanine, dopa
+0000006047, l-dihydroxyphenylalanine, dopa
+0000006047, l-dihydroxyphenylalanine, l-dihydroxyphenylalanine
+0000006057, tyrosine, tyrosine
+0000006057, tyrosine, l-tyrosine
+0000006057, tyrosine, l-tyrosin
+0000006060, acetylcholinechloride, acetylcholinechloride
+0000006060, acetylcholinechloride, ach chloride
+0000006060, acetylcholinechloride, acetylcholine chloride
+0000006083, [15n]5-amp, [14c]amp
+0000006083, [15n]5-amp, amp
+0000006083, [15n]5-amp, [15n]5-amp
+0000006083, [15n]5-amp, [3h]amp
+0000006106, leucine, [3h]leucine
+0000006106, leucine, leucine
+0000006106, leucine, [3h]leucine
+0000006106, leucine, leucine
+0000006128, androstenedione, androstenedione
+0000006128, androstenedione, [14c]androstenedione
+0000006128, androstenedione, 4-androstene-3,17-dione
+0000006128, androstenedione, [3h]androstenedione
+0000006133, utp, utp
+0000006133, utp, [3h]utp
+0000006166, 11-deoxycorticosterone, [4-14c]-11-deoxycorticosterone
+0000006166, 11-deoxycorticosterone, deoxycorticosterone
+0000006166, 11-deoxycorticosterone, 11-deoxycorticosterone
+0000006166, 11-deoxycorticosterone, [14c]deoxycorticosterone
+0000006167, colchicine, colchicine
+0000006209, choline chloride, choline chloride
+0000006224, sodium citrate, sodium citrate
+0000006280, veratridine, veratridine
+0000006305, tryptophan, trp
+0000006305, tryptophan, tryptophan
+0000006305, tryptophan, l-trp
+0000006305, tryptophan, l-tryptophan
+0000006322, l-arg, arg
+0000006322, l-arg, l-arg
+0000006322, l-arg, l-arginine
+0000006322, l-arg, [3h]l-arginine
+0000006675, taurocholate, [14c]taurocholate
+0000006675, taurocholate, taurocholate
+0000006675, taurocholate, [14c]taurocholate
+0000006675, taurocholate, taurocholate
+0000006694, rhodamine, rhodamine
+0000006717, lysergic acid, [3h]lysergic acid
+0000006763, 9,10-phenanthrenequinone, 9,10-phenanthrenequinone
+0000007047, quinoline, quinoline
+0000007333, di-o-tolylguanidine, [3h]di-o-tolylguanidine
+0000007333, di-o-tolylguanidine, [3h]-di-o-tolylguanidine
+0000007333, di-o-tolylguanidine, [3h]dtg
+0000007333, di-o-tolylguanidine, [3h]ditolylguanidine
+0000007475, para-nitroaniline, para-nitroaniline
+0000007475, para-nitroaniline, para-nitroaniline
+0000007475, para-nitroaniline, p-nitroaniline
+0000007475, para-nitroaniline, p-nitroaniline
+0000007504, abn, [125i]abn
+0000007504, abn, [125i]abn
+0000007504, abn, benzylamine
+0000007504, abn, benzylamine
+0000007847, acrolein, acrolein
+0000007965, cha, {RADIOLABEL} cha {
+0000007965, cha, [3h]cha
+0000007965, cha, {RADIOLABEL} cha {
+0000007965, cha, [3h]cha
+0000008347, acetylated, [3h]acetylated
+0000008594, -npa, [3h]-npa
+0000008955, pregnenolone, [3h]pregnenolone
+0000009060, d-trp, d-trp
+0000009060, d-trp, d-tryptophan
+0000009060, d-trp, d-tryptophan
+0000009060, d-trp, d-trp
+0000009207, phthalazine, phthalazine
+0000009500, 6-aminonicotinamide, 6-aminonicotinamide
+0000009692, kynuramine, kynuramine
+0000010252, salicyl, [3h]salicyl
+0000010255, kainic acid, kainate
+0000010255, kainic acid, [3h]kainic acid
+0000010255, kainic acid, kainic acid
+0000010371, pyridine-3-aldehyde, pyridine-3-aldehyde
+0000010635, dihydrotestosterone, [3h]dihydrotestosterone
+0000010635, dihydrotestosterone, 5-alpha-dihydrotestosterone
+0000010635, dihydrotestosterone, dihydrotestosterone
+0000010635, dihydrotestosterone, dht
+0000010635, dihydrotestosterone, [3h]dht
+0000011890, o-npa, o-nitrophenyl acetate
+0000011890, o-npa, o-npa
+0000011890, o-npa, o-nitrophenyl acetate
+0000011890, o-npa, o-npa
+0000013109, d(-)-norgestrel, d(-)-norgestrel
+0000013243, p-nitrophenyl acetate, 4-nitrophenyl acetate
+0000013243, p-nitrophenyl acetate, p-nitrophenyl acetate
+0000013243, p-nitrophenyl acetate, p-nitrophenyl acetate
+0000013243, p-nitrophenyl acetate, 4-nitrophenyl acetate
+0000013342, vinblastine, [3h]vinblastine
+0000013726, 2,6-dichloroindophenol, dcip
+0000013726, 2,6-dichloroindophenol, 2,6-dichloroindophenol
+0000013726, 2,6-dichloroindophenol, dcpip
+0000013726, 2,6-dichloroindophenol, 2,6-dichloroindophenol
+0000013726, 2,6-dichloroindophenol, dcip
+0000013726, 2,6-dichloroindophenol, dcpip
+0000013945, dcmp, [33p]dcmp
+0000014180, -nicotinamide mononucleotide, [14c]-nicotinamide mononucleotide
+0000014710, ethidiumbromide, ethidiumbromide
+0000014710, ethidiumbromide, ethidiumbromide
+0000014710, ethidiumbromide, etbr
+0000014710, ethidiumbromide, etbr
+0000015355, t1317, t1317
+0000016953, thioflavin t, thioflavin t
+0000016953, thioflavin t, thioflavin t
+0000016953, thioflavin t, thioflavin-t
+0000016953, thioflavin t, thioflavin-t
+0000017232, butyrylcholineiodide, butyrylcholineiodide
+0000017232, butyrylcholineiodide, butyrylcholineiodide
+0000017232, butyrylcholineiodide, butyrylcholine iodide
+0000017232, butyrylcholineiodide, butyrylcholine iodide
+0000017233, butyrylcholine, butyrylcholine
+0000020544, acetylthiocholine, acetylthiocholine
+0000020689, s-butyrylthiocholine, butyrylthiocholine
+0000020689, s-butyrylthiocholine, butyrylthiocholine
+0000020689, s-butyrylthiocholine, s-butyrylthiocholine
+0000020689, s-butyrylthiocholine, s-butyrylthiocholine
+0000022411, acetylthiocholine chloride, acetylthiocholine chloride
+0000022750, 1-acenaphthenol, 1-acenaphthenol
+0000023056, quinuclidinyl benzilate, [3h]quinuclidinylbenzilate
+0000023056, quinuclidinyl benzilate, [3h]quinuclidinyl benzilate
+0000023056, quinuclidinyl benzilate, bz
+0000023056, quinuclidinyl benzilate, [3h]qnb
+0000023700, udp-galnac, udp-galnac
+0000023971, bk, [ 3h]bk
+0000023971, bk, [ 3h]bk
+0000023971, bk, [3h]bk
+0000023971, bk, [3h]bk
+0000023974, ce, [3h]ce
+0000024417, s-methylcysteine, s-methylcysteine
+0000024417, s-methylcysteine, s-methylcysteine
+0000025669, cyp, [125i]cyp
+0000026644, diprenorphine, [3h]-diprenorphine
+0000030323, daunorubicin, daunomycin
+0000030323, daunorubicin, daunorubicin
+0000030323, daunorubicin, daunomycin
+0000030323, daunorubicin, daunorubicin
+0000030819, phosphotyrosine, phosphotyrosine
+0000031348, citrate, citrate
+0000031348, citrate, [14c]citrate
+0000031348, citrate, citrate
+0000031348, citrate, [14c]citrate
+0000031703, doxorubicin, adr
+0000031703, doxorubicin, doxorubicin
+0000031703, doxorubicin, doxorubicin
+0000031703, doxorubicin, adr
+0000032838, guanidinium, [14c]guanidinium
+0000033032, l-glutamate, glutamate
+0000033032, l-glutamate, l-glutamate
+0000033032, l-glutamate, [14c]glutamate
+0000033032, l-glutamate, [3h]glu
+0000033032, l-glutamate, glu
+0000033032, l-glutamate, l-glu
+0000034521, toloxatone, toloxatone
+0000034755, s-adenosylmethionine, [3h]sam
+0000034755, s-adenosylmethionine, s-adenosylmethionine
+0000034755, s-adenosylmethionine, [3h]s-adenosylmethionine
+0000034755, s-adenosylmethionine, sam
+0000034756, adomet, adomet
+0000034756, adomet, adomet
+0000034756, adomet, [3h]adomet
+0000034756, adomet, [3h]adomet
+0000034756, adomet, [3h]adomet
+0000034756, adomet, adomet
+0000036314, paclitaxel, paclitaxel
+0000036462, etoposide, etoposide
+0000036511, substance p, [3h]-substance p
+0000036511, substance p, substance p
+0000036511, substance p, [125i]substance p
+0000036511, substance p, [3h]substance p
+0000036709, r5020, r5020
+0000036709, r5020, r5020
+0000036709, r5020, [3h]r5020
+0000036709, r5020, [3h]r5020
+0000037461, (+)butaclamol, (+)butaclamol
+0000037463, 4-methylhistamine, 4-methylhistamine
+0000037851, thiocholine, thiocholine
+0000040539, quisqualate, quisqualate
+0000040539, quisqualate, l-quisqualic acid
+0000040539, quisqualate, [3h]quisqualate
+0000041206, tmb substrate, tmb
+0000041206, tmb substrate, tmb
+0000041206, tmb substrate, tmb substrate
+0000041206, tmb substrate, tmb substrate
+0000043216, -dihydroalprenolol, [3h]-dihydroalprenolol
+0000043216, -dihydroalprenolol, [3h]dihydroalprenolol
+0000043216, -dihydroalprenolol, [3h]dihydroalprenolol
+0000043216, -dihydroalprenolol, [3h]-dihydroalprenolol
+0000043815, paroxetine, paroxetine
+0000047811, pergolide, pergolide
+0000047936, forskolin, forskolin
+0000050225, buserelin, [125i]buserelin
+0000050225, buserelin, buserelin
+0000050225, buserelin, [125i]buserelin
+0000050225, buserelin, buserelin
+0000054562, quinpirole, quinpirole
+0000054562, quinpirole, [3h]quinpirole
+0000054562, quinpirole, [3h]quinpirole
+0000054562, quinpirole, quinpirole
+0000055245, ru486, ru-486
+0000055245, ru486, ru486
+0000055245, ru486, ru486
+0000055245, ru486, ru-486
+0000057363, finasteride, finasteride
+0000057537, n-0437, [3h]n-0437
+000005957 , (33p)gammaatp, (33p)gammaatp
+0000060648, tiagabine, [3h]tiagabine
+0000060700, topotecan, topotecan
+0000060809, xanomeline, xanomeline
+0000060837, cpt-11, cpt-11
+0000060870, darglitazone, darglitazone
+0000060870, darglitazone, [3h]darglitazone
+0000060870, darglitazone, darglitazone
+0000060870, darglitazone, [3h]darglitazone
+0000060961, adenosine, [u-14c]adenosine
+0000060961, adenosine, [3h]adenosine
+0000060961, adenosine, adenosine
+0000062065, dob, [3h]dob
+0000064727, lva, [125i]lva
+0000064947, methyl-alpha-d-glucopyranoside, [14c]alpha-methyl-d-glucopyranoside
+0000064947, methyl-alpha-d-glucopyranoside, [14c]methyl-alpha-d-glucopyranoside
+0000064947, methyl-alpha-d-glucopyranoside, methyl-alpha-d-glucopyranoside
+0000065028, oseltamivir, oseltamivir
+0000065047, fluoresceindiacetate, fluorescein diacetate
+0000065047, fluoresceindiacetate, fluoresceindiacetate
+0000065047, fluoresceindiacetate, fluorescein diacetate
+0000065047, fluoresceindiacetate, fluoresceindiacetate
+0000065062, methylthymidine, [3h]methylthymidine
+0000065094, 25-hydroxycholesterol, [3h]25-hydroxycholesterol
+0000065094, 25-hydroxycholesterol, [3h]25-hydroxycholesterol
+0000065094, 25-hydroxycholesterol, 25-hydroxycholesterol
+0000065094, 25-hydroxycholesterol, 25-hydroxycholesterol
+0000065191, sulforhodamineb, sulforhodamineb
+0000065191, sulforhodamineb, sulforhodamine b
+0000065191, sulforhodamineb, sulforhodamine b
+0000065191, sulforhodamineb, sulforhodamineb
+0000065246, fructose-1-phosphate, fructose-1-phosphate
+0000065384, glutamate/tyrosine ( 4:1 ) copolymer, glutamate/tyrosine ( 4:1 ) copolymer
+0000065533, glucose-1-phosphate, glucose-1-phosphate
+0000068618, iodocyanopindolol, [125i]iodocyanopindolol
+0000069507, fructose 6 phosphate, fructose 6-phosphate
+0000069507, fructose 6 phosphate, fructose 6 phosphate
+0000069507, fructose 6 phosphate, fructose 6-phosphate
+0000069507, fructose 6 phosphate, fructose 6 phosphate
+0000071077, d-serine, d-serine
+0000071080, d-alanine, d-alanine
+0000071183, methylscopolamine, [3h]methylscopolamine
+0000071183, methylscopolamine, [3h]nms
+0000071183, methylscopolamine, [3h]n-methylscopolamine
+0000071225, emopamil, emopamil
+0000071225, emopamil, [3h]emopamil
+0000071225, emopamil, [3h]emopamil
+0000071225, emopamil, emopamil
+0000071329, dofetilide, dofetilide
+0000074629, acetylthiocholineiodide, acetylthiocholine iodide
+0000074629, acetylthiocholineiodide, acetylthiocholineiodide
+0000074629, acetylthiocholineiodide, acetylthiocholineiodide
+0000074629, acetylthiocholineiodide, acetylthiocholine iodide
+0000074630, butyrylthiocholine iodide, s-butyrylthiocholine iodide
+0000074630, butyrylthiocholine iodide, s-butyrylthiocholine iodide
+0000074630, butyrylthiocholine iodide, butyrylthiocholine iodide
+0000074630, butyrylthiocholine iodide, butyrylthiocholine iodide
+0000075271, acetylcholine iodide, acetylcholine iodide
+0000075834, p-nitrophenylbutyrate, 4-nitrophenyl butyrate
+0000075834, p-nitrophenylbutyrate, p-nitrophenyl butyrate
+0000075834, p-nitrophenylbutyrate, p-nitrophenylbutyrate
+0000077718, h2dcfda, h2dcfda
+0000077949, p-npp, p-npp
+0000077949, p-npp, pnpp
+0000077999, rosiglitazone, rosiglitazone
+0000080282, cadaverine hydrochloride, cadaverine hydrochloride
+0000082146, targretin, [3h]targretin
+0000083887, d-aspartate, [3h]-d-aspartate
+0000083887, d-aspartate, [3h]-d-asp
+0000083887, d-aspartate, [3h]d-asp
+0000084843, 4-methylumbelliferyl sulfate, 4-methylumbelliferyl sulfate
+0000087330, 4-methylumbelliferyl alpha-d-glucopyranoside, 4-methylumbelliferyl alpha-d-glucopyranoside
+0000087583, 4-methylumbelliferyl heptanoate, 4-methylumbelliferyl heptanoate
+0000089594, nicotine, nicotine
+0000090220, pnp-glcnac, pnp-glcnac
+0000090540, fibrinogen, fibrinogen
+0000091451, 17alpha-hydroxypregnenolone, 17alpha-hydroxypregnenolone
+0000091451, 17alpha-hydroxypregnenolone, 17-alpha-hydroxypregnenolone
+0000091451, 17alpha-hydroxypregnenolone, 17-alpha-hydroxypregnenolone
+0000091451, 17alpha-hydroxypregnenolone, 17alpha-hydroxypregnenolone
+0000091557, alpha,beta-meatp, alpha,beta-meatp
+0000091557, alpha,beta-meatp, alphabeta-meatp
+0000091557, alpha,beta-meatp, alpha,beta-methylene-atp
+0000092236, nop, [3h]nop
+0000092249, 7-amino-4-methylcoumarin, 7-amino-4-methylcoumarin
+0000092249, 7-amino-4-methylcoumarin, amc
+0000092249, 7-amino-4-methylcoumarin, amc
+0000092249, 7-amino-4-methylcoumarin, 7-amino-4-methylcoumarin
+0000092926, 1-decanoyl-rac-glycerol, 1-decanoyl-rac-glycerol
+0000092934, d-luciferin, (4s)-4,5-dihydro-2-(6-hydroxybenzothiazolyl)-4-thiazolecarboxylic acid
+0000092934, d-luciferin, d-luciferin
+0000092934, d-luciferin, luciferin
+0000093205, {radiolabel}r-pia, (r)-pia
+0000093205, {radiolabel}r-pia, [3h]n6-(r)-phenylisopropyladenosine
+0000093205, {radiolabel}r-pia, {RADIOLABEL}r-pia
+0000093577, 4-methylumbelliferyl-beta-d-galactopyranoside, 4-methylumbelliferyl beta-d-galactopyranoside
+0000093577, 4-methylumbelliferyl-beta-d-galactopyranoside, 4-methylumbelliferyl-beta-d-galactopyranoside
+0000093577, 4-methylumbelliferyl-beta-d-galactopyranoside, 4-methylumbelliferyl beta-d-galactopyranoside
+0000093577, 4-methylumbelliferyl-beta-d-galactopyranoside, 4-methylumbelliferyl-beta-d-galactopyranoside
+0000094144, 5alpha-androstane, 5alpha-androstane
+0000094180, 2-hydroxyoctanoic acid, 2-hydroxyoctanoic acid
+0000094381, coumarin 7, coumarin 7
+0000094418, hippuryl-histidyl-leucine, hippuryl-l-histidyl-l-leucine
+0000094418, hippuryl-histidyl-leucine, hippuryl-histidyl-leucine
+0000094418, hippuryl-histidyl-leucine, hippuryl-l-histidyl-l-leucine
+0000094418, hippuryl-histidyl-leucine, hippuryl-histidyl-leucine
+0000094715, d-glucuronate, d-glucuronate
+0000095883, (2s,4r)-4-methylglutamic acid, (2s,4r)-4-methylglutamic acid
+0000095927, i-309, i-309
+0000100074, kemptide, leu-arg-arg-ala-ser-leu-gly
+0000100074, kemptide, leu-arg-arg-ala-ser-leu-gly
+0000100526, n-acetyldopamine, n-acetyldopamine
+0000102614, dpn, [3h]dpn
+0000104745, propionate, propionate
+0000104751, bapta, bapta
+0000104766, (1s,3r)-acpd, (1s,3r)-1-aminocyclopentane-1,3-dicarboxylic acid
+0000104766, (1s,3r)-acpd, (1s,3r)-acpd
+0000104766, (1s,3r)-acpd, (1s,3r)-1-aminocyclopentane-1,3-dicarboxylic acid
+0000104766, (1s,3r)-acpd, (1s,3r)-acpd
+0000104787, dpdpe, [3h]dpdpe
+0000104850, sr141716a, [3h]sr141716
+0000104850, sr141716a, [3h]sr-141716
+0000104850, sr141716a, [3h]sr-141716a
+0000104850, sr141716a, [3h]sr141716a
+0000104895, cp55,940, [3h]cp-55,940
+0000104895, cp55,940, cp-55940
+0000104895, cp55,940, cp55,940
+0000104895, cp55,940, [3h]cp55,940
+0000104895, cp55,940, cp55940
+0000104895, cp55,940, [3h]cp55940
+0000104974, sr48968, [3h]sr48968
+0000104981, propidiumiodide, propidiumiodide
+0000105056, win35428, [3h]win35428
+0000105056, win35428, [3h]-win35428
+0000105056, win35428, [3h]win-35428
+0000105091, fura-2am, fura-2am
+0000105104, u-69,593, [3h]u69,593
+0000105104, u-69,593, u-69,593
+0000105104, u-69,593, [3h]u-69593
+0000105104, u-69,593, [3h]u-69,593
+0000105104, u-69,593, u-69593
+0000105104, u-69,593, u69593
+0000105104, u-69,593, [3h]u69593
+0000105104, u-69,593, u69,593
+0000105104, u-69,593, [3h]-u69593
+0000107735, pyruvate, pyruvate
+0000107737, inositol phosphate, [3h]inositol phosphate
+0000107758, ins(1,3,4,5)p4, ins(1,3,4,5)p4
+0000107759, methoctramine, methoctramine
+0000107847, dslet, [3h]dslet
+0000108094, rx821002, [3h]rx821002
+0000108147, senktide, senktide
+0000108156, paf, [3h]paf
+0000108182, zacopride, [3h]zacopride
+0000108182, zacopride, [3h]zacopride
+0000108182, zacopride, zacopride
+0000108182, zacopride, zacopride
+0000108220, rti-55, [125i]rti-55
+0000108220, rti-55, rti-55
+0000108220, rti-55, [3h]rti-55
+0000108223, 2-deoxyglucose, 2-deoxyglucose
+0000114873, thromboxane, thromboxane
+0000115098, t(s)2, trypanothione
+0000115098, t(s)2, trypanothione
+0000115098, t(s)2, t(s)2
+0000115098, t(s)2, t(s)2
+0000115107, pd128907, pd128907
+0000115107, pd128907, [3h]pd128907
+0000115107, pd128907, [3h]-pd128907
+0000115107, pd128907, [3h]pd 128907
+0000115205, bzatp, bzatp
+0000115348, iodomelatonin, [125i]2-iodomelatonin
+0000115348, iodomelatonin, [125i]2-iodomelatonin
+0000115348, iodomelatonin, [125i]iodomelatonin
+0000115348, iodomelatonin, [125i]iodomelatonin
+0000119086, org 2058, org2058
+0000119086, org 2058, org2058
+0000119086, org 2058, org 2058
+0000119086, org 2058, org 2058
+0000119146, methylspiperone, [3h]n-methylspiperone
+0000119146, methylspiperone, [3h]methylspiperone
+0000119146, methylspiperone, [3h]methylspiperone
+0000119146, methylspiperone, [3h]n-methylspiperone
+0000119356, af-dx384, [3h]af-dx384
+0000119376, gr113808, [3h]gr113808
+0000119376, gr113808, [3h]gr113808
+0000119376, gr113808, [3h]gr-113808
+0000119376, gr113808, [3h]gr-113808
+0000119570, pramipexole, pramipexole
+0000121893, protoporphyrinogen ix, protoporphyrinogen ix
+0000121898, s-2444, s-2444
+0000121990, 2-methylthio-adp, 2-methylthio-adp
+0000121990, 2-methylthio-adp, 2-methylthio-adp
+0000121990, 2-methylthio-adp, 2-mesadp
+0000121990, 2-methylthio-adp, 2-mesadp
+0000122202, 4mu-nana, 4mu-nana
+0000122245, iodosulpride, [125i]iodosulpride
+0000122297, cmfda, cmfda
+0000123631, gefitinib, gefitinib
+0000123683, ib-meca, ib-meca
+0000123687, s-2302, s-2302
+0000123836, dihydrotetrabenazine, [3h]dihydrotetrabenazine
+0000123853, s-2238, s-2238
+0000123924, snc80, snc80
+0000124997, h-d-val-leu-lys-pna, h-d-val-leu-lys-pna
+0000125640, gly-pro-mca, gly-pro-mca
+0000125640, gly-pro-mca, gly-pro-amc
+0000125702, z-gly-pro-nh-mec, z-gly-pro-nh-mec
+0000125702, z-gly-pro-nh-mec, z-gly-pro-nh-mec
+0000125702, z-gly-pro-nh-mec, z-gly-pro-amc
+0000125702, z-gly-pro-nh-mec, z-gly-pro-amc
+0000126364, s-2366, s-2366
+0000126941, mtx, [3h]mtx
+0000127262, sch-23982, [125i]sch-23982
+0000128921, z-arg-arg-mca, z-arg-arg-mca
+0000130609, 1-methyl-4-(1-methylpyrrol-2-yl)-1,2,3,6-tetrahydropyridine, 1-methyl-4-(1-methylpyrrol-2-yl)-1,2,3,6-tetrahydropyridine
+0000130704, pam3csk4, pam3csk4
+0000130805, fgar, [14c]fgar
+0000131559, u-86170, [3h]u-86170
+0000132937, iodoproxyfan, [3h]iodoproxyfan
+0000132937, iodoproxyfan, [125i]iodoproxyfan
+0000132937, iodoproxyfan, [125i]iodoproxyfan
+0000132937, iodoproxyfan, [3h]iodoproxyfan
+0000146017, thio-paf, thio-paf
+0000148124, docetaxel, docetaxel
+0000156333, ym-09151-2, ym-09151
+0000156333, ym-09151-2, [3h]ym-09151
+0000156333, ym-09151-2, [3h]nemonapride
+0000156333, ym-09151-2, [3h]ym-09151-2
+0000156615, r-alpha-methylhistamine, [3h]r-alpha-methylhistamine
+0000156615, r-alpha-methylhistamine, [3h]ramh
+0000156615, r-alpha-methylhistamine, [3h](r)-alpha-methylhistamine
+0000160436, serotonin hydrochloride, serotonin hydrochloride
+0000161930, icilin, icilin
+0000162916, 1,2-didecanoyl-sn-glycerol, 1,2-didecanoyl-sn-glycerol
+0000163889, i-abopx, [125i]i-abopx
+0000164800, decanoyl-coa, [14c]decanoyl-coa
+0000164953, pnp-tmp, pnp-tmp
+0000167186, pheophorbide-a, pheophorbide-a
+0000167453, amplex red, amplex red
+0000167453, amplex red, adhp
+0000167453, amplex red, adhp
+0000167453, amplex red, amplex red
+0000167715, n-propylnorapomorphine, [3h]n-propylnorapomorphine
+0000169019, threitol, threitol
+0000171284, fluorogenic substrate, fluorogenic substrate
+0000171334, 4-methylumbelliferyl-alpha-l-fucopyranoside, 4-methylumbelliferyl-alpha-l-fucopyranoside
+0000171548, biotin, biotin
+0000171787, l-leucine-4-methyl-7-coumarinylamide, l-leucine-4-methyl-7-coumarinylamide
+0000175910, u-50,488h, u-50,488h
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [125i]zm241385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]zm-241385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]zm-241,385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]zm-241,385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]zm241385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]zm241385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]zm-241385
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [3h]4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol
+0000176407, 4-(2-[7-amino-2-(2-furyl)[1,2,4]triazolo[2,3-a][1,3,5]triazin-5-ylamino]ethyl)phenol, [125i]zm241385
+0000176408, sch-58261, [3h]sch58261
+0000176408, sch-58261, [3h]sch58261
+0000176408, sch-58261, [3h]sch-58261
+0000176408, sch-58261, [3h]sch-58261
+0000179394, l-ap4, l-ap4
+0000183789, tak-779, [3h]tak-779
+0000188803, n-acetylaspartylglutamate, naag
+0000188803, n-acetylaspartylglutamate, n-acetylaspartylglutamate
+0000188803, n-acetylaspartylglutamate, [3h]naag
+0000189711, mk912, [3h]mk912
+0000193401, cysteine/homocysteine, cysteine/homocysteine
+0000196428, arg-amc, arg-amc
+0000202478, (+)--3-ppp, (+)-[3h]-3-ppp
+0000213021, acetamiprid, [3h]acetamiprid
+0000213043, iclaprim, iclaprim
+0000213056, ly354740, [3h]ly354740
+0000219077, sr142801, [3h]sr142801
+0000219077, sr142801, [3h]osanetant
+0000219077, sr142801, [3h]osanetant
+0000219077, sr142801, [3h]sr142801
+0000222786, cortisone, [3h]-cortisone
+0000222786, cortisone, [3h]cortisone
+0000222786, cortisone, cortisone
+0000225710, methylcysteine, methylcysteine
+0000251636, mibolerone, [3h]mibolerone
+0000251636, mibolerone, [3h]mib
+0000251636, mibolerone, [3h]mibolerone
+0000251636, mibolerone, [3h]mib
+0000253193, pheophorbide a, pheophorbide a
+0000253193, pheophorbide a, pheophorbide a
+0000261000, r1881, [3h]r-1881
+0000261000, r1881, [3h]r1881
+0000261000, r1881, [3h]methyltrienolone
+0000261000, r1881, [3h]-r1881
+0000261000, r1881, r1881
+0000371436, dibenzylfluorescein, dibenzylfluorescein
+0000390986, calcein am, calcein am
+0000390986, calcein am, calcein-am
+0000390986, calcein am, calcein-am
+0000390986, calcein am, calcein am
+0000439155, adohcy, sah
+0000439155, adohcy, adohcy
+0000439155, adohcy, adohcy
+0000439155, adohcy, sah
+0000439176, methylthioadenosine, methylthioadenosine
+0000439186, maltose, maltose
+0000439193, isomaltose, isomaltose
+0000439199, fibrin, fibrin
+0000439201, bradykinin, bradykinin
+0000439201, bradykinin, [3h]-bradykinin
+0000439201, bradykinin, [3h]bradykinin
+0000439201, bradykinin, [3h]-bk
+0000439216, l-dihydroorotate, l-dihydroorotate
+0000439260, noradrenalin, [3h]noradrenaline
+0000439260, noradrenalin, norepinephrine
+0000439260, noradrenalin, [3h]noradrenalin
+0000439260, noradrenalin, noradrenaline
+0000439302, oxytocin, [3h]oxytocin
+0000439302, oxytocin, oxytocin
+0000439302, oxytocin, [3h]oxytocin
+0000439302, oxytocin, oxytocin
+0000439707, z-arg-arg-amc, z-arg-arg-amc
+0000439958, glucose-6-phosphate, glucose-6-phosphate
+0000440018, s-d-lactoylglutathione, s-d-lactoylglutathione
+0000440707, 11-deoxycortisol, 11-deoxycortisol
+0000441071, strychnine, [3h]strychnine
+0000441278, (-)-pentazocine, (-)-[3h]pentazocine
+0000441753, ryanodine, [3h]ryanodine
+0000442972, -cyclopamine, [3h]cyclopamine
+0000442972, -cyclopamine, [3h]-cyclopamine
+0000442972, -cyclopamine, [3h]cyclopamine
+0000442972, -cyclopamine, [3h]-cyclopamine
+0000443375, l-364718, [3h]l-364718
+0000443406, (-)-immazocine, [3h]bremazocine
+0000443406, (-)-immazocine, (-)-[3h]immazocine
+0000443406, (-)-immazocine, (-)-[3h]immazocine
+0000443406, (-)-immazocine, [3h]bremazocine
+0000443408, diprenorphine, [125i]diprenorphine
+0000443409, ethylketocyclazocine, [3h]ethylketocyclazocine
+0000444214, mdl, [3h]mdl
+0000444493, acetyl-coa, [3h]ac-coa
+0000444493, acetyl-coa, [3h]acetylcoa
+0000444493, acetyl-coa, acetyl-coa
+0000444493, acetyl-coa, acetyl coa
+0000444493, acetyl-coa, acetylcoa
+0000444493, acetyl-coa, [3h]acetyl-coa
+0000444899, [1-14c]arachidonic acid, [14c]arachidonic acid
+0000444899, [1-14c]arachidonic acid, arachidonic acid
+0000444899, [1-14c]arachidonic acid, [3h]arachidonic acid
+0000444899, [1-14c]arachidonic acid, [1-14c]arachidonic acid
+0000445127, hmg-coa, hmg-coa
+0000445127, hmg-coa, [14c]hmg-coa
+0000445127, hmg-coa, [14c]hmg-coa
+0000445127, hmg-coa, hmg-coa
+0000445354, retinol, retinol
+0000445354, retinol, [3h]retinol
+0000445354, retinol, [3h]retinol
+0000445354, retinol, retinol
+0000445639, oleic acid, [14c]oleate
+0000445639, oleic acid, [14c]oleic acid
+0000445794, adp-ribose, adp-ribose
+0000446220, cocaine, [3h]cocaine
+0000446378, thapsigargin, thapsigargin
+0000447333, imi, [3h]imi
+0000447862, nad+, [3h]nad+
+0000447912, t0901317, n-(4-(1,1,1,3,3,3-hexafluoro-2-hydroxypropan-2-yl)phenyl)-n-(2,2,2-trifluoroethyl)benzenesulfonamide
+0000447912, t0901317, [3h]to901317
+0000447912, t0901317, [3h]t0901317
+0000447912, t0901317, t0901317
+0000447912, t0901317, [3h]t-0901317
+0000449171, 9-cis-ra, 9-cis-ra
+0000449171, 9-cis-ra, [3h]9-cis-retinoic acid
+0000449171, 9-cis-ra, 9-cis-retinoic acid
+0000449171, 9-cis-ra, [3h]9-cis retinoic acid
+0000449459, 4-oht, [3h]4-oht
+0000449663, iodoproxyfan, [125i]-iodoproxyfan
+0000449744, be-2254, [125i]be-2254
+0000450825, [11c]pk11195, [11c]pk11195
+0000452544, 4alphapdd, 4alpha-pdd
+0000452544, 4alphapdd, 4alphapdd
+0000452544, 4alphapdd, 4alphapdd
+0000452544, 4alphapdd, 4alpha-pdd
+0000460602, lpc(16:0), lpc(16:0)
+0000472335, s2288, s2288
+0000493582, gly-arg-amc, gly-arg-amc
+0000493582, gly-arg-amc, h-gly-arg-amc
+0000493582, gly-arg-amc, gly-arg-amc
+0000493582, gly-arg-amc, h-gly-arg-amc
+0000515717, glu/tyr peptide, glu/tyr peptide
+0000517045, sodiumacetate, sodium acetate
+0000517045, sodiumacetate, sodium acetate
+0000517045, sodiumacetate, sodiumacetate
+0000517045, sodiumacetate, sodiumacetate
+0000637511, cinnamaldehyde, cinnamaldehyde
+0000637566, geraniol, geraniol
+0000638015, retinaldehyde, retinal
+0000638015, retinaldehyde, retinaldehyde
+0000638015, retinaldehyde, all-trans-retinal
+0000643606, rauwolscine, [3h]rauwolscine
+0000643960, pi(3,4)p2, pi(3,4)p2
+0000644066, malonyl-coa, malonyl coa
+0000644066, malonyl-coa, malonyl-coa
+0000644066, malonyl-coa, [14c]malonyl-coa
+0000644077, arginine vasopressin, [3h]arg8-vasopressin
+0000644077, arginine vasopressin, [3h]vasopressin
+0000644077, arginine vasopressin, [3h]arginine vasopressin
+0000644077, arginine vasopressin, [3h]arg-vasopressin
+0000644077, arginine vasopressin, arg-vasopressin
+0000644077, arginine vasopressin, avp
+0000644077, arginine vasopressin, arg8-vasopressin
+0000644102, pyrophosphate, [32p]pyrophosphate
+0000644109, palmitoyl-coa, palmitoyl-coa
+0000644208, [gamma-32p]-atp, [gamma-32p]-atp
+0000644209, etorphine, [3h]etorphine
+0000644212, 2iodomelatonin, 2[125i]iodomelatonin
+0000644212, 2iodomelatonin, 2 [125i]iodomelatonin
+0000644212, 2iodomelatonin, 2-[125i]iodomelatonin
+0000644273, (-)-ethylketazocine, ethylketazocine
+0000644273, (-)-ethylketazocine, ethylketazocine
+0000656400, pyrilamine, [3h]pyrilamine
+0000656400, pyrilamine, [3h]mepyramine
+0000656400, pyrilamine, [3h]pyrilamine
+0000656400, pyrilamine, [3h]mepyramine
+0000657181, leuprorelin, [125i]leuprorelin
+0000659840, (-)-vesamicol, (-)-[3h]vesamicol
+0000671690, mdl72222, mdl72222
+0000688566, (r)-qnb, [3h](r)-qnb
+0000907504, s2251, s2251
+0001377139, 2-chloro-n-(2,6-dimethylphenyl)-5-nitrobenzamide, 2-chloro-n-(2,6-dimethylphenyl)-5-nitrobenzamide
+0001548943, capsaicin, capsaicin
+0002723872, fructose, d-fructose
+0002723872, fructose, d-fructose
+0002723872, fructose, fructose
+0002723872, fructose, fructose
+0002724385, -digoxin, [3h]-digoxin
+0002726776, nibr51, nibr51
+0002733202, leu-amc, leu-amc
+0002733285, l-leucine-p-nitroanilide, l-leucine-p-nitroanilide
+0002733484, capsazepine, capsazepine
+0002733526, tamoxifen, tamoxifen
+0002733779, 4-methylumbelliferyl beta-d-glucopyranoside, 4-methylumbelliferyl-beta-d-glucopyranoside
+0002733779, 4-methylumbelliferyl beta-d-glucopyranoside, 4-methylumbelliferyl beta-d-glucopyranoside
+0002733779, 4-methylumbelliferyl beta-d-glucopyranoside, 4-methylumbelliferyl-beta-d-glucopyranoside
+0002733779, 4-methylumbelliferyl beta-d-glucopyranoside, 4-methylumbelliferyl beta-d-glucopyranoside
+0002733787, 4-methylumbelliferyl n-acetyl-beta-d-glucosaminide, 4-methylumbelliferyl n-acetyl-beta-d-glucosaminide
+0002733787, 4-methylumbelliferyl n-acetyl-beta-d-glucosaminide, 4-mu-glcnac
+0002733787, 4-methylumbelliferyl n-acetyl-beta-d-glucosaminide, 4-mu-glcnac
+0002733787, 4-methylumbelliferyl n-acetyl-beta-d-glucosaminide, 4-methylumbelliferyl n-acetyl-beta-d-glucosaminide
+0002733788, 4-methylumbelliferyl alpha-d-galactopyranoside, 4-methylumbelliferyl alpha-d-galactopyranoside
+0002762646, daf-fmda, daf-fmda
+0002786976, difmup, difmup
+0003015121, butyrylthiocholine chloride, s-butyrylthiocholine chloride
+0003015121, butyrylthiocholine chloride, butyrylthiocholine chloride
+0003015121, butyrylthiocholine chloride, s-butyrylthiocholinechloride
+0003025961, mpep, [3h]mpep
+0003025961, mpep, mpep
+0003025961, mpep, mpep
+0003025961, mpep, [3h]mpep
+0003033677, altanserine, [3h]altanserine
+0003033769, raclopride, [3h]-raclopride
+0003033769, raclopride, [3h]-raclopride
+0003033769, raclopride, [3h]raclopride
+0003033769, raclopride, [3h]raclopride
+0003033836, stearate, [14c]stearate
+0003035060, deltorphin, [3h]deltorphin
+0003036289, u50488, u50488
+0003036289, u50488, u50488
+0003036289, u50488, [3h]u50488
+0003036289, u50488, [3h]u50488
+0003036864, sch-23390, [3h]sch23390
+0003036864, sch-23390, [3h]sch 23390
+0003036864, sch-23390, sch-23390
+0003036864, sch-23390, sch23390
+0003080630, farnesylamine, farnesylamine
+0003086599, cgs21680, [3h]-cgs 21680
+0003086599, cgs21680, [3h]cgs21680
+0003086599, cgs21680, cgs-21680
+0003086599, cgs21680, cgs21680
+0003086599, cgs21680, [3h]-cgs21680
+0003291162, p-nitrophenyl-beta-d-glucuronide, p-nitrophenyl-beta-d-glucuronide
+0003392731, gw7647, gw7647
+0003693566, rs102221, rs102221
+0003943667, ala-amc, ala-amc
+0004060965, fluo-4am, fluo-4am
+0004297684, gly-pro-pna, gly-pro-pna
+0004433882, ms-d-hht-gly-arg-pna, ms-d-hht-gly-arg-pna
+0004908365, jnj7777120, [3h]jnj7777120
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-phe-arg-7-amidomethylcoumarin
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-phe-arg-amc
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-fr-amc
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-phe-arg-7-amido-4-methylcoumarin
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-fr-amc
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-phe-arg-amc
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-phe-arg-7-amido-4-methylcoumarin
+0005047642, z-phe-arg-7-amido-4-methylcoumarin, z-phe-arg-7-amidomethylcoumarin
+0005086914, fluo-3am, fluo-3am
+0005141464, leu-mca, leu-mca
+0005249538, para-tyramine, para-tyramine
+0005280335, d-erythro-sphingosine, sphingosine
+0005280335, d-erythro-sphingosine, d-erythro-sphingosine
+0005280335, d-erythro-sphingosine, d-erythrosphingosine
+0005280343, quercetin, quercetin
+0005280363, pgf2a, pgf2alpha
+0005280363, pgf2a, prostaglandin f2alpha
+0005280363, pgf2a, [3h]pgf2-alpha
+0005280363, pgf2a, pgf2a
+0005280363, pgf2a, pgf2
+0005280450, linoleic, linoleic acid
+0005280450, linoleic, linoleic acid
+0005280450, linoleic, linoleic
+0005280450, linoleic, linoleic
+0005280453, 1,25-(oh)2d3, 1,25(oh)2d3
+0005280453, 1,25-(oh)2d3, 1,25-(oh)2d3
+0005280453, 1,25-(oh)2d3, 1,25-(oh)2d3
+0005280453, 1,25-(oh)2d3, 1,25(oh)2d3
+0005280578, dd-coa, dd-coa
+0005280581, dgla, [14c]dgla
+0005280598, farnesal, [14c]farnesal
+0005280733, 5-hete, 5-hete
+0005280778, 5(s)-hydroperoxy-6-trans-8,11,14-cis-eicosatetraenoic acid, 5(s)-hydroperoxy-6-trans-8,11,14-cis-eicosatetraenoic acid
+0005280885, delta12-pgj2, delta12-pgj2
+0005280891, 11-dehydro-txb2, 11-dehydro-txb2
+0005280903, s1p, [33p]s1p
+0005281222, butein, butein
+0005281416, esculetin, esculetin
+0005281426, umbelliferone, umbelliferone
+0005281915, ubiquinone, ubiquinone
+0005281915, ubiquinone, coq10
+0005281915, ubiquinone, coq10
+0005281915, ubiquinone, ubiquinone
+0005281969, anandamide, [3h]aea
+0005281969, anandamide, aea
+0005281969, anandamide, [14c]anandamide
+0005281969, anandamide, anandamide
+0005281969, anandamide, [3h]anandamide
+0005282105, n-arachidonoyl-dopamine, n-arachidonoyldopamine
+0005282105, n-arachidonoyl-dopamine, n-arachidonoyl-dopamine
+0005282105, n-arachidonoyl-dopamine, nada
+0005282280, 2-arachidonoylglycerol, 2-ag
+0005282280, 2-arachidonoylglycerol, 2-arachidonoylglycerol
+0005282280, 2-arachidonoylglycerol, 2-ag
+0005282280, 2-arachidonoylglycerol, 2-arachidonoylglycerol
+0005282448, fondaparinux, fondaparinux
+0005283036, dk-pgd2, dk-pgd2
+0005283093, delta12-pgd2, delta12-pgd2
+0005283159, 5-oxo-ete, 5-oxo-ete
+0005283205, 14,15-epoxy-5z,8z,11z-eicosatrienoic acid, 14,15-epoxy-5z,8z,11z-eicosatrienoic acid
+0005283205, 14,15-epoxy-5z,8z,11z-eicosatrienoic acid, 14,15-eet
+0005283205, 14,15-epoxy-5z,8z,11z-eicosatrienoic acid, 14,15-epoxy-5z,8z,11z-eicosatrienoic acid
+0005283205, 14,15-epoxy-5z,8z,11z-eicosatrienoic acid, 14,15-eet
+0005283344, 4-hydroxynonenal, 4-hydroxynonenal
+0005283387, oleamide, oleamide
+0005283387, oleamide, [14c]oleamide
+0005283387, oleamide, oleamide
+0005283387, oleamide, [14c]oleamide
+0005283468, monoolein, monoolein
+0005283557, c17-sphingosine, c17-sphingosine
+0005283560, sphingosine-1-phosphate, [33p]sphingosine-1-phosphate
+0005283560, sphingosine-1-phosphate, s1p
+0005283560, sphingosine-1-phosphate, s1p
+0005283560, sphingosine-1-phosphate, [33p]sphingosine-1-phosphate
+0005284330, sag, sag
+0005284330, sag, [14c]sag
+0005284596, naloxone, [3h]naloxone
+0005284596, naloxone, [3h]nlx
+0005284596, naloxone, naloxone
+0005284596, naloxone, [n-allyl-2,3-3h]naloxone
+0005288382, geldanamycin, geldanamycin
+0005288811, methyllycaconitine, [3h]methyllycaconitine
+0005288826, morphine, morphine
+0005310960, mre3008f20, [3h]mre3008f20
+0005310983, 2-mesatp, 2-mesatp
+0005310992, ab-meca, [3h]ab-meca
+0005311018, beta-fna, beta-[3h]fna
+0005311041, osip339391, [3h]osip339391
+0005311136, gr65630, [3h]gr65630
+0005311171, hu-243, hu-243
+0005311175, i-bop, i-bop
+0005311181, iloprost, iloprost
+0005311181, iloprost, iloprost
+0005311181, iloprost, [3h]-iloprost
+0005311181, iloprost, [3h]-iloprost
+0005311254, ly278584, [3h]ly278584
+0005311254, ly278584, [3h]ly278584
+0005311263, lpa 18:1, lpa 18:1
+0005311264, lysophosphatidylcholine, lysophosphatidylcholine
+0005311271, mdl100907, [3h]mdl100907
+0005311301, mrs2279, [3h]-mrs2279
+0005311301, mrs2279, [3h]-mrs2279
+0005311301, mrs2279, [3h]mrs2279
+0005311301, mrs2279, [3h]mrs2279
+0005311312, neurokinin b, nkb
+0005311312, neurokinin b, [125i]neurokinin b
+0005311423, sb207710, [125i]sb207710
+0005311462, -m-mpep, [3h]-m-mpep
+0005311462, -m-mpep, [3h]m-mpep
+0005311462, -m-mpep, [3h]m-mpep
+0005311462, -m-mpep, [3h]-m-mpep
+0005311493, u46619, u-46619
+0005311493, u46619, u46619
+0005311493, u46619, u-46619
+0005311493, u46619, u46619
+0005311501, win-55212-2, win55212-2
+0005311501, win-55212-2, [3h]win-552122
+0005311501, win-55212-2, [3h]win-55212-2
+0005319879, 2-oleoylglycerol, 2-oleoylglycerol
+0005319879, 2-oleoylglycerol, [3h]2-oleoylglycerol
+0005319879, 2-oleoylglycerol, 2-og
+0005319879, 2-oleoylglycerol, 2og
+0005326631, suc-ala-pro-ala-pna, suc-ala-pro-ala-pna
+0005353953, sphingomyelin, sphingomyelin
+0005357696, rubidium, rubidium
+0005359464, thallium, thallium
+0005360515, naltrexone, [3h]naltrexone
+0005360545, na, [3h]na
+0005366020, 2,3-oxidosqualene, 2,3-oxidosqualene
+0005458184, [11c]daa1106, [11c]daa1106
+0005459377, 1,2-dimyristoyl-sn-glycero-3-phosphocholine, 1,2-dimyristoyl-sn-glycero-3-phosphocholine
+0005460033, cisplatin, cisplatin
+0005460048, triglyceride, triglyceride
+0005460308, glycolate, glycolate
+0005484725, ici118551, ici118551
+0005486960, suc-aapf-pna, suc-aapf-pna
+0005496888, n-succinyl-ala-ala-pro-phe-pna, n-succinyl-ala-ala-pro-phe-pna
+0005497103, 1-palmitoyl-2-oleoyl-sn-glycero-3-phosphocholine, 1-palmitoyl-2-oleoyl-sn-glycero-3-phosphocholine
+0005497111, oleoyl-coa, [14c]oleoyl coenzyme a
+0005497111, oleoyl-coa, [14c]oleoyl-coa
+0005497111, oleoyl-coa, oleoyl coenzyme a
+0005497136, c2-ceramide, c2-ceramide
+0005497143, crotonoyl-coa, crotonoyl-coa
+0005497152, lpa 18:1, lpa
+0005497152, lpa 18:1, lysophosphatidic acid
+0005497152, lpa 18:1, lpa
+0005497152, lpa 18:1, lysophosphatidic acid
+0005497163, triolein, [3h]triolein
+0005497163, triolein, triolein
+0005497163, triolein, [3h]triolein
+0005497163, triolein, triolein
+0005497186, nti, [3h]naltrindole
+0005497186, nti, [3h]-naltrindole
+0005497186, nti, [3h]-naltrindole
+0005497186, nti, [3h]nti
+0005497186, nti, [3h]nti
+0005497186, nti, [3h]naltrindole
+0005702546, resiniferatoxin, [3h]rtx
+0005702546, resiniferatoxin, [3h]resiniferatoxin
+0005702546, resiniferatoxin, [3h]resiniferatoxin
+0005702546, resiniferatoxin, [3h]rtx
+0005748289, syntide-2, syntide-2
+0006305587, 7-oh-pipat, [125i]7-oh-pipat
+0006321351, methanandamide, methanandamide
+0006324613, (-)-ethylketazocine, (-)-[3h]ethylketazocine
+0006435286, ltd4, [3h]-ltd4
+0006435286, ltd4, [3h]-ltd4
+0006435286, ltd4, [3h]ltd4
+0006435286, ltd4, [3h]ltd4
+0006435286, ltd4, [3h]-ltd4
+0006435286, ltd4, [3h]ltd4
+0006436140, nitrocefin, nitrocefin
+0006437074, sq-29548, [3h]-sq29548
+0006437074, sq-29548, [3h]sq-29548
+0006437074, sq-29548, [3h]-sq29548
+0006437074, sq-29548, [3h]sq-29548
+0006438587, 1-stearoyl-2-arachidonoyl-sn-glycerol, 1-stearoyl-2-arachidonoyl-sn-glycerol
+0006453929, ala-pro-p-nitroanilide, ala-pro-p-nitroanilide
+0006505803, 17aag, 17aag
+0006505803, 17aag, [3h]17aag
+0006505803, 17aag, 17aag
+0006505803, 17aag, [3h]17aag
+0006518166, impy, [125i]impy
+0006519333, pgd2, [3h]pgd2
+0006603931, mrs-1754, [3h]mrs1754
+0006603931, mrs-1754, [3h]mrs1754
+0006603931, mrs-1754, [3h]mrs-1754
+0006603931, mrs-1754, [3h]mrs-1754
+0006604009, sb-222200, [3h]sb-222200
+0006604009, sb-222200, sb222200
+0006604009, sb-222200, sb222200
+0006604009, sb-222200, [3h]sb-222200
+0006604887, ro25-6981, [3h]ro25-6981
+0006604887, ro25-6981, [3h]ro25,6981
+0006604887, ro25-6981, [3h]ro25-6981
+0006604887, ro25-6981, [3h]ro25,6981
+0006711157, 2-nbdg, 2-nbdg
+0006917707, [d-ala2, d-leu5]-enkephalin, [3h][d-ala2, d-leu5]-enkephalin
+0006931101, para-nitrophenylacetate, p-nitrophenylacetate
+0006931101, para-nitrophenylacetate, para-nitrophenylacetate
+0006931101, para-nitrophenylacetate, para-nitrophenylacetate
+0006931101, para-nitrophenylacetate, para-nitrophenylacetate
+0006931101, para-nitrophenylacetate, p-nitrophenylacetate
+0006931101, para-nitrophenylacetate, p-nitrophenylacetate
+0006957673, n-benzoyl-l-tyrosyl-p-aminobenzoic acid, n-benzoyl-l-tyrosyl-p-aminobenzoic acid
+0006992083, n-acetyl-l-aspartyl-l-glutamate, n-acetyl-l-aspartyl-[3h]l-glutamate
+0006994977, hippuryl-l-phenylalanine, hippuryl-l-phenylalanine
+0007058029, s-tetralol, s-tetralol
+0009543032, anthraniloyl-coa, anthraniloyl-coa
+0009566174, stat5, stat5
+0009803963, gw501516, gw501516
+0009812294, ganglioside gm3, ganglioside gm3
+0009815675, orexin, orexin
+0009819927, ly341495, [3h]ly-341,495
+0009819927, ly341495, [3h]ly341495
+0009819927, ly341495, ly341495
+0009833444, cck-8, [125i]cck-8
+0009833444, cck-8, cck-8
+0009833444, cck-8, [125]bh cck-8
+0009838729, azd9272, [3h]azd9272
+0009841240, [11c]pbr28, [11c]pbr28
+0009841284, n6-cyclohexyladenosine, n6-[3h]cyclohexyladenosine
+0009845561, bay-38-7271, [3h]bay-38-7271
+0009846360, boc-l-lys(ac)-amc, boc-lys(ac)-amc
+0009846360, boc-l-lys(ac)-amc, (boc-lys(-acetyl)-amc
+0009846360, boc-l-lys(ac)-amc, boc-l-lys(ac)-amc
+0009846360, boc-l-lys(ac)-amc, fluorescent substrate
+0009848786, pr-104a, pr-104a
+0009865843, t-226296, t-226296
+0009865843, t-226296, [3h]t-226296
+0009865843, t-226296, [3h]t-226296
+0009865843, t-226296, t-226296
+0009887712, dapagliflozin, [3h]dapagliflozin
+0009893571, gw4064, gw4064
+0009896164, ac-devd-amc, ac-devd-amc
+0009934294, [35s]-mk499, [35s]mk499
+0009934294, [35s]-mk499, mk499
+0009934294, [35s]-mk499, mk-499
+0009934294, [35s]-mk499, [35s]mk-499
+0009934294, [35s]-mk499, [33s]mk499
+0009934294, [35s]-mk499, [35s]-mk499
+0009939049, [35s]mk0677, [35s]mk0677
+0009949656, ltb4, [3h]ltb4
+0009952220, ym09151, ym09151
+0009958472, i-ab-meca, [3h]i-ab-meca
+0009958472, i-ab-meca, [125i]i-ab-meca
+0009958472, i-ab-meca, [125i]i-ab-meca
+0009958472, i-ab-meca, [3h]i-ab-meca
+0009962276, kemptide, kemptide
+0010008367, incb3344, [3h]incb3344
+0010033203, deltorphin ii, [125i]deltorphin 2
+0010033203, deltorphin ii, [3h]deltorphin 2
+0010033203, deltorphin ii, [3h]deltorphinii
+0010033203, deltorphin ii, deltorphin ii
+0010046145, msx-2, [3h]msx-2
+0010079601, angiotensinii, [125i]angiotensinii
+0010081842, 3-methoxy-5-(pyridin-2-ylethynyl)pyridine, [3h]3-methoxy-5-(pyridin-2-ylethynyl)pyridine
+0010081842, 3-methoxy-5-(pyridin-2-ylethynyl)pyridine, [3h]3-methoxy-5-(pyridin-2-ylethynyl)pyridine
+0010081842, 3-methoxy-5-(pyridin-2-ylethynyl)pyridine, [3h]mpepy
+0010081842, 3-methoxy-5-(pyridin-2-ylethynyl)pyridine, [3h]mpepy
+0010121975, snap-7941, [3h]snap-7941
+0010138988, smad3, smad3
+0010198719, cl075, cl075
+0010234210, suc-leu-leu-val-tyr-amc, suc-llvy-mca
+0010234210, suc-leu-leu-val-tyr-amc, suc-llvy-amc
+0010234210, suc-leu-leu-val-tyr-amc, suc-leu-leu-val-tyr-amc
+0010283137, (ac-plg-[2-mercapto-4-85methylpentanoyl]-lg-oc2h5), (ac-plg-[2-mercapto-4-85methylpentanoyl]-lg-oc2h5)
+0010293457, n6- (phenylisopropyl) adenosine, n6- (phenylisopropyl) adenosine
+0010305353, aypgkf, aypgkf
+0010307709, alpha-synuclein, alpha-synuclein
+0010323670, boc-lys(tfa)-amc, boc-lys(tfa)-amc
+0010323670, boc-lys(tfa)-amc, (boc-lys(trifluoroacetyl)-amc)
+0010323670, boc-lys(tfa)-amc, boc-lys(tfa)-amc
+0010323670, boc-lys(tfa)-amc, (boc-lys(trifluoroacetyl)-amc)
+0010339908, rti55, [125i]rti55
+0010347222, 2-thio-paf, 2-thio-paf
+0010350027, dimethyl-w84, [3h]dimethyl-w84
+0010368940, 2-oh-datp, 2-oh-datp
+0010450257, cyclofoxy, [3h]cyclofoxy
+0010452070, 2-thioacetyl mage, 2-thioacetyl mage
+0010460379, (s)-6-acetamido-2-(2-((s)-2-acetamido-4-methylpentanamido)acetamido)-n-(4-methyl-2-oxo-2h-chromen-7-yl)hexanamide, (s)-6-acetamido-2-(2-((s)-2-acetamido-4-methylpentanamido)acetamido)-n-(4-methyl-2-oxo-2h-chromen-7-yl)hexanamide
+0010470232, r214127, [3h]r214127
+0010483914, sligkv-nh2, sligkv-nh2
+0010743500, sb-258585, [125i]sb-258585
+0010745352, (e,e)-1-iodo-2,5-bis-(3-hydroxycarbonyl-4-methoxy)styrylbenzene, [125i](e,e)-1-iodo-2,5-bis-(3-hydroxycarbonyl-4-methoxy)styrylbenzene
+0010832988, pgf2alpha, [3h]pgf2alpha
+0010910934, methoxy-pepy, [3h]methoxy-pepy
+0010972049, win 55212-2, [3h]win 55212-2
+0010981286, hemado, [3h]hemado
+0011030410, l-idose, l-idose
+0011249040, batcp, batcp
+0011296583, pirarubicin, pirarubicin
+0011317885, mocpac, mocpac
+0011395145, et1, [125i]et1
+0011481862, abp688, [3h]abp688
+0011520239, snap 7941, [3h]snap7941
+0011520239, snap 7941, [3h]snap 7941
+0011520239, snap 7941, [3h]snap7941
+0011520239, snap 7941, [3h]snap 7941
+0011608009, aminomethylcoumarin, aminomethylcoumarin
+0011659209, 8-acetyl-2,3,5,6-tetrahydro-1h,4h-11-oxa-3a-aza-benzo[de]anthracen-10-one, 8-acetyl-2,3,5,6-tetrahydro-1h,4h-11-oxa-3a-aza-benzo[de]anthracen-10-one
+0011957499, a23187, a23187
+0011957668, (+)-pd128907, (+)-pd128907
+0011960895, (s)-n-(biphenyl-2-yl)-1-(2-(1-methyl-1h-benzo[d]imidazol-2-ylthio)acetyl)pyrrolidine-2-carboxamide, [3h](s)-n-(biphenyl-2-yl)-1-(2-(1-methyl-1h-benzo[d]imidazol-2-ylthio)acetyl)pyrrolidine-2-carboxamide
+0011966110, 2-trans-dodecenoyl-coa, 2-trans-dodecenoyl-coa
+0011966124, myristoyl-coa, [3h]myristoyl-coa
+0011979316, vasopressin, vasopressin
+0011979743, s-2765, s-2765
+0011979743, s-2765, s-2222
+0011979743, s-2765, s-2765
+0011979743, s-2765, s-2222
+0011989761, bms-725519, [3h]bms-725519
+0011998575, s2238, s2238
+0012259685, (+)-pentazocine, [3h](+)-pentazocine
+0012259685, (+)-pentazocine, [3h]-(+)-pentazocine
+0012259685, (+)-pentazocine, (+)-pentazocine
+0012259685, (+)-pentazocine, (+)-[3h]-pentazocine
+0012259685, (+)-pentazocine, [3h](+)-pentazocine
+0012259685, (+)-pentazocine, [3h]-(+)-pentazocine
+0012259685, (+)-pentazocine, (+)-pentazocine
+0012259685, (+)-pentazocine, (+)-[3h]-pentazocine
+0013547416, doi, [125i]doi
+0013558997, resorufin beta-d-glucopyranoside, resorufin beta-d-glucopyranoside
+0013558997, resorufin beta-d-glucopyranoside, resorufin-beta-d-glucopyranoside
+0013558997, resorufin beta-d-glucopyranoside, resorufin beta-d-glucopyranoside
+0013558997, resorufin beta-d-glucopyranoside, resorufin-beta-d-glucopyranoside
+0014016348, abopx, [125i]abopx
+0014691288, btcp, [3h]btcp
+0014853363, h-glu-gly-arg-pna, h-glu-gly-arg-pna
+0015345727, r91150, [125i]r91150
+0015488999, l-alpha-phosphatidylinositol, l-alpha-phosphatidylinositol
+0015521397, lg190178, lg190178
+0015608515, dha, [3h]dha
+0015704565, cbz-phe-arg-amc, cbz-phe-arg-amc
+0016019996, 3-o-methylfluorescein phosphate, 3-o-methylfluorescein phosphate
+0016081932, lpc 18:1, lpc 18:1
+0016081932, lpc 18:1, oleoyl-lysophosphatidylcholine
+0016081932, lpc 18:1, oleoyl-lysophosphatidylcholine
+0016081932, lpc 18:1, lpc 18:1
+0016129685, dynorphin, [3h]dynorphin
+0016131448, nociceptin, [125i]nociceptin
+0016131448, nociceptin, nociceptin
+0016131448, nociceptin, n/ofq
+0016132283, glucagon, [125i]glucagon
+0016132283, glucagon, glucagon
+0016132283, glucagon, [125i]glucagon
+0016132283, glucagon, glucagon
+0016132335, sauvagine, [125i]sauvagine
+0016132430, iapp, [125i]iapp
+0016133225, angiotensinogen, angiotensinogen
+0016133832, ghrelin, ghrelin
+0016133832, ghrelin, [125i]ghrelin
+0016133832, ghrelin, [125i]human ghrelin
+0016133849, sst-28, (3-125i-tyr11)-srif-28
+0016133849, sst-28, (3-125i-tyr11)-srif-28
+0016133849, sst-28, sst-28
+0016133849, sst-28, sst-28
+0016156006, serine/threonine phosphatase, serine/threonine phosphatase
+0016168596, h-asp-arg-val-tyr-ile-his-pro-phe-his-leu-val-ile-his-asn-oh, h-asp-arg-val-tyr-ile-his-pro-phe-his-leu-val-ile-his-asn-oh
+0016197727, ndp-msh, ndp-alpha-msh
+0016197727, ndp-msh, [125i]ndp-msh
+0016197727, ndp-msh, ndp-msh
+0016197727, ndp-msh, [125i]ndp-alpha-msh
+0016218957, aamca, amc arachidonoyl amide
+0016218957, aamca, amc arachidonoyl amide
+0016218957, aamca, aamca
+0016218957, aamca, aamca
+0016219783, c6-nbd-ceramide, c6-nbd-ceramide
+0016757515, tfllrn-nh2, tfllrn-nh2
+0016760374, cmp-neu5ac, cmp-neu5ac
+0016760503, hoechst33342, hoechst33342
+0017756737, 2-acylglycerol, 2-acylglycerol
+0017786744, lpa 17:0, lpa 17:0
+0020057076, dheas, [3h]dheas
+0020833017, suc-ala-ala-pro-phe-mca, suc-ala-ala-pro-phe-amc
+0020833017, suc-ala-ala-pro-phe-mca, suc-ala-ala-pro-phe-mca
+0020833017, suc-ala-ala-pro-phe-mca, suc-ala-ala-pro-phe-mca
+0020833017, suc-ala-ala-pro-phe-mca, suc-ala-ala-pro-phe-amc
+0021117106, sym2081, [3h]sym2081
+0021120493, boc-val-pro-arg-amc, boc-val-pro-arg-amc
+0021121742, suc-gly-pro-amc, suc-gly-pro-amc
+0021155421, z-gly-gly-arg-amc, z-gly-gly-arg-amc
+0021896546, z-d-arg-gly-arg-pna.2hcl, z-d-arg-gly-arg-pna.2hcl
+0023083748, primer, primer
+0023212271, disbac2, disbac2
+0023630211, gsk1016790a, gsk1016790a
+0023643135, a-585539, [3h]a-585539
+0023662274, sodium pyruvate, sodiumpyruvate
+0023662274, sodium pyruvate, sodiumpyruvate
+0023662274, sodium pyruvate, sodium pyruvate
+0023662274, sodium pyruvate, sodium pyruvate
+0023677976, sodium d-glucuronate, sodium d-glucuronate
+0023727689, almorexant, [3h]almorexant
+0024742074, ptdins(4,5)p2, ptdins(4,5)p2
+0024771780, d-dopachrome, d-dopachrome
+0024860452, 5-(saenta)-x8-fluorescein, 5-(saenta)-x8-fluorescein
+0024957011, mip-1095, [125i]mip-1095
+0024978557, pervanadate, pervanadate
+0025058173, bodipy, bodipy
+0025058176, fluo-4, fluo-4
+0025074470, (d-trp6)-gnrh, [125i]d-trp6-lhrh
+0025074470, (d-trp6)-gnrh, [125i]d-trp6-lhrh
+0025074470, (d-trp6)-gnrh, (d-trp6)-gnrh
+0025074470, (d-trp6)-gnrh, (d-trp6)-gnrh
+0025078115, rr-src, rr-src
+0025092394, crebtide, crebtide
+0025092394, crebtide, krreilsrrpsyr
+0025092394, crebtide, crebtide
+0025092394, crebtide, krreilsrrpsyr
+0025093347, (cyano(6-methoxy-naphthelen-2-yl)methyltrans-[(3-phenyl-oxiran-2-yl)methyl]carbonate), (cyano(6-methoxy-naphthelen-2-yl)methyltrans-[(3-phenyl-oxiran-2-yl)methyl]carbonate)
+0025105695, phosphatidylbutanol, phosphatidylbutanol
+0025108601, z-leu-arg-amc, z-leu-arg-amc
+0025108614, suc-ala-ala-phe-amc, suc-ala-ala-phe-amc
+0025108623, boc-leu-arg-arg-amc, boc-leu-arg-arg-amc
+0025108624, suc-ly-amc, suc-leu-tyr-amc
+0025108624, suc-ly-amc, suc-ly-amc
+0025108624, suc-ly-amc, suc-ly-amc
+0025108624, suc-ly-amc, suc-leu-tyr-amc
+0025108626, boc-gln-ala-arg-amc, boc-gln-ala-arg-mca
+0025108626, boc-gln-ala-arg-amc, boc-gln-ala-arg-amc
+0025108626, boc-gln-ala-arg-amc, boc-gln-ala-arg-mca
+0025108626, boc-gln-ala-arg-amc, boc-gln-ala-arg-amc
+0025108637, ac-wehd-amc, ac-wehd-amc
+0025108642, z-lle-amc, z-lle-amc
+0025108642, z-lle-amc, z-lle-amc
+0025108642, z-lle-amc, z-leu-leu-glu-amc
+0025108642, z-lle-amc, z-leu-leu-glu-amc
+0025108644, z-val-val-arg-amc, z-val-val-arg-amc
+0025108704, mca-plgl-dpa-ar-nh2, mca-plgl-dpa-ar-nh2
+0025108781, z-phe-arg-pna, z-phe-arg-pna
+0025190463, fp-rhodamine, fp-rhodamine
+0042625303, ur-pi294, [3h]ur-pi294
+0044185871, psb603, [3h]psb603
+0044185871, psb603, [3h]psb603
+0044185871, psb603, [3h]psb-603
+0044185871, psb603, [3h]psb-603
+0044237073, smac-1f, smac-1f
+0044264212, alpha-btx, [3h]alpha-btx
+0044278361, glucagon, [125i]-glucagon
+0044312731, iodosulpiride, [125i]iodosulpiride
+0044356648, tnfalpha, tnf-alpha
+0044356648, tnfalpha, tnfalpha
+0044356648, tnfalpha, tnf-alpha
+0044356648, tnfalpha, tnfalpha
+0044361543, nociceptin, [3h]nociceptin
+0044456028, isova-ryyrik-nh2, [3h]isova-ryyrik-nh2
+0044559100, lysergic acid diethylamide, [3h]lysergic acid diethylamide
+0044559100, lysergic acid diethylamide, [3h]lysergic acid diethylamide
+0044559100, lysergic acid diethylamide, [3h]lsd
+0044559100, lysergic acid diethylamide, [3h]lsd
+0044592366, gardiquimod, gardiquimod
+0045480504, a10070, a10070
+0045480636, nbd-sphingomyelin, nbd-sphingomyelin
+0045588096, exendin-4, exendin-4
+0046225600, urotensin2, urotensin2
+0046225600, urotensin2, urotensin 2
+0046225600, urotensin2, urotensin 2
+0046225600, urotensin2, urotensin2
+0046228506, -serotonin, [3h]-serotonin
+0046907787, (+)-jq1, (+)-jq1
+0046943432, i-bet762, i-bet762
+0049786164, ac-thr-ile-nle-nle-gln-arg-nh2, ac-thr-ile-nle-nle-gln-arg-nh2
+0049822115, jnj-46281222, [3h]jnj-46281222
+0051350010, c12-ie-dap, c12-ie-dap
+0052942441, 2-mes-adp, 2-mes-adp
+0052942441, 2-mes-adp, [33p]2-mes-adp
+0052942441, 2-mes-adp, 2-mes-adp
+0052942441, 2-mes-adp, [33p]2-mes-adp
+0053245590, ml314, ml314
+0053316647, zm241385, [3h]-zm241385
+0053316721, paroxetine, [3h]-paroxetine
+0053316721, paroxetine, [3h]-paroxetine
+0053316721, paroxetine, [3h]paroxetine
+0053316721, paroxetine, [3h]paroxetine
+0053319341, dpcpx, [3h]dpcpx
+0053319341, dpcpx, [3h]-dpcpx
+0053319341, dpcpx, [3h]-dpcpx
+0053319341, dpcpx, [3h]dpcpx
+0053320668, iloprost, [3h]iloprost
+0053321959, gr125743, [3h]gr-125743
+0053321959, gr125743, [3h]gr125743
+0053321959, gr125743, [3h]gr125743
+0053321959, gr125743, [3h]gr-125743
+0053323310, -nisoxetine, [3h]-nisoxetine
+0053323310, -nisoxetine, [3h]-nisoxetine
+0053323310, -nisoxetine, [3h]nisoxetine
+0053323310, -nisoxetine, [3h]nisoxetine
+0053324620, 5-carboxamidotryptamine, [3h]5-carboxamidotryptamine
+0053324620, 5-carboxamidotryptamine, [3h]5-carboxamidotryptamine
+0053324620, 5-carboxamidotryptamine, [3h]5-ct
+0053324620, 5-carboxamidotryptamine, [3h]5-ct
+0053325462, pirenzepine, [3h]pirenzepine
+0053394097, 4-hydroxynonenal glutathione, 4-hydroxynonenal glutathione
+0053394628, phome, phome
+0053477794, cholesteryl, [3h]cholesteryl
+0053805115, rosiglitazone, [3h]rosiglitazone
+0054531299, boc-ile-glu-gly-arg-amc, boc-ile-glu-gly-arg-amc
+0054580503, vesamicol, [3h]vesamicol
+0054580503, vesamicol, [3h]vesamicol
+0054580503, vesamicol, [3h]-vesamicol
+0054580503, vesamicol, [3h]-vesamicol
+0054582514, astemizole, [3h]-astemizole
+0054585418, rimonabant, [3h]-rimonabant
+0054585418, rimonabant, [3h]-rimonabant
+0054585418, rimonabant, [3h]rimonabant
+0054585418, rimonabant, [3h]-rimonabant
+0054585418, rimonabant, [3h]rimonabant
+0054585418, rimonabant, [3h]rimonabant
+0056841671, adrenomedullin, [125i]adrenomedullin
+0056842074, big et-1, big et-1
+0056842143, [125l]orexin a, [125l]orexin a
+0056842143, [125l]orexin a, orexin-a
+0056842143, [125l]orexin a, orexin a
+0056842206, tgfbeta, tgfbeta
+0057339251, abeta, abeta
+0057350278, dopamine, [3h]dopamine
+0057369907, 1,2-bis(heptanoylthio)glycerophosphocholine, 1,2-bis(heptanoylthio)glycerophosphocholine
+0057397484, bms-599240, [3h]bms-599240
+0057431238, picogreen, picogreen
+0057459334, cysteinyl, cysteinyl
+0057465250, mdc, mdc
+0057465250, mdc, [125i]mdc
+0066601354, cyclohexyladenosine, [3h]cyclohexyladenosine
+0066795326, 17-beta estradiol, [3h]17-beta estradiol
+0068888389, (+)-pentazocine, (+)-[3h]pentazocine
+0068949811, aminobenzyladenosine, aminobenzyladenosine
+0069118679, n6-phenylisopropyladenosine, [3h]n6-phenylisopropyladenosine
+0070678557, insulin, insulin
+0070684997, -mla, [3h]-mla
+0070878227, n-(6-methoxypyridin-3-yl)octanamide, n-(6-methoxypyridin-3-yl)octanamide
+0071304806, s-(4-nitrophenacyl)glutathione, s-(4-nitrophenacyl)glutathione
+0071306396, metastin, [125i]metastin
+0071308735, tos-gly-pro-arg-amc, tos-gly-pro-arg-amc
+0071314179, bodipy-cyclopamine, bodipy-cyclopamine
+0071454525, iodo-mla, [125i]iodo-mla
+0071464411, mca-pro-leu-gly-leu-dap(dnp)-ala-arg-nh2, mca-pro-leu-gly-leu-dap(dnp)-ala-arg-nh2
+0071717297, pentazocine, [3h]pentazocine
+0071717902, norepinephrine, [3h]norepinephrine
+0071717902, norepinephrine, [3h]norepinephrine
+0071717902, norepinephrine, [3h]-norepinephrine
+0071717902, norepinephrine, [3h]-norepinephrine
+0071750675, 4-munana, 4-munana
+0071750960, nbd-sphingosine, nbd-sphingosine
+0072699216, met-pro-pna, met-pro-pna
+0073754990, lsd, [125i]lsd
+0073754992, zm-241385, [125i]zm-241385
+0073754993, ab-meca, [125i]ab-meca
+0073754993, ab-meca, [125i]-ab-meca
+0073754993, ab-meca, [125i]ab-meca
+0073754993, ab-meca, [125i]-ab-meca
+0073754995, be2254, [125i]heat
+0073754995, be2254, [125i]heat
+0073754995, be2254, [125i]be2254
+0073754995, be2254, [125i]be2254
+0073754996, cyanopindolol, [125i]cyanopindolol
+0073754996, cyanopindolol, [125i]-iodocyanopindolol
+0073754996, cyanopindolol, [125i]cyanopindolol
+0073754996, cyanopindolol, [125i]-iodocyanopindolol
+0073754997, hu-243, [3h]hu-243
+0073755000, iodoaminopotentidine, [125i]iodoaminopotentidine
+0073755000, iodoaminopotentidine, [125i]apt
+0073755000, iodoaminopotentidine, [125i]apt
+0073755000, iodoaminopotentidine, [125i]iodoaminopotentidine
+0073755076, kainate, [3h]kainate
+0073755097, acetyl-coa, [14c]acetylcoa
+0073755097, acetyl-coa, [14c]acetyl-coa
+0073755097, acetyl-coa, [14c]acetyl-coa
+0073755097, acetyl-coa, [14c]acetylcoa
+0073755115, [32p]s1p, [32p]s1p
+0073995022, casein, casein
+0074765474, autocamtide-2, autocamtide-2
+0074974005, cxcl8, cxcl8
+0074992229, des-arg10 leu9 kallidin, [3h]des-arg10 leu9 kallidin
+0078073134, ac-lys(ac)-amc, ac-lys(ac)-amc
+0086277878, ifit-fl, ifit-fl
+0086685411, t-3364366, [3h]t-3364366
+0090345051, (14-(2-{[3-({2-{[4-(cyanomethyl)phenyl]amino}-6-[(5-cyclopropyl-1h-pyrazol-3-yl)-amino]-4-pyrimidinyl}amino)propyl]amino}-2-oxoethyl)-16,16,18,18-tetramethyl-6,7,7a,8a,9,10,16,18-octahydrobenzo[2'',3'']indolizino-[8'',7'':5',6']pyrano[3',2':3,4]pyrido[1,2-a]indol-5-ium-2-sulfonate, (14-(2-{[3-({2-{[4-(cyanomethyl)phenyl]amino}-6-[(5-cyclopropyl-1h-pyrazol-3-yl)-amino]-4-pyrimidinyl}amino)propyl]amino}-2-oxoethyl)-16,16,18,18-tetramethyl-6,7,7a,8a,9,10,16,18-octahydrobenzo[2'',3'']indolizino-[8'',7'':5',6']pyrano[3',2':3,4]pyrido[1,2-a]indol-5-ium-2-sulfonate
+0090362358, cl264, cl264
+0090470004, dabcyl-gamma-abu-ile-his-pro-phe-his-leu-val-ile-his-thr-edans, dabcyl-gamma-abu-ile-his-pro-phe-his-leu-val-ile-his-thr-edans
+0090470934, h-gln-amc hydrobromide, h-gln-amc hydrobromide
+0090475073, ac-arg-gly-lys(ac)-amc, ac-arg-gly-lys(ac)-amc
+0090478189, z-leu-leu-arg-amc, z-leu-leu-arg-amc
+0090488759, aktide-2t, aktide-2t
+0091352118, n-(2-hydroxyethyl)-4-pyren-1-ylbutanamide, n-(2-hydroxyethyl)-4-pyren-1-ylbutanamide
+0091827340, mk-912, [3h]mk-912
+0091869387, mca-lys-pro-leu-gly-leu-dap(dnp)-ala-arg-nh2, mca-lys-pro-leu-gly-leu-dap(dnp)-ala-arg-nh2
+0091895934, gm-bodipy, gm-bodipy
+0091898920, hatrap, hatrap
+0091898920, hatrap, [3h]hatrap
+0091898920, hatrap, hatrap
+0091898920, hatrap, [3h]hatrap
+0091898992, [phe13,tyr19]mch, [125i][phe13,tyr19]mch
+0097046261, c17-ceramide, c17-ceramide
+0099647972, mca-ala-pro-lys(dnp)-oh, mca-ala-pro-lys(dnp)-oh
+0101493753, eyf, [3h]eyf
+0101981638, fk33824, [125i]fk33824
+0118286581, thallos-am, thallos-am
+0122173542, boc-lys(ac)-pna, boc-lys(ac)-pna
+0124221650, mrs4174, mrs4174
+0126455957, pyy, [125i]pyy
+0126962144, epplsqeafadlwkk, epplsqeafadlwkk
+0127263133, meosuc-aapv-amc, meosuc-aapv-amc
+0129661176, trans-2-decenoyl-n-acetylcysteamine, trans-2-decenoyl-n-acetylcysteamine
+0131635627, rrrdddsddd, rrrdddsddd
+0131676392, ac-rlr-amc, ac-rlr-amc
+0132274109, beta-hematin, beta-hematin
+0134612076, mrs5449, mrs5449
+0135398565, 8-oxo-dgtp, 8-oxo-dgtp
+0135398565, 8-oxo-dgtp, 8-oxodgtp
+0135398565, 8-oxo-dgtp, 8-oxodgtp
+0135398565, 8-oxo-dgtp, 8-oxo-dgtp
+0135398604, dihydrofolate, dihydrofolate
+0135398604, dihydrofolate, dihydrofolate
+0135398604, dihydrofolate, dihydrofolic acid
+0135398604, dihydrofolate, dihydrofolic acid
+0135398638, hypoxanthine, hypoxanthine
+0135398641, inosine, inosine
+0135398658, folic acid, folic acid
+0135398675, gtp-gamma-s, gtp-gamma-s
+0135398737, clozapine, clozapine
+0135399235, zaprinast, zaprinast
+0135401907, 4-hpp, 4-hpp
+0135403657, gpp(nh)p, gpp(nh)p
+0135444742, tetrahydrofolate, tetrahydrofolate
+0135445750, 7-methylguanosine, 7-methylguanosine
+0135476260, [33s]gtpgammas, [35s]gtpgammas
+0135476260, [33s]gtpgammas, gtpgammas
+0135476260, [33s]gtpgammas, [33s]gtpgammas
+0135483530, [35s]gtp-gamma-s, [35s]gtp-gamma-s
+0135484064, mre-2029f20, [3h]mre-2029f20
+0135600305, 5,8-dideazafolic acid, 5,8-dideazafolic acid
+0135796589, nbti, [3h]nbti
+0135921139, psb-11, [3h]psb-11
+0136008305, furimazine, furimazine
+0136712324, luciferyl-adenylate, luciferyl-adenylate
+0137347169, pf-06658607, pf-06658607
+0137700547, ac-pal-amc, ac-pal-amc
+0137700559, ac-wla-amc, ac-wla-amc
+0138756696, dodecenoyl-coa, dodecenoyl-coa
+0139040355, 7a, [3h]7a
+0145711714, lit-001, lit-001
+0145994360, cyclohexyl, [3h]cyclohexyl
+0146160056, bodipy-cholesterol, bodipy-cholesterol
+0146160171, psb-298, [3h]psb-298
+0155513611, ur-deba176, ur-deba176
+0155817457, orexin a, [125i]-orexin a
+0155884413, thioflavin-s, thioflavin-s
+0162647616, ac-arg-leu-ile-lys(ac)-amc, ac-arg-leu-ile-lys(ac)-amc
+0162659013, ac-tyr-lys-leu-lys(ac)-amc, ac-tyr-lys-leu-lys(ac)-amc
+0162668624, pg2, [3h]pg2
+0162679326, biotin-jq1, biotin-jq1
+0164946868, abltide, abltide
+0164946869, srctide, srctide
+0165412519, ac-anw-amc, ac-anw-amc
+0166176945, woodtide, woodtide
+0167713318, cft, [3h]cft
+0168510520, waag-3r, waag-3r
+0168510719, dyrktide, dyrktide
+0168510724, erktide, erktide
+0168679643, abz-gly-leu-lys-arg-gly-gly-3-(no2)tyr, abz-gly-leu-lys-arg-gly-gly-3-(no2)tyr
+0169410440, il8, [125i]il8
+0169450739, lrrktide, lrrktide
+0169490735, cgs-21680, [3h]cgs-21680
+0169490746, rx-821002, [3h]rx-821002
+0169490746, rx-821002, [3h]rx-821002
+0169490795, imipramine, [3h]imipramine
+0169490796, cck-8s, [125i]cck-8s
+0169490840, 8-oh-dpat, [3h]8-oh-dpat
+0169490862, avp, [3h]avp
+0169490867, nitrendipine, [3h]nitrendipine
+0169490871, dadle, [3h]dadle
+0169490876, dofetilide, [3h]dofetilide
+0169490877, cp55940, [3h]cp-55940
+0169490877, cp55940, [3h]cp-55940
+0169494125, rs repeat peptide, rs repeat peptide
+0170453341, 5-fam-gpylpqtv-nh2, 5-fam-gpylpqtv-nh2
+0171371389, biotin-nad+, biotin-nad+
+0171378452, fluo-4-am, fluo-4-am
+0006519333, pgd2, [3h]-pgd2
+0006519333, pgd2, pgd2
+0000000951, ne, ne
+0000447862, nad+, [32p]nad+
+0000447862, nad+, nad+
+0006435286, ltd4, ltd4
+0009949656, ltb4, ltb4
+0013547416, doi, doi
+0013547416, doi, [3h]doi
+0013547416, doi, {RADIOLABEL} doi
+0000026644, diprenorphine, [3h]diprenorphine
+0000443408, diprenorphine, [3h]diprenorphine
+0014691288, btcp, btcp
+0053324620, 5-carboxamidotryptamine, [3h]-5-carboxamidotryptamine

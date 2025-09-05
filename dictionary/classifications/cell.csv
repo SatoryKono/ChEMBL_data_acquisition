@@ -1,0 +1,708 @@
+Source Name,Unified Name,Origin Organism
+12d7-mdr,12D7-MDR,Mouse
+1321,1321N1,Human
+1321n1,1321N1,Human
+293-ebna,HEK293-EBNA,Human
+293e,HEK293E,Human
+hek293,HEK293,Human
+hek293t,HEK293T,Human
+293t/17,HEK293T/17,Human
+32d,32D,Mouse
+3t3,NIH3T3,Mouse
+3t3-l1,3T3-L1,Mouse
+697,697,Human
+hek293-7df3,HEK293-7DF3,Human
+hek293-hek293-7df3,HEK293-7DF3,Human
+a-375,A375,Human
+a-431,A431,Human
+a2058,A2058,Human
+a2774,A2774,Human
+a2780,A2780,Human
+a2780 adr,A2780-ADR,Human
+a31,A31,Mouse
+a375,A375,Human
+a375p-f11,A375P-F11,Human
+a431,A431,Human
+a549,A549,Human
+a673,A673,Human
+a9l,A9L,Mouse
+african green monkey cos,COS,African Green Monkey
+ags,AGS,Human
+aml,AML,Human
+an3-ca,AN3CA,Human
+ap1,AP1,Human
+ap1 cell,AP1,Human
+ar-uas-bla griptite 293,HEK293-Griptite-AR-UAS-bla,Human
+aspc1,AsPC1,Human
+au565,AU565,Human
+av12,AV12,Hamster
+b cell,B-Cell,Human
+b-all,B-ALL,Human
+b16,B16,Mouse
+b16-f1,B16-F1,Mouse
+b300-19,B300-19,Mouse
+b5/589,B5/589,Human
+b721,B721,Human
+ba/f3,BaF3,Mouse
+bac-to-bac baculovirus expression system,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+bacmam transduced hek293,HEK293-BacMam,Human
+bacmam virus infected hela,HeLa-BacMam,Human
+bacmam virus-transduced,BacMam-Transduced,Various
+bacmid infected sf-9 insect,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+sf21 baculovirus cell expression system,Sf21-Baculovirus,Insect (Spodoptera frugiperda)
+baculovirus cell expression system,Baculovirus-System,Insect
+escherichia coli bl21(de3))-codon plus-ril,E. coli BL21(DE3)-CodonPlus-RIL,Escherichia coli
+escherichia coli bl21(de3)plyss,E. coli BL21(DE3)-pLysS,Escherichia coli
+escherichia coli bl21-codonplus (de3)-ripl,E. coli BL21(DE3)-CodonPlus-RIPL,Escherichia coli
+escherichia coli bl21alpha,E. coli BL21alpha,Escherichia coli
+escherichia coli crude cell,E. coli,Escherichia coli
+escherichia coli expression system,E. coli,Escherichia coli
+escherichia coli jm109,E. coli JM109,Escherichia coli
+escherichia coli lb2003,E. coli LB2003,Escherichia coli
+escherichia coli lb2003 assessed as reduction_in cell,E. coli LB2003,Escherichia coli
+escherichia coli mv1190,E. coli MV1190,Escherichia coli
+escherichia coli mv1190 by cell,E. coli MV1190,Escherichia coli
+escherichia coli rosetta (de3),E. coli Rosetta(DE3),Escherichia coli
+escherichia coli rosetta (de3) plyss,E. coli Rosetta(DE3)-pLysS,Escherichia coli
+escherichia coli rosetta gami 2 (de3) plyss,E. coli Rosetta-Gami2(DE3)-pLysS,Escherichia coli
+escherichia coli rosetta(de3)plyss,E. coli Rosetta(DE3)-pLysS,Escherichia coli
+escherichia coli rosetta2 (de3),E. coli Rosetta2(DE3),Escherichia coli
+escherichia coli-infected fall armyworm sf21,Sf21-Baculovirus,Insect (Spodoptera frugiperda)
+expressing,Expressing,Various
+expressing by,Expressing,Various
+expressing mcf7 by,MCF7-Expressing,Human
+f1pin cho,Flp-In-CHO,Hamster
+fall armyworm sf9,Sf9,Insect (Spodoptera frugiperda)
+fdc-p1,FDC-P1,Mouse
+ff,FF,Unknown
+fg,FG,Unknown
+fibroblast,Fibroblast,Various
+fibroblast ltk-,LTK-,Mouse
+flp-in cho,Flp-In-CHO,Hamster
+flp-in hek,Flp-In-HEK293,Human
+flp-in t-rex-293,Flp-In-T-REx-293,Human
+flp-in-293,Flp-In-HEK293,Human
+flp-in-cho,Flp-In-CHO,Hamster
+forskolin stimulated-hek293,HEK293-Forskolin,Human
+forskolin treated thp1,THP1-Forskolin,Human
+forskolin-stimulated cho,CHO-Forskolin,Hamster
+freestyle293f,FreeStyle293F,Human
+frt,FRT,Human
+g292,G292,Human
+g7,G7,Rat
+gf62,GF62,Unknown
+gh3,GH3,Rat
+gh4-c1,GH4-C1,Rat
+gist882,GIST882,Human
+golden syrian hamster av12,AV12,Hamster
+gqi5 transfected cho,CHO-Gqi5,Hamster
+graf,Graf,Rat
+griptite-293,HEK293-Griptite,Human
+growth factor dependent fdc-p1,FDC-P1,Mouse
+gtl-16,GTL16,Human
+gtl16,GTL16,Human
+guinea pig pancreatic,Guinea Pig Pancreatic,Guinea Pig
+h1975,NCI-H1975,Human
+h29,H29,Human
+h292,NCI-H292,Human
+h3255,NCI-H3255,Human
+h4,H4,Human
+h460,NCI-H460,Human
+h460a,NCI-H460A,Human
+h4iie,H4IIE,Rat
+h4iiec3,H4IIEC3,Rat
+h69ar,H69AR,Human
+h838,NCI-H838,Human
+haect1,HAECT1,Human
+hamster av12,AV12,Hamster
+hamster bhk,BHK,Hamster
+hamster v79mz,V79,Hamster
+hamster v79mzh,V79,Hamster
+hap1,HAP1,Human
+hbl-2,HBL2,Human
+hbl2,HBL2,Human
+hca2,HCA2,Human
+hcc1806,HCC1806,Human
+hcc827,HCC827,Human
+hcec,HCEC,Human
+hct,HCT,Human
+hct-116,HCT116,Human
+hct116,HCT116,Human
+hd11,HD11,Chicken
+hek,HEK293,Human
+hek blue,HEK-Blue,Human
+hek t-rex,HEK-T-REx,Human
+hek-293,HEK293,Human
+hek-293f,HEK293F,Human
+hek-293t,HEK293T,Human
+hek-a2a,HEK293-A2A,Human
+hek-blue,HEK-Blue,Human
+hek-blue il-6,HEK-Blue-IL6,Human
+hek-cng,HEK293-CNG,Human
+hek-msrii,HEK293-MSRII,Human
+hek239,HEK293,Human
+hek285-7,HEK293,Human
+hek292,HEK293,Human
+hek293 4.0-7,HEK293-4.0-7,Human
+hek293 cell,HEK293,Human
+hek293 derived freestyle293f,FreeStyle293F,Human
+hek293 flp-in,Flp-In-HEK293,Human
+hek293 griptite,HEK293-Griptite,Human
+hek293 msr,HEK293-MSR,Human
+hek293-6e,HEK293-6E,Human
+hek293-a,HEK293-A,Human
+hek293-ebna,HEK293-EBNA,Human
+hek293-h,HEK293-H,Human
+hek293-msr,HEK293-MSR,Human
+hek293-tet-on,HEK293-Tet-On,Human
+hek293-tsa,HEK293-TSA,Human
+hek293.etn,HEK293-ETN,Human
+hek293/ap1-luc,HEK293-AP1-Luc,Human
+hek293/r2,HEK293-R2,Human
+hek2936e,HEK293-6E,Human
+hek293e,HEK293E,Human
+hek293f,HEK293F,Human
+hek293s gnti(-),HEK293S-GnTI-,Human
+hek293t cell,HEK293T,Human
+hek293t/17,HEK293T/17,Human
+hek385-7,HEK293,Human
+hek93,HEK293,Human
+hekmsrii,HEK293-MSRII,Human
+hekt,HEK293T,Human
+hel,HEL,Human
+hela,HeLa,Human
+hela kyoto,HeLa-Kyoto,Human
+hela-derived hg5ln,HG5LN,Human
+hep,Hep,Human
+hep 3b2,Hep3B2,Human
+hep g2,HepG2,Human
+hepatocyte,Hepatocyte,Human
+hepg,HepG2,Human
+hepg2,HepG2,Human
+heptat,Hepatocyte,Human
+hf15,HF15,Human
+hg5ln,HG5LN,Human
+hgraf,Graf,Rat
+hi5 insect,HighFive,Insect (Trichoplusia ni)
+high five insect,HighFive,Insect (Trichoplusia ni)
+high5 baculovirus cell expression system,HighFive-Baculovirus,Insect (Trichoplusia ni)
+hl-60,HL60,Human
+hl60,HL60,Human
+hlf,HLF,Human
+hmc-1,HMC1,Human
+hmc1,HMC1,Human
+hn9.10,HN9.10,Human
+hnscc 1483,HNSCC-1483,Human
+hos,HOS,Human
+hpball,HPBALL,Human
+hs888lu,Hs888Lu,Human
+ht-1080,HT1080,Human
+ht-29,HT29,Human
+ht1080,HT1080,Human
+ht2,HT2,Mouse
+ht29,HT29,Human
+htla,HTLA,Human
+huamn hek293,HEK293,Human
+hue,HUE,Human
+huh-7,Huh7,Human
+huh7,Huh7,Human
+hut78,HuT78,Human
+hut78 t-cells,HuT78,Human
+hutu80,HuTu80,Human
+huvec,HUVEC,Human
+baculovirus cell-infected high five,HighFive-Baculovirus,Insect (Trichoplusia ni)
+baf/3,BaF3,Mouse
+baf3,BaF3,Mouse
+bel-7402/5-fu,BEL-7402/5-FU,Human
+beta-galactosidase expressing cho-k1,CHO-K1-BetaGal,Hamster
+bhk,BHK,Hamster
+bhk-21,BHK-21,Hamster
+bhk/ac9 or hek msr2,BHK-AC9,Hamster
+bjab,BJAB,Human
+bl21 (de3),E. coli BL21(DE3),Escherichia coli
+bl21(de3) escherichia coli,E. coli BL21(DE3),Escherichia coli
+bl21-de3,E. coli BL21(DE3),Escherichia coli
+brain,Brain,Human
+bt-474,BT474,Human
+bt474,BT474,Human
+bti,BTI,Insect (Trichoplusia ni)
+bti baculovirus cell expression system,BTI-Baculovirus,Insect (Trichoplusia ni)
+bti baculovirus cell expression system insect,BTI-Baculovirus,Insect (Trichoplusia ni)
+bti insect,BTI,Insect (Trichoplusia ni)
+bti-tn-5b1-4,BTI-TN-5B1-4,Insect (Trichoplusia ni)
+bti-tn-5b1-4 baculovirus cell expression system,BTI-TN-5B1-4-Baculovirus,Insect (Trichoplusia ni)
+baculovirus system,Baculovirus-System,Insect
+bv-2,BV2,Mouse
+c2c12,C2C12,Mouse
+c3h 10t1/2,C3H10T1/2,Mouse
+c5a-stimulated raw 264.7,RAW264.7-C5a,Mouse
+c6,C6,Rat
+c6 giloma,C6,Rat
+caco-2,Caco2,Human
+caco2,Caco2,Human
+cancer cell lines,Cancer Cell Lines,Human
+ccl1-3,CCL1-3,Human
+ccrf-cem,CCRF-CEM,Human
+cd34+ cell,CD34+,Human
+cells,Cells,Various
+cem,CEM,Human
+cem-ccrf,CCRF-CEM,Human
+cems529,CEM-S529,Human
+cge22,CGE22,Human
+chago k1,Chago-K1,Human
+chago-k-1,Chago-K1,Human
+chang,Chang,Human
+chem-1,Chem-1,Human
+chem-2,Chem-2,Human
+chem-3,Chem-3,Human
+chem5,Chem-5,Human
+chicken dt40,DT40,Chicken
+chinese_hamster d4,CHO-D4,Hamster
+chinese_hamster r2,CHO-R2,Hamster
+chinese_hamster rt16,CHO-RT16,Hamster
+chinese_hamster v79,V79,Hamster
+chinese_hamster v79 cell,V79,Hamster
+chlorocebus aethiops cos-1,COS-1,African Green Monkey
+cho,CHO,Hamster
+cho aa8,CHO-AA8,Hamster
+cho cre-spap,CHO-CRE-SPAP,Hamster
+cho k1,CHO-K1,Hamster
+cho t-rex,CHO-T-REx,Hamster
+cho-a1,CHO-A1,Hamster
+cho-a3,CHO-A3,Hamster
+cho-dukx-a2,CHO-DUKX-A2,Hamster
+cho-flpin,Flp-In-CHO,Hamster
+cho-hir,CHO-HIR,Hamster
+cho-k,CHO-K1,Hamster
+cho-k1,CHO-K1,Hamster
+cho-k1 cell,CHO-K1,Hamster
+cho-k1 in whole-cell,CHO-K1,Hamster
+cho-k1-gqi,CHO-K1-Gqi,Hamster
+cho-k9,CHO-K9,Hamster
+cho-ki,CHO-K1,Hamster
+cho-mmtv-beta-lactamase,CHO-MMTV-BetaLactamase,Hamster
+cho-rd-hga16,CHO-RD-HGA16,Hamster
+cho-s,CHO-S,Hamster
+cho-s1,CHO-S1,Hamster
+cho-t-rex,CHO-T-REx,Hamster
+cho-trex,CHO-T-REx,Hamster
+cho.k1,CHO-K1,Hamster
+cho/ga16,CHO-GA16,Hamster
+chok,CHO-K1,Hamster
+chok9,CHO-K9,Hamster
+chok9 cell,CHO-K9,Hamster
+chop,CHOP,Mouse
+cmec/d3,CMEC/D3,Mouse
+cml,CML,Human
+colo 205,COLO205,Human
+commercial,Commercial,Various
+cor-l105,COR-L105,Human
+cos,COS,African Green Monkey
+cos 22,COS-22,African Green Monkey
+cos-1,COS-1,African Green Monkey
+cos-7,COS-7,African Green Monkey
+crth2,CRTH2,Human
+ct26,CT26,Mouse
+ctll,CTLL,Mouse
+cv-1,CV1,African Green Monkey
+cv1,CV1,African Green Monkey
+cwr22r,CWR22R,Human
+d8,D8,Mouse
+ddt1mf-2,DDT1MF-2,Hamster
+dher14,DHER14,Mouse
+dhfr deficient cho,CHO-DHFR-,Hamster
+difi,DiFi,Human
+dld-1,DLD1,Human
+dog mdck,MDCK,Dog
+dohh2,DOHH2,Human
+doxycycline-inducible hek293,HEK293-Tet-On,Human
+dt40,DT40,Chicken
+du-145,DU145,Human
+du145,DU145,Human
+du937,U937,Human
+e10,E10,Mouse
+ec80 serotonin-stimulated cho-k1,CHO-K1-Serotonin,Hamster
+ecv-304,ECV304,Human
+ee-hek293,HEK293,Human
+endothelial cell,Endothelial Cell,Human
+eol1,EOL1,Human
+erythrocyte,Erythrocyte,Human
+es-2,ES2,Human
+es2,ES2,Human
+escherichia coli,E. coli,Escherichia coli
+escherichia coli (de3),E. coli BL21(DE3),Escherichia coli
+escherichia coli assessed as {competitor} product formation by cell,E. coli,Escherichia coli
+escherichia coli be3,E. coli BE3,Escherichia coli
+escherichia coli bl2-de3 incubated 10 mins before {competitor} addition by fluorescence spectrophotometry based cell free system,E. coli BL21(DE3),Escherichia coli
+escherichia coli bl21,E. coli BL21,Escherichia coli
+escherichia coli bl21 (de),E. coli BL21(DE3),Escherichia coli
+escherichia coli bl21 (de) codon plus rp,E. coli BL21(DE3)-CodonPlus-RP,Escherichia coli
+escherichia coli bl21 (de3),E. coli BL21(DE3),Escherichia coli
+escherichia coli bl21 (de3) codon plus ril,E. coli BL21(DE3)-CodonPlus-RIL,Escherichia coli
+escherichia coli bl21 (de3) rosetta,E. coli Rosetta(DE3),Escherichia coli
+escherichia coli bl21 assessed as orotic_acid production using {competitor} {substrate} by direct assay in_presence_of oxygen depleting system,E. coli BL21,Escherichia coli
+escherichia coli bl21 codon plus,E. coli BL21-CodonPlus,Escherichia coli
+escherichia coli bl21 de3,E. coli BL21(DE3),Escherichia coli
+escherichia coli bl21 star (de3),E. coli BL21-Star(DE3),Escherichia coli
+escherichia coli bl21(de3),E. coli BL21(DE3),Escherichia coli
+igf-1-stimulated knockout r+,R+-IGF1,Mouse
+igf1-stimulated mcf7,MCF7-IGF1,Human
+igrov-1,IGROV1,Human
+im-9,IM9,Human
+imr-32,IMR32,Human
+imr-90,IMR90,Human
+in cho,CHO,Hamster
+in cho-k1,CHO-K1,Hamster
+in cv-1,CV1,African Green Monkey
+in embryonic kidney,HEK293,Human
+in hek293,HEK293,Human
+in hek293t,HEK293T,Human
+in hela,HeLa,Human
+in mda-mb-453,MDA-MB-453,Human
+in neuroblastoma,Neuroblastoma,Human
+in rgt,RGT,Human
+in t47d,T47D,Human
+in tm3,TM3,Mouse
+ins1,INS1,Rat
+insect,Insect,Insect
+insect cell,Insect,Insect
+insect sf21,Sf21,Insect (Spodoptera frugiperda)
+insect sf9,Sf9,Insect (Spodoptera frugiperda)
+insect sf9 membrane,Sf9,Insect (Spodoptera frugiperda)
+intact cho flpin,Flp-In-CHO,Hamster
+intracellular [ca2+] concentration in hek293,HEK293,Human
+ir983f,IR983F,Human
+ishikawa,Ishikawa,Human
+j774,J774,Mouse
+jar,JAR,Human
+jeg-3,JEG3,Human
+jeko b,JEKO1,Human
+jeko-1,JEKO1,Human
+jeko1,JEKO1,Human
+jurkat,Jurkat,Human
+jurkat e6.1,Jurkat-E6.1,Human
+jurkat t,Jurkat,Human
+jy,JY,Human
+k562,K562,Human
+k562/adr,K562/ADR,Human
+karpas 299,Karpas-299,Human
+karpas-299,Karpas-299,Human
+karpas422,Karpas422,Human
+kato iii cell,KATOIII,Human
+kb,KB,Human
+kb-c2,KB-C2,Human
+kb-v1,KB-V1,Human
+kb/vcr,KB-VCR,Human
+kb8,KB8,Human
+kbv1,KB-V1,Human
+kbvin,KB-Vin,Human
+kdr15,KDR15,Human
+kg1a,KG1a,Human
+kidney,Kidney,Human
+kit225,KIT225,Human
+km12,KM12,Human
+kmh11,KMH11,Human
+kms18,KMS18,Human
+knrk,KNRK,Rat
+l (tk-),LTK-,Mouse
+l wnt3a,L-Wnt3a,Mouse
+l(tk-),LTK-,Mouse
+l1.2,L1.2,Mouse
+l1210,L1210,Mouse
+l1236,L1236,Human
+l929,L929,Mouse
+leukocyte,Leukocyte,Human
+leukocyte tyrosine kinase,LTK,Mouse
+llc-pk1,LLC-PK1,Pig
+llcpk,LLC-PK1,Pig
+lltc,LLTC,Mouse
+lm(tk-),LMTK-,Mouse
+lmtk,LMTK-,Mouse
+lmtk-,LMTK-,Mouse
+ln-18,LN18,Human
+ln18,LN18,Human
+ln229,LN229,Human
+lncap,LNCaP,Human
+lncap c4-2,LNCaP-C4-2,Human
+lncap/ar,LNCaP-AR,Human
+lnz308,LNZ308,Human
+lovo,LoVo,Human
+lox,LOX,Human
+ls174t,LS174T,Human
+ltk,LTK,Mouse
+ltk fibroblast,LTK,Mouse
+ltk-,LTK-,Mouse
+lymphocyte,Lymphocyte,Human
+m-luc,M-Luc,Mouse
+m07e,M07e,Human
+magi-ccr5,MAGI-CCR5,Human
+malm-3m,Malme-3M,Human
+malme-3m,Malme-3M,Human
+mammalian cell,Mammalian Cell,Various
+mammalian expression system,Mammalian Expression System,Various
+mc116,MC116,Human
+mc65,MC65,Human
+mcf,MCF,Human
+mcf-10a,MCF10A,Human
+mcf-7 mx,MCF7-MX,Human
+mcf-7pigst,MCF7-piGST,Human
+mcf10a,MCF10A,Human
+mcf7,MCF7,Human
+mcf7/mx,MCF7-MX,Human
+mcf7/topo,MCF7-Topo,Human
+mcf7wt,MCF7,Human
+mcneua,McNeuA,Human
+mda-453,MDA-MB-453,Human
+mda-kb2,MDA-KB2,Human
+mda-mb-231,MDA-MB-231,Human
+mda-mb-361,MDA-MB-361,Human
+mda-mb-435,MDA-MB-435,Human
+mda-mb-453,MDA-MB-453,Human
+mda-mb-468,MDA-MB-468,Human
+mda-mb453,MDA-MB-453,Human
+mda435,MDA-MB-435,Human
+mda435/lcc6mdr,MDA435-LCC6MDR,Human
+mday-d2,MDAY-D2,Mouse
+mdck,MDCK,Dog
+mdck cell,MDCK,Dog
+mdck-ii,MDCK-II,Dog
+mdck2,MDCK-II,Dog
+mef,MEF,Mouse
+mef 3t3,MEF-3T3,Mouse
+mef-3t3,MEF-3T3,Mouse
+melan-a,Melan-A,Mouse
+membrane fusion between hiv1 jr-fl env-expressing cos-7 and molt4/,COS-7-HIV1-JRFL-Molt4,African Green Monkey/Human
+membrane preparations of nih3t3 stably expressing,NIH3T3,Mouse
+membranes hek293 stably expressing,HEK293,Human
+membranes of sk-n-mc,SK-N-MC,Human
+mes-sa/dx5,MES-SA/Dx5,Human
+methylhistamine-induced h3-bla u2os,U2OS-H3-bla,Human
+mg-63,MG63,Human
+mg87,MG87,Mouse
+mgc-803,MGC803,Human
+mia paca-2,MiaPaCa-2,Human
+miapaca,MiaPaCa-2,Human
+miapaca2,MiaPaCa-2,Human
+microglia,Microglia,Various
+microsomal fraction of hek293,HEK293,Human
+mkn-45,MKN45,Human
+mkn45,MKN45,Human
+mo7,M07e,Human
+mo7e,M07e,Human
+molm-13,MOLM-13,Human
+molm-14,MOLM-14,Human
+molt-4,MOLT4,Human
+molt4,MOLT4,Human
+monkey cos-7,COS-7,African Green Monkey
+monocyte,Monocyte,Human
+mr49f,MR49F,Rat
+mt4,MT4,Human
+mtc,MTC,Human
+murine fibroblast cell,Fibroblast,Mouse
+mv4-11,MV4-11,Human
+myeloma,Myeloma,Human
+n2a,Neuro-2a,Mouse
+na+ influx in cho,CHO,Hamster
+nb-4,NB4,Human
+nci-h1299,NCI-H1299,Human
+nci-h1975,NCI-H1975,Human
+nci-h1993,NCI-H1993,Human
+nci-h2228,NCI-H2228,Human
+nci-h226,NCI-H226,Human
+nci-h292,NCI-H292,Human
+nci-h295r,NCI-H295R,Human
+nci-h3122,NCI-H3122,Human
+nci-h358,NCI-H358,Human
+nci-h441,NCI-H441,Human
+nci-h929,NCI-H929,Human
+nci-pc3,NCI-PC3,Human
+nci/adr-res,NCI/ADR-RES,Human
+neuro-2a,Neuro-2a,Mouse
+neuro2a,Neuro-2a,Mouse
+neuroblastoma,Neuroblastoma,Human
+nh3t3,NIH3T3,Mouse
+nhdfneo,NHDF-Neo,Human
+nih/ 3t3,NIH3T3,Mouse
+nih/3t3,NIH3T3,Mouse
+nih3t3,NIH3T3,Mouse
+nmu,NMU,Rat
+non-adherent,Non-Adherent,Various
+ns0,NS0,Mouse
+nso,NS0,Mouse
+oci-aml2,OCI-AML2,Human
+of th2,TH2,Human
+on cho cell,CHO,Hamster
+oocyte,Oocyte,Various (Xenopus)
+oocytes,Oocyte,Various (Xenopus)
+opm-2,OPM2,Human
+oprm1,OPRM1,Human
+ovary,Ovary,Human
+ovcar-3,OVCAR3,Human
+pa-1,PA1,Human
+paca-2,MiaPaCa-2,Human
+pae,PAE,Pig
+panc-1,PANC1,Human
+panc02,PANC02,Mouse
+pancreas,Pancreas,Human
+pathhunter cell,PathHunter,Various
+pbmc,PBMC,Human
+pc-12,PC12,Rat
+pc-3,PC3,Human
+pc3,PC3,Human
+pc3m,PC3M,Human
+pc9-drh,PC9-DRH,Human
+peo1,PEO1,Human
+pfeiffer,Pfeiffer,Human
+pfsk-1,PFSK1,Human
+pgd2-stimulated cho.k1,CHO-K1-PGD2,Hamster
+pichia pastoris,Pichia pastoris,Yeast
+pichia pastoris expression system,Pichia pastoris,Yeast
+pichia pastoris smd1168,Pichia pastoris SMD1168,Yeast
+pig llcpk,LLC-PK1,Pig
+pituitary gland cell,Pituitary Gland Cell,Human
+platelet,Platelet,Human
+plc/prf/5,PLC/PRF/5,Human
+pmnl,PMNL,Human
+porcine aorta epithelial,PAE,Pig
+porcine pae145,PAE145,Pig
+primary hepatocyte,Hepatocyte,Human
+prostate,Prostate,Human
+ps120,PS120,Hamster
+qbi-hek 293a,QBI-HEK293A,Human
+qbi-hek293-a,QBI-HEK293A,Human
+r2/pcft4,R2-PCFT4,Human
+raji,Raji,Human
+ramos,Ramos,Human
+rasf,RASF,Human
+rat c6,C6,Rat
+rat fibroblast,Rat Fibroblast,Rat
+rat nih3t3,NIH3T3,Mouse
+rat pc12,PC12,Rat
+rat rat1,Rat1,Rat
+rat rbl-2h3,RBL-2H3,Rat
+rat rh7777,RH7777,Rat
+raw,RAW264.7,Mouse
+raw blue,RAW-Blue,Mouse
+raw264.7,RAW264.7,Mouse
+rbe4,RBE4,Rat
+rbl,RBL-2H3,Rat
+rbl-2h3,RBL-2H3,Rat
+rd-hga16,RD-HGA16,Human
+recombinant baculovirus infected sf9 insect,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+recombinant baculovirus system,Baculovirus-System,Insect
+recombinant hek293,HEK293,Human
+renal leiomyoblastoma,Renal Leiomyoblastoma,Human
+rerf-lc-ai,RERF-LC-AI,Human
+rgt,RGT,Human
+rko,RKO,Human
+rle,RLE,Rat
+rms13,RMS13,Human
+rosetta2 de3,E. coli Rosetta2(DE3),Escherichia coli
+rpmi-8226,RPMI-8226,Human
+rptec,RPTEC,Human
+rs4-11,RS4;11,Human
+rt-112,RT112,Human
+s12,S12,Human
+saccharomyces cerevisiae,Saccharomyces cerevisiae,Yeast
+saccharomyces cerevisiae yy7,Saccharomyces cerevisiae YY7,Yeast
+sal,SAL,Human
+sc,SC,Human
+sc-3,SC3,Mouse
+sch,SCH,Human
+schneider 2,Schneider 2,Insect (Drosophila melanogaster)
+sem,SEM,Human
+set2,SET2,Human
+sf-9,Sf9,Insect (Spodoptera frugiperda)
+sf1,SF1,Mouse
+sf21,Sf21,Insect (Spodoptera frugiperda)
+sf21 insect,Sf21,Insect (Spodoptera frugiperda)
+sf21-baculovirus system,Sf21-Baculovirus,Insect (Spodoptera frugiperda)
+sf9,Sf9,Insect (Spodoptera frugiperda)
+sf9 baculovirus cell expression system,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+sf9 baculovirus expression system,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+sf9 baculovirus system,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+sf9 insect,Sf9,Insect (Spodoptera frugiperda)
+sf9 insect cell,Sf9,Insect (Spodoptera frugiperda)
+sf9-baculovirus system,Sf9-Baculovirus,Insect (Spodoptera frugiperda)
+sgc-7901,SGC7901,Human
+sh-sy5y,SH-SY5Y,Human
+shh light ii,SHH-Light2,Mouse
+shh light2,SHH-Light2,Mouse
+shsy5y,SH-SY5Y,Human
+siha,SiHa,Human
+sjsa-1,SJSA1,Human
+sk-br-3,SK-BR-3,Human
+sk-hep1,SK-HEP1,Human
+sk-mel-2,SK-MEL-2,Human
+sk-mel-28,SK-MEL-28,Human
+sk-n-as,SK-N-AS,Human
+sk-n-mc,SK-N-MC,Human
+sk-n-sh,SK-N-SH,Human
+sk-ov-3,SK-OV-3,Human
+skbr3,SK-BR-3,Human
+sknbe2,SKNBE2,Human
+skov-3,SK-OV-3,Human
+skov3/m6-6 isogenic,SK-OV-3/M6-6,Human
+snu-16,SNU-16,Human
+stable cho-k1,CHO-K1,Hamster
+stably in cho,CHO,Hamster
+su-dhl-1,SU-DHL-1,Human
+su.86.86,SU.86.86,Human
+sup-m2,SUP-M2,Human
+sw 1116,SW1116,Human
+sw-620,SW620,Human
+sw1353,SW1353,Human
+sw480,SW480,Human
+sy5y,SH-SY5Y,Human
+t cell,T-Cell,Human
+t-24,T24,Human
+t-cell,T-Cell,Human
+t47d,T47D,Human
+t47d-c124,T47D-C124,Human
+t98g,T98G,Human
+tc28,TC28,Human
+tet-off,Tet-Off,Various
+tetracycline inducible hek293,HEK293-Tet-On,Human
+tf-1,TF1,Human
+tf1,TF1,Human
+th2,TH2,Human
+thp,THP1,Human
+thp-1,THP1,Human
+thp1,THP1,Human
+thymidine kinase-deficient lm,LMTK-,Mouse
+tm3,TM3,Mouse
+tmd8,TMD8,Human
+tov21g,TOV21G,Human
+transcription in hela,HeLa,Human
+trex,T-REx,Human
+trex293,T-REx-293,Human
+tsa201,TSA201,Human
+tt,TT,Human
+u-251,U251,Human
+u-373mg atcc,U373MG,Human
+u-87,U87MG,Human
+u-87mg atcc,U87MG,Human
+u-937,U937,Human
+u2os,U2OS,Human
+u87,U87MG,Human
+u87mg,U87MG,Human
+u937,U937,Human
+uas-bla griptite 293,HEK293-Griptite-UAS-bla,Human
+uas-bla h,UAS-bla-H,Human
+uas-mr-bla hek293,HEK293-UAS-MR-bla,Human
+uke1,UKE1,Human
+utmc2,UTMC2,Human
+v79,V79,Hamster
+wehi265.1,WEHI265.1,Mouse
+wehi274.1,WEHI274.1,Mouse
+wi 38,WI38,Human
+widr,WiDr,Human
+wm-1799,WM1799,Human
+wm266.4,WM266.4,Human
+y3,Y3,Rat
+yeast,Saccharomyces cerevisiae,Yeast
+yeast ah109,Saccharomyces cerevisiae AH109,Yeast
+z138,Z138,Human
+zr-75-1,ZR-75-1,Human
+zr75,ZR-75-1,Human
+zs,ZS,Human
