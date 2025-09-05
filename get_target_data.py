@@ -11,9 +11,10 @@ from typing import Sequence
 import pandas as pd
 
 from library import chembl_library as cl
-from library import iuphar_library as ii
-from library import uniprot_library as uu
 from library import io
+from library import iuphar_library as ii
+from library import target_postprocessing as tp
+from library import uniprot_library as uu
 
 logger = logging.getLogger(__name__)
 
@@ -377,6 +378,10 @@ def run_iuphar(args: argparse.Namespace) -> int:
 def run_all(args: argparse.Namespace) -> int:
     """Run ChEMBL, UniProt and IUPHAR pipelines and merge their outputs.
 
+    The merged table is post-processed using
+    :func:`library.target_postprocessing.postprocess_targets` before
+    being written to disk.
+
     Parameters
     ----------
     args:
@@ -517,8 +522,10 @@ def run_all(args: argparse.Namespace) -> int:
         iuphar_df = iuphar_df[["uniprot_id", *classification_cols]]
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+        # Apply domain-specific clean-up before exporting
+        processed = tp.postprocess_targets(merged)
 
-        io.write_csv(merged, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
         return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
