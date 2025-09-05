@@ -38,7 +38,6 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 import logging
-import time
 
 import pandas as pd
 import requests
@@ -133,12 +132,11 @@ def _parse_uniprot_id(xrefs: list[dict[str, str]], chembl_id: str) -> tuple[str,
                 uniprot_id = ident
                 break
     try:
-        mapping_uniprot_id = map_chembl_to_uniprot(chembl_id)
+        mapping_uniprot_id = map_chembl_to_uniprot(chembl_id) or ""
     except Exception as exc:  # pragma: no cover - network failure paths
         logger.warning("UniProt mapping request failed for %s: %s", chembl_id, exc)
         mapping_uniprot_id = ""
     return uniprot_id, mapping_uniprot_id
-
 
 
 def _parse_hgnc(xrefs: list[dict[str, str]]) -> tuple[str, str]:
@@ -438,6 +436,7 @@ def get_assays_all(ids: Iterable[str], chunk_size: int = 5) -> pd.DataFrame:
     df = pd.concat(records, ignore_index=True)
     return df.reindex(columns=ASSAY_COLUMNS)
 
+
 def get_assays_notNull(ids: Iterable[str], chunk_size: int = 5) -> pd.DataFrame:
     """Fetch assay records for ``ids``.
 
@@ -490,6 +489,8 @@ def get_assays_notNull(ids: Iterable[str], chunk_size: int = 5) -> pd.DataFrame:
 
     df = pd.concat(records, ignore_index=True)
     return df.reindex(columns=ASSAY_COLUMNS)
+
+
 # ----------------------------
 # Activity utilities
 # ----------------------------
@@ -512,18 +513,15 @@ ACTIVITY_COLUMNS = [
     "type",
     "value",
     "units",
-    "relation"
-    "qudt_units"
-    "pchembl_value",
+    "relation" "qudt_units" "pchembl_value",
     "activity_comment",
     "data_validity_comment",
-    "data_validity_description"
-    "potential_duplicate",
+    "data_validity_description" "potential_duplicate",
     "bao_label",
     "src_id",
     "src_assay_id",
     "assay_variant_accession",
-    "assay_variant_mutation",  
+    "assay_variant_mutation",
 ]
 
 
@@ -646,7 +644,7 @@ def get_testitem(ids: Iterable[str], chunk_size: int = 5) -> pd.DataFrame:
         items = data.get("molecules") or data.get("molecule") or []
         if items:
             records.append(pd.json_normalize(items))
- # Drop empty or all-NA frames to avoid deprecation warnings in pandas
+    # Drop empty or all-NA frames to avoid deprecation warnings in pandas
     records = [r for r in records if not r.empty and not r.isna().all().all()]
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
