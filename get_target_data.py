@@ -166,13 +166,13 @@ def build_parser() -> argparse.ArgumentParser:
     iuphar.add_argument(
         "--target-csv",
         type=Path,
-        default=Path("data/_IUPHAR_target.csv"),
+        default=Path("dictionary/_IUPHAR/_IUPHAR_target.csv"),
         help="Path to the _IUPHAR_target.csv file",
     )
     iuphar.add_argument(
         "--family-csv",
         type=Path,
-        default=Path("data/_IUPHAR_family.csv"),
+        default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
         help="Path to the _IUPHAR_family.csv file",
     )
     iuphar.add_argument("--sep", default=",", help="CSV delimiter for I/O")
@@ -230,13 +230,13 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument(
         "--target-csv",
         type=Path,
-        default=Path("data/_IUPHAR_target.csv"),
+        default=Path("dictionary/_IUPHAR/_IUPHAR_target.csv"),
         help="Path to the _IUPHAR_target.csv file",
     )
     all_cmd.add_argument(
         "--family-csv",
         type=Path,
-        default=Path("data/_IUPHAR_family.csv"),
+        default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
         help="Path to the _IUPHAR_family.csv file",
     )
     all_cmd.add_argument(
