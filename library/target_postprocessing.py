@@ -52,6 +52,10 @@ def _first_token(value: str | float | None) -> str:
 def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
     """Clean and reshape merged target information.
 
+    The function normalises UniProt identifiers, resolves gene names and
+    synonyms, fills optional columns and standardises the output ordering so
+    that the resulting table is ready for downstream export.
+
     Parameters
     ----------
     df:
@@ -62,6 +66,11 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Normalised table ready for export.
+
+    Tests
+    -----
+    Behaviour is exercised in
+    :func:`tests.test_target_postprocessing.test_postprocess_targets_merges_and_normalises`.
     """
 
     df = df.copy()
@@ -221,6 +230,11 @@ def postprocess_file(
         Field delimiter of the CSV files.
     encoding:
         Text encoding of the CSV files.
+
+    Tests
+    -----
+    Verified in
+    :func:`tests.test_target_postprocessing.test_postprocess_file_roundtrip`.
     """
 
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)

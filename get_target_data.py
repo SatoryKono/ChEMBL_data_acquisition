@@ -286,6 +286,11 @@ def run_uniprot(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero on failure.
+
+    Tests
+    -----
+    The post-processing step is covered by
+    :mod:`tests.test_target_postprocessing`.
     """
     try:
         df = pd.read_csv(
@@ -391,6 +396,11 @@ def run_all(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero on failure.
+    
+    Tests
+    -----
+    The post-processing step is covered by
+    :mod:`tests.test_target_postprocessing`.
     """
 
     try:
