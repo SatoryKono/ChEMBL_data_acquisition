@@ -152,6 +152,7 @@ class DocumentClassifier:
         explain_short = f"{final_class} via {source_priority or 'rules'}"
 
         return io.ClassificationResult(
+            document_id=record.document_id,
             final_class=final_class,
             S_in_vivo=vivo_score,
             S_in_vitro=vitro_score,

@@ -26,6 +26,7 @@ LIST_FIELDS = [
 ]
 
 CSV_FIELD_MAP: Dict[str, str] = {
+    "document_chembl_id": "document_id",
     "PubMed.PublicationType": "pubmed_publicationtype",
     "scholar.PublicationTypes": "scholar_publicationtypes",
     "OpenAlex.PublicationTypes": "openalex_publicationtypes",

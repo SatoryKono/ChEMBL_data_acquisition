@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field  # type: ignore[import-not-found]
 class DocumentRecord(BaseModel):
     """Normalized input record for classification."""
 
+    document_id: Optional[str] = None
     title: str
     abstract: str
     doi: str
@@ -29,6 +30,7 @@ class DocumentRecord(BaseModel):
 class ClassificationResult(BaseModel):
     """Result of classification with detailed explanation."""
 
+    document_id: Optional[str] = None
     final_class: str
     S_in_vivo: int
     S_in_vitro: int

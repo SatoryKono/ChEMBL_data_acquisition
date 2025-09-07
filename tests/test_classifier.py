@@ -108,3 +108,11 @@ def test_tie_without_behavior_goes_vitro():
     result = classifier.classify(record)
     assert result.final_class == "Experimental in vitro bioactivity"
     assert "vivo_vs_vitro_tie" in result.conflicts
+
+
+def test_document_id_pass_through():
+    record = make_record(
+        document_id="ID123", title="Review", pubmed_publicationtype=["Review"]
+    )
+    result = classifier.classify(record)
+    assert result.document_id == "ID123"

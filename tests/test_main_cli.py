@@ -13,8 +13,8 @@ def test_cli_autodetect_csv(tmp_path: Path) -> None:
 
     input_path = tmp_path / "sample.csv"
     input_path.write_text(
-        "title,abstract,doi,PubMed.PublicationType\n"
-        "Title,Abstract,10.1/rev,Review|Journal Article\n",
+        "document_chembl_id,title,abstract,doi,PubMed.PublicationType\n"
+        "DOC1,Title,Abstract,10.1/rev,Review|Journal Article\n",
         encoding="utf-8",
     )
     output_path = tmp_path / "out.jsonl"
@@ -35,3 +35,4 @@ def test_cli_autodetect_csv(tmp_path: Path) -> None:
 
     data = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
     assert data["final_class"] == "Review"
+    assert data["document_id"] == "DOC1"
