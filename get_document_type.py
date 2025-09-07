@@ -4,6 +4,7 @@ The script reads a CSV file with publication metadata, assigns each record to
 ``review``, ``experimental`` or ``unknown`` class and writes results to a new
 CSV file with additional debug columns.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,7 +15,7 @@ from typing import Sequence
 import pandas as pd
 
 from library.document_type_classifier import compute_scores, decide_label
-from library.document_type_terms.terms import parse_terms
+from library.document_type_terms import parse_terms
 
 REQUIRED_COLUMNS = [
     "title",
@@ -31,7 +32,9 @@ def _is_empty(series: pd.Series) -> pd.Series:
     return series.isna() | (series.astype(str).str.strip() == "")
 
 
-def _read_csv_auto(path: str, encodings: Sequence[str], seps: Sequence[str]) -> tuple[pd.DataFrame, str, str]:
+def _read_csv_auto(
+    path: str, encodings: Sequence[str], seps: Sequence[str]
+) -> tuple[pd.DataFrame, str, str]:
     """Read a CSV file trying multiple encodings and separators."""
     last_error: Exception | None = None
     for enc in encodings:
@@ -43,7 +46,9 @@ def _read_csv_auto(path: str, encodings: Sequence[str], seps: Sequence[str]) -> 
                 continue
             if set(REQUIRED_COLUMNS).issubset(df.columns):
                 return df, enc, sep
-    raise ValueError(f"Cannot read input file with provided encodings/separators: {last_error}")
+    raise ValueError(
+        f"Cannot read input file with provided encodings/separators: {last_error}"
+    )
 
 
 def classify_dataframe(
@@ -131,10 +136,20 @@ def main() -> None:
     pubmed_empty = _is_empty(df["PubMed.PublicationType"]).mean() * 100
     scholar_empty = _is_empty(df["scholar.PublicationTypes"]).mean() * 100
     openalex_empty = (
-        _is_empty(df["OpenAlex.PublicationTypes"]) & _is_empty(df["OpenAlex.TypeCrossref"])
+        _is_empty(df["OpenAlex.PublicationTypes"])
+        & _is_empty(df["OpenAlex.TypeCrossref"])
     ).mean() * 100
     zero_signals = (
-        (classified[["debug.scores.review", "debug.scores.experimental", "debug.scores.unknown"]].sum(axis=1) == 0)
+        (
+            classified[
+                [
+                    "debug.scores.review",
+                    "debug.scores.experimental",
+                    "debug.scores.unknown",
+                ]
+            ].sum(axis=1)
+            == 0
+        )
     ).sum()
 
     logging.info(
