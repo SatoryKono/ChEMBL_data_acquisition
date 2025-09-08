@@ -154,3 +154,45 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
     assert not bool(res.loc[1, "is_citation"])
     assert res["high_citation_rate"].all()
     assert res["unicellular_organism"].all()
+
+
+
+def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
+    """Process activity table lacking ``nstereo`` column."""
+    df = pd.DataFrame(
+        {
+            "activity_chembl_id": [1],
+            "salt_chembl_id": ["S1"],
+            "molecule_chembl_id": ["M1"],
+            "target_chembl_id": ["T1"],
+            "assay_chembl_id": ["A1"],
+            "document_chembl_id": ["D1"],
+            "bao_endpoint": ["e1"],
+            "standard_type": ["t"],
+            "standard_value": [1.0],
+            "log_value": [0.1],
+            "bao_format": ["f1"],
+            "compound_key": ["ck1"],
+            "compound_name": ["cn1"],
+            "multmol_assay": [pd.NA],
+            "approx_cited_activity": [pd.NA],
+            "exact_cited_activity": [True],
+            "higly_correlated_cit": [pd.NA],
+            "shuffled_cit": [pd.NA],
+            "review_doc": [False],
+            "original_activity_approx": [0.5],
+            "original_activity_exact": [0.5],
+        }
+    )
+
+    (tmp_path / "citation_fraction.csv").write_text(
+        "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
+    )
+    (tmp_path / "targets_type.csv").write_text(
+        "chembl_id,type\nT1,Multicellular organism\n"
+    )
+
+    res = process_activity_table(df, tmp_path)
+    assert "unknown_chirality" in res.columns
+    assert res.loc[0, "unknown_chirality"]
+

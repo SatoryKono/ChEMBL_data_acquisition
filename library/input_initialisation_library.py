@@ -172,6 +172,13 @@ def process_activity_table(
         df["unknown_chirality"] = df["nstereo"].astype("Int64").ne(1)
         df.drop(columns=["nstereo"], inplace=True)
 
+    else:
+        # If the source table lacks ``nstereo`` values, default to True. This
+        # mirrors the Power Query behaviour where missing stereochemistry is
+        # treated as unknown.
+        df["unknown_chirality"] = pd.Series(True, index=df.index, dtype="boolean")
+
+
     # --- multimol assay map ------------------------------------------------
     group_cols = [
         "salt_chembl_id",
@@ -266,7 +273,6 @@ def process_activity_table(
         if col in df.columns:
 
             df[col] = df[col].astype("boolean").fillna(False).astype(bool)
-
 
     df["is_citation"] = df[bool_cols].any(axis=1)
 
