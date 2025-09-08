@@ -38,21 +38,15 @@ ACTIVITY_DROP_COLS: set[str] = {
     "n_stereocenters",
     "unspecified_chirality_mol",
     "shuffled_target_assay",
-    "approx_cited_activity",
     "exact_cited_activity_samedoc",
     "approx_cited_activity_samedoc",
     "survives_main_steps",
     "num_citations",
     "higly_correlated_cit_samedoc",
-    "higly_correlated_cit",
-    "shuffled_cit",
-    "exact_cited_activity",
-    "multmol_assay",
     "multimol",
     "publication_date",
     "sort_order.document",
     "document_contains_external_links",
-    "review_doc",
     "year",
     "month",
     "day",
@@ -149,6 +143,253 @@ FLOAT_COLS: set[str] = {
 DATE_COLS: set[str] = {
     "publication_date",
 }
+
+
+def process_activity_table(
+    df_activity: pd.DataFrame, dictionary_dir: Path | str
+) -> pd.DataFrame:
+    """Transform the combined activity table.
+
+    Parameters
+    ----------
+    df_activity:
+        Deduplicated activity dataframe.
+    dictionary_dir:
+        Directory containing ``targets_type.csv`` and
+        ``citation_fraction.csv``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Processed activity table ready for CSV export. The result mirrors
+        the original Power Query logic including citation significance, target
+        type flags, IUPHAR class metadata and the ``multifunctional_enzyme``
+        indicator.
+    """
+
+    logger.info("Processing activity table")
+    df = df_activity.copy()
+
+    # --- unknown chirality -------------------------------------------------
+    if "nstereo" in df.columns:
+        df["unknown_chirality"] = (
+            df["nstereo"].astype("Int64").ne(1).fillna(True)
+        )
+        df.drop(columns=["nstereo"], inplace=True)
+    else:
+        # If the source table lacks ``nstereo`` values, default to True. This
+        # mirrors the Power Query behaviour where missing stereochemistry is
+        # treated as unknown.
+        df["unknown_chirality"] = pd.Series(True, index=df.index, dtype="boolean")
+
+    # --- multimol assay map ------------------------------------------------
+    group_cols = [
+        "salt_chembl_id",
+        "molecule_chembl_id",
+        "target_chembl_id",
+        "assay_chembl_id",
+        "standard_type",
+    ]
+    missing = set(group_cols) - set(df.columns)
+    if missing:
+        raise KeyError(
+            "activity table missing columns for multimol grouping: "
+            + ", ".join(sorted(missing))
+        )
+
+    counts = (
+        df.groupby(group_cols, dropna=False)
+        .size()
+        .rename("Count")
+        .reset_index()
+    )
+    df = df.merge(counts, on=group_cols, how="left")
+
+    mask = (
+        df["unknown_chirality"].fillna(True).eq(False)
+        & df["multmol_assay"].isna()
+        & (df["Count"] > 1)
+    )
+    assays = set(df.loc[mask, "assay_chembl_id"].dropna().astype(str))
+    df["multimol_assay_same"] = df["assay_chembl_id"].isin(assays)
+
+    df["multmol_assay"] = (
+        df["multmol_assay"].astype("boolean").fillna(False).astype(bool)
+        | df["multimol_assay_same"]
+    )
+    df.drop(columns=["multimol_assay_same", "Count"], inplace=True)
+
+    # --- rename columns ----------------------------------------------------
+    df = df.rename(
+        columns={
+            "approx_cited_activity": "rounded_data_citation",
+            "shuffled_cit": "shuffled_assay",
+            "exact_cited_activity": "exact_data_citation",
+            "higly_correlated_cit": "higly_correlated_assay",
+            "review_doc": "review",
+        }
+    )
+
+    df = df.rename(
+        columns={
+            "activity_chembl_id": "activity_id",
+            "salt_chembl_id": "saltform_id",
+            "molecule_chembl_id": "molecule_id",
+            "target_chembl_id": "target_id",
+            "assay_chembl_id": "assay_id",
+            "document_chembl_id": "document_id",
+            "standard_type": "mesurement_type",
+            "log_value": "pA_value",
+        }
+    )
+
+    # --- drop unused columns -----------------------------------------------
+    drop_cols = [
+        "cited_document",
+        "acts_per_assay_step5",
+        "approx_cited_activity_samedoc",
+        "error_document",
+        "exact_cited_activity_samedoc",
+        "higly_correlated_cit_samedoc",
+        "standard_inchi_skeleton",
+        "standard_inchi_stereo",
+        "step1",
+        "step2",
+        "step3",
+        "step4",
+        "step5",
+        "step6",
+        "survives_main_steps",
+    ]
+    df.drop(columns=[c for c in drop_cols if c in df.columns], inplace=True)
+
+    # --- compute citation flags --------------------------------------------
+    bool_cols = [
+        "exact_data_citation",
+        "higly_correlated_assay",
+        "shuffled_assay",
+        "review",
+        "rounded_data_citation",
+    ]
+    for col in bool_cols:
+        if col in df.columns:
+            df[col] = df[col].astype("boolean").fillna(False).astype(bool)
+
+    df["is_citation"] = df[bool_cols].any(axis=1)
+
+    # --- documents with significant citations ------------------------------
+    counts_doc = (
+        df.groupby("document_id")["is_citation"]
+        .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
+        .reset_index()
+    )
+    counts_doc["N"] = counts_doc["n_citation"] + counts_doc["n_non_citation"]
+    counts_doc = counts_doc[
+        (counts_doc["n_citation"] > 0) & (counts_doc["n_non_citation"] > 0)
+    ]
+
+    cf_path = Path(dictionary_dir) / "citation_fraction.csv"
+    cf = pd.read_csv(cf_path)
+
+    counts_doc = counts_doc.merge(cf[["N", "K_min_significant"]], on="N", how="left")
+    counts_doc["high_citation_rate"] = counts_doc["K_min_significant"].notna() & (
+        counts_doc["n_citation"] >= counts_doc["K_min_significant"]
+    )
+
+    df = df.merge(
+        counts_doc[["document_id", "high_citation_rate"]],
+        on="document_id",
+        how="left",
+    )
+    df["high_citation_rate"] = df["high_citation_rate"].fillna(False)
+
+    # --- target types ------------------------------------------------------
+    targets_path = Path(dictionary_dir) / "targets_type.csv"
+    targets = pd.read_csv(
+        targets_path,
+        dtype={
+            "chembl_id": "string",
+            "IUPHAR_class": "string",
+            "IUPHAR_subclass": "string",
+            "type": "string",
+        },
+    )
+
+    df = df.merge(
+        targets[["chembl_id", "IUPHAR_class", "IUPHAR_subclass", "type"]],
+        how="left",
+        left_on="target_id",
+        right_on="chembl_id",
+    )
+    mapping = {
+        "Multicellular organism": False,
+        "Viruses": True,
+        "Unicellular organism": True,
+    }
+    df["unicellular_organism"] = (
+        df["type"].map(mapping).fillna(False).astype(bool)
+    )
+    df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
+    df.drop(columns=["chembl_id", "type"], inplace=True)
+
+    # --- final ordering ----------------------------------------------------
+    final_cols = [
+        "activity_id",
+        "saltform_id",
+        "molecule_id",
+        "target_id",
+        "assay_id",
+        "document_id",
+        "bao_endpoint",
+        "mesurement_type",
+        "standard_value",
+        "pA_value",
+        "bao_format",
+        "compound_key",
+        "compound_name",
+        "unknown_chirality",
+        "multmol_assay",
+        "exact_data_citation",
+        "higly_correlated_assay",
+        "shuffled_assay",
+        "review",
+        "rounded_data_citation",
+        "high_citation_rate",
+        "original_activity_approx",
+        "original_activity_exact",
+        "is_citation",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "unicellular_organism",
+        "multifunctional_enzyme",
+    ]
+
+    missing_final = set(final_cols) - set(df.columns)
+    if missing_final:
+        raise KeyError(
+            "activity table missing expected columns: "
+            + ", ".join(sorted(missing_final))
+        )
+    df = df[final_cols]
+
+    # Ensure boolean dtype where appropriate
+    bool_cols_final = [
+        "unknown_chirality",
+        "multmol_assay",
+        "exact_data_citation",
+        "higly_correlated_assay",
+        "shuffled_assay",
+        "review",
+        "rounded_data_citation",
+        "high_citation_rate",
+        "is_citation",
+        "unicellular_organism",
+        "multifunctional_enzyme",
+    ]
+    for col in bool_cols_final:
+        df[col] = df[col].astype("boolean")
+
+    return df
 
 
 def _ensure_openpyxl() -> None:
@@ -309,6 +550,7 @@ def append_entities(df_a: pd.DataFrame, df_b: pd.DataFrame) -> pd.DataFrame:
 def build_combined_tables(
     same: Dict[EntityName, pd.DataFrame],
     all_: Dict[EntityName, pd.DataFrame],
+    dictionary_dir: Path | str | None = None,
 ) -> Dict[EntityName, pd.DataFrame]:
     """Combine entity tables from ``same`` and ``all_`` sources."""
     combined: Dict[EntityName, pd.DataFrame] = {}
@@ -324,6 +566,8 @@ def build_combined_tables(
                 errors="ignore",
             )
             df = concat.drop_duplicates(keep="first")
+            if dictionary_dir is not None:
+                df = process_activity_table(df, dictionary_dir)
             rows_concat = len(concat)
             rows_after = len(df)
         else:
