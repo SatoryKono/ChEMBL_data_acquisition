@@ -28,14 +28,6 @@ python get_document_data.py \
     --column document_chembl_id
 ```
 
-## Document type classification
-
-```bash
-python get_document_type.py \
-    --input data/input-smoke/documents_v02.csv \
-    --output data/output-smoke/output_documents_v02.csv \
-    --column document_chembl_id
-```
 
 ## Target data aggregation
 

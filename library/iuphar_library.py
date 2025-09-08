@@ -633,11 +633,18 @@ class ClassificationRecord:
     IUPHAR_family_id: str = "N/A"
     IUPHAR_class: str = "Other Protein Target"
     IUPHAR_subclass: str = "Other Protein Target"
+
     IUPHAR_tree: List[str] = field(default_factory=lambda: ["0864-1", "0864"])
+
     IUPHAR_type: str = "Other Protein Target.Other Protein Target"
     IUPHAR_name: str = "N/A"
     IUPHAR_ecNumber: List[str] = field(default_factory=list)
     STATUS: str = "N/A"
+
+
+    def __post_init__(self) -> None:
+        if not self.IUPHAR_tree:
+            self.IUPHAR_tree = ["0864-1", "0864"]
 
 
 class IUPHARClassifier:
