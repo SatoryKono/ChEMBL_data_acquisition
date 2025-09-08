@@ -21,6 +21,24 @@ Individual scripts provide specialised data retrieval utilities:
 * ``get_testitem_data.py`` – download compound data and enrich with PubChem.
 * ``get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
 
+### Table quality analysis
+
+``table_quality_main.py`` profiles arbitrary CSV files and reports column
+statistics along with correlations between numeric fields. Example usage:
+
+```python
+import pandas as pd
+from library.table_quality import analyze_table_quality
+
+df = pd.read_csv("data.csv", encoding="utf-8-sig")
+quality, corr = analyze_table_quality(df, table_name="data")
+```
+
+Running the CLI saves ``data_quality_report_table.csv`` and
+``data_data_correlation_report_table.csv`` in the current working directory::
+
+    python table_quality_main.py --input data.csv --table-name data
+
 All scripts share a common set of flags:
 
 * ``--input`` – input CSV file (default ``input.csv``)
@@ -44,6 +62,11 @@ Example merging initialisation tables::
       --same-doc path/to/ChEMBL_same_document_20_05.xlsx \
       --all-doc  path/to/ChEMBL_all_10_05_step5.xlsx \
       --out-dir  ./out
+
+The script also profiles each exported table and writes
+``<name>_quality_report_table.csv`` and
+``<name>_data_correlation_report_table.csv`` alongside the original CSVs
+in ``--out-dir``.
 
 ## Development
 

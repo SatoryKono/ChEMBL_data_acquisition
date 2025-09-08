@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, Literal
+from typing import Any, Dict, Literal
 
 import pandas as pd
 
@@ -262,7 +262,7 @@ def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
 
 
 def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
-    def mapper(value: object) -> object:
+    def mapper(value: Any) -> object:
         if pd.isna(value):
             return pd.NA
         if isinstance(value, str):
