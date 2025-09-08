@@ -21,6 +21,9 @@ Individual scripts provide specialised data retrieval utilities:
 * ``get_testitem_data.py`` – download compound data and enrich with PubChem.
 * ``get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
 
+Detailed command line examples using the bundled smoke datasets can be found in
+``docs/USAGE.md``.
+
 ### Table quality analysis
 
 ``table_quality_main.py`` profiles arbitrary CSV files and reports column
