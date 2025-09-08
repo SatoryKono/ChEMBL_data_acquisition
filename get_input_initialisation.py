@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from library import input_initialisation_library as lib
+from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,15 @@ def run(args: argparse.Namespace) -> int:
         missing = [str(p) for p in paths.values() if not p.exists()]
         if missing:
             raise RuntimeError("failed to write output files: " + ", ".join(missing))
-        logger.info("Saved %d tables to %s", len(paths), args.out_dir)
+
+        logger.info("Generating data quality reports")
+        for entity, path in paths.items():
+            logger.info("Profiling %s", entity)
+            analyze_table_quality(path, table_name=str(path.with_suffix("")))
+
+        logger.info(
+            "Saved %d tables and quality reports to %s", len(paths), args.out_dir
+        )
         return 0
     except Exception as exc:
         logger.error("%s", exc)
