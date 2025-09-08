@@ -37,6 +37,7 @@ from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
 from library import io
+from library import document_postprocessing as dp
 
 logger = logging.getLogger(__name__)
 
@@ -186,9 +187,10 @@ def run_all(args: argparse.Namespace) -> int:
     doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)
     output = args.output_csv or io.default_output_path(args.input_csv)
     if doc_df.empty or "pubmed_id" not in doc_df:
+        processed = dp.postprocess_documents(doc_df)
         try:
-            io.write_csv(doc_df, output, sep=args.sep, encoding=args.encoding)
-            logger.info("Wrote %d rows to %s", len(doc_df), output)
+            io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
+            logger.info("Wrote %d rows to %s", len(processed), output)
             return 0
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
@@ -210,9 +212,10 @@ def run_all(args: argparse.Namespace) -> int:
         )
     else:
         merged = doc_df
+    processed = dp.postprocess_documents(merged)
     try:
-        io.write_csv(merged, output, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(merged), output)
+        io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
+        logger.info("Wrote %d rows to %s", len(processed), output)
         return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
