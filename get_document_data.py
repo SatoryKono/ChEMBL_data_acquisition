@@ -38,6 +38,7 @@ from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
+from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
 
@@ -145,10 +146,15 @@ def run_pubmed(args: argparse.Namespace) -> int:
         output = args.output_csv or io.default_output_path(args.input_csv)
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
-        return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
+    try:
+        analyze_table_quality(df, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def run_chembl(args: argparse.Namespace) -> int:
@@ -167,10 +173,15 @@ def run_chembl(args: argparse.Namespace) -> int:
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
-        return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+    try:
+        analyze_table_quality(df, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def run_all(args: argparse.Namespace) -> int:
@@ -200,10 +211,15 @@ def run_all(args: argparse.Namespace) -> int:
         try:
             io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
             logger.info("Wrote %d rows to %s", len(processed), output)
-            return 0
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
             return 1
+        try:
+            analyze_table_quality(processed, table_name=str(output.with_suffix("")))
+        except Exception as exc:
+            logger.error("failed to generate quality report: %s", exc)
+            return 1
+        return 0
 
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
@@ -234,10 +250,15 @@ def run_all(args: argparse.Namespace) -> int:
     try:
         io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(processed), output)
-        return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+    try:
+        analyze_table_quality(processed, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -3,10 +3,11 @@
 This module defines term sets used for classification and provides functions to
 normalise publication type fields.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Iterable, List
+from typing import List
 
 # Term dictionaries -----------------------------------------------------------------
 
@@ -34,7 +35,6 @@ REVIEW_TERMS: set[str] = {
     "retracted publication",
     # OpenAlex specific
     "review-article",
-
 }
 
 EXPERIMENTAL_TERMS: set[str] = {

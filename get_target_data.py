@@ -15,6 +15,7 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
+from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
 
@@ -337,10 +338,15 @@ def run_uniprot(args: argparse.Namespace) -> int:
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
         io.write_csv(out_df, output, sep=args.sep, encoding=args.encoding)
-        return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
+    try:
+        analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def run_chembl(args: argparse.Namespace) -> int:
@@ -358,8 +364,14 @@ def run_chembl(args: argparse.Namespace) -> int:
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        logger.info("Wrote %d rows to %s", len(df), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
+        return 1
+    try:
+        analyze_table_quality(df, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
 
@@ -380,10 +392,15 @@ def run_iuphar(args: argparse.Namespace) -> int:
             encoding=args.encoding,
             sep=args.sep,
         )
-        return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
+    try:
+        analyze_table_quality(output, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def run_all(args: argparse.Namespace) -> int:
@@ -547,10 +564,15 @@ def run_all(args: argparse.Namespace) -> int:
         final_df = tp.finalise_targets(processed, organism_df)
 
         io.write_csv(final_df, output, sep=args.sep, encoding=args.encoding)
-        return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
+    try:
+        analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
