@@ -19,6 +19,7 @@ Individual scripts provide specialised data retrieval utilities:
 * ``get_document_data.py`` – gather publication metadata.
 * ``get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.
 * ``get_testitem_data.py`` – download compound data and enrich with PubChem.
+* ``get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
 
 All scripts share a common set of flags:
 
@@ -36,6 +37,13 @@ Example fetching assay data::
 
 Each command validates required columns before querying external APIs and
 writes the resulting table to the specified output file.
+
+Example merging initialisation tables::
+
+    python get_input_initialisation.py \
+      --same-doc path/to/ChEMBL_same_document_20_05.xlsx \
+      --all-doc  path/to/ChEMBL_all_10_05_step5.xlsx \
+      --out-dir  ./out
 
 ## Development
 

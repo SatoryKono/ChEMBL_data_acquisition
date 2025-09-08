@@ -151,6 +151,23 @@ DATE_COLS: set[str] = {
 }
 
 
+def _ensure_openpyxl() -> None:
+    """Ensure a supported ``openpyxl`` version is available.
+
+    Raises
+    ------
+    RuntimeError
+        If ``openpyxl`` is missing or too old.
+    """
+    try:
+        import openpyxl  # type: ignore
+    except Exception as exc:  # pragma: no cover - import error path
+        raise RuntimeError("openpyxl>=3.1 is required to read Excel files") from exc
+    version = tuple(int(v) for v in openpyxl.__version__.split(".")[:3])
+    if version < (3, 1, 0):  # pragma: no cover - defensive
+        raise RuntimeError(f"openpyxl>=3.1 is required, found {openpyxl.__version__}")
+
+
 def _read_sheet(
     path: Path, sheet: str, *, header_promotion: bool = False
 ) -> pd.DataFrame:
@@ -171,6 +188,7 @@ def _read_sheet(
     ValueError
         If the sheet is missing.
     """
+    _ensure_openpyxl()
     try:
         if header_promotion:
             raw = pd.read_excel(path, sheet_name=sheet, header=None, engine="openpyxl")
