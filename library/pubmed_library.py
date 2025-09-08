@@ -29,8 +29,7 @@ def read_pmids(path: Union[str, Path]) -> List[str]:
                 reader = csv.DictReader(f)
                 if reader.fieldnames is None or "PMID" not in reader.fieldnames:
                     raise ValueError("Input CSV must contain 'PMID' column")
-                pmids = [row.get("PMID", "").strip() for row in reader]
-                return [p for p in pmids if p]
+                return [pmid for row in reader if (pmid := row.get("PMID", "").strip())]
         except UnicodeDecodeError as exc:
             last_exc = exc
             continue
