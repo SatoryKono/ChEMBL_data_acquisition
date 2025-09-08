@@ -156,6 +156,7 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
     assert res["unicellular_organism"].all()
 
 
+
 def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
     """Process activity table lacking ``nstereo`` column."""
     df = pd.DataFrame(
@@ -194,3 +195,4 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
     res = process_activity_table(df, tmp_path)
     assert "unknown_chirality" in res.columns
     assert res.loc[0, "unknown_chirality"]
+
