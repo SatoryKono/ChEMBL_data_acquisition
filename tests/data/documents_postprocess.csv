@@ -1,0 +1,3 @@
+document_chembl_id,PubMed.YearCompleted,PubMed.MonthCompleted,PubMed.DayCompleted,PubMed.YearRevised,PubMed.MonthRevised,PubMed.DayRevised,PubMed.PublicationType,scholar.PublicationTypes,OpenAlex.PublicationTypes
+DOC1,2020,05,12,2021,07,0,Journal Article|Review,Review,review-article
+DOC2,2019,06,0,2018,08,15,Letter,,other
