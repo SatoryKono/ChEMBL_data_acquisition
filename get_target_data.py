@@ -241,6 +241,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the _IUPHAR_family.csv file",
     )
     all_cmd.add_argument(
+        "--organism-csv",
+        type=Path,
+        default=Path("dictionary/organism.csv"),
+        help="CSV mapping 'genus' to organism 'type' for finalisation",
+    )
+    all_cmd.add_argument(
         "--uniprot-column",
         default="uniprot_id",
         choices=["uniprot_id", "mapping_uniprot_id"],
@@ -383,9 +389,10 @@ def run_iuphar(args: argparse.Namespace) -> int:
 def run_all(args: argparse.Namespace) -> int:
     """Run ChEMBL, UniProt and IUPHAR pipelines and merge their outputs.
 
-    The merged table is post-processed using
-    :func:`library.target_postprocessing.postprocess_targets` before
-    being written to disk.
+    The merged table is cleaned and normalised using
+    :func:`library.target_postprocessing.postprocess_targets` followed by
+    :func:`library.target_postprocessing.finalise_targets` before being
+    written to disk.
 
     Parameters
     ----------
@@ -396,7 +403,7 @@ def run_all(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero on failure.
-    
+
     Tests
     -----
     The post-processing step is covered by
@@ -532,10 +539,14 @@ def run_all(args: argparse.Namespace) -> int:
         iuphar_df = iuphar_df[["uniprot_id", *classification_cols]]
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
-        # Apply domain-specific clean-up before exporting
+        # Apply domain-specific clean-up and finalise table before exporting
         processed = tp.postprocess_targets(merged)
+        organism_df = pd.read_csv(
+            args.organism_csv, sep=args.sep, encoding=args.encoding, dtype=str
+        )
+        final_df = tp.finalise_targets(processed, organism_df)
 
-        io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(final_df, output, sep=args.sep, encoding=args.encoding)
         return 0
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
