@@ -38,7 +38,7 @@ def run(args: argparse.Namespace) -> int:
         all_ = lib.load_all_doc(args.all_doc)
 
         logger.info("Combining tables")
-        tables = lib.build_combined_tables(same, all_)
+        tables = lib.build_combined_tables(same, all_, dictionary_dir=args.dictionary_dir)
 
         logger.info("Saving output")
         paths = lib.save_tables(tables, args.out_dir, fmt=args.format)
@@ -70,6 +70,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--all-doc", type=Path, required=True, help="Path to all document workbook"
+    )
+    parser.add_argument(
+        "--dictionary-dir",
+        type=Path,
+        default=Path("dictionary"),
+        help="Directory with targets_type.csv and citation_fraction.csv",
     )
     parser.add_argument(
         "--out-dir", type=Path, default=Path("."), help="Output directory"

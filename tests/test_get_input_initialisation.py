@@ -33,7 +33,11 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli.lib, "build_combined_tables", fake_build_combined_tables)
 
     args = argparse.Namespace(
-        same_doc=same_doc, all_doc=all_doc, out_dir=out_dir, format="csv"
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=out_dir,
+        format="csv",
+        dictionary_dir=tmp_path,
     )
     result = cli.run(args)
     assert result == 0

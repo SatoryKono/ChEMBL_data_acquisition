@@ -13,6 +13,7 @@ from library.input_initialisation_library import (
     build_combined_tables,
     unify_dtypes,
     save_tables,
+    process_activity_table,
 )
 
 
@@ -83,3 +84,113 @@ def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(RuntimeError):
         _ensure_openpyxl()
     monkeypatch.delitem(sys.modules, "openpyxl")
+
+
+def test_process_activity_table_basic(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "activity_chembl_id": [1, 2],
+            "salt_chembl_id": ["S1", "S1"],
+            "molecule_chembl_id": ["M1", "M1"],
+            "target_chembl_id": ["T1", "T1"],
+            "assay_chembl_id": ["A1", "A1"],
+            "document_chembl_id": ["D1", "D1"],
+            "bao_endpoint": ["e1", "e1"],
+            "standard_type": ["t", "t"],
+            "standard_value": [1.0, 2.0],
+            "log_value": [0.1, 0.2],
+            "bao_format": ["f1", "f1"],
+            "compound_key": ["ck1", "ck1"],
+            "compound_name": ["cn1", "cn1"],
+            "multmol_assay": [pd.NA, pd.NA],
+            "nstereo": [2, 1],
+            "approx_cited_activity": [pd.NA, False],
+            "exact_cited_activity": [True, False],
+            "higly_correlated_cit": [pd.NA, False],
+            "shuffled_cit": [pd.NA, False],
+            "review_doc": [False, False],
+            "original_activity_approx": [0.5, 0.6],
+            "original_activity_exact": [0.5, 0.6],
+        }
+    )
+
+    (tmp_path / "citation_fraction.csv").write_text(
+        "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n2,1,x,0.05\n"
+    )
+    (tmp_path / "targets_type.csv").write_text(
+        "chembl_id,type\nT1,Unicellular organism\n"
+    )
+
+    res = process_activity_table(df, tmp_path)
+    expected_cols = [
+        "activity_id",
+        "saltform_id",
+        "molecule_id",
+        "target_id",
+        "assay_id",
+        "document_id",
+        "bao_endpoint",
+        "mesurement_type",
+        "standard_value",
+        "pA_value",
+        "bao_format",
+        "compound_key",
+        "compound_name",
+        "unknown_chirality",
+        "multmol_assay",
+        "exact_data_citation",
+        "higly_correlated_assay",
+        "shuffled_assay",
+        "review",
+        "rounded_data_citation",
+        "high_citation_rate",
+        "original_activity_approx",
+        "original_activity_exact",
+        "is_citation",
+        "unicellular_organism",
+    ]
+    assert list(res.columns) == expected_cols
+    assert bool(res.loc[0, "is_citation"])
+    assert not bool(res.loc[1, "is_citation"])
+    assert res["high_citation_rate"].all()
+    assert res["unicellular_organism"].all()
+
+
+def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
+    """Process activity table lacking ``nstereo`` column."""
+    df = pd.DataFrame(
+        {
+            "activity_chembl_id": [1],
+            "salt_chembl_id": ["S1"],
+            "molecule_chembl_id": ["M1"],
+            "target_chembl_id": ["T1"],
+            "assay_chembl_id": ["A1"],
+            "document_chembl_id": ["D1"],
+            "bao_endpoint": ["e1"],
+            "standard_type": ["t"],
+            "standard_value": [1.0],
+            "log_value": [0.1],
+            "bao_format": ["f1"],
+            "compound_key": ["ck1"],
+            "compound_name": ["cn1"],
+            "multmol_assay": [pd.NA],
+            "approx_cited_activity": [pd.NA],
+            "exact_cited_activity": [True],
+            "higly_correlated_cit": [pd.NA],
+            "shuffled_cit": [pd.NA],
+            "review_doc": [False],
+            "original_activity_approx": [0.5],
+            "original_activity_exact": [0.5],
+        }
+    )
+
+    (tmp_path / "citation_fraction.csv").write_text(
+        "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
+    )
+    (tmp_path / "targets_type.csv").write_text(
+        "chembl_id,type\nT1,Multicellular organism\n"
+    )
+
+    res = process_activity_table(df, tmp_path)
+    assert "unknown_chirality" in res.columns
+    assert res.loc[0, "unknown_chirality"]
