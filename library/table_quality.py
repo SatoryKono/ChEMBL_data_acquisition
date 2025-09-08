@@ -109,10 +109,12 @@ def _bool_like_cov(values: pd.Series) -> float:
     return float(values.astype(str).str.strip().str.lower().isin(BOOL_LIKE).mean())
 
 
+
 def _numeric_stats(series: pd.Series) -> tuple[pd.Series, float, dict[str, float]]:
     """Convert ``series`` to numeric values and compute summary statistics."""
 
     numeric = pd.to_numeric(series, errors="coerce").astype(float)
+
     coverage = float(numeric.notna().mean())
     stats = {
         "numeric_min": float(numeric.min()) if coverage else np.nan,
@@ -122,7 +124,9 @@ def _numeric_stats(series: pd.Series) -> tuple[pd.Series, float, dict[str, float
         "numeric_mean": float(numeric.mean()) if coverage else np.nan,
         "numeric_std": float(numeric.std(ddof=0)) if coverage else np.nan,
     }
+
     return numeric, coverage, stats
+
 
 
 def _parse_dates(series: pd.Series) -> tuple[float, dict[str, pd.Timestamp | float]]:
@@ -132,7 +136,9 @@ def _parse_dates(series: pd.Series) -> tuple[float, dict[str, pd.Timestamp | flo
         return val
 
     normalised = series.map(normalise)
+
     dates = pd.to_datetime(normalised, errors="coerce", utc=True, format="mixed")
+
     coverage = float(dates.notna().mean())
     if coverage:
         dt = dates.dropna().dt.tz_convert(None)
@@ -208,9 +214,11 @@ def analyze_table_quality(
 
         bool_like_cov = _bool_like_cov(strings)
 
+
         numeric_series, numeric_cov, num_stats = _numeric_stats(series)
         if numeric_cov >= 0.8:
             numeric_candidates[column] = numeric_series
+
 
         date_cov, date_stats = _parse_dates(series)
 
