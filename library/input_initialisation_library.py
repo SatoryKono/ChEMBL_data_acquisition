@@ -161,7 +161,12 @@ def process_activity_table(
     Returns
     -------
     pandas.DataFrame
-        Processed activity table ready for CSV export.
+
+        Processed activity table ready for CSV export. The result mirrors
+        the original Power Query logic including citation significance, target
+        type flags, IUPHAR class metadata and the ``multifunctional_enzyme``
+        indicator.
+
     """
 
     logger.info("Processing activity table")
@@ -169,7 +174,10 @@ def process_activity_table(
 
     # --- unknown chirality -------------------------------------------------
     if "nstereo" in df.columns:
-        df["unknown_chirality"] = df["nstereo"].astype("Int64").ne(1)
+
+        df["unknown_chirality"] = (
+            df["nstereo"].astype("Int64").ne(1).fillna(True)
+        )
         df.drop(columns=["nstereo"], inplace=True)
 
     else:
@@ -304,10 +312,20 @@ def process_activity_table(
 
     # --- target types ------------------------------------------------------
     targets_path = Path(dictionary_dir) / "targets_type.csv"
-    targets = pd.read_csv(targets_path, dtype={"chembl_id": "string"})
+
+    targets = pd.read_csv(
+        targets_path,
+        dtype={
+            "chembl_id": "string",
+            "IUPHAR_class": "string",
+            "IUPHAR_subclass": "string",
+            "type": "string",
+        },
+    )
 
     df = df.merge(
-        targets[["chembl_id", "type"]],
+        targets[["chembl_id", "IUPHAR_class", "IUPHAR_subclass", "type"]],
+
         how="left",
         left_on="target_id",
         right_on="chembl_id",
@@ -320,6 +338,9 @@ def process_activity_table(
     df["unicellular_organism"] = (
         df["type"].map(mapping).fillna(False).astype(bool)
     )
+
+    df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
+
     df.drop(columns=["chembl_id", "type"], inplace=True)
 
     # --- final ordering ----------------------------------------------------
@@ -348,7 +369,12 @@ def process_activity_table(
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
+
+        "IUPHAR_class",
+        "IUPHAR_subclass",
         "unicellular_organism",
+        "multifunctional_enzyme",
+
     ]
 
     missing_final = set(final_cols) - set(df.columns)
@@ -371,6 +397,9 @@ def process_activity_table(
         "high_citation_rate",
         "is_citation",
         "unicellular_organism",
+
+        "multifunctional_enzyme",
+
     ]
     for col in bool_cols_final:
         df[col] = df[col].astype("boolean")

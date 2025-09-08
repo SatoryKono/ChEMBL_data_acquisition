@@ -118,7 +118,9 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n2,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
-        "chembl_id,type\nT1,Unicellular organism\n"
+
+        "chembl_id,type,IUPHAR_class,IUPHAR_subclass\nT1,Unicellular organism,ClassA,Multifunctional\n"
+
     )
 
     res = process_activity_table(df, tmp_path)
@@ -147,13 +149,20 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
+
+        "IUPHAR_class",
+        "IUPHAR_subclass",
         "unicellular_organism",
+        "multifunctional_enzyme",
+
     ]
     assert list(res.columns) == expected_cols
     assert bool(res.loc[0, "is_citation"])
     assert not bool(res.loc[1, "is_citation"])
     assert res["high_citation_rate"].all()
     assert res["unicellular_organism"].all()
+
+    assert res["multifunctional_enzyme"].all()
 
 
 
@@ -189,10 +198,14 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
-        "chembl_id,type\nT1,Multicellular organism\n"
+
+        "chembl_id,type,IUPHAR_class,IUPHAR_subclass\nT1,Multicellular organism,,\n"
+
     )
 
     res = process_activity_table(df, tmp_path)
     assert "unknown_chirality" in res.columns
     assert res.loc[0, "unknown_chirality"]
+
+    assert pd.isna(res.loc[0, "multifunctional_enzyme"])
 
