@@ -83,3 +83,55 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
     expected = tp.postprocess_targets(df).astype(str)
     result = pd.read_csv(output_path, dtype=str)
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_finalise_targets_filters_duplicates_and_merges() -> None:
+    """``finalise_targets`` drops invalid rows and merges organism data."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "uniprotkb_Id": ["P12345", "P12345", "nan"],
+            "genus": ["Homo", "Homo", "Mus"],
+            "isoform_names": ["IsoA", "IsoB", "IsoC"],
+            "synonyms": ["SynA", "SynB", "SynC"],
+            "SUPFAM": ["s1", "s2", "s3"],
+            "transmembrane": ["True", "True", "False"],
+        }
+    )
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+
+    out = tp.finalise_targets(df, organism)
+
+    assert list(out["chembl_id"]) == ["CHEMBL1"]
+    assert "SUPFAM" not in out.columns
+    assert out.loc[0, "isoform_names"] == "isoa"
+    assert out.loc[0, "type"] == "Mammal"
+    assert out["transmembrane"].dtype == "boolean"
+
+
+def test_finalise_file_roundtrip(tmp_path: Path) -> None:
+    """``finalise_file`` reads, processes and writes the expected table."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "uniprotkb_Id": ["P12345", "P12345", "nan"],
+            "genus": ["Homo", "Homo", "Mus"],
+            "synonyms": ["SynA", "SynB", "SynC"],
+            "SUPFAM": ["s1", "s2", "s3"],
+        }
+    )
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+
+    input_path = tmp_path / "in.csv"
+    df.to_csv(input_path, index=False)
+    organism_path = tmp_path / "org.csv"
+    organism.to_csv(organism_path, index=False)
+    output_path = tmp_path / "out.csv"
+
+    tp.finalise_file(input_path, organism_path, output_path)
+
+    expected = tp.finalise_targets(df, organism).astype(str)
+    result = pd.read_csv(output_path, dtype=str)
+    pd.testing.assert_frame_equal(result, expected)
