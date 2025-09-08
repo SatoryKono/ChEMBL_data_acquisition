@@ -188,6 +188,15 @@ def run_all(args: argparse.Namespace) -> int:
     output = args.output_csv or io.default_output_path(args.input_csv)
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
+        # Merge any columns not covered by ``postprocess_documents`` back
+        # into the result so the output retains all original fields.
+        extra_cols = [c for c in doc_df.columns if c not in processed.columns]
+        if extra_cols:
+            processed = processed.merge(
+                doc_df[["document_chembl_id"] + extra_cols],
+                on="document_chembl_id",
+                how="left",
+            )
         try:
             io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
             logger.info("Wrote %d rows to %s", len(processed), output)
@@ -213,6 +222,15 @@ def run_all(args: argparse.Namespace) -> int:
     else:
         merged = doc_df
     processed = dp.postprocess_documents(merged)
+    # Append any additional columns from the merged table that were not
+    # included in the post-processing result.
+    extra_cols = [c for c in merged.columns if c not in processed.columns]
+    if extra_cols:
+        processed = processed.merge(
+            merged[["document_chembl_id"] + extra_cols],
+            on="document_chembl_id",
+            how="left",
+        )
     try:
         io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(processed), output)
