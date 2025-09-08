@@ -13,6 +13,9 @@ def test_analyze_table_quality(tmp_path: Path) -> None:
         {
             "num": [1, 2, 3, 4],
             "str": ["10.1234/abc", "", None, "test"],
+
+            "flag": pd.Series([True, False, True, False], dtype="boolean"),
+
         }
     )
     cwd = os.getcwd()
@@ -21,7 +24,9 @@ def test_analyze_table_quality(tmp_path: Path) -> None:
         quality, corr = analyze_table_quality(df, table_name="sample")
     finally:
         os.chdir(cwd)
-    assert set(quality["column"]) == {"num", "str"}
+
+    assert set(quality["column"]) == {"num", "str", "flag"}
     assert (tmp_path / "sample_quality_report_table.csv").exists()
     assert (tmp_path / "sample_data_correlation_report_table.csv").exists()
-    assert corr.shape == (1, 1)
+    assert corr.shape == (2, 2)
+
