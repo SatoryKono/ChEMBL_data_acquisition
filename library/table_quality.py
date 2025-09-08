@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import logging
 import re
+import warnings
 from pathlib import Path
 
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from pandas.errors import DtypeWarning
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,9 @@ def _load_table(table: pd.DataFrame | str | Path) -> pd.DataFrame:
     encodings = ["utf-8-sig", "utf-8", "cp1251", "latin-1"]
     for enc in encodings:
         try:
-            return pd.read_csv(path, encoding=enc)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=DtypeWarning)
+                return pd.read_csv(path, encoding=enc, low_memory=False)
         except UnicodeDecodeError:
             logger.debug("failed to decode %s with %s", path, enc)
             continue
@@ -137,7 +141,13 @@ def _parse_dates(series: pd.Series) -> tuple[float, dict[str, pd.Timestamp | flo
 
     normalised = series.map(normalise)
 
-    dates = pd.to_datetime(normalised, errors="coerce", utc=True, format="mixed")
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Parsed string.*included an un-recognized timezone",
+            category=FutureWarning,
+        )
+        dates = pd.to_datetime(normalised, errors="coerce", utc=True, format="mixed")
 
     coverage = float(dates.notna().mean())
     if coverage:

@@ -204,7 +204,9 @@ def process_activity_table(
     df["multimol_assay_same"] = df["assay_chembl_id"].isin(assays)
 
     df["multmol_assay"] = (
-        df["multmol_assay"].fillna(False).astype(bool) | df["multimol_assay_same"]
+        df["multmol_assay"].astype("boolean").fillna(False).astype(bool)
+        | df["multimol_assay_same"]
+
     )
     df.drop(columns=["multimol_assay_same", "Count"], inplace=True)
 
@@ -262,7 +264,9 @@ def process_activity_table(
     ]
     for col in bool_cols:
         if col in df.columns:
-            df[col] = df[col].fillna(False).astype(bool)
+
+            df[col] = df[col].astype("boolean").fillna(False).astype(bool)
+
 
     df["is_citation"] = df[bool_cols].any(axis=1)
 
