@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import warnings
 
 from library import target_postprocessing as tp
 
@@ -135,3 +136,21 @@ def test_finalise_file_roundtrip(tmp_path: Path) -> None:
     expected = tp.finalise_targets(df, organism).astype(str)
     result = pd.read_csv(output_path, dtype=str)
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_finalise_targets_no_downcast_warning() -> None:
+    """``finalise_targets`` should not emit downcast warnings during replace."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1"],
+            "uniprotkb_Id": ["P12345"],
+            "genus": ["Homo"],
+            "transmembrane": ["True"],
+        }
+    )
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        tp.finalise_targets(df, organism)

@@ -372,7 +372,9 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = (
                 df[col]
-                .replace({"True": True, "False": False, "true": True, "false": False})
+                .astype("string")  # normalise mixed inputs
+                .str.lower()
+                .map({"true": True, "false": False})
                 .astype("boolean")
             )
 
