@@ -75,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dictionary-dir",
         type=Path,
         default=Path("dictionary"),
-        help="Directory with targets_type.csv and citation_fraction.csv",
+        help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
     )
     parser.add_argument(
         "--out-dir", type=Path, default=Path("."), help="Output directory"
