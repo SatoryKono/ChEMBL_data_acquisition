@@ -13,7 +13,7 @@ comments to aid maintenance.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional
 
@@ -24,10 +24,6 @@ import requests
 
 
 logger = logging.getLogger(__name__)
-
-
-
-
 
 
 EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (
@@ -174,7 +170,9 @@ class IUPHARData:
             ]
             if parent_series.empty:
                 break
-            parent = str(parent_series.iloc[0]) if pd.notna(parent_series.iloc[0]) else ""
+            parent = (
+                str(parent_series.iloc[0]) if pd.notna(parent_series.iloc[0]) else ""
+            )
             if not parent:
                 break
             current = parent
@@ -257,8 +255,10 @@ class IUPHARData:
 
         if not target_name:
             return ""
-        mask = self.target_df["synonyms"].fillna("").str.contains(
-            target_name, case=False, na=False, regex=False
+        mask = (
+            self.target_df["synonyms"]
+            .fillna("")
+            .str.contains(target_name, case=False, na=False, regex=False)
         )
         ids = self._select_target_ids(mask)
         return "|".join(ids) if ids else ""
@@ -454,8 +454,11 @@ class IUPHARData:
     def from_target_family_record(self, target_id: str) -> Optional[pd.Series]:
         """Return the family record associated with ``target_id``."""
 
-        mask = self.family_df["target_id"].fillna("").str.split("|").apply(
-            lambda ids: target_id in ids
+        mask = (
+            self.family_df["target_id"]
+            .fillna("")
+            .str.split("|")
+            .apply(lambda ids: target_id in ids)
         )
         rows = self.family_df[mask]
         if rows.empty:
@@ -579,12 +582,8 @@ class IUPHARData:
         combines them with the local target and family tables.
         """
 
-        uni_url = (
-            "https://www.guidetopharmacology.org/DATA/GtP_to_UniProt_mapping.csv"
-        )
-        hgnc_url = (
-            "https://www.guidetopharmacology.org/DATA/GtP_to_HGNC_mapping.csv"
-        )
+        uni_url = "https://www.guidetopharmacology.org/DATA/GtP_to_UniProt_mapping.csv"
+        hgnc_url = "https://www.guidetopharmacology.org/DATA/GtP_to_HGNC_mapping.csv"
 
         uni_df = pd.read_csv(uni_url)
         hgnc_df = pd.read_csv(hgnc_url)
@@ -634,17 +633,11 @@ class ClassificationRecord:
     IUPHAR_family_id: str = "N/A"
     IUPHAR_class: str = "Other Protein Target"
     IUPHAR_subclass: str = "Other Protein Target"
-    IUPHAR_tree: List[str] = None  # set in __post_init__
+    IUPHAR_tree: List[str] = field(default_factory=lambda: ["0864-1", "0864"])
     IUPHAR_type: str = "Other Protein Target.Other Protein Target"
     IUPHAR_name: str = "N/A"
-    IUPHAR_ecNumber: List[str] = None
+    IUPHAR_ecNumber: List[str] = field(default_factory=list)
     STATUS: str = "N/A"
-
-    def __post_init__(self) -> None:
-        if self.IUPHAR_tree is None:
-            self.IUPHAR_tree = ["0864-1", "0864"]
-        if self.IUPHAR_ecNumber is None:
-            self.IUPHAR_ecNumber = []
 
 
 class IUPHARClassifier:
@@ -704,9 +697,7 @@ class IUPHARClassifier:
             type_val = type1
         elif self._is_valid_parameter(type2) and not self._is_valid_parameter(type1):
             type_val = type2
-        elif not (
-            self._is_valid_parameter(type1) or self._is_valid_parameter(type2)
-        ):
+        elif not (self._is_valid_parameter(type1) or self._is_valid_parameter(type2)):
             type_val = "Other Protein Target.Other Protein Target"
         elif type1 == type2:
             type_val = type1
@@ -764,9 +755,7 @@ class IUPHARClassifier:
     def _ec_number_to_type(ec_numbers: List[str]) -> str:
         if not IUPHARClassifier._is_valid_list(ec_numbers):
             return ""
-        prefixes = {
-            n.split(".")[0] for n in ec_numbers if "." in n and n.split(".")[0]
-        }
+        prefixes = {n.split(".")[0] for n in ec_numbers if "." in n and n.split(".")[0]}
         if not prefixes:
             return ""
         if len(prefixes) > 1:
@@ -804,7 +793,9 @@ class IUPHARClassifier:
             iuphar_target_id if self._is_valid_parameter(iuphar_target_id) else "N/A"
         )
         family_id = iuphar_family_id
-        if not self._is_valid_parameter(family_id) and self._is_valid_parameter(target_id):
+        if not self._is_valid_parameter(family_id) and self._is_valid_parameter(
+            target_id
+        ):
             family_id = self.data.from_target_family_id(target_id) or "N/A"
         name = iuphar_name if self._is_valid_parameter(iuphar_name) else "N/A"
         numbers = ec_numbers if ec_numbers and self._is_valid_list(ec_numbers) else []
@@ -837,7 +828,9 @@ class IUPHARClassifier:
 
         return ClassificationRecord(
             IUPHAR_target_id=target_id,
-            IUPHAR_family_id=family_id if self._is_valid_parameter(family_id) else "N/A",
+            IUPHAR_family_id=(
+                family_id if self._is_valid_parameter(family_id) else "N/A"
+            ),
             IUPHAR_class=cls_part,
             IUPHAR_subclass=sub_part,
             IUPHAR_tree=tree,
@@ -891,7 +884,10 @@ class IUPHARClassifier:
         )
         if not self._is_valid_list(numbers):
             return ClassificationRecord()
-        type_val = self._ec_number_to_type(numbers) or "Other Protein Target.Other Protein Target"
+        type_val = (
+            self._ec_number_to_type(numbers)
+            or "Other Protein Target.Other Protein Target"
+        )
         parts = type_val.split(".")
         cls_part = parts[0] if parts else "Other Protein Target"
         sub_part = parts[1] if len(parts) > 1 else "Other Protein Target"
@@ -904,10 +900,11 @@ class IUPHARClassifier:
             IUPHAR_class=cls_part,
             IUPHAR_subclass=sub_part,
             IUPHAR_tree=tree,
-            IUPHAR_name=name,
+            IUPHAR_name=name or "N/A",
             IUPHAR_ecNumber=numbers,
             STATUS="ec_number",
         )
+
     def by_molecular_function(self, function: str) -> ClassificationRecord:
         """Classify based on a UniProt ``molecular_function`` string.
 
@@ -966,8 +963,12 @@ class IUPHARClassifier:
         cls_part = parts[0] if parts else "Other Protein Target"
         sub_part = parts[1] if len(parts) > 1 else "Other Protein Target"
         return ClassificationRecord(
-            IUPHAR_target_id=target_id if self._is_valid_parameter(target_id) else "N/A",
-            IUPHAR_family_id=family_id if self._is_valid_parameter(family_id) else "N/A",
+            IUPHAR_target_id=(
+                target_id if self._is_valid_parameter(target_id) else "N/A"
+            ),
+            IUPHAR_family_id=(
+                family_id if self._is_valid_parameter(family_id) else "N/A"
+            ),
             IUPHAR_type=type_val,
             IUPHAR_class=cls_part,
             IUPHAR_subclass=sub_part,
@@ -1020,16 +1021,19 @@ class IUPHARClassifier:
             activity_df, on="task_uniprot_id", how="left", suffixes=("", "_act")
         )
         merged["activity.ec_number"] = (
-            merged.get("activity.ec_number", "").replace("EC-not-assigned", "").fillna("")
+            merged.get("activity.ec_number", pd.Series(dtype=str))
+            .replace("EC-not-assigned", "")
+            .fillna("")
         )
         merged["ec_number"] = (
             merged["activity.ec_number"].fillna("")
-            + "|" + merged.get("ec_number", "").fillna("")
+            + "|"
+            + merged.get("ec_number", pd.Series(dtype=str)).fillna("")
         )
         merged["ec_number"] = (
-            merged["ec_number"].str.split("|").apply(
-                lambda x: "|".join(sorted({i.strip() for i in x if i.strip()}))
-            )
+            merged["ec_number"]
+            .str.split("|")
+            .apply(lambda x: "|".join(sorted({i.strip() for i in x if i.strip()})))
         )
         return merged.drop(columns=["activity.ec_number"], errors="ignore")
 
@@ -1076,9 +1080,9 @@ class IUPHARClassifier:
         if db_column not in db_df.columns:
             raise ValueError(f"db_df must contain '{db_column}' column")
         merged = target_df.merge(db_df, on="task_uniprot_id", how="left")
-        merged["guidetopharmacology_family"] = merged["guidetopharmacology_family"].fillna(
-            merged.get("guidetopharmacology_family_y")
-        )
+        merged["guidetopharmacology_family"] = merged[
+            "guidetopharmacology_family"
+        ].fillna(merged.get("guidetopharmacology_family_y"))
         merged["guidetopharmacology_type"] = merged["guidetopharmacology_type"].fillna(
             merged.get("guidetopharmacology_type_y")
         )
@@ -1098,7 +1102,9 @@ class IUPHARClassifier:
     ) -> pd.DataFrame:
         """Derive a database-specific classification lookup table."""
 
-        valid = family_table[family_table[db_column].notna() & (family_table[db_column] != "N/A")]
+        valid = family_table[
+            family_table[db_column].notna() & (family_table[db_column] != "N/A")
+        ]
         merged = valid.merge(name_table, on="task_uniprot_id", how="left")
         records = []
         for key, group in merged.groupby(db_column):
@@ -1107,8 +1113,10 @@ class IUPHARClassifier:
                 if not group["guidetopharmacology_family"].dropna().empty
                 else ""
             )
-            type_series = group["guidetopharmacology_id"].dropna().apply(
-                self.data.from_target_type
+            type_series = (
+                group["guidetopharmacology_id"]
+                .dropna()
+                .apply(self.data.from_target_type)
             )
             type_val = type_series.mode().iloc[0] if not type_series.empty else ""
             records.append(

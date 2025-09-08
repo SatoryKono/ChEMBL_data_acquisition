@@ -29,8 +29,7 @@ def read_pmids(path: Union[str, Path]) -> List[str]:
                 reader = csv.DictReader(f)
                 if reader.fieldnames is None or "PMID" not in reader.fieldnames:
                     raise ValueError("Input CSV must contain 'PMID' column")
-                pmids = [row.get("PMID", "").strip() for row in reader]
-                return [p for p in pmids if p]
+                return [pmid for row in reader if (pmid := row.get("PMID", "").strip())]
         except UnicodeDecodeError as exc:
             last_exc = exc
             continue
@@ -70,7 +69,7 @@ def _do_request(
     for attempt in range(retries + 1):
         if attempt:
             time.sleep(sleep * attempt)
-        
+
         try:
             if method.upper() == "POST":
                 resp = session.post(url, timeout=TIMEOUT, **kwargs)
@@ -99,6 +98,8 @@ def _do_request(
                 return None, f"Invalid JSON: {exc}"
         return resp.text, ""
     return None, "Request failed"
+
+
 def fetch_pubmed_batch(
     session: requests.Session, pmids: List[str], sleep: float
 ) -> List[Dict[str, str]]:
@@ -209,11 +210,13 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
                 doi = doi[4:].strip()
             for pref in ("https://doi.org/", "http://doi.org/", "doi.org/"):
                 if doi.lower().startswith(pref):
-                    doi = doi[len(pref):].strip()
+                    doi = doi[len(pref) :].strip()
                     break
 
     article_title = (
-        text_or_none(find_one(article, "./ArticleTitle")) if article is not None else None
+        text_or_none(find_one(article, "./ArticleTitle"))
+        if article is not None
+        else None
     )
 
     # Abstract: join all segments, preserve label when present.
@@ -229,7 +232,9 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
                     parts.append(f"{label}: {seg_text}" if label else seg_text)
             article_abstract = " ".join(parts) if parts else None
         if article_abstract is None:
-            article_abstract = text_or_none(find_one(article, "./Abstract/AbstractText"))
+            article_abstract = text_or_none(
+                find_one(article, "./Abstract/AbstractText")
+            )
 
     journal_title = text_or_none(find_one(journal, "./Title"))
     issn = text_or_none(find_one(journal, "./ISSN"))
@@ -239,8 +244,14 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
     start_page = text_or_none(find_one(pagination, "./StartPage"))
     end_page = text_or_none(find_one(pagination, "./EndPage"))
 
-    pubtypes = [text_or_none(x) for x in find_all(article, "./PublicationTypeList/PublicationType")]
-    pubtypes = [p for p in pubtypes if p] if pubtypes else []
+    pubtypes = [
+        p
+        for p in (
+            text_or_none(x)
+            for x in find_all(article, "./PublicationTypeList/PublicationType")
+        )
+        if p
+    ]
 
     mh_list = find_one(mc, "./MeshHeadingList")
     mesh_descriptors: List[str] = []
@@ -346,7 +357,9 @@ def fetch_pubmed(session: requests.Session, pmid: str, sleep: float) -> Dict[str
     return result
 
 
-def fetch_semantic_scholar(session: requests.Session, pmid: str, sleep: float) -> Dict[str, str]:
+def fetch_semantic_scholar(
+    session: requests.Session, pmid: str, sleep: float
+) -> Dict[str, str]:
     fields = "publicationTypes,externalIds,paperId,venue"
     headers = {"Accept": "application/json"}
     url = f"https://api.semanticscholar.org/graph/v1/paper/PMID:{pmid}"
@@ -391,9 +404,9 @@ def fetch_semantic_scholar_batch(
     fields = "publicationTypes,externalIds,paperId,venue"
     headers = {"Accept": "application/json"}
     url = "https://api.semanticscholar.org/graph/v1/paper/batch"
-    
+
     prefixed_pmids = [f"PMID:{pmid}" for pmid in pmids]
-    
+
     data, error = _do_request(
         session,
         url,
@@ -401,7 +414,7 @@ def fetch_semantic_scholar_batch(
         headers=headers,
         params={"fields": fields},
         json={"ids": prefixed_pmids},
-        method="POST"
+        method="POST",
     )
 
     if error:
@@ -418,34 +431,38 @@ def fetch_semantic_scholar_batch(
             for pmid in pmids
         ]
 
-    results = []
+    results: List[Dict[str, str]] = []
     if isinstance(data, list) and len(data) == len(pmids):
         for pmid, item in zip(pmids, data):
             if item is None:
-                results.append({
-                    "scholar.PMID": pmid,
-                    "scholar.Venue": "",
-                    "scholar.PublicationTypes": "",
-                    "scholar.SemanticScholarId": "",
-                    "scholar.ExternalIds": "",
-                    "scholar.DOI": "",
-                    "scholar.Error": "Not found",
-                })
+                results.append(
+                    {
+                        "scholar.PMID": pmid,
+                        "scholar.Venue": "",
+                        "scholar.PublicationTypes": "",
+                        "scholar.SemanticScholarId": "",
+                        "scholar.ExternalIds": "",
+                        "scholar.DOI": "",
+                        "scholar.Error": "Not found",
+                    }
+                )
                 continue
 
             external_ids = item.get("externalIds") or {}
             doi = external_ids.get("DOI") or ""
             pubtypes = item.get("publicationTypes") or []
-            
-            results.append({
-                "scholar.PMID": pmid,
-                "scholar.Venue": item.get("venue", ""),
-                "scholar.PublicationTypes": "; ".join(pubtypes) if pubtypes else "",
-                "scholar.SemanticScholarId": item.get("paperId", ""),
-                "scholar.ExternalIds": json.dumps(external_ids, ensure_ascii=False),
-                "scholar.DOI": doi,
-                "scholar.Error": "",
-            })
+
+            results.append(
+                {
+                    "scholar.PMID": pmid,
+                    "scholar.Venue": item.get("venue", ""),
+                    "scholar.PublicationTypes": "; ".join(pubtypes) if pubtypes else "",
+                    "scholar.SemanticScholarId": item.get("paperId", ""),
+                    "scholar.ExternalIds": json.dumps(external_ids, ensure_ascii=False),
+                    "scholar.DOI": doi,
+                    "scholar.Error": "",
+                }
+            )
     else:
         return [
             {
@@ -459,11 +476,13 @@ def fetch_semantic_scholar_batch(
             }
             for pmid in pmids
         ]
-        
+
     return results
 
 
-def fetch_openalex(session: requests.Session, pmid: str, sleep: float) -> Dict[str, str]:
+def fetch_openalex(
+    session: requests.Session, pmid: str, sleep: float
+) -> Dict[str, str]:
     url = f"https://api.openalex.org/works/pmid:{pmid}"
     data, error = _do_request(session, url, sleep)
     if error or not isinstance(data, dict):
@@ -569,12 +588,14 @@ def print_results(records: List[Dict[str, str]]):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Fetch publication metadata by PMID"
+    parser = argparse.ArgumentParser(description="Fetch publication metadata by PMID")
+    parser.add_argument(
+        "-i", "--input", required=True, help="Input CSV path with PMID column"
     )
-    parser.add_argument("-i", "--input", required=True, help="Input CSV path with PMID column")
     parser.add_argument("-o", "--output", required=True, help="Output CSV path")
-    parser.add_argument("--sleep", type=float, default=5.0, help="Sleep between requests")
+    parser.add_argument(
+        "--sleep", type=float, default=5.0, help="Sleep between requests"
+    )
     args = parser.parse_args()
 
     pmids = read_pmids(args.input)
@@ -582,33 +603,33 @@ def main() -> None:
     batch_size = 100  # A reasonable batch size
     with requests.Session() as session:
         for i in range(0, len(pmids), batch_size):
-            batch_pmids = pmids[i:i + batch_size]
-            
+            batch_pmids = pmids[i : i + batch_size]
+
             # Batch fetch PubMed and Semantic Scholar
             pubmed_list = fetch_pubmed_batch(session, batch_pmids, args.sleep)
             semsch_list = fetch_semantic_scholar_batch(session, batch_pmids, args.sleep)
-            
+
             semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
 
             for pubmed in pubmed_list:
                 pmid = pubmed.get("PubMed.PMID", "")
                 semsch = semsch_map.get(pmid, {})
-                
+
                 # Still fetching these individually
                 openalex = fetch_openalex(session, pmid, args.sleep)
                 doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
                 crossref = fetch_crossref(session, doi, args.sleep)
-                
+
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)
                 combined.update(semsch)
                 combined.update(openalex)
                 combined.update(crossref)
-                
+
                 print_results([combined])
                 records.append(combined)
 
-    all_keys = set()
+    all_keys: set[str] = set()
     for rec in records:
         all_keys.update(rec.keys())
     fieldnames = sorted(all_keys)
