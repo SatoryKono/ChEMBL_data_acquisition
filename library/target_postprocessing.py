@@ -15,6 +15,80 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+# Columns removed in the final export
+REMOVE_COLUMNS: list[str] = [
+    "SUPFAM",
+    "PROSITE",
+    "InterPro",
+    "Pfam",
+    "PRINTS",
+    "TCDB",
+]
+
+# Columns that should be transformed to lowercase
+LOWERCASE_COLUMNS: list[str] = [
+    "isoform_synonyms",
+    "isoform_names",
+    "topology",
+    "cellular_component",
+    "subcellular_location",
+    "molecular_function",
+    "recommended_name",
+    "synonyms",
+]
+
+# Columns treated as text in the final table
+TEXT_COLUMNS: list[str] = [
+    "chembl_id",
+    "uniprotkb_Id",
+    "uniprot_id",
+    "secondary_uniprot_id",
+    "gene_name",
+    "recommended_name",
+    "synonyms",
+    "genus",
+    "superkingdom",
+    "phylum",
+    "ec_number",
+    "hgnc_name",
+    "hgnc_id",
+    "molecular_function",
+    "cellular_component",
+    "subcellular_location",
+    "topology",
+    "isoform_names",
+    "isoform_ids",
+    "isoform_synonyms",
+    "reactions",
+    "target_id",
+    "IUPHAR_family_id",
+    "IUPHAR_type",
+    "IUPHAR_class",
+    "IUPHAR_subclass",
+    "IUPHAR_chain",
+    "full_id_path",
+    "full_name_path",
+    "GuidetoPHARMACOLOGY",
+]
+
+# Integer and boolean columns
+INT_COLUMNS: list[str] = ["taxon_id"]
+
+BOOL_COLUMNS: list[str] = [
+    "transmembrane",
+    "intramembrane",
+    "glycosylation",
+    "lipidation",
+    "disulfide_bond",
+    "modified_residue",
+    "phosphorylation",
+    "acetylation",
+    "ubiquitination",
+    "signal_peptide",
+    "propeptide",
+]
+
+
 def _pipe_merge(values: Iterable[str | float | None]) -> str:
     """Return a ``"|"``-separated string of unique tokens.
 
@@ -47,6 +121,14 @@ def _first_token(value: str | float | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
+    """Ensure that *df* contains all *required* columns."""
+
+    missing = set(required) - set(df.columns)
+    if missing:
+        raise ValueError(f"missing required columns: {', '.join(sorted(missing))}")
 
 
 def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
@@ -239,4 +321,103 @@ def postprocess_file(
 
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_targets(df)
+    processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
+
+
+def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
+    """Apply final cleaning steps and organism merge.
+
+    This function mirrors a Power Query script that was previously used to
+    prepare the exportable target table. It filters rows with missing
+    identifiers, enforces data types, joins the organism classification and
+    normalises selected text fields.
+
+    Parameters
+    ----------
+    df:
+        DataFrame produced by :func:`postprocess_targets`.
+    organism:
+        Lookup table with at least ``genus`` and ``type`` columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Cleaned table ready for export.
+    """
+
+    _validate_columns(df, ["chembl_id", "uniprotkb_Id", "genus"])
+    _validate_columns(organism, ["genus", "type"])
+
+    df = df.copy()
+
+    # Drop rows where uniprotkb_Id is the string "nan"
+    mask_nan = df["uniprotkb_Id"].astype(str) == "nan"
+    if mask_nan.any():
+        logger.debug("Dropping %d rows with missing UniProt IDs", mask_nan.sum())
+    df = df[~mask_nan]
+
+    # Remove duplicate chembl_id entries
+    before = len(df)
+    df = df.drop_duplicates(subset="chembl_id", keep="first")
+    logger.debug("Removed %d duplicate chembl_id rows", before - len(df))
+
+    # Enforce column types
+    for col in TEXT_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].astype("string")
+    for col in INT_COLUMNS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+    for col in BOOL_COLUMNS:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype("string")  # normalise mixed inputs
+                .str.lower()
+                .map({"true": True, "false": False})
+                .astype("boolean")
+            )
+
+    # Merge organism classification and add type column
+    df = df.merge(organism[["genus", "type"]], on="genus", how="left")
+    df["type"] = df["type"].astype("string")
+
+    # Remove unwanted columns
+    df = df.drop(columns=[c for c in REMOVE_COLUMNS if c in df.columns])
+
+    # Lowercase selected text columns
+    for col in LOWERCASE_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].astype("string").str.lower()
+
+    return df
+
+
+def finalise_file(
+    input_path: Path | str,
+    organism_path: Path | str,
+    output_path: Path | str,
+    *,
+    sep: str = ",",
+    encoding: str = "utf8",
+) -> None:
+    """Read CSV files, finalise the target table and write the result.
+
+    Parameters
+    ----------
+    input_path:
+        Path to the CSV file produced by :func:`postprocess_file`.
+    organism_path:
+        Path to a CSV containing organism ``genus`` and ``type`` columns.
+    output_path:
+        Destination path for the cleaned CSV file.
+    sep:
+        Field delimiter of the CSV files.
+    encoding:
+        Text encoding of the CSV files.
+    """
+
+    df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
+    organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
+    processed = finalise_targets(df, organism)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
