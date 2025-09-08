@@ -12,6 +12,7 @@ import pandas as pd
 from library import chembl_library as cl
 from library import pubchem_library as pl
 from library import io
+from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,15 @@ def run_chembl(args: argparse.Namespace) -> int:
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
-        return 0
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+    try:
+        analyze_table_quality(df, table_name=str(output.with_suffix("")))
+    except Exception as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
