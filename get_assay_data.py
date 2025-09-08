@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import io
 
@@ -38,6 +39,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     df = cl.get_assays_all(ids, chunk_size=args.chunk_size)
+    df = ap.postprocess_assays(df)
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
