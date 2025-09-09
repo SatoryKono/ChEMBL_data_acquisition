@@ -40,7 +40,7 @@ ALL_DOC_SHEETS: dict[str, EntityName] = {
     "target_step5": "target",
     "document_step5": "document",
     "activities_step5": "activity",
-    "pairs_step5": "pairs",
+    "step5_pairs": "pairs",
 }
 
 # Columns that should be removed from the combined activity table
