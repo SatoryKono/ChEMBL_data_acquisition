@@ -36,7 +36,18 @@ def fetch_openalex(
     timeout: float, optional
         Maximum seconds to wait for the HTTP response.
 
+    Returns
+    -------
+    dict
+        Metadata returned by the OpenAlex API.
+
+    Raises
+    ------
+    requests.RequestException
+        Propagated if the HTTP request fails.
+
     """
+
     return _pl.fetch_openalex(session, pmid, sleep, timeout=timeout)
 
 
@@ -60,5 +71,16 @@ def fetch_crossref(
     timeout: float, optional
         Maximum seconds to wait for the HTTP response.
 
+    Returns
+    -------
+    dict
+        Metadata returned by the CrossRef API.
+
+    Raises
+    ------
+    requests.RequestException
+        Propagated if the HTTP request fails.
+
     """
+
     return _pl.fetch_crossref(session, doi, sleep, timeout=timeout)
