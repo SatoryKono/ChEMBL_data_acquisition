@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_openalex(
-    session: requests.Session, pmid: str, sleep: float
+    session: requests.Session,
+    pmid: str,
+    sleep: float,
+    *,
+    timeout: float = _pl.TIMEOUT,
 ) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -29,12 +33,20 @@ def fetch_openalex(
         PubMed identifier.
     sleep: float
         Delay before making the request in seconds.
+    timeout: float, optional
+        Maximum seconds to wait for the HTTP response.
 
     """
-    return _pl.fetch_openalex(session, pmid, sleep)
+    return _pl.fetch_openalex(session, pmid, sleep, timeout=timeout)
 
 
-def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[str, str]:
+def fetch_crossref(
+    session: requests.Session,
+    doi: str,
+    sleep: float,
+    *,
+    timeout: float = _pl.TIMEOUT,
+) -> Dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
     Parameters
@@ -45,6 +57,8 @@ def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[st
         Digital Object Identifier of the article.
     sleep: float
         Delay before making the request in seconds.
+    timeout: float, optional
+        Maximum seconds to wait for the HTTP response.
 
     """
-    return _pl.fetch_crossref(session, doi, sleep)
+    return _pl.fetch_crossref(session, doi, sleep, timeout=timeout)

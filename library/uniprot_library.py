@@ -77,36 +77,49 @@ __all__ = [
     "iter_ids",
     "collect_info",
     "process",
+    "UniProtFetchError",
 ]
 
 
-def fetch_uniprot(uniprot_id: str) -> Dict[str, Any]:
+class UniProtFetchError(RuntimeError):
+    """Raised when a UniProt record cannot be retrieved or decoded."""
+
+
+def fetch_uniprot(uniprot_id: str, *, timeout: float = 30.0) -> Dict[str, Any]:
     """Fetch a UniProt JSON record from the public REST API.
 
     Parameters
     ----------
     uniprot_id:
         UniProt accession identifier to retrieve.
+    timeout:
+        Maximum seconds to wait for the HTTP response. Defaults to ``30``.
 
     Returns
     -------
     dict
-        JSON-decoded response.  An empty dictionary is returned when the
-        request fails or the payload cannot be decoded.
+        JSON-decoded response.
+
+    Raises
+    ------
+    UniProtFetchError
+        If the request fails or the payload cannot be decoded as JSON.
 
     """
     url = API_URL.format(id=uniprot_id)
     try:
-        resp = _session.get(url, timeout=30)
-        resp.raise_for_status()
-        try:
-            return resp.json()
-        except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
-            logger.warning("Failed to decode JSON for UniProt %s: %s", uniprot_id, exc)
-            return {}
+        with _session.get(url, timeout=timeout) as resp:
+            resp.raise_for_status()
+            try:
+                return resp.json()
+            except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
+                raise UniProtFetchError(
+                    f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
+                ) from exc
     except requests.RequestException as exc:  # pragma: no cover - network
-        logger.warning("UniProt request failed for %s: %s", uniprot_id, exc)
-        return {}
+        raise UniProtFetchError(
+            f"UniProt request failed for {uniprot_id}: {exc}"
+        ) from exc
 
 
 def _collect_name_fields(name_obj: Dict[str, Any]) -> Iterable[str]:
@@ -400,8 +413,10 @@ def extract_names_for_secondary_accessions(data: Any) -> str:
     """
     names: Set[str] = set()
     for acc in extract_secondary_accessions(data):
-        entry = fetch_uniprot(acc)
-        if not isinstance(entry, dict):
+        try:
+            entry = fetch_uniprot(acc)
+        except UniProtFetchError as exc:  # pragma: no cover - network errors
+            logger.warning("failed to fetch secondary accession %s: %s", acc, exc)
             continue
         desc = entry.get("proteinDescription")
         if isinstance(desc, dict):
@@ -862,9 +877,10 @@ def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
             data = json.load(handle)
     except FileNotFoundError:
         logger.info("downloading UniProt JSON for %s", uid)
-        data = fetch_uniprot(uid)
-        if not data:
-            logger.warning("failed to retrieve UniProt JSON for %s", uid)
+        try:
+            data = fetch_uniprot(uid)
+        except UniProtFetchError as exc:
+            logger.warning("failed to retrieve UniProt JSON for %s: %s", uid, exc)
             return result
         os.makedirs(data_dir, exist_ok=True)
         try:
