@@ -10,8 +10,11 @@ from __future__ import annotations
 import csv
 from datetime import datetime
 from pathlib import Path
+from typing import Iterable
 
 import pandas as pd
+
+from . import validation
 
 
 def read_ids(
@@ -70,8 +73,9 @@ def read_csv(
     *,
     sep: str = ",",
     encoding: str = "utf8",
+    required_columns: Iterable[str] | None = None,
 ) -> pd.DataFrame:
-    """Load a CSV file into a :class:`pandas.DataFrame`.
+    """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
     Parameters
     ----------
@@ -81,6 +85,9 @@ def read_csv(
         Field delimiter used in the CSV file. Defaults to ``","``.
     encoding:
         Character encoding of the CSV file. Defaults to ``"utf8"``.
+    required_columns:
+        Optional list of column names that must be present in the loaded
+        DataFrame. A :class:`ValueError` is raised if any are missing.
 
     Returns
     -------
@@ -88,7 +95,10 @@ def read_csv(
         DataFrame containing the CSV contents.
 
     """
-    return pd.read_csv(path, sep=sep, encoding=encoding)
+    df = pd.read_csv(path, sep=sep, encoding=encoding)
+    if required_columns is not None:
+        validation.validate_columns(df, required_columns)
+    return df
 
 
 def write_csv(

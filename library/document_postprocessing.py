@@ -13,6 +13,8 @@ from typing import Iterable
 
 import pandas as pd
 
+from . import validation
+
 logger = logging.getLogger(__name__)
 
 # Columns that should be treated as text
@@ -151,19 +153,26 @@ DATE_COLUMNS: Iterable[str] = [
     "PubMed.YearRevised",
 ]
 
+REQUIRED_COLUMNS = ["PubMed.PMID"]
+
 
 def _safe_numeric(series: pd.Series) -> pd.Series:
     """Return ``series`` as ``Int64`` with invalid values set to ``<NA>``."""
     return pd.to_numeric(series, errors="coerce").astype("Int64")
 
 
-def postprocess_documents(df: pd.DataFrame) -> pd.DataFrame:
+def postprocess_documents(
+    df: pd.DataFrame, *, required_columns: Iterable[str] | None = None
+) -> pd.DataFrame:
     """Clean and enrich document metadata.
 
     Parameters
     ----------
     df:
         Combined table produced by :mod:`get_document_data.py`.
+    required_columns:
+        Optional columns that must exist in ``df`` before processing. If
+        ``None`` (the default), no schema validation is performed.
 
     Returns
     -------
@@ -171,6 +180,8 @@ def postprocess_documents(df: pd.DataFrame) -> pd.DataFrame:
         Normalised table with derived fields.
 
     """
+    if required_columns is not None:
+        validation.validate_columns(df, required_columns)
     result = df.copy()
     if result.empty:
         return result

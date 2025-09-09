@@ -12,7 +12,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import requests
 from xml.etree import ElementTree as ET
@@ -51,6 +51,7 @@ def _do_request(
     expect_json: bool = True,
     retries: int = 2,
     method: str = "GET",
+    timeout: float = TIMEOUT,
     **kwargs: Any,
 ) -> Tuple[Union[Dict[str, Any], str, None], str]:
     """Perform an HTTP request with retry and error handling.
@@ -69,6 +70,8 @@ def _do_request(
         Number of additional attempts after the initial one.
     method:
         HTTP method to use, either "GET" or "POST".
+    timeout:
+        Maximum seconds to wait for each HTTP request.
     **kwargs:
         Additional parameters passed to ``session.get`` or ``session.post``.
 
@@ -85,31 +88,38 @@ def _do_request(
 
         try:
             if method.upper() == "POST":
-                resp = session.post(url, timeout=TIMEOUT, **kwargs)
+                request: Callable[..., requests.Response] = session.post
             else:
-                resp = session.get(url, timeout=TIMEOUT, **kwargs)
+                request = session.get
+            with request(url, timeout=timeout, **kwargs) as resp:
+                status_code = resp.status_code
+                text = resp.text
+                try:
+                    content = resp.json() if expect_json else text
+                except ValueError as exc:
+                    content = None
+                    parse_error = str(exc)
+                else:
+                    parse_error = ""
         except requests.RequestException as exc:
             if attempt >= retries:  # pragma: no cover - network errors
                 return None, str(exc)
             continue
-
-        if resp.status_code in (429, 500, 502, 503, 504):
+        if status_code in (429, 500, 502, 503, 504):
             if attempt >= retries:
-                return None, f"HTTP {resp.status_code}: {resp.text[:100]}"
+                return None, f"HTTP {status_code}: {text[:100]}"
             continue
-        if resp.status_code == 404:
+        if status_code == 404:
             return None, "PMID not found"
-        if resp.status_code == 400:
-            return None, f"Bad request: {resp.text[:100]}"
-        if resp.status_code != 200:
-            return None, f"HTTP {resp.status_code}: {resp.text[:100]}"
-
+        if status_code == 400:
+            return None, f"Bad request: {text[:100]}"
+        if status_code != 200:
+            return None, f"HTTP {status_code}: {text[:100]}"
         if expect_json:
-            try:
-                return resp.json(), ""
-            except ValueError as exc:
-                return None, f"Invalid JSON: {exc}"
-        return resp.text, ""
+            if parse_error:
+                return None, f"Invalid JSON: {parse_error}"
+            return content, ""
+        return content or "", ""
     return None, "Request failed"
 
 
@@ -511,7 +521,11 @@ def fetch_semantic_scholar_batch(
 
 
 def fetch_openalex(
-    session: requests.Session, pmid: str, sleep: float
+    session: requests.Session,
+    pmid: str,
+    sleep: float,
+    *,
+    timeout: float = TIMEOUT,
 ) -> Dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``.
 
@@ -523,6 +537,8 @@ def fetch_openalex(
         PubMed identifier to query.
     sleep:
         Seconds to pause before making the request.
+    timeout:
+        Maximum seconds to wait for the HTTP response. Defaults to ``TIMEOUT``.
 
     Returns
     -------
@@ -531,7 +547,7 @@ def fetch_openalex(
 
     """
     url = f"https://api.openalex.org/works/pmid:{pmid}"
-    data, error = _do_request(session, url, sleep)
+    data, error = _do_request(session, url, sleep, timeout=timeout)
     if error or not isinstance(data, dict):
         return {
             "OpenAlex.PublicationTypes": "",
@@ -566,7 +582,13 @@ def fetch_openalex(
     }
 
 
-def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[str, str]:
+def fetch_crossref(
+    session: requests.Session,
+    doi: str,
+    sleep: float,
+    *,
+    timeout: float = TIMEOUT,
+) -> Dict[str, str]:
     """Retrieve Crossref metadata for a given DOI.
 
     Parameters
@@ -577,6 +599,8 @@ def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[st
         Digital Object Identifier to query.
     sleep:
         Seconds to pause before making the request.
+    timeout:
+        Maximum seconds to wait for the HTTP response. Defaults to ``TIMEOUT``.
 
     Returns
     -------
@@ -595,7 +619,7 @@ def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[st
         }
 
     url = f"https://api.crossref.org/works/{quote(doi, safe='')}"
-    data, error = _do_request(session, url, sleep)
+    data, error = _do_request(session, url, sleep, timeout=timeout)
     if error or not isinstance(data, dict):
         return {
             "crossref.Type": "",
