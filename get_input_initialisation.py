@@ -1,4 +1,10 @@
-"""CLI for combining ChEMBL initialisation Excel sources."""
+"""CLI for combining ChEMBL initialisation Excel sources.
+
+Exports pair tables without merging:
+
+- ``pairs_same_document.csv`` from sheet ``pairs_same_doc`` in ``--same-doc``
+- ``pairs.csv`` from sheet ``pairs_step5`` in ``--all-doc``
+"""
 
 from __future__ import annotations
 
@@ -38,7 +44,9 @@ def run(args: argparse.Namespace) -> int:
         all_ = lib.load_all_doc(args.all_doc)
 
         logger.info("Combining tables")
-        tables = lib.build_combined_tables(same, all_, dictionary_dir=args.dictionary_dir)
+        tables = lib.build_combined_tables(
+            same, all_, dictionary_dir=args.dictionary_dir
+        )
 
         logger.info("Saving output")
         paths = lib.save_tables(tables, args.out_dir, fmt=args.format)

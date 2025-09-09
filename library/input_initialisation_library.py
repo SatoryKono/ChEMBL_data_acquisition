@@ -14,7 +14,15 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-EntityName = Literal["activity", "assay", "document", "target", "testitem"]
+EntityName = Literal[
+    "activity",
+    "assay",
+    "document",
+    "target",
+    "testitem",
+    "pairs",
+    "pairs_same_document",
+]
 
 # Mapping of sheet names to entity identifiers
 SAME_DOC_SHEETS: dict[str, EntityName] = {
@@ -23,6 +31,7 @@ SAME_DOC_SHEETS: dict[str, EntityName] = {
     "target_step5_same_doc": "target",
     "document_step5_same_doc": "document",
     "activities_step5_same_doc": "activity",
+    "pairs_same_doc": "pairs_same_document",
 }
 
 ALL_DOC_SHEETS: dict[str, EntityName] = {
@@ -31,6 +40,7 @@ ALL_DOC_SHEETS: dict[str, EntityName] = {
     "target_step5": "target",
     "document_step5": "document",
     "activities_step5": "activity",
+    "pairs_step5": "pairs",
 }
 
 # Columns that should be removed from the combined activity table
@@ -175,9 +185,7 @@ def process_activity_table(
     # --- unknown chirality -------------------------------------------------
     if "nstereo" in df.columns:
 
-        df["unknown_chirality"] = (
-            df["nstereo"].astype("Int64").ne(1).fillna(True)
-        )
+        df["unknown_chirality"] = df["nstereo"].astype("Int64").ne(1).fillna(True)
         df.drop(columns=["nstereo"], inplace=True)
 
     else:
@@ -185,7 +193,6 @@ def process_activity_table(
         # mirrors the Power Query behaviour where missing stereochemistry is
         # treated as unknown.
         df["unknown_chirality"] = pd.Series(True, index=df.index, dtype="boolean")
-
 
     # --- multimol assay map ------------------------------------------------
     group_cols = [
@@ -202,12 +209,7 @@ def process_activity_table(
             + ", ".join(sorted(missing))
         )
 
-    counts = (
-        df.groupby(group_cols, dropna=False)
-        .size()
-        .rename("Count")
-        .reset_index()
-    )
+    counts = df.groupby(group_cols, dropna=False).size().rename("Count").reset_index()
     df = df.merge(counts, on=group_cols, how="left")
 
     mask = (
@@ -221,7 +223,6 @@ def process_activity_table(
     df["multmol_assay"] = (
         df["multmol_assay"].astype("boolean").fillna(False).astype(bool)
         | df["multimol_assay_same"]
-
     )
     df.drop(columns=["multimol_assay_same", "Count"], inplace=True)
 
@@ -325,7 +326,6 @@ def process_activity_table(
 
     df = df.merge(
         targets[["chembl_id", "IUPHAR_class", "IUPHAR_subclass", "type"]],
-
         how="left",
         left_on="target_id",
         right_on="chembl_id",
@@ -335,9 +335,7 @@ def process_activity_table(
         "Viruses": True,
         "Unicellular organism": True,
     }
-    df["unicellular_organism"] = (
-        df["type"].map(mapping).fillna(False).astype(bool)
-    )
+    df["unicellular_organism"] = df["type"].map(mapping).fillna(False).astype(bool)
 
     df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
 
@@ -369,12 +367,10 @@ def process_activity_table(
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
-
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
-
     ]
 
     missing_final = set(final_cols) - set(df.columns)
@@ -397,9 +393,7 @@ def process_activity_table(
         "high_citation_rate",
         "is_citation",
         "unicellular_organism",
-
         "multifunctional_enzyme",
-
     ]
     for col in bool_cols_final:
         df[col] = df[col].astype("boolean")
@@ -568,42 +562,61 @@ def build_combined_tables(
     dictionary_dir: Path | str | None = None,
 ) -> Dict[EntityName, pd.DataFrame]:
     """Combine entity tables from ``same`` and ``all_`` sources."""
+
     combined: Dict[EntityName, pd.DataFrame] = {}
-    for entity in SAME_DOC_SHEETS.values():
+
+    # --- regular entities -------------------------------------------------
+    regular_entities: tuple[EntityName, ...] = (
+        "assay",
+        "document",
+        "target",
+        "testitem",
+    )
+    for entity in regular_entities:
         df_same = unify_dtypes(same[entity])
         df_all = unify_dtypes(all_[entity])
-        rows_same = len(df_same)
-        rows_all = len(df_all)
-        if entity == "activity":
-            concat = pd.concat([df_same, df_all], ignore_index=True, sort=False)
-            concat = concat.drop(
-                columns=list(ACTIVITY_DROP_COLS & set(concat.columns)),
-                errors="ignore",
-            )
-            df = concat.drop_duplicates(keep="first")
-            if dictionary_dir is not None:
-                df = process_activity_table(df, dictionary_dir)
-            rows_concat = len(concat)
-            rows_after = len(df)
-        else:
-            df = append_entities(df_same, df_all)
-            rows_concat = rows_same + rows_all
-            rows_after = len(df)
+        df = append_entities(df_same, df_all)
         logger.info(
-            "Entity %s: rows_same=%d rows_all=%d rows_concat=%d rows_after_dedup=%d",
+            "Entity %s: rows_same=%d rows_all=%d rows_after_dedup=%d",
             entity,
-            rows_same,
-            rows_all,
-            rows_concat,
-            rows_after,
+            len(df_same),
+            len(df_all),
+            len(df),
         )
-        if entity == "activity":
-            remaining = ACTIVITY_DROP_COLS & set(df.columns)
-            if remaining:
-                raise ValueError(
-                    f"activity table still contains columns: {', '.join(sorted(remaining))}"
-                )
         combined[entity] = df
+
+    # --- activity --------------------------------------------------------
+    df_same_act = unify_dtypes(same["activity"])
+    df_all_act = unify_dtypes(all_["activity"])
+    concat = pd.concat([df_same_act, df_all_act], ignore_index=True, sort=False)
+    concat = concat.drop(
+        columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"
+    )
+    df_activity = concat.drop_duplicates(keep="first")
+    if dictionary_dir is not None:
+        df_activity = process_activity_table(df_activity, dictionary_dir)
+    logger.info(
+        "Entity activity: rows_same=%d rows_all=%d rows_concat=%d rows_after_dedup=%d",
+        len(df_same_act),
+        len(df_all_act),
+        len(concat),
+        len(df_activity),
+    )
+    remaining = ACTIVITY_DROP_COLS & set(df_activity.columns)
+    if remaining:
+        raise ValueError(
+            f"activity table still contains columns: {', '.join(sorted(remaining))}"
+        )
+    combined["activity"] = df_activity
+
+    # --- pairs ------------------------------------------------------------
+    df_pairs_same = unify_dtypes(same["pairs_same_document"])
+    df_pairs = unify_dtypes(all_["pairs"])
+    logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
+    logger.info("Entity pairs: rows=%d", len(df_pairs))
+    combined["pairs_same_document"] = df_pairs_same
+    combined["pairs"] = df_pairs
+
     return combined
 
 
