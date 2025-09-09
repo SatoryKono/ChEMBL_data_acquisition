@@ -3,7 +3,8 @@
 Exports pair tables without merging:
 
 - ``pairs_same_document.csv`` from sheet ``pairs_same_doc`` in ``--same-doc``
-- ``pairs.csv`` from sheet ``pairs_step5`` in ``--all-doc``
+- ``pairs_independent.csv`` and ``pairs_non_independent.csv`` derived from
+  ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag
 """
 
 from __future__ import annotations
@@ -56,9 +57,11 @@ def run(args: argparse.Namespace) -> int:
             raise RuntimeError("failed to write output files: " + ", ".join(missing))
 
         logger.info("Generating data quality reports")
+        report_dir = args.out_dir / "data_validity_report"
+        report_dir.mkdir(parents=True, exist_ok=True)
         for entity, path in paths.items():
             logger.info("Profiling %s", entity)
-            analyze_table_quality(path, table_name=str(path.with_suffix("")))
+            analyze_table_quality(path, table_name=str(report_dir / path.stem))
 
         logger.info(
             "Saved %d tables and quality reports to %s", len(paths), args.out_dir

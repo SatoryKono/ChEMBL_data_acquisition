@@ -17,8 +17,10 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
     tables = {
         "assay": pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}),
         "activity": pd.DataFrame({"x": [1, 2, 3], "y": [1, 2, 3]}),
-        "pairs": pd.DataFrame({"id": [1, 2]}),
         "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
+        "pairs_independent": pd.DataFrame({"id": [5]}),
+        "pairs_non_independent": pd.DataFrame({"id": [6]}),
+        "activity_status": pd.DataFrame({"id": [7]}),
     }
 
     def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
@@ -44,9 +46,15 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
     result = cli.run(args)
     assert result == 0
 
+    assert (out_dir / "status" / "activity_status.csv").exists()
+
     for name in tables:
-        quality = out_dir / f"{name}_quality_report_table.csv"
-        corr = out_dir / f"{name}_data_correlation_report_table.csv"
+        quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
+        corr = (
+            out_dir
+            / "data_validity_report"
+            / f"{name}_data_correlation_report_table.csv"
+        )
         assert quality.exists(), quality
         assert corr.exists(), corr
         df = pd.read_csv(quality)
