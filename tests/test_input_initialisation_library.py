@@ -50,6 +50,7 @@ def test_build_combined_tables_drops_activity_cols() -> None:
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
     }
     all_: dict[EntityName, pd.DataFrame] = {
         "activity": pd.DataFrame({"id": [2], "Column1": ["b"]}),
@@ -57,10 +58,36 @@ def test_build_combined_tables_drops_activity_cols() -> None:
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
     }
     combined = build_combined_tables(same, all_)
     assert "Column1" not in combined["activity"].columns
     assert len(combined["activity"]) == 2
+    assert "pairs_same_document" in combined
+    assert "pairs" in combined
+
+
+def test_build_combined_tables_pairs_no_merge() -> None:
+    """Pairs from different sources should not be combined."""
+    same: dict[EntityName, pd.DataFrame] = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame({"id": range(3)}),
+    }
+    all_: dict[EntityName, pd.DataFrame] = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame(),
+        "pairs": pd.DataFrame({"id": range(5)}),
+    }
+    combined = build_combined_tables(same, all_)
+    assert len(combined["pairs_same_document"]) == 3
+    assert len(combined["pairs"]) == 5
 
 
 def test_save_tables_writes_files(tmp_path: Path) -> None:
@@ -70,6 +97,8 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "document": pd.DataFrame({"id": [3]}),
         "target": pd.DataFrame({"id": [4]}),
         "testitem": pd.DataFrame({"id": [5]}),
+        "pairs_same_document": pd.DataFrame({"id": [1]}),
+        "pairs": pd.DataFrame({"id": [1]}),
     }
     paths = save_tables(tables, tmp_path)
     for entity, path in paths.items():
@@ -118,9 +147,7 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n2,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
-
         "chembl_id,type,IUPHAR_class,IUPHAR_subclass\nT1,Unicellular organism,ClassA,Multifunctional\n"
-
     )
 
     res = process_activity_table(df, tmp_path)
@@ -149,12 +176,10 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
-
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
-
     ]
     assert list(res.columns) == expected_cols
     assert bool(res.loc[0, "is_citation"])
@@ -163,7 +188,6 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
     assert res["unicellular_organism"].all()
 
     assert res["multifunctional_enzyme"].all()
-
 
 
 def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
@@ -198,9 +222,7 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
-
         "chembl_id,type,IUPHAR_class,IUPHAR_subclass\nT1,Multicellular organism,,\n"
-
     )
 
     res = process_activity_table(df, tmp_path)
@@ -208,4 +230,3 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
     assert res.loc[0, "unknown_chirality"]
 
     assert pd.isna(res.loc[0, "multifunctional_enzyme"])
-
