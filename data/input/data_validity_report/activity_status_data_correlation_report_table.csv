@@ -1,0 +1,6 @@
+﻿index,activity_id,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki
+activity_id,1.0,0.16665525464015957,,-0.00414735434451733,
+independent_IC50,0.16665525464015957,1.0,,-0.09127347751040366,
+non_independent_IC50,,,,,
+independent_Ki,-0.00414735434451733,-0.09127347751040366,,1.0,
+non_independent_Ki,,,,,

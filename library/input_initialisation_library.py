@@ -688,6 +688,24 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
+    if "INDEPENDENT" in df_pairs.columns:
+        indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
+            False
+        )
+        df_pairs_independent = normalize_pair_columns(df_pairs[indep_series].copy())
+        df_pairs_non_independent = normalize_pair_columns(
+            df_pairs[~indep_series].copy()
+        )
+    else:
+        logger.warning("INDEPENDENT column missing; creating empty pair segments")
+        df_pairs_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+        df_pairs_non_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+
+    combined["pairs_independent"] = df_pairs_independent
+    combined["pairs_non_independent"] = df_pairs_non_independent
+
+    
+
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -719,6 +737,7 @@ def build_combined_tables(
                     pair_key,
                 )
 
+
         for suffix, pair_key in [
             ("independent", "pairs_independent"),
             ("non_independent", "pairs_non_independent"),
@@ -739,6 +758,7 @@ def build_combined_tables(
                     "%s table missing or lacks Filtered columns; skipping status aggregation",
                     pair_key,
                 )
+
 
     return combined
 
@@ -769,6 +789,7 @@ def save_tables(
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: Dict[str, Path] = {}
     for entity, df in tables.items():
+
         if entity.endswith("_non_independent_status"):
             sub_dir = out_dir / "status" / "non-independent"
         elif entity.endswith("_independent_status"):
@@ -779,6 +800,7 @@ def save_tables(
             sub_dir = out_dir / "status"
         else:
             sub_dir = out_dir
+
         sub_dir.mkdir(parents=True, exist_ok=True)
         path = sub_dir / f"{entity}.csv"
         df.to_csv(path, index=False, encoding="utf-8", na_rep="")

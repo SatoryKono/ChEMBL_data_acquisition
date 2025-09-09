@@ -1,0 +1,1961 @@
+target_id,Filtered.new,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki
+CHEMBL1075024,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL1075029,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075045,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075051,multifunctional enzyme,17.0,0.0,0.0,0.0
+CHEMBL1075097,no issue,20.0,0.0,0.0,0.0
+CHEMBL1075102,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075104,multifunctional enzyme,200.0,0.0,1.0,0.0
+CHEMBL1075105,no issue,3.0,0.0,0.0,0.0
+CHEMBL1075108,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1075115,no issue,2.0,0.0,0.0,0.0
+CHEMBL1075126,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075128,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075132,no issue,7.0,0.0,0.0,0.0
+CHEMBL1075133,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1075138,no issue,4.0,0.0,0.0,0.0
+CHEMBL1075144,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075145,no issue,23.0,0.0,0.0,0.0
+CHEMBL1075155,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1075162,no issue,1.0,0.0,0.0,0.0
+CHEMBL1075163,review,3.0,0.0,0.0,0.0
+CHEMBL1075164,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075165,no issue,8.0,0.0,0.0,0.0
+CHEMBL1075166,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1075167,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1075169,no issue,3.0,0.0,0.0,0.0
+CHEMBL1075172,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075173,no issue,1.0,0.0,0.0,0.0
+CHEMBL1075174,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1075178,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075189,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075195,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1075201,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075214,test Item with unknown chirality,0.0,0.0,2.0,0.0
+CHEMBL1075226,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL1075228,no issue,1.0,0.0,2.0,0.0
+CHEMBL1075246,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL1075263,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075268,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075269,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075275,no issue,5.0,0.0,0.0,0.0
+CHEMBL1075280,no issue,1.0,0.0,0.0,0.0
+CHEMBL1075281,no issue,1.0,0.0,0.0,0.0
+CHEMBL1075282,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075283,no issue,3.0,0.0,0.0,0.0
+CHEMBL1075284,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL1075294,no issue,7.0,0.0,0.0,0.0
+CHEMBL1075302,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1075307,review,3.0,0.0,0.0,0.0
+CHEMBL1075317,no issue,21.0,0.0,0.0,0.0
+CHEMBL1075319,no issue,65.0,0.0,0.0,0.0
+CHEMBL1075320,no issue,0.0,0.0,0.0,0.0
+CHEMBL1075323,no issue,15.0,0.0,0.0,0.0
+CHEMBL1163101,no issue,7.0,0.0,0.0,0.0
+CHEMBL1163106,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1163108,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1163109,no issue,0.0,0.0,0.0,0.0
+CHEMBL1163111,no issue,0.0,0.0,0.0,0.0
+CHEMBL1163122,no issue,0.0,0.0,0.0,0.0
+CHEMBL1163123,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1163125,no issue,23440.0,0.0,584.0,0.0
+CHEMBL1163126,highly correlated assays,3.0,0.0,0.0,0.0
+CHEMBL1163129,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1163130,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL1169596,no issue,1.0,0.0,0.0,0.0
+CHEMBL1169597,no issue,0.0,0.0,1.0,0.0
+CHEMBL1169598,no issue,1.0,0.0,0.0,0.0
+CHEMBL1250368,no issue,0.0,0.0,0.0,0.0
+CHEMBL1250378,no issue,0.0,0.0,0.0,0.0
+CHEMBL1250379,review,0.0,0.0,0.0,0.0
+CHEMBL1250402,no issue,39.0,0.0,0.0,0.0
+CHEMBL1255126,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1255149,no issue,0.0,0.0,0.0,0.0
+CHEMBL1255160,no issue,0.0,0.0,1.0,0.0
+CHEMBL1255163,no issue,0.0,0.0,0.0,0.0
+CHEMBL1255164,no issue,0.0,0.0,0.0,0.0
+CHEMBL1275212,no issue,7.0,0.0,0.0,0.0
+CHEMBL1275214,no issue,0.0,0.0,0.0,0.0
+CHEMBL1275221,no issue,2.0,0.0,0.0,0.0
+CHEMBL1287622,no issue,0.0,0.0,0.0,0.0
+CHEMBL1287623,no issue,0.0,0.0,0.0,0.0
+CHEMBL1287627,no issue,0.0,0.0,0.0,0.0
+CHEMBL1293197,no issue,2.0,0.0,0.0,0.0
+CHEMBL1293204,no issue,0.0,0.0,0.0,0.0
+CHEMBL1293222,no issue,15.0,0.0,0.0,0.0
+CHEMBL1293224,no issue,12.0,0.0,0.0,0.0
+CHEMBL1293226,no issue,0.0,0.0,0.0,0.0
+CHEMBL1293237,no issue,44.0,0.0,0.0,0.0
+CHEMBL1293255,multifunctional enzyme,3.0,0.0,0.0,0.0
+CHEMBL1293266,no issue,11.0,0.0,0.0,0.0
+CHEMBL1293267,no issue,7.0,0.0,0.0,0.0
+CHEMBL1293269,no issue,0.0,0.0,0.0,0.0
+CHEMBL1293287,no issue,9.0,0.0,9.0,0.0
+CHEMBL1293289,no issue,915.0,0.0,0.0,0.0
+CHEMBL1293292,no issue,6.0,0.0,0.0,0.0
+CHEMBL1293293,no issue,0.0,0.0,0.0,0.0
+CHEMBL1293295,no issue,3.0,0.0,0.0,0.0
+CHEMBL1293299,no issue,1.0,0.0,0.0,0.0
+CHEMBL1293320,no issue,0.0,0.0,0.0,0.0
+CHEMBL1613743,no issue,0.0,0.0,0.0,0.0
+CHEMBL1615381,no issue,1.0,0.0,0.0,0.0
+CHEMBL1615384,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1628461,no issue,0.0,0.0,0.0,0.0
+CHEMBL1628477,no issue,0.0,0.0,0.0,0.0
+CHEMBL1628481,no issue,0.0,0.0,0.0,0.0
+CHEMBL1641346,no issue,0.0,0.0,0.0,0.0
+CHEMBL1641359,test Item with unknown chirality,2.0,0.0,0.0,0.0
+CHEMBL1649048,no issue,1.0,0.0,0.0,0.0
+CHEMBL1649052,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1667683,no issue,0.0,0.0,0.0,0.0
+CHEMBL1667685,no issue,0.0,0.0,0.0,0.0
+CHEMBL1667686,no issue,0.0,0.0,0.0,0.0
+CHEMBL1667695,no issue,0.0,0.0,0.0,0.0
+CHEMBL1671609,no issue,0.0,0.0,0.0,0.0
+CHEMBL1671612,no issue,0.0,0.0,0.0,0.0
+CHEMBL1671613,no issue,9.0,0.0,0.0,0.0
+CHEMBL1681620,multifunctional enzyme,92.0,0.0,267.0,0.0
+CHEMBL1687677,no issue,86.0,0.0,0.0,0.0
+CHEMBL1697657,no issue,0.0,0.0,0.0,0.0
+CHEMBL1697662,no issue,0.0,0.0,0.0,0.0
+CHEMBL1697671,no issue,0.0,0.0,0.0,0.0
+CHEMBL1741162,no issue,0.0,0.0,0.0,0.0
+CHEMBL1741179,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL1741186,no issue,1182.0,0.0,0.0,0.0
+CHEMBL1741203,no issue,0.0,0.0,0.0,0.0
+CHEMBL1741208,no issue,55.0,0.0,0.0,0.0
+CHEMBL1741217,no issue,0.0,0.0,0.0,0.0
+CHEMBL1741219,review,0.0,0.0,0.0,0.0
+CHEMBL1741220,no issue,2.0,0.0,0.0,0.0
+CHEMBL1741221,no issue,10.0,0.0,0.0,0.0
+CHEMBL1743126,no issue,0.0,0.0,0.0,0.0
+CHEMBL1743183,no issue,0.0,0.0,0.0,0.0
+CHEMBL1744522,no issue,0.0,0.0,0.0,0.0
+CHEMBL1744525,no issue,103.0,0.0,7.0,0.0
+CHEMBL1764946,no issue,0.0,0.0,0.0,0.0
+CHEMBL1770034,no issue,2.0,0.0,0.0,0.0
+CHEMBL1770046,no issue,1.0,0.0,0.0,0.0
+CHEMBL1772927,no issue,0.0,0.0,0.0,0.0
+CHEMBL1781,no issue,239.0,0.0,0.0,0.0
+CHEMBL1781862,no issue,0.0,0.0,0.0,0.0
+CHEMBL1781865,no issue,0.0,0.0,0.0,0.0
+CHEMBL1782,no issue,583.0,0.0,0.0,0.0
+CHEMBL1784,no issue,0.0,0.0,0.0,0.0
+CHEMBL1785,no issue,34.0,0.0,0.0,0.0
+CHEMBL1787,no issue,39.0,0.0,0.0,0.0
+CHEMBL1790,no issue,38.0,0.0,4.0,0.0
+CHEMBL1792,no issue,7.0,0.0,3.0,0.0
+CHEMBL1795101,no issue,1.0,0.0,0.0,0.0
+CHEMBL1795116,no issue,23.0,0.0,0.0,0.0
+CHEMBL1795117,no issue,56.0,0.0,44.0,0.0
+CHEMBL1795118,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL1795119,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1795126,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL1795136,review,6.0,0.0,0.0,0.0
+CHEMBL1795139,no issue,0.0,0.0,0.0,0.0
+CHEMBL1795143,no issue,0.0,0.0,0.0,0.0
+CHEMBL1795148,no issue,0.0,0.0,2.0,0.0
+CHEMBL1795167,no issue,0.0,0.0,0.0,0.0
+CHEMBL1795176,no issue,10.0,0.0,1.0,0.0
+CHEMBL1795177,no issue,1.0,0.0,0.0,0.0
+CHEMBL1795180,no issue,0.0,0.0,0.0,0.0
+CHEMBL1795185,no issue,166.0,0.0,0.0,0.0
+CHEMBL1795186,no issue,444.0,0.0,32.0,0.0
+CHEMBL1795188,no issue,0.0,0.0,0.0,0.0
+CHEMBL1795192,review,1.0,0.0,0.0,0.0
+CHEMBL1795194,shuffled assays,0.0,0.0,0.0,0.0
+CHEMBL1795199,review,0.0,0.0,0.0,0.0
+CHEMBL1798,no issue,21.0,0.0,0.0,0.0
+CHEMBL1800,no issue,28.0,0.0,126.0,0.0
+CHEMBL1801,no issue,26.0,0.0,5.0,0.0
+CHEMBL1803,no issue,0.0,0.0,0.0,0.0
+CHEMBL1804,no issue,0.0,0.0,2.0,0.0
+CHEMBL1805,highly correlated assays,0.0,0.0,2.0,0.0
+CHEMBL1806,no issue,83.0,0.0,0.0,0.0
+CHEMBL1808,no issue,17.0,0.0,41.0,0.0
+CHEMBL1809,multifunctional enzyme,93.0,0.0,15.0,0.0
+CHEMBL1811,no issue,0.0,0.0,13.0,0.0
+CHEMBL1812,no issue,3.0,0.0,0.0,0.0
+CHEMBL1821,no issue,14.0,0.0,55.0,0.0
+CHEMBL1822,multifunctional enzyme,6.0,0.0,0.0,0.0
+CHEMBL1824,no issue,868.0,0.0,0.0,0.0
+CHEMBL1825,no issue,21.0,0.0,0.0,0.0
+CHEMBL1826,no issue,0.0,0.0,0.0,0.0
+CHEMBL1827,no issue,1552.0,0.0,7.0,0.0
+CHEMBL1828,no issue,4.0,0.0,0.0,0.0
+CHEMBL1829,no issue,4155.0,0.0,13.0,0.0
+CHEMBL1833,no issue,14.0,0.0,38.0,0.0
+CHEMBL1835,multifunctional enzyme,2.0,0.0,0.0,0.0
+CHEMBL1836,no issue,102.0,0.0,30.0,0.0
+CHEMBL1841,no issue,60.0,0.0,1.0,0.0
+CHEMBL1844,no issue,124.0,0.0,0.0,0.0
+CHEMBL1845,no issue,0.0,0.0,0.0,0.0
+CHEMBL1849,no issue,43.0,0.0,1.0,0.0
+CHEMBL1850,no issue,3.0,0.0,17.0,0.0
+CHEMBL1853,no issue,2.0,0.0,9.0,0.0
+CHEMBL1855,no issue,4835.0,0.0,6.0,0.0
+CHEMBL1856,no issue,111.0,0.0,0.0,0.0
+CHEMBL1859,no issue,5.0,0.0,0.0,0.0
+CHEMBL1860,no issue,2.0,0.0,2.0,0.0
+CHEMBL1862,no issue,2408.0,0.0,6.0,0.0
+CHEMBL1865,no issue,24454.0,0.0,38.0,0.0
+CHEMBL1867,no issue,1.0,0.0,15.0,0.0
+CHEMBL1868,no issue,53.0,0.0,0.0,0.0
+CHEMBL1870,no issue,0.0,0.0,1.0,0.0
+CHEMBL1871,no issue,4919.0,0.0,223.0,0.0
+CHEMBL1873,no issue,0.0,0.0,1.0,0.0
+CHEMBL1875,no issue,0.0,0.0,58.0,0.0
+CHEMBL1878,no issue,19.0,0.0,0.0,0.0
+CHEMBL1881,no issue,9.0,0.0,17.0,0.0
+CHEMBL1889,no issue,20.0,0.0,140.0,0.0
+CHEMBL1892,no issue,14.0,0.0,8.0,0.0
+CHEMBL1893,no issue,0.0,0.0,0.0,0.0
+CHEMBL1898,no issue,5.0,0.0,19.0,0.0
+CHEMBL1899,no issue,39.0,0.0,7.0,0.0
+CHEMBL1900,no issue,110.0,0.0,0.0,0.0
+CHEMBL1901,no issue,150.0,0.0,1.0,0.0
+CHEMBL1902,no issue,0.0,0.0,0.0,0.0
+CHEMBL1903,no issue,1.0,0.0,1.0,0.0
+CHEMBL1904,no issue,4.0,0.0,16.0,0.0
+CHEMBL1906,no issue,81.0,0.0,0.0,0.0
+CHEMBL1907,no issue,185.0,0.0,1.0,0.0
+CHEMBL1908,no issue,54.0,0.0,0.0,0.0
+CHEMBL1908384,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1908386,review,3.0,0.0,0.0,0.0
+CHEMBL1908389,no issue,1.0,0.0,0.0,0.0
+CHEMBL1909484,no issue,1.0,0.0,0.0,0.0
+CHEMBL1910,review,0.0,0.0,0.0,0.0
+CHEMBL1913,no issue,91.0,0.0,0.0,0.0
+CHEMBL1914,no issue,7552.0,0.0,8.0,0.0
+CHEMBL1914270,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL1914272,no issue,0.0,0.0,0.0,0.0
+CHEMBL1916,no issue,0.0,0.0,10.0,0.0
+CHEMBL1917,no issue,0.0,0.0,1.0,0.0
+CHEMBL1918,no issue,0.0,0.0,0.0,0.0
+CHEMBL1919,no issue,0.0,0.0,1.0,0.0
+CHEMBL1921,no issue,0.0,0.0,3.0,0.0
+CHEMBL1921661,no issue,0.0,0.0,0.0,0.0
+CHEMBL1921666,no issue,3.0,0.0,0.0,0.0
+CHEMBL1923,test Item with unknown chirality,6.0,0.0,0.0,0.0
+CHEMBL1926,multifunctional enzyme,128.0,0.0,0.0,0.0
+CHEMBL1926488,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL1927,no issue,1.0,0.0,0.0,0.0
+CHEMBL1929,multifunctional enzyme,248.0,0.0,12.0,0.0
+CHEMBL1932895,no issue,0.0,0.0,0.0,0.0
+CHEMBL1932912,no issue,6.0,0.0,0.0,0.0
+CHEMBL1935,no issue,0.0,0.0,0.0,0.0
+CHEMBL1936,no issue,902.0,0.0,0.0,0.0
+CHEMBL1937,no issue,9390.0,0.0,23.0,0.0
+CHEMBL1938208,no issue,0.0,0.0,0.0,0.0
+CHEMBL1938209,no issue,0.0,0.0,0.0,0.0
+CHEMBL1938210,no issue,0.0,0.0,0.0,0.0
+CHEMBL1938211,no issue,3.0,0.0,0.0,0.0
+CHEMBL1938215,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL1938219,no issue,0.0,0.0,0.0,0.0
+CHEMBL1938224,no issue,3.0,0.0,0.0,0.0
+CHEMBL1940,no issue,0.0,0.0,0.0,0.0
+CHEMBL1941,no issue,14.0,0.0,13.0,0.0
+CHEMBL1942,no issue,0.0,0.0,21.0,0.0
+CHEMBL1944,no issue,3.0,0.0,0.0,0.0
+CHEMBL1944495,no issue,10.0,0.0,0.0,0.0
+CHEMBL1944497,no issue,0.0,0.0,2.0,0.0
+CHEMBL1944501,no issue,0.0,0.0,0.0,0.0
+CHEMBL1945,no issue,19.0,0.0,1246.0,0.0
+CHEMBL1946,no issue,0.0,0.0,990.0,0.0
+CHEMBL1947,no issue,72.0,0.0,2.0,0.0
+CHEMBL1949483,no issue,0.0,0.0,0.0,0.0
+CHEMBL1949488,no issue,1.0,0.0,0.0,0.0
+CHEMBL1951,multifunctional enzyme,3242.0,0.0,23.0,0.0
+CHEMBL1952,multifunctional enzyme,62.0,0.0,0.0,0.0
+CHEMBL1955,no issue,60.0,0.0,0.0,0.0
+CHEMBL1957,no issue,256.0,0.0,0.0,0.0
+CHEMBL1962,review,0.0,0.0,0.0,0.0
+CHEMBL1966,multifunctional enzyme,495.0,0.0,0.0,0.0
+CHEMBL1968,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL1972,no issue,9.0,0.0,0.0,0.0
+CHEMBL1973,no issue,30.0,0.0,0.0,0.0
+CHEMBL1974,no issue,4989.0,0.0,0.0,0.0
+CHEMBL1977,no issue,202.0,0.0,0.0,0.0
+CHEMBL1978,no issue,1377.0,0.0,63.0,0.0
+CHEMBL1980,no issue,15.0,0.0,0.0,0.0
+CHEMBL1981,no issue,39.0,0.0,0.0,0.0
+CHEMBL1983,no issue,10.0,0.0,23.0,0.0
+CHEMBL1985,no issue,38.0,0.0,0.0,0.0
+CHEMBL1987,no issue,0.0,0.0,0.0,0.0
+CHEMBL1991,no issue,214.0,0.0,0.0,0.0
+CHEMBL1992,no issue,1.0,0.0,0.0,0.0
+CHEMBL1993,no issue,23.0,0.0,0.0,0.0
+CHEMBL1994,no issue,314.0,0.0,7.0,0.0
+CHEMBL1995,no issue,14.0,0.0,6.0,0.0
+CHEMBL1997,no issue,0.0,0.0,1.0,0.0
+CHEMBL2000,no issue,0.0,0.0,0.0,0.0
+CHEMBL2001,no issue,1.0,0.0,1.0,0.0
+CHEMBL2002,multifunctional enzyme,14.0,0.0,0.0,0.0
+CHEMBL2003,no issue,0.0,0.0,1.0,0.0
+CHEMBL2004,no issue,0.0,0.0,1.0,0.0
+CHEMBL2007,no issue,49.0,0.0,0.0,0.0
+CHEMBL2007625,multifunctional enzyme,578.0,0.0,15.0,0.0
+CHEMBL2007628,no issue,2.0,0.0,6.0,0.0
+CHEMBL2007629,no issue,0.0,0.0,0.0,0.0
+CHEMBL2009,no issue,0.0,0.0,0.0,0.0
+CHEMBL2010631,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2010636,no issue,0.0,0.0,0.0,0.0
+CHEMBL2014,no issue,0.0,0.0,7.0,0.0
+CHEMBL2015,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2016,no issue,0.0,0.0,1.0,0.0
+CHEMBL2016431,review,0.0,0.0,0.0,0.0
+CHEMBL202,multifunctional enzyme,384.0,0.0,18.0,0.0
+CHEMBL2021745,no issue,0.0,0.0,0.0,0.0
+CHEMBL2021749,no issue,0.0,0.0,0.0,0.0
+CHEMBL2021752,no issue,0.0,0.0,0.0,0.0
+CHEMBL2021753,no issue,0.0,0.0,0.0,0.0
+CHEMBL2023,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2027,no issue,0.0,0.0,0.0,0.0
+CHEMBL2028,no issue,0.0,0.0,1.0,0.0
+CHEMBL2029197,no issue,0.0,0.0,0.0,0.0
+CHEMBL2029198,no issue,0.0,0.0,0.0,0.0
+CHEMBL203,no issue,81138.0,0.0,196.0,0.0
+CHEMBL2034,no issue,5141.0,0.0,512.0,0.0
+CHEMBL2034805,no issue,1.0,0.0,0.0,0.0
+CHEMBL2034807,no issue,13.0,0.0,0.0,0.0
+CHEMBL2035,no issue,9.0,0.0,45.0,0.0
+CHEMBL2039,multifunctional enzyme,8887.0,0.0,83.0,0.0
+CHEMBL204,no issue,125.0,0.0,24.0,0.0
+CHEMBL2041,no issue,1092.0,0.0,0.0,0.0
+CHEMBL2046259,no issue,0.0,0.0,0.0,0.0
+CHEMBL2046260,no issue,0.0,0.0,0.0,0.0
+CHEMBL2046264,no issue,0.0,0.0,0.0,0.0
+CHEMBL2046266,no issue,0.0,0.0,0.0,0.0
+CHEMBL2046267,no issue,108.0,0.0,0.0,0.0
+CHEMBL2047,no issue,43.0,0.0,0.0,0.0
+CHEMBL2049,no issue,6.0,0.0,95.0,0.0
+CHEMBL205,no issue,3536.0,0.0,7744.0,0.0
+CHEMBL2051,no issue,3.0,0.0,0.0,0.0
+CHEMBL2052027,no issue,1.0,0.0,0.0,0.0
+CHEMBL2052028,no issue,12.0,0.0,0.0,0.0
+CHEMBL2052031,no issue,0.0,0.0,0.0,0.0
+CHEMBL2052038,no issue,0.0,0.0,0.0,0.0
+CHEMBL2052039,no issue,0.0,0.0,0.0,0.0
+CHEMBL2056,no issue,186.0,0.0,160.0,0.0
+CHEMBL206,no issue,5261.0,0.0,36.0,0.0
+CHEMBL2061,no issue,0.0,0.0,63.0,0.0
+CHEMBL2063,no issue,2.0,0.0,0.0,0.0
+CHEMBL2065,no issue,8.0,0.0,0.0,0.0
+CHEMBL2068,no issue,3.0,0.0,0.0,0.0
+CHEMBL2069,no issue,6.0,0.0,0.0,0.0
+CHEMBL2069156,no issue,10.0,0.0,0.0,0.0
+CHEMBL2072,no issue,1.0,0.0,0.0,0.0
+CHEMBL2073,no issue,14.0,0.0,0.0,0.0
+CHEMBL2073663,no issue,0.0,0.0,0.0,0.0
+CHEMBL2073674,no issue,0.0,0.0,0.0,0.0
+CHEMBL2073676,no issue,0.0,0.0,0.0,0.0
+CHEMBL2073677,review,1.0,0.0,0.0,0.0
+CHEMBL2073709,no issue,0.0,0.0,0.0,0.0
+CHEMBL2074,no issue,4.0,0.0,1.0,0.0
+CHEMBL2079849,no issue,0.0,0.0,0.0,0.0
+CHEMBL208,no issue,645.0,0.0,44.0,0.0
+CHEMBL2081,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2083,no issue,0.0,0.0,5.0,0.0
+CHEMBL2085,no issue,90.0,0.0,18.0,0.0
+CHEMBL2088,no issue,0.0,0.0,0.0,0.0
+CHEMBL2094,no issue,0.0,0.0,0.0,0.0
+CHEMBL2099,no issue,0.0,0.0,0.0,0.0
+CHEMBL210,no issue,27.0,0.0,180.0,0.0
+CHEMBL2104,no issue,359.0,0.0,0.0,0.0
+CHEMBL2107,no issue,1263.0,0.0,0.0,0.0
+CHEMBL2109,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL211,no issue,31.0,0.0,567.0,0.0
+CHEMBL2121,no issue,0.0,0.0,0.0,0.0
+CHEMBL2123,no issue,0.0,0.0,0.0,0.0
+CHEMBL2125,no issue,0.0,0.0,0.0,0.0
+CHEMBL213,no issue,20.0,0.0,9.0,0.0
+CHEMBL2135,high citation rate,0.0,0.0,0.0,0.0
+CHEMBL2136,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL214,no issue,105.0,0.0,1376.0,0.0
+CHEMBL2140,no issue,157.0,0.0,6.0,0.0
+CHEMBL2145,no issue,105.0,0.0,0.0,0.0
+CHEMBL2146302,no issue,859.0,0.0,0.0,0.0
+CHEMBL2146312,no issue,2.0,0.0,0.0,0.0
+CHEMBL2146350,no issue,1.0,0.0,0.0,0.0
+CHEMBL2147,no issue,288.0,0.0,0.0,0.0
+CHEMBL2148,no issue,1959.0,0.0,0.0,0.0
+CHEMBL215,no issue,6490.0,0.0,0.0,0.0
+CHEMBL2150835,no issue,0.0,0.0,0.0,0.0
+CHEMBL2150837,no issue,38.0,0.0,0.0,0.0
+CHEMBL2154,no issue,0.0,0.0,0.0,0.0
+CHEMBL2157850,rounded data citation,2.0,0.0,0.0,0.0
+CHEMBL216,no issue,94.0,0.0,171.0,0.0
+CHEMBL2163171,no issue,0.0,0.0,0.0,0.0
+CHEMBL2163175,no issue,0.0,0.0,0.0,0.0
+CHEMBL2163176,no issue,0.0,0.0,0.0,0.0
+CHEMBL2163182,no issue,1.0,0.0,0.0,0.0
+CHEMBL2163183,no issue,36.0,0.0,0.0,0.0
+CHEMBL2169716,no issue,44.0,0.0,0.0,0.0
+CHEMBL2169718,test Item with unknown chirality,3.0,0.0,0.0,0.0
+CHEMBL2169720,test Item with unknown chirality,3.0,0.0,0.0,0.0
+CHEMBL2169724,no issue,0.0,0.0,0.0,0.0
+CHEMBL2169726,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2169736,no issue,4.0,0.0,0.0,0.0
+CHEMBL217,no issue,41.0,0.0,9035.0,0.0
+CHEMBL2171,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2176771,no issue,14.0,0.0,0.0,0.0
+CHEMBL2176774,no issue,18.0,0.0,0.0,0.0
+CHEMBL2176776,no issue,0.0,0.0,0.0,0.0
+CHEMBL2176777,rounded data citation,6.0,0.0,0.0,0.0
+CHEMBL2176778,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2176837,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2176846,no issue,2.0,0.0,0.0,0.0
+CHEMBL2179,no issue,6.0,0.0,1.0,0.0
+CHEMBL218,no issue,984.0,0.0,5556.0,0.0
+CHEMBL2181,no issue,0.0,0.0,0.0,0.0
+CHEMBL2182,no issue,0.0,0.0,1.0,0.0
+CHEMBL2185,no issue,516.0,0.0,14.0,0.0
+CHEMBL2186,no issue,0.0,0.0,0.0,0.0
+CHEMBL2189110,no issue,251.0,0.0,45.0,0.0
+CHEMBL2189117,no issue,47.0,0.0,8.0,0.0
+CHEMBL2189121,no issue,51.0,0.0,0.0,0.0
+CHEMBL2189127,no issue,0.0,0.0,1.0,0.0
+CHEMBL2189158,no issue,0.0,0.0,0.0,0.0
+CHEMBL219,no issue,28.0,0.0,799.0,0.0
+CHEMBL220,no issue,16672.0,0.0,94.0,0.0
+CHEMBL2207,no issue,1.0,0.0,0.0,0.0
+CHEMBL2208,no issue,72.0,0.0,0.0,0.0
+CHEMBL221,no issue,847.0,0.0,0.0,0.0
+CHEMBL2211,no issue,13.0,0.0,0.0,0.0
+CHEMBL2216745,no issue,0.0,0.0,0.0,0.0
+CHEMBL2219,no issue,0.0,0.0,0.0,0.0
+CHEMBL222,no issue,661.0,0.0,277.0,0.0
+CHEMBL223,no issue,1.0,0.0,57.0,0.0
+CHEMBL2231,multifunctional enzyme,17.0,0.0,0.0,0.0
+CHEMBL2237,no issue,0.0,0.0,0.0,0.0
+CHEMBL2238,no issue,0.0,0.0,0.0,0.0
+CHEMBL224,no issue,120.0,0.0,923.0,0.0
+CHEMBL2242740,no issue,1.0,0.0,0.0,0.0
+CHEMBL2243,no issue,788.0,0.0,5.0,0.0
+CHEMBL2246,no issue,2.0,0.0,0.0,0.0
+CHEMBL2249,no issue,0.0,0.0,0.0,0.0
+CHEMBL225,no issue,9.0,0.0,245.0,0.0
+CHEMBL2250,no issue,11.0,0.0,0.0,0.0
+CHEMBL2252,no issue,252.0,0.0,0.0,0.0
+CHEMBL2253,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL226,no issue,21.0,0.0,1774.0,0.0
+CHEMBL2264,no issue,1.0,0.0,0.0,0.0
+CHEMBL2265,no issue,7.0,0.0,12.0,0.0
+CHEMBL2268003,no issue,0.0,0.0,0.0,0.0
+CHEMBL227,no issue,68.0,0.0,8.0,0.0
+CHEMBL2274,no issue,5.0,0.0,0.0,0.0
+CHEMBL2276,no issue,64.0,0.0,1.0,0.0
+CHEMBL228,no issue,976.0,0.0,585.0,0.0
+CHEMBL2283,no issue,0.0,0.0,0.0,0.0
+CHEMBL2285,no issue,19.0,0.0,0.0,0.0
+CHEMBL2288,no issue,10.0,0.0,1.0,0.0
+CHEMBL2289,no issue,0.0,0.0,0.0,0.0
+CHEMBL229,no issue,1.0,0.0,137.0,0.0
+CHEMBL2292,no issue,930.0,0.0,0.0,0.0
+CHEMBL230,no issue,16277.0,0.0,0.0,0.0
+CHEMBL2304402,no issue,0.0,0.0,0.0,0.0
+CHEMBL2304404,highly correlated assays,0.0,0.0,27.0,0.0
+CHEMBL231,no issue,91.0,0.0,144.0,0.0
+CHEMBL2311243,no issue,41.0,0.0,0.0,0.0
+CHEMBL2318,no issue,2.0,0.0,0.0,0.0
+CHEMBL232,no issue,0.0,0.0,60.0,0.0
+CHEMBL2321613,no issue,10.0,0.0,0.0,0.0
+CHEMBL2321614,no issue,7.0,0.0,0.0,0.0
+CHEMBL2321628,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2321630,multifunctional enzyme,6.0,0.0,0.0,0.0
+CHEMBL2321643,no issue,0.0,0.0,0.0,0.0
+CHEMBL2322,no issue,1.0,0.0,0.0,0.0
+CHEMBL2326,no issue,0.0,0.0,284.0,0.0
+CHEMBL2327,no issue,0.0,0.0,2.0,0.0
+CHEMBL2329,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL233,no issue,244.0,0.0,1357.0,0.0
+CHEMBL2331,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2331041,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2331053,multifunctional enzyme,2.0,0.0,0.0,0.0
+CHEMBL2331061,no issue,0.0,0.0,0.0,0.0
+CHEMBL2331064,no issue,2.0,0.0,0.0,0.0
+CHEMBL2331066,no issue,3.0,0.0,0.0,0.0
+CHEMBL2331070,no issue,0.0,0.0,0.0,0.0
+CHEMBL2334,no issue,17.0,0.0,0.0,0.0
+CHEMBL2335,no issue,0.0,0.0,0.0,0.0
+CHEMBL2336,no issue,0.0,0.0,0.0,0.0
+CHEMBL2337,no issue,18.0,0.0,0.0,0.0
+CHEMBL2339,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL234,no issue,11.0,0.0,2187.0,0.0
+CHEMBL2343,no issue,355.0,0.0,0.0,0.0
+CHEMBL2345,no issue,37.0,0.0,0.0,0.0
+CHEMBL2346486,no issue,0.0,0.0,1.0,0.0
+CHEMBL2346488,no issue,6.0,0.0,0.0,0.0
+CHEMBL2349,highly correlated assays,3.0,0.0,0.0,0.0
+CHEMBL235,no issue,1134.0,0.0,60.0,0.0
+CHEMBL236,no issue,14.0,0.0,563.0,0.0
+CHEMBL2360,no issue,0.0,0.0,0.0,0.0
+CHEMBL2362979,no issue,0.0,0.0,0.0,0.0
+CHEMBL2363,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2366456,no issue,39.0,0.0,0.0,0.0
+CHEMBL2366470,no issue,0.0,0.0,0.0,0.0
+CHEMBL2366481,no issue,0.0,0.0,0.0,0.0
+CHEMBL2366494,no issue,0.0,0.0,0.0,0.0
+CHEMBL2366504,no issue,0.0,0.0,0.0,0.0
+CHEMBL2366516,no issue,0.0,0.0,0.0,0.0
+CHEMBL2366517,no issue,19.0,0.0,598.0,0.0
+CHEMBL237,no issue,238.0,0.0,993.0,0.0
+CHEMBL2372,multifunctional enzyme,2.0,0.0,0.0,0.0
+CHEMBL2373,no issue,0.0,0.0,0.0,0.0
+CHEMBL2375203,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2375206,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2375207,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2378,no issue,3.0,0.0,0.0,0.0
+CHEMBL238,no issue,1032.0,0.0,354.0,0.0
+CHEMBL2380186,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2380190,no issue,1.0,0.0,0.0,0.0
+CHEMBL2383,multifunctional enzyme,3.0,0.0,0.0,0.0
+CHEMBL2384891,no issue,0.0,0.0,0.0,0.0
+CHEMBL239,no issue,11.0,0.0,2.0,0.0
+CHEMBL2391,no issue,0.0,0.0,0.0,0.0
+CHEMBL2397,no issue,11.0,0.0,0.0,0.0
+CHEMBL240,no issue,877.0,0.0,38.0,0.0
+CHEMBL2401609,no issue,0.0,0.0,0.0,0.0
+CHEMBL2406899,no issue,1.0,0.0,0.0,0.0
+CHEMBL2409,no issue,414.0,0.0,1.0,0.0
+CHEMBL241,no issue,3.0,0.0,0.0,0.0
+CHEMBL2411,no issue,0.0,0.0,0.0,0.0
+CHEMBL2413,no issue,224.0,0.0,0.0,0.0
+CHEMBL2414,no issue,7.0,0.0,0.0,0.0
+CHEMBL2417347,no issue,6.0,0.0,0.0,0.0
+CHEMBL2417348,no issue,32.0,0.0,0.0,0.0
+CHEMBL2417353,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL242,no issue,1330.0,0.0,28.0,0.0
+CHEMBL2424,no issue,5.0,0.0,3.0,0.0
+CHEMBL2424504,no issue,18.0,0.0,0.0,0.0
+CHEMBL2425,multifunctional enzyme,483.0,0.0,0.0,0.0
+CHEMBL2426,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2428,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2429708,no issue,63.0,0.0,0.0,0.0
+CHEMBL2429709,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL243,no issue,210.0,0.0,2637.0,0.0
+CHEMBL2431,no issue,18.0,0.0,0.0,0.0
+CHEMBL2434,no issue,36.0,0.0,0.0,0.0
+CHEMBL2438,no issue,0.0,0.0,0.0,0.0
+CHEMBL2439,no issue,87.0,0.0,0.0,0.0
+CHEMBL2439944,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL244,no issue,58.0,0.0,110.0,0.0
+CHEMBL2443,no issue,0.0,0.0,1.0,0.0
+CHEMBL2447,no issue,0.0,0.0,0.0,0.0
+CHEMBL245,no issue,38.0,0.0,351.0,0.0
+CHEMBL2458,no issue,0.0,0.0,0.0,0.0
+CHEMBL246,no issue,0.0,0.0,0.0,0.0
+CHEMBL2460,no issue,0.0,0.0,0.0,0.0
+CHEMBL2461,no issue,10.0,0.0,3.0,0.0
+CHEMBL2468,no issue,2.0,0.0,0.0,0.0
+CHEMBL2469,no issue,0.0,0.0,0.0,0.0
+CHEMBL247,no issue,36035.0,0.0,1176.0,0.0
+CHEMBL2470,no issue,0.0,0.0,2.0,0.0
+CHEMBL2473,no issue,0.0,0.0,0.0,0.0
+CHEMBL2474,no issue,1.0,0.0,0.0,0.0
+CHEMBL248,no issue,58.0,0.0,20.0,0.0
+CHEMBL2480,no issue,0.0,0.0,0.0,0.0
+CHEMBL2487,no issue,549.0,0.0,558.0,0.0
+CHEMBL2488,no issue,0.0,0.0,2.0,0.0
+CHEMBL2489,no issue,0.0,0.0,2.0,0.0
+CHEMBL249,no issue,26.0,0.0,15.0,0.0
+CHEMBL2490,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL2492,no issue,3.0,0.0,150.0,0.0
+CHEMBL2493,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2494,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2496,no issue,30.0,0.0,1.0,0.0
+CHEMBL2498,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL2499,no issue,1.0,0.0,0.0,0.0
+CHEMBL250,no issue,0.0,0.0,0.0,0.0
+CHEMBL2508,no issue,21.0,0.0,0.0,0.0
+CHEMBL251,no issue,36.0,0.0,3661.0,0.0
+CHEMBL2514,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2516,no issue,1.0,0.0,0.0,0.0
+CHEMBL252,no issue,10.0,0.0,1.0,0.0
+CHEMBL2522,no issue,0.0,0.0,1.0,0.0
+CHEMBL2524,no issue,0.0,0.0,0.0,0.0
+CHEMBL2525,no issue,0.0,0.0,0.0,0.0
+CHEMBL2527,no issue,15.0,0.0,0.0,0.0
+CHEMBL2528,no issue,2.0,0.0,0.0,0.0
+CHEMBL253,no issue,193.0,0.0,3672.0,0.0
+CHEMBL2530,no issue,0.0,0.0,0.0,0.0
+CHEMBL2531,rounded data citation,0.0,0.0,0.0,0.0
+CHEMBL2534,no issue,22.0,0.0,0.0,0.0
+CHEMBL2535,review,0.0,0.0,0.0,0.0
+CHEMBL2536,no issue,0.0,0.0,0.0,0.0
+CHEMBL254,no issue,39.0,0.0,0.0,0.0
+CHEMBL2543,no issue,1.0,0.0,0.0,0.0
+CHEMBL255,no issue,4.0,0.0,583.0,0.0
+CHEMBL2553,no issue,7.0,0.0,0.0,0.0
+CHEMBL2558,no issue,10.0,0.0,0.0,0.0
+CHEMBL256,no issue,216.0,0.0,1733.0,0.0
+CHEMBL2560,no issue,0.0,0.0,0.0,0.0
+CHEMBL2563,no issue,326.0,0.0,11.0,0.0
+CHEMBL2564,no issue,29.0,0.0,31.0,0.0
+CHEMBL2567,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2568,no issue,1.0,0.0,0.0,0.0
+CHEMBL2569,no issue,0.0,0.0,0.0,0.0
+CHEMBL2575,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL2577,no issue,0.0,0.0,0.0,0.0
+CHEMBL258,no issue,46.0,0.0,0.0,0.0
+CHEMBL2581,no issue,50.0,0.0,1.0,0.0
+CHEMBL259,no issue,2.0,0.0,294.0,0.0
+CHEMBL2590,no issue,94.0,0.0,15.0,0.0
+CHEMBL2592,no issue,0.0,0.0,0.0,0.0
+CHEMBL2593,no issue,0.0,0.0,0.0,0.0
+CHEMBL2595,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2597,no issue,5.0,0.0,0.0,0.0
+CHEMBL2598,no issue,3.0,0.0,0.0,0.0
+CHEMBL2599,no issue,377.0,0.0,0.0,0.0
+CHEMBL260,no issue,1331.0,0.0,17.0,0.0
+CHEMBL2605,no issue,0.0,0.0,6.0,0.0
+CHEMBL2608,no issue,6.0,0.0,0.0,0.0
+CHEMBL261,no issue,422.0,0.0,7966.0,0.0
+CHEMBL2611,no issue,0.0,0.0,0.0,0.0
+CHEMBL2617,no issue,0.0,0.0,1.0,0.0
+CHEMBL2618,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL262,no issue,698.0,0.0,0.0,0.0
+CHEMBL2622,no issue,158.0,0.0,0.0,0.0
+CHEMBL2623,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL2625,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2634,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2637,no issue,28.0,0.0,1.0,0.0
+CHEMBL264,no issue,10.0,0.0,3013.0,0.0
+CHEMBL2640,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2649,no issue,0.0,0.0,0.0,0.0
+CHEMBL265,no issue,5.0,0.0,26.0,0.0
+CHEMBL2652,no issue,137.0,0.0,0.0,0.0
+CHEMBL2659,no issue,0.0,0.0,1.0,0.0
+CHEMBL2662,no issue,2.0,0.0,0.0,0.0
+CHEMBL2664,no issue,27.0,0.0,0.0,0.0
+CHEMBL267,no issue,149.0,0.0,5.0,0.0
+CHEMBL2672,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL268,no issue,23.0,0.0,10.0,0.0
+CHEMBL2680,no issue,0.0,0.0,0.0,0.0
+CHEMBL2683,no issue,0.0,0.0,0.0,0.0
+CHEMBL2689,no issue,35.0,0.0,0.0,0.0
+CHEMBL269,no issue,1.0,0.0,140.0,0.0
+CHEMBL2693,no issue,0.0,0.0,2.0,0.0
+CHEMBL2695,no issue,195.0,0.0,0.0,0.0
+CHEMBL270,no issue,7.0,0.0,93.0,0.0
+CHEMBL2706,no issue,0.0,0.0,0.0,0.0
+CHEMBL2708,no issue,6.0,0.0,0.0,0.0
+CHEMBL2716,no issue,206.0,0.0,9.0,0.0
+CHEMBL2717,no issue,65.0,0.0,0.0,0.0
+CHEMBL2721,no issue,8.0,0.0,0.0,0.0
+CHEMBL2722,no issue,165.0,0.0,0.0,0.0
+CHEMBL2725,no issue,70.0,0.0,0.0,0.0
+CHEMBL2726,no issue,1.0,0.0,0.0,0.0
+CHEMBL2728,no issue,22.0,0.0,0.0,0.0
+CHEMBL273,no issue,2.0,0.0,156.0,0.0
+CHEMBL2730,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2731,no issue,0.0,0.0,0.0,0.0
+CHEMBL2733,no issue,0.0,0.0,0.0,0.0
+CHEMBL2734,no issue,0.0,0.0,0.0,0.0
+CHEMBL2736,no issue,0.0,0.0,0.0,0.0
+CHEMBL274,no issue,147.0,0.0,0.0,0.0
+CHEMBL2742,no issue,83.0,0.0,0.0,0.0
+CHEMBL2743,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2745,multifunctional enzyme,0.0,0.0,32.0,0.0
+CHEMBL2749,no issue,0.0,0.0,0.0,0.0
+CHEMBL275,no issue,2179.0,0.0,1.0,0.0
+CHEMBL2754,review,1.0,0.0,0.0,0.0
+CHEMBL2755,no issue,0.0,0.0,0.0,0.0
+CHEMBL2758,no issue,0.0,0.0,0.0,0.0
+CHEMBL276,no issue,6.0,0.0,15.0,0.0
+CHEMBL2760,no issue,0.0,0.0,0.0,0.0
+CHEMBL277,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2775,no issue,4.0,0.0,0.0,0.0
+CHEMBL2777,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2778,no issue,0.0,0.0,0.0,0.0
+CHEMBL278,no issue,0.0,0.0,0.0,0.0
+CHEMBL2781,no issue,4.0,0.0,0.0,0.0
+CHEMBL2782,no issue,33.0,0.0,0.0,0.0
+CHEMBL2789,no issue,0.0,0.0,0.0,0.0
+CHEMBL279,no issue,8318.0,0.0,3.0,0.0
+CHEMBL2792,no issue,0.0,0.0,0.0,0.0
+CHEMBL2793,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2794,exact data citation,0.0,0.0,0.0,0.0
+CHEMBL280,no issue,149.0,0.0,3.0,0.0
+CHEMBL2801,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2803,no issue,20.0,0.0,0.0,0.0
+CHEMBL2808,no issue,28.0,0.0,0.0,0.0
+CHEMBL281,no issue,0.0,0.0,0.0,0.0
+CHEMBL2815,no issue,981.0,0.0,0.0,0.0
+CHEMBL2818,no issue,1.0,0.0,0.0,0.0
+CHEMBL2820,no issue,1.0,0.0,8.0,0.0
+CHEMBL2821,no issue,0.0,0.0,0.0,0.0
+CHEMBL2828,no issue,35.0,0.0,0.0,0.0
+CHEMBL283,no issue,25.0,0.0,24.0,0.0
+CHEMBL2835,no issue,2070.0,0.0,5.0,0.0
+CHEMBL284,no issue,1054.0,0.0,8.0,0.0
+CHEMBL2842,no issue,311.0,0.0,2.0,0.0
+CHEMBL285,no issue,10.0,0.0,0.0,0.0
+CHEMBL2850,no issue,12.0,0.0,0.0,0.0
+CHEMBL2851,no issue,0.0,0.0,0.0,0.0
+CHEMBL2854,rounded data citation,0.0,0.0,0.0,0.0
+CHEMBL2855,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2857,no issue,0.0,0.0,0.0,0.0
+CHEMBL2858,no issue,2.0,0.0,32.0,0.0
+CHEMBL286,no issue,770.0,0.0,1.0,0.0
+CHEMBL2860,no issue,3.0,0.0,0.0,0.0
+CHEMBL2863,no issue,0.0,0.0,0.0,0.0
+CHEMBL2864,no issue,2.0,0.0,0.0,0.0
+CHEMBL2868,no issue,0.0,0.0,0.0,0.0
+CHEMBL287,no issue,1.0,0.0,460.0,0.0
+CHEMBL2871,no issue,4.0,0.0,0.0,0.0
+CHEMBL2872,no issue,9.0,0.0,0.0,0.0
+CHEMBL2873,no issue,4.0,0.0,0.0,0.0
+CHEMBL2878,no issue,9.0,0.0,0.0,0.0
+CHEMBL288,no issue,3626.0,0.0,90.0,0.0
+CHEMBL2880,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL2882,no issue,1.0,0.0,4.0,0.0
+CHEMBL2885,no issue,0.0,0.0,0.0,0.0
+CHEMBL2888,no issue,14.0,0.0,0.0,0.0
+CHEMBL2889,no issue,0.0,0.0,0.0,0.0
+CHEMBL2896,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2897,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL290,no issue,1.0,0.0,0.0,0.0
+CHEMBL2902,multifunctional enzyme,75.0,0.0,1.0,0.0
+CHEMBL2903,no issue,27.0,0.0,0.0,0.0
+CHEMBL2908,no issue,0.0,0.0,0.0,0.0
+CHEMBL291,no issue,38.0,0.0,0.0,0.0
+CHEMBL2916,no issue,271.0,0.0,0.0,0.0
+CHEMBL2918,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2919,no issue,0.0,0.0,0.0,0.0
+CHEMBL2927,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2935,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL2938,no issue,32.0,0.0,0.0,0.0
+CHEMBL2939,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2949,no issue,3506.0,0.0,0.0,0.0
+CHEMBL2950,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL2951,no issue,0.0,0.0,0.0,0.0
+CHEMBL2954,no issue,2.0,0.0,1.0,0.0
+CHEMBL2955,no issue,11.0,0.0,0.0,0.0
+CHEMBL2959,no issue,33.0,0.0,1.0,0.0
+CHEMBL2964,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL2966,no issue,0.0,0.0,3.0,0.0
+CHEMBL2967,no issue,0.0,0.0,1.0,0.0
+CHEMBL2968,no issue,1.0,0.0,0.0,0.0
+CHEMBL2971,no issue,6696.0,0.0,0.0,0.0
+CHEMBL2973,no issue,74.0,0.0,1.0,0.0
+CHEMBL2977,no issue,1.0,0.0,0.0,0.0
+CHEMBL298,no issue,1.0,0.0,0.0,0.0
+CHEMBL299,no issue,72.0,0.0,7.0,0.0
+CHEMBL2991,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL2993,multifunctional enzyme,25.0,0.0,0.0,0.0
+CHEMBL2996,no issue,20.0,0.0,0.0,0.0
+CHEMBL2998,no issue,17.0,0.0,0.0,0.0
+CHEMBL2999,no issue,2.0,0.0,0.0,0.0
+CHEMBL300,no issue,0.0,0.0,0.0,0.0
+CHEMBL3004,no issue,4.0,0.0,0.0,0.0
+CHEMBL3009,no issue,40.0,0.0,0.0,0.0
+CHEMBL301,no issue,129.0,0.0,2.0,0.0
+CHEMBL3012,no issue,4.0,0.0,0.0,0.0
+CHEMBL3018,no issue,0.0,0.0,2.0,0.0
+CHEMBL3019,no issue,0.0,0.0,0.0,0.0
+CHEMBL302,no issue,1.0,0.0,373.0,0.0
+CHEMBL3023,no issue,10.0,0.0,109.0,0.0
+CHEMBL3024,no issue,68.0,0.0,1.0,0.0
+CHEMBL3025,no issue,0.0,0.0,22.0,0.0
+CHEMBL3026,review,0.0,0.0,0.0,0.0
+CHEMBL3027,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3028,review,1.0,0.0,0.0,0.0
+CHEMBL3032,no issue,6.0,0.0,0.0,0.0
+CHEMBL3037,no issue,0.0,0.0,7.0,0.0
+CHEMBL304,no issue,5.0,0.0,69.0,0.0
+CHEMBL3041,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3045,no issue,534.0,0.0,0.0,0.0
+CHEMBL3046,no issue,13.0,0.0,0.0,0.0
+CHEMBL3048,no issue,0.0,0.0,7.0,0.0
+CHEMBL3050,multifunctional enzyme,0.0,0.0,1.0,0.0
+CHEMBL3055,no issue,17.0,0.0,0.0,0.0
+CHEMBL3056,no issue,3.0,0.0,0.0,0.0
+CHEMBL3060,no issue,28.0,0.0,0.0,0.0
+CHEMBL3066,no issue,11.0,0.0,1.0,0.0
+CHEMBL3067,no issue,0.0,0.0,0.0,0.0
+CHEMBL3070,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3072,no issue,10.0,0.0,19.0,0.0
+CHEMBL308,no issue,61.0,0.0,1.0,0.0
+CHEMBL3080,no issue,2.0,0.0,0.0,0.0
+CHEMBL3081,no issue,27.0,0.0,0.0,0.0
+CHEMBL3085,highly correlated assays,22.0,0.0,0.0,0.0
+CHEMBL3085613,no issue,0.0,0.0,0.0,0.0
+CHEMBL3085619,no issue,0.0,0.0,0.0,0.0
+CHEMBL3085622,no issue,0.0,0.0,0.0,0.0
+CHEMBL309,no issue,0.0,0.0,33.0,0.0
+CHEMBL3091268,no issue,0.0,0.0,0.0,0.0
+CHEMBL3092,no issue,0.0,0.0,0.0,0.0
+CHEMBL3094,no issue,2.0,0.0,0.0,0.0
+CHEMBL3099,no issue,6.0,0.0,0.0,0.0
+CHEMBL310,no issue,0.0,0.0,0.0,0.0
+CHEMBL3100,no issue,70.0,0.0,0.0,0.0
+CHEMBL3105,no issue,2360.0,0.0,18.0,0.0
+CHEMBL3106,no issue,81.0,0.0,16.0,0.0
+CHEMBL3108632,no issue,0.0,0.0,0.0,0.0
+CHEMBL3108638,no issue,0.0,0.0,0.0,0.0
+CHEMBL3108639,no issue,7.0,0.0,0.0,0.0
+CHEMBL3108640,no issue,32.0,0.0,0.0,0.0
+CHEMBL3108642,no issue,1.0,0.0,0.0,0.0
+CHEMBL3108644,no issue,0.0,0.0,0.0,0.0
+CHEMBL3108648,no issue,2.0,0.0,0.0,0.0
+CHEMBL311,no issue,1.0,0.0,1.0,0.0
+CHEMBL3111,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3112379,no issue,0.0,0.0,0.0,0.0
+CHEMBL3112384,no issue,0.0,0.0,0.0,0.0
+CHEMBL3114,no issue,71.0,0.0,0.0,0.0
+CHEMBL3116,no issue,63.0,0.0,0.0,0.0
+CHEMBL3117,no issue,0.0,0.0,0.0,0.0
+CHEMBL3119,no issue,33.0,0.0,0.0,0.0
+CHEMBL312,no issue,8.0,0.0,0.0,0.0
+CHEMBL3120,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3122,no issue,0.0,0.0,0.0,0.0
+CHEMBL3123,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3125,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL313,no issue,43.0,0.0,167.0,0.0
+CHEMBL3130,no issue,1490.0,0.0,0.0,0.0
+CHEMBL3131,no issue,0.0,0.0,0.0,0.0
+CHEMBL3132741,no issue,2.0,0.0,0.0,0.0
+CHEMBL3138,no issue,0.0,0.0,17.0,0.0
+CHEMBL3142,no issue,53.0,0.0,0.0,0.0
+CHEMBL3145,no issue,702.0,0.0,0.0,0.0
+CHEMBL315,no issue,0.0,0.0,2.0,0.0
+CHEMBL3150,no issue,0.0,0.0,0.0,0.0
+CHEMBL3151,no issue,0.0,0.0,0.0,0.0
+CHEMBL3154,no issue,0.0,0.0,0.0,0.0
+CHEMBL3155,no issue,46.0,0.0,498.0,0.0
+CHEMBL3157,no issue,0.0,0.0,0.0,0.0
+CHEMBL3160,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3166,no issue,1.0,0.0,0.0,0.0
+CHEMBL317,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3174,multifunctional enzyme,2.0,0.0,0.0,0.0
+CHEMBL3176,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL318,no issue,251.0,0.0,2734.0,0.0
+CHEMBL3180,no issue,3.0,0.0,0.0,0.0
+CHEMBL3181,no issue,4.0,0.0,0.0,0.0
+CHEMBL319,no issue,0.0,0.0,0.0,0.0
+CHEMBL3190,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3192,no issue,9159.0,0.0,45.0,0.0
+CHEMBL3194,no issue,29.0,0.0,0.0,0.0
+CHEMBL3195,no issue,0.0,0.0,0.0,0.0
+CHEMBL3197,no issue,0.0,0.0,0.0,0.0
+CHEMBL3198,no issue,6.0,0.0,0.0,0.0
+CHEMBL3199,no issue,373.0,0.0,0.0,0.0
+CHEMBL320,no issue,0.0,0.0,1.0,0.0
+CHEMBL3200,no issue,11.0,0.0,0.0,0.0
+CHEMBL3202,no issue,21.0,0.0,6.0,0.0
+CHEMBL321,no issue,99.0,0.0,24.0,0.0
+CHEMBL3213,no issue,0.0,0.0,0.0,0.0
+CHEMBL3217390,no issue,15.0,0.0,0.0,0.0
+CHEMBL322,no issue,31.0,0.0,121.0,0.0
+CHEMBL3222,no issue,10.0,0.0,15.0,0.0
+CHEMBL3223,no issue,0.0,0.0,14.0,0.0
+CHEMBL3227,no issue,104.0,0.0,20.0,0.0
+CHEMBL3229,no issue,656.0,0.0,152.0,0.0
+CHEMBL3230,no issue,13.0,0.0,0.0,0.0
+CHEMBL3231,no issue,40.0,0.0,17.0,0.0
+CHEMBL3232699,review,1.0,0.0,0.0,0.0
+CHEMBL3234,no issue,2.0,0.0,0.0,0.0
+CHEMBL3237,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3239,no issue,6.0,0.0,0.0,0.0
+CHEMBL324,no issue,0.0,0.0,6.0,0.0
+CHEMBL3242,no issue,3.0,0.0,2900.0,0.0
+CHEMBL3247,no issue,8.0,0.0,0.0,0.0
+CHEMBL325,no issue,36967.0,0.0,19.0,0.0
+CHEMBL3252,no issue,0.0,0.0,45.0,0.0
+CHEMBL3254,multifunctional enzyme,8.0,0.0,2.0,0.0
+CHEMBL3257,no issue,0.0,0.0,0.0,0.0
+CHEMBL3259465,no issue,0.0,0.0,0.0,0.0
+CHEMBL3259470,no issue,0.0,0.0,0.0,0.0
+CHEMBL3259471,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3259474,no issue,0.0,0.0,0.0,0.0
+CHEMBL3259478,no issue,0.0,0.0,0.0,0.0
+CHEMBL326,no issue,0.0,0.0,0.0,0.0
+CHEMBL3263,no issue,0.0,0.0,0.0,0.0
+CHEMBL3266,no issue,0.0,0.0,0.0,0.0
+CHEMBL3267,no issue,809.0,0.0,0.0,0.0
+CHEMBL3268,no issue,7.0,0.0,0.0,0.0
+CHEMBL3272,no issue,0.0,0.0,0.0,0.0
+CHEMBL3278,no issue,0.0,0.0,0.0,0.0
+CHEMBL3286,no issue,0.0,0.0,4.0,0.0
+CHEMBL3286061,no issue,0.0,0.0,0.0,0.0
+CHEMBL3286067,no issue,0.0,0.0,0.0,0.0
+CHEMBL3286068,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3288,no issue,7.0,0.0,0.0,0.0
+CHEMBL329,no issue,0.0,0.0,1.0,0.0
+CHEMBL3290,no issue,3.0,0.0,0.0,0.0
+CHEMBL3295,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3298,no issue,0.0,0.0,0.0,0.0
+CHEMBL330,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3300,no issue,0.0,0.0,0.0,0.0
+CHEMBL3308,no issue,0.0,0.0,0.0,0.0
+CHEMBL3308911,no issue,0.0,0.0,0.0,0.0
+CHEMBL3308912,no issue,38.0,0.0,0.0,0.0
+CHEMBL3308929,review,0.0,0.0,0.0,0.0
+CHEMBL3308948,no issue,0.0,0.0,0.0,0.0
+CHEMBL3308969,no issue,0.0,0.0,0.0,0.0
+CHEMBL3309098,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL331,no issue,50.0,0.0,0.0,0.0
+CHEMBL3310,no issue,335.0,0.0,1.0,0.0
+CHEMBL3312,no issue,1.0,0.0,0.0,0.0
+CHEMBL3313,no issue,0.0,0.0,3.0,0.0
+CHEMBL3313836,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3314,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3317,no issue,0.0,0.0,0.0,0.0
+CHEMBL3317334,no issue,1.0,0.0,0.0,0.0
+CHEMBL3318,no issue,2633.0,0.0,70.0,0.0
+CHEMBL332,no issue,42.0,0.0,27.0,0.0
+CHEMBL3321,no issue,5.0,0.0,0.0,0.0
+CHEMBL3326,no issue,0.0,0.0,0.0,0.0
+CHEMBL3329078,no issue,0.0,0.0,0.0,0.0
+CHEMBL3329080,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL333,no issue,66.0,0.0,19.0,0.0
+CHEMBL3332,no issue,5.0,0.0,5.0,0.0
+CHEMBL3333,no issue,0.0,0.0,0.0,0.0
+CHEMBL3334418,no issue,6.0,0.0,0.0,0.0
+CHEMBL3337,no issue,0.0,0.0,0.0,0.0
+CHEMBL3338,no issue,0.0,0.0,0.0,0.0
+CHEMBL3341581,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3344,no issue,0.0,0.0,1.0,0.0
+CHEMBL3346,no issue,0.0,0.0,0.0,0.0
+CHEMBL3349,no issue,0.0,0.0,0.0,0.0
+CHEMBL335,no issue,1193.0,0.0,14.0,0.0
+CHEMBL3351,no issue,22.0,0.0,0.0,0.0
+CHEMBL3351190,no issue,0.0,0.0,0.0,0.0
+CHEMBL3351204,no issue,0.0,0.0,0.0,0.0
+CHEMBL3354,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3356,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3357,no issue,3.0,0.0,0.0,0.0
+CHEMBL3358,multifunctional enzyme,2.0,0.0,2.0,0.0
+CHEMBL3359,no issue,0.0,0.0,0.0,0.0
+CHEMBL3360,no issue,0.0,0.0,27.0,0.0
+CHEMBL3361,no issue,0.0,0.0,0.0,0.0
+CHEMBL3368,no issue,4.0,0.0,0.0,0.0
+CHEMBL3369,no issue,0.0,0.0,0.0,0.0
+CHEMBL3371,no issue,53.0,0.0,604.0,0.0
+CHEMBL3372,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3374,no issue,3.0,0.0,0.0,0.0
+CHEMBL338,no issue,290.0,0.0,266.0,0.0
+CHEMBL3383,no issue,0.0,0.0,0.0,0.0
+CHEMBL3384,no issue,6.0,0.0,0.0,0.0
+CHEMBL3385,no issue,22.0,0.0,0.0,0.0
+CHEMBL339,no issue,26.0,0.0,574.0,0.0
+CHEMBL3390,no issue,6.0,0.0,0.0,0.0
+CHEMBL3392,test Item with unknown chirality,0.0,0.0,6.0,0.0
+CHEMBL3396,no issue,3.0,0.0,0.0,0.0
+CHEMBL3396943,no issue,9.0,0.0,0.0,0.0
+CHEMBL3399,no issue,1.0,0.0,0.0,0.0
+CHEMBL3399911,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3403,no issue,106.0,0.0,0.0,0.0
+CHEMBL3407325,no issue,0.0,0.0,0.0,0.0
+CHEMBL3407326,no issue,0.0,0.0,0.0,0.0
+CHEMBL3407328,no issue,0.0,0.0,0.0,0.0
+CHEMBL341,no issue,0.0,0.0,2.0,0.0
+CHEMBL3414409,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL3414411,no issue,50.0,0.0,0.0,0.0
+CHEMBL3414416,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3419,no issue,0.0,0.0,0.0,0.0
+CHEMBL3422,no issue,1.0,0.0,0.0,0.0
+CHEMBL3426,no issue,27.0,0.0,17.0,0.0
+CHEMBL3429,no issue,1.0,0.0,0.0,0.0
+CHEMBL3436,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3437,no issue,0.0,0.0,0.0,0.0
+CHEMBL3438,no issue,3.0,0.0,0.0,0.0
+CHEMBL344,no issue,96.0,0.0,6.0,0.0
+CHEMBL3440,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL3442,no issue,0.0,0.0,0.0,0.0
+CHEMBL3455,no issue,3.0,0.0,0.0,0.0
+CHEMBL3457,no issue,0.0,0.0,0.0,0.0
+CHEMBL3459,no issue,3.0,0.0,0.0,0.0
+CHEMBL3463,no issue,0.0,0.0,0.0,0.0
+CHEMBL3464,no issue,16.0,0.0,0.0,0.0
+CHEMBL3468,no issue,8.0,0.0,0.0,0.0
+CHEMBL3471,no issue,3939.0,0.0,0.0,0.0
+CHEMBL3473,no issue,0.0,0.0,0.0,0.0
+CHEMBL3474,no issue,28.0,0.0,0.0,0.0
+CHEMBL3475,no issue,17.0,0.0,0.0,0.0
+CHEMBL3476,no issue,6.0,0.0,0.0,0.0
+CHEMBL3477,no issue,0.0,0.0,0.0,0.0
+CHEMBL3478,no issue,13.0,0.0,0.0,0.0
+CHEMBL3482,no issue,0.0,0.0,0.0,0.0
+CHEMBL3486,multifunctional enzyme,6.0,0.0,0.0,0.0
+CHEMBL3490,no issue,0.0,0.0,0.0,0.0
+CHEMBL3492,no issue,32.0,0.0,0.0,0.0
+CHEMBL3499,no issue,0.0,0.0,0.0,0.0
+CHEMBL3501,no issue,0.0,0.0,0.0,0.0
+CHEMBL3503,no issue,0.0,0.0,0.0,0.0
+CHEMBL3504,no issue,0.0,0.0,0.0,0.0
+CHEMBL3505,no issue,0.0,0.0,0.0,0.0
+CHEMBL3507,review,1.0,0.0,0.0,0.0
+CHEMBL3510,no issue,0.0,0.0,39.0,0.0
+CHEMBL3513,no issue,5.0,0.0,0.0,0.0
+CHEMBL3514,no issue,44.0,0.0,0.0,0.0
+CHEMBL3521,no issue,3.0,0.0,0.0,0.0
+CHEMBL3522,no issue,528.0,0.0,0.0,0.0
+CHEMBL3524,no issue,798.0,0.0,18.0,0.0
+CHEMBL3529,no issue,3.0,0.0,0.0,0.0
+CHEMBL3530,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3535,no issue,15.0,0.0,0.0,0.0
+CHEMBL3542,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3543,no issue,0.0,0.0,0.0,0.0
+CHEMBL3545,no issue,0.0,0.0,1.0,0.0
+CHEMBL3553,no issue,278.0,0.0,3.0,0.0
+CHEMBL3558,no issue,0.0,0.0,0.0,0.0
+CHEMBL3559,no issue,1259.0,0.0,1.0,0.0
+CHEMBL3559673,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL3559692,review,1.0,0.0,0.0,0.0
+CHEMBL3561,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3563,no issue,11.0,0.0,42.0,0.0
+CHEMBL3564,no issue,0.0,0.0,0.0,0.0
+CHEMBL3565,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3568,no issue,8.0,0.0,0.0,0.0
+CHEMBL3571,no issue,6.0,0.0,71.0,0.0
+CHEMBL3572,no issue,197.0,0.0,0.0,0.0
+CHEMBL3575,no issue,0.0,0.0,0.0,0.0
+CHEMBL3577,no issue,34.0,0.0,0.0,0.0
+CHEMBL3578,no issue,0.0,0.0,0.0,0.0
+CHEMBL3579,no issue,0.0,0.0,0.0,0.0
+CHEMBL3580505,no issue,0.0,0.0,0.0,0.0
+CHEMBL3580522,no issue,6.0,0.0,0.0,0.0
+CHEMBL3582,no issue,52.0,0.0,6.0,0.0
+CHEMBL3585,no issue,0.0,0.0,0.0,0.0
+CHEMBL3587,no issue,46.0,0.0,0.0,0.0
+CHEMBL3589,no issue,15.0,0.0,6.0,0.0
+CHEMBL3590,no issue,0.0,0.0,0.0,0.0
+CHEMBL3593,no issue,2.0,0.0,0.0,0.0
+CHEMBL3593151,no issue,0.0,0.0,0.0,0.0
+CHEMBL3593154,exact data citation,0.0,0.0,0.0,0.0
+CHEMBL3594,no issue,1884.0,0.0,5200.0,0.0
+CHEMBL3595,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3596075,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3597,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL3602,no issue,1.0,0.0,115.0,0.0
+CHEMBL3607,no issue,0.0,0.0,8.0,0.0
+CHEMBL3608197,no issue,0.0,0.0,0.0,0.0
+CHEMBL3611961,no issue,0.0,0.0,0.0,0.0
+CHEMBL3611965,no issue,0.0,0.0,0.0,0.0
+CHEMBL3614,no issue,1.0,0.0,362.0,0.0
+CHEMBL3616,no issue,5.0,0.0,0.0,0.0
+CHEMBL3616354,no issue,0.0,0.0,0.0,0.0
+CHEMBL3618,no issue,0.0,0.0,0.0,0.0
+CHEMBL3621,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3621020,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3623,no issue,13.0,0.0,0.0,0.0
+CHEMBL3627581,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3627582,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3627583,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3627584,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3627585,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3627587,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3627592,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3629,no issue,393.0,0.0,35.0,0.0
+CHEMBL3632452,no issue,10.0,0.0,0.0,0.0
+CHEMBL3632454,no issue,0.0,0.0,0.0,0.0
+CHEMBL3636,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3638,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3638324,rounded data citation,0.0,0.0,0.0,0.0
+CHEMBL3649,multifunctional enzyme,882.0,0.0,0.0,0.0
+CHEMBL3650,no issue,188.0,0.0,0.0,0.0
+CHEMBL3655,no issue,26.0,0.0,0.0,0.0
+CHEMBL3663,no issue,0.0,0.0,0.0,0.0
+CHEMBL3666,no issue,0.0,0.0,0.0,0.0
+CHEMBL3667,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3668,no issue,0.0,0.0,0.0,0.0
+CHEMBL3674,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3675,no issue,0.0,0.0,0.0,0.0
+CHEMBL3683,no issue,0.0,0.0,0.0,0.0
+CHEMBL3686,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL3687,no issue,0.0,0.0,0.0,0.0
+CHEMBL3691,no issue,664.0,0.0,0.0,0.0
+CHEMBL3699,no issue,0.0,0.0,0.0,0.0
+CHEMBL3700,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3701,no issue,0.0,0.0,0.0,0.0
+CHEMBL3706,no issue,50.0,0.0,2.0,0.0
+CHEMBL3708,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3708265,no issue,224.0,0.0,0.0,0.0
+CHEMBL3710,no issue,0.0,0.0,3.0,0.0
+CHEMBL3711550,review,4.0,0.0,0.0,0.0
+CHEMBL3712868,no issue,0.0,0.0,0.0,0.0
+CHEMBL3712907,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3713355,no issue,0.0,0.0,0.0,0.0
+CHEMBL3714029,no issue,259.0,0.0,0.0,0.0
+CHEMBL3714079,review,0.0,0.0,0.0,0.0
+CHEMBL3714531,no issue,7.0,0.0,0.0,0.0
+CHEMBL3715,no issue,0.0,0.0,0.0,0.0
+CHEMBL3717,no issue,4042.0,0.0,7.0,0.0
+CHEMBL3719,no issue,0.0,0.0,0.0,0.0
+CHEMBL3720,multifunctional enzyme,2.0,0.0,3.0,0.0
+CHEMBL3729,no issue,0.0,0.0,250.0,0.0
+CHEMBL3733,no issue,0.0,0.0,0.0,0.0
+CHEMBL3736,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL3744,exact data citation,0.0,0.0,0.0,0.0
+CHEMBL3746,no issue,2.0,0.0,0.0,0.0
+CHEMBL3748,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3751,no issue,2.0,0.0,0.0,0.0
+CHEMBL3753,no issue,3.0,0.0,0.0,0.0
+CHEMBL3754,no issue,0.0,0.0,0.0,0.0
+CHEMBL3759,no issue,85.0,0.0,5036.0,0.0
+CHEMBL3761,no issue,4.0,0.0,0.0,0.0
+CHEMBL3762,no issue,1.0,0.0,0.0,0.0
+CHEMBL3763007,no issue,0.0,0.0,0.0,0.0
+CHEMBL3764,no issue,8.0,0.0,12.0,0.0
+CHEMBL3766,no issue,0.0,0.0,0.0,0.0
+CHEMBL3768,no issue,25.0,0.0,0.0,0.0
+CHEMBL3769,no issue,0.0,0.0,11.0,0.0
+CHEMBL3769292,no issue,0.0,0.0,0.0,0.0
+CHEMBL3769293,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3772,no issue,7.0,0.0,0.0,0.0
+CHEMBL3774295,no issue,1.0,0.0,0.0,0.0
+CHEMBL3775,no issue,14.0,0.0,0.0,0.0
+CHEMBL3776,no issue,0.0,0.0,0.0,0.0
+CHEMBL3778,no issue,36.0,0.0,0.0,0.0
+CHEMBL3779754,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL3779755,no issue,24.0,0.0,0.0,0.0
+CHEMBL3783,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3784,no issue,341.0,0.0,0.0,0.0
+CHEMBL3784911,no issue,0.0,0.0,0.0,0.0
+CHEMBL3785,no issue,110.0,0.0,0.0,0.0
+CHEMBL3788,no issue,6.0,0.0,3.0,0.0
+CHEMBL3795,no issue,0.0,0.0,1.0,0.0
+CHEMBL3797,no issue,111.0,0.0,0.0,0.0
+CHEMBL3797017,rounded data citation,1.0,0.0,0.0,0.0
+CHEMBL3798,no issue,35.0,0.0,17.0,0.0
+CHEMBL3799,no issue,0.0,0.0,0.0,0.0
+CHEMBL3802,no issue,0.0,0.0,0.0,0.0
+CHEMBL3807,no issue,53.0,0.0,4.0,0.0
+CHEMBL3813,no issue,0.0,0.0,0.0,0.0
+CHEMBL3813586,no issue,0.0,0.0,0.0,0.0
+CHEMBL3815,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3816,no issue,1.0,0.0,0.0,0.0
+CHEMBL3819,no issue,3.0,0.0,0.0,0.0
+CHEMBL3820,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3826863,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3826870,no issue,0.0,0.0,0.0,0.0
+CHEMBL3826871,no issue,0.0,0.0,0.0,0.0
+CHEMBL3829,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3831,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3834,no issue,30.0,0.0,0.0,0.0
+CHEMBL3835,no issue,9.0,0.0,0.0,0.0
+CHEMBL3836,no issue,7.0,0.0,0.0,0.0
+CHEMBL3837,no issue,7.0,0.0,5.0,0.0
+CHEMBL3839,highly correlated assays,6.0,0.0,0.0,0.0
+CHEMBL3858,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3859,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3861,no issue,7.0,0.0,0.0,0.0
+CHEMBL3863,no issue,2.0,0.0,0.0,0.0
+CHEMBL3864,no issue,192.0,0.0,0.0,0.0
+CHEMBL3869,no issue,5.0,0.0,0.0,0.0
+CHEMBL3872,no issue,0.0,0.0,0.0,0.0
+CHEMBL3879,no issue,1.0,0.0,0.0,0.0
+CHEMBL3879821,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3879850,no issue,0.0,0.0,0.0,0.0
+CHEMBL3879854,no issue,0.0,0.0,0.0,0.0
+CHEMBL3880,no issue,233.0,0.0,0.0,0.0
+CHEMBL3883,no issue,1.0,0.0,0.0,0.0
+CHEMBL3884,no issue,757.0,0.0,0.0,0.0
+CHEMBL3885662,no issue,0.0,0.0,0.0,0.0
+CHEMBL3886,no issue,0.0,0.0,0.0,0.0
+CHEMBL3891,no issue,47.0,0.0,0.0,0.0
+CHEMBL3892,no issue,12.0,0.0,0.0,0.0
+CHEMBL3893,no issue,6.0,0.0,0.0,0.0
+CHEMBL3898,no issue,0.0,0.0,0.0,0.0
+CHEMBL3900,no issue,0.0,0.0,0.0,0.0
+CHEMBL3902,no issue,2.0,0.0,0.0,0.0
+CHEMBL3905,no issue,89.0,0.0,0.0,0.0
+CHEMBL3906,no issue,8.0,0.0,0.0,0.0
+CHEMBL3910,no issue,10.0,0.0,0.0,0.0
+CHEMBL3911,no issue,0.0,0.0,0.0,0.0
+CHEMBL3912,high citation rate,0.0,0.0,29.0,0.0
+CHEMBL3913,review,0.0,0.0,0.0,0.0
+CHEMBL3920,no issue,13.0,0.0,0.0,0.0
+CHEMBL3921,no issue,10.0,0.0,0.0,0.0
+CHEMBL3922,no issue,5.0,0.0,0.0,0.0
+CHEMBL3923,test Item with unknown chirality,0.0,0.0,6.0,0.0
+CHEMBL3927,no issue,0.0,0.0,0.0,0.0
+CHEMBL3932,no issue,0.0,0.0,0.0,0.0
+CHEMBL3933,no issue,0.0,0.0,0.0,0.0
+CHEMBL3935,no issue,9.0,0.0,14.0,0.0
+CHEMBL3938,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3942,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL3943,no issue,3.0,0.0,12.0,0.0
+CHEMBL3948,no issue,48.0,0.0,0.0,0.0
+CHEMBL3949,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL3952,no issue,55.0,0.0,3180.0,0.0
+CHEMBL3956,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3959,no issue,41.0,0.0,0.0,0.0
+CHEMBL3960,no issue,2.0,0.0,0.0,0.0
+CHEMBL3961,no issue,5.0,0.0,0.0,0.0
+CHEMBL3962,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL3969,no issue,0.0,0.0,29.0,0.0
+CHEMBL3972,multifunctional enzyme,0.0,0.0,3.0,0.0
+CHEMBL3973,no issue,683.0,0.0,0.0,0.0
+CHEMBL3974,no issue,186.0,0.0,0.0,0.0
+CHEMBL3975,no issue,129.0,0.0,0.0,0.0
+CHEMBL3976,no issue,7.0,0.0,0.0,0.0
+CHEMBL3977,no issue,3.0,0.0,0.0,0.0
+CHEMBL3979,no issue,107.0,0.0,1.0,0.0
+CHEMBL3980,no issue,27.0,0.0,0.0,0.0
+CHEMBL3981,no issue,1.0,0.0,0.0,0.0
+CHEMBL3982,no issue,3.0,0.0,0.0,0.0
+CHEMBL3983,no issue,300.0,0.0,0.0,0.0
+CHEMBL3984,no issue,0.0,0.0,0.0,0.0
+CHEMBL3985,no issue,1.0,0.0,0.0,0.0
+CHEMBL3987,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3987581,no issue,0.0,0.0,0.0,0.0
+CHEMBL3988,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL3988607,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL3991,no issue,3.0,0.0,1.0,0.0
+CHEMBL3991501,no issue,229.0,0.0,0.0,0.0
+CHEMBL3994,no issue,8.0,0.0,0.0,0.0
+CHEMBL3996,no issue,0.0,0.0,0.0,0.0
+CHEMBL3998,no issue,0.0,0.0,9.0,0.0
+CHEMBL3999,review,0.0,0.0,0.0,0.0
+CHEMBL4001,no issue,13.0,0.0,0.0,0.0
+CHEMBL4004,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4005,no issue,1149.0,0.0,0.0,0.0
+CHEMBL401,no issue,0.0,0.0,0.0,0.0
+CHEMBL4014,no issue,3.0,0.0,0.0,0.0
+CHEMBL4015,no issue,193.0,0.0,7.0,0.0
+CHEMBL4016,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL4017,no issue,0.0,0.0,0.0,0.0
+CHEMBL4018,no issue,9.0,0.0,0.0,0.0
+CHEMBL402,no issue,24.0,0.0,0.0,0.0
+CHEMBL4026,no issue,5.0,0.0,0.0,0.0
+CHEMBL4027,no issue,0.0,0.0,0.0,0.0
+CHEMBL4029,no issue,8.0,0.0,0.0,0.0
+CHEMBL4033,no issue,0.0,0.0,0.0,0.0
+CHEMBL4036,no issue,63.0,0.0,0.0,0.0
+CHEMBL4037,review,0.0,0.0,0.0,0.0
+CHEMBL4040,no issue,85.0,0.0,0.0,0.0
+CHEMBL4050,no issue,0.0,0.0,0.0,0.0
+CHEMBL4051,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4054,no issue,272.0,0.0,0.0,0.0
+CHEMBL4062,no issue,0.0,0.0,0.0,0.0
+CHEMBL4065,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4068,no issue,0.0,0.0,0.0,0.0
+CHEMBL4070,no issue,10.0,0.0,0.0,0.0
+CHEMBL4071,no issue,1.0,0.0,0.0,0.0
+CHEMBL4072,no issue,27.0,0.0,0.0,0.0
+CHEMBL4073,highly correlated assays,8.0,0.0,0.0,0.0
+CHEMBL4074,no issue,105.0,0.0,0.0,0.0
+CHEMBL4078,no issue,17943.0,0.0,65.0,0.0
+CHEMBL4079,no issue,11.0,0.0,0.0,0.0
+CHEMBL4080,no issue,0.0,0.0,0.0,0.0
+CHEMBL4081,no issue,0.0,0.0,0.0,0.0
+CHEMBL4082,no issue,0.0,0.0,0.0,0.0
+CHEMBL4086,no issue,1.0,0.0,0.0,0.0
+CHEMBL4087,no issue,0.0,0.0,0.0,0.0
+CHEMBL4088,no issue,0.0,0.0,0.0,0.0
+CHEMBL4092,no issue,1.0,0.0,0.0,0.0
+CHEMBL4093,no issue,26.0,0.0,1.0,0.0
+CHEMBL4096,no issue,1.0,0.0,0.0,0.0
+CHEMBL4098,no issue,0.0,0.0,0.0,0.0
+CHEMBL4101,no issue,3.0,0.0,0.0,0.0
+CHEMBL4102,no issue,1835.0,0.0,0.0,0.0
+CHEMBL4105758,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4105786,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105787,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105810,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105832,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105833,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105838,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105845,no issue,1.0,0.0,0.0,0.0
+CHEMBL4105859,no issue,1.0,0.0,0.0,0.0
+CHEMBL4105864,no issue,0.0,0.0,110.0,0.0
+CHEMBL4105879,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105899,no issue,1.0,0.0,0.0,0.0
+CHEMBL4105905,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105907,no issue,0.0,0.0,9.0,0.0
+CHEMBL4105915,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4105923,exact data citation,6.0,0.0,0.0,0.0
+CHEMBL4105929,high citation rate,0.0,0.0,0.0,0.0
+CHEMBL4105932,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4105948,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105966,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105972,no issue,0.0,0.0,0.0,0.0
+CHEMBL4105989,no issue,1.0,0.0,0.0,0.0
+CHEMBL4106,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4108,no issue,0.0,0.0,0.0,0.0
+CHEMBL4111,no issue,1.0,0.0,0.0,0.0
+CHEMBL4121,highly correlated assays,3.0,0.0,0.0,0.0
+CHEMBL4123,no issue,2.0,0.0,1.0,0.0
+CHEMBL4124,no issue,0.0,0.0,196.0,0.0
+CHEMBL4128,no issue,16.0,0.0,0.0,0.0
+CHEMBL4134,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4140,no issue,7.0,0.0,0.0,0.0
+CHEMBL4141,no issue,7.0,0.0,0.0,0.0
+CHEMBL4142,no issue,107.0,0.0,0.0,0.0
+CHEMBL4143,no issue,1.0,0.0,0.0,0.0
+CHEMBL4145,no issue,147.0,0.0,7.0,0.0
+CHEMBL4147,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4150,no issue,34.0,0.0,43.0,0.0
+CHEMBL4151,no issue,0.0,0.0,0.0,0.0
+CHEMBL4153,no issue,0.0,0.0,3044.0,0.0
+CHEMBL4158,multifunctional enzyme,3.0,0.0,1.0,0.0
+CHEMBL4161,no issue,22.0,0.0,1.0,0.0
+CHEMBL4162,no issue,7.0,0.0,0.0,0.0
+CHEMBL4163,no issue,0.0,0.0,0.0,0.0
+CHEMBL4165,no issue,0.0,0.0,0.0,0.0
+CHEMBL4167,no issue,0.0,0.0,0.0,0.0
+CHEMBL4174,no issue,2.0,0.0,0.0,0.0
+CHEMBL4175,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4176,no issue,0.0,0.0,0.0,0.0
+CHEMBL4177,no issue,0.0,0.0,0.0,0.0
+CHEMBL4179,no issue,12.0,0.0,0.0,0.0
+CHEMBL4187,no issue,10.0,0.0,0.0,0.0
+CHEMBL4188,no issue,6.0,0.0,4.0,0.0
+CHEMBL4190,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4191,no issue,809.0,0.0,0.0,0.0
+CHEMBL4198,no issue,250.0,0.0,0.0,0.0
+CHEMBL4200,no issue,0.0,0.0,0.0,0.0
+CHEMBL4201,no issue,0.0,0.0,0.0,0.0
+CHEMBL4202,no issue,3.0,0.0,0.0,0.0
+CHEMBL4203,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4204,no issue,24.0,0.0,0.0,0.0
+CHEMBL4208,no issue,52.0,0.0,0.0,0.0
+CHEMBL4220,no issue,0.0,0.0,0.0,0.0
+CHEMBL4223,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4224,no issue,8.0,0.0,0.0,0.0
+CHEMBL4225,no issue,8.0,0.0,0.0,0.0
+CHEMBL4226,no issue,2.0,0.0,0.0,0.0
+CHEMBL4227,no issue,0.0,0.0,0.0,0.0
+CHEMBL4228,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4229,no issue,0.0,0.0,1.0,0.0
+CHEMBL4234,no issue,0.0,0.0,0.0,0.0
+CHEMBL4235,no issue,69.0,0.0,1.0,0.0
+CHEMBL4237,no issue,3.0,0.0,0.0,0.0
+CHEMBL4245,no issue,191.0,0.0,0.0,0.0
+CHEMBL4246,no issue,3.0,0.0,0.0,0.0
+CHEMBL4247,no issue,23671.0,0.0,62.0,0.0
+CHEMBL4255,no issue,0.0,0.0,0.0,0.0
+CHEMBL4261,no issue,22.0,0.0,0.0,0.0
+CHEMBL4263,no issue,0.0,0.0,0.0,0.0
+CHEMBL4267,no issue,1.0,0.0,0.0,0.0
+CHEMBL4270,high citation rate,1.0,0.0,0.0,0.0
+CHEMBL4273,highly correlated assays,44.0,0.0,0.0,0.0
+CHEMBL4282,no issue,186.0,0.0,0.0,0.0
+CHEMBL4295,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4295521,no issue,1.0,0.0,0.0,0.0
+CHEMBL4295598,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4295666,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295683,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295701,review,0.0,0.0,0.0,0.0
+CHEMBL4295738,no issue,1.0,0.0,0.0,0.0
+CHEMBL4295740,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL4295745,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL4295828,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295840,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295910,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4295919,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295956,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295974,no issue,0.0,0.0,0.0,0.0
+CHEMBL4295985,no issue,0.0,0.0,1.0,0.0
+CHEMBL4296,no issue,411.0,0.0,0.0,0.0
+CHEMBL4296325,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4296326,no issue,0.0,0.0,0.0,0.0
+CHEMBL4296327,no issue,0.0,0.0,0.0,0.0
+CHEMBL4302,no issue,7840.0,0.0,0.0,0.0
+CHEMBL4303,no issue,34.0,0.0,0.0,0.0
+CHEMBL4305,no issue,7.0,0.0,0.0,0.0
+CHEMBL4306,no issue,16.0,0.0,0.0,0.0
+CHEMBL4308,no issue,2.0,0.0,50.0,0.0
+CHEMBL4311,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4315,no issue,44.0,0.0,21.0,0.0
+CHEMBL4316,no issue,0.0,0.0,0.0,0.0
+CHEMBL4321,no issue,61.0,0.0,0.0,0.0
+CHEMBL4323,no issue,2.0,0.0,0.0,0.0
+CHEMBL4328,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4329,no issue,0.0,0.0,1.0,0.0
+CHEMBL4330,no issue,5.0,0.0,0.0,0.0
+CHEMBL4333,no issue,22.0,0.0,0.0,0.0
+CHEMBL4336,no issue,0.0,0.0,0.0,0.0
+CHEMBL4338,multifunctional enzyme,1.0,0.0,44.0,0.0
+CHEMBL4342,no issue,17.0,0.0,0.0,0.0
+CHEMBL4343,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL4349,no issue,34.0,0.0,0.0,0.0
+CHEMBL4354,no issue,49.0,0.0,825.0,0.0
+CHEMBL4355,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL4358,no issue,10.0,0.0,0.0,0.0
+CHEMBL4360,no issue,0.0,0.0,0.0,0.0
+CHEMBL4361,no issue,3.0,0.0,180.0,0.0
+CHEMBL4367,no issue,2.0,0.0,0.0,0.0
+CHEMBL4370,no issue,0.0,0.0,0.0,0.0
+CHEMBL4372,no issue,6.0,0.0,0.0,0.0
+CHEMBL4375,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4376,no issue,20.0,0.0,0.0,0.0
+CHEMBL4378,no issue,0.0,0.0,0.0,0.0
+CHEMBL4379,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL4383,no issue,0.0,0.0,0.0,0.0
+CHEMBL4393,no issue,10.0,0.0,1.0,0.0
+CHEMBL4394,no issue,209.0,0.0,78.0,0.0
+CHEMBL4398,no issue,0.0,0.0,0.0,0.0
+CHEMBL4404,no issue,0.0,0.0,0.0,0.0
+CHEMBL4409,no issue,106.0,0.0,0.0,0.0
+CHEMBL4414,no issue,11.0,0.0,17.0,0.0
+CHEMBL4415,no issue,6.0,0.0,0.0,0.0
+CHEMBL4420,no issue,0.0,0.0,0.0,0.0
+CHEMBL4422,no issue,0.0,0.0,6.0,0.0
+CHEMBL4423,no issue,0.0,0.0,0.0,0.0
+CHEMBL4426,no issue,0.0,0.0,0.0,0.0
+CHEMBL4427,no issue,0.0,0.0,0.0,0.0
+CHEMBL4429,no issue,22.0,0.0,119.0,0.0
+CHEMBL4430,no issue,204.0,0.0,0.0,0.0
+CHEMBL4439,no issue,79.0,0.0,0.0,0.0
+CHEMBL4441,no issue,31.0,0.0,0.0,0.0
+CHEMBL4444,no issue,1.0,0.0,0.0,0.0
+CHEMBL4445,no issue,0.0,0.0,0.0,0.0
+CHEMBL4447,no issue,0.0,0.0,1.0,0.0
+CHEMBL4454,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4461,no issue,17.0,0.0,0.0,0.0
+CHEMBL4462,no issue,416.0,0.0,0.0,0.0
+CHEMBL4464,no issue,0.0,0.0,0.0,0.0
+CHEMBL4468,no issue,0.0,0.0,11.0,0.0
+CHEMBL4471,no issue,0.0,0.0,0.0,0.0
+CHEMBL4477,no issue,3.0,0.0,0.0,0.0
+CHEMBL4478,no issue,0.0,0.0,0.0,0.0
+CHEMBL4481,no issue,133.0,0.0,0.0,0.0
+CHEMBL4482,no issue,117.0,0.0,0.0,0.0
+CHEMBL4484,no issue,8.0,0.0,0.0,0.0
+CHEMBL4487,no issue,4.0,0.0,0.0,0.0
+CHEMBL4497,no issue,0.0,0.0,0.0,0.0
+CHEMBL4501,no issue,6.0,0.0,0.0,0.0
+CHEMBL4506,no issue,125.0,0.0,0.0,0.0
+CHEMBL4507,no issue,0.0,0.0,0.0,0.0
+CHEMBL4508,no issue,2.0,0.0,0.0,0.0
+CHEMBL4510,no issue,0.0,0.0,0.0,0.0
+CHEMBL4512,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL4513,no issue,0.0,0.0,0.0,0.0
+CHEMBL4516,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4518,no issue,36.0,0.0,0.0,0.0
+CHEMBL4521,rounded data citation,49.0,0.0,0.0,0.0
+CHEMBL4523,no issue,28.0,0.0,0.0,0.0
+CHEMBL4523125,no issue,0.0,0.0,0.0,0.0
+CHEMBL4523191,no issue,6.0,0.0,0.0,0.0
+CHEMBL4523370,review,0.0,0.0,0.0,0.0
+CHEMBL4523375,no issue,0.0,0.0,0.0,0.0
+CHEMBL4523386,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4523406,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4523465,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4523470,no issue,0.0,0.0,0.0,0.0
+CHEMBL4523509,no issue,0.0,0.0,0.0,0.0
+CHEMBL4523517,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4523582,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL4523952,review,0.0,0.0,0.0,0.0
+CHEMBL4524,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4525,no issue,28.0,0.0,0.0,0.0
+CHEMBL4526,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4527,no issue,13.0,0.0,1.0,0.0
+CHEMBL4530,no issue,0.0,0.0,0.0,0.0
+CHEMBL4531,no issue,0.0,0.0,0.0,0.0
+CHEMBL4540,no issue,1.0,0.0,0.0,0.0
+CHEMBL4542,no issue,0.0,0.0,1.0,0.0
+CHEMBL4550,no issue,125.0,0.0,0.0,0.0
+CHEMBL4552,no issue,52.0,0.0,153.0,0.0
+CHEMBL4556,no issue,0.0,0.0,0.0,0.0
+CHEMBL4561,no issue,1.0,0.0,0.0,0.0
+CHEMBL4567,no issue,1.0,0.0,0.0,0.0
+CHEMBL4574,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4575,no issue,10.0,0.0,0.0,0.0
+CHEMBL4576,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4577,no issue,2.0,0.0,0.0,0.0
+CHEMBL4578,no issue,9.0,0.0,0.0,0.0
+CHEMBL4580,no issue,0.0,0.0,0.0,0.0
+CHEMBL4581,no issue,239.0,0.0,2.0,0.0
+CHEMBL4586,no issue,2.0,0.0,0.0,0.0
+CHEMBL4588,no issue,14.0,0.0,0.0,0.0
+CHEMBL4589,no issue,1.0,0.0,0.0,0.0
+CHEMBL4592,no issue,0.0,0.0,0.0,0.0
+CHEMBL4596,no issue,0.0,0.0,0.0,0.0
+CHEMBL4598,no issue,1.0,0.0,0.0,0.0
+CHEMBL4599,no issue,33.0,0.0,0.0,0.0
+CHEMBL4600,no issue,56.0,0.0,1.0,0.0
+CHEMBL4601,no issue,6.0,0.0,0.0,0.0
+CHEMBL4602,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4607,no issue,0.0,0.0,8.0,0.0
+CHEMBL4608,no issue,0.0,0.0,0.0,0.0
+CHEMBL4613,no issue,0.0,0.0,1.0,0.0
+CHEMBL4616,no issue,10.0,0.0,0.0,0.0
+CHEMBL4617,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL4618,no issue,45.0,0.0,0.0,0.0
+CHEMBL4619,no issue,0.0,0.0,0.0,0.0
+CHEMBL4625,no issue,8.0,0.0,356.0,0.0
+CHEMBL4627,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4630,no issue,38.0,0.0,0.0,0.0
+CHEMBL4632,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL4633,no issue,1.0,0.0,0.0,0.0
+CHEMBL4641,no issue,56.0,0.0,0.0,0.0
+CHEMBL4644,no issue,0.0,0.0,2.0,0.0
+CHEMBL4647,no issue,6.0,0.0,0.0,0.0
+CHEMBL4649,no issue,17.0,0.0,0.0,0.0
+CHEMBL4653,no issue,1.0,0.0,0.0,0.0
+CHEMBL4657,no issue,35.0,0.0,0.0,0.0
+CHEMBL4660,no issue,0.0,0.0,0.0,0.0
+CHEMBL4662,no issue,446.0,0.0,0.0,0.0
+CHEMBL4670,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4674,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4676,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4677,no issue,0.0,0.0,1.0,0.0
+CHEMBL4680030,review,0.0,0.0,0.0,0.0
+CHEMBL4681,multifunctional enzyme,486.0,0.0,1.0,0.0
+CHEMBL4683,no issue,11.0,0.0,0.0,0.0
+CHEMBL4685,no issue,7589.0,0.0,22.0,0.0
+CHEMBL4687,highly correlated assays,1.0,0.0,1.0,0.0
+CHEMBL4691,no issue,89.0,0.0,0.0,0.0
+CHEMBL4693,no issue,1.0,0.0,0.0,0.0
+CHEMBL4696,no issue,1.0,0.0,12.0,0.0
+CHEMBL4698,no issue,22.0,0.0,0.0,0.0
+CHEMBL4699,no issue,2.0,0.0,0.0,0.0
+CHEMBL4701,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL4708,no issue,4.0,0.0,0.0,0.0
+CHEMBL4713,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4714,no issue,1.0,0.0,0.0,0.0
+CHEMBL4715,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL4718,no issue,17.0,0.0,0.0,0.0
+CHEMBL4720,no issue,0.0,0.0,0.0,0.0
+CHEMBL4722,no issue,840.0,0.0,20.0,0.0
+CHEMBL4726,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL4730,no issue,0.0,0.0,0.0,0.0
+CHEMBL4748,no issue,1.0,0.0,0.0,0.0
+CHEMBL4752,no issue,0.0,0.0,0.0,0.0
+CHEMBL4755,no issue,0.0,0.0,0.0,0.0
+CHEMBL4756,no issue,0.0,0.0,0.0,0.0
+CHEMBL4761,no issue,23.0,0.0,0.0,0.0
+CHEMBL4766,no issue,37.0,0.0,0.0,0.0
+CHEMBL4767,no issue,0.0,0.0,0.0,0.0
+CHEMBL4768,no issue,228.0,0.0,0.0,0.0
+CHEMBL4769,no issue,55.0,0.0,0.0,0.0
+CHEMBL4772,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL4774,no issue,0.0,0.0,0.0,0.0
+CHEMBL4777,no issue,13.0,0.0,24.0,0.0
+CHEMBL4779,no issue,0.0,0.0,0.0,0.0
+CHEMBL4780,no issue,26.0,0.0,0.0,0.0
+CHEMBL4789,high citation rate,0.0,0.0,38.0,0.0
+CHEMBL4791,no issue,3.0,0.0,0.0,0.0
+CHEMBL4792,no issue,12.0,0.0,59.0,0.0
+CHEMBL4793,no issue,14.0,0.0,0.0,0.0
+CHEMBL4794,no issue,846.0,0.0,161.0,0.0
+CHEMBL4796,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL4801,no issue,3.0,0.0,0.0,0.0
+CHEMBL4802,no issue,0.0,0.0,0.0,0.0
+CHEMBL4802015,no issue,0.0,0.0,0.0,0.0
+CHEMBL4803,no issue,6.0,0.0,0.0,0.0
+CHEMBL4804,no issue,28.0,0.0,0.0,0.0
+CHEMBL4805,no issue,771.0,0.0,1.0,0.0
+CHEMBL4807,no issue,0.0,0.0,0.0,0.0
+CHEMBL4810,no issue,0.0,0.0,0.0,0.0
+CHEMBL4813,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4814,review,0.0,0.0,0.0,0.0
+CHEMBL4816,no issue,16.0,0.0,0.0,0.0
+CHEMBL4820,no issue,0.0,0.0,0.0,0.0
+CHEMBL4822,no issue,1122.0,0.0,88.0,0.0
+CHEMBL4824,exact data citation,0.0,0.0,0.0,0.0
+CHEMBL4828,no issue,0.0,0.0,7.0,0.0
+CHEMBL4829,no issue,22.0,0.0,0.0,0.0
+CHEMBL4833,no issue,0.0,0.0,0.0,0.0
+CHEMBL4835,no issue,45.0,0.0,1.0,0.0
+CHEMBL4838,no issue,0.0,0.0,0.0,0.0
+CHEMBL4851,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4852,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4860,no issue,13.0,0.0,67.0,0.0
+CHEMBL4867,no issue,0.0,0.0,0.0,0.0
+CHEMBL4877,no issue,0.0,0.0,0.0,0.0
+CHEMBL4878,multifunctional enzyme,725.0,0.0,6.0,0.0
+CHEMBL4879439,no issue,0.0,0.0,0.0,0.0
+CHEMBL4889,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL4892,no issue,0.0,0.0,0.0,0.0
+CHEMBL4894,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL4895,no issue,118.0,0.0,0.0,0.0
+CHEMBL4896,no issue,2.0,0.0,0.0,0.0
+CHEMBL4897,no issue,1.0,0.0,0.0,0.0
+CHEMBL4898,no issue,30.0,0.0,1.0,0.0
+CHEMBL4899,no issue,0.0,0.0,0.0,0.0
+CHEMBL4900,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4901,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL4903,no issue,0.0,0.0,0.0,0.0
+CHEMBL4909,no issue,1.0,0.0,0.0,0.0
+CHEMBL4919,no issue,62.0,0.0,0.0,0.0
+CHEMBL4921,no issue,0.0,0.0,1.0,0.0
+CHEMBL4924,highly correlated assays,7.0,0.0,0.0,0.0
+CHEMBL4937,no issue,12.0,0.0,0.0,0.0
+CHEMBL4940,no issue,2.0,0.0,0.0,0.0
+CHEMBL4941,no issue,0.0,0.0,0.0,0.0
+CHEMBL4944,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL4945,no issue,0.0,0.0,0.0,0.0
+CHEMBL4948,no issue,2.0,0.0,0.0,0.0
+CHEMBL4954,highly correlated assays,3.0,0.0,0.0,0.0
+CHEMBL4956,review,0.0,0.0,0.0,0.0
+CHEMBL4959,no issue,0.0,0.0,0.0,0.0
+CHEMBL4966,review,0.0,0.0,0.0,0.0
+CHEMBL4970,no issue,0.0,0.0,0.0,0.0
+CHEMBL4973,no issue,8.0,0.0,0.0,0.0
+CHEMBL4975,no issue,0.0,0.0,17.0,0.0
+CHEMBL4977,review,0.0,0.0,0.0,0.0
+CHEMBL4979,no issue,270.0,0.0,0.0,0.0
+CHEMBL4980,no issue,0.0,0.0,176.0,0.0
+CHEMBL4981,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5000,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL5010,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5011,no issue,32.0,0.0,0.0,0.0
+CHEMBL5014,no issue,20.0,0.0,0.0,0.0
+CHEMBL5017,no issue,1.0,0.0,3.0,0.0
+CHEMBL5021,no issue,0.0,0.0,0.0,0.0
+CHEMBL5023,no issue,230.0,0.0,77.0,0.0
+CHEMBL5024,no issue,14.0,0.0,1.0,0.0
+CHEMBL5026,no issue,13.0,0.0,0.0,0.0
+CHEMBL5028,no issue,1.0,0.0,0.0,0.0
+CHEMBL5032,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5035,no issue,2.0,0.0,0.0,0.0
+CHEMBL5036,no issue,0.0,0.0,0.0,0.0
+CHEMBL5043,no issue,40.0,0.0,0.0,0.0
+CHEMBL5044,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5047,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5048,no issue,0.0,0.0,0.0,0.0
+CHEMBL5052,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5062,no issue,0.0,0.0,0.0,0.0
+CHEMBL5064,no issue,0.0,0.0,0.0,0.0
+CHEMBL5067,no issue,0.0,0.0,0.0,0.0
+CHEMBL5068,no issue,0.0,0.0,0.0,0.0
+CHEMBL5071,no issue,486.0,0.0,31.0,0.0
+CHEMBL5072,no issue,3.0,0.0,0.0,0.0
+CHEMBL5073,no issue,1.0,0.0,0.0,0.0
+CHEMBL5076,no issue,0.0,0.0,15.0,0.0
+CHEMBL5077,no issue,63.0,0.0,0.0,0.0
+CHEMBL5080,no issue,1.0,0.0,0.0,0.0
+CHEMBL5082,review,3.0,0.0,0.0,0.0
+CHEMBL5083,no issue,2.0,0.0,0.0,0.0
+CHEMBL5084,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5094,no issue,0.0,0.0,0.0,0.0
+CHEMBL5096,no issue,1.0,0.0,0.0,0.0
+CHEMBL5099,no issue,3.0,0.0,0.0,0.0
+CHEMBL5101,no issue,0.0,0.0,0.0,0.0
+CHEMBL5102,no issue,263.0,0.0,30.0,0.0
+CHEMBL5103,no issue,992.0,0.0,2.0,0.0
+CHEMBL5107,no issue,0.0,0.0,0.0,0.0
+CHEMBL5112,review,0.0,0.0,0.0,0.0
+CHEMBL5113,no issue,11.0,0.0,57.0,0.0
+CHEMBL5118,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL5122,no issue,42.0,0.0,0.0,0.0
+CHEMBL5124,no issue,0.0,0.0,0.0,0.0
+CHEMBL5125,no issue,1.0,0.0,0.0,0.0
+CHEMBL5129,no issue,0.0,0.0,0.0,0.0
+CHEMBL5131,no issue,0.0,0.0,6.0,0.0
+CHEMBL5135,review,0.0,0.0,0.0,0.0
+CHEMBL5137,no issue,16.0,0.0,0.0,0.0
+CHEMBL5141,no issue,28.0,0.0,0.0,0.0
+CHEMBL5145,no issue,7803.0,0.0,1.0,0.0
+CHEMBL5147,no issue,3.0,0.0,0.0,0.0
+CHEMBL5150,no issue,0.0,0.0,0.0,0.0
+CHEMBL5158,no issue,0.0,0.0,0.0,0.0
+CHEMBL5160,no issue,0.0,0.0,0.0,0.0
+CHEMBL5162,no issue,3.0,0.0,0.0,0.0
+CHEMBL5163,no issue,7.0,0.0,0.0,0.0
+CHEMBL5174,no issue,12.0,0.0,0.0,0.0
+CHEMBL5175,no issue,0.0,0.0,0.0,0.0
+CHEMBL5180,no issue,0.0,0.0,0.0,0.0
+CHEMBL5183,no issue,4.0,0.0,0.0,0.0
+CHEMBL5189,no issue,0.0,0.0,0.0,0.0
+CHEMBL5192,no issue,36.0,0.0,64.0,0.0
+CHEMBL5198,highly correlated assays,3.0,0.0,0.0,0.0
+CHEMBL5200,no issue,0.0,0.0,0.0,0.0
+CHEMBL5202,no issue,1.0,0.0,0.0,0.0
+CHEMBL5203,no issue,0.0,0.0,0.0,0.0
+CHEMBL5205,no issue,0.0,0.0,0.0,0.0
+CHEMBL5208,no issue,2.0,0.0,0.0,0.0
+CHEMBL5221,no issue,0.0,0.0,11.0,0.0
+CHEMBL5246,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5250,no issue,13.0,0.0,0.0,0.0
+CHEMBL5251,no issue,12887.0,0.0,0.0,0.0
+CHEMBL5255,no issue,1.0,0.0,0.0,0.0
+CHEMBL5256,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5257,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5258,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5260,no issue,0.0,0.0,0.0,0.0
+CHEMBL5261,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5262,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5270,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL5275,no issue,1.0,0.0,0.0,0.0
+CHEMBL5282,no issue,0.0,0.0,0.0,0.0
+CHEMBL5284,no issue,1.0,0.0,0.0,0.0
+CHEMBL5285,no issue,269.0,0.0,0.0,0.0
+CHEMBL5288,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5293,no issue,0.0,0.0,0.0,0.0
+CHEMBL5306,no issue,0.0,0.0,0.0,0.0
+CHEMBL5310,no issue,1.0,0.0,0.0,0.0
+CHEMBL5311,no issue,3.0,0.0,0.0,0.0
+CHEMBL5314,no issue,3.0,0.0,0.0,0.0
+CHEMBL5319,no issue,4.0,0.0,0.0,0.0
+CHEMBL5320,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5328,multifunctional enzyme,0.0,0.0,19.0,0.0
+CHEMBL5331,no issue,7.0,0.0,0.0,0.0
+CHEMBL5332,no issue,17.0,0.0,0.0,0.0
+CHEMBL5334,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5335,no issue,6.0,0.0,0.0,0.0
+CHEMBL5346,no issue,1.0,0.0,0.0,0.0
+CHEMBL5347,no issue,1.0,0.0,0.0,0.0
+CHEMBL5348,review,1.0,0.0,0.0,0.0
+CHEMBL5351,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL5353,no issue,0.0,0.0,0.0,0.0
+CHEMBL5359,no issue,0.0,0.0,0.0,0.0
+CHEMBL5362,no issue,0.0,0.0,0.0,0.0
+CHEMBL5364,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5365,no issue,0.0,0.0,0.0,0.0
+CHEMBL5366,no issue,250.0,0.0,1.0,0.0
+CHEMBL5373,no issue,0.0,0.0,9.0,0.0
+CHEMBL5374,no issue,0.0,0.0,0.0,0.0
+CHEMBL5375,multifunctional enzyme,16.0,0.0,0.0,0.0
+CHEMBL5387,no issue,8.0,0.0,0.0,0.0
+CHEMBL5388,review,3.0,0.0,0.0,0.0
+CHEMBL5393,no issue,695.0,0.0,0.0,0.0
+CHEMBL5394,no issue,0.0,0.0,0.0,0.0
+CHEMBL5396,no issue,0.0,0.0,0.0,0.0
+CHEMBL5399,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL5402,review,1.0,0.0,0.0,0.0
+CHEMBL5403,no issue,0.0,0.0,0.0,0.0
+CHEMBL5404,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5405,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5406,no issue,12.0,0.0,0.0,0.0
+CHEMBL5407,no issue,17.0,0.0,0.0,0.0
+CHEMBL5408,no issue,8.0,0.0,0.0,0.0
+CHEMBL5412,no issue,0.0,0.0,0.0,0.0
+CHEMBL5413,no issue,0.0,0.0,0.0,0.0
+CHEMBL5415,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5419,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL5424,no issue,0.0,0.0,0.0,0.0
+CHEMBL5426,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5427,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5432,no issue,1.0,0.0,0.0,0.0
+CHEMBL5435,no issue,25.0,0.0,0.0,0.0
+CHEMBL5440,no issue,0.0,0.0,0.0,0.0
+CHEMBL5443,no issue,0.0,0.0,0.0,0.0
+CHEMBL5444,no issue,6.0,0.0,0.0,0.0
+CHEMBL5445,no issue,9.0,0.0,3.0,0.0
+CHEMBL5451,no issue,13.0,0.0,0.0,0.0
+CHEMBL5452,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5455,no issue,3.0,0.0,0.0,0.0
+CHEMBL5456,no issue,0.0,0.0,0.0,0.0
+CHEMBL5457,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL5462,no issue,89.0,0.0,0.0,0.0
+CHEMBL5463,no issue,0.0,0.0,0.0,0.0
+CHEMBL5464,no issue,2.0,0.0,0.0,0.0
+CHEMBL5467,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5469,no issue,4.0,0.0,0.0,0.0
+CHEMBL5476,no issue,2.0,0.0,0.0,0.0
+CHEMBL5479,no issue,0.0,0.0,0.0,0.0
+CHEMBL5483,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5485,no issue,144.0,0.0,21.0,0.0
+CHEMBL5491,no issue,197.0,0.0,0.0,0.0
+CHEMBL5493,no issue,0.0,0.0,0.0,0.0
+CHEMBL5498,test Item with unknown chirality,0.0,0.0,1.0,0.0
+CHEMBL5500,no issue,18.0,0.0,0.0,0.0
+CHEMBL5501,no issue,1.0,0.0,0.0,0.0
+CHEMBL5503,no issue,0.0,0.0,0.0,0.0
+CHEMBL5508,no issue,0.0,0.0,0.0,0.0
+CHEMBL5516,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL5517,no issue,0.0,0.0,0.0,0.0
+CHEMBL5518,no issue,3.0,0.0,0.0,0.0
+CHEMBL5519,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5520,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5521,no issue,1.0,0.0,0.0,0.0
+CHEMBL5522,no issue,0.0,0.0,0.0,0.0
+CHEMBL5523,no issue,6.0,0.0,0.0,0.0
+CHEMBL5524,no issue,22.0,0.0,0.0,0.0
+CHEMBL5525,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL5538,no issue,0.0,0.0,0.0,0.0
+CHEMBL5541,no issue,1.0,0.0,0.0,0.0
+CHEMBL5543,no issue,21.0,0.0,0.0,0.0
+CHEMBL5545,no issue,18.0,0.0,0.0,0.0
+CHEMBL5546,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5552,review,3.0,0.0,0.0,0.0
+CHEMBL5553,no issue,0.0,0.0,0.0,0.0
+CHEMBL5554,no issue,10.0,0.0,0.0,0.0
+CHEMBL5555,no issue,14.0,0.0,0.0,0.0
+CHEMBL5556,no issue,0.0,0.0,0.0,0.0
+CHEMBL5558,no issue,0.0,0.0,0.0,0.0
+CHEMBL5566,no issue,0.0,0.0,0.0,0.0
+CHEMBL5567,no issue,0.0,0.0,0.0,0.0
+CHEMBL5568,no issue,111.0,0.0,9.0,0.0
+CHEMBL5575,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL5579,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5586,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL5600,no issue,1.0,0.0,0.0,0.0
+CHEMBL5602,no issue,0.0,0.0,0.0,0.0
+CHEMBL5604,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5606,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5607,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5608,no issue,31.0,0.0,0.0,0.0
+CHEMBL5615,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5619,no issue,6.0,0.0,0.0,0.0
+CHEMBL5620,no issue,154.0,0.0,0.0,0.0
+CHEMBL5624,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5627,no issue,3.0,0.0,0.0,0.0
+CHEMBL5630,no issue,5.0,0.0,0.0,0.0
+CHEMBL5631,no issue,0.0,0.0,0.0,0.0
+CHEMBL5636,test Item with unknown chirality,2.0,0.0,0.0,0.0
+CHEMBL5638,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5639,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5645,no issue,4.0,0.0,32.0,0.0
+CHEMBL5647,no issue,0.0,0.0,0.0,0.0
+CHEMBL5648,multifunctional enzyme,0.0,0.0,32.0,0.0
+CHEMBL5650,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5652,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5654,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5656,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5657,no issue,0.0,0.0,16.0,0.0
+CHEMBL5658,multifunctional enzyme,1605.0,0.0,0.0,0.0
+CHEMBL5661,no issue,1.0,0.0,0.0,0.0
+CHEMBL5668,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5669,no issue,3.0,0.0,0.0,0.0
+CHEMBL5671,no issue,1.0,0.0,0.0,0.0
+CHEMBL5672,no issue,0.0,0.0,0.0,0.0
+CHEMBL5678,highly correlated assays,2.0,0.0,0.0,0.0
+CHEMBL5679,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5683,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5684,no issue,3.0,0.0,0.0,0.0
+CHEMBL5686,no issue,0.0,0.0,0.0,0.0
+CHEMBL5689,no issue,0.0,0.0,0.0,0.0
+CHEMBL5691,no issue,0.0,0.0,0.0,0.0
+CHEMBL5695,no issue,2.0,0.0,0.0,0.0
+CHEMBL5697,no issue,114.0,0.0,1.0,0.0
+CHEMBL5698,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5699,no issue,1.0,0.0,0.0,0.0
+CHEMBL5700,no issue,0.0,0.0,0.0,0.0
+CHEMBL5701,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5703,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5704,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5705,review,2.0,0.0,0.0,0.0
+CHEMBL5719,no issue,9.0,0.0,0.0,0.0
+CHEMBL5720,no issue,0.0,0.0,0.0,0.0
+CHEMBL5724,no issue,0.0,0.0,0.0,0.0
+CHEMBL5726,no issue,0.0,0.0,0.0,0.0
+CHEMBL5727,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL5730,test Item with unknown chirality,10.0,0.0,0.0,0.0
+CHEMBL5731,review,0.0,0.0,0.0,0.0
+CHEMBL5742,no issue,0.0,0.0,399.0,0.0
+CHEMBL5747,no issue,202.0,0.0,0.0,0.0
+CHEMBL5750,no issue,7.0,0.0,0.0,0.0
+CHEMBL5754,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5756,no issue,0.0,0.0,0.0,0.0
+CHEMBL5761,no issue,0.0,0.0,0.0,0.0
+CHEMBL5763,no issue,12879.0,0.0,4.0,0.0
+CHEMBL5767,no issue,0.0,0.0,0.0,0.0
+CHEMBL5768,review,3.0,0.0,0.0,0.0
+CHEMBL5769,no issue,0.0,0.0,0.0,0.0
+CHEMBL5774,no issue,13.0,0.0,0.0,0.0
+CHEMBL5776,no issue,22.0,0.0,0.0,0.0
+CHEMBL5784,no issue,6.0,0.0,0.0,0.0
+CHEMBL5786,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL5794,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5799,review,0.0,0.0,0.0,0.0
+CHEMBL5800,no issue,0.0,0.0,0.0,0.0
+CHEMBL5801,no issue,0.0,0.0,0.0,0.0
+CHEMBL5804,no issue,0.0,0.0,0.0,0.0
+CHEMBL5805,high citation rate,0.0,0.0,0.0,0.0
+CHEMBL5810,no issue,3.0,0.0,0.0,0.0
+CHEMBL5812,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL5815,no issue,54.0,0.0,0.0,0.0
+CHEMBL5818,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5819,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5831,no issue,0.0,0.0,0.0,0.0
+CHEMBL5838,no issue,1.0,0.0,0.0,0.0
+CHEMBL5840,no issue,1.0,0.0,0.0,0.0
+CHEMBL5845,no issue,0.0,0.0,0.0,0.0
+CHEMBL5847,no issue,3.0,0.0,0.0,0.0
+CHEMBL5850,no issue,1.0,0.0,0.0,0.0
+CHEMBL5852,no issue,0.0,0.0,0.0,0.0
+CHEMBL5853,multifunctional enzyme,6.0,0.0,0.0,0.0
+CHEMBL5855,review,3.0,0.0,0.0,0.0
+CHEMBL5861,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5862,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL5865,no issue,4.0,0.0,0.0,0.0
+CHEMBL5868,no issue,3.0,0.0,0.0,0.0
+CHEMBL5869,no issue,0.0,0.0,0.0,0.0
+CHEMBL5870,no issue,0.0,0.0,0.0,0.0
+CHEMBL5871,multiply activity for same test item,0.0,0.0,0.0,0.0
+CHEMBL5872,no issue,0.0,0.0,1.0,0.0
+CHEMBL5873,review,0.0,0.0,0.0,0.0
+CHEMBL5877,no issue,0.0,0.0,0.0,0.0
+CHEMBL5879,multifunctional enzyme,15.0,0.0,0.0,0.0
+CHEMBL5888,no issue,1.0,0.0,4.0,0.0
+CHEMBL5891,no issue,2.0,0.0,0.0,0.0
+CHEMBL5896,review,0.0,0.0,0.0,0.0
+CHEMBL5903,no issue,34.0,0.0,0.0,0.0
+CHEMBL5905,multifunctional enzyme,2.0,0.0,10.0,0.0
+CHEMBL5907,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5912,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5914,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5917,no issue,0.0,0.0,0.0,0.0
+CHEMBL5921,no issue,0.0,0.0,21.0,0.0
+CHEMBL5925,no issue,0.0,0.0,2.0,0.0
+CHEMBL5926,no issue,0.0,0.0,0.0,0.0
+CHEMBL5932,no issue,7.0,0.0,0.0,0.0
+CHEMBL5936,high citation rate,0.0,0.0,0.0,0.0
+CHEMBL5938,no issue,9.0,0.0,0.0,0.0
+CHEMBL5939,test Item with unknown chirality,57.0,0.0,0.0,0.0
+CHEMBL5940,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5941,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5951,no issue,0.0,0.0,2.0,0.0
+CHEMBL5952,no issue,0.0,0.0,2.0,0.0
+CHEMBL5953,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL5957,no issue,121.0,0.0,8.0,0.0
+CHEMBL5963,no issue,18.0,0.0,0.0,0.0
+CHEMBL5970,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL5971,no issue,103.0,0.0,7.0,0.0
+CHEMBL5973,no issue,0.0,0.0,0.0,0.0
+CHEMBL5979,no issue,0.0,0.0,0.0,0.0
+CHEMBL5983,no issue,7.0,0.0,0.0,0.0
+CHEMBL5993,test Item with unknown chirality,1.0,0.0,0.0,0.0
+CHEMBL6003,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6005,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6006,no issue,28.0,0.0,0.0,0.0
+CHEMBL6007,no issue,44.0,0.0,0.0,0.0
+CHEMBL6009,multifunctional enzyme,142.0,0.0,0.0,0.0
+CHEMBL6011,no issue,3.0,0.0,0.0,0.0
+CHEMBL6012,no issue,0.0,0.0,0.0,0.0
+CHEMBL6013,no issue,2.0,0.0,0.0,0.0
+CHEMBL6014,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6017,no issue,0.0,0.0,0.0,0.0
+CHEMBL6030,no issue,0.0,0.0,0.0,0.0
+CHEMBL6031,no issue,26.0,0.0,0.0,0.0
+CHEMBL6032,no issue,1065.0,0.0,1.0,0.0
+CHEMBL6035,no issue,0.0,0.0,0.0,0.0
+CHEMBL6052,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL6054,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6056,no issue,0.0,0.0,0.0,0.0
+CHEMBL6060,test Item with unknown chirality,0.0,0.0,0.0,0.0
+CHEMBL6065,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL6068,highly correlated assays,0.0,0.0,0.0,0.0
+CHEMBL6069,no issue,0.0,0.0,0.0,0.0
+CHEMBL6080,no issue,30.0,0.0,0.0,0.0
+CHEMBL6082,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6084,no issue,0.0,0.0,11.0,0.0
+CHEMBL6094,no issue,9.0,0.0,0.0,0.0
+CHEMBL6095,no issue,10.0,0.0,0.0,0.0
+CHEMBL6110,no issue,0.0,0.0,0.0,0.0
+CHEMBL6120,no issue,146.0,0.0,0.0,0.0
+CHEMBL6126,no issue,2.0,0.0,0.0,0.0
+CHEMBL6129,multifunctional enzyme,1.0,0.0,0.0,0.0
+CHEMBL6132,no issue,1.0,0.0,0.0,0.0
+CHEMBL6135,no issue,0.0,0.0,0.0,0.0
+CHEMBL6136,no issue,197.0,0.0,16.0,0.0
+CHEMBL6137,multifunctional enzyme,0.0,0.0,0.0,0.0
+CHEMBL6138,no issue,0.0,0.0,0.0,0.0
+CHEMBL6140,no issue,13.0,0.0,0.0,0.0
+CHEMBL6141,no issue,35.0,0.0,0.0,0.0
+CHEMBL6142,no issue,1.0,0.0,0.0,0.0
+CHEMBL6144,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6145,no issue,6.0,0.0,0.0,0.0
+CHEMBL6149,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6152,review,0.0,0.0,0.0,0.0
+CHEMBL6154,no issue,214.0,0.0,0.0,0.0
+CHEMBL6158,no issue,0.0,0.0,0.0,0.0
+CHEMBL6164,no issue,257.0,0.0,0.0,0.0
+CHEMBL6166,no issue,33.0,0.0,0.0,0.0
+CHEMBL6167,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6168,no issue,0.0,0.0,0.0,0.0
+CHEMBL6172,no issue,1.0,0.0,0.0,0.0
+CHEMBL6174,no issue,2.0,0.0,0.0,0.0
+CHEMBL6175,no issue,19.0,0.0,0.0,0.0
+CHEMBL6184,no issue,1.0,0.0,2.0,0.0
+CHEMBL6186,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6191,highly correlated assays,1.0,0.0,0.0,0.0
+CHEMBL6198,test Item with unknown chirality,0.0,0.0,0.0,0.0
