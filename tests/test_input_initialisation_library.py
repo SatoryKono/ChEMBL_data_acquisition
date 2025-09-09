@@ -65,7 +65,9 @@ def test_build_combined_tables_drops_activity_cols() -> None:
     assert "Column1" not in combined["activity"].columns
     assert len(combined["activity"]) == 2
     assert "pairs_same_document" in combined
-    assert "pairs" in combined
+    assert "pairs_independent" in combined
+    assert "pairs_non_independent" in combined
+    assert "pairs" not in combined
 
 
 def test_build_combined_tables_pairs_no_merge() -> None:
@@ -88,7 +90,9 @@ def test_build_combined_tables_pairs_no_merge() -> None:
     }
     combined = build_combined_tables(same, all_)
     assert len(combined["pairs_same_document"]) == 3
-    assert len(combined["pairs"]) == 5
+    assert len(combined["pairs_independent"]) == 0
+    assert len(combined["pairs_non_independent"]) == 0
+    assert "pairs" not in combined
 
 
 def test_build_combined_tables_adds_pair_metrics() -> None:
@@ -112,7 +116,7 @@ def test_build_combined_tables_adds_pair_metrics() -> None:
         "pairs": pd.DataFrame({"INDEPENDENT": [True], "standard_type": ["IC50"]}),
     }
     combined = build_combined_tables(same, all_)
-    assert combined["pairs"].loc[0, "independent_IC50"] == 1
+    assert combined["pairs_independent"].loc[0, "independent_IC50"] == 1
     assert combined["pairs_same_document"].loc[0, "non_independent_Ki"] == 1
     assert len(combined["pairs_independent"]) == 1
     assert len(combined["pairs_non_independent"]) == 0
@@ -141,7 +145,7 @@ def test_build_combined_tables_handles_status(
 
     # Minimal status.csv to satisfy loader
     (tmp_path / "status.csv").write_text(
-        "status,condition_field,condition_value,order,score\n" "ok,null,null,0,0\n"
+        "status,condition_field,condition_value,order,score\nok,null,null,0,0\n"
     )
 
     # Simplify heavy processing steps
@@ -175,7 +179,9 @@ def test_build_combined_tables_initializes_pair_tables(
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
         "activity": pd.DataFrame({"activity_id": [2]}),
-        "pairs": pd.DataFrame({"activity_id1": [2], "activity_id2": [1]}),
+        "pairs": pd.DataFrame(
+            {"INDEPENDENT": [True], "activity_id1": [2], "activity_id2": [1]}
+        ),
     }
 
     (tmp_path / "status.csv").write_text(
@@ -194,7 +200,7 @@ def test_build_combined_tables_initializes_pair_tables(
     monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
 
     combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
-    pairs = combined["pairs"].iloc[0]
+    pairs = combined["pairs_independent"].iloc[0]
     assert [pairs["Filtered1"], pairs["Filtered2"], pairs["Filtered"]] == [
         "bad",
         "good",
@@ -241,7 +247,9 @@ def test_build_combined_tables_initializes_pair_segments(
     }
 
     (tmp_path / "status.csv").write_text(
-        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+
+        "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
+
     )
 
     monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
@@ -258,6 +266,58 @@ def test_build_combined_tables_initializes_pair_segments(
     assert len(combined["pairs_non_independent"]) == 1
     for key in ("pairs_independent", "pairs_non_independent"):
         assert {"Filtered1", "Filtered2", "Filtered"}.issubset(combined[key].columns)
+
+
+
+def test_build_combined_tables_aggregates_from_pairs_independent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Status aggregation should use only ``pairs_independent``."""
+
+    same: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [1]}),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [2]}),
+        "pairs": pd.DataFrame(
+            {
+                "INDEPENDENT": [True],
+                "activity_id1": [1],
+                "activity_id2": [2],
+            }
+        ),
+    }
+
+    (tmp_path / "status.csv").write_text(
+        "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
+    )
+
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(
+        lib,
+        "initialize_activity_status",
+        lambda df, _api: df.assign(**{"Filtered.init": "good"}),
+    )
+
+    captured: dict[str, pd.DataFrame] = {}
+
+    def fake_aggregate(pair_df: pd.DataFrame, *_args, **_kwargs):
+        captured["pair_df"] = pair_df
+        return {}
+
+    monkeypatch.setattr(lib, "aggregate_activity", fake_aggregate)
+
+    combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
+    assert captured["pair_df"] is combined["pairs_independent"]
 
 
 def test_build_combined_tables_normalizes_pair_column_names(
@@ -279,11 +339,13 @@ def test_build_combined_tables_normalizes_pair_column_names(
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
         "activity": pd.DataFrame({"activity_id": [2]}),
-        "pairs": pd.DataFrame({"ACTIVITY_ID_1": [2], "ACTIVITY_ID_2": [1]}),
+        "pairs": pd.DataFrame(
+            {"INDEPENDENT": [True], "ACTIVITY_ID_1": [2], "ACTIVITY_ID_2": [1]}
+        ),
     }
 
     (tmp_path / "status.csv").write_text(
-        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+        "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
 
     monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
@@ -296,7 +358,7 @@ def test_build_combined_tables_normalizes_pair_column_names(
     monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
 
     combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
-    for key in ("pairs", "pairs_same_document"):
+    for key in ("pairs_independent", "pairs_same_document"):
         assert {
             "activity_chembl_id1",
             "activity_chembl_id2",
@@ -314,13 +376,16 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "target": pd.DataFrame({"id": [4]}),
         "testitem": pd.DataFrame({"id": [5]}),
         "pairs_same_document": pd.DataFrame({"id": [1]}),
-        "pairs": pd.DataFrame({"id": [1]}),
+        "pairs_independent": pd.DataFrame({"id": [1]}),
+        "pairs_non_independent": pd.DataFrame({"id": [2]}),
+        "activity_status": pd.DataFrame({"id": [1]}),
     }
     paths = save_tables(tables, tmp_path)
     for entity, path in paths.items():
         assert path.exists(), f"missing {entity} file"
         df = pd.read_csv(path)
         assert not df.empty
+    assert paths["activity_status"].parent == tmp_path / "status"
 
 
 def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:
