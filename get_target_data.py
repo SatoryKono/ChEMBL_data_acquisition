@@ -11,6 +11,7 @@ from typing import Sequence
 import pandas as pd
 import requests
 
+from chembl_da.library.config import load_config
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
@@ -64,6 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING)",
+    )
+    parser.add_argument(
+        "--config",
+        default="config.yaml",
+        help="Path to YAML configuration file",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -300,6 +306,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
     :mod:`tests.test_target_postprocessing`.
 
     """
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         df = pd.read_csv(
             args.input_csv, sep=args.sep, encoding=args.encoding, dtype=str
@@ -323,7 +330,10 @@ def run_uniprot(args: argparse.Namespace) -> int:
                 writer.writerow({"uniprot_id": uid})
             tmp_path = Path(tmp.name)
 
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = (
+            args.output_csv
+            or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+        )
         try:
             uu.process(
                 input_csv=str(tmp_path),
@@ -352,6 +362,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
 
 def run_chembl(args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
@@ -365,7 +376,10 @@ def run_chembl(args: argparse.Namespace) -> int:
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = (
+        args.output_csv
+        or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+    )
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -382,13 +396,17 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def run_iuphar(args: argparse.Namespace) -> int:
     """Execute the ``iuphar`` sub-command."""
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         data = ii.IUPHARData.from_files(
             target_path=args.target_csv,
             family_path=args.family_csv,
             encoding=args.encoding,
         )
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = (
+            args.output_csv
+            or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+        )
         data.map_uniprot_file(
             input_path=args.input_csv,
             output_path=output,

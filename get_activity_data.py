@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 from typing import Sequence
 
 import requests
 
+from chembl_da.library.config import load_config
 from library import chembl_library as cl
 from library import io
 from library.cli import build_parser as base_parser, configure_logging
@@ -30,6 +32,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -42,11 +45,16 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_activities(ids, chunk_size=args.chunk_size, timeout=args.timeout)
+        chunk_size = args.chunk_size or cfg.chunk_size
+        timeout = args.timeout or cfg.api.timeout_read
+        df = cl.get_activities(ids, chunk_size=chunk_size, timeout=timeout)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve activities: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = (
+        args.output_csv
+        or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+    )
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -63,13 +71,11 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line argument parser."""
-    parser = base_parser(
-        "ChEMBL activity data utilities", column="activity_id", chunk_size=5
-    )
+    parser = base_parser("ChEMBL activity data utilities", column="activity_id")
     parser.add_argument(
         "--timeout",
         type=float,
-        default=30.0,
+        default=None,
         help="Timeout in seconds for each HTTP request",
     )
     parser.set_defaults(func=run_chembl)

@@ -13,6 +13,7 @@ from typing import Iterable
 
 import pandas as pd
 
+from chembl_da.library.config import load_config
 from library.document_type_classifier import compute_scores, decide_label
 
 
@@ -76,8 +77,12 @@ def main() -> int:  # pragma: no cover - simple CLI
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Input CSV")
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
     args = parser.parse_args()
 
+    load_config(getattr(args, "config", "config.yaml"))
     df_in = pd.read_csv(args.input)
     df_out = classify_dataframe(df_in)
     df_out.to_csv(args.output, index=False)

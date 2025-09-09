@@ -33,6 +33,7 @@ import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from chembl_da.library.config import load_config
 from library import chembl_library as cl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
@@ -135,6 +136,7 @@ def fetch_pubmed_records(
 
 def run_pubmed(args: argparse.Namespace) -> int:
     """Execute the ``pubmed`` sub-command."""
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         pmids = io.read_ids(
             args.input_csv,
@@ -143,7 +145,10 @@ def run_pubmed(args: argparse.Namespace) -> int:
             encoding=args.encoding,
         )
         df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = (
+            args.output_csv
+            or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+        )
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -159,6 +164,7 @@ def run_pubmed(args: argparse.Namespace) -> int:
 
 def run_chembl(args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
@@ -168,11 +174,15 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        chunk_size = args.chunk_size or cfg.chunk_size
+        df = cl.get_documents(ids, chunk_size=chunk_size)  # type: ignore[attr-defined]
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = (
+        args.output_csv
+        or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+    )
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -189,6 +199,7 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def run_all(args: argparse.Namespace) -> int:
     """Run ChEMBL and PubMed pipelines and merge their outputs."""
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
@@ -198,11 +209,15 @@ def run_all(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        chunk_size = args.chunk_size or cfg.chunk_size
+        doc_df = cl.get_documents(ids, chunk_size=chunk_size)  # type: ignore[attr-defined]
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = (
+        args.output_csv
+        or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+    )
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
         # Merge any columns not covered by ``postprocess_documents`` back
@@ -278,6 +293,9 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description="Document data utilities")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
@@ -335,7 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
     chembl.add_argument("--sep", default=",", help="CSV delimiter")
     chembl.add_argument("--encoding", default="utf8", help="File encoding")
     chembl.add_argument(
-        "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
+        "--chunk-size", type=int, default=None, help="Maximum number of IDs per request"
     )
     chembl.set_defaults(func=run_chembl)
 
@@ -360,7 +378,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument("--sep", default=",", help="CSV delimiter")
     all_cmd.add_argument("--encoding", default="utf8", help="File encoding")
     all_cmd.add_argument(
-        "--chunk-size", type=int, default=5, help="Maximum IDs per request"
+        "--chunk-size", type=int, default=None, help="Maximum IDs per request"
     )
     all_cmd.add_argument(
         "--sleep",
