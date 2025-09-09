@@ -317,7 +317,9 @@ def process_activity_table(
         on="document_id",
         how="left",
     )
-    df["high_citation_rate"] = df["high_citation_rate"].fillna(False)
+    df["high_citation_rate"] = (
+        df["high_citation_rate"].astype("boolean").fillna(False).astype(bool)
+    )
 
     # --- target types ------------------------------------------------------
     targets_path = Path(dictionary_dir) / "targets_type.csv"
@@ -343,7 +345,9 @@ def process_activity_table(
         "Viruses": True,
         "Unicellular organism": True,
     }
-    df["unicellular_organism"] = df["type"].map(mapping).fillna(False).astype(bool)
+    df["unicellular_organism"] = (
+        df["type"].map(mapping).astype("boolean").fillna(False).astype(bool)
+    )
 
     df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
 
