@@ -317,7 +317,9 @@ def process_activity_table(
         on="document_id",
         how="left",
     )
-    df["high_citation_rate"] = df["high_citation_rate"].fillna(False)
+    df["high_citation_rate"] = (
+        df["high_citation_rate"].astype("boolean").fillna(False).astype(bool)
+    )
 
     # --- target types ------------------------------------------------------
     targets_path = Path(dictionary_dir) / "targets_type.csv"
@@ -343,7 +345,9 @@ def process_activity_table(
         "Viruses": True,
         "Unicellular organism": True,
     }
-    df["unicellular_organism"] = df["type"].map(mapping).fillna(False).astype(bool)
+    df["unicellular_organism"] = (
+        df["type"].map(mapping).astype("boolean").fillna(False).astype(bool)
+    )
 
     df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
 
@@ -925,10 +929,14 @@ def initialize_pairs(
     """Merge activity statuses into ``pair_df``."""
     df = pair_df.copy()
     mapping = activity_df[["activity_id", "Filtered.init"]]
-    df = df.merge(mapping, left_on="activity_chembl_id1", right_on="activity_id", how="left")
+    df = df.merge(
+        mapping, left_on="activity_chembl_id1", right_on="activity_id", how="left"
+    )
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
     df.drop(columns=["activity_id"], inplace=True)
-    df = df.merge(mapping, left_on="activity_chembl_id2", right_on="activity_id", how="left")
+    df = df.merge(
+        mapping, left_on="activity_chembl_id2", right_on="activity_id", how="left"
+    )
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
     df.drop(columns=["activity_id"], inplace=True)
 
@@ -964,7 +972,15 @@ def _aggregate_entity(
 def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> Dict[str, pd.DataFrame]:
-    """Aggregate status metrics across entities."""
+    """Aggregate status metrics across entities.
+
+    The function combines activity pair information with per-activity
+    annotations to produce status summaries for several entity levels.  Pair
+    tables may not always contain the expected metric columns, and some
+    activity tables can lack identifiers necessary for higher level
+    aggregations.  Missing metrics are created and zero filled while missing
+    identifier columns result in skipped aggregations with empty results.
+    """
     metrics = [
         "independent_IC50",
         "non_independent_IC50",
@@ -972,10 +988,20 @@ def aggregate_activity(
         "non_independent_Ki",
     ]
 
-    left = pair_df.rename(
+    df_pairs = pair_df.copy()
+    missing = [m for m in metrics if m not in df_pairs.columns]
+    if missing:
+        logger.warning(
+            "pair table missing columns %s; filling with zeros",
+            ", ".join(missing),
+        )
+        for col in missing:
+            df_pairs[col] = 0
+
+    left = df_pairs.rename(
         columns={"activity_chembl_id1": "activity_id", "Filtered1": "Filtered.new"}
     )[["activity_id", "Filtered.new", *metrics]]
-    right = pair_df.rename(
+    right = df_pairs.rename(
         columns={"activity_chembl_id2": "activity_id", "Filtered2": "Filtered.new"}
     )[["activity_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
@@ -989,23 +1015,46 @@ def aggregate_activity(
     assay_status = _aggregate_entity(merged, "assay_id", status_api)
     document_status = _aggregate_entity(merged, "document_id", status_api)
 
-    system_src = merged.copy()
-    system_src["system_id"] = (
-        system_src["testitem_id"].astype("string")
-        + "_"
-        + system_src["target_id"].astype("string")
-        + "_"
-        + system_src["mesurement_type"].astype("string")
-    )
-    system_status = _aggregate_entity(system_src, "system_id", status_api)
+    system_cols = ["testitem_id", "target_id", "mesurement_type"]
+    if all(c in merged.columns for c in system_cols):
+        system_src = merged.copy()
+        system_src["system_id"] = (
+            system_src["testitem_id"].astype("string")
+            + "_"
+            + system_src["target_id"].astype("string")
+            + "_"
+            + system_src["mesurement_type"].astype("string")
+        )
+        system_status = _aggregate_entity(system_src, "system_id", status_api)
+        split = system_status["system_id"].str.split("_", n=2, expand=True)
+        system_status["testitem_id"] = split[0]
+        system_status["target_id"] = split[1]
+        system_status["mesurement_type"] = split[2]
+    else:
+        missing_sys = [c for c in system_cols if c not in merged.columns]
+        logger.warning(
+            "activity table missing columns %s; skipping system aggregation",
+            ", ".join(missing_sys),
+        )
+        system_status = pd.DataFrame(columns=["system_id", "Filtered.new", *metrics])
 
-    split = system_status["system_id"].str.split("_", n=2, expand=True)
-    system_status["testitem_id"] = split[0]
-    system_status["target_id"] = split[1]
-    system_status["mesurement_type"] = split[2]
+    if "testitem_id" in merged.columns:
+        testitem_status = _aggregate_entity(merged, "testitem_id", status_api)
+    else:
+        logger.warning(
+            "activity table missing column testitem_id; skipping testitem aggregation"
+        )
+        testitem_status = pd.DataFrame(
+            columns=["testitem_id", "Filtered.new", *metrics]
+        )
 
-    testitem_status = _aggregate_entity(system_status, "testitem_id", status_api)
-    target_status = _aggregate_entity(system_status, "target_id", status_api)
+    if "target_id" in merged.columns:
+        target_status = _aggregate_entity(merged, "target_id", status_api)
+    else:
+        logger.warning(
+            "activity table missing column target_id; skipping target aggregation"
+        )
+        target_status = pd.DataFrame(columns=["target_id", "Filtered.new", *metrics])
 
     # metrics are counted per activity; divide by 2 for higher-level aggregations
     for df in [
