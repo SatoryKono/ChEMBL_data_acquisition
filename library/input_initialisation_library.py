@@ -675,6 +675,22 @@ def build_combined_tables(
     combined["pairs_same_document"] = df_pairs_same
     combined["pairs"] = df_pairs
 
+    if "INDEPENDENT" in df_pairs.columns:
+        indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
+            False
+        )
+        df_pairs_independent = normalize_pair_columns(df_pairs[indep_series].copy())
+        df_pairs_non_independent = normalize_pair_columns(
+            df_pairs[~indep_series].copy()
+        )
+    else:
+        logger.warning("INDEPENDENT column missing; creating empty pair segments")
+        df_pairs_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+        df_pairs_non_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+
+    combined["pairs_independent"] = df_pairs_independent
+    combined["pairs_non_independent"] = df_pairs_non_independent
+
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -682,7 +698,14 @@ def build_combined_tables(
             combined["activity"], status_api
         )
 
-        for pair_key in ("pairs", "pairs_same_document"):
+        pair_keys = (
+            "pairs",
+            "pairs_same_document",
+            "pairs_independent",
+            "pairs_non_independent",
+        )
+
+        for pair_key in pair_keys:
             if pair_key not in combined:
                 logger.warning("skip initialize_pairs: table '%s' missing", pair_key)
                 continue
@@ -701,7 +724,7 @@ def build_combined_tables(
                 )
 
         pair_table = None
-        for pair_key in ("pairs", "pairs_same_document"):
+        for pair_key in pair_keys:
             if pair_key in combined and {"Filtered1", "Filtered2"}.issubset(
                 combined[pair_key].columns
             ):
@@ -1040,10 +1063,8 @@ def aggregate_activity(
     missing = [m for m in metrics if m not in df_pairs.columns]
     if missing:
         logger.warning(
-
             "pair table missing %s %s; filling with zeros",
             "column" if len(missing) == 1 else "columns",
-
             ", ".join(missing),
         )
         for col in missing:
@@ -1092,7 +1113,6 @@ def aggregate_activity(
         system_status["target_id"] = split[1]
         system_status["standard_type"] = split[2]
 
-
     if "testitem_id" in merged.columns:
         testitem_status = _aggregate_entity(merged, "testitem_id", status_api)
     elif "testitem_id" not in missing_sys:
@@ -1108,7 +1128,6 @@ def aggregate_activity(
         testitem_status = pd.DataFrame(
             columns=["testitem_id", "Filtered.new", *metrics]
         )
-
 
     if "target_id" in merged.columns:
         target_status = _aggregate_entity(merged, "target_id", status_api)
