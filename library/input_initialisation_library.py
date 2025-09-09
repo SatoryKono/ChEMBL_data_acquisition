@@ -644,6 +644,7 @@ def build_combined_tables(
                 )
             else:
                 combined[pair_key] = df_pair
+
                 logger.warning(
                     "skip initialize_pairs: table '%s' missing or has no activity_id1/activity_id2",
                     pair_key,
