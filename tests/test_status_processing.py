@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from library.input_initialisation_library import (
@@ -73,3 +75,15 @@ def test_status_pipeline(tmp_path):
     agg = aggregate_activity(pair_df, activity, api)
     assert agg["activity"].set_index("activity_id").loc[1, "Filtered.new"] == "bad"
     assert agg["assay"].loc[0, "independent_IC50"] == 1
+
+
+def test_load_status_table_skips_empty_rows(tmp_path: Path) -> None:
+    """``load_status_table`` should ignore completely empty CSV lines."""
+    (tmp_path / "status.csv").write_text(
+        "status,condition_field,condition_value,order,score\n"
+        "good,null,null,0,1\n"
+        "\n"
+        "bad,null,null,1,2\n"
+    )
+    df = load_status_table(tmp_path)
+    assert df["status"].tolist() == ["good", "bad"]
