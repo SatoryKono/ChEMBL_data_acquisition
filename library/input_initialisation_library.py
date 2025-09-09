@@ -593,6 +593,7 @@ def build_combined_tables(
         )
         combined[entity] = df
 
+
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -613,6 +614,7 @@ def build_combined_tables(
         else:
 
             logger.warning("pair table not found; skipping status aggregation")
+
 
     # --- activity --------------------------------------------------------
     df_same_act = unify_dtypes(same["activity"])
@@ -645,6 +647,28 @@ def build_combined_tables(
     logger.info("Entity pairs: rows=%d", len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
     combined["pairs"] = df_pairs
+
+
+    if dictionary_dir is not None:
+        status_df = load_status_table(dictionary_dir)
+        status_api = build_status_helpers(status_df)
+        combined["activity"] = initialize_activity_status(
+            combined["activity"], status_api
+        )
+        pair_table = None
+        for table in combined.values():
+            if {"activity_id1", "activity_id2"}.issubset(table.columns):
+                pair_table = table.copy()
+                break
+        if pair_table is not None:
+            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
+            aggregates = aggregate_activity(
+                pair_table, combined["activity"], status_api
+            )
+            combined.update({f"{k}_status": v for k, v in aggregates.items()})
+        else:
+            logger.warning("pair table not found; skipping status aggregation")
+
 
     return combined
 
