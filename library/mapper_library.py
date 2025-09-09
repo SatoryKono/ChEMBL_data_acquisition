@@ -17,6 +17,7 @@ API_BASE = "https://rest.uniprot.org/idmapping"
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
 
+
 def map_chembl_to_uniprot(
     chembl_target_id: str,
     poll_interval: float = 0.5,
@@ -64,7 +65,7 @@ def map_chembl_to_uniprot(
             if opener is urllib.request.urlopen:
                 with opener(url, data=data, timeout=30) as response:
                     return json.load(response)
-            else: # For mock openers used in tests
+            else:  # For mock openers used in tests
                 with opener(url, data=data) as response:
                     return json.load(response)
         except HTTPError as exc:  # pragma: no cover - network failure simulation
@@ -91,10 +92,10 @@ def map_chembl_to_uniprot(
     # Poll the job status until it finishes
     status_url = f"{API_BASE}/status/{job_id}"
     start = time.time()
-    result_data = {} # Initialize result_data
+    result_data = {}  # Initialize result_data
     while True:
         status_data = _open_json(status_url)
-        
+
         # Check for results in the response, which indicates a redirect has occurred
         if "results" in status_data:
             result_data = status_data
@@ -116,7 +117,7 @@ def map_chembl_to_uniprot(
     if not result_data:
         result_url = f"{API_BASE}/uniprotkb/results/{job_id}?format=json"
         result_data = _open_json(result_url)
-    
+
     results = result_data.get("results", [])
     if not results:
         return None
@@ -131,9 +132,13 @@ def map_chembl_to_uniprot(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Map ChEMBL IDs to UniProt accessions in a CSV file.")
+    parser = argparse.ArgumentParser(
+        description="Map ChEMBL IDs to UniProt accessions in a CSV file."
+    )
     parser.add_argument("csv_file", help="Path to the CSV file to process.")
-    parser.add_argument("chembl_id_column", help="Name of the column containing ChEMBL IDs.")
+    parser.add_argument(
+        "chembl_id_column", help="Name of the column containing ChEMBL IDs."
+    )
     args = parser.parse_args()
 
     try:
@@ -146,10 +151,12 @@ if __name__ == "__main__":
         exit(1)
 
     if args.chembl_id_column not in df.columns:
-        logging.error(f"Error: Column '{args.chembl_id_column}' not found in the CSV file.")
+        logging.error(
+            f"Error: Column '{args.chembl_id_column}' not found in the CSV file."
+        )
         exit(1)
 
-    uniprot_ids = []
+    uniprot_ids: list[str | None] = []
     for chembl_id in df[args.chembl_id_column]:
         if pd.isna(chembl_id) or not str(chembl_id).strip():
             uniprot_ids.append(None)
@@ -166,7 +173,7 @@ if __name__ == "__main__":
             uniprot_ids.append(None)
 
     df["mapping_uniprot_id"] = uniprot_ids
-    
+
     try:
         df.to_csv(args.csv_file, index=False)
         logging.info(f"Successfully updated '{args.csv_file}' with UniProt IDs.")

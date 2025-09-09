@@ -11,32 +11,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 
+from .validation import validate_schema
+
 logger = logging.getLogger(__name__)
-
-
-def _validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
-    """Ensure that *df* contains all *required* columns.
-
-    Parameters
-    ----------
-    df:
-        DataFrame to validate.
-    required:
-        Iterable of mandatory column names.
-
-    Raises
-    ------
-    ValueError
-        If any of the required columns is missing from ``df``.
-    """
-
-    missing = set(required) - set(df.columns)
-    if missing:
-        raise ValueError(f"missing required columns: {', '.join(sorted(missing))}")
 
 
 def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
@@ -49,7 +29,7 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df:
-        DataFrame produced by :func:`library.chembl_library.get_assays_all`.
+        DataFrame produced by :func:`library.chembl_library.get_assays`.
 
     Returns
     -------
@@ -57,16 +37,20 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
         Copy of the input with the additional ``assay_with_same_target`` column.
     """
 
-    _validate_columns(df, ["document_chembl_id", "target_chembl_id"])
-    df = df.copy()
+    validate_schema(
+        df,
+        {
+            "document_chembl_id": "object",
+            "target_chembl_id": "object",
+        },
+    )
     counts = (
         df.groupby(["document_chembl_id", "target_chembl_id"])
         .size()
         .rename("assay_with_same_target")
     )
     logger.debug("Calculated counts for %d document/target groups", len(counts))
-    df = df.merge(counts, on=["document_chembl_id", "target_chembl_id"], how="left")
-    return df
+    return df.merge(counts, on=["document_chembl_id", "target_chembl_id"], how="left")
 
 
 def postprocess_file(

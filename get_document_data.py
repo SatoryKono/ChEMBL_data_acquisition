@@ -108,7 +108,7 @@ def fetch_pubmed_records(
                     combined.update(crossref)
                     combined_records.append(combined)
                 return combined_records
-        except Exception as exc:  # pragma: no cover - network errors
+        except requests.RequestException as exc:  # pragma: no cover - network errors
             logger.warning("failed to fetch PMIDs %s: %s", batch, exc)
             return [{} for _ in batch]
 
@@ -151,7 +151,7 @@ def run_pubmed(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
@@ -168,7 +168,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    df = cl.get_documents(ids, chunk_size=args.chunk_size)
+    df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
@@ -178,7 +178,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
@@ -195,7 +195,7 @@ def run_all(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)
+    doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
     output = args.output_csv or io.default_output_path(args.input_csv)
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
@@ -216,7 +216,7 @@ def run_all(args: argparse.Namespace) -> int:
             return 1
         try:
             analyze_table_quality(processed, table_name=str(output.with_suffix("")))
-        except Exception as exc:
+        except ValueError as exc:
             logger.error("failed to generate quality report: %s", exc)
             return 1
         return 0
@@ -255,7 +255,7 @@ def run_all(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(processed, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
