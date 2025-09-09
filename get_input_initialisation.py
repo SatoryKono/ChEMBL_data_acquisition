@@ -4,6 +4,8 @@ Exports pair tables without merging:
 
 - ``pairs_same_document.csv`` from sheet ``pairs_same_doc`` in ``--same-doc``
 - ``pairs.csv`` from sheet ``pairs_step5`` in ``--all-doc``
+- ``pairs_independent.csv`` and ``pairs_non_independent.csv`` derived from
+  ``pairs`` based on the ``INDEPENDENT`` flag
 """
 
 from __future__ import annotations

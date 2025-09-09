@@ -100,7 +100,7 @@ def test_build_combined_tables_adds_pair_metrics() -> None:
         "testitem": pd.DataFrame(),
         "activity": pd.DataFrame(),
         "pairs_same_document": pd.DataFrame(
-            {"INDEPENDENT": [False], "mesurement_type": ["Ki"]}
+            {"INDEPENDENT": [False], "standard_type": ["Ki"]}
         ),
     }
     all_: TableDict = {
@@ -109,11 +109,13 @@ def test_build_combined_tables_adds_pair_metrics() -> None:
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
         "activity": pd.DataFrame(),
-        "pairs": pd.DataFrame({"INDEPENDENT": [True], "mesurement_type": ["IC50"]}),
+        "pairs": pd.DataFrame({"INDEPENDENT": [True], "standard_type": ["IC50"]}),
     }
     combined = build_combined_tables(same, all_)
     assert combined["pairs"].loc[0, "independent_IC50"] == 1
     assert combined["pairs_same_document"].loc[0, "non_independent_Ki"] == 1
+    assert len(combined["pairs_independent"]) == 1
+    assert len(combined["pairs_non_independent"]) == 0
 
 
 def test_build_combined_tables_handles_status(
@@ -208,6 +210,54 @@ def test_build_combined_tables_initializes_pair_tables(
         "bad",
         "good",
     ]
+
+
+def test_build_combined_tables_initializes_pair_segments(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Derived pair segments should receive Filtered columns."""
+
+    same: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [1]}),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [2]}),
+        "pairs": pd.DataFrame(
+            {
+                "INDEPENDENT": [True, False],
+                "activity_id1": [1, 2],
+                "activity_id2": [2, 1],
+            }
+        ),
+    }
+
+    (tmp_path / "status.csv").write_text(
+        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+    )
+
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+
+    def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
+        mapping = {1: "good", 2: "good"}
+        return df.assign(**{"Filtered.init": df["activity_id"].map(mapping)})
+
+    monkeypatch.setattr(lib, "initialize_activity_status", fake_init)
+    monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
+
+    combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
+    assert len(combined["pairs_independent"]) == 1
+    assert len(combined["pairs_non_independent"]) == 1
+    for key in ("pairs_independent", "pairs_non_independent"):
+        assert {"Filtered1", "Filtered2", "Filtered"}.issubset(combined[key].columns)
 
 
 def test_build_combined_tables_normalizes_pair_column_names(
@@ -320,12 +370,12 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
     expected_cols = [
         "activity_id",
         "saltform_id",
-        "molecule_id",
+        "testitem_id",
         "target_id",
         "assay_id",
         "document_id",
         "bao_endpoint",
-        "mesurement_type",
+        "standard_type",
         "standard_value",
         "pA_value",
         "bao_format",
