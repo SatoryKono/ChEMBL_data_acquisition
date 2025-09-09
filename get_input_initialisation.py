@@ -38,7 +38,9 @@ def run(args: argparse.Namespace) -> int:
         all_ = lib.load_all_doc(args.all_doc)
 
         logger.info("Combining tables")
-        tables = lib.build_combined_tables(same, all_, dictionary_dir=args.dictionary_dir)
+        tables = lib.build_combined_tables(
+            same, all_, dictionary_dir=args.dictionary_dir
+        )
 
         logger.info("Saving output")
         paths = lib.save_tables(tables, args.out_dir, fmt=args.format)

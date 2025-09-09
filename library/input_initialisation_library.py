@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Literal
+from typing import Any, Dict, Iterable, Literal
 import logging
 
 import pandas as pd
@@ -177,9 +177,7 @@ def process_activity_table(
     # --- unknown chirality -------------------------------------------------
     if "nstereo" in df.columns:
 
-        df["unknown_chirality"] = (
-            df["nstereo"].astype("Int64").ne(1).fillna(True)
-        )
+        df["unknown_chirality"] = df["nstereo"].astype("Int64").ne(1).fillna(True)
         df.drop(columns=["nstereo"], inplace=True)
 
     else:
@@ -187,7 +185,6 @@ def process_activity_table(
         # mirrors the Power Query behaviour where missing stereochemistry is
         # treated as unknown.
         df["unknown_chirality"] = pd.Series(True, index=df.index, dtype="boolean")
-
 
     # --- multimol assay map ------------------------------------------------
     group_cols = [
@@ -204,12 +201,7 @@ def process_activity_table(
             + ", ".join(sorted(missing))
         )
 
-    counts = (
-        df.groupby(group_cols, dropna=False)
-        .size()
-        .rename("Count")
-        .reset_index()
-    )
+    counts = df.groupby(group_cols, dropna=False).size().rename("Count").reset_index()
     df = df.merge(counts, on=group_cols, how="left")
 
     mask = (
@@ -223,7 +215,6 @@ def process_activity_table(
     df["multmol_assay"] = (
         df["multmol_assay"].astype("boolean").fillna(False).astype(bool)
         | df["multimol_assay_same"]
-
     )
     df.drop(columns=["multimol_assay_same", "Count"], inplace=True)
 
@@ -327,7 +318,6 @@ def process_activity_table(
 
     df = df.merge(
         targets[["chembl_id", "IUPHAR_class", "IUPHAR_subclass", "type"]],
-
         how="left",
         left_on="target_id",
         right_on="chembl_id",
@@ -337,9 +327,7 @@ def process_activity_table(
         "Viruses": True,
         "Unicellular organism": True,
     }
-    df["unicellular_organism"] = (
-        df["type"].map(mapping).fillna(False).astype(bool)
-    )
+    df["unicellular_organism"] = df["type"].map(mapping).fillna(False).astype(bool)
 
     df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
 
@@ -371,12 +359,10 @@ def process_activity_table(
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
-
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
-
     ]
 
     missing_final = set(final_cols) - set(df.columns)
@@ -399,9 +385,7 @@ def process_activity_table(
         "high_citation_rate",
         "is_citation",
         "unicellular_organism",
-
         "multifunctional_enzyme",
-
     ]
     for col in bool_cols_final:
         df[col] = df[col].astype("boolean")
@@ -609,18 +593,22 @@ def build_combined_tables(
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
-        combined['activity'] = initialize_activity_status(combined['activity'], status_api)
+        combined["activity"] = initialize_activity_status(
+            combined["activity"], status_api
+        )
         pair_table = None
         for table in list(all_.values()) + list(same.values()):
-            if {'activity_id1', 'activity_id2'}.issubset(table.columns):
+            if {"activity_id1", "activity_id2"}.issubset(table.columns):
                 pair_table = table.copy()
                 break
         if pair_table is not None:
-            pair_table = initialize_pairs(pair_table, combined['activity'], status_api)
-            aggregates = aggregate_activity(pair_table, combined['activity'], status_api)
-            combined.update({f'{k}_status': v for k, v in aggregates.items()})
+            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
+            aggregates = aggregate_activity(
+                pair_table, combined["activity"], status_api
+            )
+            combined.update({f"{k}_status": v for k, v in aggregates.items()})
         else:
-            logger.warning('pair table not found; skipping status aggregation')
+            logger.warning("pair table not found; skipping status aggregation")
     return combined
 
 
@@ -659,6 +647,7 @@ def save_tables(
 
 # Status processing -----------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class StatusAPI:
     """Container for status table helpers.
@@ -687,7 +676,11 @@ class StatusAPI:
         return self.min_status([s1, s2])
 
     def next(self, status: str) -> str:
-        idx = self.status_list.index(status) if status in self.status_list else len(self.status_list) - 1
+        idx = (
+            self.status_list.index(status)
+            if status in self.status_list
+            else len(self.status_list) - 1
+        )
         return self.status_list[min(idx + 1, len(self.status_list) - 1)]
 
     def min_status(self, statuses: Iterable[str]) -> str:
@@ -713,6 +706,7 @@ class StatusAPI:
 
     def descending(self, s1: str, s2: str) -> bool:
         return self.get_order(s1) > self.get_order(s2)
+
     def Next(self, status: str) -> str:
         return self.next(status)
 
@@ -772,19 +766,9 @@ def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
     return StatusAPI(status_df, status_list, conditions, order_map, score_map)
 
 
-def _active(row: pd.Series, fields: Iterable[str]) -> list[str]:
-    """Return names of condition fields active in ``row``."""
-    return [f for f in fields if bool(row.get(f, False))]
-
-
-def _min_by_condition(fields: Iterable[str], status_api: StatusAPI) -> str:
-    sub = status_api.table[status_api.table["condition_field"].isin(list(fields))]
-    if sub.empty:
-        return status_api.status_list[-1]
-    return sub.iloc[0]["status"]
-
-
-def initialize_activity_status(df_activity: pd.DataFrame, status_api: StatusAPI) -> pd.DataFrame:
+def initialize_activity_status(
+    df_activity: pd.DataFrame, status_api: StatusAPI
+) -> pd.DataFrame:
     """Add status flags and initial status to activity table."""
     df = df_activity.copy()
     issue_cols = [
@@ -799,18 +783,40 @@ def initialize_activity_status(df_activity: pd.DataFrame, status_api: StatusAPI)
         "multifunctional_enzyme",
         "unknown_chirality",
     ]
-    for col in issue_cols:
-        if col not in df.columns:
-            df[col] = False
-        df[col] = df[col].fillna(False).astype("boolean")
+    for issue in issue_cols:
+        if issue not in df.columns:
+            df[issue] = False
+        df[issue] = df[issue].fillna(False).astype("boolean")
     df["no_issue"] = ~df[issue_cols].any(axis=1)
-    df["Filtered.init"] = [
-        _min_by_condition(_active(row, status_api.conditions), status_api) for _, row in df.iterrows()
-    ]
+
+    # Map condition fields to their corresponding status and order
+    cond_rows = status_api.table[status_api.table["condition_value"] != "null"]
+    field_to_status = dict(zip(cond_rows["condition_field"], cond_rows["status"]))
+    order_to_status = {v: k for k, v in status_api.order_map.items()}
+    default_order = status_api.order_map[status_api.status_list[-1]]
+
+    # Build a dataframe of candidate orders per condition field
+    order_df = pd.DataFrame(index=df.index)
+    for field, status in field_to_status.items():
+        if field not in df.columns:
+            df[field] = False
+        mask = df[field].fillna(False)
+        order_series = pd.Series(default_order, index=df.index)
+        order_series[mask] = status_api.order_map[status]
+        order_df[field] = order_series
+
+    min_order = (
+        order_df.min(axis=1)
+        if not order_df.empty
+        else pd.Series(default_order, index=df.index)
+    )
+    df["Filtered.init"] = min_order.map(order_to_status)
     return df
 
 
-def initialize_pairs(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI) -> pd.DataFrame:
+def initialize_pairs(
+    pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
+) -> pd.DataFrame:
     """Merge activity statuses into ``pair_df``."""
     df = pair_df.copy()
     mapping = activity_df[["activity_id", "Filtered.init"]]
@@ -830,7 +836,9 @@ def initialize_pairs(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_ap
     return df
 
 
-def _aggregate_entity(source: pd.DataFrame, group_col: str, status_api: StatusAPI) -> pd.DataFrame:
+def _aggregate_entity(
+    source: pd.DataFrame, group_col: str, status_api: StatusAPI
+) -> pd.DataFrame:
     metrics = [
         "independent_IC50",
         "non_independent_IC50",
@@ -838,7 +846,9 @@ def _aggregate_entity(source: pd.DataFrame, group_col: str, status_api: StatusAP
         "non_independent_Ki",
     ]
     agg: dict[str, Any] = {
-        "Filtered.new": lambda s: status_api.max_status([x for x in s if isinstance(x, str)]),
+        "Filtered.new": lambda s: status_api.max_status(
+            [x for x in s if isinstance(x, str)]
+        ),
     }
     for m in metrics:
         agg[m] = "sum"
@@ -846,7 +856,9 @@ def _aggregate_entity(source: pd.DataFrame, group_col: str, status_api: StatusAP
     return source[keep].groupby(group_col, as_index=False).agg(agg)
 
 
-def aggregate_activity(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI) -> Dict[str, pd.DataFrame]:
+def aggregate_activity(
+    pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
+) -> Dict[str, pd.DataFrame]:
     """Aggregate status metrics across entities."""
     metrics = [
         "independent_IC50",
@@ -855,12 +867,12 @@ def aggregate_activity(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_
         "non_independent_Ki",
     ]
 
-    left = pair_df.rename(columns={"activity_id1": "activity_id", "Filtered1": "Filtered.new"})[
-        ["activity_id", "Filtered.new", *metrics]
-    ]
-    right = pair_df.rename(columns={"activity_id2": "activity_id", "Filtered2": "Filtered.new"})[
-        ["activity_id", "Filtered.new", *metrics]
-    ]
+    left = pair_df.rename(
+        columns={"activity_id1": "activity_id", "Filtered1": "Filtered.new"}
+    )[["activity_id", "Filtered.new", *metrics]]
+    right = pair_df.rename(
+        columns={"activity_id2": "activity_id", "Filtered2": "Filtered.new"}
+    )[["activity_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
     activity_status = _aggregate_entity(activity_pairs, "activity_id", status_api)
 
@@ -889,6 +901,17 @@ def aggregate_activity(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_
 
     testitem_status = _aggregate_entity(system_status, "testitem_id", status_api)
     target_status = _aggregate_entity(system_status, "target_id", status_api)
+
+    # metrics are counted per activity; divide by 2 for higher-level aggregations
+    for df in [
+        assay_status,
+        document_status,
+        system_status,
+        testitem_status,
+        target_status,
+    ]:
+        for m in metrics:
+            df[m] = (df[m] / 2).astype("float64")
 
     return {
         "activity": activity_status,
