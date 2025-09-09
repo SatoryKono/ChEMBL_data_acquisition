@@ -6,7 +6,7 @@ Exports pair tables without merging:
 
 - ``pairs_independent.csv`` and ``pairs_non_independent.csv`` derived from
   ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag
-
+"""
 
 from __future__ import annotations
 
