@@ -688,6 +688,22 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
+    if "INDEPENDENT" in df_pairs.columns:
+        indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
+            False
+        )
+        df_pairs_independent = normalize_pair_columns(df_pairs[indep_series].copy())
+        df_pairs_non_independent = normalize_pair_columns(
+            df_pairs[~indep_series].copy()
+        )
+    else:
+        logger.warning("INDEPENDENT column missing; creating empty pair segments")
+        df_pairs_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+        df_pairs_non_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+
+    combined["pairs_independent"] = df_pairs_independent
+    combined["pairs_non_independent"] = df_pairs_non_independent
+
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -719,10 +735,12 @@ def build_combined_tables(
                     pair_key,
                 )
 
+
         pair_table = combined.get("pairs_independent")
         if pair_table is not None and {"Filtered1", "Filtered2"}.issubset(
             pair_table.columns
         ):
+
             aggregates = aggregate_activity(
                 pair_table, combined["activity"], status_api
             )

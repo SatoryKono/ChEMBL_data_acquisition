@@ -20,7 +20,9 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
         "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
         "pairs_independent": pd.DataFrame({"id": [5]}),
         "pairs_non_independent": pd.DataFrame({"id": [6]}),
+
         "activity_status": pd.DataFrame({"id": [7]}),
+
     }
 
     def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub

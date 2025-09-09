@@ -247,7 +247,9 @@ def test_build_combined_tables_initializes_pair_segments(
     }
 
     (tmp_path / "status.csv").write_text(
+
         "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
+
     )
 
     monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
@@ -264,6 +266,7 @@ def test_build_combined_tables_initializes_pair_segments(
     assert len(combined["pairs_non_independent"]) == 1
     for key in ("pairs_independent", "pairs_non_independent"):
         assert {"Filtered1", "Filtered2", "Filtered"}.issubset(combined[key].columns)
+
 
 
 def test_build_combined_tables_aggregates_from_pairs_independent(
