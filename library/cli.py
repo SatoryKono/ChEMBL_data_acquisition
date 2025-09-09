@@ -24,8 +24,8 @@ def _positive_int(value: str) -> int:
     ------
     argparse.ArgumentTypeError
         If ``value`` is not a positive integer.
-    """
 
+    """
     try:
         ivalue = int(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
@@ -48,8 +48,8 @@ def build_parser(
         Default column name for identifier extraction.
     chunk_size:
         Default chunk size for API requests.
-    """
 
+    """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
@@ -89,7 +89,7 @@ def configure_logging(level: str) -> None:
     ----------
     level:
         Textual logging level (e.g. ``"INFO"``, ``"DEBUG"``).
-    """
 
+    """
     numeric = getattr(logging, level.upper(), logging.INFO)
     logging.basicConfig(level=numeric, force=True)

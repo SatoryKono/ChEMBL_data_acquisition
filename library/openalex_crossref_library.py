@@ -16,7 +16,9 @@ from . import pubmed_library as _pl
 logger = logging.getLogger(__name__)
 
 
-def fetch_openalex(session: requests.Session, pmid: str, sleep: float) -> Dict[str, str]:
+def fetch_openalex(
+    session: requests.Session, pmid: str, sleep: float
+) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
     Parameters
@@ -27,8 +29,8 @@ def fetch_openalex(session: requests.Session, pmid: str, sleep: float) -> Dict[s
         PubMed identifier.
     sleep: float
         Delay before making the request in seconds.
-    """
 
+    """
     return _pl.fetch_openalex(session, pmid, sleep)
 
 
@@ -43,6 +45,6 @@ def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[st
         Digital Object Identifier of the article.
     sleep: float
         Delay before making the request in seconds.
-    """
 
+    """
     return _pl.fetch_crossref(session, doi, sleep)

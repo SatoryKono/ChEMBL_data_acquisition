@@ -186,7 +186,6 @@ def process_activity_table(
         indicator.
 
     """
-
     logger.info("Processing activity table")
     df = df_activity.copy()
 
@@ -418,6 +417,7 @@ def _ensure_openpyxl() -> None:
     ------
     RuntimeError
         If ``openpyxl`` is missing or too old.
+
     """
     try:
         import openpyxl  # type: ignore
@@ -447,6 +447,7 @@ def _read_sheet(
     ------
     ValueError
         If the sheet is missing.
+
     """
     _ensure_openpyxl()
     try:
@@ -475,6 +476,7 @@ def load_same_doc(xlsx_path: Path) -> TableDict:
     -------
     dict
         Mapping of entity names to DataFrames.
+
     """
     tables: TableDict = {}
     for sheet, entity in SAME_DOC_SHEETS.items():
@@ -581,8 +583,8 @@ def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
         Copy of ``df`` with four additional integer columns indicating the
         count of independent or non-independent measurements for ``IC50`` and
         ``Ki`` values.
-    """
 
+    """
     result = df.copy()
     indep_col, type_col = "INDEPENDENT", "standard_type"
     if {indep_col, type_col}.issubset(result.columns):
@@ -618,7 +620,6 @@ def build_combined_tables(
     dictionary_dir: Path | str | None = None,
 ) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources."""
-
     combined: TableDict = {}
 
     # --- regular entities -------------------------------------------------
@@ -704,8 +705,6 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
-    
-
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -737,7 +736,6 @@ def build_combined_tables(
                     pair_key,
                 )
 
-
         for suffix, pair_key in [
             ("independent", "pairs_independent"),
             ("non_independent", "pairs_non_independent"),
@@ -758,7 +756,6 @@ def build_combined_tables(
                     "%s table missing or lacks Filtered columns; skipping status aggregation",
                     pair_key,
                 )
-
 
     return combined
 
@@ -783,6 +780,7 @@ def save_tables(
     -------
     dict
         Mapping of entity names to written file paths.
+
     """
     if fmt != "csv":
         raise ValueError("only csv output is supported")
@@ -828,6 +826,7 @@ class StatusAPI:
         Mapping of status to its ``order``.
     score_map:
         Mapping of status to ``score``.
+
     """
 
     table: pd.DataFrame
@@ -837,9 +836,35 @@ class StatusAPI:
     score_map: Dict[str, int]
 
     def pair(self, s1: str, s2: str) -> str:
+        """Return the lower-ranked status between ``s1`` and ``s2``.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        str
+            The status with the smaller ``order`` value.
+
+        """
         return self.min_status([s1, s2])
 
     def next(self, status: str) -> str:
+        """Return the status following ``status`` in ``status_list``.
+
+        Parameters
+        ----------
+        status:
+            Current status value.
+
+        Returns
+        -------
+        str
+            The next status or the last element if ``status`` is unknown.
+
+        """
         idx = (
             self.status_list.index(status)
             if status in self.status_list
@@ -848,42 +873,188 @@ class StatusAPI:
         return self.status_list[min(idx + 1, len(self.status_list) - 1)]
 
     def min_status(self, statuses: Iterable[str]) -> str:
+        """Return the lowest ``order`` value among ``statuses``.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            The status with the minimum ``order`` or the first element of
+            ``status_list`` if none are valid.
+
+        """
         valid = [s for s in statuses if s in self.order_map]
         if not valid:
             return self.status_list[0]
         return min(valid, key=lambda s: self.order_map[s])
 
     def max_status(self, statuses: Iterable[str]) -> str:
+        """Return the highest ``order`` value among ``statuses``.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            The status with the maximum ``order`` or the last element of
+            ``status_list`` if none are valid.
+
+        """
         valid = [s for s in statuses if s in self.order_map]
         if not valid:
             return self.status_list[-1]
         return max(valid, key=lambda s: self.order_map[s])
 
     def get_order(self, status: str) -> int:
+        """Return the numeric ``order`` for ``status``.
+
+        Parameters
+        ----------
+        status:
+            Status value to resolve.
+
+        Returns
+        -------
+        int
+            ``order`` associated with ``status``; uses the last element's value
+            as fallback.
+
+        """
         return self.order_map.get(status, self.order_map[self.status_list[-1]])
 
     def get_score(self, status: str) -> int:
+        """Return the ``score`` associated with ``status``.
+
+        Parameters
+        ----------
+        status:
+            Status value to look up.
+
+        Returns
+        -------
+        int
+            Score for ``status``; defaults to ``0`` when unknown.
+
+        """
         return self.score_map.get(status, 0)
 
     def ascending(self, s1: str, s2: str) -> bool:
+        """Return ``True`` if ``s1`` precedes ``s2`` by ``order`` value.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``s1`` has a lower ``order`` than ``s2``.
+
+        """
         return self.get_order(s1) < self.get_order(s2)
 
     def descending(self, s1: str, s2: str) -> bool:
+        """Return ``True`` if ``s1`` follows ``s2`` by ``order`` value.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``s1`` has a higher ``order`` than ``s2``.
+
+        """
         return self.get_order(s1) > self.get_order(s2)
 
     def Next(self, status: str) -> str:
+        """Compatibility alias for :meth:`next`.
+
+        Parameters
+        ----------
+        status:
+            Current status value.
+
+        Returns
+        -------
+        str
+            The next status according to :attr:`status_list`.
+
+        """
         return self.next(status)
 
     def MinStatus(self, statuses: Iterable[str]) -> str:
+        """Compatibility alias for :meth:`min_status`.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            Result of :meth:`min_status`.
+
+        """
         return self.min_status(statuses)
 
     def MaxStatus(self, statuses: Iterable[str]) -> str:
+        """Compatibility alias for :meth:`max_status`.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            Result of :meth:`max_status`.
+
+        """
         return self.max_status(statuses)
 
     def Ascending(self, s1: str, s2: str) -> bool:
+        """Compatibility alias for :meth:`ascending`.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            Result of :meth:`ascending`.
+
+        """
         return self.ascending(s1, s2)
 
     def Descending(self, s1: str, s2: str) -> bool:
+        """Compatibility alias for :meth:`descending`.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            Result of :meth:`descending`.
+
+        """
         return self.descending(s1, s2)
 
 
@@ -899,6 +1070,7 @@ def load_status_table(dictionary_dir: Path | str) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Status table sorted by ``order`` with proper dtypes.
+
     """
     path = Path(dictionary_dir) / "status.csv"
     df = pd.read_csv(
@@ -1015,8 +1187,8 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     pandas.DataFrame
         Copy of ``df`` with recognised activity ID columns renamed to
         ``activity_id1`` and ``activity_id2``.
-    """
 
+    """
     rename: dict[str, str] = {}
     for col in df.columns:
         key = col.lower().replace("_", "")
@@ -1077,7 +1249,6 @@ def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> Dict[str, pd.DataFrame]:
     """Aggregate status metrics across entities.
-
 
     The function combines activity pair information with per-activity
     annotations to produce status summaries for several entity levels.  Pair

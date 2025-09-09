@@ -1,3 +1,9 @@
+"""Utilities for retrieving and merging publication metadata.
+
+The functions in this module fetch information from PubMed, Semantic Scholar,
+OpenAlex and Crossref and consolidate it into tabular form.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -47,7 +53,7 @@ def _do_request(
     method: str = "GET",
     **kwargs: Any,
 ) -> Tuple[Union[Dict[str, Any], str, None], str]:
-    """Perform a GET or POST request with retry and error handling.
+    """Perform an HTTP request with retry and error handling.
 
     Parameters
     ----------
@@ -63,8 +69,15 @@ def _do_request(
         Number of additional attempts after the initial one.
     method:
         HTTP method to use, either "GET" or "POST".
+    **kwargs:
+        Additional parameters passed to ``session.get`` or ``session.post``.
 
-    Any extra keyword arguments are forwarded to ``session.get`` or ``session.post``.
+    Returns
+    -------
+    tuple
+        Pair of parsed data (dict/str/``None``) and an error message. The error
+        string is empty on success.
+
     """
     for attempt in range(retries + 1):
         if attempt:
@@ -118,8 +131,8 @@ def fetch_pubmed_batch(
     -------
     list of dict
         One metadata dictionary per PMID in ``pmids``.
-    """
 
+    """
     ids = ",".join(pmids)
     url = (
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id="
@@ -360,6 +373,23 @@ def fetch_pubmed(session: requests.Session, pmid: str, sleep: float) -> Dict[str
 def fetch_semantic_scholar(
     session: requests.Session, pmid: str, sleep: float
 ) -> Dict[str, str]:
+    """Retrieve Semantic Scholar metadata for a single PMID.
+
+    Parameters
+    ----------
+    session:
+        Active :class:`requests.Session`.
+    pmid:
+        PubMed identifier to query.
+    sleep:
+        Seconds to pause before making the request.
+
+    Returns
+    -------
+    dict
+        Mapping of Semantic Scholar fields and any error encountered.
+
+    """
     fields = "publicationTypes,externalIds,paperId,venue"
     headers = {"Accept": "application/json"}
     url = f"https://api.semanticscholar.org/graph/v1/paper/PMID:{pmid}"
@@ -483,6 +513,23 @@ def fetch_semantic_scholar_batch(
 def fetch_openalex(
     session: requests.Session, pmid: str, sleep: float
 ) -> Dict[str, str]:
+    """Retrieve OpenAlex metadata for ``pmid``.
+
+    Parameters
+    ----------
+    session:
+        Active :class:`requests.Session`.
+    pmid:
+        PubMed identifier to query.
+    sleep:
+        Seconds to pause before making the request.
+
+    Returns
+    -------
+    dict
+        Mapping of OpenAlex fields and any error encountered.
+
+    """
     url = f"https://api.openalex.org/works/pmid:{pmid}"
     data, error = _do_request(session, url, sleep)
     if error or not isinstance(data, dict):
@@ -520,6 +567,23 @@ def fetch_openalex(
 
 
 def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[str, str]:
+    """Retrieve Crossref metadata for a given DOI.
+
+    Parameters
+    ----------
+    session:
+        Active :class:`requests.Session`.
+    doi:
+        Digital Object Identifier to query.
+    sleep:
+        Seconds to pause before making the request.
+
+    Returns
+    -------
+    dict
+        Mapping of Crossref fields and any error encountered.
+
+    """
     if not doi:
         return {
             "crossref.Type": "",
@@ -555,7 +619,15 @@ def fetch_crossref(session: requests.Session, doi: str, sleep: float) -> Dict[st
     }
 
 
-def print_results(records: List[Dict[str, str]]):
+def print_results(records: List[Dict[str, str]]) -> None:
+    """Pretty-print result records to stdout.
+
+    Parameters
+    ----------
+    records:
+        Sequence of result dictionaries produced by ``main``.
+
+    """
     try:
         from tabulate import tabulate  # type: ignore
 
@@ -588,6 +660,7 @@ def print_results(records: List[Dict[str, str]]):
 
 
 def main() -> None:
+    """Command-line interface entry point."""
     parser = argparse.ArgumentParser(description="Fetch publication metadata by PMID")
     parser.add_argument(
         "-i", "--input", required=True, help="Input CSV path with PMID column"

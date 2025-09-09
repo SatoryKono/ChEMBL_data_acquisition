@@ -6,8 +6,24 @@ parsing, validation, aggregation and export of tabular data.
 
 ## Installation
 
+Clone the repository and install the runtime and development dependencies:
+
 ```bash
+git clone https://example.com/ChEMBL_data_acquisition.git
+cd ChEMBL_data_acquisition
 pip install -r requirements.txt
+```
+
+## Project structure
+
+```
+data/             Example input and output files
+dictionary/       Lookup tables used during processing
+library/          Reusable data-processing modules
+tests/            Pytest suite and sample datasets
+get_*.py          Command-line utilities for specific tasks
+mapper_main.py    Mapping CLI
+table_quality_main.py  CSV profiling CLI
 ```
 
 ## Command line interface
@@ -74,12 +90,12 @@ in ``--out-dir``.
 ## Development
 
 Formatting, linting and type checking are handled by *black*, *ruff* and
-*mypy* respectively:
+*mypy* respectively. Run the following before committing changes:
 
 ```bash
-black get_*.py library/io.py library/validation.py tests
-ruff get_*.py library/io.py library/validation.py tests
-mypy get_*.py library/io.py library/validation.py
+black get_*.py library mapper_main.py table_quality_main.py
+ruff check get_*.py library mapper_main.py table_quality_main.py
+mypy get_*.py library mapper_main.py table_quality_main.py
 pytest
 ```
 

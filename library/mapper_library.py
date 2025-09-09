@@ -49,8 +49,8 @@ def map_chembl_to_uniprot(
         If the mapping job does not complete within ``timeout`` seconds.
     URLError
         If a network-related error occurs.
-    """
 
+    """
     if opener is None:
         opener = urllib.request.urlopen
 

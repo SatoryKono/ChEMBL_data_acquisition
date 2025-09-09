@@ -43,8 +43,8 @@ def classify_dataframe(
     -------
     pandas.DataFrame
         Original dataframe with an added ``class_label`` column.
-    """
 
+    """
     result = df.copy()
 
     def _classify(row: pd.Series) -> str:
@@ -65,6 +65,14 @@ def classify_dataframe(
 
 
 def main() -> int:  # pragma: no cover - simple CLI
+    """Command-line entry point for document type classification.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Input CSV")
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")

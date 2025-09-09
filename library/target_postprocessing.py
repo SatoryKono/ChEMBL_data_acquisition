@@ -102,8 +102,8 @@ def _pipe_merge(values: Iterable[str | float | None]) -> str:
     -------
     str
         Unique tokens joined by ``"|"`` in their first appearance order.
-    """
 
+    """
     tokens: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -117,7 +117,6 @@ def _pipe_merge(values: Iterable[str | float | None]) -> str:
 
 def _first_token(value: str | float | None) -> str:
     """Return the first token from a pipe-delimited string."""
-
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
@@ -125,7 +124,6 @@ def _first_token(value: str | float | None) -> str:
 
 def _validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
     """Ensure that *df* contains all *required* columns."""
-
     missing = set(required) - set(df.columns)
     if missing:
         raise ValueError(f"missing required columns: {', '.join(sorted(missing))}")
@@ -153,8 +151,8 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
     -----
     Behaviour is exercised in
     :func:`tests.test_target_postprocessing.test_postprocess_targets_merges_and_normalises`.
-    """
 
+    """
     df = df.copy()
 
     # --- normalise identifiers -------------------------------------------------
@@ -317,8 +315,8 @@ def postprocess_file(
     -----
     Verified in
     :func:`tests.test_target_postprocessing.test_postprocess_file_roundtrip`.
-    """
 
+    """
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_targets(df)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
@@ -343,8 +341,8 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Cleaned table ready for export.
-    """
 
+    """
     _validate_columns(df, ["chembl_id", "uniprotkb_Id", "genus"])
     _validate_columns(organism, ["genus", "type"])
 
@@ -415,8 +413,8 @@ def finalise_file(
         Field delimiter of the CSV files.
     encoding:
         Text encoding of the CSV files.
-    """
 
+    """
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
     processed = finalise_targets(df, organism)

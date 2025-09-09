@@ -12,13 +12,14 @@ provides three sub-commands:
 ``all``
     Run the ChEMBL and PubMed pipelines and merge the results.
 
-Example
+Example:
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
     python get_document_data.py pubmed pmids.csv output.csv
 
 The input file must contain a ``PMID`` column.
+
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ def fetch_pubmed_records(
     -------
     pandas.DataFrame
         Combined metadata from the different sources.
+
     """
 
     def _fetch_batch(batch: list[str]) -> list[dict[str, str]]:
@@ -77,7 +79,6 @@ def fetch_pubmed_records(
         for each PMID. Exceptions are logged so a failure in one batch does not
         abort the whole process.
         """
-
         try:
             with requests.Session() as session:
                 pubmed_list = pl.fetch_pubmed_batch(session, batch, sleep)
@@ -134,7 +135,6 @@ def fetch_pubmed_records(
 
 def run_pubmed(args: argparse.Namespace) -> int:
     """Execute the ``pubmed`` sub-command."""
-
     try:
         pmids = io.read_ids(
             args.input_csv,
@@ -159,7 +159,6 @@ def run_pubmed(args: argparse.Namespace) -> int:
 
 def run_chembl(args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
-
     try:
         ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
@@ -190,7 +189,6 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def run_all(args: argparse.Namespace) -> int:
     """Run ChEMBL and PubMed pipelines and merge their outputs."""
-
     try:
         ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
@@ -270,6 +268,14 @@ def run_all(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Create the argument parser for document utilities.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser populated with all sub-commands.
+
+    """
     parser = argparse.ArgumentParser(description="Document data utilities")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -378,7 +384,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
-
     parser = build_parser()
     args = parser.parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
