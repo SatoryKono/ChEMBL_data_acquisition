@@ -192,7 +192,6 @@ def process_activity_table(
 
     # --- unknown chirality -------------------------------------------------
     if "nstereo" in df.columns:
-
         df["unknown_chirality"] = df["nstereo"].astype("Int64").ne(1).fillna(True)
         df.drop(columns=["nstereo"], inplace=True)
 
@@ -288,7 +287,6 @@ def process_activity_table(
     ]
     for col in bool_cols:
         if col in df.columns:
-
             df[col] = df[col].astype("boolean").fillna(False).astype(bool)
 
     df["is_citation"] = df[bool_cols].any(axis=1)
@@ -673,7 +671,22 @@ def build_combined_tables(
     logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
     logger.info("Entity pairs: rows=%d", len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
-    combined["pairs"] = df_pairs
+
+    if "INDEPENDENT" in df_pairs.columns:
+        indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
+            False
+        )
+        df_pairs_independent = normalize_pair_columns(df_pairs[indep_series].copy())
+        df_pairs_non_independent = normalize_pair_columns(
+            df_pairs[~indep_series].copy()
+        )
+    else:
+        logger.warning("INDEPENDENT column missing; creating empty pair segments")
+        df_pairs_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+        df_pairs_non_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+
+    combined["pairs_independent"] = df_pairs_independent
+    combined["pairs_non_independent"] = df_pairs_non_independent
 
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
@@ -682,7 +695,13 @@ def build_combined_tables(
             combined["activity"], status_api
         )
 
-        for pair_key in ("pairs", "pairs_same_document"):
+        pair_keys = (
+            "pairs_same_document",
+            "pairs_independent",
+            "pairs_non_independent",
+        )
+
+        for pair_key in pair_keys:
             if pair_key not in combined:
                 logger.warning("skip initialize_pairs: table '%s' missing", pair_key)
                 continue
@@ -700,20 +719,26 @@ def build_combined_tables(
                     pair_key,
                 )
 
-        pair_table = None
-        for pair_key in ("pairs", "pairs_same_document"):
-            if pair_key in combined and {"Filtered1", "Filtered2"}.issubset(
-                combined[pair_key].columns
+        for suffix, pair_key in [
+            ("independent", "pairs_independent"),
+            ("non_independent", "pairs_non_independent"),
+            ("same_document", "pairs_same_document"),
+        ]:
+            pair_table = combined.get(pair_key)
+            if pair_table is not None and {"Filtered1", "Filtered2"}.issubset(
+                pair_table.columns
             ):
-                pair_table = combined[pair_key]
-                break
-        if pair_table is not None:
-            aggregates = aggregate_activity(
-                pair_table, combined["activity"], status_api
-            )
-            combined.update({f"{k}_status": v for k, v in aggregates.items()})
-        else:
-            logger.warning("pair table not found; skipping status aggregation")
+                aggregates = aggregate_activity(
+                    pair_table, combined["activity"], status_api
+                )
+                combined.update(
+                    {f"{k}_{suffix}_status": v for k, v in aggregates.items()}
+                )
+            else:
+                logger.warning(
+                    "%s table missing or lacks Filtered columns; skipping status aggregation",
+                    pair_key,
+                )
 
     return combined
 
@@ -744,7 +769,18 @@ def save_tables(
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: Dict[str, Path] = {}
     for entity, df in tables.items():
-        path = out_dir / f"{entity}.csv"
+        if entity.endswith("_non_independent_status"):
+            sub_dir = out_dir / "status" / "non-independent"
+        elif entity.endswith("_independent_status"):
+            sub_dir = out_dir / "status" / "independent"
+        elif entity.endswith("_same_document_status"):
+            sub_dir = out_dir / "status" / "same_document"
+        elif entity.endswith("_status"):
+            sub_dir = out_dir / "status"
+        else:
+            sub_dir = out_dir
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        path = sub_dir / f"{entity}.csv"
         df.to_csv(path, index=False, encoding="utf-8", na_rep="")
         logger.info("Wrote %d rows to %s", len(df), path)
         paths[entity] = path
@@ -1040,10 +1076,8 @@ def aggregate_activity(
     missing = [m for m in metrics if m not in df_pairs.columns]
     if missing:
         logger.warning(
-
             "pair table missing %s %s; filling with zeros",
             "column" if len(missing) == 1 else "columns",
-
             ", ".join(missing),
         )
         for col in missing:
@@ -1077,7 +1111,6 @@ def aggregate_activity(
         )
         system_status = pd.DataFrame(columns=["system_id", "Filtered.new", *metrics])
     else:
-
         system_src = merged.copy()
         system_src["system_id"] = (
             system_src["testitem_id"].astype("string")
@@ -1092,11 +1125,9 @@ def aggregate_activity(
         system_status["target_id"] = split[1]
         system_status["standard_type"] = split[2]
 
-
     if "testitem_id" in merged.columns:
         testitem_status = _aggregate_entity(merged, "testitem_id", status_api)
     elif "testitem_id" not in missing_sys:
-
         logger.warning(
             "activity table missing column testitem_id; skipping testitem aggregation"
         )
@@ -1108,7 +1139,6 @@ def aggregate_activity(
         testitem_status = pd.DataFrame(
             columns=["testitem_id", "Filtered.new", *metrics]
         )
-
 
     if "target_id" in merged.columns:
         target_status = _aggregate_entity(merged, "target_id", status_api)
