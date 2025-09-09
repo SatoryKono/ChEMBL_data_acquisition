@@ -15,8 +15,17 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-EntityName = Literal["activity", "assay", "document", "target", "testitem"]
-TableDict = Dict[str, pd.DataFrame]
+
+EntityName = Literal[
+    "activity",
+    "assay",
+    "document",
+    "target",
+    "testitem",
+    "pairs",
+    "pairs_same_document",
+]
+
 
 # Mapping of sheet names to entity identifiers
 SAME_DOC_SHEETS: dict[str, EntityName] = {
@@ -25,6 +34,7 @@ SAME_DOC_SHEETS: dict[str, EntityName] = {
     "target_step5_same_doc": "target",
     "document_step5_same_doc": "document",
     "activities_step5_same": "activity",
+    "pairs_same_doc": "pairs_same_document",
 }
 
 ALL_DOC_SHEETS: dict[str, EntityName] = {
@@ -33,6 +43,7 @@ ALL_DOC_SHEETS: dict[str, EntityName] = {
     "target_step5": "target",
     "document_step5": "document",
     "activities_step5": "activity",
+    "step5_pairs": "pairs",
 }
 
 # Columns that should be removed from the combined activity table
@@ -554,42 +565,29 @@ def build_combined_tables(
     dictionary_dir: Path | str | None = None,
 ) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources."""
-    combined: TableDict = {}
-    for entity in SAME_DOC_SHEETS.values():
+
+    combined: Dict[EntityName, pd.DataFrame] = {}
+
+    # --- regular entities -------------------------------------------------
+    regular_entities: tuple[EntityName, ...] = (
+        "assay",
+        "document",
+        "target",
+        "testitem",
+    )
+    for entity in regular_entities:
         df_same = unify_dtypes(same[entity])
         df_all = unify_dtypes(all_[entity])
-        rows_same = len(df_same)
-        rows_all = len(df_all)
-        if entity == "activity":
-            concat = pd.concat([df_same, df_all], ignore_index=True, sort=False)
-            concat = concat.drop(
-                columns=list(ACTIVITY_DROP_COLS & set(concat.columns)),
-                errors="ignore",
-            )
-            df = concat.drop_duplicates(keep="first")
-            if dictionary_dir is not None:
-                df = process_activity_table(df, dictionary_dir)
-            rows_concat = len(concat)
-            rows_after = len(df)
-        else:
-            df = append_entities(df_same, df_all)
-            rows_concat = rows_same + rows_all
-            rows_after = len(df)
+        df = append_entities(df_same, df_all)
         logger.info(
-            "Entity %s: rows_same=%d rows_all=%d rows_concat=%d rows_after_dedup=%d",
+            "Entity %s: rows_same=%d rows_all=%d rows_after_dedup=%d",
             entity,
-            rows_same,
-            rows_all,
-            rows_concat,
-            rows_after,
+            len(df_same),
+            len(df_all),
+            len(df),
         )
-        if entity == "activity":
-            remaining = ACTIVITY_DROP_COLS & set(df.columns)
-            if remaining:
-                raise ValueError(
-                    f"activity table still contains columns: {', '.join(sorted(remaining))}"
-                )
         combined[entity] = df
+ 
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -608,7 +606,43 @@ def build_combined_tables(
             )
             combined.update({f"{k}_status": v for k, v in aggregates.items()})
         else:
-            logger.warning("pair table not found; skipping status aggregation")
+
+            logger.warning('pair table not found; skipping status aggregation')
+ 
+
+    # --- activity --------------------------------------------------------
+    df_same_act = unify_dtypes(same["activity"])
+    df_all_act = unify_dtypes(all_["activity"])
+    concat = pd.concat([df_same_act, df_all_act], ignore_index=True, sort=False)
+    concat = concat.drop(
+        columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"
+    )
+    df_activity = concat.drop_duplicates(keep="first")
+    if dictionary_dir is not None:
+        df_activity = process_activity_table(df_activity, dictionary_dir)
+    logger.info(
+        "Entity activity: rows_same=%d rows_all=%d rows_concat=%d rows_after_dedup=%d",
+        len(df_same_act),
+        len(df_all_act),
+        len(concat),
+        len(df_activity),
+    )
+    remaining = ACTIVITY_DROP_COLS & set(df_activity.columns)
+    if remaining:
+        raise ValueError(
+            f"activity table still contains columns: {', '.join(sorted(remaining))}"
+        )
+    combined["activity"] = df_activity
+
+    # --- pairs ------------------------------------------------------------
+    df_pairs_same = unify_dtypes(same["pairs_same_document"])
+    df_pairs = unify_dtypes(all_["pairs"])
+    logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
+    logger.info("Entity pairs: rows=%d", len(df_pairs))
+    combined["pairs_same_document"] = df_pairs_same
+    combined["pairs"] = df_pairs
+ 
+
     return combined
 
 

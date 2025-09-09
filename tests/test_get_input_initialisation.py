@@ -17,6 +17,8 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
     tables = {
         "assay": pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}),
         "activity": pd.DataFrame({"x": [1, 2, 3], "y": [1, 2, 3]}),
+        "pairs": pd.DataFrame({"id": [1, 2]}),
+        "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
     }
 
     def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
