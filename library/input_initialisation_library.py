@@ -1020,12 +1020,14 @@ def aggregate_activity(
 ) -> Dict[str, pd.DataFrame]:
     """Aggregate status metrics across entities.
 
+
     The function combines activity pair information with per-activity
     annotations to produce status summaries for several entity levels.  Pair
     tables may not always contain the expected metric columns, and some
     activity tables can lack identifiers necessary for higher level
     aggregations.  Missing metrics are created and zero filled while missing
     identifier columns result in skipped aggregations with empty results.
+
     """
     metrics = [
         "independent_IC50",
@@ -1038,8 +1040,10 @@ def aggregate_activity(
     missing = [m for m in metrics if m not in df_pairs.columns]
     if missing:
         logger.warning(
+
             "pair table missing %s %s; filling with zeros",
             "column" if len(missing) == 1 else "columns",
+
             ", ".join(missing),
         )
         for col in missing:
@@ -1063,6 +1067,7 @@ def aggregate_activity(
     document_status = _aggregate_entity(merged, "document_id", status_api)
 
     system_cols = ["testitem_id", "target_id", "mesurement_type"]
+
     missing_sys = [c for c in system_cols if c not in merged.columns]
     if missing_sys:
         logger.warning(
@@ -1072,6 +1077,7 @@ def aggregate_activity(
         )
         system_status = pd.DataFrame(columns=["system_id", "Filtered.new", *metrics])
     else:
+
         system_src = merged.copy()
         system_src["system_id"] = (
             system_src["testitem_id"].astype("string")
@@ -1086,19 +1092,23 @@ def aggregate_activity(
         system_status["target_id"] = split[1]
         system_status["mesurement_type"] = split[2]
 
+
     if "testitem_id" in merged.columns:
         testitem_status = _aggregate_entity(merged, "testitem_id", status_api)
     elif "testitem_id" not in missing_sys:
+
         logger.warning(
             "activity table missing column testitem_id; skipping testitem aggregation"
         )
         testitem_status = pd.DataFrame(
             columns=["testitem_id", "Filtered.new", *metrics]
         )
+
     else:
         testitem_status = pd.DataFrame(
             columns=["testitem_id", "Filtered.new", *metrics]
         )
+
 
     if "target_id" in merged.columns:
         target_status = _aggregate_entity(merged, "target_id", status_api)
