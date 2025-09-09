@@ -59,8 +59,8 @@ def test_status_pipeline(tmp_path):
 
     pair_df = pd.DataFrame(
         {
-            "activity_id1": [1],
-            "activity_id2": [2],
+            "activity_chembl_id1": [1],
+            "activity_chembl_id2": [2],
             "testitem_id": ["T1"],
             "target_id": ["TG1"],
             "mesurement_type": ["IC50"],
@@ -87,3 +87,45 @@ def test_load_status_table_skips_empty_rows(tmp_path: Path) -> None:
     )
     df = load_status_table(tmp_path)
     assert df["status"].tolist() == ["good", "bad"]
+
+
+def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
+    """``aggregate_activity`` should default missing metric columns to zeros."""
+    (tmp_path / "status.csv").write_text(
+        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+    )
+    status_df = load_status_table(tmp_path)
+    api = build_status_helpers(status_df)
+    activity = pd.DataFrame(
+        {
+            "activity_id": [1, 2],
+            "assay_id": ["A1", "A1"],
+            "document_id": ["D1", "D1"],
+            "testitem_id": ["T1", "T2"],
+            "target_id": ["TG1", "TG1"],
+            "mesurement_type": ["IC50", "IC50"],
+            "high_citation_rate": [False, False],
+            "unicellular_organism": [False, False],
+        }
+    )
+    activity = initialize_activity_status(activity, api)
+    pair_df = pd.DataFrame(
+        {
+            "activity_chembl_id1": [1],
+            "activity_chembl_id2": [2],
+            "testitem_id": ["T1"],
+            "target_id": ["TG1"],
+            "mesurement_type": ["IC50"],
+        }
+    )
+    pair_df = initialize_pairs(pair_df, activity, api)
+    agg = aggregate_activity(pair_df, activity, api)
+    activity_status = agg["activity"].set_index("activity_id")
+    for col in [
+        "independent_IC50",
+        "non_independent_IC50",
+        "independent_Ki",
+        "non_independent_Ki",
+    ]:
+        assert col in activity_status.columns
+        assert activity_status[col].eq(0).all()
