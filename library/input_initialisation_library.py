@@ -163,6 +163,131 @@ DATE_COLS: set[str] = {
 }
 
 
+def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+    """Calculate percentage distribution for a status table.
+
+    Parameters
+    ----------
+    df:
+        DataFrame containing a ``Filtered`` column with status labels.
+    table_name:
+        Logical name of the table for error reporting.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table with columns ``Filtered``, ``Count`` and ``Percentage, %``
+        including a summary ``Total`` row.
+
+    Raises
+    ------
+    KeyError
+        If the ``Filtered`` column is absent.
+    """
+
+    if "Filtered" not in df.columns:
+        raise KeyError(
+            f"table '{table_name}' missing column 'Filtered'; available: {', '.join(df.columns)}"
+        )
+
+    counts = df.groupby("Filtered", dropna=False).size().rename("Count").reset_index()
+    total = int(counts["Count"].sum())
+
+    if total > 0:
+        counts["fraction"] = counts["Count"] / total * 100
+    else:
+        counts["fraction"] = 0.0
+
+    total_row = pd.DataFrame(
+        {"Filtered": ["Total"], "Count": [total], "fraction": [100.0 if total else 0.0]}
+    )
+    counts = pd.concat([counts, total_row], ignore_index=True)
+
+    def _round(val: float) -> float:
+        if val == 100 or val == total:
+            return float(total if total else 0)
+        if val > 10:
+            return round(val, 1)
+        if val > 1:
+            return round(val, 2)
+        if val > 0.1:
+            return round(val, 3)
+        return round(val, 4)
+
+    counts["Percentage, %"] = counts["fraction"].apply(_round)
+    return counts.drop(columns=["fraction"])
+
+
+def add_percentage(
+    statistics: pd.DataFrame, percent_df: pd.DataFrame, table_name: str
+) -> pd.DataFrame:
+    """Merge percentage information into aggregated statistics.
+
+    Parameters
+    ----------
+    statistics:
+        Aggregated metrics per ``Filtered`` value including a ``Total`` row.
+    percent_df:
+        Output of :func:`get_percentage` for the same table.
+    table_name:
+        Entity name used to prefix the percentage column.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``percent_df`` enriched with metric columns and renamed percentage
+        column ``{table_name}.Percentage, %``.
+    """
+
+    merged = percent_df.merge(statistics, on="Filtered", how="left")
+    col_name = f"{table_name}.Percentage, %"
+    merged.rename(columns={"Percentage, %": col_name}, inplace=True)
+
+    metric_cols = [c for c in statistics.columns if c != "Filtered"]
+    ordered = ["Filtered", "Count", *metric_cols, col_name]
+    return merged[ordered]
+
+
+def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+    """Prepare status statistics with percentage distribution.
+
+    Parameters
+    ----------
+    df:
+        Status dataframe containing ``Filtered.new`` and metric columns.
+    table_name:
+        Entity name used for percentage column prefix.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Aggregated table grouped by ``Filtered`` with counts and percentage
+        information appended.
+    """
+
+    if "Filtered.new" not in df.columns:
+        raise KeyError(
+            f"table '{table_name}' missing column 'Filtered.new'; available: {', '.join(df.columns)}"
+        )
+
+    df_tmp = df.rename(columns={"Filtered.new": "Filtered"}).copy()
+    metric_cols = [
+        c
+        for c in df_tmp.columns
+        if c != "Filtered" and pd.api.types.is_numeric_dtype(df_tmp[c])
+    ]
+
+    grouped = df_tmp.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
+    totals = {col: grouped[col].sum() for col in metric_cols}
+    grouped = pd.concat(
+        [grouped, pd.DataFrame([{"Filtered": "Total", **totals}])],
+        ignore_index=True,
+    )
+
+    percent_df = get_percentage(df_tmp, table_name)
+    return add_percentage(grouped, percent_df, table_name)
+
+
 def process_activity_table(
     df_activity: pd.DataFrame, dictionary_dir: Path | str
 ) -> pd.DataFrame:
@@ -633,7 +758,10 @@ def build_combined_tables(
         df_same = unify_dtypes(same[entity])
         df_all = unify_dtypes(all_[entity])
         df_tmp = append_entities(df_same, df_all)
-        df=df_tmp.drop_duplicates(subset=concat.columns[0],keep="first")
+        if df_tmp.shape[1]:
+            df = df_tmp.drop_duplicates(subset=df_tmp.columns[0], keep="first")
+        else:
+            df = df_tmp
         logger.info(
             "Entity %s: rows_same=%d rows_all=%d rows_after_dedup=%d",
             entity,
@@ -650,7 +778,10 @@ def build_combined_tables(
     concat = concat.drop(
         columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"
     )
-    df_activity = concat.drop_duplicates(subset=concat.columns[0],keep="first")
+    if concat.shape[1]:
+        df_activity = concat.drop_duplicates(subset=concat.columns[0], keep="first")
+    else:
+        df_activity = concat
     if dictionary_dir is not None:
         df_activity = process_activity_table(df_activity, dictionary_dir)
     logger.info(
@@ -673,22 +804,6 @@ def build_combined_tables(
     logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
     logger.info("Entity pairs: rows=%d", len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
-
-    if "INDEPENDENT" in df_pairs.columns:
-        indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
-            False
-        )
-        df_pairs_independent = normalize_pair_columns(df_pairs[indep_series].copy())
-        df_pairs_non_independent = normalize_pair_columns(
-            df_pairs[~indep_series].copy()
-        )
-    else:
-        logger.warning("INDEPENDENT column missing; creating empty pair segments")
-        df_pairs_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
-        df_pairs_non_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
-
-    combined["pairs_independent"] = df_pairs_independent
-    combined["pairs_non_independent"] = df_pairs_non_independent
 
     if "INDEPENDENT" in df_pairs.columns:
         indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
