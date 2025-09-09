@@ -185,6 +185,54 @@ def test_build_combined_tables_initializes_pair_tables(
     ]
 
 
+ 
+def test_build_combined_tables_normalizes_pair_column_names(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Pair tables with varied activity ID column names should still initialise."""
+
+    same: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [1]}),
+        "pairs_same_document": pd.DataFrame({"Activity_ID1": [1], "Activity_ID2": [2]}),
+    }
+    all_: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [2]}),
+        "pairs": pd.DataFrame({"ACTIVITY_ID_1": [2], "ACTIVITY_ID_2": [1]}),
+    }
+
+    (tmp_path / "status.csv").write_text(
+        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+    )
+
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+
+    def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
+        mapping = {1: "good", 2: "good"}
+        return df.assign(**{"Filtered.init": df["activity_id"].map(mapping)})
+
+    monkeypatch.setattr(lib, "initialize_activity_status", fake_init)
+    monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
+
+    combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
+    for key in ("pairs", "pairs_same_document"):
+        assert {
+            "activity_id1",
+            "activity_id2",
+            "Filtered1",
+            "Filtered2",
+            "Filtered",
+        }.issubset(combined[key].columns)
+
+
+ 
 def test_save_tables_writes_files(tmp_path: Path) -> None:
     tables: TableDict = {
         "activity": pd.DataFrame({"id": [1]}),

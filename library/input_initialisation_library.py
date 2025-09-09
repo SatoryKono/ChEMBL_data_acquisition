@@ -633,13 +633,18 @@ def build_combined_tables(
         )
 
         for pair_key in ("pairs", "pairs_same_document"):
-            if pair_key in combined and {"activity_id1", "activity_id2"}.issubset(
-                combined[pair_key].columns
-            ):
+            if pair_key not in combined:
+                logger.warning("skip initialize_pairs: table '%s' missing", pair_key)
+                continue
+
+            df_pair = normalize_pair_columns(combined[pair_key])
+            if {"activity_id1", "activity_id2"}.issubset(df_pair.columns):
                 combined[pair_key] = initialize_pairs(
-                    combined[pair_key], combined["activity"], status_api
+                    df_pair, combined["activity"], status_api
                 )
             else:
+                combined[pair_key] = df_pair
+
                 logger.warning(
                     "skip initialize_pairs: table '%s' missing or has no activity_id1/activity_id2",
                     pair_key,
@@ -882,6 +887,36 @@ def initialize_activity_status(
     )
     df["Filtered.init"] = min_order.map(order_to_status)
     return df
+
+
+def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize activity ID column names in pair tables.
+
+    The Excel sources occasionally vary in the casing or use of underscores
+    for ``activity_id1`` and ``activity_id2``.  This helper normalises these
+    column names so downstream processing can rely on a consistent schema.
+
+    Parameters
+    ----------
+    df:
+        DataFrame potentially containing activity ID columns with alternative
+        spellings.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of ``df`` with recognised activity ID columns renamed to
+        ``activity_id1`` and ``activity_id2``.
+    """
+
+    rename: dict[str, str] = {}
+    for col in df.columns:
+        key = col.lower().replace("_", "")
+        if key == "activityid1":
+            rename[col] = "activity_id1"
+        elif key == "activityid2":
+            rename[col] = "activity_id2"
+    return df.rename(columns=rename)
 
 
 def initialize_pairs(
