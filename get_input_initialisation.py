@@ -49,6 +49,15 @@ def run(args: argparse.Namespace) -> int:
         tables = lib.build_combined_tables(
             same, all_, dictionary_dir=args.dictionary_dir
         )
+        logger.info("Computing status percentages")
+        for key, df in list(tables.items()):
+            if not key.endswith("_status"):
+                continue
+            if "Filtered.new" not in df.columns:
+                logger.warning("table '%s' lacks Filtered.new; skipping", key)
+                continue
+            entity = key.split("_")[0]
+            tables[key] = lib.compute_status_statistics(df, entity)
 
         logger.info("Saving output")
         paths = lib.save_tables(tables, args.out_dir, fmt=args.format)
