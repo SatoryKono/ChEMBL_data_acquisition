@@ -625,6 +625,21 @@ def load_all_doc(xlsx_path: Path) -> TableDict:
 
 
 def _safe_to_int(series: pd.Series, col: str) -> pd.Series:
+    """Safely cast ``series`` to ``Int64``.
+
+    Parameters
+    ----------
+    series:
+        Column values to convert.
+    col:
+        Column name used in warning messages.
+
+    Returns
+    -------
+    pandas.Series
+        ``Int64`` typed series or ``string`` on failure.
+    """
+
     try:
         return pd.to_numeric(series, errors="raise").astype("Int64")
     except Exception as exc:  # pragma: no cover - rare
@@ -633,6 +648,21 @@ def _safe_to_int(series: pd.Series, col: str) -> pd.Series:
 
 
 def _safe_to_float(series: pd.Series, col: str) -> pd.Series:
+    """Safely cast ``series`` to ``float64``.
+
+    Parameters
+    ----------
+    series:
+        Column values to convert.
+    col:
+        Column name used in warning messages.
+
+    Returns
+    -------
+    pandas.Series
+        ``float64`` typed series or ``string`` on failure.
+    """
+
     try:
         return pd.to_numeric(series, errors="raise").astype("float64")
     except Exception as exc:  # pragma: no cover - rare
@@ -641,6 +671,21 @@ def _safe_to_float(series: pd.Series, col: str) -> pd.Series:
 
 
 def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
+    """Safely cast ``series`` to pandas ``datetime64``.
+
+    Parameters
+    ----------
+    series:
+        Column values to convert.
+    col:
+        Column name used in warning messages.
+
+    Returns
+    -------
+    pandas.Series
+        ``datetime64`` typed series or ``string`` on failure.
+    """
+
     try:
         return pd.to_datetime(series, errors="raise")
     except Exception as exc:  # pragma: no cover - rare
@@ -649,6 +694,21 @@ def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
 
 
 def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
+    """Safely cast ``series`` to pandas ``boolean``.
+
+    Parameters
+    ----------
+    series:
+        Column values to convert.
+    col:
+        Column name used in warning messages.
+
+    Returns
+    -------
+    pandas.Series
+        ``boolean`` typed series or ``string`` on failure.
+    """
+
     def mapper(value: Any) -> object:
         if pd.isna(value):
             return pd.NA

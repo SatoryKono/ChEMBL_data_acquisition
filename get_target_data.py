@@ -16,6 +16,7 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
+from library.cli import configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -261,24 +262,6 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.set_defaults(func=run_all)
 
     return parser
-
-
-def configure_logging(level: str) -> None:
-    """Configure basic logging.
-
-    Parameters
-    ----------
-    level:
-        Logging verbosity such as ``"INFO"`` or ``"DEBUG"``.
-
-    Returns
-    -------
-    None
-        This function configures the root logger in-place and does not
-        return a value.
-
-    """
-    logging.basicConfig(level=getattr(logging, level.upper(), logging.INFO))
 
 
 def run_uniprot(args: argparse.Namespace) -> int:
