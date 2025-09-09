@@ -185,7 +185,6 @@ def test_build_combined_tables_initializes_pair_tables(
     ]
 
 
- 
 def test_build_combined_tables_normalizes_pair_column_names(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -224,15 +223,14 @@ def test_build_combined_tables_normalizes_pair_column_names(
     combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
     for key in ("pairs", "pairs_same_document"):
         assert {
-            "activity_id1",
-            "activity_id2",
+            "activity_chembl_id1",
+            "activity_chembl_id2",
             "Filtered1",
             "Filtered2",
             "Filtered",
         }.issubset(combined[key].columns)
 
 
- 
 def test_save_tables_writes_files(tmp_path: Path) -> None:
     tables: TableDict = {
         "activity": pd.DataFrame({"id": [1]}),
