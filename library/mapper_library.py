@@ -7,15 +7,12 @@ import logging
 import time
 import urllib.parse
 import urllib.request
+from typing import Any, Callable, Optional
 from urllib.error import HTTPError
-from typing import Optional, Callable, Any
-import argparse
-import pandas as pd
 
 API_BASE = "https://rest.uniprot.org/idmapping"
 
-# Configure basic logging
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def map_chembl_to_uniprot(
@@ -129,54 +126,3 @@ def map_chembl_to_uniprot(
         raise ValueError("Unexpected response format from UniProt ID mapping API")
 
     return accession
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Map ChEMBL IDs to UniProt accessions in a CSV file."
-    )
-    parser.add_argument("csv_file", help="Path to the CSV file to process.")
-    parser.add_argument(
-        "chembl_id_column", help="Name of the column containing ChEMBL IDs."
-    )
-    args = parser.parse_args()
-
-    try:
-        df = pd.read_csv(args.csv_file)
-    except FileNotFoundError:
-        logging.error(f"Error: The file '{args.csv_file}' was not found.")
-        exit(1)
-    except Exception as e:
-        logging.error(f"Error reading CSV file: {e}")
-        exit(1)
-
-    if args.chembl_id_column not in df.columns:
-        logging.error(
-            f"Error: Column '{args.chembl_id_column}' not found in the CSV file."
-        )
-        exit(1)
-
-    uniprot_ids: list[str | None] = []
-    for chembl_id in df[args.chembl_id_column]:
-        if pd.isna(chembl_id) or not str(chembl_id).strip():
-            uniprot_ids.append(None)
-            continue
-        try:
-            uniprot_id = map_chembl_to_uniprot(str(chembl_id))
-            uniprot_ids.append(uniprot_id)
-            if uniprot_id:
-                logging.info(f"Successfully mapped {chembl_id} to {uniprot_id}")
-            else:
-                logging.warning(f"No UniProt ID found for {chembl_id}")
-        except (ValueError, TimeoutError) as e:
-            logging.warning(f"Failed to map {chembl_id}: {e}")
-            uniprot_ids.append(None)
-
-    df["mapping_uniprot_id"] = uniprot_ids
-
-    try:
-        df.to_csv(args.csv_file, index=False)
-        logging.info(f"Successfully updated '{args.csv_file}' with UniProt IDs.")
-    except Exception as e:
-        logging.error(f"Error writing to CSV file: {e}")
-        exit(1)

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+import requests
 
 from library import chembl_library as cl
 from library import io
@@ -360,7 +361,11 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    df = cl.get_targets(ids)
+    try:
+        df = cl.get_targets(ids)
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("failed to retrieve targets: %s", exc)
+        return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)

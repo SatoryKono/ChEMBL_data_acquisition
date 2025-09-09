@@ -6,6 +6,8 @@ import argparse
 import logging
 from typing import Sequence
 
+import requests
+
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import io
@@ -39,7 +41,11 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    df = cl.get_assays(ids, chunk_size=args.chunk_size)
+    try:
+        df = cl.get_assays(ids, chunk_size=args.chunk_size)
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("failed to retrieve assays: %s", exc)
+        return 1
     df = ap.postprocess_assays(df)
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:

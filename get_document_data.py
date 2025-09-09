@@ -168,7 +168,11 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+    try:
+        df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("failed to retrieve documents: %s", exc)
+        return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
@@ -195,7 +199,11 @@ def run_all(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+    try:
+        doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("failed to retrieve documents: %s", exc)
+        return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
