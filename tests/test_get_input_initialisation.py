@@ -51,3 +51,36 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
         assert corr.exists(), corr
         df = pd.read_csv(quality)
         assert "column" in df.columns
+
+
+def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch, caplog) -> None:
+    """``run`` should report missing required tables."""
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+
+    def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
+        return {}
+
+    def fake_load_all_doc(path: Path):  # pragma: no cover - simple stub
+        return {}
+
+    def fake_build_combined_tables(*_args, **_kwargs):
+        raise KeyError("activity")
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", fake_load_same_doc)
+    monkeypatch.setattr(cli.lib, "load_all_doc", fake_load_all_doc)
+    monkeypatch.setattr(cli.lib, "build_combined_tables", fake_build_combined_tables)
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=tmp_path / "out",
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    with caplog.at_level("ERROR"):
+        result = cli.run(args)
+    assert result == 1
+    assert "required table 'activity' missing" in caplog.text

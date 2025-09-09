@@ -594,26 +594,8 @@ def build_combined_tables(
         combined[entity] = df
 
 
-    if dictionary_dir is not None:
-        status_df = load_status_table(dictionary_dir)
-        status_api = build_status_helpers(status_df)
-        combined["activity"] = initialize_activity_status(
-            combined["activity"], status_api
-        )
-        pair_table = None
-        for table in list(all_.values()) + list(same.values()):
-            if {"activity_id1", "activity_id2"}.issubset(table.columns):
-                pair_table = table.copy()
-                break
-        if pair_table is not None:
-            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
-            aggregates = aggregate_activity(
-                pair_table, combined["activity"], status_api
-            )
-            combined.update({f"{k}_status": v for k, v in aggregates.items()})
-        else:
 
-            logger.warning("pair table not found; skipping status aggregation")
+
 
 
     # --- activity --------------------------------------------------------
