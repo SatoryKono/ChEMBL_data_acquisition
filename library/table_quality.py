@@ -42,6 +42,11 @@ def _load_table(table: pd.DataFrame | str | Path) -> pd.DataFrame:
     -------
     pandas.DataFrame
     """
+    # Importing pandas locally guards against environments where the global
+    # ``pd`` alias might be missing.  This avoids ``NameError`` exceptions when
+    # :func:`analyze_table_quality` is executed in constrained runtimes.
+    import pandas as pd
+
     if isinstance(table, pd.DataFrame):
         return table.copy()
 
@@ -113,7 +118,6 @@ def _bool_like_cov(values: pd.Series) -> float:
     return float(values.astype(str).str.strip().str.lower().isin(BOOL_LIKE).mean())
 
 
-
 def _numeric_stats(series: pd.Series) -> tuple[pd.Series, float, dict[str, float]]:
     """Convert ``series`` to numeric values and compute summary statistics."""
 
@@ -130,7 +134,6 @@ def _numeric_stats(series: pd.Series) -> tuple[pd.Series, float, dict[str, float
     }
 
     return numeric, coverage, stats
-
 
 
 def _parse_dates(series: pd.Series) -> tuple[float, dict[str, pd.Timestamp | float]]:
@@ -203,6 +206,10 @@ def analyze_table_quality(
     tuple[pandas.DataFrame, pandas.DataFrame]
         Quality report and correlation matrix.
     """
+    # Import pandas locally to ensure the alias is available even if the module
+    # level import was stripped by the execution environment.
+    import pandas as pd
+
     df = _load_table(table)
     rows: list[dict[str, object]] = []
     numeric_candidates: dict[str, pd.Series] = {}
@@ -224,11 +231,9 @@ def analyze_table_quality(
 
         bool_like_cov = _bool_like_cov(strings)
 
-
         numeric_series, numeric_cov, num_stats = _numeric_stats(series)
         if numeric_cov >= 0.8:
             numeric_candidates[column] = numeric_series
-
 
         date_cov, date_stats = _parse_dates(series)
 
