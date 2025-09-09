@@ -638,7 +638,7 @@ def build_combined_tables(
                 continue
 
             df_pair = normalize_pair_columns(combined[pair_key])
-            if {"activity_id1", "activity_id2"}.issubset(df_pair.columns):
+            if {"activity_chembl_id1", "activity_chembl_id2"}.issubset(df_pair.columns):
                 combined[pair_key] = initialize_pairs(
                     df_pair, combined["activity"], status_api
                 )
@@ -646,7 +646,7 @@ def build_combined_tables(
                 combined[pair_key] = df_pair
 
                 logger.warning(
-                    "skip initialize_pairs: table '%s' missing or has no activity_id1/activity_id2",
+                    "skip initialize_pairs: table '%s' missing or has no activity_chembl_id1/activity_chembl_id2",
                     pair_key,
                 )
 
@@ -893,7 +893,7 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
     The Excel sources occasionally vary in the casing or use of underscores
-    for ``activity_id1`` and ``activity_id2``.  This helper normalises these
+    for ``activity_chembl_id1`` and ``activity_chembl_id2``.  This helper normalises these
     column names so downstream processing can rely on a consistent schema.
 
     Parameters
@@ -913,9 +913,9 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
         key = col.lower().replace("_", "")
         if key == "activityid1":
-            rename[col] = "activity_id1"
+            rename[col] = "activity_chembl_id1"
         elif key == "activityid2":
-            rename[col] = "activity_id2"
+            rename[col] = "activity_chembl_id2"
     return df.rename(columns=rename)
 
 
@@ -925,10 +925,10 @@ def initialize_pairs(
     """Merge activity statuses into ``pair_df``."""
     df = pair_df.copy()
     mapping = activity_df[["activity_id", "Filtered.init"]]
-    df = df.merge(mapping, left_on="activity_id1", right_on="activity_id", how="left")
+    df = df.merge(mapping, left_on="activity_chembl_id1", right_on="activity_id", how="left")
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
     df.drop(columns=["activity_id"], inplace=True)
-    df = df.merge(mapping, left_on="activity_id2", right_on="activity_id", how="left")
+    df = df.merge(mapping, left_on="activity_chembl_id2", right_on="activity_id", how="left")
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
     df.drop(columns=["activity_id"], inplace=True)
 
@@ -973,10 +973,10 @@ def aggregate_activity(
     ]
 
     left = pair_df.rename(
-        columns={"activity_id1": "activity_id", "Filtered1": "Filtered.new"}
+        columns={"activity_chembl_id1": "activity_id", "Filtered1": "Filtered.new"}
     )[["activity_id", "Filtered.new", *metrics]]
     right = pair_df.rename(
-        columns={"activity_id2": "activity_id", "Filtered2": "Filtered.new"}
+        columns={"activity_chembl_id2": "activity_id", "Filtered2": "Filtered.new"}
     )[["activity_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
     activity_status = _aggregate_entity(activity_pairs, "activity_id", status_api)

@@ -1,4 +1,4 @@
-chembl_id,organism,target_uniprot_id,target_names,isoforms,pH_dependence,primaryAccession,isoform_names,isoform_ids
+target_chembl_id,organism,target_uniprot_id,target_names,isoforms,pH_dependence,primaryAccession,isoform_names,isoform_ids
 CHEMBL1827,Homo sapiens,O76074,"PDE5A | cGMP-specific 3',5'-cyclic phosphodiesterase | cGMP-binding cGMP-specific phosphodiesterase | CGB-PDE | PDE5",2.0,,O76074,PDE5A1|PDE5A2,O76074-1|O76074-2
 CHEMBL1859,Homo sapiens,O95180,Voltage-dependent T-type calcium channel subunit alpha-1H | CACNA1H | Voltage-gated calcium channel subunit alpha Cav3.2 | Low-voltage-activated calcium channel alpha1 3.2 subunit,2.0,,O95180,1|2,O95180-1|O95180-2
 CHEMBL202,Homo sapiens,P00374,DHFR | Dihydrofolate reductase,2.0,,P00374,1|2,P00374-1|P00374-2
