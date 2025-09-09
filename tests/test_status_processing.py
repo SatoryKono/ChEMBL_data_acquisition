@@ -1,25 +1,29 @@
+"""Tests for status processing pipeline."""
+
+from __future__ import annotations
 
 import pandas as pd
 
 from library.input_initialisation_library import (
-    load_status_table,
+    aggregate_activity,
     build_status_helpers,
     initialize_activity_status,
     initialize_pairs,
-    aggregate_activity,
+    load_status_table,
 )
 
 
 def test_status_pipeline(tmp_path):
+    """Smoke test the status workflow end-to-end."""
     (tmp_path / "status.csv").write_text(
-        "status,condition_field,condition_value,order,score
-"
-        "good,null,null,0,1
-"
-        "warning,review,True,1,0
-"
-        "bad,high_citation_rate,True,2,-1
-"
+        "\n".join(
+            [
+                "status,condition_field,condition_value,order,score",
+                "good,null,null,0,1",
+                "warning,review,True,1,0",
+                "bad,high_citation_rate,True,2,-1",
+            ]
+        )
     )
     status_df = load_status_table(tmp_path)
     api = build_status_helpers(status_df)
