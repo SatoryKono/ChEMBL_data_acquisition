@@ -593,11 +593,6 @@ def build_combined_tables(
         )
         combined[entity] = df
 
-
-
-
-
-
     # --- activity --------------------------------------------------------
     df_same_act = unify_dtypes(same["activity"])
     df_all_act = unify_dtypes(all_["activity"])
@@ -630,27 +625,40 @@ def build_combined_tables(
     combined["pairs_same_document"] = df_pairs_same
     combined["pairs"] = df_pairs
 
-
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
         combined["activity"] = initialize_activity_status(
             combined["activity"], status_api
         )
+
+        for pair_key in ("pairs", "pairs_same_document"):
+            if pair_key in combined and {"activity_id1", "activity_id2"}.issubset(
+                combined[pair_key].columns
+            ):
+                combined[pair_key] = initialize_pairs(
+                    combined[pair_key], combined["activity"], status_api
+                )
+            else:
+                logger.warning(
+                    "skip initialize_pairs: table '%s' missing or has no activity_id1/activity_id2",
+                    pair_key,
+                )
+
         pair_table = None
-        for table in combined.values():
-            if {"activity_id1", "activity_id2"}.issubset(table.columns):
-                pair_table = table.copy()
+        for pair_key in ("pairs", "pairs_same_document"):
+            if pair_key in combined and {"Filtered1", "Filtered2"}.issubset(
+                combined[pair_key].columns
+            ):
+                pair_table = combined[pair_key]
                 break
         if pair_table is not None:
-            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
             aggregates = aggregate_activity(
                 pair_table, combined["activity"], status_api
             )
             combined.update({f"{k}_status": v for k, v in aggregates.items()})
         else:
             logger.warning("pair table not found; skipping status aggregation")
-
 
     return combined
 
