@@ -22,6 +22,7 @@ def validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
     ------
     ValueError
         If any columns are missing.
+
     """
     missing = [col for col in required if col not in df.columns]
     if missing:
@@ -44,8 +45,8 @@ def validate_schema(df: pd.DataFrame, schema: Mapping[str, str]) -> None:
         If required columns are missing.
     TypeError
         If a column has an unexpected dtype.
-    """
 
+    """
     validate_columns(df, schema.keys())
     for column, dtype in schema.items():
         if not ptypes.is_dtype_equal(df[column].dtype, dtype):

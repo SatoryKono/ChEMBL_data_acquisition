@@ -34,8 +34,8 @@ def _pipe_merge(values: Sequence[str | None]) -> str:
     str
         Sorted, unique tokens separated by ``"|"``. Empty inputs yield
         an empty string.
-    """
 
+    """
     tokens: set[str] = set()
     for value in values:
         if isinstance(value, str) and value:
@@ -46,7 +46,6 @@ def _pipe_merge(values: Sequence[str | None]) -> str:
 
 def _first_token(value: str | None) -> str:
     """Return the first token from a pipe-delimited ``value``."""
-
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
@@ -60,7 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
     as well as a convenience ``all`` command that runs all pipelines and
     merges their outputs.
     """
-
     parser = argparse.ArgumentParser(description="Target data utilities")
     parser.add_argument(
         "--log-level",
@@ -278,6 +276,7 @@ def configure_logging(level: str) -> None:
     None
         This function configures the root logger in-place and does not
         return a value.
+
     """
     logging.basicConfig(level=getattr(logging, level.upper(), logging.INFO))
 
@@ -299,6 +298,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
     -----
     The post-processing step is covered by
     :mod:`tests.test_target_postprocessing`.
+
     """
     try:
         df = pd.read_csv(
@@ -352,7 +352,6 @@ def run_uniprot(args: argparse.Namespace) -> int:
 
 def run_chembl(args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
-
     try:
         ids = io.read_ids(
             args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
@@ -383,7 +382,6 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def run_iuphar(args: argparse.Namespace) -> int:
     """Execute the ``iuphar`` sub-command."""
-
     try:
         data = ii.IUPHARData.from_files(
             target_path=args.target_csv,
@@ -430,8 +428,8 @@ def run_all(args: argparse.Namespace) -> int:
     -----
     The post-processing step is covered by
     :mod:`tests.test_target_postprocessing`.
-    """
 
+    """
     try:
         output = args.output_csv or io.default_output_path(args.input_csv)
         chembl_out = args.chembl_out or output.with_name(output.stem + "_chembl.csv")
@@ -582,7 +580,6 @@ def run_all(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
-
     parser = build_parser()
     args = parser.parse_args(argv)
     configure_logging(args.log_level)

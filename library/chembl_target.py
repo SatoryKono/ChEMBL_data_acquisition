@@ -184,6 +184,7 @@ def extend_target(
         DataFrame containing a column with ChEMBL target identifiers.
     id_column:
         Name of the column holding the identifiers.
+
     """
     if id_column not in df.columns:
         raise ValueError(f"missing required column: {id_column}")

@@ -28,6 +28,7 @@ def run(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero on failure.
+
     """
     try:
         df = io.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)

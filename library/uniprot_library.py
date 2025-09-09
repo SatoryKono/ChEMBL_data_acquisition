@@ -93,8 +93,8 @@ def fetch_uniprot(uniprot_id: str) -> Dict[str, Any]:
     dict
         JSON-decoded response.  An empty dictionary is returned when the
         request fails or the payload cannot be decoded.
-    """
 
+    """
     url = API_URL.format(id=uniprot_id)
     try:
         resp = _session.get(url, timeout=30)
@@ -174,6 +174,7 @@ def extract_names(data: Any) -> Set[str]:
 
     Returns:
         A set of name strings aggregated from protein and gene sections.
+
     """
     names: Set[str] = set()
     if isinstance(data, dict) and "results" in data:
@@ -200,6 +201,7 @@ def extract_organism(data: Any) -> Dict[str, str]:
     Returns:
         A dictionary with keys ``genus``, ``superkingdom``, ``phylum`` and
         ``taxon_id``. Empty strings are returned when a field is missing.
+
     """
     result = {"genus": "", "superkingdom": "", "phylum": "", "taxon_id": ""}
     if isinstance(data, dict) and "results" in data:
@@ -237,6 +239,7 @@ def extract_organism(data: Any) -> Dict[str, str]:
         break
     return result
 
+
 def extract_uniprotkb_id(data: Any) -> str | None:
     """Return the ``uniProtkbId`` for the first entry in ``data``.
 
@@ -246,8 +249,8 @@ def extract_uniprotkb_id(data: Any) -> str | None:
 
     Returns:
         The ``uniProtkbId`` string when present, otherwise ``None``.
-    """
 
+    """
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -273,8 +276,8 @@ def extract_secondary_accessions(data: Any) -> List[str]:
     Returns:
         A sorted list of secondary accession identifiers. An empty list is
         returned when no secondary accessions are present.
-    """
 
+    """
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -303,8 +306,8 @@ def extract_recommended_name(data: Any) -> str | None:
 
     Returns:
         The recommended name string, or ``None`` when unavailable.
-    """
 
+    """
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -349,8 +352,8 @@ def extract_gene_name(data: Any) -> str | None:
 
     Returns:
         The primary gene name string, or ``None`` when unavailable.
-    """
 
+    """
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -374,6 +377,7 @@ def extract_gene_name(data: Any) -> str | None:
         break
     return None
 
+
 def extract_names_for_secondary_accessions(data: Any) -> str:
     """Return protein names for secondary accessions listed in ``data``.
 
@@ -392,8 +396,8 @@ def extract_names_for_secondary_accessions(data: Any) -> str:
     -------
     str
         Pipe-separated protein names for all secondary accessions.
-    """
 
+    """
     names: Set[str] = set()
     for acc in extract_secondary_accessions(data):
         entry = fetch_uniprot(acc)
@@ -403,6 +407,7 @@ def extract_names_for_secondary_accessions(data: Any) -> str:
         if isinstance(desc, dict):
             names.update(_extract_protein_names(desc))
     return "|".join(sorted(names))
+
 
 def _collect_ec_numbers(name_obj: Dict[str, Any]) -> Iterable[str]:
     """Yield EC numbers from a UniProt name object."""
@@ -444,6 +449,7 @@ def extract_keywords(data: Any) -> Dict[str, Any]:
         ``transmembrane``, and ``intramembrane``. Keyword-related values are
         returned as sets, while ``transmembrane`` and ``intramembrane`` are
         booleans.
+
     """
     result: Dict[str, Any] = {
         "molecular_function": set(),
@@ -542,6 +548,7 @@ def extract_ptm(data: Any) -> Dict[str, bool]:
         ``modified_residue``, ``phosphorylation``, ``acetylation``,
         ``ubiquitination``, ``signal_peptide``, ``propeptide``, and
         ``transmembrane``.
+
     """
     feature_map = {
         "glycosylation": "GLYCOSYLATION",
@@ -597,6 +604,7 @@ def extract_isoform(data: Any) -> Dict[str, str]:
     Returns:
         A dictionary with keys ``isoform_names``, ``isoform_ids``, and
         ``isoform_synonyms`` mapping to pipe separated strings.
+
     """
     names: List[str] = []
     ids: List[str] = []
@@ -614,7 +622,10 @@ def extract_isoform(data: Any) -> Dict[str, str]:
         if not isinstance(comments, list):
             continue
         for comment in comments:
-            if not isinstance(comment, dict) or comment.get("commentType") != "ALTERNATIVE PRODUCTS":
+            if (
+                not isinstance(comment, dict)
+                or comment.get("commentType") != "ALTERNATIVE PRODUCTS"
+            ):
                 continue
             isoforms = comment.get("isoforms", [])
             if not isinstance(isoforms, list):
@@ -668,6 +679,7 @@ def extract_crossrefs(data: Any) -> Dict[str, str]:
         strings. The returned keys include ``GuidetoPHARMACOLOGY``, ``family``,
         ``SUPFAM``, ``PROSITE``, ``InterPro``, ``Pfam``, ``PRINTS``, and
         ``TCDB``.
+
     """
     dbs = [
         "GuidetoPHARMACOLOGY",
@@ -722,6 +734,7 @@ def extract_activity(data: Any) -> Dict[str, str]:
     Returns:
         A dictionary with keys ``reactions`` and ``reaction_ec_numbers``.
         Missing information yields empty strings.
+
     """
     reactions: List[str] = []
     numbers: List[str] = []
@@ -773,8 +786,8 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
     ------
     str
         Each UniProt accession ID.
-    """
 
+    """
     try:
         with open(csv_path, newline="", encoding=encoding) as handle:
             reader = csv.DictReader(handle, delimiter=sep)
@@ -789,6 +802,7 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
     except csv.Error as exc:
         raise ValueError(f"malformed CSV in file: {csv_path}: {exc}") from exc
 
+
 def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
     """Return names, organism, keyword, PTM, isoform, cross-ref, and activity data for ``uid``.
 
@@ -802,6 +816,7 @@ def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
         membrane features, post-translational modification flags, isoform
         metadata, and selected database cross references. Missing or invalid
         files leave fields empty.
+
     """
     json_path = os.path.join(data_dir, f"{uid}.json")
     result = {
@@ -871,16 +886,12 @@ def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
     activity = extract_activity(data)
     result["names"] = "|".join(sorted(names))
     result.update(org)
-    result["molecular_function"] = "|".join(
-        sorted(keywords["molecular_function"])
-    )
-    result["cellular_component"] = "|".join(
-        sorted(keywords["cellular_component"])
-    )
+    result["molecular_function"] = "|".join(sorted(keywords["molecular_function"]))
+    result["cellular_component"] = "|".join(sorted(keywords["cellular_component"]))
     result["ec_numbers"] = "|".join(sorted(keywords["ec_numbers"]))
-    result["subcellular_location"] = "|".join(
-        sorted(keywords["subcellular_location"])
-    ) or "N/A"
+    result["subcellular_location"] = (
+        "|".join(sorted(keywords["subcellular_location"])) or "N/A"
+    )
     result["topology"] = "|".join(sorted(keywords["topology"])) or "N/A"
     result["transmembrane"] = ptm["transmembrane"]
     result["intramembrane"] = keywords["intramembrane"]
@@ -939,8 +950,8 @@ def process(
     -------
     None
         The processed information is written to ``output_csv``.
-    """
 
+    """
     fieldnames = [
         "uniprot_id",
         "names",

@@ -46,6 +46,7 @@ def read_ids(
         If ``path`` does not exist.
     ValueError
         If the CSV file is malformed or ``column`` is missing.
+
     """
     try:
         with Path(path).open("r", encoding=encoding, newline="") as fh:
@@ -85,6 +86,7 @@ def read_csv(
     -------
     pandas.DataFrame
         DataFrame containing the CSV contents.
+
     """
     return pd.read_csv(path, sep=sep, encoding=encoding)
 
@@ -108,6 +110,7 @@ def write_csv(
         Field delimiter used in the CSV file. Defaults to ``","``.
     encoding:
         Character encoding of the CSV file. Defaults to ``"utf8"``.
+
     """
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False, sep=sep, encoding=encoding)

@@ -102,7 +102,7 @@ def get_assay(chembl_assay_id: str, *, timeout: float = 30.0) -> pd.DataFrame:
     items = data.get("assays") or data.get("assay") or []
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
-    df = pd.json_normalize(items, dtype_backend="pyarrow").dropna(
+    df = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
         axis="columns", how="all"
     )
     return df.reindex(columns=ASSAY_COLUMNS)
@@ -132,6 +132,7 @@ def get_assays(
     -------
     pandas.DataFrame
         Combined assay records.
+
     """
     valid = [i for i in ids if i not in {"", "#N/A"}]
     if not valid:
@@ -146,7 +147,7 @@ def get_assays(
         data = request_json(url, timeout=timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
-            df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(
+            df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
                 axis="columns", how="all"
             )
             if not df_chunk.empty:
@@ -178,6 +179,7 @@ def get_activities(
     -------
     pandas.DataFrame
         Combined activity records.
+
     """
     valid = [i for i in ids if i not in {"", "#N/A"}]
     if not valid:
@@ -190,7 +192,7 @@ def get_activities(
         data = request_json(url, timeout=timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
-            records.append(pd.json_normalize(items, dtype_backend="pyarrow"))
+            records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
     if not records:
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
@@ -215,7 +217,7 @@ def get_testitem(
         data = request_json(url, timeout=timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
-            records.append(pd.json_normalize(items, dtype_backend="pyarrow"))
+            records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)

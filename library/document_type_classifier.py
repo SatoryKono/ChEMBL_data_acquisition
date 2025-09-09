@@ -1,4 +1,5 @@
 """Scoring and decision logic for publication classification."""
+
 from __future__ import annotations
 
 from typing import Dict, Iterable, Mapping
@@ -30,6 +31,7 @@ def compute_scores(
     dict[str, int]
         Mapping of class names (``review``, ``experimental``, ``unknown``) to
         accumulated weights.
+
     """
     scores = {"review": 0, "experimental": 0, "unknown": 0}
 
@@ -68,6 +70,7 @@ def decide_label(
     -------
     str
         One of ``review``, ``experimental`` or ``unknown``.
+
     """
     r = scores.get("review", 0)
     e = scores.get("experimental", 0)

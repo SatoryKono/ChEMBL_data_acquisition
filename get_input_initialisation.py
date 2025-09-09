@@ -32,6 +32,7 @@ def run(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero otherwise.
+
     """
     try:
         if not args.same_doc.exists():

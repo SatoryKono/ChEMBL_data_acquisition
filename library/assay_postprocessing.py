@@ -35,8 +35,8 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Copy of the input with the additional ``assay_with_same_target`` column.
-    """
 
+    """
     validate_schema(
         df,
         {
@@ -71,8 +71,8 @@ def postprocess_file(
         Field delimiter of the CSV files.
     encoding:
         Text encoding of the CSV files.
-    """
 
+    """
     try:
         df = pd.read_csv(
             input_path,

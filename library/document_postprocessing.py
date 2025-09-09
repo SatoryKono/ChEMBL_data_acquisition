@@ -154,7 +154,6 @@ DATE_COLUMNS: Iterable[str] = [
 
 def _safe_numeric(series: pd.Series) -> pd.Series:
     """Return ``series`` as ``Int64`` with invalid values set to ``<NA>``."""
-
     return pd.to_numeric(series, errors="coerce").astype("Int64")
 
 
@@ -170,8 +169,8 @@ def postprocess_documents(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Normalised table with derived fields.
-    """
 
+    """
     result = df.copy()
     if result.empty:
         return result
@@ -264,8 +263,8 @@ def postprocess_file(
         Field delimiter of the CSV files.
     encoding:
         Text encoding of the CSV files.
-    """
 
+    """
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_documents(df)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)

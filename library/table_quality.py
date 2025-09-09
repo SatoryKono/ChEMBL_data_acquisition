@@ -41,6 +41,7 @@ def _load_table(table: pd.DataFrame | str | Path) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
+
     """
     # Importing pandas locally guards against environments where the global
     # ``pd`` alias might be missing.  This avoids ``NameError`` exceptions when
@@ -120,7 +121,6 @@ def _bool_like_cov(values: pd.Series) -> float:
 
 def _numeric_stats(series: pd.Series) -> tuple[pd.Series, float, dict[str, float]]:
     """Convert ``series`` to numeric values and compute summary statistics."""
-
     numeric = pd.to_numeric(series, errors="coerce").astype(float)
 
     coverage = float(numeric.notna().mean())
@@ -205,6 +205,7 @@ def analyze_table_quality(
     -------
     tuple[pandas.DataFrame, pandas.DataFrame]
         Quality report and correlation matrix.
+
     """
     # Import pandas locally to ensure the alias is available even if the module
     # level import was stripped by the execution environment.

@@ -99,6 +99,7 @@ def _normalise_token(token: str) -> str:
     -------
     str
         Canonical form or an empty string if token is empty after processing.
+
     """
     token = token.strip().lower()
     if not token:
@@ -119,6 +120,7 @@ def parse_terms(value: object) -> List[str]:
     -------
     list[str]
         Sorted list of unique canonical tokens. Empty list if no valid tokens.
+
     """
     if not isinstance(value, str):
         return []

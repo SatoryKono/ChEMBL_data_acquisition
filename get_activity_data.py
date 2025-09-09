@@ -28,6 +28,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero on failure.
+
     """
     try:
         ids = io.read_ids(

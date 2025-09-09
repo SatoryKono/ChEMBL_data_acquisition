@@ -46,8 +46,8 @@ def request_json(url: str, *, timeout: float = 30.0) -> dict[str, Any]:
         If the HTTP request fails.
     ValueError
         If the response body is not valid JSON.
-    """
 
+    """
     response = _session.get(url, timeout=timeout)
     response.raise_for_status()
     return response.json()
@@ -72,8 +72,8 @@ def _chunked(items: Iterable[str], size: int) -> Iterator[list[str]]:
     ------
     ValueError
         If ``size`` is not a positive integer.
-    """
 
+    """
     if size <= 0:
         raise ValueError("size must be a positive integer")
 

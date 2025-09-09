@@ -39,8 +39,8 @@ def fetch_semantic_scholar(
     dict
         Mapping of metadata fields to values.  Errors are encoded within the
         returned dictionary and never raise exceptions.
-    """
 
+    """
     return _pl.fetch_semantic_scholar(session, pmid, sleep)
 
 
@@ -63,5 +63,6 @@ def fetch_semantic_scholar_batch(
     list of dict
         A list of metadata mappings. Errors are encoded within each
         dictionary and never raise exceptions.
+
     """
     return _pl.fetch_semantic_scholar_batch(session, pmids, sleep)

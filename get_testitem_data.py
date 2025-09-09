@@ -35,8 +35,8 @@ def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pandas.DataFrame
         ``df`` with additional PubChem columns.
-    """
 
+    """
     if df.empty or "molecule_structures.canonical_smiles" not in df.columns:
         return df
 
@@ -105,6 +105,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     -------
     int
         Zero on success, non-zero on failure.
+
     """
     try:
         ids = io.read_ids(

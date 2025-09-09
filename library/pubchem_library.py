@@ -3,6 +3,7 @@
 This module provides functions to interact with the PubChem REST API.
 The implementation is a Python translation of a PowerQuery script.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,12 +46,13 @@ def url_encode(text: str) -> str:
     -------
     str
         URL-encoded string.
+
     """
     return quote(text, safe="")
 
+
 def _cids_from_identifier_list(data: Dict[str, Any]) -> List[str]:
     """Extract CIDs from a JSON ``IdentifierList`` structure."""
-
     return [str(cid) for cid in data.get("IdentifierList", {}).get("CID", [])]
 
 
@@ -67,8 +69,8 @@ def get_cid_from_smiles(smiles: str) -> Optional[str]:
     str or None
         Pipe-separated list of CIDs or ``None`` if the structure is
         unknown to PubChem.
-    """
 
+    """
     safe_smiles = url_encode(smiles)
     url = (
         "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/"
@@ -95,8 +97,8 @@ def get_cid_from_inchi(inchi: str) -> Optional[str]:
     str or None
         Pipe-separated list of CIDs or ``None`` if the structure is
         unknown to PubChem.
-    """
 
+    """
     safe_inchi = url_encode(inchi)
     url = (
         "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchi/"
@@ -112,7 +114,6 @@ def get_cid_from_inchi(inchi: str) -> Optional[str]:
 
 def get_cid_from_inchikey(inchikey: str) -> Optional[str]:
     """Retrieve PubChem CID(s) for an InChIKey."""
-
     safe_inchikey = url_encode(inchikey)
     url = (
         "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/"
@@ -146,8 +147,8 @@ def make_request(url: str, delay: float = 3.0) -> Optional[Dict[str, Any]]:
     dict or None
         Parsed JSON response or ``None`` when the request fails, the server
         returns a non-success status code, or the payload cannot be decoded.
-    """
 
+    """
     time.sleep(delay)
     try:
         response = _session.get(url, timeout=10)
@@ -181,6 +182,7 @@ def validate_cid(cid: str) -> Optional[str]:
     str or None
         ``cid`` if valid, otherwise ``None`` when the identifier is empty or
         represents an invalid placeholder (``"0"`` or ``"-1"``).
+
     """
     if cid in {"", "0", "-1"}:
         return None
@@ -216,6 +218,7 @@ def get_cid(compound_name: str) -> Optional[str]:
     -------
     str or None
         Pipe-separated list of CIDs or ``None`` if not found.
+
     """
     safe_name = url_encode(compound_name)
     url = (
@@ -322,11 +325,16 @@ def process_compound(compound_name: str) -> Dict[str, str]:
     -------
     dict
         Dictionary containing compound details.
+
     """
     cid = get_cid(compound_name)
     standard = get_standard_name(cid) if cid else None
-    props = get_properties(cid) if cid else Properties(
-        "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
+    props = (
+        get_properties(cid)
+        if cid
+        else Properties(
+            "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
+        )
     )
     return {
         "Name": compound_name,
