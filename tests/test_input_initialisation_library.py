@@ -8,13 +8,14 @@ import pytest
 
 from library.input_initialisation_library import (
     _ensure_openpyxl,
-    EntityName,
+    TableDict,
     append_entities,
     build_combined_tables,
     unify_dtypes,
     save_tables,
     process_activity_table,
 )
+import library.input_initialisation_library as lib
 
 
 def test_unify_dtypes_basic() -> None:
@@ -44,7 +45,7 @@ def test_append_entities_deduplication() -> None:
 
 
 def test_build_combined_tables_drops_activity_cols() -> None:
-    same: dict[EntityName, pd.DataFrame] = {
+    same: TableDict = {
         "activity": pd.DataFrame({"id": [1], "Column1": ["a"]}),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
@@ -52,7 +53,7 @@ def test_build_combined_tables_drops_activity_cols() -> None:
         "testitem": pd.DataFrame(),
         "pairs_same_document": pd.DataFrame(),
     }
-    all_: dict[EntityName, pd.DataFrame] = {
+    all_: TableDict = {
         "activity": pd.DataFrame({"id": [2], "Column1": ["b"]}),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
@@ -69,7 +70,7 @@ def test_build_combined_tables_drops_activity_cols() -> None:
 
 def test_build_combined_tables_pairs_no_merge() -> None:
     """Pairs from different sources should not be combined."""
-    same: dict[EntityName, pd.DataFrame] = {
+    same: TableDict = {
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -77,7 +78,7 @@ def test_build_combined_tables_pairs_no_merge() -> None:
         "activity": pd.DataFrame(),
         "pairs_same_document": pd.DataFrame({"id": range(3)}),
     }
-    all_: dict[EntityName, pd.DataFrame] = {
+    all_: TableDict = {
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -90,8 +91,47 @@ def test_build_combined_tables_pairs_no_merge() -> None:
     assert len(combined["pairs"]) == 5
 
 
+def test_build_combined_tables_handles_status(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``build_combined_tables`` should populate activity before status logic."""
+    same: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [1]}),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame({"activity_id": [2]}),
+        "pairs": pd.DataFrame(),
+    }
+
+    # Minimal status.csv to satisfy loader
+    (tmp_path / "status.csv").write_text(
+        "status,condition_field,condition_value,order,score\n" "ok,null,null,0,0\n"
+    )
+
+    # Simplify heavy processing steps
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(
+        lib,
+        "initialize_activity_status",
+        lambda df, _api: df.assign(**{"Filtered.init": "ok"}),
+    )
+
+    combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
+    assert len(combined["activity"]) == 2
+    assert "Filtered.init" in combined["activity"].columns
+
+
 def test_save_tables_writes_files(tmp_path: Path) -> None:
-    tables: dict[EntityName, pd.DataFrame] = {
+    tables: TableDict = {
         "activity": pd.DataFrame({"id": [1]}),
         "assay": pd.DataFrame({"id": [2]}),
         "document": pd.DataFrame({"id": [3]}),
