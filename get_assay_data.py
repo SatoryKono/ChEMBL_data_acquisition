@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 from typing import Sequence
 
 import requests
 
+from chembl_da.library.config import load_config
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import io
@@ -31,6 +33,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -43,12 +46,16 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_assays(ids, chunk_size=args.chunk_size)
+        chunk_size = args.chunk_size or cfg.chunk_size
+        df = cl.get_assays(ids, chunk_size=chunk_size)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve assays: %s", exc)
         return 1
     df = ap.postprocess_assays(df)
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = (
+        args.output_csv
+        or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+    )
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -65,9 +72,7 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line argument parser."""
-    parser = base_parser(
-        "ChEMBL assay data utilities", column="assay_chembl_id", chunk_size=10
-    )
+    parser = base_parser("ChEMBL assay data utilities", column="assay_chembl_id")
     parser.set_defaults(func=run_chembl)
     return parser
 

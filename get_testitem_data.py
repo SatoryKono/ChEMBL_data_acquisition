@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
 import requests
 
+from chembl_da.library.config import load_config
 from library import chembl_library as cl
 from library import pubchem_library as pl
 from library import io
@@ -107,6 +109,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -119,9 +122,10 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     logger.info("Retrieved %d identifiers", len(ids))
-    logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
+    chunk_size = args.chunk_size or cfg.chunk_size
+    logger.info("Fetching ChEMBL data in chunks of %d", chunk_size)
     try:
-        df = cl.get_testitem(ids, chunk_size=args.chunk_size)
+        df = cl.get_testitem(ids, chunk_size=chunk_size)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve compounds: %s", exc)
         return 1
@@ -129,7 +133,10 @@ def run_chembl(args: argparse.Namespace) -> int:
     logger.info("Augmenting results with PubChem data")
     df = add_pubchem_data(df)
     logger.info("PubChem augmentation completed")
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = (
+        args.output_csv
+        or Path(cfg.output_dir) / io.default_output_path(args.input_csv).name
+    )
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -149,7 +156,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = base_parser(
         "ChEMBL and PubChem compound data utilities",
         column="molecule_chembl_id",
-        chunk_size=5,
     )
     parser.set_defaults(func=run_chembl)
     return parser

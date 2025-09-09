@@ -1,0 +1,14 @@
+api:
+  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
+  timeout_connect: 5
+  timeout_read: 30
+  rps: 5
+  burst: 5
+
+io:
+  output_dir: "data/output"
+  cache_dir: ".cache"
+
+jobs:
+  concurrency: 8
+  chunk_size: 500

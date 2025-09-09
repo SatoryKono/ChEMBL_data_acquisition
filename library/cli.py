@@ -35,9 +35,7 @@ def _positive_int(value: str) -> int:
     return ivalue
 
 
-def build_parser(
-    description: str, *, column: str, chunk_size: int = 10
-) -> argparse.ArgumentParser:
+def build_parser(description: str, *, column: str) -> argparse.ArgumentParser:
     """Return an argument parser with shared options.
 
     Parameters
@@ -46,9 +44,6 @@ def build_parser(
         Text used in the parser description.
     column:
         Default column name for identifier extraction.
-    chunk_size:
-        Default chunk size for API requests.
-
     """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
@@ -76,8 +71,13 @@ def build_parser(
     parser.add_argument(
         "--chunk-size",
         type=_positive_int,
-        default=chunk_size,
+        default=None,
         help="Maximum IDs per request",
+    )
+    parser.add_argument(
+        "--config",
+        default="config.yaml",
+        help="Path to YAML configuration file",
     )
     return parser
 

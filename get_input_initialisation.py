@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from chembl_da.library.config import load_config
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
 
@@ -34,11 +35,13 @@ def run(args: argparse.Namespace) -> int:
         Zero on success, non-zero otherwise.
 
     """
+    cfg = load_config(getattr(args, "config", "config.yaml"))
     try:
         if not args.same_doc.exists():
             raise FileNotFoundError(f"{args.same_doc} does not exist")
         if not args.all_doc.exists():
             raise FileNotFoundError(f"{args.all_doc} does not exist")
+        args.out_dir = args.out_dir or Path(cfg.output_dir)
         args.out_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("Loading source workbooks")
@@ -98,11 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("dictionary"),
         help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
     )
-    parser.add_argument(
-        "--out-dir", type=Path, default=Path("."), help="Output directory"
-    )
+    parser.add_argument("--out-dir", type=Path, default=None, help="Output directory")
     parser.add_argument(
         "--format", choices=["csv"], default="csv", help="Output format"
+    )
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
     )
     parser.set_defaults(func=run)
     return parser
