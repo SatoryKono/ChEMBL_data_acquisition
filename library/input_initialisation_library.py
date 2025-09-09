@@ -974,12 +974,14 @@ def aggregate_activity(
 ) -> Dict[str, pd.DataFrame]:
     """Aggregate status metrics across entities.
 
+
     The function combines activity pair information with per-activity
     annotations to produce status summaries for several entity levels.  Pair
     tables may not always contain the expected metric columns, and some
     activity tables can lack identifiers necessary for higher level
     aggregations.  Missing metrics are created and zero filled while missing
     identifier columns result in skipped aggregations with empty results.
+
     """
     metrics = [
         "independent_IC50",
