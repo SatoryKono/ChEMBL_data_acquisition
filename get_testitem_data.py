@@ -7,6 +7,7 @@ import logging
 from typing import Sequence
 
 import pandas as pd
+import requests
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
@@ -118,7 +119,11 @@ def run_chembl(args: argparse.Namespace) -> int:
 
     logger.info("Retrieved %d identifiers", len(ids))
     logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
-    df = cl.get_testitem(ids, chunk_size=args.chunk_size)
+    try:
+        df = cl.get_testitem(ids, chunk_size=args.chunk_size)
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("failed to retrieve compounds: %s", exc)
+        return 1
     logger.info("Retrieved %d rows from ChEMBL", len(df))
     logger.info("Augmenting results with PubChem data")
     df = add_pubchem_data(df)

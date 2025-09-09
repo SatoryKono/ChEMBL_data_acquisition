@@ -44,13 +44,12 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
             "target_chembl_id": "object",
         },
     )
-    counts = (
-        df.groupby(["document_chembl_id", "target_chembl_id"])
-        .size()
-        .rename("assay_with_same_target")
-    )
-    logger.debug("Calculated counts for %d document/target groups", len(counts))
-    return df.merge(counts, on=["document_chembl_id", "target_chembl_id"], how="left")
+    group_cols = ["document_chembl_id", "target_chembl_id"]
+    groups = df.groupby(group_cols)
+    logger.debug("Calculated counts for %d document/target groups", groups.ngroups)
+    result = df.copy()
+    result["assay_with_same_target"] = groups["document_chembl_id"].transform("size")
+    return result
 
 
 def postprocess_file(
@@ -74,6 +73,15 @@ def postprocess_file(
         Text encoding of the CSV files.
     """
 
-    df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
+    try:
+        df = pd.read_csv(
+            input_path,
+            sep=sep,
+            encoding=encoding,
+            dtype=str,
+            dtype_backend="pyarrow",
+        )
+    except ImportError:  # pragma: no cover - pyarrow optional
+        df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_assays(df)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
