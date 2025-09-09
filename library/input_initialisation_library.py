@@ -6,15 +6,17 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Callable, Dict, Iterable, Literal
+import logging
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 EntityName = Literal["activity", "assay", "document", "target", "testitem"]
+TableDict = Dict[str, pd.DataFrame]
 
 # Mapping of sheet names to entity identifiers
 SAME_DOC_SHEETS: dict[str, EntityName] = {
@@ -459,7 +461,7 @@ def _read_sheet(
         raise ValueError(f"sheet '{sheet}' not found in {path}") from exc
 
 
-def load_same_doc(xlsx_path: Path) -> Dict[EntityName, pd.DataFrame]:
+def load_same_doc(xlsx_path: Path) -> TableDict:
     """Load entity tables from ``ChEMBL_same_document_20_05.xlsx``.
 
     Parameters
@@ -472,20 +474,20 @@ def load_same_doc(xlsx_path: Path) -> Dict[EntityName, pd.DataFrame]:
     dict
         Mapping of entity names to DataFrames.
     """
-    tables: Dict[EntityName, pd.DataFrame] = {}
+    tables: TableDict = {}
     for sheet, entity in SAME_DOC_SHEETS.items():
         logger.info("Reading sheet '%s' from %s", sheet, xlsx_path)
         tables[entity] = _read_sheet(xlsx_path, sheet)
     return tables
 
 
-def load_all_doc(xlsx_path: Path) -> Dict[EntityName, pd.DataFrame]:
+def load_all_doc(xlsx_path: Path) -> TableDict:
     """Load entity tables from ``ChEMBL_all_10_05_step5.xlsx``.
 
     The ``activities_step5`` sheet requires promotion of the first row to
     header.
     """
-    tables: Dict[EntityName, pd.DataFrame] = {}
+    tables: TableDict = {}
     for sheet, entity in ALL_DOC_SHEETS.items():
         logger.info("Reading sheet '%s' from %s", sheet, xlsx_path)
         promote = sheet == "activities_step5"
@@ -563,12 +565,12 @@ def append_entities(df_a: pd.DataFrame, df_b: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_combined_tables(
-    same: Dict[EntityName, pd.DataFrame],
-    all_: Dict[EntityName, pd.DataFrame],
+    same: TableDict,
+    all_: TableDict,
     dictionary_dir: Path | str | None = None,
-) -> Dict[EntityName, pd.DataFrame]:
+) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources."""
-    combined: Dict[EntityName, pd.DataFrame] = {}
+    combined: TableDict = {}
     for entity in SAME_DOC_SHEETS.values():
         df_same = unify_dtypes(same[entity])
         df_all = unify_dtypes(all_[entity])
@@ -604,14 +606,29 @@ def build_combined_tables(
                     f"activity table still contains columns: {', '.join(sorted(remaining))}"
                 )
         combined[entity] = df
+    if dictionary_dir is not None:
+        status_df = load_status_table(dictionary_dir)
+        status_api = build_status_helpers(status_df)
+        combined['activity'] = initialize_activity_status(combined['activity'], status_api)
+        pair_table = None
+        for table in list(all_.values()) + list(same.values()):
+            if {'activity_id1', 'activity_id2'}.issubset(table.columns):
+                pair_table = table.copy()
+                break
+        if pair_table is not None:
+            pair_table = initialize_pairs(pair_table, combined['activity'], status_api)
+            aggregates = aggregate_activity(pair_table, combined['activity'], status_api)
+            combined.update({f'{k}_status': v for k, v in aggregates.items()})
+        else:
+            logger.warning('pair table not found; skipping status aggregation')
     return combined
 
 
 def save_tables(
-    tables: Dict[EntityName, pd.DataFrame],
+    tables: TableDict,
     out_dir: Path,
     fmt: str = "csv",
-) -> Dict[EntityName, Path]:
+) -> Dict[str, Path]:
     """Persist combined tables to ``out_dir``.
 
     Parameters
@@ -631,10 +648,253 @@ def save_tables(
     if fmt != "csv":
         raise ValueError("only csv output is supported")
     out_dir.mkdir(parents=True, exist_ok=True)
-    paths: Dict[EntityName, Path] = {}
+    paths: Dict[str, Path] = {}
     for entity, df in tables.items():
         path = out_dir / f"{entity}.csv"
         df.to_csv(path, index=False, encoding="utf-8", na_rep="")
         logger.info("Wrote %d rows to %s", len(df), path)
         paths[entity] = path
     return paths
+
+
+# Status processing -----------------------------------------------------------
+
+@dataclass(frozen=True)
+class StatusAPI:
+    """Container for status table helpers.
+
+    Attributes
+    ----------
+    table:
+        Raw status dataframe sorted by ``order``.
+    status_list:
+        Status names ordered by ``order``.
+    conditions:
+        List of condition fields where ``condition_value`` is not ``"null"``.
+    order_map:
+        Mapping of status to its ``order``.
+    score_map:
+        Mapping of status to ``score``.
+    """
+
+    table: pd.DataFrame
+    status_list: list[str]
+    conditions: list[str]
+    order_map: Dict[str, int]
+    score_map: Dict[str, int]
+
+    def pair(self, s1: str, s2: str) -> str:
+        return self.min_status([s1, s2])
+
+    def next(self, status: str) -> str:
+        idx = self.status_list.index(status) if status in self.status_list else len(self.status_list) - 1
+        return self.status_list[min(idx + 1, len(self.status_list) - 1)]
+
+    def min_status(self, statuses: Iterable[str]) -> str:
+        valid = [s for s in statuses if s in self.order_map]
+        if not valid:
+            return self.status_list[0]
+        return min(valid, key=lambda s: self.order_map[s])
+
+    def max_status(self, statuses: Iterable[str]) -> str:
+        valid = [s for s in statuses if s in self.order_map]
+        if not valid:
+            return self.status_list[-1]
+        return max(valid, key=lambda s: self.order_map[s])
+
+    def get_order(self, status: str) -> int:
+        return self.order_map.get(status, self.order_map[self.status_list[-1]])
+
+    def get_score(self, status: str) -> int:
+        return self.score_map.get(status, 0)
+
+    def ascending(self, s1: str, s2: str) -> bool:
+        return self.get_order(s1) < self.get_order(s2)
+
+    def descending(self, s1: str, s2: str) -> bool:
+        return self.get_order(s1) > self.get_order(s2)
+    def Next(self, status: str) -> str:
+        return self.next(status)
+
+    def MinStatus(self, statuses: Iterable[str]) -> str:
+        return self.min_status(statuses)
+
+    def MaxStatus(self, statuses: Iterable[str]) -> str:
+        return self.max_status(statuses)
+
+    def Ascending(self, s1: str, s2: str) -> bool:
+        return self.ascending(s1, s2)
+
+    def Descending(self, s1: str, s2: str) -> bool:
+        return self.descending(s1, s2)
+
+
+def load_status_table(dictionary_dir: Path | str) -> pd.DataFrame:
+    """Load ``status.csv`` from ``dictionary_dir``.
+
+    Parameters
+    ----------
+    dictionary_dir:
+        Directory containing ``status.csv``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Status table sorted by ``order`` with proper dtypes.
+    """
+    path = Path(dictionary_dir) / "status.csv"
+    df = pd.read_csv(
+        path,
+        dtype={
+            "status": "string",
+            "condition_field": "string",
+            "condition_value": "string",
+            "order": "Int64",
+            "score": "Int64",
+        },
+    )
+    df["order"] = df["order"].astype(int)
+    df["score"] = df["score"].astype(int)
+    return df.sort_values("order").reset_index(drop=True)
+
+
+def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
+    """Construct :class:`StatusAPI` from ``status_df``."""
+    status_list = status_df["status"].tolist()
+    conditions = (
+        status_df.loc[status_df["condition_value"] != "null", "condition_field"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    order_map = dict(zip(status_df["status"], status_df["order"]))
+    score_map = dict(zip(status_df["status"], status_df["score"]))
+    return StatusAPI(status_df, status_list, conditions, order_map, score_map)
+
+
+def _active(row: pd.Series, fields: Iterable[str]) -> list[str]:
+    """Return names of condition fields active in ``row``."""
+    return [f for f in fields if bool(row.get(f, False))]
+
+
+def _min_by_condition(fields: Iterable[str], status_api: StatusAPI) -> str:
+    sub = status_api.table[status_api.table["condition_field"].isin(list(fields))]
+    if sub.empty:
+        return status_api.status_list[-1]
+    return sub.iloc[0]["status"]
+
+
+def initialize_activity_status(df_activity: pd.DataFrame, status_api: StatusAPI) -> pd.DataFrame:
+    """Add status flags and initial status to activity table."""
+    df = df_activity.copy()
+    issue_cols = [
+        "high_citation_rate",
+        "unicellular_organism",
+        "review",
+        "rounded_data_citation",
+        "shuffled_assay",
+        "higly_correlated_assay",
+        "exact_data_citation",
+        "multmol_assay",
+        "multifunctional_enzyme",
+        "unknown_chirality",
+    ]
+    for col in issue_cols:
+        if col not in df.columns:
+            df[col] = False
+        df[col] = df[col].fillna(False).astype("boolean")
+    df["no_issue"] = ~df[issue_cols].any(axis=1)
+    df["Filtered.init"] = [
+        _min_by_condition(_active(row, status_api.conditions), status_api) for _, row in df.iterrows()
+    ]
+    return df
+
+
+def initialize_pairs(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI) -> pd.DataFrame:
+    """Merge activity statuses into ``pair_df``."""
+    df = pair_df.copy()
+    mapping = activity_df[["activity_id", "Filtered.init"]]
+    df = df.merge(mapping, left_on="activity_id1", right_on="activity_id", how="left")
+    df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
+    df.drop(columns=["activity_id"], inplace=True)
+    df = df.merge(mapping, left_on="activity_id2", right_on="activity_id", how="left")
+    df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
+    df.drop(columns=["activity_id"], inplace=True)
+
+    order_map = status_api.order_map
+    order_to_status = {v: k for k, v in order_map.items()}
+    last_order = order_map[status_api.status_list[-1]]
+    o1 = df["Filtered1"].map(order_map).fillna(last_order)
+    o2 = df["Filtered2"].map(order_map).fillna(last_order)
+    df["Filtered"] = o1.where(o1 < o2, o2).map(order_to_status)
+    return df
+
+
+def _aggregate_entity(source: pd.DataFrame, group_col: str, status_api: StatusAPI) -> pd.DataFrame:
+    metrics = [
+        "independent_IC50",
+        "non_independent_IC50",
+        "independent_Ki",
+        "non_independent_Ki",
+    ]
+    agg: dict[str, Any] = {
+        "Filtered.new": lambda s: status_api.max_status([x for x in s if isinstance(x, str)]),
+    }
+    for m in metrics:
+        agg[m] = "sum"
+    keep = [group_col, "Filtered.new", *metrics]
+    return source[keep].groupby(group_col, as_index=False).agg(agg)
+
+
+def aggregate_activity(pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI) -> Dict[str, pd.DataFrame]:
+    """Aggregate status metrics across entities."""
+    metrics = [
+        "independent_IC50",
+        "non_independent_IC50",
+        "independent_Ki",
+        "non_independent_Ki",
+    ]
+
+    left = pair_df.rename(columns={"activity_id1": "activity_id", "Filtered1": "Filtered.new"})[
+        ["activity_id", "Filtered.new", *metrics]
+    ]
+    right = pair_df.rename(columns={"activity_id2": "activity_id", "Filtered2": "Filtered.new"})[
+        ["activity_id", "Filtered.new", *metrics]
+    ]
+    activity_pairs = pd.concat([left, right], ignore_index=True)
+    activity_status = _aggregate_entity(activity_pairs, "activity_id", status_api)
+
+    merged = activity_df.merge(activity_status, on="activity_id", how="left")
+    merged["Filtered.new"] = merged["Filtered.new"].fillna(merged["Filtered.init"])
+    for m in metrics:
+        merged[m] = merged[m].fillna(0)
+
+    assay_status = _aggregate_entity(merged, "assay_id", status_api)
+    document_status = _aggregate_entity(merged, "document_id", status_api)
+
+    system_src = merged.copy()
+    system_src["system_id"] = (
+        system_src["testitem_id"].astype("string")
+        + "_"
+        + system_src["target_id"].astype("string")
+        + "_"
+        + system_src["mesurement_type"].astype("string")
+    )
+    system_status = _aggregate_entity(system_src, "system_id", status_api)
+
+    split = system_status["system_id"].str.split("_", n=2, expand=True)
+    system_status["testitem_id"] = split[0]
+    system_status["target_id"] = split[1]
+    system_status["mesurement_type"] = split[2]
+
+    testitem_status = _aggregate_entity(system_status, "testitem_id", status_api)
+    target_status = _aggregate_entity(system_status, "target_id", status_api)
+
+    return {
+        "activity": activity_status,
+        "assay": assay_status,
+        "document": document_status,
+        "system": system_status,
+        "testitem": testitem_status,
+        "target": target_status,
+    }
