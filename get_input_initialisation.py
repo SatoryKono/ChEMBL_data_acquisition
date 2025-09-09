@@ -64,7 +64,10 @@ def run(args: argparse.Namespace) -> int:
             "Saved %d tables and quality reports to %s", len(paths), args.out_dir
         )
         return 0
-    except Exception as exc:
+    except KeyError as exc:
+        logger.error("required table '%s' missing", exc.args[0])
+        return 1
+    except Exception as exc:  # pragma: no cover - defensive
         logger.error("%s", exc)
         return 1
 

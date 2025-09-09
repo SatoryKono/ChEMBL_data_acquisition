@@ -26,6 +26,11 @@ EntityName = Literal[
     "pairs_same_document",
 ]
 
+# Mapping of entity names to their corresponding dataframes.  The dictionary
+# may contain additional keys such as ``"activity_status"`` produced during
+# processing, hence the generic ``str`` key type.
+TableDict = Dict[str, pd.DataFrame]
+
 
 # Mapping of sheet names to entity identifiers
 SAME_DOC_SHEETS: dict[str, EntityName] = {
@@ -566,7 +571,7 @@ def build_combined_tables(
 ) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources."""
 
-    combined: Dict[EntityName, pd.DataFrame] = {}
+    combined: TableDict = {}
 
     # --- regular entities -------------------------------------------------
     regular_entities: tuple[EntityName, ...] = (
@@ -587,29 +592,6 @@ def build_combined_tables(
             len(df),
         )
         combined[entity] = df
- 
-    if dictionary_dir is not None:
-        status_df = load_status_table(dictionary_dir)
-        status_api = build_status_helpers(status_df)
-        combined["activity"] = initialize_activity_status(
-            combined["activity"], status_api
-        )
-        pair_table = None
-        for table in list(all_.values()) + list(same.values()):
-            if {"activity_id1", "activity_id2"}.issubset(table.columns):
-                pair_table = table.copy()
-                break
-        if pair_table is not None:
-            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
-            aggregates = aggregate_activity(
-                pair_table, combined["activity"], status_api
-            )
-            combined.update({f"{k}_status": v for k, v in aggregates.items()})
-        else:
-
-            logger.warning('pair table not found; skipping status aggregation')
- 
-
     # --- activity --------------------------------------------------------
     df_same_act = unify_dtypes(same["activity"])
     df_all_act = unify_dtypes(all_["activity"])
@@ -641,7 +623,26 @@ def build_combined_tables(
     logger.info("Entity pairs: rows=%d", len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
     combined["pairs"] = df_pairs
- 
+
+    if dictionary_dir is not None:
+        status_df = load_status_table(dictionary_dir)
+        status_api = build_status_helpers(status_df)
+        combined["activity"] = initialize_activity_status(
+            combined["activity"], status_api
+        )
+        pair_table = None
+        for table in combined.values():
+            if {"activity_id1", "activity_id2"}.issubset(table.columns):
+                pair_table = table.copy()
+                break
+        if pair_table is not None:
+            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
+            aggregates = aggregate_activity(
+                pair_table, combined["activity"], status_api
+            )
+            combined.update({f"{k}_status": v for k, v in aggregates.items()})
+        else:
+            logger.warning("pair table not found; skipping status aggregation")
 
     return combined
 
@@ -781,8 +782,27 @@ def load_status_table(dictionary_dir: Path | str) -> pd.DataFrame:
             "score": "Int64",
         },
     )
-    df["order"] = df["order"].astype(int)
-    df["score"] = df["score"].astype(int)
+
+    # Remove rows that are completely empty in the CSV.  The source file may
+    # contain trailing empty lines which ``pandas.read_csv`` represents as rows
+    # filled with ``NA``.  Such rows would later cause ``astype(int)`` to raise
+    # ``ValueError``.
+    df = df.dropna(how="all")
+
+    # Ensure mandatory numeric columns are present and convertible to plain
+    # integers.  ``Int64`` allows ``NA`` values, so we explicitly check for
+    # missing values to provide a clearer error message than the default
+    # ``cannot convert NA to integer``.
+    required = ["order", "score"]
+    if df[required].isna().any().any():
+        missing = df[df[required].isna().any(axis=1)].index.tolist()
+        raise ValueError(
+            "status.csv contains missing numeric values in rows: "
+            + ", ".join(str(i + 2) for i in missing)  # account for header
+        )
+
+    df["order"] = pd.to_numeric(df["order"], errors="raise").astype(int)
+    df["score"] = pd.to_numeric(df["score"], errors="raise").astype(int)
     return df.sort_values("order").reset_index(drop=True)
 
 
