@@ -704,6 +704,8 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
+    
+
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
@@ -736,19 +738,27 @@ def build_combined_tables(
                 )
 
 
-        pair_table = combined.get("pairs_independent")
-        if pair_table is not None and {"Filtered1", "Filtered2"}.issubset(
-            pair_table.columns
-        ):
+        for suffix, pair_key in [
+            ("independent", "pairs_independent"),
+            ("non_independent", "pairs_non_independent"),
+            ("same_document", "pairs_same_document"),
+        ]:
+            pair_table = combined.get(pair_key)
+            if pair_table is not None and {"Filtered1", "Filtered2"}.issubset(
+                pair_table.columns
+            ):
+                aggregates = aggregate_activity(
+                    pair_table, combined["activity"], status_api
+                )
+                combined.update(
+                    {f"{k}_{suffix}_status": v for k, v in aggregates.items()}
+                )
+            else:
+                logger.warning(
+                    "%s table missing or lacks Filtered columns; skipping status aggregation",
+                    pair_key,
+                )
 
-            aggregates = aggregate_activity(
-                pair_table, combined["activity"], status_api
-            )
-            combined.update({f"{k}_status": v for k, v in aggregates.items()})
-        else:
-            logger.warning(
-                "pairs_independent table missing or lacks Filtered columns; skipping status aggregation"
-            )
 
     return combined
 
@@ -779,7 +789,18 @@ def save_tables(
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: Dict[str, Path] = {}
     for entity, df in tables.items():
-        sub_dir = out_dir / "status" if entity.endswith("_status") else out_dir
+
+        if entity.endswith("_non_independent_status"):
+            sub_dir = out_dir / "status" / "non-independent"
+        elif entity.endswith("_independent_status"):
+            sub_dir = out_dir / "status" / "independent"
+        elif entity.endswith("_same_document_status"):
+            sub_dir = out_dir / "status" / "same_document"
+        elif entity.endswith("_status"):
+            sub_dir = out_dir / "status"
+        else:
+            sub_dir = out_dir
+
         sub_dir.mkdir(parents=True, exist_ok=True)
         path = sub_dir / f"{entity}.csv"
         df.to_csv(path, index=False, encoding="utf-8", na_rep="")
