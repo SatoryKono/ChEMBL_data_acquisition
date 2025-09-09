@@ -343,7 +343,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
@@ -370,7 +370,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
@@ -397,7 +397,7 @@ def run_iuphar(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(output, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
@@ -569,7 +569,7 @@ def run_all(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
@@ -12,6 +11,7 @@ import pandas as pd
 from library import chembl_library as cl
 from library import pubchem_library as pl
 from library import io
+from library.cli import build_parser as base_parser, configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -132,7 +132,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
     return 0
@@ -140,42 +140,13 @@ def run_chembl(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line argument parser."""
-    parser = argparse.ArgumentParser(
-        description="ChEMBL and PubChem compound data utilities"
-    )
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
-    parser.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV file containing molecule identifiers",
-    )
-    parser.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file (default: auto-generate)",
-    )
-    parser.add_argument(
-        "--column",
-        default="molecule_chembl_id",
-        help="Column name in the input CSV containing identifiers",
-    )
-    parser.add_argument("--sep", default=",", help="CSV delimiter")
-    parser.add_argument("--encoding", default="utf8", help="File encoding")
-    parser.add_argument(
-        "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
+    parser = base_parser(
+        "ChEMBL and PubChem compound data utilities",
+        column="molecule_chembl_id",
+        chunk_size=5,
     )
     parser.set_defaults(func=run_chembl)
     return parser
-
-
-def configure_logging(level: str) -> None:
-    """Configure basic logging."""
-    numeric_level = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(level=numeric_level)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
