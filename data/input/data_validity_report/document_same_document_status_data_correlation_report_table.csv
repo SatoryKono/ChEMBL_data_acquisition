@@ -1,0 +1,5 @@
+﻿index,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki
+independent_IC50,,,,
+non_independent_IC50,,1.0,,-0.0006767955449492958
+independent_Ki,,,,
+non_independent_Ki,,-0.0006767955449492958,,1.0

@@ -632,7 +632,8 @@ def build_combined_tables(
     for entity in regular_entities:
         df_same = unify_dtypes(same[entity])
         df_all = unify_dtypes(all_[entity])
-        df = append_entities(df_same, df_all)
+        df_tmp = append_entities(df_same, df_all)
+        df=df_tmp.drop_duplicates(subset=concat.columns[0],keep="first")
         logger.info(
             "Entity %s: rows_same=%d rows_all=%d rows_after_dedup=%d",
             entity,
@@ -649,7 +650,7 @@ def build_combined_tables(
     concat = concat.drop(
         columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"
     )
-    df_activity = concat.drop_duplicates(keep="first")
+    df_activity = concat.drop_duplicates(subset=concat.columns[0],keep="first")
     if dictionary_dir is not None:
         df_activity = process_activity_table(df_activity, dictionary_dir)
     logger.info(
