@@ -925,10 +925,14 @@ def initialize_pairs(
     """Merge activity statuses into ``pair_df``."""
     df = pair_df.copy()
     mapping = activity_df[["activity_id", "Filtered.init"]]
-    df = df.merge(mapping, left_on="activity_chembl_id1", right_on="activity_id", how="left")
+    df = df.merge(
+        mapping, left_on="activity_chembl_id1", right_on="activity_id", how="left"
+    )
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
     df.drop(columns=["activity_id"], inplace=True)
-    df = df.merge(mapping, left_on="activity_chembl_id2", right_on="activity_id", how="left")
+    df = df.merge(
+        mapping, left_on="activity_chembl_id2", right_on="activity_id", how="left"
+    )
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
     df.drop(columns=["activity_id"], inplace=True)
 
@@ -964,7 +968,11 @@ def _aggregate_entity(
 def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> Dict[str, pd.DataFrame]:
-    """Aggregate status metrics across entities."""
+    """Aggregate status metrics across entities.
+
+    Missing metric columns in ``pair_df`` are created and filled with zeros
+    to ensure consistent output schemas.
+    """
     metrics = [
         "independent_IC50",
         "non_independent_IC50",
@@ -972,10 +980,20 @@ def aggregate_activity(
         "non_independent_Ki",
     ]
 
-    left = pair_df.rename(
+    df_pairs = pair_df.copy()
+    missing = [m for m in metrics if m not in df_pairs.columns]
+    if missing:
+        logger.warning(
+            "pair table missing columns %s; filling with zeros",
+            ", ".join(missing),
+        )
+        for col in missing:
+            df_pairs[col] = 0
+
+    left = df_pairs.rename(
         columns={"activity_chembl_id1": "activity_id", "Filtered1": "Filtered.new"}
     )[["activity_id", "Filtered.new", *metrics]]
-    right = pair_df.rename(
+    right = df_pairs.rename(
         columns={"activity_chembl_id2": "activity_id", "Filtered2": "Filtered.new"}
     )[["activity_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
