@@ -24,7 +24,7 @@ SAME_DOC_SHEETS: dict[str, EntityName] = {
     "molecule_step5_same_doc": "testitem",
     "target_step5_same_doc": "target",
     "document_step5_same_doc": "document",
-    "activities_step5_same_doc": "activity",
+    "activities_step5_same": "activity",
 }
 
 ALL_DOC_SHEETS: dict[str, EntityName] = {
