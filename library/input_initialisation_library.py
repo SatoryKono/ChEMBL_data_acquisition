@@ -568,6 +568,52 @@ def append_entities(df_a: pd.DataFrame, df_b: pd.DataFrame) -> pd.DataFrame:
     return combined.drop_duplicates(keep="first")
 
 
+def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Add independent/non-independent metric flags to pair tables.
+
+    Parameters
+    ----------
+    df:
+        DataFrame containing pair information. Expected to include the
+        ``INDEPENDENT`` and ``mesurement_type`` columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of ``df`` with four additional integer columns indicating the
+        count of independent or non-independent measurements for ``IC50`` and
+        ``Ki`` values.
+    """
+
+    result = df.copy()
+    indep_col, type_col = "INDEPENDENT", "mesurement_type"
+    if {indep_col, type_col}.issubset(result.columns):
+        # Convert flag column to pandas boolean and fill missing with ``False``
+        independent = _safe_to_bool(result[indep_col], indep_col).fillna(False)
+        mtype = result[type_col].astype("string")
+        # Derive measurement-specific indicators as integer columns
+        result["non_independent_IC50"] = (~independent & (mtype == "IC50")).astype(
+            "int64"
+        )
+        result["independent_IC50"] = (independent & (mtype == "IC50")).astype("int64")
+        result["non_independent_Ki"] = (~independent & (mtype == "Ki")).astype("int64")
+        result["independent_Ki"] = (independent & (mtype == "Ki")).astype("int64")
+    else:
+        # Ensure metric columns exist even if source fields are missing
+        for col in (
+            "non_independent_IC50",
+            "independent_IC50",
+            "non_independent_Ki",
+            "independent_Ki",
+        ):
+            result[col] = 0
+        missing = [c for c in (indep_col, type_col) if c not in result.columns]
+        logger.warning(
+            "pair table missing columns %s; metric flags set to zero", missing
+        )
+    return result
+
+
 def build_combined_tables(
     same: TableDict,
     all_: TableDict,
@@ -622,8 +668,8 @@ def build_combined_tables(
     combined["activity"] = df_activity
 
     # --- pairs ------------------------------------------------------------
-    df_pairs_same = unify_dtypes(same["pairs_same_document"])
-    df_pairs = unify_dtypes(all_["pairs"])
+    df_pairs_same = add_pair_metric_columns(unify_dtypes(same["pairs_same_document"]))
+    df_pairs = add_pair_metric_columns(unify_dtypes(all_["pairs"]))
     logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
     logger.info("Entity pairs: rows=%d", len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
@@ -994,7 +1040,10 @@ def aggregate_activity(
     missing = [m for m in metrics if m not in df_pairs.columns]
     if missing:
         logger.warning(
-            "pair table missing columns %s; filling with zeros",
+
+            "pair table missing %s %s; filling with zeros",
+            "column" if len(missing) == 1 else "columns",
+
             ", ".join(missing),
         )
         for col in missing:
@@ -1018,7 +1067,17 @@ def aggregate_activity(
     document_status = _aggregate_entity(merged, "document_id", status_api)
 
     system_cols = ["testitem_id", "target_id", "mesurement_type"]
-    if all(c in merged.columns for c in system_cols):
+
+    missing_sys = [c for c in system_cols if c not in merged.columns]
+    if missing_sys:
+        logger.warning(
+            "activity table missing %s %s; skipping system aggregation",
+            "column" if len(missing_sys) == 1 else "columns",
+            ", ".join(missing_sys),
+        )
+        system_status = pd.DataFrame(columns=["system_id", "Filtered.new", *metrics])
+    else:
+
         system_src = merged.copy()
         system_src["system_id"] = (
             system_src["testitem_id"].astype("string")
@@ -1032,23 +1091,24 @@ def aggregate_activity(
         system_status["testitem_id"] = split[0]
         system_status["target_id"] = split[1]
         system_status["mesurement_type"] = split[2]
-    else:
-        missing_sys = [c for c in system_cols if c not in merged.columns]
-        logger.warning(
-            "activity table missing columns %s; skipping system aggregation",
-            ", ".join(missing_sys),
-        )
-        system_status = pd.DataFrame(columns=["system_id", "Filtered.new", *metrics])
+
 
     if "testitem_id" in merged.columns:
         testitem_status = _aggregate_entity(merged, "testitem_id", status_api)
-    else:
+    elif "testitem_id" not in missing_sys:
+
         logger.warning(
             "activity table missing column testitem_id; skipping testitem aggregation"
         )
         testitem_status = pd.DataFrame(
             columns=["testitem_id", "Filtered.new", *metrics]
         )
+
+    else:
+        testitem_status = pd.DataFrame(
+            columns=["testitem_id", "Filtered.new", *metrics]
+        )
+
 
     if "target_id" in merged.columns:
         target_status = _aggregate_entity(merged, "target_id", status_api)

@@ -91,6 +91,31 @@ def test_build_combined_tables_pairs_no_merge() -> None:
     assert len(combined["pairs"]) == 5
 
 
+def test_build_combined_tables_adds_pair_metrics() -> None:
+    """Pair tables should contain metric flags derived from source columns."""
+    same: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(
+            {"INDEPENDENT": [False], "mesurement_type": ["Ki"]}
+        ),
+    }
+    all_: TableDict = {
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "activity": pd.DataFrame(),
+        "pairs": pd.DataFrame({"INDEPENDENT": [True], "mesurement_type": ["IC50"]}),
+    }
+    combined = build_combined_tables(same, all_)
+    assert combined["pairs"].loc[0, "independent_IC50"] == 1
+    assert combined["pairs_same_document"].loc[0, "non_independent_Ki"] == 1
+
+
 def test_build_combined_tables_handles_status(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
