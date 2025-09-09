@@ -166,3 +166,4 @@ def test_aggregate_activity_handles_missing_testitem_id(tmp_path: Path) -> None:
     assert agg["system"].empty
     assert agg["testitem"].empty
     assert agg["target"].set_index("target_id").loc["TG1", "independent_IC50"] == 1
+
