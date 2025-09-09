@@ -1,0 +1,7 @@
+﻿column,non_null,non_empty,empty_pct,unique_cnt,unique_pct_of_non_empty,pattern_cov_doi,pattern_cov_issn,pattern_cov_isbn,pattern_cov_url,pattern_cov_email,bool_like_cov,numeric_cov,numeric_min,numeric_p50,numeric_p95,numeric_max,numeric_mean,numeric_std,date_cov,date_min,date_p50,date_max,text_len_min,text_len_p50,text_len_p95,text_len_max,guessed_roles,top_values
+system_id,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
+Filtered.new,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
+independent_IC50,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
+non_independent_IC50,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
+independent_Ki,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
+non_independent_Ki,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
