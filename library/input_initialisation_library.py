@@ -249,11 +249,11 @@ def process_activity_table(
         columns={
             "activity_chembl_id": "activity_id",
             "salt_chembl_id": "saltform_id",
-            "molecule_chembl_id": "molecule_id",
+            "molecule_chembl_id": "testitem_id",
             "target_chembl_id": "target_id",
             "assay_chembl_id": "assay_id",
             "document_chembl_id": "document_id",
-            "standard_type": "mesurement_type",
+            "standard_type": "standard_type",
             "log_value": "pA_value",
         }
     )
@@ -357,12 +357,12 @@ def process_activity_table(
     final_cols = [
         "activity_id",
         "saltform_id",
-        "molecule_id",
+        "testitem_id",
         "target_id",
         "assay_id",
         "document_id",
         "bao_endpoint",
-        "mesurement_type",
+        "standard_type",
         "standard_value",
         "pA_value",
         "bao_format",
@@ -575,7 +575,7 @@ def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df:
         DataFrame containing pair information. Expected to include the
-        ``INDEPENDENT`` and ``mesurement_type`` columns.
+        ``INDEPENDENT`` and ``standard_type`` columns.
 
     Returns
     -------
@@ -586,7 +586,7 @@ def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
 
     result = df.copy()
-    indep_col, type_col = "INDEPENDENT", "mesurement_type"
+    indep_col, type_col = "INDEPENDENT", "standard_type"
     if {indep_col, type_col}.issubset(result.columns):
         # Convert flag column to pandas boolean and fill missing with ``False``
         independent = _safe_to_bool(result[indep_col], indep_col).fillna(False)
@@ -1066,7 +1066,7 @@ def aggregate_activity(
     assay_status = _aggregate_entity(merged, "assay_id", status_api)
     document_status = _aggregate_entity(merged, "document_id", status_api)
 
-    system_cols = ["testitem_id", "target_id", "mesurement_type"]
+    system_cols = ["testitem_id", "target_id", "standard_type"]
 
     missing_sys = [c for c in system_cols if c not in merged.columns]
     if missing_sys:
@@ -1084,13 +1084,13 @@ def aggregate_activity(
             + "_"
             + system_src["target_id"].astype("string")
             + "_"
-            + system_src["mesurement_type"].astype("string")
+            + system_src["standard_type"].astype("string")
         )
         system_status = _aggregate_entity(system_src, "system_id", status_api)
         split = system_status["system_id"].str.split("_", n=2, expand=True)
         system_status["testitem_id"] = split[0]
         system_status["target_id"] = split[1]
-        system_status["mesurement_type"] = split[2]
+        system_status["standard_type"] = split[2]
 
 
     if "testitem_id" in merged.columns:

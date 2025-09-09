@@ -1,7 +1,7 @@
 ﻿column,non_null,non_empty,empty_pct,unique_cnt,unique_pct_of_non_empty,pattern_cov_doi,pattern_cov_issn,pattern_cov_isbn,pattern_cov_url,pattern_cov_email,bool_like_cov,numeric_cov,numeric_min,numeric_p50,numeric_p95,numeric_max,numeric_mean,numeric_std,date_cov,date_min,date_p50,date_max,text_len_min,text_len_p50,text_len_p95,text_len_max,guessed_roles,top_values
-testitem_id,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
-Filtered.new,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
-independent_IC50,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
-non_independent_IC50,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
-independent_Ki,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
-non_independent_Ki,0,0,0.0,0,,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,,,,,,,,,,categorical,
+testitem_id,40675,40675,0.0,40675,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,7.0,13.0,13.0,13.0,identifier-like,CHEMBL10 (1); CHEMBL3814418 (1); CHEMBL3814317 (1)
+Filtered.new,40675,40675,0.0,10,0.0002458512599877074,0.0,0.0,0.0,0.0,0.0,0.0,0.0,,,,,,,0.0,,,,6.0,8.0,32.0,36.0,categorical,no issue (22400); test Item with unknown chirality (6980); highly correlated assays (5001)
+independent_IC50,40675,40675,0.0,315,0.007744314689612784,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,2.0,77440.0,13.216963736939151,524.6106278111567,1.0,1970-01-01,1970-01-01,1970-01-01 00:00:00.000077440,3.0,3.0,3.0,7.0,date|numeric|free-text,0.0 (36380); 1.0 (2009); 6.0 (453)
+non_independent_IC50,40675,40675,0.0,205,0.005039950829748003,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,3.0,7636.0,2.960712968653964,64.57901326575043,1.0,1970-01-01,1970-01-01,1970-01-01 00:00:00.000007636,3.0,3.0,3.0,6.0,date|numeric|free-text,0.0 (35504); 1.0 (2403); 6.0 (618)
+independent_Ki,40675,40675,0.0,169,0.004154886293792255,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,1.0,24109.0,2.4572095881991394,133.1787004417029,1.0,1970-01-01,1970-01-01,1970-01-01 00:00:00.000024109,3.0,3.0,3.0,7.0,date|numeric|free-text,0.0 (38602); 1.0 (956); 2.0 (297)
+non_independent_Ki,40675,40675,0.0,189,0.0046465888137676705,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,1.0,167421.0,6.794910878918254,833.4736176391358,1.0,1970-01-01,1970-01-01,1970-01-01 00:00:00.000167421,3.0,3.0,3.0,8.0,date|numeric|free-text,0.0 (37085); 1.0 (1654); 2.0 (513)
