@@ -593,11 +593,6 @@ def build_combined_tables(
         )
         combined[entity] = df
 
-
-
-
-
-
     # --- activity --------------------------------------------------------
     df_same_act = unify_dtypes(same["activity"])
     df_all_act = unify_dtypes(all_["activity"])
@@ -630,27 +625,44 @@ def build_combined_tables(
     combined["pairs_same_document"] = df_pairs_same
     combined["pairs"] = df_pairs
 
-
     if dictionary_dir is not None:
         status_df = load_status_table(dictionary_dir)
         status_api = build_status_helpers(status_df)
         combined["activity"] = initialize_activity_status(
             combined["activity"], status_api
         )
+
+        for pair_key in ("pairs", "pairs_same_document"):
+            if pair_key not in combined:
+                logger.warning("skip initialize_pairs: table '%s' missing", pair_key)
+                continue
+
+            df_pair = normalize_pair_columns(combined[pair_key])
+            if {"activity_id1", "activity_id2"}.issubset(df_pair.columns):
+                combined[pair_key] = initialize_pairs(
+                    df_pair, combined["activity"], status_api
+                )
+            else:
+                combined[pair_key] = df_pair
+                logger.warning(
+                    "skip initialize_pairs: table '%s' missing or has no activity_id1/activity_id2",
+                    pair_key,
+                )
+
         pair_table = None
-        for table in combined.values():
-            if {"activity_id1", "activity_id2"}.issubset(table.columns):
-                pair_table = table.copy()
+        for pair_key in ("pairs", "pairs_same_document"):
+            if pair_key in combined and {"Filtered1", "Filtered2"}.issubset(
+                combined[pair_key].columns
+            ):
+                pair_table = combined[pair_key]
                 break
         if pair_table is not None:
-            pair_table = initialize_pairs(pair_table, combined["activity"], status_api)
             aggregates = aggregate_activity(
                 pair_table, combined["activity"], status_api
             )
             combined.update({f"{k}_status": v for k, v in aggregates.items()})
         else:
             logger.warning("pair table not found; skipping status aggregation")
-
 
     return combined
 
@@ -874,6 +886,36 @@ def initialize_activity_status(
     )
     df["Filtered.init"] = min_order.map(order_to_status)
     return df
+
+
+def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize activity ID column names in pair tables.
+
+    The Excel sources occasionally vary in the casing or use of underscores
+    for ``activity_id1`` and ``activity_id2``.  This helper normalises these
+    column names so downstream processing can rely on a consistent schema.
+
+    Parameters
+    ----------
+    df:
+        DataFrame potentially containing activity ID columns with alternative
+        spellings.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of ``df`` with recognised activity ID columns renamed to
+        ``activity_id1`` and ``activity_id2``.
+    """
+
+    rename: dict[str, str] = {}
+    for col in df.columns:
+        key = col.lower().replace("_", "")
+        if key == "activityid1":
+            rename[col] = "activity_id1"
+        elif key == "activityid2":
+            rename[col] = "activity_id2"
+    return df.rename(columns=rename)
 
 
 def initialize_pairs(
