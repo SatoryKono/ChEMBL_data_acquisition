@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
-from library.config import Config, ensure_dirs
+from library.config import Config, ensure_dirs, print_config
 from library.cli import (
     apply_config_overrides,
     build_parser as base_parser,
@@ -138,6 +138,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "out_dir": "init.output_dir",
             },
         )
+        if args.print_config:
+            print_config(cfg)
+            return 0
         ensure_dirs(cfg)
 
         args.same_doc = Path(args.same_doc)

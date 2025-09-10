@@ -93,6 +93,11 @@ def build_parser(
         default=Path("config.yaml"),
         help="YAML configuration file",
     )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
     return parser
 
 
