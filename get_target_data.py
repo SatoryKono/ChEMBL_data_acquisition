@@ -621,6 +621,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
         return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        return 1
     if hasattr(args, "func"):
         return args.func(cfg, args)
     parser.print_help()

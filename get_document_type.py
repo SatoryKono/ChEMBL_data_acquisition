@@ -9,13 +9,15 @@ from __future__ import annotations
 
 from typing import Iterable, Sequence
 
-import argparse
 import logging
-from pathlib import Path
 
 import pandas as pd
 from library.config import Config, ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 from library import io
 
 from library.document_type_classifier import compute_scores, decide_label
@@ -74,13 +76,18 @@ def classify_dataframe(
 def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point for document type classification."""
 
-
     parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
     args = parser.parse_args(argv)
-    cfg: Config = apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-
+    try:
+        cfg: Config = apply_config_overrides(args, parser, args.config)
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        return 1
 
     df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
     df_out = classify_dataframe(df_in)
