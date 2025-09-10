@@ -24,6 +24,7 @@ tests/            Pytest suite and sample datasets
 get_*.py          Command-line utilities for specific tasks
 mapper_main.py    Mapping CLI
 table_quality_main.py  CSV profiling CLI
+config.yaml       Global configuration defaults
 ```
 
 ## Command line interface
@@ -74,6 +75,14 @@ Example fetching assay data::
 
 Each command validates required columns before querying external APIs and
 writes the resulting table to the specified output file.
+
+## Configuration
+
+Default settings such as API endpoints, network timeouts, rate limits and
+output directories live in `config.yaml` at the repository root. Each field is
+documented inside the file and has a sensible fallback that the utilities use
+if the entry is missing. See `docs/CONFIG.md` for a detailed description of all
+available options.
 
 Example merging initialisation tables::
 

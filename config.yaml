@@ -1,0 +1,60 @@
+# Global configuration for ChEMBL data acquisition utilities.
+#
+# This file provides default values for all scripts. Each field includes a
+# comment explaining its purpose and the fallback applied when the value is
+# missing. Individual scripts may override any setting via command-line
+# arguments or environment variables.
+
+api:
+  # Base URL for the ChEMBL API. Fallback: default hard-coded endpoint.
+  chembl_base_url: "https://www.ebi.ac.uk/chembl/api/data"
+
+  # Base URL for PubChem REST services. Fallback: built-in default.
+  pubchem_base_url: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+
+  # Base URL for UniProt REST services. Fallback: built-in default.
+  uniprot_base_url: "https://rest.uniprot.org"
+
+  # Base URL for NCBI E-utilities (PubMed). Fallback: built-in default.
+  eutils_base_url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+  # Base URL for Semantic Scholar API. Fallback: built-in default.
+  semanticscholar_base_url: "https://api.semanticscholar.org/graph/v1"
+
+  # Base URL for OpenAlex API. Fallback: built-in default.
+  openalex_base_url: "https://api.openalex.org"
+
+  # Base URL for CrossRef API. Fallback: built-in default.
+  crossref_base_url: "https://api.crossref.org"
+
+  # Base URL for Guide to Pharmacology services. Fallback: built-in default.
+  gtp_base_url: "https://www.guidetopharmacology.org"
+
+timeouts:
+  # Seconds to wait for a connection to the server. Fallback: 10 seconds.
+  connect: 10
+
+  # Seconds to wait for a server response after connection. Fallback: 30 seconds.
+  read: 30
+
+rate_limits:
+  # Maximum number of requests per second allowed by the client.
+  # Fallback: 5 requests per second.
+  max_requests_per_second: 5
+
+  # Number of times to retry a request after transient failures.
+  # Fallback: 3 retries.
+  max_retries: 3
+
+  # Exponential backoff factor between retries. Fallback: 0.3.
+  backoff_factor: 0.3
+
+output:
+  # Directory where output datasets are written. Fallback: ./data
+  data_dir: "data"
+
+  # Directory for log files. Fallback: ./logs
+  logs_dir: "logs"
+
+  # Directory for temporary files. Fallback: ./tmp
+  tmp_dir: "tmp"
