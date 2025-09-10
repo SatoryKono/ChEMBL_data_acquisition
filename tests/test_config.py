@@ -53,12 +53,19 @@ def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert cfg.api.rps == 4
 
 
+def test_cli_path_override(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    out = tmp_path / "out"
+    cfg = load_config(path, cli_overrides={"io.output_dir": str(out)})
+    assert cfg.io.output_dir == out
+
+
 def test_type_validation(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text("api:\n  rps: fast\n")
     with pytest.raises(TypeError, match="api.rps must be int"):
         load_config(path)
-
 
 
 def test_missing_dirs_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,4 +85,3 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert not out.exists() and not cache.exists()
     ensure_dirs(cfg)
     assert out.is_dir() and cache.is_dir()
-

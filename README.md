@@ -105,6 +105,11 @@ but not created when loading the configuration. Scripts that need these paths
 can call :func:`library.config.ensure_dirs` after :func:`load_config` to create
 them if they are missing and ``io.exist_ok`` permits it.
 
+Path values such as ``io.output_dir``, ``io.cache_dir`` and the ``init``
+workbook paths are exposed as :class:`pathlib.Path` objects. String values in
+``config.yaml`` or overrides from the environment and command line are
+automatically converted.
+
 
 Common flags shared by scripts include:
 
