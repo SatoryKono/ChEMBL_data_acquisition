@@ -5,6 +5,12 @@
 # comment explaining its purpose and the fallback applied when the value is
 # missing. Individual scripts may override any setting via command-line
 # arguments or environment variables.
+#
+# Environment variables override YAML values when present. For example,
+# ``CHEMBL_API_BASE_URL`` replaces the value of ``api.chembl_base_url`` and
+# ``TIMEOUT_CONNECT`` updates ``timeouts.connect``. Short aliases are also
+# recognised for convenience; e.g. ``api.chembl.url`` maps to
+# ``api.chembl_base_url``.
 
 api:
   timeout: 30.0
