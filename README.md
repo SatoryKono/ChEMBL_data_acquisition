@@ -62,33 +62,41 @@ All scripts share a common set of flags:
 
 ## Configuration
 
-Default settings live in `config.yaml`. Values can be overridden via environment variables using the `CHEMBL_DA__SECTION__KEY` pattern or short aliases like `CHEMBL_DA_RPS`.
+Default settings live in ``config.yaml`` and are split into sections ``api``,
+``io`` and ``jobs``. A minimal configuration looks like::
 
-Example usage:
+    api:
+      rps: 5
+    io:
+      output_dir: data/output
+    jobs:
+      concurrency: 8
 
-```bash
-python get_activity_data.py --config config.yaml
-CHEMBL_DA__API__RPS=2 python get_assay_data.py
-```
+Environment variables override values from the YAML file. Variables use the
+``CHEMBL_DA__SECTION__KEY`` pattern and also support short aliases:
 
-| Script | Config sections |
-| --- | --- |
-| get_activity_data.py | api, io, jobs, quality, log |
-| get_assay_data.py | api, io, jobs, quality, log |
-| get_document_data.py | api, io, jobs, quality, log |
-| get_document_type.py | io, log |
-| get_target_data.py | api, uniprot, iuphar, io, jobs, quality, log |
-| get_testitem_data.py | api, pubchem, io, jobs, quality, log |
-| get_input_initialisation.py | init, io, quality, log |
-| mapper_main.py | mapper, io, jobs, log |
-| table_quality_main.py | io, quality, log |
+* ``CHEMBL_DA__API__RPS`` / ``CHEMBL_DA_RPS``
+* ``CHEMBL_DA__IO__OUTPUT_DIR`` / ``CHEMBL_DA_OUTDIR``
+* ``CHEMBL_DA__JOBS__CONCURRENCY`` / ``CHEMBL_DA_CONCURRENCY``
+* ``CHEMBL_DA__JOBS__CHUNK_SIZE`` / ``CHEMBL_DA_CHUNK_SIZE``
 
+Command line flags have the highest priority. All utilities accept ``--config``
+to point at a configuration file and ``--print-config`` to show the effective
+values after all overrides have been applied. The final precedence is::
+
+    YAML < environment variables < CLI options
+
+Only the top-level command line scripts read the configuration file. Modules
+under ``library/`` expect a :class:`Config` (or one of its subsections) to be
+passed explicitly, making dependencies clear and avoiding hidden global state.
+
+Common flags shared by scripts include:
 
 * ``--input`` – input CSV file (default ``input.csv``)
 * ``--output`` – destination CSV file (default: auto-generated next to the input)
 * ``--log-level`` – logging verbosity (default ``INFO``)
-* ``--sep`` – CSV delimiter (default ``,``)
-* ``--encoding`` – file encoding (default ``utf8``)
+* ``--sep`` – CSV delimiter (default taken from configuration)
+* ``--encoding`` – file encoding (default taken from configuration)
 * ``--column`` – column containing identifiers (script specific)
 
 Example fetching assay data::

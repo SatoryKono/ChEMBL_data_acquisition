@@ -12,13 +12,10 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-from library.config import Config, load_config
+from library.config import load_config
 from library.cli import configure_logging
 
 from library.document_type_classifier import compute_scores, decide_label
-
-
-cfg: Config = load_config()
 
 
 def _split_terms(value: object) -> Iterable[str]:
@@ -84,7 +81,6 @@ def main() -> int:  # pragma: no cover - simple CLI
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
-    global cfg
     cfg = load_config(args.config)
     if args.log_level == "INFO":
         args.log_level = cfg.log.level

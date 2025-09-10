@@ -17,7 +17,6 @@ from library.cli import build_parser as base_parser, configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
-cfg: Config = load_config()
 
 
 def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -95,7 +94,7 @@ def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute compound retrieval from the ChEMBL API and augment with PubChem data.
 
     Parameters
@@ -113,6 +112,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         ids = io.read_ids(
             args.input_csv,
             column=args.column,
+            cfg=cfg.io,
             sep=args.sep,
             encoding=args.encoding,
         )
@@ -133,7 +133,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     logger.info("PubChem augmentation completed")
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -162,7 +162,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    global cfg
     cfg = load_config(args.config)
 
     default_chunk = parser.get_default("chunk_size")
@@ -178,7 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.log_level == default_log:
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-    return args.func(args)
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

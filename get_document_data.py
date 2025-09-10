@@ -44,7 +44,6 @@ from library.table_quality import analyze_table_quality
 from library.cli import configure_logging
 
 logger = logging.getLogger(__name__)
-cfg: Config = load_config()
 
 
 def fetch_pubmed_records(
@@ -136,18 +135,19 @@ def fetch_pubmed_records(
     return pd.DataFrame(records)
 
 
-def run_pubmed(args: argparse.Namespace) -> int:
+def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``pubmed`` sub-command."""
     try:
         pmids = io.read_ids(
             args.input_csv,
             column=args.column,
+            cfg=cfg.io,
             sep=args.sep,
             encoding=args.encoding,
         )
         df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
         output = args.output_csv or io.default_output_path(args.input_csv)
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
@@ -160,11 +160,15 @@ def run_pubmed(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
     try:
         ids = io.read_ids(
-            args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            column=args.column,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
@@ -177,7 +181,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -190,11 +194,15 @@ def run_chembl(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_all(args: argparse.Namespace) -> int:
+def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """Run ChEMBL and PubMed pipelines and merge their outputs."""
     try:
         ids = io.read_ids(
-            args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            column=args.column,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
@@ -218,7 +226,9 @@ def run_all(args: argparse.Namespace) -> int:
                 how="left",
             )
         try:
-            io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
+            io.write_csv(
+                processed, output, cfg=cfg, sep=args.sep, encoding=args.encoding
+            )
             logger.info("Wrote %d rows to %s", len(processed), output)
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
@@ -257,7 +267,7 @@ def run_all(args: argparse.Namespace) -> int:
             how="left",
         )
     try:
-        io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(processed, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(processed), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -390,14 +400,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    global cfg
     cfg = load_config(args.config)
 
     default_log = parser.get_default("log_level")
     if args.log_level == default_log:
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-    return args.func(args)
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
