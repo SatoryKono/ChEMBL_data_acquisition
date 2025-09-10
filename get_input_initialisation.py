@@ -126,10 +126,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Entry point using :class:`Config` for defaults."""
     parser = build_parser()
 
-    parser.add_argument(
-        "--config", default="config.yaml", help="Path to YAML configuration file"
-    )
-
     args = parser.parse_args(argv)
     cfg: Config = apply_config_overrides(
         args,
