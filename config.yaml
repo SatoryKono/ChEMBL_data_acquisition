@@ -7,7 +7,8 @@
 # arguments or environment variables.
 
 api:
-  timeout: 30.0
+  # Base URLs for external services. Network timeouts are configured in the
+  # `timeouts` section below. Fallback: built-in defaults.
   # Base URL for the ChEMBL API. Fallback: default hard-coded endpoint.
   chembl_base_url: "https://www.ebi.ac.uk/chembl/api/data"
 
