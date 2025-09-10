@@ -26,6 +26,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, is_dataclass
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -36,8 +37,12 @@ import jsonschema
 logger = logging.getLogger(__name__)
 
 
+
+_EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
 class ConfigError(RuntimeError):
     """Raised when configuration loading fails."""
+
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +52,11 @@ class ConfigError(RuntimeError):
 
 @dataclass
 class ApiCfg:
-    """Settings for ChEMBL API access."""
+    """Settings for ChEMBL API access.
+
+    The ``user_agent`` must include contact information such as an e-mail
+    address, e.g. ``"chembl-da/0.1 (mailto:info@example.org)"``.
+    """
 
     chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
     timeout_connect: int = 5
@@ -56,12 +65,15 @@ class ApiCfg:
     backoff_factor: float = 0.5
     rps: int = 5
     burst: int = 5
-    user_agent: str = "chembl-da/0.1 (+contact: unset)"
+    user_agent: str = "chembl-da/0.1 (mailto:info@example.org)"
 
 
 @dataclass
 class OpenAlexCfg:
-    """Settings for the OpenAlex API."""
+    """Settings for the OpenAlex API.
+
+    ``mailto`` is required by the service and must be a valid e-mail address.
+    """
 
     base: str = "https://api.openalex.org"
     timeout_connect: int = 5
@@ -69,12 +81,15 @@ class OpenAlexCfg:
     retries: int = 3
     rps: int = 4
     burst: int = 5
-    mailto: str = ""
+    mailto: str = "info@example.org"
 
 
 @dataclass
 class CrossRefCfg:
-    """Settings for the CrossRef API."""
+    """Settings for the CrossRef API.
+
+    ``mailto`` must be supplied and contain a valid e-mail address.
+    """
 
     base: str = "https://api.crossref.org"
     timeout_connect: int = 5
@@ -82,7 +97,7 @@ class CrossRefCfg:
     retries: int = 3
     rps: int = 4
     burst: int = 5
-    mailto: str = ""
+    mailto: str = "info@example.org"
 
 
 @dataclass
@@ -364,6 +379,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
     "CHEMBL_DA_GLOBAL_BURST": ["rate", "global_burst"],
     "CHEMBL_DA_LOG_LEVEL": ["log", "level"],
+    "CHEMBL_DA_LOG_FORMAT": ["log", "format"],
+    "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["retry", "max_attempts"],
+    "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["retry", "backoff_factor"],
 }
 
 
@@ -665,6 +683,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
 
 
 def _validate(cfg: Config) -> None:
+ 
     """Validate ``cfg`` against :data:`CONFIG_SCHEMA`."""
 
     validator = jsonschema.Draft202012Validator(
@@ -672,6 +691,58 @@ def _validate(cfg: Config) -> None:
     )
     # ``cfg`` contains ``Path`` instances; convert them to strings before validation
     validator.validate(_serialize_paths(cfg.to_dict()))
+ 
+    """Basic sanity checks for configuration values."""
+    if not _valid_url(cfg.api.chembl_base):
+        raise ValueError("api.chembl_base must be a valid URL")
+    if cfg.api.timeout_connect <= 0 or cfg.api.timeout_read <= 0:
+        raise ValueError("api timeouts must be positive")
+    if cfg.api.retries < 0 or cfg.api.backoff_factor < 0:
+        raise ValueError(
+            "api.retries must be non-negative and backoff_factor non-negative"
+        )
+    if cfg.api.rps <= 0 or cfg.api.burst <= 0:
+        raise ValueError("api.rps and api.burst must be positive")
+    if not _EMAIL_RE.search(cfg.api.user_agent):
+        raise ValueError(
+            "api.user_agent must include contact information such as an email"
+        )
+
+    services: list[tuple[str, Any]] = [
+        ("openalex", cfg.openalex),
+        ("crossref", cfg.crossref),
+        ("uniprot", cfg.uniprot),
+        ("iuphar", cfg.iuphar),
+        ("pubchem", cfg.pubchem),
+    ]
+    for name, service in services:
+        if not _valid_url(service.base):
+            raise ValueError(f"{name}.base must be a valid URL")
+        if service.timeout_connect <= 0 or service.timeout_read <= 0:
+            raise ValueError(f"{name} timeouts must be positive")
+        if service.retries < 0:
+            raise ValueError(f"{name}.retries must be non-negative")
+        if service.rps <= 0 or service.burst <= 0:
+            raise ValueError(f"{name}.rps and {name}.burst must be positive")
+
+    for name, mail in [
+        ("openalex", cfg.openalex.mailto),
+        ("crossref", cfg.crossref.mailto),
+    ]:
+        if not mail or not _EMAIL_RE.fullmatch(mail):
+            raise ValueError(f"{name}.mailto must be a valid email address")
+
+    if cfg.jobs.concurrency <= 0 or cfg.jobs.chunk_size <= 0:
+        raise ValueError("jobs.concurrency and jobs.chunk_size must be positive")
+    if cfg.batch.size <= 0 or cfg.batch.concurrency <= 0:
+        raise ValueError("batch.size and batch.concurrency must be positive")
+    if cfg.rate.global_rps <= 0 or cfg.rate.global_burst <= 0:
+        raise ValueError("rate.global_rps and rate.global_burst must be positive")
+    if cfg.retry.max_attempts <= 0 or cfg.retry.backoff_factor < 0:
+        raise ValueError(
+            "retry.max_attempts must be positive and backoff_factor non-negative"
+        )
+ 
 
     out_dir = cfg.io.output_dir
     cache_dir = cfg.io.cache_dir

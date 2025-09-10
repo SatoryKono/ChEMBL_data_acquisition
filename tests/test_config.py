@@ -53,6 +53,23 @@ def test_alias_env_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert cfg.api.rps == 5
 
 
+def test_retry_and_log_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """New environment variable aliases should override retry and log defaults."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+
+    monkeypatch.setenv("CHEMBL_DA_RETRY_MAX_ATTEMPTS", "10")
+    monkeypatch.setenv("CHEMBL_DA_RETRY_BACKOFF_FACTOR", "2.0")
+    monkeypatch.setenv("CHEMBL_DA_LOG_FORMAT", "%(levelname)s")
+
+    cfg = load_config(path)
+
+    assert cfg.retry.max_attempts == 10
+    assert cfg.retry.backoff_factor == 2.0
+    assert cfg.log.format == "%(levelname)s"
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
@@ -137,3 +154,31 @@ def test_yaml_error_includes_path(tmp_path: Path) -> None:
     msg = str(excinfo.value)
     assert str(path) in msg
     assert "while parsing" in msg
+
+
+
+def test_user_agent_must_include_contact(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        "api:\n  user_agent: chembl-da/0.1\n"
+        "openalex:\n  mailto: info@example.org\n"
+        "crossref:\n  mailto: info@example.org\n"
+    )
+    with pytest.raises(ValueError, match="user_agent"):
+        load_config(path)
+
+
+def test_openalex_mailto_required(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        "openalex:\n  mailto: ''\n" "crossref:\n  mailto: info@example.org\n"
+    )
+    with pytest.raises(ValueError, match="openalex.mailto"):
+        load_config(path)
+
+
+def test_crossref_mailto_format(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("crossref:\n  mailto: not-an-email\n")
+    with pytest.raises(ValueError, match="crossref.mailto"):
+        load_config(path)

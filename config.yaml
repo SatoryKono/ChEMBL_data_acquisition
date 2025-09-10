@@ -15,7 +15,7 @@ api:
   backoff_factor: 0.5  # Exponential backoff multiplier
   rps: 5  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
   burst: 5  # Burst size for token bucket limiter
-  user_agent: "chembl-da/0.1 (+contact: unset)"  # Custom User-Agent header
+  user_agent: "chembl-da/0.1 (mailto:info@example.org)"  # Custom User-Agent header; must include contact info in the form "app/version (mailto:email@example.org)"
 
 openalex:
   base: "https://api.openalex.org"  # OpenAlex API root URL
@@ -24,7 +24,7 @@ openalex:
   retries: 3  # Retry attempts
   rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
   burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
-  mailto: ""  # Contact email per API guidelines
+  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address
 
 crossref:
   base: "https://api.crossref.org"  # CrossRef API root URL
@@ -33,7 +33,7 @@ crossref:
   retries: 3
   rps: 4  # (env: CHEMBL_DA_CROSSREF_RPS)
   burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
-  mailto: ""
+  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address
 
 uniprot:
   base: "https://rest.uniprot.org"  # UniProt REST API root
@@ -99,8 +99,8 @@ rate:
   global_burst: 8  # Global burst size
 
 retry:
-  max_attempts: 3  # HTTP retry attempts
-  backoff_factor: 0.5  # Base delay multiplier
+  max_attempts: 3  # HTTP retry attempts (env: CHEMBL_DA_RETRY_MAX_ATTEMPTS)
+  backoff_factor: 0.5  # Base delay multiplier (env: CHEMBL_DA_RETRY_BACKOFF_FACTOR)
   status_forcelist:
     - 429  # Too Many Requests
     - 500
@@ -109,7 +109,7 @@ retry:
     - 504
 
 log:
-  level: "INFO"  # Default logging level
-  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format
+  level: "INFO"  # Default logging level (env: CHEMBL_DA_LOG_LEVEL)
+  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format (env: CHEMBL_DA_LOG_FORMAT)
   datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format
 

@@ -140,7 +140,21 @@ def fetch_pubmed_records(
 
 
 def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the ``pubmed`` sub-command."""
+    """Execute the ``pubmed`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         pmids = io.read_ids(
             args.input_csv,
@@ -165,7 +179,21 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the ``chembl`` sub-command."""
+    """Execute the ``chembl`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -199,7 +227,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
-    """Run ChEMBL and PubMed pipelines and merge their outputs."""
+    """Run ChEMBL and PubMed pipelines and merge their outputs.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -399,7 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
+    """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
 
     parser.add_argument(
@@ -407,7 +449,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg: Config = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(cfg, args)
