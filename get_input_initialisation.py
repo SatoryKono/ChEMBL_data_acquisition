@@ -133,9 +133,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
     )
     ensure_dirs(cfg)
+
     args.same_doc = Path(args.same_doc)
     args.all_doc = Path(args.all_doc)
     args.out_dir = Path(args.out_dir)
+
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(cfg, args)
 
