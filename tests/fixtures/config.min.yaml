@@ -1,0 +1,4 @@
+api:
+  rps: 1
+jobs:
+  concurrency: 2

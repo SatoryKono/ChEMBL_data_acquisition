@@ -75,6 +75,33 @@ Example fetching assay data::
 Each command validates required columns before querying external APIs and
 writes the resulting table to the specified output file.
 
+## Configuration
+
+Runtime behaviour is controlled via a YAML configuration file located at the
+repository root.  The default `config.yaml` ships with sane defaults for API
+timeouts, rate limits, logging and I/O locations.  Values can be overridden via
+environment variables using the `CHEMBL_DA__SECTION__KEY` pattern or short
+aliases such as `CHEMBL_DA_OUTDIR` and `CHEMBL_DA_RPS`.
+
+Example usage::
+
+    python get_activity_data.py --config config.yaml
+    CHEMBL_DA__API__RPS=2 python get_assay_data.py --config config.yaml
+
+The table below lists which configuration sections affect each CLI:
+
+| Script | Configuration sections |
+| ------ | ---------------------- |
+| `get_activity_data.py` | `api`, `io`, `jobs` |
+| `get_assay_data.py` | `api`, `io`, `jobs` |
+| `get_document_data.py` | `api`, `io` |
+| `get_target_data.py` | `api`, `uniprot`, `iuphar`, `io` |
+| `mapper_main.py` | `io`, `mapper`, `jobs` |
+| `table_quality_main.py` | `quality`, `io` |
+| `get_input_initialisation.py` | `init`, `io` |
+
+Configuration values fall back to built‑in defaults when the file is missing.
+
 Example merging initialisation tables::
 
     python get_input_initialisation.py \
