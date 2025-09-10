@@ -134,10 +134,12 @@ mapper:
   # Warn when casting datatypes
   warn_on_cast: true
 init:
+
   # Path to same document workbook
   same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
   # Path to all document workbook
   all_doc: "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
+
   # Required sheets in input Excel files
   required_sheets_same_doc:
     - "assay_step5_same_doc"

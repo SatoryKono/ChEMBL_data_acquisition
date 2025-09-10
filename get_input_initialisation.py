@@ -124,12 +124,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     global cfg
     cfg = load_config(args.config)
+
     if args.same_doc is None:
         args.same_doc = Path(cfg.init.same_doc)
     if args.all_doc is None:
         args.all_doc = Path(cfg.init.all_doc)
     if args.out_dir is None:
         args.out_dir = Path(cfg.init.output_dir)
+
     default_log = parser.get_default("log_level")
     if args.log_level == default_log:
         args.log_level = cfg.log.level

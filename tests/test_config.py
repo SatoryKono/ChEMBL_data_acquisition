@@ -39,6 +39,7 @@ def test_init_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.init.all_doc == "env_all.xlsx"
 
 
+
 def test_validation(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text("api:\n  rps: 0\n")
