@@ -11,8 +11,11 @@ import csv
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+import subprocess
+import sys
 
 import pandas as pd
+import yaml
 from . import validation
 from .config import Config, load_config
 
@@ -110,7 +113,7 @@ def write_csv(
     sep: str = cfg.io.csv_sep,
     encoding: str = cfg.io.csv_encoding,
 ) -> None:
-    """Write ``df`` to ``path`` as CSV.
+    """Write ``df`` to ``path`` as CSV and store metadata.
 
     Parameters
     ----------
@@ -126,6 +129,7 @@ def write_csv(
     """
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False, sep=sep, encoding=encoding)
+    _write_meta(Path(path))
 
 
 def default_output_path(input_path: str | Path) -> Path:
@@ -138,3 +142,27 @@ def default_output_path(input_path: str | Path) -> Path:
     inp = Path(input_path)
     date_str = datetime.now().strftime("%Y%m%d")
     return inp.with_name(f"output_{inp.stem}_{date_str}.csv")
+
+
+def _git_sha() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except Exception:  # pragma: no cover - git may be unavailable
+        return "unknown"
+
+
+def _write_meta(path: Path) -> None:
+    meta = {
+        "git_sha": _git_sha(),
+        "command": " ".join(sys.argv),
+        "config": cfg.to_dict(),
+    }
+    meta_path = Path(str(path) + ".meta.yaml")
+    with meta_path.open("w", encoding="utf8") as fh:
+        yaml.safe_dump(meta, fh, sort_keys=False)

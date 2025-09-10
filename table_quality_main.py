@@ -73,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--sep", default=",", help="CSV delimiter")
     parser.add_argument("--encoding", default="utf-8-sig", help="File encoding")
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
     parser.set_defaults(func=run)
     return parser
 
@@ -82,8 +87,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
+    cli_overrides = {}
+    if args.sep != parser.get_default("sep"):
+        cli_overrides["io.csv_sep"] = args.sep
+    if args.encoding != parser.get_default("encoding"):
+        cli_overrides["io.csv_encoding"] = args.encoding
     global cfg
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, cli_overrides=cli_overrides)
+    if args.print_config:
+        print(cfg.to_yaml())
+        return 0
 
     default_sep = parser.get_default("sep")
     if args.sep == default_sep:
