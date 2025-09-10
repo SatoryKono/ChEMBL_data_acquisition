@@ -278,10 +278,24 @@ class Config:
 
 
 def _coerce(value: str, current: Any) -> Any:
-    """Coerce ``value`` (from env/CLI) to the type of ``current``."""
+    """Coerce ``value`` (from env/CLI) to the type of ``current``.
+
+    When ``current`` is :class:`bool`, only a restricted set of string
+    representations is accepted. Truthy values are ``{"1", "true", "yes",
+    "on"}`` and falsy values are ``{"0", "false", "no", "off"}``.
+    Any other value raises :class:`ValueError` to avoid silently interpreting
+    unexpected input.
+    """
 
     if isinstance(current, bool):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
+        val = value.strip().lower()
+        truthy = {"1", "true", "yes", "on"}
+        falsy = {"0", "false", "no", "off"}
+        if val in truthy:
+            return True
+        if val in falsy:
+            return False
+        raise ValueError(f"Invalid boolean value: {value!r}")
     if isinstance(current, int):
         return int(value)
     if isinstance(current, float):
@@ -359,6 +373,8 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
             raise TypeError
     except Exception as exc:  # pragma: no cover - defensive
         joined = ".".join(path)
+        if isinstance(exc, ValueError):
+            raise ValueError(f"{joined}: {exc}") from exc
         raise TypeError(
             f"{joined} must be {type(current).__name__}, got {value!r}"
         ) from exc

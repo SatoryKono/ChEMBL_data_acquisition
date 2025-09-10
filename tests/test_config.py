@@ -118,6 +118,16 @@ def test_missing_dirs_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         load_config(path)
 
 
+def test_invalid_bool_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure unknown boolean strings raise :class:`ValueError`."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    monkeypatch.setenv("CHEMBL_DA__IO__EXIST_OK", "maybe")
+    with pytest.raises(ValueError, match="Invalid boolean value"):
+        load_config(path)
+
+
 def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     out = tmp_path / "out"
     cache = tmp_path / "cache"
@@ -202,7 +212,7 @@ def test_invalid_urls_raise(tmp_path: Path, snippet: str, match: str) -> None:
     with pytest.raises(ValueError, match=match):
         load_config(path)
 
- 
+
 def test_unknown_env_var_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -214,7 +224,8 @@ def test_unknown_env_var_warning(
     with caplog.at_level(logging.WARNING, logger="library.config"):
         load_config(path)
     assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in caplog.text
- 
+
+
 def test_log_level_valid(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("log:\n  level: warn\n")
@@ -227,4 +238,3 @@ def test_log_level_invalid(tmp_path: Path) -> None:
     path.write_text("log:\n  level: verbose\n")
     with pytest.raises(ValueError, match="log.level"):
         load_config(path)
- 
