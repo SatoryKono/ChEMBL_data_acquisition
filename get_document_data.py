@@ -225,7 +225,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        df = cl.get_documents(
+            ids,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )  # type: ignore[attr-defined]
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -273,7 +278,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        doc_df = cl.get_documents(
+            ids,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )  # type: ignore[attr-defined]
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -420,6 +430,12 @@ def build_parser() -> argparse.ArgumentParser:
     chembl.add_argument(
         "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
     )
+    chembl.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     chembl.set_defaults(func=run_chembl)
 
     all_cmd = sub.add_parser("all", help="Run both ChEMBL and PubMed pipelines")
@@ -460,6 +476,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Maximum PMIDs per PubMed request",
     )
+    all_cmd.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     all_cmd.set_defaults(func=run_all)
 
     return parser
@@ -470,7 +492,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
+        cfg: Config = apply_config_overrides(
+            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+        )
         if args.print_config:
             print_config(cfg)
             return 0
