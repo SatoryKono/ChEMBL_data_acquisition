@@ -104,7 +104,6 @@ jobs:
   # - UniProt REST: up to 500 per page
   # - IUPHAR: no published page-size cap; keep modest
   # - PubChem PUG REST: varies by operation; large queries hit ~30 s time limit
-  chunk_size: 500
 batch:
   # Batch size for processing records at once (internal batching).
   # Keep this ≤ effective API page sizes above when batches map 1:1 to requests.
@@ -140,7 +139,6 @@ init:
     - "activity_step5_same_doc"
     - "document_step5_same_doc"
     - "target_step5_same_doc"
-    - " molecule_step5_same_doc"
     - "pairs_same_doc"
 
   required_sheets_all_doc:

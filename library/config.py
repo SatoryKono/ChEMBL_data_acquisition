@@ -146,6 +146,9 @@ class InitConfig:
         ]
     )
     output_dir: str = "data/output/ChEMBL/processed"
+    same_doc: str = "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
+    all_doc: str = "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
+    dictionary_dir: str = "dictionary/"
     save_pairs_sheets: bool = True
     fail_fast: bool = True
 
