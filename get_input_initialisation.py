@@ -90,10 +90,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
-        "--same-doc", type=Path, required=True, help="Path to same document workbook"
+        "--same-doc",
+        type=Path,
+        help="Path to same document workbook (default: config init.same_doc)",
     )
     parser.add_argument(
-        "--all-doc", type=Path, required=True, help="Path to all document workbook"
+        "--all-doc",
+        type=Path,
+        help="Path to all document workbook (default: config init.all_doc)",
     )
     parser.add_argument(
         "--dictionary-dir",
@@ -102,7 +106,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
     )
     parser.add_argument(
-        "--out-dir", type=Path, default=Path("."), help="Output directory"
+        "--out-dir",
+        type=Path,
+        help="Output directory (default: config init.output_dir)",
     )
     parser.add_argument(
         "--format", choices=["csv"], default="csv", help="Output format"
@@ -118,6 +124,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     global cfg
     cfg = load_config(args.config)
+
+    if args.same_doc is None:
+        args.same_doc = Path(cfg.init.same_doc)
+    if args.all_doc is None:
+        args.all_doc = Path(cfg.init.all_doc)
+    if args.out_dir is None:
+        args.out_dir = Path(cfg.init.output_dir)
 
     default_log = parser.get_default("log_level")
     if args.log_level == default_log:

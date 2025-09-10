@@ -30,6 +30,16 @@ def test_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     assert cfg.io.output_dir == "out"
 
 
+def test_init_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("init:\n  same_doc: custom_same.xlsx\n  all_doc: custom_all.xlsx\n")
+    monkeypatch.setenv("CHEMBL_DA__INIT__ALL_DOC", "env_all.xlsx")
+    cfg = load_config(path)
+    assert cfg.init.same_doc == "custom_same.xlsx"
+    assert cfg.init.all_doc == "env_all.xlsx"
+
+
+
 def test_validation(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text("api:\n  rps: 0\n")
