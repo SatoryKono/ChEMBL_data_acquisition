@@ -326,6 +326,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
                 input_csv=str(tmp_path),
                 output_csv=str(output),
                 data_dir=str(args.data_dir),
+                cfg=cfg.uniprot,
                 sep=args.sep,
                 encoding=args.encoding,
             )
