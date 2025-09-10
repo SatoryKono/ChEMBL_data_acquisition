@@ -104,6 +104,10 @@ Environment variables override values from the YAML file. Variables use the
 * ``CHEMBL_DA__IO__OUTPUT_DIR`` / ``CHEMBL_DA_OUTDIR``
 * ``CHEMBL_DA__JOBS__CONCURRENCY`` / ``CHEMBL_DA_CONCURRENCY``
 * ``CHEMBL_DA__JOBS__CHUNK_SIZE`` / ``CHEMBL_DA_CHUNK_SIZE``
+* ``CHEMBL_DA__RETRY__MAX_ATTEMPTS`` / ``CHEMBL_DA_RETRY_MAX_ATTEMPTS``
+* ``CHEMBL_DA__RETRY__BACKOFF_FACTOR`` / ``CHEMBL_DA_RETRY_BACKOFF_FACTOR``
+* ``CHEMBL_DA__LOG__LEVEL`` / ``CHEMBL_DA_LOG_LEVEL``
+* ``CHEMBL_DA__LOG__FORMAT`` / ``CHEMBL_DA_LOG_FORMAT``
 
 Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective
