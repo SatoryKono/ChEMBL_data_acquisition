@@ -84,11 +84,13 @@ Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective
 values after all overrides have been applied. The final precedence is::
 
+
     YAML < environment variables < CLI options
 
 Only the top-level command line scripts read the configuration file. Modules
 under ``library/`` expect a :class:`Config` (or one of its subsections) to be
 passed explicitly, making dependencies clear and avoiding hidden global state.
+
 
 Common flags shared by scripts include:
 

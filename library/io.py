@@ -17,6 +17,7 @@ import sys
 import pandas as pd
 import yaml
 
+
 from . import validation
 from .config import Config, IoCfg
 
@@ -143,7 +144,9 @@ def write_csv(
     encoding = encoding or cfg.io.csv_encoding
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False, sep=sep, encoding=encoding)
+
     _write_meta(Path(path), cfg)
+
 
 
 def default_output_path(input_path: str | Path) -> Path:
@@ -171,7 +174,9 @@ def _git_sha() -> str:
         return "unknown"
 
 
+
 def _write_meta(path: Path, cfg: Config) -> None:
+
     meta = {
         "git_sha": _git_sha(),
         "command": " ".join(sys.argv),

@@ -91,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cli_overrides["io.csv_sep"] = args.sep
     if args.encoding != parser.get_default("encoding"):
         cli_overrides["io.csv_encoding"] = args.encoding
+
     cfg = load_config(args.config, cli_overrides=cli_overrides)
     if args.print_config:
         print(cfg.to_yaml())
