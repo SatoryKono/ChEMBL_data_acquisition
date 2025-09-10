@@ -320,7 +320,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
                 writer.writerow({"uniprot_id": uid})
             tmp_path = Path(tmp.name)
 
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         try:
             uu.process(
                 input_csv=str(tmp_path),
@@ -381,7 +381,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -418,7 +418,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             family_path=args.family_csv,
             encoding=args.encoding,
         )
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
             input_path=args.input_csv,
             output_path=output,
@@ -463,7 +463,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     try:
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         chembl_out = args.chembl_out or output.with_name(output.stem + "_chembl.csv")
         uniprot_out = args.uniprot_out or output.with_name(output.stem + "_uniprot.csv")
         iuphar_out = args.iuphar_out or output.with_name(output.stem + "_iuphar.csv")

@@ -56,7 +56,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("failed to retrieve assays: %s", exc)
         return 1
     df = ap.postprocess_assays(df)
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
