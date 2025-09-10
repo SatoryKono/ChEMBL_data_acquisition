@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 import pytest
 
@@ -85,3 +86,18 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert not out.exists() and not cache.exists()
     ensure_dirs(cfg)
     assert out.is_dir() and cache.is_dir()
+
+
+def test_unknown_key_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("unknown: 1\napi:\n  rps: 1\n")
+    with caplog.at_level(logging.WARNING, logger="library.config"):
+        load_config(path)
+    assert "Unknown configuration key" in caplog.text
+
+
+def test_unknown_key_error(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("unknown: 1\n")
+    with pytest.raises(ValueError, match="Unknown configuration key"):
+        load_config(path, strict=True)
