@@ -38,12 +38,15 @@ import csv
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, Iterable, List, Set
 
 import requests
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from .config import UniprotCfg
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +60,6 @@ _retry = Retry(
 _session: Session = requests.Session()
 _session.mount("http://", HTTPAdapter(max_retries=_retry))
 _session.mount("https://", HTTPAdapter(max_retries=_retry))
-
-API_URL = "https://rest.uniprot.org/uniprotkb/{id}.json"
 
 __all__ = [
     "fetch_uniprot",
@@ -85,15 +86,15 @@ class UniProtFetchError(RuntimeError):
     """Raised when a UniProt record cannot be retrieved or decoded."""
 
 
-def fetch_uniprot(uniprot_id: str, *, timeout: float = 30.0) -> Dict[str, Any]:
+def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
     """Fetch a UniProt JSON record from the public REST API.
 
     Parameters
     ----------
     uniprot_id:
         UniProt accession identifier to retrieve.
-    timeout:
-        Maximum seconds to wait for the HTTP response. Defaults to ``30``.
+    cfg:
+        UniProt configuration providing base URL, timeouts and rate limits.
 
     Returns
     -------
@@ -106,7 +107,11 @@ def fetch_uniprot(uniprot_id: str, *, timeout: float = 30.0) -> Dict[str, Any]:
         If the request fails or the payload cannot be decoded as JSON.
 
     """
-    url = API_URL.format(id=uniprot_id)
+    delay = 1 / cfg.rps if cfg.rps else 0
+    time.sleep(delay)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/uniprotkb/{uniprot_id}.json"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
     try:
         with _session.get(url, timeout=timeout) as resp:
             resp.raise_for_status()
@@ -391,7 +396,7 @@ def extract_gene_name(data: Any) -> str | None:
     return None
 
 
-def extract_names_for_secondary_accessions(data: Any) -> str:
+def extract_names_for_secondary_accessions(data: Any, *, cfg: UniprotCfg) -> str:
     """Return protein names for secondary accessions listed in ``data``.
 
     The function looks up each secondary accession via :func:`fetch_uniprot`
@@ -414,7 +419,7 @@ def extract_names_for_secondary_accessions(data: Any) -> str:
     names: Set[str] = set()
     for acc in extract_secondary_accessions(data):
         try:
-            entry = fetch_uniprot(acc)
+            entry = fetch_uniprot(acc, cfg=cfg)
         except UniProtFetchError as exc:  # pragma: no cover - network errors
             logger.warning("failed to fetch secondary accession %s: %s", acc, exc)
             continue
@@ -818,14 +823,23 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
         raise ValueError(f"malformed CSV in file: {csv_path}: {exc}") from exc
 
 
-def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
+def collect_info(
+    uid: str, data_dir: str = "uniprot", *, cfg: UniprotCfg
+) -> Dict[str, Any]:
     """Return names, organism, keyword, PTM, isoform, cross-ref, and activity data for ``uid``.
 
-    Args:
-        uid: UniProt accession identifier.
-        data_dir: Directory containing ``<uid>.json`` files with UniProt data.
+    Parameters
+    ----------
+    uid:
+        UniProt accession identifier.
+    data_dir:
+        Directory containing ``<uid>.json`` files with UniProt data.
+    cfg:
+        UniProt configuration used for downloading missing records.
 
-    Returns:
+    Returns
+    -------
+    dict
         A dictionary with keys ``uniprot_id``, ``names``, organism taxonomy
         fields, keyword categories, EC numbers, subcellular location data,
         membrane features, post-translational modification flags, isoform
@@ -878,7 +892,7 @@ def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
     except FileNotFoundError:
         logger.info("downloading UniProt JSON for %s", uid)
         try:
-            data = fetch_uniprot(uid)
+            data = fetch_uniprot(uid, cfg=cfg)
         except UniProtFetchError as exc:
             logger.warning("failed to retrieve UniProt JSON for %s: %s", uid, exc)
             return result
@@ -930,7 +944,9 @@ def collect_info(uid: str, data_dir: str = "uniprot") -> Dict[str, Any]:
     result["secondaryAccessions"] = extract_secondary_accessions(data)
     result["recommendedName"] = extract_recommended_name(data)
     result["geneName"] = extract_gene_name(data)
-    result["secondaryAccessionNames"] = extract_names_for_secondary_accessions(data)
+    result["secondaryAccessionNames"] = extract_names_for_secondary_accessions(
+        data, cfg=cfg
+    )
     return result
 
 
@@ -939,6 +955,7 @@ def process(
     output_csv: str,
     data_dir: str = "uniprot",
     *,
+    cfg: UniprotCfg,
     sep: str = ",",
     encoding: str = "utf-8",
 ) -> None:
@@ -957,6 +974,9 @@ def process(
         Destination path for the output CSV file.
     data_dir:
         Directory where JSON files for each ID are stored.
+    cfg:
+        UniProt configuration used for network requests when local files are
+        missing.
     sep:
         Field delimiter used for both input and output CSV files. Defaults to a comma.
     encoding:
@@ -1016,7 +1036,7 @@ def process(
             writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter=sep)
             writer.writeheader()
             for uid in iter_ids(input_csv, sep=sep, encoding=encoding):
-                info = collect_info(uid, data_dir)
+                info = collect_info(uid, data_dir, cfg=cfg)
                 info["secondaryAccessions"] = "|".join(info["secondaryAccessions"])
                 writer.writerow(info)
     except OSError as exc:

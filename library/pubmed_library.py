@@ -18,6 +18,8 @@ import requests
 from xml.etree import ElementTree as ET
 from urllib.parse import quote
 
+from .config import CrossRefCfg, OpenAlexCfg
+
 ENCODINGS = ["utf-8-sig", "cp1251", "latin1"]
 TIMEOUT = 10
 
@@ -51,7 +53,7 @@ def _do_request(
     expect_json: bool = True,
     retries: int = 2,
     method: str = "GET",
-    timeout: float = TIMEOUT,
+    timeout: float | tuple[float, float] = TIMEOUT,
     **kwargs: Any,
 ) -> Tuple[Union[Dict[str, Any], str, None], str]:
     """Perform an HTTP request with retry and error handling.
@@ -71,7 +73,8 @@ def _do_request(
     method:
         HTTP method to use, either "GET" or "POST".
     timeout:
-        Maximum seconds to wait for each HTTP request.
+        Maximum seconds to wait for each HTTP request. May be a single float
+        or a ``(connect, read)`` tuple.
     **kwargs:
         Additional parameters passed to ``session.get`` or ``session.post``.
 
@@ -523,9 +526,8 @@ def fetch_semantic_scholar_batch(
 def fetch_openalex(
     session: requests.Session,
     pmid: str,
-    sleep: float,
     *,
-    timeout: float = TIMEOUT,
+    cfg: OpenAlexCfg,
 ) -> Dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``.
 
@@ -535,10 +537,8 @@ def fetch_openalex(
         Active :class:`requests.Session`.
     pmid:
         PubMed identifier to query.
-    sleep:
-        Seconds to pause before making the request.
-    timeout:
-        Maximum seconds to wait for the HTTP response. Defaults to ``TIMEOUT``.
+    cfg:
+        OpenAlex configuration providing base URL, timeouts and rate limits.
 
     Returns
     -------
@@ -546,8 +546,12 @@ def fetch_openalex(
         Mapping of OpenAlex fields and any error encountered.
 
     """
-    url = f"https://api.openalex.org/works/pmid:{pmid}"
-    data, error = _do_request(session, url, sleep, timeout=timeout)
+    delay = 1 / cfg.rps if cfg.rps else 0
+    time.sleep(delay)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    data, error = _do_request(session, url, delay, timeout=timeout)
     if error or not isinstance(data, dict):
         return {
             "OpenAlex.PublicationTypes": "",
@@ -585,9 +589,8 @@ def fetch_openalex(
 def fetch_crossref(
     session: requests.Session,
     doi: str,
-    sleep: float,
     *,
-    timeout: float = TIMEOUT,
+    cfg: CrossRefCfg,
 ) -> Dict[str, str]:
     """Retrieve Crossref metadata for a given DOI.
 
@@ -597,10 +600,8 @@ def fetch_crossref(
         Active :class:`requests.Session`.
     doi:
         Digital Object Identifier to query.
-    sleep:
-        Seconds to pause before making the request.
-    timeout:
-        Maximum seconds to wait for the HTTP response. Defaults to ``TIMEOUT``.
+    cfg:
+        CrossRef configuration providing base URL, timeouts and rate limits.
 
     Returns
     -------
@@ -618,8 +619,12 @@ def fetch_crossref(
             "crossref.Error": "Missing DOI",
         }
 
-    url = f"https://api.crossref.org/works/{quote(doi, safe='')}"
-    data, error = _do_request(session, url, sleep, timeout=timeout)
+    delay = 1 / cfg.rps if cfg.rps else 0
+    time.sleep(delay)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    data, error = _do_request(session, url, delay, timeout=timeout)
     if error or not isinstance(data, dict):
         return {
             "crossref.Type": "",
@@ -713,9 +718,9 @@ def main() -> None:
                 semsch = semsch_map.get(pmid, {})
 
                 # Still fetching these individually
-                openalex = fetch_openalex(session, pmid, args.sleep)
+                openalex = fetch_openalex(session, pmid, cfg=OpenAlexCfg())
                 doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                crossref = fetch_crossref(session, doi, args.sleep)
+                crossref = fetch_crossref(session, doi, cfg=CrossRefCfg())
 
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)

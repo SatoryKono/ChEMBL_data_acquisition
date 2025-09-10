@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 import requests
 import pytest
 
 from library import uniprot_library as ul
+from library.config import UniprotCfg
 
 
 def test_extract_names() -> None:
@@ -51,7 +53,7 @@ def test_fetch_uniprot_network_error(monkeypatch) -> None:
 
     monkeypatch.setattr(ul._session, "get", fake_get)
     with pytest.raises(ul.UniProtFetchError):
-        ul.fetch_uniprot("P12345")
+        ul.fetch_uniprot("P12345", cfg=UniprotCfg())
 
 
 def test_fetch_uniprot_bad_json(monkeypatch) -> None:
@@ -62,4 +64,29 @@ def test_fetch_uniprot_bad_json(monkeypatch) -> None:
 
     monkeypatch.setattr(ul._session, "get", fake_get)
     with pytest.raises(ul.UniProtFetchError):
-        ul.fetch_uniprot("P12345")
+        ul.fetch_uniprot("P12345", cfg=UniprotCfg())
+
+
+def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
+    called: dict[str, object] = {}
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> _DummyResponse:
+        called["url"] = url
+        called["timeout"] = timeout
+        return _DummyResponse()
+
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(ul._session, "get", fake_get)
+    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+    cfg = UniprotCfg(
+        base="https://example.org/api",
+        timeout_connect=1,
+        timeout_read=2,
+        rps=2,
+        burst=5,
+    )
+    ul.fetch_uniprot("P12345", cfg=cfg)
+    assert called["url"] == "https://example.org/api/uniprotkb/P12345.json"
+    assert called["timeout"] == (1, 2)
+    assert sleeps and sleeps[0] == pytest.approx(0.5)
