@@ -13,6 +13,12 @@ sections and keys are joined by double underscores. Short aliases such as
 * ``CHEMBL_DA_BASE`` → ``api.chembl_base``
 * ``CHEMBL_DA_TIMEOUT_CONNECT`` → ``api.timeout_connect``
 * ``CHEMBL_DA_TIMEOUT_READ`` → ``api.timeout_read``
+
+Failure modes
+-------------
+``load_config`` raises :class:`ConfigError` when the configuration file is
+missing or cannot be parsed. Type and value mismatches are reported via the
+appropriate built-in exceptions during validation.
 """
 
 from __future__ import annotations
@@ -28,6 +34,10 @@ from urllib.parse import urlparse
 
 
 logger = logging.getLogger(__name__)
+
+
+class ConfigError(RuntimeError):
+    """Raised when configuration loading fails."""
 
 
 # ---------------------------------------------------------------------------
@@ -488,21 +498,31 @@ def load_config(
     -------
     Config
         Fully populated configuration object.
+
+    Raises
+    ------
+    ConfigError
+        If ``path`` does not exist or contains invalid YAML.
+    ValueError
+        If ``strict`` is ``True`` and unknown configuration keys are present.
+    TypeError
+        If configuration values have incorrect types.
     """
 
     cfg = Config()
     unknown_keys: List[str] = []
-    if path and Path(path).is_file():
-        try:
-            with Path(path).open("r", encoding="utf8") as fh:
-                data = yaml.safe_load(fh) or {}
-        except yaml.YAMLError as err:
-            raise ValueError(
-                f"Failed to parse YAML configuration at {path}: {err}"
-            ) from err
-        if not isinstance(data, dict):
-            raise TypeError("top-level structure in config file must be a mapping")
-        _update_from_dict(cfg, data, unknown_keys=unknown_keys)
+    try:
+        with Path(path).open("r", encoding="utf8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except FileNotFoundError as err:
+        raise ConfigError(f"configuration file not found: {path}") from err
+    except yaml.YAMLError as err:
+        raise ConfigError(
+            f"failed to parse YAML configuration at {path}: {err}"
+        ) from err
+    if not isinstance(data, dict):
+        raise TypeError("top-level structure in config file must be a mapping")
+    _update_from_dict(cfg, data, unknown_keys=unknown_keys)
 
     if unknown_keys:
         joined = ", ".join(sorted(unknown_keys))
@@ -538,6 +558,7 @@ __all__ = [
     "RetryCfg",
     "LogCfg",
     "Config",
+    "ConfigError",
     "ensure_dirs",
     "load_config",
 ]

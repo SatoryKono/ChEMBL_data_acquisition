@@ -62,7 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     merges their outputs.
     """
     parser = argparse.ArgumentParser(description="Target data utilities")
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
     parser.add_argument(
         "--log-level",
         default="INFO",

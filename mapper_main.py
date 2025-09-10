@@ -86,7 +86,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)

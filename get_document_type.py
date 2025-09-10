@@ -76,7 +76,9 @@ def main() -> int:  # pragma: no cover - simple CLI
 
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
     parser.add_argument("--input", type=Path, required=True, help="Input CSV")
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")
     parser.add_argument("--log-level", default="INFO")
