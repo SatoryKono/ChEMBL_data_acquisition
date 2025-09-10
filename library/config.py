@@ -23,10 +23,12 @@ import yaml
 
 class ConfigError(ValueError):
     """Raised when configuration values are invalid."""
+ 
 
 
 @dataclass
 class APISettings:
+
     """Base URLs for external services."""
 
     chembl_base_url: str = "https://www.ebi.ac.uk/chembl/api/data"
@@ -132,16 +134,20 @@ class Config:
 def load_config(path: str | Path | None = None) -> Config:
     """Return configuration loaded from ``path`` or defaults.
 
+
     Parameters
     ----------
     path:
+
         Optional path to a YAML configuration file. When omitted, ``config.yaml``
         located at the repository root is used. Missing files result in the
         default configuration being returned.
 
+
     Returns
     -------
     Config
+
         Parsed configuration object.
     """
     cfg_path = Path(path) if path is not None else Path("config.yaml")
@@ -171,3 +177,4 @@ __all__ = [
     "RateLimitSettings",
     "OutputPaths",
 ]
+
