@@ -82,7 +82,9 @@ def build_parser(
     return parser
 
 
-def configure_logging(level: str) -> None:
+def configure_logging(
+    level: str, *, fmt: str | None = None, datefmt: str | None = None
+) -> None:
     """Configure root logging for command-line utilities.
 
     Parameters
@@ -92,4 +94,9 @@ def configure_logging(level: str) -> None:
 
     """
     numeric = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(level=numeric, force=True)
+    logging.basicConfig(
+        level=numeric,
+        format=fmt or "%(levelname)s: %(message)s",
+        datefmt=datefmt,
+        force=True,
+    )

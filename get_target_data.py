@@ -10,6 +10,7 @@ from typing import Sequence
 
 import pandas as pd
 import requests
+from library.config import Config, load_config
 
 from library import chembl_library as cl
 from library import io
@@ -20,6 +21,7 @@ from library.cli import configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
+cfg: Config = load_config()
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -61,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     merges their outputs.
     """
     parser = argparse.ArgumentParser(description="Target data utilities")
+    parser.add_argument("--config", default="config.yaml")
     parser.add_argument(
         "--log-level",
         default="INFO",
@@ -565,7 +568,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    configure_logging(args.log_level)
+    global cfg
+    cfg = load_config(args.config)
+    default_log = parser.get_default("log_level")
+    if args.log_level == default_log:
+        args.log_level = cfg.log.level
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     if hasattr(args, "func"):
         return args.func(args)
     parser.print_help()

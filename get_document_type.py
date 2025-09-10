@@ -12,8 +12,13 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+from library.config import Config, load_config
+from library.cli import configure_logging
 
 from library.document_type_classifier import compute_scores, decide_label
+
+
+cfg: Config = load_config()
 
 
 def _split_terms(value: object) -> Iterable[str]:
@@ -74,13 +79,22 @@ def main() -> int:  # pragma: no cover - simple CLI
 
     """
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--input", type=Path, required=True, help="Input CSV")
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")
+    parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
+    global cfg
+    cfg = load_config(args.config)
+    if args.log_level == "INFO":
+        args.log_level = cfg.log.level
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
 
-    df_in = pd.read_csv(args.input)
+    df_in = pd.read_csv(args.input, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)
     df_out = classify_dataframe(df_in)
-    df_out.to_csv(args.output, index=False)
+    df_out.to_csv(
+        args.output, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
+    )
     return 0
 
 
