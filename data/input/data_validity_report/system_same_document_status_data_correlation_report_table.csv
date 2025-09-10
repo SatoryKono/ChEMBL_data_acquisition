@@ -1,5 +1,7 @@
-﻿index,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki
-independent_IC50,,,,
-non_independent_IC50,,1.0,,-0.0017056766924546272
-independent_Ki,,,,
-non_independent_Ki,,-0.0017056766924546272,,1.0
+﻿index,Count,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki,"system.Percentage, %"
+Count,1.0,,0.9832288300991568,,0.991776163027339,0.8717233727713857
+independent_IC50,,,,,,
+non_independent_IC50,0.9832288300991568,,1.0,,0.9809685815347238,0.8772943695973537
+independent_Ki,,,,,,
+non_independent_Ki,0.991776163027339,,0.9809685815347238,,1.0,0.8745677049461992
+"system.Percentage, %",0.8717233727713857,,0.8772943695973537,,0.8745677049461992,1.0

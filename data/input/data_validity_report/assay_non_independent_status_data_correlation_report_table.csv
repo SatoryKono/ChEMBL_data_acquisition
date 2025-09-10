@@ -1,5 +1,7 @@
-﻿index,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki
-independent_IC50,,,,
-non_independent_IC50,,1.0,,-0.03146680653510077
-independent_Ki,,,,
-non_independent_Ki,,-0.03146680653510077,,1.0
+﻿index,Count,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki,"assay.Percentage, %"
+Count,1.0,,0.9786400094371771,,0.8182333172628542,0.9185369900141584
+independent_IC50,,,,,,
+non_independent_IC50,0.9786400094371771,,1.0,,0.8531256736092484,0.9568668694076411
+independent_Ki,,,,,,
+non_independent_Ki,0.8182333172628542,,0.8531256736092484,,1.0,0.8104832290225765
+"assay.Percentage, %",0.9185369900141584,,0.9568668694076411,,0.8104832290225765,1.0
