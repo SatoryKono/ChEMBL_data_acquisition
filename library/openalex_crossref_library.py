@@ -13,14 +13,17 @@ import requests
 
 from .config import CrossRefCfg, OpenAlexCfg
 from . import pubmed_library as _pl
+from .config import CrossRefCfg, OpenAlexCfg
 
 logger = logging.getLogger(__name__)
 
 
 def fetch_openalex(
+
     session: requests.Session,
     pmid: str,
     cfg: OpenAlexCfg,
+
 ) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -31,7 +34,9 @@ def fetch_openalex(
     pmid: str
         PubMed identifier.
     cfg: OpenAlexCfg
+
         Configuration specifying base URL, timeouts and rate limits.
+
 
     Returns
     -------
@@ -49,9 +54,11 @@ def fetch_openalex(
 
 
 def fetch_crossref(
+
     session: requests.Session,
     doi: str,
     cfg: CrossRefCfg,
+
 ) -> Dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
@@ -62,7 +69,9 @@ def fetch_crossref(
     doi: str
         Digital Object Identifier of the article.
     cfg: CrossRefCfg
+
         Configuration specifying base URL, timeouts and rate limits.
+
 
     Returns
     -------

@@ -30,7 +30,9 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+
 from library.config import Config, ensure_dirs, OpenAlexCfg, CrossRefCfg
+
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -53,6 +55,8 @@ logger = logging.getLogger(__name__)
 def fetch_pubmed_records(
     pmids: list[str],
     sleep: float,
+
+
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
     max_workers: int = 1,
@@ -65,11 +69,13 @@ def fetch_pubmed_records(
     pmids:
         Identifiers to query.
     sleep:
+
         Seconds to pause between PubMed and Semantic Scholar requests.
     openalex_cfg:
         Configuration for OpenAlex API access.
     crossref_cfg:
         Configuration for CrossRef API access.
+
     max_workers:
         Maximum number of concurrent threads.
     batch_size:
@@ -110,9 +116,11 @@ def fetch_pubmed_records(
                     semsch = semsch_map.get(pmid, {})
 
                     # Still fetching these individually for now
+
                     openalex = ocl.fetch_openalex(session, pmid, openalex_cfg)
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
                     crossref = ocl.fetch_crossref(session, doi, crossref_cfg)
+
 
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
@@ -172,10 +180,12 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         df = fetch_pubmed_records(
             pmids,
             args.sleep,
+
             cfg.openalex,
             cfg.crossref,
             args.workers,
             args.batch_size,
+
         )
         output = args.output_csv or io.default_output_path(args.input_csv)
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
@@ -304,11 +314,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        args.sleep,
+
         cfg.openalex,
         cfg.crossref,
         args.workers,
         args.batch_size,
+
     )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:

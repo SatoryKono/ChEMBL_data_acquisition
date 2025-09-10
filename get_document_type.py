@@ -7,7 +7,7 @@ scoring logic.
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import argparse
 import logging
@@ -71,39 +71,21 @@ def classify_dataframe(
     return result
 
 
-def main() -> int:  # pragma: no cover - simple CLI
-    """Command-line entry point for document type classification using :class:`Config`.
+def main(argv: Sequence[str] | None = None) -> int:
+    """Command-line entry point for document type classification."""
 
-    Returns
-    -------
-    int
-        Zero on success, non-zero on failure.
 
-    """
+    parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
+    args = parser.parse_args(argv)
+    cfg: Config = apply_config_overrides(args, parser, args.config)
+    ensure_dirs(cfg)
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
 
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--config", default="config.yaml", help="Path to YAML configuration file"
-    )
-    parser.add_argument("--input", type=Path, required=True, help="Input CSV")
-    parser.add_argument("--output", type=Path, required=True, help="Output CSV")
-    parser.add_argument("--log-level", default="INFO")
 
-    args = parser.parse_args()
-    try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
-        ensure_dirs(cfg)
-        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-    except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
-        return 1
-
-    df_in = pd.read_csv(
-        args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
-    )
+    df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
     df_out = classify_dataframe(df_in)
     output = args.output_csv or io.default_output_path(args.input_csv)
-    df_out.to_csv(output, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)
+    df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
     return 0
 
 
