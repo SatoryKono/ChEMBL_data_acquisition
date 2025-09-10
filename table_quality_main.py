@@ -11,7 +11,9 @@ from typing import Sequence
 import pandas as pd
 
 from library.table_quality import analyze_table_quality
-from library.config import DEFAULT_CONFIG
+
+from library.config import DEFAULT_CONFIG load_config
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Table quality analysis")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="Path to YAML configuration file",
+    )
+    parser.add_argument(
         "--input",
         dest="input_csv",
         type=Path,
@@ -66,7 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         dest="output_dir",
         type=Path,
+
         default=DEFAULT_CONFIG.output.data_dir,
+
         help="Directory to store generated reports",
     )
     parser.add_argument("--sep", default=",", help="CSV delimiter")
@@ -85,6 +95,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    if args.output_dir is None:
+        args.output_dir = Path(config.get("output", {}).get("data_dir", "."))
     configure_logging(args.log_level)
     return args.func(args)
 

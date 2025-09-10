@@ -1,6 +1,26 @@
 
 from pathlib import Path
 
+from library.config import load_config
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
+
+
+def test_load_config_reads_yaml() -> None:
+    path = DATA_DIR / "sample_config.yaml"
+    cfg = load_config(path)
+    assert cfg["foo"] == "bar"
+    assert cfg["nested"]["value"] == 42
+
+
+def test_load_config_missing_returns_empty(tmp_path: Path) -> None:
+    path = tmp_path / "missing.yaml"
+    cfg = load_config(path)
+    assert cfg == {}
+
+
+from pathlib import Path
+
 import pytest
 
 
@@ -29,3 +49,4 @@ def test_non_writable_directory_raises(tmp_path: Path) -> None:
     bad_path.write_text("x")
     with pytest.raises(ConfigError):
         Config(output=OutputPaths(data_dir=bad_path))
+

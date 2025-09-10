@@ -40,6 +40,7 @@ from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
 from library.table_quality import analyze_table_quality
+from library.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +279,12 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description="Document data utilities")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="Path to YAML configuration file",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
@@ -301,7 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
     pubmed.add_argument("--sep", default=",", help="CSV delimiter")
     pubmed.add_argument("--encoding", default="utf8", help="File encoding")
     pubmed.add_argument(
-        "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
+        "--sleep", type=float, default=None, help="Seconds to sleep between requests"
     )
     pubmed.add_argument(
         "--workers", type=int, default=1, help="Number of concurrent requests"
@@ -365,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument(
         "--sleep",
         type=float,
-        default=5.0,
+        default=None,
         help="Seconds to sleep between PubMed requests",
     )
     all_cmd.add_argument(
@@ -386,6 +393,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    if hasattr(args, "output_csv") and getattr(args, "output_csv") is None:
+        out_dir = config.get("output", {}).get("data_dir")
+        if out_dir:
+            args.output_csv = (
+                Path(out_dir) / io.default_output_path(args.input_csv).name
+            )
+    if getattr(args, "sleep", None) is None:
+        rate = config.get("rate_limits", {}).get("max_requests_per_second")
+        if rate:
+            args.sleep = 1 / rate
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
     return args.func(args)
 

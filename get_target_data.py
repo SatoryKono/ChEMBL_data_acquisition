@@ -18,6 +18,7 @@ from library import target_postprocessing as tp
 from library import uniprot_library as uu
 from library.cli import configure_logging
 from library.table_quality import analyze_table_quality
+from library.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING)",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="Path to YAML configuration file",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -565,6 +572,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    if hasattr(args, "output_csv") and args.output_csv is None:
+        out_dir = config.get("output", {}).get("data_dir")
+        if out_dir:
+            args.output_csv = (
+                Path(out_dir) / io.default_output_path(args.input_csv).name
+            )
     configure_logging(args.log_level)
     if hasattr(args, "func"):
         return args.func(args)

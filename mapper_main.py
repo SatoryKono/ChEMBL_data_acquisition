@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 from typing import Sequence
 from urllib.error import URLError
 
@@ -11,6 +12,7 @@ import pandas as pd
 
 from library import io
 from library.cli import build_parser as base_parser, configure_logging
+from library.config import load_config
 from library.mapper_library import map_chembl_to_uniprot
 
 logger = logging.getLogger(__name__)
@@ -80,6 +82,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    if args.output_csv is None:
+        out_dir = config.get("output", {}).get("data_dir")
+        if out_dir:
+            args.output_csv = (
+                Path(out_dir) / io.default_output_path(args.input_csv).name
+            )
     configure_logging(args.log_level)
     return args.func(args)
 

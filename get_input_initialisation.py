@@ -16,6 +16,7 @@ from typing import Sequence
 
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
+from library.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="Path to YAML configuration file",
+    )
+    parser.add_argument(
         "--same-doc", type=Path, required=True, help="Path to same document workbook"
     )
     parser.add_argument(
@@ -98,9 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("dictionary"),
         help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
     )
-    parser.add_argument(
-        "--out-dir", type=Path, default=Path("."), help="Output directory"
-    )
+    parser.add_argument("--out-dir", type=Path, default=None, help="Output directory")
     parser.add_argument(
         "--format", choices=["csv"], default="csv", help="Output format"
     )
@@ -118,6 +123,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    if args.out_dir is None:
+        args.out_dir = Path(config.get("output", {}).get("data_dir", "."))
     configure_logging(args.log_level)
     return args.func(args)
 

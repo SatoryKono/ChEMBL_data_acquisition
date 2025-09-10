@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 from typing import Sequence
 
 import requests
@@ -11,6 +12,7 @@ import requests
 from library import chembl_library as cl
 from library import io
 from library.cli import build_parser as base_parser, configure_logging
+from library.config import load_config
 from library.table_quality import analyze_table_quality
 from library.config import DEFAULT_CONFIG
 
@@ -70,7 +72,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout",
         type=float,
+
         default=DEFAULT_CONFIG.timeouts.read,
+
         help="Timeout in seconds for each HTTP request",
     )
     parser.set_defaults(func=run_chembl)
@@ -81,6 +85,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    config = load_config(args.config)
+    if args.timeout is None:
+        args.timeout = float(config.get("timeouts", {}).get("read", 30.0))
+    if args.output_csv is None:
+        out_dir = config.get("output", {}).get("data_dir")
+        if out_dir:
+            args.output_csv = (
+                Path(out_dir) / io.default_output_path(args.input_csv).name
+            )
     configure_logging(args.log_level)
     return args.func(args)
 
