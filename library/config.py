@@ -29,7 +29,8 @@ from urllib.parse import urlparse
 
 @dataclass
 class ApiCfg:
-    """Settings for external API access."""
+    """Settings for ChEMBL API access."""
+
 
     chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
     timeout_connect: int = 5
@@ -42,8 +43,72 @@ class ApiCfg:
 
 
 @dataclass
+
+class OpenAlexCfg:
+    """Settings for the OpenAlex API."""
+
+    base: str = "https://api.openalex.org"
+    timeout_connect: int = 5
+    timeout_read: int = 30
+    retries: int = 3
+    rps: int = 4
+    burst: int = 5
+    mailto: str = ""
+
+
+@dataclass
+class CrossRefCfg:
+    """Settings for the CrossRef API."""
+
+    base: str = "https://api.crossref.org"
+    timeout_connect: int = 5
+    timeout_read: int = 30
+    retries: int = 3
+    rps: int = 4
+    burst: int = 5
+    mailto: str = ""
+
+
+@dataclass
+class UniprotCfg:
+    """Settings for the UniProt REST API."""
+
+    base: str = "https://rest.uniprot.org"
+    timeout_connect: int = 5
+    timeout_read: int = 30
+    retries: int = 3
+    rps: int = 4
+    burst: int = 5
+
+
+@dataclass
+class IupharCfg:
+    """Settings for the IUPHAR API."""
+
+    base: str = "https://www.guidetopharmacology.org/services"
+    timeout_connect: int = 5
+    timeout_read: int = 30
+    retries: int = 3
+    rps: int = 4
+    burst: int = 5
+
+
+@dataclass
+class PubChemCfg:
+    """Settings for the PubChem PUG REST API."""
+
+    base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    timeout_connect: int = 5
+    timeout_read: int = 60
+    retries: int = 3
+    rps: int = 3
+    burst: int = 5
+
+
+@dataclass
 class IoCfg:
     """Input/output defaults."""
+
 
     output_dir: str = "data/output"
     cache_dir: str = ".cache"
@@ -65,6 +130,7 @@ class JobsCfg:
 class LogCfg:
     """Logging configuration."""
 
+
     level: str = "INFO"
     format: str = "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
     datefmt: str = "%Y-%m-%d %H:%M:%S"
@@ -80,14 +146,82 @@ class InitCfg:
 
 
 @dataclass
-class Config:
-    """Aggregate project configuration."""
+class BatchCfg:
+    """Batch processing parameters."""
+
+    size: int = 1000
+    pause: float = 0
+    concurrency: int = 2
+    fail_fast: bool = True
+    retry_failed: bool = True
+
+
+@dataclass
+class QualityCfg:
+    """Options for table quality analysis."""
+
+    sample_rows: int = 0
+    corr_method: str = "pearson"
+    max_unique_preview: int = 50
+    bin_count: int = 20
+
+
+@dataclass
+class MapperCfg:
+    """Mapper tool configuration."""
+
+    enable_cache: bool = True
+    strict_schema: bool = True
+    warn_on_cast: bool = True
+
+
+@dataclass
+class RateCfg:
+    """Global rate limiting settings."""
+
+    global_rps: int = 8
+    global_burst: int = 8
+
 
     api: ApiCfg = field(default_factory=ApiCfg)
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     log: LogCfg = field(default_factory=LogCfg)
     init: InitCfg = field(default_factory=InitCfg)
+
+
+@dataclass
+class RetryCfg:
+    """Retry behaviour for HTTP requests."""
+
+    max_attempts: int = 3
+    backoff_factor: float = 0.5
+    status_forcelist: List[int] = field(
+        default_factory=lambda: [429, 500, 502, 503, 504]
+    )
+
+
+        return asdict(self)
+
+@dataclass
+class Config:
+    """Aggregate project configuration."""
+
+    api: ApiCfg = field(default_factory=ApiCfg)
+    openalex: OpenAlexCfg = field(default_factory=OpenAlexCfg)
+    crossref: CrossRefCfg = field(default_factory=CrossRefCfg)
+    uniprot: UniprotCfg = field(default_factory=UniprotCfg)
+    iuphar: IupharCfg = field(default_factory=IupharCfg)
+    pubchem: PubChemCfg = field(default_factory=PubChemCfg)
+    io: IoCfg = field(default_factory=IoCfg)
+    jobs: JobsCfg = field(default_factory=JobsCfg)
+    batch: BatchCfg = field(default_factory=BatchCfg)
+    quality: QualityCfg = field(default_factory=QualityCfg)
+    mapper: MapperCfg = field(default_factory=MapperCfg)
+    init: InitCfg = field(default_factory=InitCfg)
+    rate: RateCfg = field(default_factory=RateCfg)
+    retry: RetryCfg = field(default_factory=RetryCfg)
+    log: LogCfg = field(default_factory=LogCfg)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return the configuration as a plain dictionary."""
@@ -96,6 +230,7 @@ class Config:
 
     def to_yaml(self) -> str:
         """Serialise the configuration to a YAML string."""
+
 
         return yaml.safe_dump(self.to_dict(), sort_keys=False)
 
@@ -202,8 +337,30 @@ def _validate(cfg: Config) -> None:
         raise ValueError("api.chembl_base must be a valid URL")
     if cfg.api.rps <= 0 or cfg.api.burst <= 0:
         raise ValueError("api.rps and api.burst must be positive")
+
+    services: list[tuple[str, Any]] = [
+        ("openalex", cfg.openalex),
+        ("crossref", cfg.crossref),
+        ("uniprot", cfg.uniprot),
+        ("iuphar", cfg.iuphar),
+        ("pubchem", cfg.pubchem),
+    ]
+    for name, service in services:
+        if not _valid_url(service.base):
+            raise ValueError(f"{name}.base must be a valid URL")
+        if service.rps <= 0 or service.burst <= 0:
+            raise ValueError(f"{name}.rps and {name}.burst must be positive")
     if cfg.jobs.concurrency <= 0 or cfg.jobs.chunk_size <= 0:
         raise ValueError("jobs.concurrency and jobs.chunk_size must be positive")
+    if cfg.batch.size <= 0 or cfg.batch.concurrency <= 0:
+        raise ValueError("batch.size and batch.concurrency must be positive")
+    if cfg.rate.global_rps <= 0 or cfg.rate.global_burst <= 0:
+        raise ValueError("rate.global_rps and rate.global_burst must be positive")
+    if cfg.retry.max_attempts <= 0 or cfg.retry.backoff_factor < 0:
+        raise ValueError(
+            "retry.max_attempts must be positive and backoff_factor non-negative"
+        )
+
     if not cfg.io.output_dir.strip() or not cfg.io.cache_dir.strip():
         raise ValueError("io.output_dir and io.cache_dir must not be empty")
     if not cfg.init.same_doc.strip() or not cfg.init.all_doc.strip():
@@ -252,4 +409,23 @@ def load_config(
     return cfg
 
 
-__all__ = ["ApiCfg", "IoCfg", "JobsCfg", "Config", "load_config"]
+
+__all__ = [
+    "ApiCfg",
+    "OpenAlexCfg",
+    "CrossRefCfg",
+    "UniprotCfg",
+    "IupharCfg",
+    "PubChemCfg",
+    "IoCfg",
+    "JobsCfg",
+    "BatchCfg",
+    "QualityCfg",
+    "MapperCfg",
+    "InitCfg",
+    "RateCfg",
+    "RetryCfg",
+    "LogCfg",
+    "Config",
+    "load_config",
+]

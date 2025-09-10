@@ -144,6 +144,7 @@ def write_csv(
     encoding = encoding or cfg.io.csv_encoding
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False, sep=sep, encoding=encoding)
+    _write_meta(Path(path), cfg)
 
     _write_meta(Path(path), cfg)
 

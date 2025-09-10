@@ -62,8 +62,13 @@ All scripts share a common set of flags:
 
 ## Configuration
 
-Default settings live in ``config.yaml`` and are split into sections ``api``,
-``io`` and ``jobs``. A minimal configuration looks like::
+
+Default settings live in ``config.yaml`` and are split into sections for each
+API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
+I/O and processing (``io``, ``jobs``, ``batch``, ``quality``, ``mapper``) and
+general infrastructure (``init``, ``rate``, ``retry``, ``log``). A minimal
+configuration looks like::
+
 
     api:
       rps: 5
@@ -76,6 +81,9 @@ Environment variables override values from the YAML file. Variables use the
 ``CHEMBL_DA__SECTION__KEY`` pattern and also support short aliases:
 
 * ``CHEMBL_DA__API__RPS`` / ``CHEMBL_DA_RPS``
+
+* ``CHEMBL_DA__OPENALEX__RPS``
+
 * ``CHEMBL_DA__IO__OUTPUT_DIR`` / ``CHEMBL_DA_OUTDIR``
 * ``CHEMBL_DA__JOBS__CONCURRENCY`` / ``CHEMBL_DA_CONCURRENCY``
 * ``CHEMBL_DA__JOBS__CHUNK_SIZE`` / ``CHEMBL_DA_CHUNK_SIZE``
@@ -83,7 +91,6 @@ Environment variables override values from the YAML file. Variables use the
 Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective
 values after all overrides have been applied. The final precedence is::
-
 
     YAML < environment variables < CLI options
 

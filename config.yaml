@@ -8,6 +8,50 @@ api:
   burst: 5
   user_agent: "chembl-da/0.1 (+contact: unset)"
 
+
+openalex:
+  base: "https://api.openalex.org"
+  timeout_connect: 5
+  timeout_read: 30
+  retries: 3
+  rps: 4
+  burst: 5
+  mailto: ""
+
+crossref:
+  base: "https://api.crossref.org"
+  timeout_connect: 5
+  timeout_read: 30
+  retries: 3
+  rps: 4
+  burst: 5
+  mailto: ""
+
+uniprot:
+  base: "https://rest.uniprot.org"
+  timeout_connect: 5
+  timeout_read: 30
+  retries: 3
+  rps: 4
+  burst: 5
+
+iuphar:
+  base: "https://www.guidetopharmacology.org/services"
+  timeout_connect: 5
+  timeout_read: 30
+  retries: 3
+  rps: 4
+  burst: 5
+
+pubchem:
+  base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+  timeout_connect: 5
+  timeout_read: 60
+  retries: 3
+  rps: 3
+  burst: 5
+
+
 io:
   output_dir: "data/output"
   cache_dir: ".cache"
@@ -20,13 +64,48 @@ jobs:
   concurrency: 8
   chunk_size: 500
 
-log:
-  level: "INFO"
-  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
-  datefmt: "%Y-%m-%d %H:%M:%S"
+
+batch:
+  size: 1000
+  pause: 0
+  concurrency: 2
+  fail_fast: true
+  retry_failed: true
+
+quality:
+  sample_rows: 0
+  corr_method: "pearson"
+  max_unique_preview: 50
+  bin_count: 20
+
+mapper:
+  enable_cache: true
+  strict_schema: true
+  warn_on_cast: true
 
 init:
   same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
   all_doc: "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
   output_dir: "data/output/ChEMBL/processed"
+
+rate:
+  global_rps: 8
+  global_burst: 8
+
+retry:
+  max_attempts: 3
+  backoff_factor: 0.5
+  status_forcelist:
+    - 429
+    - 500
+    - 502
+    - 503
+    - 504
+
+
+log:
+  level: "INFO"
+  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"
+
 
