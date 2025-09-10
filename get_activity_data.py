@@ -26,6 +26,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args : argparse.Namespace
         Parsed command-line arguments.
 
@@ -85,10 +87,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
+    """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg = apply_config_overrides(
+    cfg: Config = apply_config_overrides(
         args,
         parser,
         args.config,

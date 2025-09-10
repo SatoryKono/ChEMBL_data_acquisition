@@ -32,6 +32,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command line arguments.
 
@@ -121,10 +123,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point."""
+    """Entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg = apply_config_overrides(
+    cfg: Config = apply_config_overrides(
         args,
         parser,
         args.config,

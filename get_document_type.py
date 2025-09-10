@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Iterable
 
 import pandas as pd
-from library.config import ensure_dirs
+from library.config import Config, ensure_dirs
 from library.cli import (
     apply_config_overrides,
     build_parser as base_parser,
@@ -70,7 +70,7 @@ def classify_dataframe(
 
 
 def main() -> int:  # pragma: no cover - simple CLI
-    """Command-line entry point for document type classification.
+    """Command-line entry point for document type classification using :class:`Config`.
 
     Returns
     -------
@@ -80,7 +80,7 @@ def main() -> int:  # pragma: no cover - simple CLI
     """
     parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
     args = parser.parse_args()
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg: Config = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
 
