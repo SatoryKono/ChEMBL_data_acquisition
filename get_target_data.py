@@ -17,10 +17,12 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
+
 from library.cli import (
     apply_config_overrides,
     configure_logging,
 )
+
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -611,9 +613,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg: Config = apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    try:
+        cfg: Config = apply_config_overrides(args, parser, args.config)
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
     if hasattr(args, "func"):
         return args.func(cfg, args)
     parser.print_help()
