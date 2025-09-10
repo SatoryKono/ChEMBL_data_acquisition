@@ -1,184 +1,106 @@
 api:
-  # Base URL for ChEMBL API
   chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
-  # Timeout for establishing a connection (seconds)
   timeout_connect: 5
-  # Timeout for reading a response (seconds)
   timeout_read: 30
-  # Number of retries on failure
   retries: 3
-  # Backoff factor for exponential retry delays
   backoff_factor: 0.5
-  # Requests per second for ChEMBL client.
-  # NOTE: ChEMBL public guidance commonly observed ~1 rps without key; set conservatively.
-  # Documented page-size (not RPS): max 1000 per page.
   rps: 5
-  # Allowed burst of requests above the RPS before throttling (client-side only; no official "burst")
   burst: 5
-  # Custom User-Agent header for API calls
   user_agent: "chembl-da/0.1 (+contact: unset)"
+
 openalex:
-  # Base URL for OpenAlex API
   base: "https://api.openalex.org"
   timeout_connect: 5
   timeout_read: 30
   retries: 3
-  # Requests per second. OpenAlex hard limit = 10 rps; daily cap = 100,000 requests.
   rps: 4
-  # Client-side burst (OpenAlex does not document "burst"; keep small to avoid 429)
   burst: 5
-  # Email contact recommended by OpenAlex for polite API use (improves throttling behavior)
   mailto: ""
+
 crossref:
-  # Base URL for Crossref API
   base: "https://api.crossref.org"
   timeout_connect: 5
   timeout_read: 30
   retries: 3
-  # Requests per second. Crossref advertises active limits in X-Rate-Limit headers (often ~50 rps);
-  # treat this value as conservative default and honor response headers.
   rps: 4
-  # Client-side burst; keep modest because Crossref limits can change dynamically
   burst: 5
-  # Email contact recommended by Crossref
   mailto: ""
+
 uniprot:
-  # Base URL for UniProt REST API
   base: "https://rest.uniprot.org"
   timeout_connect: 5
   timeout_read: 30
   retries: 3
-  # Requests per second. No official fixed RPS published for this REST API; back off on 429.
-  # Max page size in recent docs ~500; keep RPS low if fetching large pages.
   rps: 4
-  # Client-side burst; keep small to avoid 429 during spikes
   burst: 5
+
 iuphar:
-  # Base URL for IUPHAR Guide to Pharmacology
   base: "https://www.guidetopharmacology.org/services"
   timeout_connect: 5
   timeout_read: 30
   retries: 3
-  # Requests per second. No official rate-limit figures; be conservative and monitor 429/503.
   rps: 4
-  # Client-side burst; keep small since server-side limits are undocumented
   burst: 5
+
 pubchem:
-  # Base URL for PubChem PUG REST API
   base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
   timeout_connect: 5
-  # PubChem has a standard ~30 s time limit per request → longer read timeout recommended
   timeout_read: 60
   retries: 3
-  # Requests per second. PubChem policy requests ≤5 rps per user/app.
   rps: 3
-  # Client-side burst; keep small to respect the 5 rps guidance
   burst: 5
+
 io:
-  # Directory for output files
   output_dir: "data/output"
-  # Directory for cache and temporary files
   cache_dir: ".cache"
-  # Column separator for CSV files
   csv_sep: ","
-  # Encoding for CSV files
   csv_encoding: "utf-8-sig"
-  # Save pandas index when writing CSV (usually false)
   csv_index: false
-  # Engine for reading/writing Excel files
-  xlsx_engine: "openpyxl"
-  # Minimum required version of openpyxl
-  xlsx_min_version: "3.1.0"
-  # Automatically create directories if they don't exist
   exist_ok: true
-  # Compression for output files ("" = none, or "gzip")
-  compression: ""
+
 jobs:
-  # Number of workers/threads for parallel jobs (CPU-bound or I/O-bound depending on your code)
   concurrency: 8
-  # Chunk size for splitting data in local processing pipelines (NOT an API page size).
-  # Reference API page-size ceilings to choose safe values:
-  # - ChEMBL: up to 1000 per page
-  # - OpenAlex: 1–200 per page
-  # - Crossref: default 20, up to 1000 rows per page (check headers/offset constraints)
-  # - UniProt REST: up to 500 per page
-  # - IUPHAR: no published page-size cap; keep modest
-  # - PubChem PUG REST: varies by operation; large queries hit ~30 s time limit
+  chunk_size: 500
+
 batch:
-  # Batch size for processing records at once (internal batching).
-  # Keep this ≤ effective API page sizes above when batches map 1:1 to requests.
   size: 1000
-  # Pause between processing batches (seconds)
   pause: 0
-  # Maximum number of batches processed in parallel
   concurrency: 2
-  # Whether to stop immediately on first batch error
   fail_fast: true
-  # Retry failed batches (true/false)
   retry_failed: true
+
 quality:
-  # Number of rows to sample for profiling (0 = use all data)
   sample_rows: 0
-  # Correlation method for numeric columns
   corr_method: "pearson"
-  # Maximum unique values to show in categorical previews
   max_unique_preview: 50
-  # Number of bins for numeric histograms
   bin_count: 20
+
 mapper:
-  # Enable cache for mapping operations
   enable_cache: true
-  # Require strict schema (fail if expected columns are missing)
   strict_schema: true
-  # Warn when casting datatypes
   warn_on_cast: true
+
 init:
-
-  # Path to same document workbook
   same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
-  # Path to all document workbook
   all_doc: "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
-
-  # Required sheets in input Excel files
-  required_sheets_same_doc:
-    - "assay_step5_same_doc"
-    - "activity_step5_same_doc"
-    - "document_step5_same_doc"
-    - "target_step5_same_doc"
-    - "pairs_same_doc"
-
-  required_sheets_all_doc:
-    - "assay_step5"
-    - "activity_step5"
-    - "document_step5"
-    - "targets_step5"
-    - "molecule_step5"
-    - "step5_pairs"
-
-  # Directory for saving initialized datasets
   output_dir: "data/output/ChEMBL/processed"
-  # Save pairs/pairs_same_doc sheets without merging
-  save_pairs_sheets: true
-  # Stop immediately if a critical error occurs
-  fail_fast: true
+
 rate:
-  # Global requests per second across all API clients (respect the strictest API among those you call)
   global_rps: 8
-  # Global request burst capacity (client-side); keep modest if mixing APIs with low limits
   global_burst: 8
+
 retry:
-  # Maximum retry attempts for failed requests
   max_attempts: 3
-  # Backoff factor for exponential retry delays
   backoff_factor: 0.5
-  # HTTP status codes that should trigger a retry
-  status_forcelist: [429, 500, 502, 503, 504]
+  status_forcelist:
+    - 429
+    - 500
+    - 502
+    - 503
+    - 504
+
 log:
-  # Logging level (DEBUG, INFO, WARNING, ERROR)
   level: "INFO"
-  # Logging message format
   format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
-  # Date format for logs
   datefmt: "%Y-%m-%d %H:%M:%S"
-  # Enable colored output in console logs
-  color: true
+

@@ -21,7 +21,6 @@ from library.cli import configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
-cfg: Config = load_config()
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -267,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_uniprot(args: argparse.Namespace) -> int:
+def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``uniprot`` sub-command.
 
     Parameters
@@ -324,7 +323,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
         out_df = pd.read_csv(output, sep=args.sep, encoding=args.encoding, dtype=str)
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
-        io.write_csv(out_df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(out_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -336,11 +335,15 @@ def run_uniprot(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command."""
     try:
         ids = io.read_ids(
-            args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            column=args.column,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
@@ -353,7 +356,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -366,7 +369,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_iuphar(args: argparse.Namespace) -> int:
+def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``iuphar`` sub-command."""
     try:
         data = ii.IUPHARData.from_files(
@@ -392,7 +395,7 @@ def run_iuphar(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_all(args: argparse.Namespace) -> int:
+def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """Run ChEMBL, UniProt and IUPHAR pipelines and merge their outputs.
 
     The merged table is cleaned and normalised using
@@ -430,7 +433,7 @@ def run_all(args: argparse.Namespace) -> int:
             sep=args.sep,
             encoding=args.encoding,
         )
-        if run_chembl(chembl_args) != 0:
+        if run_chembl(cfg, chembl_args) != 0:
             return 1
         chembl_df = pd.read_csv(
             chembl_out, sep=args.sep, encoding=args.encoding, dtype=str
@@ -463,7 +466,7 @@ def run_all(args: argparse.Namespace) -> int:
             column="uniprot_id",
         )
         try:
-            if run_uniprot(uniprot_args) != 0:
+            if run_uniprot(cfg, uniprot_args) != 0:
                 return 1
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -529,7 +532,7 @@ def run_all(args: argparse.Namespace) -> int:
             encoding=args.encoding,
         )
         try:
-            if run_iuphar(iuphar_args) != 0:
+            if run_iuphar(cfg, iuphar_args) != 0:
                 return 1
         finally:
             iuphar_input.unlink(missing_ok=True)
@@ -552,7 +555,7 @@ def run_all(args: argparse.Namespace) -> int:
         )
         final_df = tp.finalise_targets(processed, organism_df)
 
-        io.write_csv(final_df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(final_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -568,14 +571,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    global cfg
     cfg = load_config(args.config)
     default_log = parser.get_default("log_level")
     if args.log_level == default_log:
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     if hasattr(args, "func"):
-        return args.func(args)
+        return args.func(cfg, args)
     parser.print_help()
     return 1
 

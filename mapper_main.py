@@ -15,10 +15,9 @@ from library.cli import build_parser as base_parser, configure_logging
 from library.mapper_library import map_chembl_to_uniprot
 
 logger = logging.getLogger(__name__)
-cfg: Config = load_config()
 
 
-def run(args: argparse.Namespace) -> int:
+def run(cfg: Config, args: argparse.Namespace) -> int:
     """Map ChEMBL target identifiers to UniProt accessions.
 
     Parameters
@@ -33,7 +32,9 @@ def run(args: argparse.Namespace) -> int:
 
     """
     try:
-        df = io.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
+        df = io.read_csv(
+            args.input_csv, cfg=cfg.io, sep=args.sep, encoding=args.encoding
+        )
     except (FileNotFoundError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -59,7 +60,7 @@ def run(args: argparse.Namespace) -> int:
     df["mapping_uniprot_id"] = uniprot_ids
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("wrote %s", output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -83,7 +84,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    global cfg
     cfg = load_config(args.config)
 
     default_sep = parser.get_default("sep")
@@ -96,7 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.log_level == default_log:
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-    return args.func(args)
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

@@ -11,20 +11,23 @@ import csv
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+import subprocess
+import sys
 
 import pandas as pd
-from . import validation
-from .config import Config, load_config
+import yaml
 
-cfg: Config = load_config()
+from . import validation
+from .config import Config, IoCfg
 
 
 def read_ids(
     path: str | Path,
     *,
     column: str,
-    sep: str = cfg.io.csv_sep,
-    encoding: str = cfg.io.csv_encoding,
+    cfg: IoCfg,
+    sep: str | None = None,
+    encoding: str | None = None,
 ) -> list[str]:
     """Return identifier values from ``column`` in ``path``.
 
@@ -34,10 +37,12 @@ def read_ids(
         Location of the CSV file.
     column:
         Name of the column that contains identifiers.
+    cfg:
+        I/O configuration providing default CSV parameters.
     sep:
-        Field delimiter used in the CSV file. Defaults to ``","``.
+        Field delimiter used in the CSV file. Defaults to ``cfg.csv_sep``.
     encoding:
-        Character encoding of the CSV file. Defaults to ``"utf8"``.
+        Character encoding of the CSV file. Defaults to ``cfg.csv_encoding``.
 
     Returns
     -------
@@ -53,6 +58,8 @@ def read_ids(
         If the CSV file is malformed or ``column`` is missing.
 
     """
+    sep = sep or cfg.csv_sep
+    encoding = encoding or cfg.csv_encoding
     try:
         with Path(path).open("r", encoding=encoding, newline="") as fh:
             reader = csv.DictReader(fh, delimiter=sep)
@@ -73,8 +80,9 @@ def read_ids(
 def read_csv(
     path: str | Path,
     *,
-    sep: str = cfg.io.csv_sep,
-    encoding: str = cfg.io.csv_encoding,
+    cfg: IoCfg,
+    sep: str | None = None,
+    encoding: str | None = None,
     required_columns: Iterable[str] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
@@ -83,10 +91,12 @@ def read_csv(
     ----------
     path:
         Location of the CSV file.
+    cfg:
+        I/O configuration providing default CSV parameters.
     sep:
-        Field delimiter used in the CSV file. Defaults to ``","``.
+        Field delimiter used in the CSV file. Defaults to ``cfg.csv_sep``.
     encoding:
-        Character encoding of the CSV file. Defaults to ``"utf8"``.
+        Character encoding of the CSV file. Defaults to ``cfg.csv_encoding``.
     required_columns:
         Optional list of column names that must be present in the loaded
         DataFrame. A :class:`ValueError` is raised if any are missing.
@@ -97,6 +107,8 @@ def read_csv(
         DataFrame containing the CSV contents.
 
     """
+    sep = sep or cfg.csv_sep
+    encoding = encoding or cfg.csv_encoding
     df = pd.read_csv(path, sep=sep, encoding=encoding)
     if required_columns is not None:
         validation.validate_columns(df, required_columns)
@@ -107,10 +119,11 @@ def write_csv(
     df: pd.DataFrame,
     path: str | Path,
     *,
-    sep: str = cfg.io.csv_sep,
-    encoding: str = cfg.io.csv_encoding,
+    cfg: Config,
+    sep: str | None = None,
+    encoding: str | None = None,
 ) -> None:
-    """Write ``df`` to ``path`` as CSV.
+    """Write ``df`` to ``path`` as CSV and store metadata.
 
     Parameters
     ----------
@@ -118,14 +131,19 @@ def write_csv(
         DataFrame to serialise.
     path:
         Destination file path.
+    cfg:
+        Full configuration used for metadata sidecars.
     sep:
-        Field delimiter used in the CSV file. Defaults to ``","``.
+        Field delimiter used in the CSV file. Defaults to ``cfg.io.csv_sep``.
     encoding:
-        Character encoding of the CSV file. Defaults to ``"utf8"``.
+        Character encoding of the CSV file. Defaults to ``cfg.io.csv_encoding``.
 
     """
+    sep = sep or cfg.io.csv_sep
+    encoding = encoding or cfg.io.csv_encoding
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False, sep=sep, encoding=encoding)
+    _write_meta(Path(path), cfg)
 
 
 def default_output_path(input_path: str | Path) -> Path:
@@ -138,3 +156,27 @@ def default_output_path(input_path: str | Path) -> Path:
     inp = Path(input_path)
     date_str = datetime.now().strftime("%Y%m%d")
     return inp.with_name(f"output_{inp.stem}_{date_str}.csv")
+
+
+def _git_sha() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except Exception:  # pragma: no cover - git may be unavailable
+        return "unknown"
+
+
+def _write_meta(path: Path, cfg: Config) -> None:
+    meta = {
+        "git_sha": _git_sha(),
+        "command": " ".join(sys.argv),
+        "config": cfg.to_dict(),
+    }
+    meta_path = Path(str(path) + ".meta.yaml")
+    with meta_path.open("w", encoding="utf8") as fh:
+        yaml.safe_dump(meta, fh, sort_keys=False)
