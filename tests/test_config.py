@@ -101,3 +101,13 @@ def test_unknown_key_error(tmp_path: Path) -> None:
     path.write_text("unknown: 1\n")
     with pytest.raises(ValueError, match="Unknown configuration key"):
         load_config(path, strict=True)
+
+def test_yaml_error_includes_path(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("api: [\n")  # malformed YAML
+    with pytest.raises(ValueError) as excinfo:
+        load_config(path)
+    msg = str(excinfo.value)
+    assert str(path) in msg
+    assert "while parsing" in msg
+

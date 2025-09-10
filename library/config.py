@@ -473,8 +473,13 @@ def load_config(
     cfg = Config()
     unknown_keys: List[str] = []
     if path and Path(path).is_file():
-        with Path(path).open("r", encoding="utf8") as fh:
-            data = yaml.safe_load(fh) or {}
+        try:
+            with Path(path).open("r", encoding="utf8") as fh:
+                data = yaml.safe_load(fh) or {}
+        except yaml.YAMLError as err:
+            raise ValueError(
+                f"Failed to parse YAML configuration at {path}: {err}"
+            ) from err
         if not isinstance(data, dict):
             raise TypeError("top-level structure in config file must be a mapping")
         _update_from_dict(cfg, data, unknown_keys=unknown_keys)
