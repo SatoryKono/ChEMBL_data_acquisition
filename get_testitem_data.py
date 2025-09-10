@@ -131,7 +131,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     logger.info("Retrieved %d identifiers", len(ids))
     logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
     try:
-        df = cl.get_testitem(ids, cfg=cfg.api, chunk_size=args.chunk_size)
+        df = cl.get_testitem(
+            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve compounds: %s", exc)
         return 1
@@ -161,6 +163,12 @@ def build_parser() -> argparse.ArgumentParser:
         column="molecule_chembl_id",
         chunk_size=5,
     )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     parser.set_defaults(func=run_chembl)
     return parser
 
@@ -170,7 +178,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
+        cfg: Config = apply_config_overrides(
+            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+        )
         if args.print_config:
             print_config(cfg)
             return 0

@@ -160,6 +160,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="utf8",
         help="File encoding for input and output CSV files",
     )
+    chembl.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
@@ -257,6 +263,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
         help="Path to the _IUPHAR_family.csv file",
+    )
+    all_cmd.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
     )
     all_cmd.add_argument(
         "--organism-csv",
@@ -382,7 +394,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_targets(ids, cfg=cfg.api)
+        df = cl.get_targets(ids, cfg=cfg.api, timeout=args.timeout)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
@@ -480,6 +492,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             column="chembl_id",
             sep=args.sep,
             encoding=args.encoding,
+            timeout=args.timeout,
         )
         if run_chembl(cfg, chembl_args) != 0:
             return 1
@@ -620,7 +633,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
+        cfg: Config = apply_config_overrides(
+            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+        )
         if args.print_config:
             print_config(cfg)
             return 0
