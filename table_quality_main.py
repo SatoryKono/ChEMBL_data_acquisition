@@ -10,7 +10,7 @@ from typing import Sequence
 
 import pandas as pd
 from library.config import Config, ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import add_config_argument, apply_config_overrides, configure_logging
 
 from library.table_quality import analyze_table_quality
 
@@ -84,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
-    parser.add_argument("--config", default="config.yaml")
+    add_config_argument(parser)
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)

@@ -1,4 +1,8 @@
-"""Shared command-line helpers."""
+"""Shared command-line helpers.
+
+Configuration loading errors are converted to user-facing messages using
+``argparse.ArgumentParser.error``.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
-from .config import Config, load_config
+from .config import Config, ConfigError, load_config
 
 
 def _positive_int(value: str) -> int:
@@ -105,6 +109,29 @@ def configure_logging(
     )
 
 
+def add_config_argument(parser: argparse.ArgumentParser) -> None:
+    """Ensure a ``--config`` option is present.
+
+    Parameters
+    ----------
+    parser:
+        Parser to which the option will be added.
+
+    Notes
+    -----
+    Adding an argument with ``argparse`` that already exists results in an
+    ``ArgumentError``.  This helper allows repeated calls without raising by
+    first checking whether ``--config`` is already defined.
+    """
+
+    for action in parser._actions:
+        if "--config" in action.option_strings:
+            return
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Configuration overrides
 # ---------------------------------------------------------------------------
@@ -165,6 +192,11 @@ def apply_config_overrides(
     -------
     Config
         Loaded configuration object with overrides applied.
+
+    Raises
+    ------
+    SystemExit
+        If the configuration file cannot be loaded.
     """
 
     override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
@@ -178,7 +210,10 @@ def apply_config_overrides(
         if value != default:
             cli_overrides[key] = value
 
-    cfg = load_config(config_path, cli_overrides=cli_overrides)
+    try:
+        cfg = load_config(config_path, cli_overrides=cli_overrides)
+    except ConfigError as exc:
+        parser.error(str(exc))
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):
@@ -190,4 +225,9 @@ def apply_config_overrides(
     return cfg
 
 
-__all__ = ["build_parser", "configure_logging", "apply_config_overrides"]
+__all__ = [
+    "build_parser",
+    "configure_logging",
+    "apply_config_overrides",
+    "add_config_argument",
+]

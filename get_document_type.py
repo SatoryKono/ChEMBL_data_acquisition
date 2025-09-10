@@ -13,7 +13,7 @@ from typing import Iterable
 
 import pandas as pd
 from library.config import ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import add_config_argument, apply_config_overrides, configure_logging
 
 from library.document_type_classifier import compute_scores, decide_label
 
@@ -76,7 +76,7 @@ def main() -> int:  # pragma: no cover - simple CLI
 
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="config.yaml")
+    add_config_argument(parser)
     parser.add_argument("--input", type=Path, required=True, help="Input CSV")
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")
     parser.add_argument("--log-level", default="INFO")

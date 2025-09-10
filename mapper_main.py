@@ -12,6 +12,7 @@ from library.config import Config, ensure_dirs
 
 from library import io
 from library.cli import (
+    add_config_argument,
     apply_config_overrides,
     build_parser as base_parser,
     configure_logging,
@@ -86,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
-    parser.add_argument("--config", default="config.yaml")
+    add_config_argument(parser)
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)

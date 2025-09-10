@@ -17,7 +17,7 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import add_config_argument, apply_config_overrides, configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     merges their outputs.
     """
     parser = argparse.ArgumentParser(description="Target data utilities")
-    parser.add_argument("--config", default="config.yaml")
+    add_config_argument(parser)
     parser.add_argument(
         "--log-level",
         default="INFO",

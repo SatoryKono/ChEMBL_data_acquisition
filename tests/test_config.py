@@ -3,14 +3,20 @@ import logging
 
 import pytest
 
-from library.config import ensure_dirs, load_config
+from library.config import ConfigError, ensure_dirs, load_config
 
 
 def test_load_minimal_config(tmp_path: Path) -> None:
-    cfg = load_config(tmp_path / "missing.yaml")
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cfg = load_config(path)
     assert cfg.api.rps == 5
-
     assert cfg.openalex.rps == 4
+
+
+def test_missing_config_raises(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="configuration file not found"):
+        load_config(tmp_path / "missing.yaml")
 
 
 def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -73,8 +79,10 @@ def test_missing_dirs_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("CHEMBL_DA_OUTDIR", str(tmp_path / "out"))
     monkeypatch.setenv("CHEMBL_DA__IO__CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("CHEMBL_DA__IO__EXIST_OK", "false")
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
     with pytest.raises(FileNotFoundError):
-        load_config(tmp_path / "cfg.yaml")
+        load_config(path)
 
 
 def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,7 +90,9 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     cache = tmp_path / "cache"
     monkeypatch.setenv("CHEMBL_DA_OUTDIR", str(out))
     monkeypatch.setenv("CHEMBL_DA__IO__CACHE_DIR", str(cache))
-    cfg = load_config(tmp_path / "cfg.yaml")
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cfg = load_config(path)
     assert not out.exists() and not cache.exists()
     ensure_dirs(cfg)
     assert out.is_dir() and cache.is_dir()
@@ -102,12 +112,12 @@ def test_unknown_key_error(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unknown configuration key"):
         load_config(path, strict=True)
 
+
 def test_yaml_error_includes_path(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api: [\n")  # malformed YAML
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ConfigError) as excinfo:
         load_config(path)
     msg = str(excinfo.value)
     assert str(path) in msg
     assert "while parsing" in msg
-

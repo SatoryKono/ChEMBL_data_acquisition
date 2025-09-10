@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Sequence
 
 from library.config import Config, ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import add_config_argument, apply_config_overrides, configure_logging
 
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point."""
     parser = build_parser()
-    parser.add_argument("--config", default="config.yaml")
+    add_config_argument(parser)
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(
         args,
