@@ -156,7 +156,6 @@ def test_yaml_error_includes_path(tmp_path: Path) -> None:
     assert "while parsing" in msg
 
 
-
 def test_user_agent_must_include_contact(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text(
@@ -181,4 +180,24 @@ def test_crossref_mailto_format(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("crossref:\n  mailto: not-an-email\n")
     with pytest.raises(ValueError, match="crossref.mailto"):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    ("snippet", "match"),
+    [
+        ("api:\n  chembl_base: https://\n", "api.chembl_base"),
+        ("openalex:\n  base: https://\n", "openalex.base"),
+        ("crossref:\n  base: https://\n", "crossref.base"),
+        ("uniprot:\n  base: https://\n", "uniprot.base"),
+        ("iuphar:\n  base: https://\n", "iuphar.base"),
+        ("pubchem:\n  base: https://\n", "pubchem.base"),
+    ],
+)
+def test_invalid_urls_raise(tmp_path: Path, snippet: str, match: str) -> None:
+    """Invalid base URLs should trigger :class:`ValueError`."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text(snippet)
+    with pytest.raises(ValueError, match=match):
         load_config(path)

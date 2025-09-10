@@ -125,6 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point using :class:`Config` for defaults."""
     parser = build_parser()
+
     args = parser.parse_args(argv)
     try:
         cfg: Config = apply_config_overrides(
