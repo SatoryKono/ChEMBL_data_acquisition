@@ -1,3 +1,5 @@
-foo: bar
-nested:
-  value: 42
+api:
+  chembl_base_url: https://example.org/chembl
+timeouts:
+  connect: 5
+  read: 15
