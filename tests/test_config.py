@@ -202,7 +202,7 @@ def test_invalid_urls_raise(tmp_path: Path, snippet: str, match: str) -> None:
     with pytest.raises(ValueError, match=match):
         load_config(path)
 
-
+ 
 def test_unknown_env_var_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -214,3 +214,17 @@ def test_unknown_env_var_warning(
     with caplog.at_level(logging.WARNING, logger="library.config"):
         load_config(path)
     assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in caplog.text
+ 
+def test_log_level_valid(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("log:\n  level: warn\n")
+    cfg = load_config(path)
+    assert cfg.log.level == "warn"
+
+
+def test_log_level_invalid(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("log:\n  level: verbose\n")
+    with pytest.raises(ValueError, match="log.level"):
+        load_config(path)
+ 
