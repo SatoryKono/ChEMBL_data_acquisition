@@ -8,7 +8,8 @@
 #   export CHEMBL_DA_BASE=https://dev.example/chembl  # short alias
 
 api:
-  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"  # Base URL for ChEMBL API (env: CHEMBL_DA__API__CHEMBL_BASE / CHEMBL_DA_BASE)
+  # Base URL for ChEMBL API (env: CHEMBL_DA__API__CHEMBL_BASE / CHEMBL_DA_BASE)
+  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
   timeout_connect: 5  # Seconds to wait for a connection
   timeout_read: 30  # Seconds to wait for a response
   retries: 3  # HTTP retry attempts
