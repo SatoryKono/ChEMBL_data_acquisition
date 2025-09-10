@@ -53,6 +53,11 @@ def build_parser(
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
+        "--config",
+        default="config.yaml",
+        help="Path to configuration file",
+    )
+    parser.add_argument(
         "--input",
         dest="input_csv",
         type=Path,
