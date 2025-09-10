@@ -12,7 +12,7 @@ import pandas as pd
 
 from library.table_quality import analyze_table_quality
 
-from library.config import DEFAULT_CONFIG load_config
+from library.config import DEFAULT_CONFIG, load_config
 
 
 logger = logging.getLogger(__name__)
@@ -74,9 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         dest="output_dir",
         type=Path,
-
         default=DEFAULT_CONFIG.output.data_dir,
-
         help="Directory to store generated reports",
     )
     parser.add_argument("--sep", default=",", help="CSV delimiter")
