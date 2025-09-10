@@ -146,9 +146,6 @@ def write_csv(
     df.to_csv(path, index=False, sep=sep, encoding=encoding)
     _write_meta(Path(path), cfg)
 
-    _write_meta(Path(path), cfg)
-
-
 
 def default_output_path(input_path: str | Path) -> Path:
     """Return the default output path for ``input_path``.
@@ -173,7 +170,6 @@ def _git_sha() -> str:
         return result.stdout.strip()
     except Exception:  # pragma: no cover - git may be unavailable
         return "unknown"
-
 
 
 def _write_meta(path: Path, cfg: Config) -> None:

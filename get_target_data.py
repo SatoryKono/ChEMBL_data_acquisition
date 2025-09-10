@@ -17,11 +17,12 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
+
 from library.cli import (
     apply_config_overrides,
-    build_parser as base_parser,
     configure_logging,
 )
+
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -76,8 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Logging level (DEBUG, INFO, WARNING)",
     )
 
-
- #   parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
+    #   parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -376,7 +376,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_targets(ids)
+        df = cl.get_targets(ids, cfg=cfg.api)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
@@ -613,9 +613,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg: Config = apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    try:
+        cfg: Config = apply_config_overrides(args, parser, args.config)
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
     if hasattr(args, "func"):
         return args.func(cfg, args)
     parser.print_help()

@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
-from library.config import Config, ensure_dirs
+from library.config import Config, CrossRefCfg, OpenAlexCfg, ensure_dirs
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -53,6 +53,9 @@ logger = logging.getLogger(__name__)
 def fetch_pubmed_records(
     pmids: list[str],
     sleep: float,
+    *,
+    openalex_cfg: OpenAlexCfg,
+    crossref_cfg: CrossRefCfg,
     max_workers: int = 1,
     batch_size: int = 100,
 ) -> pd.DataFrame:
@@ -64,6 +67,10 @@ def fetch_pubmed_records(
         Identifiers to query.
     sleep:
         Seconds to pause between API requests.
+    openalex_cfg:
+        Configuration for the OpenAlex API.
+    crossref_cfg:
+        Configuration for the CrossRef API.
     max_workers:
         Maximum number of concurrent threads.
     batch_size:
@@ -104,9 +111,9 @@ def fetch_pubmed_records(
                     semsch = semsch_map.get(pmid, {})
 
                     # Still fetching these individually for now
-                    openalex = ocl.fetch_openalex(session, pmid, sleep)
+                    openalex = ocl.fetch_openalex(session, pmid, cfg=openalex_cfg)
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                    crossref = ocl.fetch_crossref(session, doi, sleep)
+                    crossref = ocl.fetch_crossref(session, doi, cfg=crossref_cfg)
 
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
@@ -163,7 +170,14 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             sep=args.sep,
             encoding=args.encoding,
         )
-        df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
+        df = fetch_pubmed_records(
+            pmids,
+            args.sleep,
+            openalex_cfg=cfg.openalex,
+            crossref_cfg=cfg.crossref,
+            max_workers=args.workers,
+            batch_size=args.batch_size,
+        )
         output = args.output_csv or io.default_output_path(args.input_csv)
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -289,7 +303,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
     pmids = pubmed_ids.dropna().astype(str).tolist()
-    pub_df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
+    pub_df = fetch_pubmed_records(
+        pmids,
+        args.sleep,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        max_workers=args.workers,
+        batch_size=args.batch_size,
+    )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
         pub_df["PubMed.PMID"] = (
@@ -444,9 +465,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg: Config = apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    try:
+        cfg: Config = apply_config_overrides(args, parser, args.config)
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
     return args.func(cfg, args)
 
 
