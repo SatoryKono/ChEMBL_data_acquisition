@@ -50,7 +50,7 @@ class RateLimitSettings:
 
     max_requests_per_second: float = 5.0
     max_retries: int = 3
-    backoff_factor: float = 1.0
+    backoff_factor: float = 0.3
 
 
 @dataclass
@@ -206,6 +206,7 @@ def _override_with_env(data: Dict[str, Any], env: Mapping[str, str]) -> None:
             _deep_set(data, path, value)
 
 
+
 def _filter_section(data: Dict[str, Any], cls: Type[Any]) -> Dict[str, Any]:
     """Return ``data`` with keys not present on ``cls`` removed."""
 
@@ -216,18 +217,23 @@ def _filter_section(data: Dict[str, Any], cls: Type[Any]) -> Dict[str, Any]:
 def load_config(path: str | Path | None = None) -> Config:
     """Load configuration from ``path`` and apply overrides.
 
+
     Parameters
     ----------
     path:
         Optional path to a YAML configuration file. When omitted, ``config.yaml``
-        in the repository root is used. Missing files yield the default
-        configuration.
+
+        located at the repository root is used. Missing files result in the
+        default configuration being returned.
+
 
     Returns
     -------
     Config
+
         Parsed configuration object with environment variable overrides
         applied.
+
     """
 
     cfg_path = Path(path) if path is not None else Path("config.yaml")
