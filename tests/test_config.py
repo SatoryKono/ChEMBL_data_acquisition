@@ -3,6 +3,8 @@ import logging
 
 import pytest
 
+from jsonschema import ValidationError
+
 from library.config import ConfigError, ensure_dirs, load_config
 
 
@@ -89,6 +91,20 @@ def test_type_validation(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text("api:\n  rps: fast\n")
     with pytest.raises(TypeError, match="api.rps must be int"):
+        load_config(path)
+
+
+def test_schema_negative_value(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("openalex:\n  rps: -1\n")
+    with pytest.raises(ValidationError):
+        load_config(path)
+
+
+def test_schema_list_item_type(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("retry:\n  status_forcelist: [429, '500']\n")
+    with pytest.raises(ValidationError):
         load_config(path)
 
 

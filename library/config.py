@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml
-from urllib.parse import urlparse
+import jsonschema
 
 
 logger = logging.getLogger(__name__)
@@ -401,12 +401,297 @@ def _apply_env_overrides(cfg: Config) -> None:
         _set_by_path(cfg, path_parts, env_val)
 
 
-def _valid_url(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+def _serialize_paths(data: Any) -> Any:
+    """Recursively convert :class:`~pathlib.Path` objects to strings."""
+
+    if isinstance(data, dict):
+        return {k: _serialize_paths(v) for k, v in data.items()}
+    if isinstance(data, list):  # handle lists such as retry.status_forcelist
+        return [_serialize_paths(v) for v in data]
+    if isinstance(data, Path):
+        return str(data)
+    return data
+
+
+# JSON schema describing the configuration structure.
+CONFIG_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "api": {
+            "type": "object",
+            "properties": {
+                "chembl_base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "backoff_factor": {"type": "number", "minimum": 0},
+                "rps": {"type": "integer", "minimum": 1},
+                "burst": {"type": "integer", "minimum": 1},
+                "user_agent": {"type": "string"},
+            },
+            "required": [
+                "chembl_base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "backoff_factor",
+                "rps",
+                "burst",
+                "user_agent",
+            ],
+            "additionalProperties": False,
+        },
+        "openalex": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "rps": {"type": "integer", "minimum": 1},
+                "burst": {"type": "integer", "minimum": 1},
+                "mailto": {"type": "string"},
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "rps",
+                "burst",
+                "mailto",
+            ],
+            "additionalProperties": False,
+        },
+        "crossref": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "rps": {"type": "integer", "minimum": 1},
+                "burst": {"type": "integer", "minimum": 1},
+                "mailto": {"type": "string"},
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "rps",
+                "burst",
+                "mailto",
+            ],
+            "additionalProperties": False,
+        },
+        "uniprot": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "rps": {"type": "integer", "minimum": 1},
+                "burst": {"type": "integer", "minimum": 1},
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "rps",
+                "burst",
+            ],
+            "additionalProperties": False,
+        },
+        "iuphar": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "rps": {"type": "integer", "minimum": 1},
+                "burst": {"type": "integer", "minimum": 1},
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "rps",
+                "burst",
+            ],
+            "additionalProperties": False,
+        },
+        "pubchem": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "rps": {"type": "integer", "minimum": 1},
+                "burst": {"type": "integer", "minimum": 1},
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "rps",
+                "burst",
+            ],
+            "additionalProperties": False,
+        },
+        "io": {
+            "type": "object",
+            "properties": {
+                "output_dir": {"type": "string", "minLength": 1},
+                "cache_dir": {"type": "string", "minLength": 1},
+                "csv_sep": {"type": "string", "minLength": 1},
+                "csv_encoding": {"type": "string", "minLength": 1},
+                "csv_index": {"type": "boolean"},
+                "exist_ok": {"type": "boolean"},
+            },
+            "required": [
+                "output_dir",
+                "cache_dir",
+                "csv_sep",
+                "csv_encoding",
+                "csv_index",
+                "exist_ok",
+            ],
+            "additionalProperties": False,
+        },
+        "jobs": {
+            "type": "object",
+            "properties": {
+                "concurrency": {"type": "integer", "minimum": 1},
+                "chunk_size": {"type": "integer", "minimum": 1},
+            },
+            "required": ["concurrency", "chunk_size"],
+            "additionalProperties": False,
+        },
+        "batch": {
+            "type": "object",
+            "properties": {
+                "size": {"type": "integer", "minimum": 1},
+                "pause": {"type": "number", "minimum": 0},
+                "concurrency": {"type": "integer", "minimum": 1},
+                "fail_fast": {"type": "boolean"},
+                "retry_failed": {"type": "boolean"},
+            },
+            "required": [
+                "size",
+                "pause",
+                "concurrency",
+                "fail_fast",
+                "retry_failed",
+            ],
+            "additionalProperties": False,
+        },
+        "quality": {
+            "type": "object",
+            "properties": {
+                "sample_rows": {"type": "integer", "minimum": 0},
+                "corr_method": {"type": "string", "minLength": 1},
+                "max_unique_preview": {"type": "integer", "minimum": 1},
+                "bin_count": {"type": "integer", "minimum": 1},
+            },
+            "required": [
+                "sample_rows",
+                "corr_method",
+                "max_unique_preview",
+                "bin_count",
+            ],
+            "additionalProperties": False,
+        },
+        "mapper": {
+            "type": "object",
+            "properties": {
+                "enable_cache": {"type": "boolean"},
+                "strict_schema": {"type": "boolean"},
+                "warn_on_cast": {"type": "boolean"},
+            },
+            "required": ["enable_cache", "strict_schema", "warn_on_cast"],
+            "additionalProperties": False,
+        },
+        "init": {
+            "type": "object",
+            "properties": {
+                "same_doc": {"type": "string", "minLength": 1},
+                "all_doc": {"type": "string", "minLength": 1},
+                "output_dir": {"type": "string", "minLength": 1},
+            },
+            "required": ["same_doc", "all_doc", "output_dir"],
+            "additionalProperties": False,
+        },
+        "rate": {
+            "type": "object",
+            "properties": {
+                "global_rps": {"type": "integer", "minimum": 1},
+                "global_burst": {"type": "integer", "minimum": 1},
+            },
+            "required": ["global_rps", "global_burst"],
+            "additionalProperties": False,
+        },
+        "retry": {
+            "type": "object",
+            "properties": {
+                "max_attempts": {"type": "integer", "minimum": 1},
+                "backoff_factor": {"type": "number", "minimum": 0},
+                "status_forcelist": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                },
+            },
+            "required": ["max_attempts", "backoff_factor", "status_forcelist"],
+            "additionalProperties": False,
+        },
+        "log": {
+            "type": "object",
+            "properties": {
+                "level": {"type": "string", "minLength": 1},
+                "format": {"type": "string", "minLength": 1},
+                "datefmt": {"type": "string", "minLength": 1},
+            },
+            "required": ["level", "format", "datefmt"],
+            "additionalProperties": False,
+        },
+    },
+    "required": [
+        "api",
+        "openalex",
+        "crossref",
+        "uniprot",
+        "iuphar",
+        "pubchem",
+        "io",
+        "jobs",
+        "batch",
+        "quality",
+        "mapper",
+        "init",
+        "rate",
+        "retry",
+        "log",
+    ],
+    "additionalProperties": False,
+}
 
 
 def _validate(cfg: Config) -> None:
+ 
+    """Validate ``cfg`` against :data:`CONFIG_SCHEMA`."""
+
+    validator = jsonschema.Draft202012Validator(
+        CONFIG_SCHEMA, format_checker=jsonschema.FormatChecker()
+    )
+    # ``cfg`` contains ``Path`` instances; convert them to strings before validation
+    validator.validate(_serialize_paths(cfg.to_dict()))
+ 
     """Basic sanity checks for configuration values."""
     if not _valid_url(cfg.api.chembl_base):
         raise ValueError("api.chembl_base must be a valid URL")
@@ -457,17 +742,15 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "retry.max_attempts must be positive and backoff_factor non-negative"
         )
+ 
 
     out_dir = cfg.io.output_dir
     cache_dir = cfg.io.cache_dir
     for path in (out_dir, cache_dir):
         if not path.exists() and not cfg.io.exist_ok:
             raise FileNotFoundError(f"{path} does not exist")
-        elif path.exists() and not path.is_dir():
+        if path.exists() and not path.is_dir():
             raise NotADirectoryError(f"{path} is not a directory")
-
-    if not cfg.init.same_doc.name or not cfg.init.all_doc.name:
-        raise ValueError("init.same_doc and init.all_doc must not be empty")
 
 
 # ---------------------------------------------------------------------------

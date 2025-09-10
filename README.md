@@ -109,6 +109,12 @@ Environment variables override values from the YAML file. Variables use the
 * ``CHEMBL_DA__LOG__LEVEL`` / ``CHEMBL_DA_LOG_LEVEL``
 * ``CHEMBL_DA__LOG__FORMAT`` / ``CHEMBL_DA_LOG_FORMAT``
 
+### Schema validation
+
+Configuration values are validated against a JSON Schema via the
+``jsonschema`` package. The schema mirrors the dataclass structure and checks
+types and value ranges, producing helpful error messages for nested fields.
+
 Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective
 values after all overrides have been applied. The final precedence is::
