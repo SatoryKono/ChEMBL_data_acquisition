@@ -87,6 +87,29 @@ def test_mailto_aliases_override_defaults(
     assert cfg.crossref.mailto == "crossref@example.org"
 
 
+def test_base_aliases_override_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """New base aliases should override the default base URLs."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+
+    monkeypatch.setenv("CHEMBL_DA_OPENALEX_BASE", "https://example.org/openalex")
+    monkeypatch.setenv("CHEMBL_DA_CROSSREF_BASE", "https://example.org/crossref")
+    monkeypatch.setenv("CHEMBL_DA_UNIPROT_BASE", "https://example.org/uniprot")
+    monkeypatch.setenv("CHEMBL_DA_IUPHAR_BASE", "https://example.org/iuphar")
+    monkeypatch.setenv("CHEMBL_DA_PUBCHEM_BASE", "https://example.org/pubchem")
+
+    cfg = load_config(path)
+
+    assert cfg.openalex.base == "https://example.org/openalex"
+    assert cfg.crossref.base == "https://example.org/crossref"
+    assert cfg.uniprot.base == "https://example.org/uniprot"
+    assert cfg.iuphar.base == "https://example.org/iuphar"
+    assert cfg.pubchem.base == "https://example.org/pubchem"
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
