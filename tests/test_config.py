@@ -70,6 +70,23 @@ def test_retry_and_log_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert cfg.log.format == "%(levelname)s"
 
 
+def test_mailto_aliases_override_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """New mailto aliases should override the default email addresses."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+
+    monkeypatch.setenv("CHEMBL_DA_OPENALEX_MAILTO", "openalex@example.org")
+    monkeypatch.setenv("CHEMBL_DA_CROSSREF_MAILTO", "crossref@example.org")
+
+    cfg = load_config(path)
+
+    assert cfg.openalex.mailto == "openalex@example.org"
+    assert cfg.crossref.mailto == "crossref@example.org"
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
