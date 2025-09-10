@@ -1,3 +1,4 @@
+
 # Global configuration for ChEMBL data acquisition utilities.
 #
 # This file provides default values for all scripts. Each field includes a
@@ -6,6 +7,7 @@
 # arguments or environment variables.
 
 api:
+  timeout: 30.0
   # Base URL for the ChEMBL API. Fallback: default hard-coded endpoint.
   chembl_base_url: "https://www.ebi.ac.uk/chembl/api/data"
 
@@ -58,3 +60,4 @@ output:
 
   # Directory for temporary files. Fallback: ./tmp
   tmp_dir: "tmp"
+

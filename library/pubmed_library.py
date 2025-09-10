@@ -18,8 +18,10 @@ import requests
 from xml.etree import ElementTree as ET
 from urllib.parse import quote
 
+from .config import DEFAULT_CONFIG
+
 ENCODINGS = ["utf-8-sig", "cp1251", "latin1"]
-TIMEOUT = 10
+TIMEOUT = DEFAULT_CONFIG.timeouts.read
 
 
 def read_pmids(path: Union[str, Path]) -> List[str]:
@@ -49,7 +51,7 @@ def _do_request(
     url: str,
     sleep: float,
     expect_json: bool = True,
-    retries: int = 2,
+    retries: int = DEFAULT_CONFIG.rate_limits.max_retries,
     method: str = "GET",
     timeout: float = TIMEOUT,
     **kwargs: Any,
@@ -67,7 +69,8 @@ def _do_request(
     expect_json:
         Whether to parse the response as JSON.
     retries:
-        Number of additional attempts after the initial one.
+        Number of additional attempts after the initial one. Defaults to
+        :data:`library.config.DEFAULT_CONFIG.rate_limits.max_retries`.
     method:
         HTTP method to use, either "GET" or "POST".
     timeout:

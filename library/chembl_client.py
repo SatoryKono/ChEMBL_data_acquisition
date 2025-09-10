@@ -10,12 +10,14 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .config import DEFAULT_CONFIG
+
 logger = logging.getLogger(__name__)
 
-# Configure session with retry/backoff for robustness
+# Configure session with retry/backoff for robustness using shared config
 _retry = Retry(
-    total=3,
-    backoff_factor=1.0,
+    total=DEFAULT_CONFIG.rate_limits.max_retries,
+    backoff_factor=DEFAULT_CONFIG.rate_limits.backoff_factor,
     status_forcelist=[500, 502, 503, 504],
     allowed_methods=["GET"],
 )
@@ -25,15 +27,16 @@ _session.mount("http://", _adapter)
 _session.mount("https://", _adapter)
 
 
-def request_json(url: str, *, timeout: float = 30.0) -> dict[str, Any]:
-    """Return JSON content from *url*.
+def request_json(url: str, *, timeout: float | None = None) -> dict[str, Any]:
+    """Return JSON content from ``url``.
 
     Parameters
     ----------
     url:
         API endpoint to query.
     timeout:
-        Maximum number of seconds to wait for the response.
+        Maximum number of seconds to wait for the response. Defaults to
+        :data:`library.config.DEFAULT_CONFIG.timeouts.read` when ``None``.
 
     Returns
     -------
@@ -48,7 +51,8 @@ def request_json(url: str, *, timeout: float = 30.0) -> dict[str, Any]:
         If the response body is not valid JSON.
 
     """
-    with _session.get(url, timeout=timeout) as response:
+    effective_timeout = timeout if timeout is not None else DEFAULT_CONFIG.timeouts.read
+    with _session.get(url, timeout=effective_timeout) as response:
         response.raise_for_status()
         return response.json()
 

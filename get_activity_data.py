@@ -14,6 +14,7 @@ from library import io
 from library.cli import build_parser as base_parser, configure_logging
 from library.config import load_config
 from library.table_quality import analyze_table_quality
+from library.config import DEFAULT_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=None,
+
+        default=DEFAULT_CONFIG.timeouts.read,
+
         help="Timeout in seconds for each HTTP request",
     )
     parser.set_defaults(func=run_chembl)
