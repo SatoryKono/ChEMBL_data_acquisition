@@ -80,6 +80,9 @@ configuration looks like::
 Environment variables override values from the YAML file. Variables use the
 ``CHEMBL_DA__SECTION__KEY`` pattern and also support short aliases:
 
+* ``CHEMBL_DA__API__CHEMBL_BASE`` / ``CHEMBL_DA_BASE``
+* ``CHEMBL_DA__API__TIMEOUT_CONNECT`` / ``CHEMBL_DA_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__API__TIMEOUT_READ`` / ``CHEMBL_DA_TIMEOUT_READ``
 * ``CHEMBL_DA__API__RPS`` / ``CHEMBL_DA_RPS``
 
 * ``CHEMBL_DA__OPENALEX__RPS``

@@ -22,6 +22,28 @@ def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert cfg.openalex.rps == 6
 
 
+def test_alias_env_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure shorthand environment variables map to the correct fields."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        "api:\n"
+        "  chembl_base: https://www.ebi.ac.uk/chembl/api/data\n"
+        "  timeout_connect: 1\n"
+        "  timeout_read: 1\n"
+    )
+
+    monkeypatch.setenv("CHEMBL_DA_BASE", "https://example.org")
+    monkeypatch.setenv("CHEMBL_DA_TIMEOUT_CONNECT", "10")
+    monkeypatch.setenv("CHEMBL_DA_TIMEOUT_READ", "20")
+    cfg = load_config(path)
+
+    assert cfg.api.chembl_base == "https://example.org"
+    assert cfg.api.timeout_connect == 10
+    assert cfg.api.timeout_read == 20
+    assert cfg.api.rps == 5
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
@@ -36,4 +58,3 @@ def test_type_validation(tmp_path: Path) -> None:
     path.write_text("api:\n  rps: fast\n")
     with pytest.raises(TypeError, match="api.rps must be int"):
         load_config(path)
-
