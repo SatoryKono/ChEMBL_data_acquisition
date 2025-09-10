@@ -13,45 +13,45 @@ api:
 
 openalex:
   base: "https://api.openalex.org"  # OpenAlex API root URL
-  timeout_connect: 5  # Connection timeout in seconds
-  timeout_read: 30  # Read timeout in seconds
+  timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)
+  timeout_read: 30  # Read timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_READ)
   retries: 3  # Retry attempts
-  rps: 4  # Requests per second limit
-  burst: 5  # Burst size for rate limiter
+  rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
+  burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
   mailto: ""  # Contact email per API guidelines
 
 crossref:
   base: "https://api.crossref.org"  # CrossRef API root URL
-  timeout_connect: 5
-  timeout_read: 30
+  timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
+  timeout_read: 30  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_READ)
   retries: 3
-  rps: 4
-  burst: 5
+  rps: 4  # (env: CHEMBL_DA_CROSSREF_RPS)
+  burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
   mailto: ""
 
 uniprot:
   base: "https://rest.uniprot.org"  # UniProt REST API root
-  timeout_connect: 5
-  timeout_read: 30
+  timeout_connect: 5  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT)
+  timeout_read: 30  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_READ)
   retries: 3
-  rps: 4
-  burst: 5
+  rps: 4  # (env: CHEMBL_DA_UNIPROT_RPS)
+  burst: 5  # (env: CHEMBL_DA_UNIPROT_BURST)
 
 iuphar:
   base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base
-  timeout_connect: 5
-  timeout_read: 30
+  timeout_connect: 5  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT)
+  timeout_read: 30  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_READ)
   retries: 3
-  rps: 4
-  burst: 5
+  rps: 4  # (env: CHEMBL_DA_IUPHAR_RPS)
+  burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
 
 pubchem:
   base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API
-  timeout_connect: 5
-  timeout_read: 60
+  timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
+  timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
   retries: 3
-  rps: 3
-  burst: 5
+  rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
+  burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
 
 io:
   output_dir: "data/output"  # Directory for generated datasets
