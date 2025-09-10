@@ -18,12 +18,16 @@ sections and keys are joined by double underscores. Short aliases such as
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml
 from urllib.parse import urlparse
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -245,20 +249,39 @@ def _coerce(value: str, current: Any) -> Any:
 
 
 def _update_from_dict(
-    obj: Any, data: Dict[str, Any], path: List[str] | None = None
+    obj: Any,
+    data: Dict[str, Any],
+    path: List[str] | None = None,
+    *,
+    unknown_keys: List[str] | None = None,
 ) -> None:
-    """Recursively update dataclass ``obj`` with ``data`` validating types."""
+    """Recursively update dataclass ``obj`` with ``data`` validating types.
+
+    Parameters
+    ----------
+    obj:
+        Dataclass instance to update.
+    data:
+        Mapping of field names to values.
+    path:
+        Current traversal path used for error reporting.
+    unknown_keys:
+        Collects dotted-path names of keys not present on ``obj``.
+    """
 
     path = [] if path is None else path
+    if unknown_keys is None:
+        unknown_keys = []
     for key, val in data.items():
         if not hasattr(obj, key):
+            unknown_keys.append(".".join(path + [key]))
             continue
         current = getattr(obj, key)
         if is_dataclass(current):
             if not isinstance(val, dict):
                 joined = ".".join(path + [key])
                 raise TypeError(f"{joined} must be a mapping")
-            _update_from_dict(current, val, path + [key])
+            _update_from_dict(current, val, path + [key], unknown_keys=unknown_keys)
             continue
         if isinstance(val, str):
             try:
@@ -423,7 +446,10 @@ def ensure_dirs(cfg: Config) -> None:
 
 
 def load_config(
-    path: str | Path = "config.yaml", cli_overrides: Dict[str, Any] | None = None
+    path: str | Path = "config.yaml",
+    cli_overrides: Dict[str, Any] | None = None,
+    *,
+    strict: bool = False,
 ) -> Config:
     """Load configuration from ``path`` applying environment and CLI overrides.
 
@@ -434,6 +460,9 @@ def load_config(
     cli_overrides:
         Mapping of ``"section.key"`` paths to values coming from the command
         line.
+    strict:
+        When ``True`` raise :class:`ValueError` for unknown configuration keys;
+        otherwise a warning is emitted.
 
     Returns
     -------
@@ -442,6 +471,7 @@ def load_config(
     """
 
     cfg = Config()
+    unknown_keys: List[str] = []
     if path and Path(path).is_file():
         try:
             with Path(path).open("r", encoding="utf8") as fh:
@@ -452,7 +482,14 @@ def load_config(
             ) from err
         if not isinstance(data, dict):
             raise TypeError("top-level structure in config file must be a mapping")
-        _update_from_dict(cfg, data)
+        _update_from_dict(cfg, data, unknown_keys=unknown_keys)
+
+    if unknown_keys:
+        joined = ", ".join(sorted(unknown_keys))
+        msg = f"Unknown configuration key(s) in {path}: {joined}"
+        if strict:
+            raise ValueError(msg)
+        logger.warning(msg)
 
     _apply_env_overrides(cfg)
 
