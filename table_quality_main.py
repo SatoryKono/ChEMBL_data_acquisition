@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
-from library.config import Config, ensure_dirs, load_config
-from library.cli import configure_logging
+from library.config import Config, ensure_dirs
+from library.cli import apply_config_overrides, configure_logging
 
 from library.table_quality import analyze_table_quality
 
@@ -86,27 +86,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    cli_overrides = {}
-    if args.sep != parser.get_default("sep"):
-        cli_overrides["io.csv_sep"] = args.sep
-    if args.encoding != parser.get_default("encoding"):
-        cli_overrides["io.csv_encoding"] = args.encoding
-
-    cfg = load_config(args.config, cli_overrides=cli_overrides)
+    cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     if args.print_config:
         print(cfg.to_yaml())
         return 0
-
-    default_sep = parser.get_default("sep")
-    if args.sep == default_sep:
-        args.sep = cfg.io.csv_sep
-    default_encoding = parser.get_default("encoding")
-    if args.encoding == default_encoding:
-        args.encoding = cfg.io.csv_encoding
-    default_log = parser.get_default("log_level")
-    if args.log_level == default_log:
-        args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(cfg, args)
 

@@ -8,10 +8,14 @@ from typing import Sequence
 from urllib.error import URLError
 
 import pandas as pd
-from library.config import Config, ensure_dirs, load_config
+from library.config import Config, ensure_dirs
 
 from library import io
-from library.cli import build_parser as base_parser, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 from library.mapper_library import map_chembl_to_uniprot
 
 logger = logging.getLogger(__name__)
@@ -84,18 +88,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    cfg = load_config(args.config)
+    cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
-
-    default_sep = parser.get_default("sep")
-    if args.sep == default_sep:
-        args.sep = cfg.io.csv_sep
-    default_encoding = parser.get_default("encoding")
-    if args.encoding == default_encoding:
-        args.encoding = cfg.io.csv_encoding
-    default_log = parser.get_default("log_level")
-    if args.log_level == default_log:
-        args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(cfg, args)
 
