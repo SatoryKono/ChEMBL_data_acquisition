@@ -19,7 +19,7 @@ import yaml
 
 
 from . import validation
-from .config import Config, IoCfg
+from .config import Config, IoCfg, _serialize_paths
 
 
 def read_ids(
@@ -182,12 +182,17 @@ def _git_sha() -> str:
 
 
 def _write_meta(path: Path, cfg: Config) -> None:
+    """Write YAML metadata alongside the output file.
+
+    Paths inside the configuration are converted to plain strings so that the
+    resulting YAML does not contain :class:`~pathlib.Path` objects.
+    """
 
     meta = {
         "git_sha": _git_sha(),
         "command": " ".join(sys.argv),
-        "config": cfg.to_dict(),
+        "config": _serialize_paths(cfg.to_dict()),
     }
-    meta_path = Path(str(path) + ".meta.yaml")
+    meta_path = Path(f"{path}.meta.yaml")
     with meta_path.open("w", encoding="utf8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
