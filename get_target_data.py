@@ -10,14 +10,14 @@ from typing import Sequence
 
 import pandas as pd
 import requests
-from library.config import Config, ensure_dirs, load_config
+from library.config import Config, ensure_dirs
 
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.cli import configure_logging
+from library.cli import apply_config_overrides, configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -571,11 +571,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg = load_config(args.config)
+    cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
-    default_log = parser.get_default("log_level")
-    if args.log_level == default_log:
-        args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     if hasattr(args, "func"):
         return args.func(cfg, args)

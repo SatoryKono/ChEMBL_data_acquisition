@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
-from library.config import Config, ensure_dirs, load_config
+from library.config import Config, ensure_dirs
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -41,7 +41,7 @@ from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
 from library.table_quality import analyze_table_quality
-from library.cli import configure_logging
+from library.cli import apply_config_overrides, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -400,12 +400,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    cfg = load_config(args.config)
+    cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
-
-    default_log = parser.get_default("log_level")
-    if args.log_level == default_log:
-        args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(cfg, args)
 

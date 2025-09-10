@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-from library.config import ensure_dirs, load_config
-from library.cli import configure_logging
+from library.config import ensure_dirs
+from library.cli import apply_config_overrides, configure_logging
 
 from library.document_type_classifier import compute_scores, decide_label
 
@@ -81,10 +81,8 @@ def main() -> int:  # pragma: no cover - simple CLI
     parser.add_argument("--output", type=Path, required=True, help="Output CSV")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
-    cfg = load_config(args.config)
+    cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
-    if args.log_level == "INFO":
-        args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
 
     df_in = pd.read_csv(args.input, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)

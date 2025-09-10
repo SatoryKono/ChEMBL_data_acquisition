@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
+from typing import Any, Dict
+
+from .config import Config, load_config
 
 
 def _positive_int(value: str) -> int:
@@ -100,3 +103,91 @@ def configure_logging(
         datefmt=datefmt,
         force=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Configuration overrides
+# ---------------------------------------------------------------------------
+
+# Mapping of common CLI argument names to configuration paths.
+_DEFAULT_OVERRIDES: Dict[str, str] = {
+    "sep": "io.csv_sep",
+    "encoding": "io.csv_encoding",
+    "log_level": "log.level",
+    "chunk_size": "jobs.chunk_size",
+    "timeout": "api.timeout_read",
+}
+
+
+def _get_cfg_value(cfg: Config, path: str) -> Any:
+    """Return the value in ``cfg`` located at ``path``.
+
+    Parameters
+    ----------
+    cfg:
+        Configuration object.
+    path:
+        Dot separated attribute path within ``cfg``.
+    """
+
+    current: Any = cfg
+    for part in path.split("."):
+        current = getattr(current, part)
+    return current
+
+
+def apply_config_overrides(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    config_path: str | Path,
+    mapping: Dict[str, str] | None = None,
+) -> Config:
+    """Load configuration applying command line overrides.
+
+    This helper compares CLI arguments with parser defaults. Values that differ
+    from the defaults are added to ``cli_overrides`` and passed to
+    :func:`library.config.load_config`. After loading, ``args`` is updated with
+    configuration values for options that were not explicitly provided.
+
+    Parameters
+    ----------
+    args:
+        Parsed command line arguments.
+    parser:
+        Argument parser used to determine default values.
+    config_path:
+        Location of the YAML configuration file.
+    mapping:
+        Optional mapping of argument names to ``Config`` attribute paths. The
+        mapping is merged with a set of common defaults.
+
+    Returns
+    -------
+    Config
+        Loaded configuration object with overrides applied.
+    """
+
+    override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
+
+    cli_overrides: Dict[str, Any] = {}
+    for arg, key in override_map.items():
+        if not hasattr(args, arg):
+            continue
+        value = getattr(args, arg)
+        default = parser.get_default(arg)
+        if value != default:
+            cli_overrides[key] = value
+
+    cfg = load_config(config_path, cli_overrides=cli_overrides)
+
+    for arg, key in override_map.items():
+        if not hasattr(args, arg):
+            continue
+        default = parser.get_default(arg)
+        if getattr(args, arg) == default:
+            setattr(args, arg, _get_cfg_value(cfg, key))
+
+    return cfg
+
+
+__all__ = ["build_parser", "configure_logging", "apply_config_overrides"]

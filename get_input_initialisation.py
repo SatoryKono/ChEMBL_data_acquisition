@@ -12,9 +12,10 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from library.config import Config, ensure_dirs, load_config
-from library.cli import configure_logging
 from typing import Sequence
+
+from library.config import Config, ensure_dirs
+from library.cli import apply_config_overrides, configure_logging
 
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
@@ -121,19 +122,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    cfg = load_config(args.config)
+    cfg = apply_config_overrides(
+        args,
+        parser,
+        args.config,
+        mapping={
+            "same_doc": "init.same_doc",
+            "all_doc": "init.all_doc",
+            "out_dir": "init.output_dir",
+        },
+    )
     ensure_dirs(cfg)
 
-    if args.same_doc is None:
-        args.same_doc = cfg.init.same_doc
-    if args.all_doc is None:
-        args.all_doc = cfg.init.all_doc
-    if args.out_dir is None:
-        args.out_dir = cfg.init.output_dir
+    args.same_doc = Path(args.same_doc)
+    args.all_doc = Path(args.all_doc)
+    args.out_dir = Path(args.out_dir)
 
-    default_log = parser.get_default("log_level")
-    if args.log_level == default_log:
-        args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(cfg, args)
 
