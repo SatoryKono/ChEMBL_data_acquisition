@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+from library.config import Config, load_config
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -40,8 +41,10 @@ from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
 from library.table_quality import analyze_table_quality
+from library.cli import configure_logging
 
 logger = logging.getLogger(__name__)
+cfg: Config = load_config()
 
 
 def fetch_pubmed_records(
@@ -385,8 +388,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
+    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
+    global cfg
+    cfg = load_config(args.config)
+
+    default_log = parser.get_default("log_level")
+    if args.log_level == default_log:
+        args.log_level = cfg.log.level
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(args)
 
 
