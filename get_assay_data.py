@@ -7,7 +7,7 @@ import logging
 from typing import Sequence
 
 import requests
-from library.config import Config, ensure_dirs
+from library.config import Config, ensure_dirs, print_config
 
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
@@ -86,6 +86,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         cfg: Config = apply_config_overrides(args, parser, args.config)
+        if args.print_config:
+            print_config(cfg)
+            return 0
         ensure_dirs(cfg)
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:

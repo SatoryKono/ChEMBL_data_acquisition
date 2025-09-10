@@ -10,7 +10,7 @@ from typing import Sequence
 
 import pandas as pd
 import requests
-from library.config import Config, ensure_dirs
+from library.config import Config, ensure_dirs, print_config
 
 from library import chembl_library as cl
 from library import io
@@ -75,6 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING)",
+    )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
     )
 
     #   parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
@@ -616,6 +621,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         cfg: Config = apply_config_overrides(args, parser, args.config)
+        if args.print_config:
+            print_config(cfg)
+            return 0
         ensure_dirs(cfg)
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:

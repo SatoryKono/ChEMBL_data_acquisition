@@ -468,6 +468,42 @@ def _serialize_paths(data: Any) -> Any:
     return data
 
 
+def _mask_secrets(data: Any) -> Any:
+    """Recursively mask values for keys that look like secrets.
+
+    Keys containing common secret keywords (``key``, ``token``, ``secret``,
+    ``password``) have their values replaced with ``"***"``. The check is
+    case-insensitive and operates on nested mappings.
+    """
+
+    secret_tokens = {"key", "token", "secret", "password"}
+    if isinstance(data, dict):
+        masked: Dict[str, Any] = {}
+        for k, v in data.items():
+            if any(tok in k.lower() for tok in secret_tokens):
+                masked[k] = "***"
+            else:
+                masked[k] = _mask_secrets(v)
+        return masked
+    if isinstance(data, list):
+        return [_mask_secrets(v) for v in data]
+    return data
+
+
+def print_config(cfg: Config) -> None:
+    """Print ``cfg`` in YAML format masking secret values.
+
+    Parameters
+    ----------
+    cfg:
+        Configuration object to serialise.
+    """
+
+    data = _serialize_paths(cfg.to_dict())
+    masked = _mask_secrets(data)
+    print(yaml.safe_dump(masked, sort_keys=False))
+
+
 # JSON schema describing the configuration structure.
 CONFIG_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -931,4 +967,5 @@ __all__ = [
     "ConfigError",
     "ensure_dirs",
     "load_config",
+    "print_config",
 ]
