@@ -4,11 +4,11 @@ import csv
 from pathlib import Path
 
 import pandas as pd
-
 import pytest
+import yaml
 
 from library import io
-from library.config import IoCfg, Config
+from library.config import Config, IoCfg
 
 
 def test_read_csv_validates_columns(tmp_path: Path) -> None:
@@ -52,3 +52,15 @@ def test_write_csv_creates_single_metadata_file(
     assert len(calls) == 1
     assert path.exists()
     assert meta_path.exists()
+
+
+def test_write_meta_serialises_paths(tmp_path: Path) -> None:
+    df = pd.DataFrame({"a": [1]})
+    path = tmp_path / "out.csv"
+    cfg = Config()
+    io.write_csv(df, path, cfg=cfg)
+
+    meta_path = Path(f"{path}.meta.yaml")
+    meta = yaml.safe_load(meta_path.read_text())
+    assert isinstance(meta["config"]["io"]["output_dir"], str)
+    assert meta["config"]["io"]["output_dir"] == str(cfg.io.output_dir)
