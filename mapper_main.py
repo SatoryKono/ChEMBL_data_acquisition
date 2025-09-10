@@ -8,7 +8,7 @@ from typing import Sequence
 from urllib.error import URLError
 
 import pandas as pd
-from library.config import Config, load_config
+from library.config import Config, ensure_dirs, load_config
 
 from library import io
 from library.cli import build_parser as base_parser, configure_logging
@@ -85,6 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
+    ensure_dirs(cfg)
 
     default_sep = parser.get_default("sep")
     if args.sep == default_sep:

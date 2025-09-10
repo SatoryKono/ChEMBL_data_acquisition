@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from library.config import load_config
+from library.config import ensure_dirs, load_config
 
 
 def test_load_minimal_config(tmp_path: Path) -> None:
@@ -58,3 +58,24 @@ def test_type_validation(tmp_path: Path) -> None:
     path.write_text("api:\n  rps: fast\n")
     with pytest.raises(TypeError, match="api.rps must be int"):
         load_config(path)
+
+
+
+def test_missing_dirs_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHEMBL_DA_OUTDIR", str(tmp_path / "out"))
+    monkeypatch.setenv("CHEMBL_DA__IO__CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("CHEMBL_DA__IO__EXIST_OK", "false")
+    with pytest.raises(FileNotFoundError):
+        load_config(tmp_path / "cfg.yaml")
+
+
+def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    out = tmp_path / "out"
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("CHEMBL_DA_OUTDIR", str(out))
+    monkeypatch.setenv("CHEMBL_DA__IO__CACHE_DIR", str(cache))
+    cfg = load_config(tmp_path / "cfg.yaml")
+    assert not out.exists() and not cache.exists()
+    ensure_dirs(cfg)
+    assert out.is_dir() and cache.is_dir()
+

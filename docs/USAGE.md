@@ -4,6 +4,10 @@ This guide demonstrates how to run the command line tools on the bundled
 "smoke" datasets. Each example writes output next to the input file with a
 prefix of `output_` followed by the input stem and current date.
 
+All scripts call :func:`library.config.ensure_dirs` after loading the
+configuration so that the configured output and cache directories exist before
+processing begins.
+
 ## Activity data
 
 ```bash

@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from library.config import Config, load_config
+from library.config import Config, ensure_dirs, load_config
 from library.cli import configure_logging
 from typing import Sequence
 
@@ -122,6 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
+    ensure_dirs(cfg)
 
     if args.same_doc is None:
         args.same_doc = Path(cfg.init.same_doc)

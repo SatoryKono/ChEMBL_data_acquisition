@@ -8,7 +8,7 @@ from typing import Sequence
 
 import pandas as pd
 import requests
-from library.config import Config, load_config
+from library.config import Config, ensure_dirs, load_config
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
@@ -165,6 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
+    ensure_dirs(cfg)
 
     default_chunk = parser.get_default("chunk_size")
     if args.chunk_size == default_chunk:

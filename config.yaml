@@ -59,7 +59,7 @@ io:
   csv_sep: ","  # CSV field separator
   csv_encoding: "utf-8-sig"  # Encoding for CSV files
   csv_index: false  # Include index column when writing CSV
-  exist_ok: true  # Create directories if missing
+  exist_ok: true  # Create directories with ensure_dirs if missing
 
 jobs:
   concurrency: 8  # Number of parallel workers
