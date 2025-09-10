@@ -29,6 +29,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
 import yaml
 import jsonschema
@@ -37,12 +38,29 @@ import jsonschema
 logger = logging.getLogger(__name__)
 
 
-
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+def _valid_url(url: str) -> bool:
+    """Check that a URL contains both a scheme and network location.
+
+    Parameters
+    ----------
+    url:
+        URL string to validate.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``url`` contains scheme and netloc components.
+    """
+
+    parsed = urlparse(url)
+    return bool(parsed.scheme and parsed.netloc)
+
 
 class ConfigError(RuntimeError):
     """Raised when configuration loading fails."""
-
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +701,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
 
 
 def _validate(cfg: Config) -> None:
- 
     """Validate ``cfg`` against :data:`CONFIG_SCHEMA`."""
 
     validator = jsonschema.Draft202012Validator(
@@ -691,7 +708,7 @@ def _validate(cfg: Config) -> None:
     )
     # ``cfg`` contains ``Path`` instances; convert them to strings before validation
     validator.validate(_serialize_paths(cfg.to_dict()))
- 
+
     """Basic sanity checks for configuration values."""
     if not _valid_url(cfg.api.chembl_base):
         raise ValueError("api.chembl_base must be a valid URL")
@@ -742,7 +759,6 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "retry.max_attempts must be positive and backoff_factor non-negative"
         )
- 
 
     out_dir = cfg.io.output_dir
     cache_dir = cfg.io.cache_dir
