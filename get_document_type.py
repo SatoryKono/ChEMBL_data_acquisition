@@ -9,16 +9,19 @@ from __future__ import annotations
 
 from typing import Iterable
 
+import logging
 import pandas as pd
+import argparse
+from pathlib import Path
+
 from library.config import ensure_dirs
-from library.cli import (
-    apply_config_overrides,
-    build_parser as base_parser,
-    configure_logging,
-)
+from library.cli import apply_config_overrides, configure_logging
 from library import io
 
 from library.document_type_classifier import compute_scores, decide_label
+
+
+logger = logging.getLogger(__name__)
 
 
 def _split_terms(value: object) -> Iterable[str]:
@@ -88,9 +91,13 @@ def main() -> int:  # pragma: no cover - simple CLI
     parser.add_argument("--log-level", default="INFO")
 
     args = parser.parse_args()
-    cfg = apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    try:
+        cfg = apply_config_overrides(args, parser, args.config)
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("invalid configuration: %s", exc)
+        return 1
 
     df_in = pd.read_csv(
         args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding

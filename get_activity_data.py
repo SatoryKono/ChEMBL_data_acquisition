@@ -87,20 +87,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
-
-    parser.add_argument(
-        "--config", default="config.yaml", help="Path to YAML configuration file"
-    )
-
     args = parser.parse_args(argv)
-    cfg = apply_config_overrides(
-        args,
-        parser,
-        args.config,
-        mapping={"timeout": "api.timeout_read"},
-    )
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    try:
+        cfg = apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={"timeout": "api.timeout_read"},
+        )
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("invalid configuration: %s", exc)
+        return 1
     return args.func(cfg, args)
 
 
