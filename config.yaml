@@ -1,25 +1,27 @@
-api:
-  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
-  timeout_connect: 5
-  timeout_read: 30
-  retries: 3
-  backoff_factor: 0.5
-  rps: 5
-  burst: 5
-  user_agent: "chembl-da/0.1 (+contact: unset)"
+# Default configuration for ChEMBL data acquisition.
+# Values can be overridden via environment variables or CLI arguments.
 
+api:
+  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"  # Base URL for ChEMBL API
+  timeout_connect: 5  # Seconds to wait for a connection
+  timeout_read: 30  # Seconds to wait for a response
+  retries: 3  # HTTP retry attempts
+  backoff_factor: 0.5  # Exponential backoff multiplier
+  rps: 5  # Requests per second limit
+  burst: 5  # Burst size for token bucket limiter
+  user_agent: "chembl-da/0.1 (+contact: unset)"  # Custom User-Agent header
 
 openalex:
-  base: "https://api.openalex.org"
-  timeout_connect: 5
-  timeout_read: 30
-  retries: 3
-  rps: 4
-  burst: 5
-  mailto: ""
+  base: "https://api.openalex.org"  # OpenAlex API root URL
+  timeout_connect: 5  # Connection timeout in seconds
+  timeout_read: 30  # Read timeout in seconds
+  retries: 3  # Retry attempts
+  rps: 4  # Requests per second limit
+  burst: 5  # Burst size for rate limiter
+  mailto: ""  # Contact email per API guidelines
 
 crossref:
-  base: "https://api.crossref.org"
+  base: "https://api.crossref.org"  # CrossRef API root URL
   timeout_connect: 5
   timeout_read: 30
   retries: 3
@@ -28,7 +30,7 @@ crossref:
   mailto: ""
 
 uniprot:
-  base: "https://rest.uniprot.org"
+  base: "https://rest.uniprot.org"  # UniProt REST API root
   timeout_connect: 5
   timeout_read: 30
   retries: 3
@@ -36,7 +38,7 @@ uniprot:
   burst: 5
 
 iuphar:
-  base: "https://www.guidetopharmacology.org/services"
+  base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base
   timeout_connect: 5
   timeout_read: 30
   retries: 3
@@ -44,68 +46,64 @@ iuphar:
   burst: 5
 
 pubchem:
-  base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+  base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API
   timeout_connect: 5
   timeout_read: 60
   retries: 3
   rps: 3
   burst: 5
 
-
 io:
-  output_dir: "data/output"
-  cache_dir: ".cache"
-  csv_sep: ","
-  csv_encoding: "utf-8-sig"
-  csv_index: false
-  exist_ok: true
+  output_dir: "data/output"  # Directory for generated datasets
+  cache_dir: ".cache"  # Directory for cached HTTP responses
+  csv_sep: ","  # CSV field separator
+  csv_encoding: "utf-8-sig"  # Encoding for CSV files
+  csv_index: false  # Include index column when writing CSV
+  exist_ok: true  # Create directories if missing
 
 jobs:
-  concurrency: 8
-  chunk_size: 500
-
+  concurrency: 8  # Number of parallel workers
+  chunk_size: 500  # Records per job chunk
 
 batch:
-  size: 1000
-  pause: 0
-  concurrency: 2
-  fail_fast: true
-  retry_failed: true
+  size: 1000  # Number of rows per batch
+  pause: 0  # Delay between batches in seconds
+  concurrency: 2  # Number of concurrent batch workers
+  fail_fast: true  # Abort on first error
+  retry_failed: true  # Retry failed batches
 
 quality:
-  sample_rows: 0
-  corr_method: "pearson"
-  max_unique_preview: 50
-  bin_count: 20
+  sample_rows: 0  # Rows to sample for previews (0 = all)
+  corr_method: "pearson"  # Correlation method
+  max_unique_preview: 50  # Preview unique values up to this count
+  bin_count: 20  # Histogram bins for numeric columns
 
 mapper:
-  enable_cache: true
-  strict_schema: true
-  warn_on_cast: true
+  enable_cache: true  # Cache mapping results
+  strict_schema: true  # Enforce input schema
+  warn_on_cast: true  # Warn when casting types
 
 init:
-  same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
+  same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook
   all_doc: "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
-  output_dir: "data/output/ChEMBL/processed"
+  output_dir: "data/output/ChEMBL/processed"  # Output directory for processed files
 
 rate:
-  global_rps: 8
-  global_burst: 8
+  global_rps: 8  # Global requests-per-second limit
+  global_burst: 8  # Global burst size
 
 retry:
-  max_attempts: 3
-  backoff_factor: 0.5
+  max_attempts: 3  # HTTP retry attempts
+  backoff_factor: 0.5  # Base delay multiplier
   status_forcelist:
-    - 429
+    - 429  # Too Many Requests
     - 500
     - 502
     - 503
     - 504
 
-
 log:
-  level: "INFO"
-  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
-  datefmt: "%Y-%m-%d %H:%M:%S"
-
+  level: "INFO"  # Default logging level
+  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format
+  datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format
 
