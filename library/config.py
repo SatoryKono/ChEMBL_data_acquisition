@@ -125,6 +125,10 @@ class MapperConfig:
 
 @dataclass
 class InitConfig:
+
+    same_doc: str = "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
+    all_doc: str = "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
+
     required_sheets_same_doc: List[str] = field(
         default_factory=lambda: [
             "assay_step5_same_doc",
@@ -297,6 +301,10 @@ def _validate(cfg: Config) -> None:
         raise ValueError("concurrency and chunk_size must be positive")
     if not cfg.io.output_dir.strip() or not cfg.io.cache_dir.strip():
         raise ValueError("directories must not be empty")
+
+    if not cfg.init.same_doc.strip() or not cfg.init.all_doc.strip():
+        raise ValueError("init.same_doc and init.all_doc must not be empty")
+
 
 
 # ---------------------------------------------------------------------------

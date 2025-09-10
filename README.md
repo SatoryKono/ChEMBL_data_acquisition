@@ -101,6 +101,11 @@ writes the resulting table to the specified output file.
 
 Example merging initialisation tables::
 
+    python get_input_initialisation.py --config config.yaml
+
+The ``same_doc`` and ``all_doc`` workbook paths default to values from
+``config.yaml`` but can be overridden on the command line::
+
     python get_input_initialisation.py \
       --same-doc path/to/ChEMBL_same_document_20_05.xlsx \
       --all-doc  path/to/ChEMBL_all_10_05_step5.xlsx \
