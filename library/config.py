@@ -1,14 +1,10 @@
-
 """Configuration utilities for data acquisition scripts.
 
 This module centralises configuration options such as timeouts, rate limits
 and output directories. Settings are loaded from ``config.yaml`` when
-available, otherwise built-in defaults are used.
-
-The :class:`Config` dataclass performs validation in ``__post_init__`` to
-ensure supplied values are sensible.  Invalid values raise
-:class:`ConfigError`.
-
+available, otherwise built-in defaults are used. Values can be overridden
+using environment variables prefixed with ``CHEMBL_``. Nested fields are
+separated by double underscores, e.g. ``CHEMBL_TIMEOUTS__CONNECT``.
 """
 
 from __future__ import annotations
@@ -16,25 +12,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Type
 from urllib.parse import urlparse
-
 
 import yaml
 
 
-
-def load_config(path: str | Path) -> Dict[str, Any]:
-    """Load a YAML configuration file.
-
 class ConfigError(ValueError):
     """Raised when configuration values are invalid."""
- 
 
 
 @dataclass
 class APISettings:
-
     """Base URLs for external services."""
 
     chembl_base_url: str = "https://www.ebi.ac.uk/chembl/api/data"
@@ -68,11 +57,12 @@ class RateLimitSettings:
 class OutputPaths:
     """Output directory configuration."""
 
-    data_dir: Path | str = Path("data")
-    logs_dir: Path | str = Path("logs")
-    tmp_dir: Path | str = Path("tmp")
+    data_dir: Path = Path("data")
+    logs_dir: Path = Path("logs")
+    tmp_dir: Path = Path("tmp")
 
     def __post_init__(self) -> None:
+        # Allow providing string paths but store as ``Path`` instances.
         self.data_dir = Path(self.data_dir)
         self.logs_dir = Path(self.logs_dir)
         self.tmp_dir = Path(self.tmp_dir)
@@ -131,73 +121,87 @@ class Config:
         for path in [self.output.data_dir, self.output.logs_dir, self.output.tmp_dir]:
             try:
                 path.mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
+            except OSError as exc:  # pragma: no cover - unlikely on CI
                 raise ConfigError(f"failed to create directory: {path}") from exc
             if not os.access(path, os.W_OK):
                 raise ConfigError(f"directory not writable: {path}")
 
 
-def load_config(path: str | Path | None = None) -> Config:
-    """Return configuration loaded from ``path`` or defaults.
+def _apply_env_overrides(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge environment variable overrides into ``data``.
 
+    Environment variable names must start with ``CHEMBL_``. Nested configuration
+    sections are separated by double underscores. For example::
+
+        CHEMBL_TIMEOUTS__CONNECT=5
 
     Parameters
     ----------
-    path:
-
-        Location of the configuration file.
+    data:
+        Configuration mapping to update in place.
 
     Returns
     -------
     dict[str, Any]
-        Parsed configuration settings. An empty dictionary is returned if the
-        file does not exist.
-
-    Raises
-    ------
-    ValueError
-        If the file exists but contains invalid YAML.
+        The updated mapping.
     """
-    cfg_path = Path(path)
-    if not cfg_path.exists():
-        return {}
-    try:
-        with cfg_path.open("r", encoding="utf8") as fh:
-            data = yaml.safe_load(fh)
-    except yaml.YAMLError as exc:  # pragma: no cover - parse errors are rare
-        raise ValueError(
-            f"failed to parse configuration file {cfg_path}: {exc}"
-        ) from exc
-    return data or {}
+
+    prefix = "CHEMBL_"
+    for key, value in os.environ.items():
+        if not key.startswith(prefix):
+            continue
+        path = key[len(prefix) :].lower().split("__")
+        current = data
+        for part in path[:-1]:
+            current = current.setdefault(part, {})
+        current[path[-1]] = yaml.safe_load(value)
+    return data
 
 
-        Optional path to a YAML configuration file. When omitted, ``config.yaml``
-        located at the repository root is used. Missing files result in the
-        default configuration being returned.
+def _filter_kwargs(data: Dict[str, Any], cls: Type[Any]) -> Dict[str, Any]:
+    """Return mapping of keys in ``data`` that match ``cls`` fields."""
 
+    valid_keys = set(getattr(cls, "__dataclass_fields__", {}))
+    return {k: v for k, v in data.items() if k in valid_keys}
+
+
+def load_config(path: str | Path | None = None) -> Config:
+    """Return configuration loaded from ``path`` or defaults.
+
+    Parameters
+    ----------
+    path:
+        Optional path to a YAML configuration file. When omitted,
+        ``config.yaml`` located at the repository root is used. Missing files
+        result in the default configuration being returned.
 
     Returns
     -------
     Config
-
         Parsed configuration object.
     """
+
     cfg_path = Path(path) if path is not None else Path("config.yaml")
     data: Dict[str, Any] = {}
     if cfg_path.exists():
         with cfg_path.open("r", encoding="utf8") as fh:
             data = yaml.safe_load(fh) or {}
 
+    data = _apply_env_overrides(data)
+
     return Config(
-        api=APISettings(**data.get("api", {})),
-        timeouts=TimeoutSettings(**data.get("timeouts", {})),
-        rate_limits=RateLimitSettings(**data.get("rate_limits", {})),
-        output=OutputPaths(**data.get("output", {})),
+        api=APISettings(**_filter_kwargs(data.get("api", {}), APISettings)),
+        timeouts=TimeoutSettings(
+            **_filter_kwargs(data.get("timeouts", {}), TimeoutSettings)
+        ),
+        rate_limits=RateLimitSettings(
+            **_filter_kwargs(data.get("rate_limits", {}), RateLimitSettings)
+        ),
+        output=OutputPaths(**_filter_kwargs(data.get("output", {}), OutputPaths)),
     )
 
 
 DEFAULT_CONFIG = load_config()
-
 
 __all__ = [
     "Config",
@@ -209,5 +213,3 @@ __all__ = [
     "RateLimitSettings",
     "OutputPaths",
 ]
-
-
