@@ -18,7 +18,7 @@ api:
   user_agent: "chembl-da/0.1 (mailto:info@example.org)"  # Custom User-Agent header; must include contact info in the form "app/version (mailto:email@example.org)"
 
 openalex:
-  base: "https://api.openalex.org"  # OpenAlex API root URL
+  base: "https://api.openalex.org"  # OpenAlex API root URL (env: CHEMBL_DA__OPENALEX__BASE / CHEMBL_DA_OPENALEX_BASE)
   timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)
   timeout_read: 30  # Read timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_READ)
   retries: 3  # Retry attempts
@@ -27,7 +27,7 @@ openalex:
   mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_OPENALEX_MAILTO)
 
 crossref:
-  base: "https://api.crossref.org"  # CrossRef API root URL
+  base: "https://api.crossref.org"  # CrossRef API root URL (env: CHEMBL_DA__CROSSREF__BASE / CHEMBL_DA_CROSSREF_BASE)
   timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_READ)
   retries: 3
@@ -36,7 +36,7 @@ crossref:
   mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_CROSSREF_MAILTO)
 
 uniprot:
-  base: "https://rest.uniprot.org"  # UniProt REST API root
+  base: "https://rest.uniprot.org"  # UniProt REST API root (env: CHEMBL_DA__UNIPROT__BASE / CHEMBL_DA_UNIPROT_BASE)
   timeout_connect: 5  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_READ)
   retries: 3
@@ -44,7 +44,7 @@ uniprot:
   burst: 5  # (env: CHEMBL_DA_UNIPROT_BURST)
 
 iuphar:
-  base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base
+  base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base (env: CHEMBL_DA__IUPHAR__BASE / CHEMBL_DA_IUPHAR_BASE)
   timeout_connect: 5  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_READ)
   retries: 3
@@ -52,7 +52,7 @@ iuphar:
   burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
 
 pubchem:
-  base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API
+  base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
   timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
   timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
   retries: 3
