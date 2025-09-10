@@ -19,7 +19,7 @@ from library.table_quality import analyze_table_quality
 logger = logging.getLogger(__name__)
 
 
-def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
+def add_pubchem_data(df: pd.DataFrame, cfg: pl.PubChemCfg) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
     For each canonical SMILES string in ``df``, the function looks up the
@@ -31,6 +31,8 @@ def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df:
         Data frame returned by :func:`library.chembl_library.get_testitem`.
+    cfg:
+        PubChem configuration options.
 
     Returns
     -------
@@ -56,10 +58,10 @@ def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
     records: dict[str, dict[str, str]] = {}
     for idx, smi in enumerate(unique_smiles, start=1):
         logger.info("PubChem lookup %d/%d", idx, total)
-        cid = pl.get_cid_from_smiles(smi) or ""
+        cid = pl.get_cid_from_smiles(smi, cfg) or ""
         first_cid = cid.split("|")[0] if cid else ""
         if first_cid:
-            props = pl.get_properties(first_cid)
+            props = pl.get_properties(first_cid, cfg)
             records[smi] = {
                 "pubchem_cid": first_cid,
                 "pubchem_iupac_name": props.IUPACName,
@@ -123,13 +125,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     logger.info("Retrieved %d identifiers", len(ids))
     logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
     try:
-        df = cl.get_testitem(ids, chunk_size=args.chunk_size)
+        df = cl.get_testitem(ids, cfg=cfg.api, chunk_size=args.chunk_size)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve compounds: %s", exc)
         return 1
     logger.info("Retrieved %d rows from ChEMBL", len(df))
     logger.info("Augmenting results with PubChem data")
-    df = add_pubchem_data(df)
+    df = add_pubchem_data(df, cfg.pubchem)
     logger.info("PubChem augmentation completed")
     output = args.output_csv or io.default_output_path(args.input_csv)
     try:
