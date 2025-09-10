@@ -127,23 +127,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
 
     args = parser.parse_args(argv)
-    cfg: Config = apply_config_overrides(
-        args,
-        parser,
-        args.config,
-        mapping={
-            "same_doc": "init.same_doc",
-            "all_doc": "init.all_doc",
-            "out_dir": "init.output_dir",
-        },
-    )
-    ensure_dirs(cfg)
+    try:
+        cfg: Config = apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={
+                "same_doc": "init.same_doc",
+                "all_doc": "init.all_doc",
+                "out_dir": "init.output_dir",
+            },
+        )
+        ensure_dirs(cfg)
 
-    args.same_doc = Path(args.same_doc)
-    args.all_doc = Path(args.all_doc)
-    args.out_dir = Path(args.out_dir)
+        args.same_doc = Path(args.same_doc)
+        args.all_doc = Path(args.all_doc)
+        args.out_dir = Path(args.out_dir)
 
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
     return args.func(cfg, args)
 
 
