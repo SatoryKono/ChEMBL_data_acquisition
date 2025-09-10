@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from library import io
+from library.config import IoCfg
 
 
 def test_read_csv_validates_columns(tmp_path: Path) -> None:
@@ -14,7 +15,7 @@ def test_read_csv_validates_columns(tmp_path: Path) -> None:
         writer = csv.writer(fh)
         writer.writerow(["a", "b"])
         writer.writerow(["1", "2"])
-    df = io.read_csv(path, required_columns=["a"])
+    df = io.read_csv(path, cfg=IoCfg(), required_columns=["a"])
     assert list(df.columns) == ["a", "b"]
 
 
@@ -25,4 +26,4 @@ def test_read_csv_missing_column(tmp_path: Path) -> None:
         writer.writerow(["a"])
         writer.writerow(["1"])
     with pytest.raises(ValueError):
-        io.read_csv(path, required_columns=["a", "b"])
+        io.read_csv(path, cfg=IoCfg(), required_columns=["a", "b"])

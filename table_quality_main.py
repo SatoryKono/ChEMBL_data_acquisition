@@ -15,10 +15,9 @@ from library.cli import configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
-cfg: Config = load_config()
 
 
-def run(args: argparse.Namespace) -> int:
+def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the profiling workflow.
 
     Parameters
@@ -92,7 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cli_overrides["io.csv_sep"] = args.sep
     if args.encoding != parser.get_default("encoding"):
         cli_overrides["io.csv_encoding"] = args.encoding
-    global cfg
+
     cfg = load_config(args.config, cli_overrides=cli_overrides)
     if args.print_config:
         print(cfg.to_yaml())
@@ -108,7 +107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.log_level == default_log:
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-    return args.func(args)
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

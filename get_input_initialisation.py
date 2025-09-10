@@ -20,10 +20,9 @@ from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
-cfg: Config = load_config()
 
 
-def run(args: argparse.Namespace) -> int:
+def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute table combination routine.
 
     Parameters
@@ -122,7 +121,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    global cfg
     cfg = load_config(args.config)
 
     if args.same_doc is None:
@@ -136,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.log_level == default_log:
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-    return args.func(args)
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover
