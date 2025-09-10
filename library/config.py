@@ -364,6 +364,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
     "CHEMBL_DA_GLOBAL_BURST": ["rate", "global_burst"],
     "CHEMBL_DA_LOG_LEVEL": ["log", "level"],
+    "CHEMBL_DA_LOG_FORMAT": ["log", "format"],
+    "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["retry", "max_attempts"],
+    "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["retry", "backoff_factor"],
 }
 
 
