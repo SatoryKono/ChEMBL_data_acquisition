@@ -17,7 +17,12 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.cli import apply_config_overrides, configure_logging
+
+from library.cli import (
+    apply_config_overrides,
+    configure_logging,
+)
+
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -371,7 +376,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_targets(ids)
+        df = cl.get_targets(ids, cfg=cfg.api)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1

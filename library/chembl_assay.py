@@ -116,7 +116,7 @@ def get_assay(
     base = cfg.chembl_base.rstrip("/")
     url = f"{base}/assay/{chembl_assay_id}?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    data = request_json(url, timeout=effective_timeout)
+    data = request_json(url, cfg=cfg, timeout=effective_timeout)
     items = data.get("assays") or data.get("assay") or []
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
@@ -166,7 +166,7 @@ def get_assays(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&assay_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=effective_timeout)
+        data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
             df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
@@ -214,7 +214,7 @@ def get_activities(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&activity_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=effective_timeout)
+        data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
@@ -258,7 +258,7 @@ def get_testitem(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&molecule_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=effective_timeout)
+        data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
