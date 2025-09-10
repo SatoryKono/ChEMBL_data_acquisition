@@ -61,11 +61,6 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Base name used for output report files",
     )
-    parser.add_argument(
-        "--print-config",
-        action="store_true",
-        help="Print effective configuration and exit",
-    )
     parser.set_defaults(func=run, output_csv=Path("."), encoding="utf-8-sig")
     return parser
 
@@ -77,9 +72,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         cfg: Config = apply_config_overrides(args, parser, args.config)
         ensure_dirs(cfg)
-        if args.print_config:
-            print(cfg.to_yaml())
-            return 0
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)

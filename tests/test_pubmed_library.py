@@ -62,7 +62,9 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     session = requests.Session()
     res = pl.fetch_openalex(session, "1", cfg=cfg)
     assert res["OpenAlex.Error"] == ""
-    assert captured["url"] == "https://example.org/works/pmid:1"
+    assert (
+        captured["url"] == "https://example.org/works/pmid:1?mailto=info%40example.org"
+    )
     assert captured["timeout"] == (1, 2)
     assert captured["retries"] == 4
     assert captured["sleep"] == pytest.approx(0.1)
@@ -103,7 +105,10 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     session = requests.Session()
     res = pl.fetch_crossref(session, "10.1000/xyz", cfg=cfg)
     assert res["crossref.Error"] == ""
-    assert captured["url"] == "https://api.example.org/works/10.1000%2Fxyz"
+    assert (
+        captured["url"]
+        == "https://api.example.org/works/10.1000%2Fxyz?mailto=info%40example.org"
+    )
     assert captured["timeout"] == (2, 3)
     assert captured["retries"] == 5
     assert captured["sleep"] == pytest.approx(1 / 8)
