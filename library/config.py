@@ -1,4 +1,3 @@
-
 """Configuration utilities for data acquisition scripts.
 
 This module centralises configuration options such as timeouts, rate limits
@@ -23,18 +22,12 @@ from urllib.parse import urlparse
 import yaml
 
 
-
-def load_config(path: str | Path) -> Dict[str, Any]:
-    """Load a YAML configuration file.
-
 class ConfigError(ValueError):
     """Raised when configuration values are invalid."""
- 
 
 
 @dataclass
 class APISettings:
-
     """Base URLs for external services."""
 
     chembl_base_url: str = "https://www.ebi.ac.uk/chembl/api/data"
@@ -61,16 +54,16 @@ class RateLimitSettings:
 
     max_requests_per_second: float = 5.0
     max_retries: int = 3
-    backoff_factor: float = 1.0
+    backoff_factor: float = 0.3
 
 
 @dataclass
 class OutputPaths:
     """Output directory configuration."""
 
-    data_dir: Path | str = Path("data")
-    logs_dir: Path | str = Path("logs")
-    tmp_dir: Path | str = Path("tmp")
+    data_dir: Path = Path("data")
+    logs_dir: Path = Path("logs")
+    tmp_dir: Path = Path("tmp")
 
     def __post_init__(self) -> None:
         self.data_dir = Path(self.data_dir)
@@ -140,48 +133,19 @@ class Config:
 def load_config(path: str | Path | None = None) -> Config:
     """Return configuration loaded from ``path`` or defaults.
 
-
     Parameters
     ----------
     path:
-
-        Location of the configuration file.
-
-    Returns
-    -------
-    dict[str, Any]
-        Parsed configuration settings. An empty dictionary is returned if the
-        file does not exist.
-
-    Raises
-    ------
-    ValueError
-        If the file exists but contains invalid YAML.
-    """
-    cfg_path = Path(path)
-    if not cfg_path.exists():
-        return {}
-    try:
-        with cfg_path.open("r", encoding="utf8") as fh:
-            data = yaml.safe_load(fh)
-    except yaml.YAMLError as exc:  # pragma: no cover - parse errors are rare
-        raise ValueError(
-            f"failed to parse configuration file {cfg_path}: {exc}"
-        ) from exc
-    return data or {}
-
-
         Optional path to a YAML configuration file. When omitted, ``config.yaml``
         located at the repository root is used. Missing files result in the
         default configuration being returned.
 
-
     Returns
     -------
     Config
-
         Parsed configuration object.
     """
+
     cfg_path = Path(path) if path is not None else Path("config.yaml")
     data: Dict[str, Any] = {}
     if cfg_path.exists():
@@ -209,5 +173,3 @@ __all__ = [
     "RateLimitSettings",
     "OutputPaths",
 ]
-
-

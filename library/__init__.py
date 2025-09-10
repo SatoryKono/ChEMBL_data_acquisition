@@ -8,7 +8,7 @@ directory.
 """
 
 from . import io, validation
-from .config import Config, get_config
+from .config import Config, load_config
 from .document_type_terms import (
     EXPERIMENTAL_TERMS,
     REVIEW_TERMS,
@@ -27,5 +27,5 @@ __all__ = [
     "io",
     "validation",
     "Config",
-    "get_config",
+    "load_config",
 ]
