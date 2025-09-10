@@ -12,13 +12,13 @@ import pandas as pd
 
 from library.table_quality import analyze_table_quality
 
-from library.config import DEFAULT_CONFIG load_config
+from library.config import Config, load_config
 
 
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(args: argparse.Namespace, cfg: Config) -> int:
     """Execute the profiling workflow.
 
     Parameters
@@ -74,9 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         dest="output_dir",
         type=Path,
-
-        default=DEFAULT_CONFIG.output.data_dir,
-
+        default=None,
         help="Directory to store generated reports",
     )
     parser.add_argument("--sep", default=",", help="CSV delimiter")
@@ -95,11 +93,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
+    cfg = load_config(args.config)
     if args.output_dir is None:
-        args.output_dir = Path(config.get("output", {}).get("data_dir", "."))
+        args.output_dir = cfg.output.data_dir
     configure_logging(args.log_level)
-    return args.func(args)
+    return args.func(args, cfg)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

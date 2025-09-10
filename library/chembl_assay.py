@@ -9,6 +9,7 @@ import logging
 import pandas as pd
 
 from .chembl_client import _chunked, request_json
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +94,17 @@ TESTITEM_COLUMNS = [
 ]
 
 
-def get_assay(chembl_assay_id: str, *, timeout: float = 30.0) -> pd.DataFrame:
+def get_assay(
+    chembl_assay_id: str,
+    *,
+    cfg: Config,
+    timeout: float | None = None,
+) -> pd.DataFrame:
     """Retrieve assay information as a DataFrame."""
     if chembl_assay_id in {"", "#N/A"}:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     url = ASSAY_URL.format(id=chembl_assay_id)
-    data = request_json(url, timeout=timeout)
+    data = request_json(cfg, url, timeout=timeout)
     items = data.get("assays") or data.get("assay") or []
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
@@ -111,8 +117,9 @@ def get_assay(chembl_assay_id: str, *, timeout: float = 30.0) -> pd.DataFrame:
 def get_assays(
     ids: Iterable[str],
     *,
+    cfg: Config,
     chunk_size: int = 5,
-    timeout: float = 30.0,
+    timeout: float | None = None,
     require_variant_sequence: bool = False,
 ) -> pd.DataFrame:
     """Fetch assay records for *ids*.
@@ -144,7 +151,7 @@ def get_assays(
         base += "&variant_sequence__isnull=false"
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&assay_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        data = request_json(cfg, url, timeout=timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
             df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
@@ -161,8 +168,9 @@ def get_assays(
 def get_activities(
     ids: Iterable[str],
     *,
+    cfg: Config,
     chunk_size: int = 5,
-    timeout: float = 30.0,
+    timeout: float | None = None,
 ) -> pd.DataFrame:
     """Fetch activity records for *ids*.
 
@@ -189,7 +197,7 @@ def get_activities(
     base = "https://www.ebi.ac.uk/chembl/api/data/activity.json?format=json"
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&activity_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        data = request_json(cfg, url, timeout=timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
@@ -202,8 +210,9 @@ def get_activities(
 def get_testitem(
     ids: Iterable[str],
     *,
+    cfg: Config,
     chunk_size: int = 5,
-    timeout: float = 30.0,
+    timeout: float | None = None,
 ) -> pd.DataFrame:
     """Fetch compound records for *ids*."""
     valid = [i for i in ids if i not in {"", "#N/A"}]
@@ -214,7 +223,7 @@ def get_testitem(
     base = "https://www.ebi.ac.uk/chembl/api/data/molecule.json?format=json"
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&molecule_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        data = request_json(cfg, url, timeout=timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]

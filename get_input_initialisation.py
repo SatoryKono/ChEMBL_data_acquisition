@@ -16,12 +16,12 @@ from typing import Sequence
 
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
-from library.config import load_config
+from library.config import Config, load_config
 
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(args: argparse.Namespace, cfg: Config) -> int:
     """Execute table combination routine.
 
     Parameters
@@ -123,11 +123,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
+    cfg = load_config(args.config)
     if args.out_dir is None:
-        args.out_dir = Path(config.get("output", {}).get("data_dir", "."))
+        args.out_dir = cfg.output.data_dir
     configure_logging(args.log_level)
-    return args.func(args)
+    return args.func(args, cfg)
 
 
 if __name__ == "__main__":  # pragma: no cover

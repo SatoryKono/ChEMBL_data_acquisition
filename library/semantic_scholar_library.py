@@ -14,12 +14,13 @@ import logging
 import requests
 
 from . import pubmed_library as _pl
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
 
 def fetch_semantic_scholar(
-    session: requests.Session, pmid: str, sleep: float
+    session: requests.Session, pmid: str, sleep: float, cfg: Config
 ) -> Dict[str, str]:
     """Return Semantic Scholar metadata for ``pmid``.
 
@@ -41,11 +42,11 @@ def fetch_semantic_scholar(
         returned dictionary and never raise exceptions.
 
     """
-    return _pl.fetch_semantic_scholar(session, pmid, sleep)
+    return _pl.fetch_semantic_scholar(session, pmid, sleep, cfg)
 
 
 def fetch_semantic_scholar_batch(
-    session: requests.Session, pmids: List[str], sleep: float
+    session: requests.Session, pmids: List[str], sleep: float, cfg: Config
 ) -> List[Dict[str, str]]:
     """Return Semantic Scholar metadata for a batch of ``pmids``.
 
@@ -65,4 +66,4 @@ def fetch_semantic_scholar_batch(
         dictionary and never raise exceptions.
 
     """
-    return _pl.fetch_semantic_scholar_batch(session, pmids, sleep)
+    return _pl.fetch_semantic_scholar_batch(session, pmids, sleep, cfg)

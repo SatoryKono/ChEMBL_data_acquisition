@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 from typing import Sequence
 
 import requests
@@ -12,14 +11,13 @@ import requests
 from library import chembl_library as cl
 from library import io
 from library.cli import build_parser as base_parser, configure_logging
-from library.config import load_config
+from library.config import Config, load_config
 from library.table_quality import analyze_table_quality
-from library.config import DEFAULT_CONFIG
 
 logger = logging.getLogger(__name__)
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(args: argparse.Namespace, cfg: Config) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
     Parameters
@@ -45,7 +43,12 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_activities(ids, chunk_size=args.chunk_size, timeout=args.timeout)
+        df = cl.get_activities(
+            ids,
+            cfg=cfg,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve activities: %s", exc)
         return 1
@@ -72,9 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout",
         type=float,
-
-        default=DEFAULT_CONFIG.timeouts.read,
-
+        default=None,
         help="Timeout in seconds for each HTTP request",
     )
     parser.set_defaults(func=run_chembl)
@@ -85,17 +86,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
+    cfg = load_config(args.config)
     if args.timeout is None:
-        args.timeout = float(config.get("timeouts", {}).get("read", 30.0))
+        args.timeout = cfg.timeouts.read
     if args.output_csv is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
-            )
+        args.output_csv = (
+            cfg.output.data_dir / io.default_output_path(args.input_csv).name
+        )
     configure_logging(args.log_level)
-    return args.func(args)
+    return args.func(args, cfg)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

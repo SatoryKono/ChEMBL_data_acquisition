@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
@@ -14,7 +13,7 @@ from library import chembl_library as cl
 from library import pubchem_library as pl
 from library import io
 from library.cli import build_parser as base_parser, configure_logging
-from library.config import load_config
+from library.config import Config, load_config
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -95,7 +94,7 @@ def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(args: argparse.Namespace, cfg: Config) -> int:
     """Execute compound retrieval from the ChEMBL API and augment with PubChem data.
 
     Parameters
@@ -123,7 +122,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     logger.info("Retrieved %d identifiers", len(ids))
     logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
     try:
-        df = cl.get_testitem(ids, chunk_size=args.chunk_size)
+        df = cl.get_testitem(ids, cfg=cfg, chunk_size=args.chunk_size)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve compounds: %s", exc)
         return 1
@@ -161,15 +160,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
+    cfg = load_config(args.config)
     if args.output_csv is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
-            )
+        args.output_csv = (
+            cfg.output.data_dir / io.default_output_path(args.input_csv).name
+        )
     configure_logging(args.log_level)
-    return args.func(args)
+    return args.func(args, cfg)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

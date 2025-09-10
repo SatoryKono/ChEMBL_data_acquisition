@@ -18,7 +18,7 @@ from library import target_postprocessing as tp
 from library import uniprot_library as uu
 from library.cli import configure_logging
 from library.table_quality import analyze_table_quality
-from library.config import load_config
+from library.config import Config, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_uniprot(args: argparse.Namespace) -> int:
+def run_uniprot(args: argparse.Namespace, cfg: Config) -> int:
     """Execute the ``uniprot`` sub-command.
 
     Parameters
@@ -340,7 +340,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(args: argparse.Namespace, cfg: Config) -> int:
     """Execute the ``chembl`` sub-command."""
     try:
         ids = io.read_ids(
@@ -351,7 +351,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_targets(ids)
+        df = cl.get_targets(ids, cfg=cfg)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
@@ -370,7 +370,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_iuphar(args: argparse.Namespace) -> int:
+def run_iuphar(args: argparse.Namespace, cfg: Config) -> int:
     """Execute the ``iuphar`` sub-command."""
     try:
         data = ii.IUPHARData.from_files(
@@ -396,7 +396,7 @@ def run_iuphar(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_all(args: argparse.Namespace) -> int:
+def run_all(args: argparse.Namespace, cfg: Config) -> int:
     """Run ChEMBL, UniProt and IUPHAR pipelines and merge their outputs.
 
     The merged table is cleaned and normalised using
@@ -434,7 +434,7 @@ def run_all(args: argparse.Namespace) -> int:
             sep=args.sep,
             encoding=args.encoding,
         )
-        if run_chembl(chembl_args) != 0:
+        if run_chembl(chembl_args, cfg) != 0:
             return 1
         chembl_df = pd.read_csv(
             chembl_out, sep=args.sep, encoding=args.encoding, dtype=str
@@ -467,7 +467,7 @@ def run_all(args: argparse.Namespace) -> int:
             column="uniprot_id",
         )
         try:
-            if run_uniprot(uniprot_args) != 0:
+            if run_uniprot(uniprot_args, cfg) != 0:
                 return 1
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -533,7 +533,7 @@ def run_all(args: argparse.Namespace) -> int:
             encoding=args.encoding,
         )
         try:
-            if run_iuphar(iuphar_args) != 0:
+            if run_iuphar(iuphar_args, cfg) != 0:
                 return 1
         finally:
             iuphar_input.unlink(missing_ok=True)
@@ -572,16 +572,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
+    cfg = load_config(args.config)
     if hasattr(args, "output_csv") and args.output_csv is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
-            )
+        args.output_csv = (
+            cfg.output.data_dir / io.default_output_path(args.input_csv).name
+        )
     configure_logging(args.log_level)
     if hasattr(args, "func"):
-        return args.func(args)
+        return args.func(args, cfg)
     parser.print_help()
     return 1
 

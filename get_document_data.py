@@ -40,7 +40,7 @@ from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
 from library.table_quality import analyze_table_quality
-from library.config import load_config
+from library.config import Config, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,8 @@ def fetch_pubmed_records(
     sleep: float,
     max_workers: int = 1,
     batch_size: int = 100,
+    *,
+    cfg: Config,
 ) -> pd.DataFrame:
     """Retrieve metadata for a list of PubMed identifiers.
 
@@ -82,12 +84,12 @@ def fetch_pubmed_records(
         """
         try:
             with requests.Session() as session:
-                pubmed_list = pl.fetch_pubmed_batch(session, batch, sleep)
+                pubmed_list = pl.fetch_pubmed_batch(session, batch, sleep, cfg)
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
 
                 # Fetch Semantic Scholar data in a single batch
                 semsch_list = ssl.fetch_semantic_scholar_batch(
-                    session, pmids_in_batch, sleep
+                    session, pmids_in_batch, sleep, cfg
                 )
 
                 # Create a map for easy lookup
@@ -99,9 +101,9 @@ def fetch_pubmed_records(
                     semsch = semsch_map.get(pmid, {})
 
                     # Still fetching these individually for now
-                    openalex = ocl.fetch_openalex(session, pmid, sleep)
+                    openalex = ocl.fetch_openalex(session, pmid, sleep, cfg=cfg)
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                    crossref = ocl.fetch_crossref(session, doi, sleep)
+                    crossref = ocl.fetch_crossref(session, doi, sleep, cfg=cfg)
 
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
@@ -134,7 +136,7 @@ def fetch_pubmed_records(
     return pd.DataFrame(records)
 
 
-def run_pubmed(args: argparse.Namespace) -> int:
+def run_pubmed(args: argparse.Namespace, cfg: Config) -> int:
     """Execute the ``pubmed`` sub-command."""
     try:
         pmids = io.read_ids(
@@ -143,7 +145,9 @@ def run_pubmed(args: argparse.Namespace) -> int:
             sep=args.sep,
             encoding=args.encoding,
         )
-        df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
+        df = fetch_pubmed_records(
+            pmids, args.sleep, args.workers, args.batch_size, cfg=cfg
+        )
         output = args.output_csv or io.default_output_path(args.input_csv)
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -158,7 +162,7 @@ def run_pubmed(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(args: argparse.Namespace, cfg: Config) -> int:
     """Execute the ``chembl`` sub-command."""
     try:
         ids = io.read_ids(
@@ -169,7 +173,9 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        df = cl.get_documents(  # type: ignore[attr-defined]
+            ids, cfg=cfg, chunk_size=args.chunk_size
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -188,7 +194,7 @@ def run_chembl(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_all(args: argparse.Namespace) -> int:
+def run_all(args: argparse.Namespace, cfg: Config) -> int:
     """Run ChEMBL and PubMed pipelines and merge their outputs."""
     try:
         ids = io.read_ids(
@@ -199,7 +205,9 @@ def run_all(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        doc_df = cl.get_documents(  # type: ignore[attr-defined]
+            ids, cfg=cfg, chunk_size=args.chunk_size
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -231,7 +239,9 @@ def run_all(args: argparse.Namespace) -> int:
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
     pmids = pubmed_ids.dropna().astype(str).tolist()
-    pub_df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
+    pub_df = fetch_pubmed_records(
+        pmids, args.sleep, args.workers, args.batch_size, cfg=cfg
+    )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
         pub_df["PubMed.PMID"] = (
@@ -393,19 +403,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
+    cfg = load_config(args.config)
     if hasattr(args, "output_csv") and getattr(args, "output_csv") is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
-            )
+        args.output_csv = (
+            cfg.output.data_dir / io.default_output_path(args.input_csv).name
+        )
     if getattr(args, "sleep", None) is None:
-        rate = config.get("rate_limits", {}).get("max_requests_per_second")
-        if rate:
-            args.sleep = 1 / rate
+        args.sleep = 1 / cfg.rate_limits.max_requests_per_second
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    return args.func(args)
+    return args.func(args, cfg)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

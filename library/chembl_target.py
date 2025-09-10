@@ -10,6 +10,7 @@ import pandas as pd
 
 from .chembl_client import _chunked, request_json
 from .mapper_library import map_chembl_to_uniprot
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -138,14 +139,19 @@ def _parse_target_record(data: dict[str, Any]) -> dict[str, Any]:
     return res
 
 
-def get_target(chembl_target_id: str, *, timeout: float = 30.0) -> dict[str, str]:
+def get_target(
+    chembl_target_id: str,
+    *,
+    cfg: Config,
+    timeout: float | None = None,
+) -> dict[str, str]:
     """Fetch target information for a single ChEMBL identifier."""
     if chembl_target_id in {"", "#N/A"}:
         return dict(EMPTY_TARGET)
     url = "https://www.ebi.ac.uk/chembl/api/data/target/{id}.json".format(
         id=chembl_target_id
     )
-    data = request_json(url, timeout=timeout)
+    data = request_json(cfg, url, timeout=timeout)
     target_list = _get_items(data, "target")
     if not target_list:
         return dict(EMPTY_TARGET)
@@ -153,7 +159,11 @@ def get_target(chembl_target_id: str, *, timeout: float = 30.0) -> dict[str, str
 
 
 def get_targets(
-    ids: Iterable[str], *, chunk_size: int = 5, timeout: float = 30.0
+    ids: Iterable[str],
+    *,
+    cfg: Config,
+    chunk_size: int = 5,
+    timeout: float | None = None,
 ) -> pd.DataFrame:
     """Fetch target records for ``ids``."""
     valid = [i for i in ids if i not in {"", "#N/A"}]
@@ -164,7 +174,7 @@ def get_targets(
     base = "https://www.ebi.ac.uk/chembl/api/data/target.json?format=json"
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&target_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        data = request_json(cfg, url, timeout=timeout)
         items = data.get("targets") or data.get("target") or []
         records.extend(_parse_target_record(item) for item in items)
     if not records:
@@ -174,7 +184,7 @@ def get_targets(
 
 
 def extend_target(
-    df: pd.DataFrame, *, id_column: str = "target_chembl_id"
+    df: pd.DataFrame, *, cfg: Config, id_column: str = "target_chembl_id"
 ) -> pd.DataFrame:
     """Augment ``df`` with columns returned from :func:`get_target`.
 
@@ -188,7 +198,7 @@ def extend_target(
     """
     if id_column not in df.columns:
         raise ValueError(f"missing required column: {id_column}")
-    targets = [get_target(i) for i in df[id_column].fillna("")]
+    targets = [get_target(i, cfg=cfg) for i in df[id_column].fillna("")]
     extra = pd.DataFrame(targets)
     return pd.concat([df.reset_index(drop=True), extra], axis=1)
 

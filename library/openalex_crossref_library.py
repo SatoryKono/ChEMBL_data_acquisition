@@ -12,6 +12,7 @@ import logging
 import requests
 
 from . import pubmed_library as _pl
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ def fetch_openalex(
     pmid: str,
     sleep: float,
     *,
-    timeout: float = _pl.TIMEOUT,
+    cfg: Config,
+    timeout: float | None = None,
 ) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -48,7 +50,7 @@ def fetch_openalex(
 
     """
 
-    return _pl.fetch_openalex(session, pmid, sleep, timeout=timeout)
+    return _pl.fetch_openalex(session, pmid, sleep, cfg=cfg, timeout=timeout)
 
 
 def fetch_crossref(
@@ -56,7 +58,8 @@ def fetch_crossref(
     doi: str,
     sleep: float,
     *,
-    timeout: float = _pl.TIMEOUT,
+    cfg: Config,
+    timeout: float | None = None,
 ) -> Dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
@@ -83,4 +86,4 @@ def fetch_crossref(
 
     """
 
-    return _pl.fetch_crossref(session, doi, sleep, timeout=timeout)
+    return _pl.fetch_crossref(session, doi, sleep, cfg=cfg, timeout=timeout)

@@ -10,33 +10,25 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .config import DEFAULT_CONFIG
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
-# Configure session with retry/backoff for robustness using shared config
-_retry = Retry(
-    total=DEFAULT_CONFIG.rate_limits.max_retries,
-    backoff_factor=DEFAULT_CONFIG.rate_limits.backoff_factor,
-    status_forcelist=[500, 502, 503, 504],
-    allowed_methods=["GET"],
-)
-_session = requests.Session()
-_adapter = HTTPAdapter(max_retries=_retry)
-_session.mount("http://", _adapter)
-_session.mount("https://", _adapter)
 
-
-def request_json(url: str, *, timeout: float | None = None) -> dict[str, Any]:
+def request_json(
+    cfg: Config, url: str, *, timeout: float | None = None
+) -> dict[str, Any]:
     """Return JSON content from ``url``.
 
     Parameters
     ----------
+    cfg:
+        Application configuration containing timeout and retry settings.
     url:
         API endpoint to query.
     timeout:
-        Maximum number of seconds to wait for the response. Defaults to
-        :data:`library.config.DEFAULT_CONFIG.timeouts.read` when ``None``.
+        Maximum number of seconds to wait for the response. When ``None`` the
+        value from :attr:`cfg.timeouts.read` is used.
 
     Returns
     -------
@@ -50,9 +42,26 @@ def request_json(url: str, *, timeout: float | None = None) -> dict[str, Any]:
     ValueError
         If the response body is not valid JSON.
 
+    Notes
+    -----
+    A new :class:`requests.Session` is created for each call with retry
+    behaviour configured according to ``cfg``. This keeps the function
+    stateless and avoids hidden global configuration.
     """
-    effective_timeout = timeout if timeout is not None else DEFAULT_CONFIG.timeouts.read
-    with _session.get(url, timeout=effective_timeout) as response:
+
+    retry = Retry(
+        total=cfg.rate_limits.max_retries,
+        backoff_factor=cfg.rate_limits.backoff_factor,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    effective_timeout = timeout if timeout is not None else cfg.timeouts.read
+    with session.get(url, timeout=effective_timeout) as response:
         response.raise_for_status()
         return response.json()
 

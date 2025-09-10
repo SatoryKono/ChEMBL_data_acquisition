@@ -1,15 +1,4 @@
-
-"""Configuration utilities for data acquisition scripts.
-
-This module centralises configuration options such as timeouts, rate limits
-and output directories. Settings are loaded from ``config.yaml`` when
-available, otherwise built-in defaults are used.
-
-The :class:`Config` dataclass performs validation in ``__post_init__`` to
-ensure supplied values are sensible.  Invalid values raise
-:class:`ConfigError`.
-
-"""
+"""Configuration utilities for data acquisition scripts."""
 
 from __future__ import annotations
 
@@ -19,22 +8,15 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlparse
 
-
 import yaml
 
 
-
-def load_config(path: str | Path) -> Dict[str, Any]:
-    """Load a YAML configuration file.
-
 class ConfigError(ValueError):
     """Raised when configuration values are invalid."""
- 
 
 
 @dataclass
 class APISettings:
-
     """Base URLs for external services."""
 
     chembl_base_url: str = "https://www.ebi.ac.uk/chembl/api/data"
@@ -76,23 +58,16 @@ class OutputPaths:
         self.data_dir = Path(self.data_dir)
         self.logs_dir = Path(self.logs_dir)
         self.tmp_dir = Path(self.tmp_dir)
+        for path in (self.data_dir, self.logs_dir, self.tmp_dir):
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:  # pragma: no cover - rare
+                raise ConfigError(f"failed to create directory: {path}") from exc
 
 
 @dataclass
 class Config:
-    """Application configuration loaded from ``config.yaml``.
-
-    Parameters
-    ----------
-    api:
-        Base URLs for external services.
-    timeouts:
-        Network timeout configuration.
-    rate_limits:
-        HTTP rate limiting and retry configuration.
-    output:
-        Output directory configuration.
-    """
+    """Application configuration loaded from ``config.yaml``."""
 
     api: APISettings = field(default_factory=APISettings)
     timeouts: TimeoutSettings = field(default_factory=TimeoutSettings)
@@ -100,20 +75,12 @@ class Config:
     output: OutputPaths = field(default_factory=OutputPaths)
 
     def __post_init__(self) -> None:
-        """Validate configuration values.
+        """Validate configuration values."""
 
-        Raises
-        ------
-        ConfigError
-            If any configuration value is invalid.
-        """
-
-        # Validate timeouts
         for name, value in vars(self.timeouts).items():
             if value <= 0:
                 raise ConfigError(f"timeout '{name}' must be > 0")
 
-        # Validate rate limits
         if self.rate_limits.max_requests_per_second <= 0:
             raise ConfigError("max_requests_per_second must be > 0")
         if self.rate_limits.max_retries < 0:
@@ -121,93 +88,32 @@ class Config:
         if self.rate_limits.backoff_factor < 0:
             raise ConfigError("backoff_factor must be >= 0")
 
-        # Validate URLs
         for name, url in vars(self.api).items():
             parsed = urlparse(url)
             if not parsed.scheme or not parsed.netloc:
                 raise ConfigError(f"invalid URL for {name}: {url}")
 
-        # Validate output directories
-        for path in [self.output.data_dir, self.output.logs_dir, self.output.tmp_dir]:
-            try:
-                path.mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                raise ConfigError(f"failed to create directory: {path}") from exc
+        for path in (self.output.data_dir, self.output.logs_dir, self.output.tmp_dir):
+            if not path.exists() and not path.is_dir():
+                try:
+                    path.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    raise ConfigError(f"failed to create directory: {path}") from exc
             if not os.access(path, os.W_OK):
                 raise ConfigError(f"directory not writable: {path}")
 
 
 def load_config(path: str | Path | None = None) -> Config:
-    """Return configuration loaded from ``path`` or defaults.
+    """Return configuration loaded from ``path`` or defaults."""
 
-
-    Parameters
-    ----------
-    path:
-
-        Location of the configuration file.
-
-    Returns
-    -------
-    dict[str, Any]
-        Parsed configuration settings. An empty dictionary is returned if the
-        file does not exist.
-
-    Raises
-    ------
-    ValueError
-        If the file exists but contains invalid YAML.
-    """
-    cfg_path = Path(path)
-    if not cfg_path.exists():
-        return {}
-    try:
-        with cfg_path.open("r", encoding="utf8") as fh:
-            data = yaml.safe_load(fh)
-    except yaml.YAMLError as exc:  # pragma: no cover - parse errors are rare
-        raise ValueError(
-            f"failed to parse configuration file {cfg_path}: {exc}"
-        ) from exc
-    return data or {}
-
-
-        Optional path to a YAML configuration file. When omitted, ``config.yaml``
-        located at the repository root is used. Missing files result in the
-        default configuration being returned.
-
-
-    Returns
-    -------
-    Config
-
-        Parsed configuration object.
-    """
     cfg_path = Path(path) if path is not None else Path("config.yaml")
     data: Dict[str, Any] = {}
     if cfg_path.exists():
         with cfg_path.open("r", encoding="utf8") as fh:
             data = yaml.safe_load(fh) or {}
-
     return Config(
         api=APISettings(**data.get("api", {})),
         timeouts=TimeoutSettings(**data.get("timeouts", {})),
         rate_limits=RateLimitSettings(**data.get("rate_limits", {})),
         output=OutputPaths(**data.get("output", {})),
     )
-
-
-DEFAULT_CONFIG = load_config()
-
-
-__all__ = [
-    "Config",
-    "ConfigError",
-    "load_config",
-    "DEFAULT_CONFIG",
-    "APISettings",
-    "TimeoutSettings",
-    "RateLimitSettings",
-    "OutputPaths",
-]
-
-

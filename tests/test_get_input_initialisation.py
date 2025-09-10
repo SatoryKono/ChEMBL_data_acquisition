@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import get_input_initialisation as cli
+from library.config import Config
 
 
 def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
@@ -20,9 +21,7 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
         "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
         "pairs_independent": pd.DataFrame({"id": [5]}),
         "pairs_non_independent": pd.DataFrame({"id": [6]}),
-
         "activity_independent_status": pd.DataFrame({"id": [7]}),
-
     }
 
     def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
@@ -45,14 +44,12 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
         format="csv",
         dictionary_dir=tmp_path,
     )
-    result = cli.run(args)
+    result = cli.run(args, Config())
     assert result == 0
-
 
     assert (
         out_dir / "status" / "independent" / "activity_independent_status.csv"
     ).exists()
-
 
     for name in tables:
         quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
@@ -95,6 +92,6 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch, caplog) ->
         dictionary_dir=tmp_path,
     )
     with caplog.at_level("ERROR"):
-        result = cli.run(args)
+        result = cli.run(args, Config())
     assert result == 1
     assert "required table 'activity' missing" in caplog.text
