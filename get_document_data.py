@@ -55,8 +55,6 @@ logger = logging.getLogger(__name__)
 def fetch_pubmed_records(
     pmids: list[str],
     sleep: float,
-
-
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
     max_workers: int = 1,
@@ -121,7 +119,6 @@ def fetch_pubmed_records(
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
                     crossref = ocl.fetch_crossref(session, doi, crossref_cfg)
 
-
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
                     combined.update(semsch)
@@ -180,12 +177,10 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         df = fetch_pubmed_records(
             pmids,
             args.sleep,
-
             cfg.openalex,
             cfg.crossref,
             args.workers,
             args.batch_size,
-
         )
         output = args.output_csv or io.default_output_path(args.input_csv)
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
@@ -314,12 +309,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-
         cfg.openalex,
         cfg.crossref,
         args.workers,
         args.batch_size,
-
     )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
@@ -481,6 +474,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
         return 1
     return args.func(cfg, args)
 

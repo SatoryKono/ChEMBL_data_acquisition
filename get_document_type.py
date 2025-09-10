@@ -78,9 +78,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
     args = parser.parse_args(argv)
-    cfg: Config = apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+
+    try:
+        cfg: Config = apply_config_overrides(args, parser, args.config)
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        return 1
+
 
     df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
     df_out = classify_dataframe(df_in)
