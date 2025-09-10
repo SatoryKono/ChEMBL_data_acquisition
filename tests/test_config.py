@@ -1,38 +1,31 @@
-from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-from library.config import load_config
+
+from library.config import (
+    APISettings,
+    Config,
+    ConfigError,
+    OutputPaths,
+    TimeoutSettings,
+)
 
 
-def _write_config(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "config.yaml"
-    path.write_text(text, encoding="utf8")
-    return path
+def test_negative_timeout_raises() -> None:
+    with pytest.raises(ConfigError):
+        Config(timeouts=TimeoutSettings(connect=-1, read=10))
 
 
-def test_load_config_from_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_file = _write_config(tmp_path, "api:\n  timeout: 5\n")
-    monkeypatch.delenv("CHEMBL_TIMEOUT", raising=False)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-    cfg = load_config(config_file)
-    assert cfg.api.timeout == 5
+def test_invalid_url_raises() -> None:
+    api = APISettings(chembl_base_url="not-a-url")
+    with pytest.raises(ConfigError):
+        Config(api=api)
 
 
-def test_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_file = _write_config(tmp_path, "api:\n  timeout: 5\n")
-    monkeypatch.setenv("CHEMBL_TIMEOUT", "10")
-    monkeypatch.setattr(sys, "argv", ["prog"])
-    cfg = load_config(config_file)
-    assert cfg.api.timeout == 10
-
-
-def test_cli_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_file = _write_config(tmp_path, "api:\n  timeout: 5\n")
-    monkeypatch.delenv("CHEMBL_TIMEOUT", raising=False)
-    monkeypatch.setattr(sys, "argv", ["prog", "--timeout", "15"])
-    cfg = load_config(config_file)
-    assert cfg.api.timeout == 15
+def test_non_writable_directory_raises(tmp_path: Path) -> None:
+    bad_path = tmp_path / "file"
+    bad_path.write_text("x")
+    with pytest.raises(ConfigError):
+        Config(output=OutputPaths(data_dir=bad_path))
