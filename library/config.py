@@ -709,6 +709,11 @@ def _validate(cfg: Config) -> None:
     # ``cfg`` contains ``Path`` instances; convert them to strings before validation
     validator.validate(_serialize_paths(cfg.to_dict()))
 
+    # Validate logging level (case-insensitive)
+    if cfg.log.level.upper() not in logging._nameToLevel:
+        valid = ", ".join(sorted(logging._nameToLevel))
+        raise ValueError(f"log.level must be one of {valid}, got {cfg.log.level!r}")
+
     """Basic sanity checks for configuration values."""
     if not _valid_url(cfg.api.chembl_base):
         raise ValueError("api.chembl_base must be a valid URL")
