@@ -225,7 +225,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        df = cl.get_documents(  # type: ignore[attr-defined]
+            ids,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -273,7 +278,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        doc_df = cl.get_documents(  # type: ignore[attr-defined]
+            ids,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -361,6 +371,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     """
     parser = base_parser("Document data utilities", column="chembl_id", chunk_size=5)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
@@ -470,7 +486,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
+        cfg: Config = apply_config_overrides(
+            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+        )
         ensure_dirs(cfg)
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
