@@ -15,7 +15,11 @@ from pathlib import Path
 from typing import Sequence
 
 from library.config import Config, ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
@@ -87,8 +91,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser = base_parser(__doc__ or "Input initialisation", column="chembl_id")
     parser.add_argument(
         "--same-doc",
         type=Path,
@@ -120,9 +123,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point."""
     parser = build_parser()
+
     parser.add_argument(
         "--config", default="config.yaml", help="Path to YAML configuration file"
     )
+
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(
         args,
