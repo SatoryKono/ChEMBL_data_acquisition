@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 class ApiCfg:
     """Settings for ChEMBL API access."""
 
+
     chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
     timeout_connect: int = 5
     timeout_read: int = 30
@@ -42,6 +43,7 @@ class ApiCfg:
 
 
 @dataclass
+
 class OpenAlexCfg:
     """Settings for the OpenAlex API."""
 
@@ -107,6 +109,7 @@ class PubChemCfg:
 class IoCfg:
     """Input/output defaults."""
 
+
     output_dir: str = "data/output"
     cache_dir: str = ".cache"
     csv_sep: str = ","
@@ -126,6 +129,7 @@ class JobsCfg:
 @dataclass
 class LogCfg:
     """Logging configuration."""
+
 
     level: str = "INFO"
     format: str = "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
@@ -179,6 +183,13 @@ class RateCfg:
     global_burst: int = 8
 
 
+    api: ApiCfg = field(default_factory=ApiCfg)
+    io: IoCfg = field(default_factory=IoCfg)
+    jobs: JobsCfg = field(default_factory=JobsCfg)
+    log: LogCfg = field(default_factory=LogCfg)
+    init: InitCfg = field(default_factory=InitCfg)
+
+
 @dataclass
 class RetryCfg:
     """Retry behaviour for HTTP requests."""
@@ -189,6 +200,8 @@ class RetryCfg:
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
 
+
+        return asdict(self)
 
 @dataclass
 class Config:
@@ -217,6 +230,7 @@ class Config:
 
     def to_yaml(self) -> str:
         """Serialise the configuration to a YAML string."""
+
 
         return yaml.safe_dump(self.to_dict(), sort_keys=False)
 
@@ -323,6 +337,7 @@ def _validate(cfg: Config) -> None:
         raise ValueError("api.chembl_base must be a valid URL")
     if cfg.api.rps <= 0 or cfg.api.burst <= 0:
         raise ValueError("api.rps and api.burst must be positive")
+
     services: list[tuple[str, Any]] = [
         ("openalex", cfg.openalex),
         ("crossref", cfg.crossref),
@@ -345,6 +360,7 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "retry.max_attempts must be positive and backoff_factor non-negative"
         )
+
     if not cfg.io.output_dir.strip() or not cfg.io.cache_dir.strip():
         raise ValueError("io.output_dir and io.cache_dir must not be empty")
     if not cfg.init.same_doc.strip() or not cfg.init.all_doc.strip():
@@ -391,6 +407,7 @@ def load_config(
 
     _validate(cfg)
     return cfg
+
 
 
 __all__ = [

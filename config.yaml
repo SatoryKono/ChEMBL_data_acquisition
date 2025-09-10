@@ -8,6 +8,7 @@ api:
   burst: 5
   user_agent: "chembl-da/0.1 (+contact: unset)"
 
+
 openalex:
   base: "https://api.openalex.org"
   timeout_connect: 5
@@ -50,6 +51,7 @@ pubchem:
   rps: 3
   burst: 5
 
+
 io:
   output_dir: "data/output"
   cache_dir: ".cache"
@@ -61,6 +63,7 @@ io:
 jobs:
   concurrency: 8
   chunk_size: 500
+
 
 batch:
   size: 1000
@@ -99,8 +102,10 @@ retry:
     - 503
     - 504
 
+
 log:
   level: "INFO"
   format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
   datefmt: "%Y-%m-%d %H:%M:%S"
+
 
