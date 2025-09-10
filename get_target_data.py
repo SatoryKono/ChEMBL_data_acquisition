@@ -76,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING)",
     )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
 
     #   parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
 
@@ -377,7 +383,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_targets(ids, cfg=cfg.api)
+        df = cl.get_targets(ids, cfg=cfg.api, timeout=args.timeout)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
@@ -475,6 +481,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             column="chembl_id",
             sep=args.sep,
             encoding=args.encoding,
+            timeout=args.timeout,
         )
         if run_chembl(cfg, chembl_args) != 0:
             return 1
@@ -615,7 +622,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
+        cfg: Config = apply_config_overrides(
+            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+        )
         ensure_dirs(cfg)
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
