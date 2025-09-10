@@ -1,10 +1,18 @@
-"""Shared command-line helpers."""
+"""Shared command-line helpers.
+
+The parsers built by :func:`build_parser` expose a ``--config`` option whose
+value can be passed to :func:`library.config.load_config`.  If the configuration
+file is missing or malformed, calling :func:`~library.config.load_config` will
+raise :class:`library.config.ConfigError`.
+"""
 
 from __future__ import annotations
 
 import argparse
 import logging
 from pathlib import Path
+
+from .config import DEFAULT_PATH
 
 
 def _positive_int(value: str) -> int:
@@ -49,6 +57,14 @@ def build_parser(
     chunk_size:
         Default chunk size for API requests.
 
+    Notes
+    -----
+    The returned parser defines common arguments used across scripts,
+    including ``--config`` for specifying the path to a YAML configuration
+    file.  Consumers should load the file with
+    :func:`library.config.load_config` and handle
+    :class:`library.config.ConfigError` for missing or malformed files.
+
     """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
@@ -78,6 +94,12 @@ def build_parser(
         type=_positive_int,
         default=chunk_size,
         help="Maximum IDs per request",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_PATH,
+        help="Path to configuration YAML file",
     )
     return parser
 

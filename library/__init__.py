@@ -8,6 +8,7 @@ directory.
 """
 
 from . import io, validation
+from .config import ConfigError, DEFAULT_PATH, load_config
 from .document_type_terms import (
     EXPERIMENTAL_TERMS,
     REVIEW_TERMS,
@@ -25,4 +26,7 @@ __all__ = [
     "decide_label",
     "io",
     "validation",
+    "load_config",
+    "ConfigError",
+    "DEFAULT_PATH",
 ]
