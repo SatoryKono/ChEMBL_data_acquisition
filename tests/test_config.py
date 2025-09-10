@@ -85,3 +85,13 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert not out.exists() and not cache.exists()
     ensure_dirs(cfg)
     assert out.is_dir() and cache.is_dir()
+
+
+def test_yaml_error_includes_path(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("api: [\n")  # malformed YAML
+    with pytest.raises(ValueError) as excinfo:
+        load_config(path)
+    msg = str(excinfo.value)
+    assert str(path) in msg
+    assert "while parsing" in msg
