@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
-from library.config import Config, load_config
+from library.config import Config, ensure_dirs, load_config
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -401,6 +401,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
+    ensure_dirs(cfg)
 
     default_log = parser.get_default("log_level")
     if args.log_level == default_log:

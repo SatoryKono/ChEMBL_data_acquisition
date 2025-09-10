@@ -97,6 +97,10 @@ values after all overrides have been applied. The final precedence is::
 Only the top-level command line scripts read the configuration file. Modules
 under ``library/`` expect a :class:`Config` (or one of its subsections) to be
 passed explicitly, making dependencies clear and avoiding hidden global state.
+The directories referenced by ``io.output_dir`` and ``io.cache_dir`` are checked
+but not created when loading the configuration. Scripts that need these paths
+can call :func:`library.config.ensure_dirs` after :func:`load_config` to create
+them if they are missing and ``io.exist_ok`` permits it.
 
 
 Common flags shared by scripts include:

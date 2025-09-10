@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
-from library.config import Config, load_config
+from library.config import Config, ensure_dirs, load_config
 from library.cli import configure_logging
 
 from library.table_quality import analyze_table_quality
@@ -93,6 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cli_overrides["io.csv_encoding"] = args.encoding
 
     cfg = load_config(args.config, cli_overrides=cli_overrides)
+    ensure_dirs(cfg)
     if args.print_config:
         print(cfg.to_yaml())
         return 0

@@ -362,13 +362,10 @@ def _validate(cfg: Config) -> None:
 
     out_dir = Path(cfg.io.output_dir)
     cache_dir = Path(cfg.io.cache_dir)
-    for path in [out_dir, cache_dir]:
-        if not path.exists():
-            if cfg.io.exist_ok:
-                path.mkdir(parents=True, exist_ok=True)
-            else:
-                raise FileNotFoundError(f"{path} does not exist")
-        elif not path.is_dir():
+    for path in (out_dir, cache_dir):
+        if not path.exists() and not cfg.io.exist_ok:
+            raise FileNotFoundError(f"{path} does not exist")
+        elif path.exists() and not path.is_dir():
             raise NotADirectoryError(f"{path} is not a directory")
 
     if not cfg.init.same_doc.strip() or not cfg.init.all_doc.strip():
@@ -378,6 +375,35 @@ def _validate(cfg: Config) -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def ensure_dirs(cfg: Config) -> None:
+    """Create I/O directories if required.
+
+    Parameters
+    ----------
+    cfg : Config
+        Configuration settings containing ``io`` paths.
+
+    Raises
+    ------
+    FileNotFoundError
+        If a directory is missing and ``cfg.io.exist_ok`` is ``False``.
+    NotADirectoryError
+        If an existing path is not a directory.
+    """
+
+    out_dir = Path(cfg.io.output_dir)
+    cache_dir = Path(cfg.io.cache_dir)
+    for path in (out_dir, cache_dir):
+        if path.exists():
+            if not path.is_dir():
+                raise NotADirectoryError(f"{path} is not a directory")
+        else:
+            if cfg.io.exist_ok:
+                path.mkdir(parents=True, exist_ok=True)
+            else:
+                raise FileNotFoundError(f"{path} does not exist")
 
 
 def load_config(
@@ -434,5 +460,6 @@ __all__ = [
     "RetryCfg",
     "LogCfg",
     "Config",
+    "ensure_dirs",
     "load_config",
 ]

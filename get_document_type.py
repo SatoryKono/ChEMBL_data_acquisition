@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-from library.config import load_config
+from library.config import ensure_dirs, load_config
 from library.cli import configure_logging
 
 from library.document_type_classifier import compute_scores, decide_label
@@ -82,6 +82,7 @@ def main() -> int:  # pragma: no cover - simple CLI
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    ensure_dirs(cfg)
     if args.log_level == "INFO":
         args.log_level = cfg.log.level
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
