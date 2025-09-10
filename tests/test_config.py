@@ -70,6 +70,23 @@ def test_retry_and_log_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert cfg.log.format == "%(levelname)s"
 
 
+def test_mailto_aliases_override_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """New mailto aliases should override the default email addresses."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+
+    monkeypatch.setenv("CHEMBL_DA_OPENALEX_MAILTO", "openalex@example.org")
+    monkeypatch.setenv("CHEMBL_DA_CROSSREF_MAILTO", "crossref@example.org")
+
+    cfg = load_config(path)
+
+    assert cfg.openalex.mailto == "openalex@example.org"
+    assert cfg.crossref.mailto == "crossref@example.org"
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
@@ -202,7 +219,7 @@ def test_invalid_urls_raise(tmp_path: Path, snippet: str, match: str) -> None:
     with pytest.raises(ValueError, match=match):
         load_config(path)
 
- 
+
 def test_unknown_env_var_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -214,7 +231,8 @@ def test_unknown_env_var_warning(
     with caplog.at_level(logging.WARNING, logger="library.config"):
         load_config(path)
     assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in caplog.text
- 
+
+
 def test_log_level_valid(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("log:\n  level: warn\n")
@@ -227,4 +245,3 @@ def test_log_level_invalid(tmp_path: Path) -> None:
     path.write_text("log:\n  level: verbose\n")
     with pytest.raises(ValueError, match="log.level"):
         load_config(path)
- 

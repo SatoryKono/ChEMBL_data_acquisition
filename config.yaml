@@ -24,7 +24,7 @@ openalex:
   retries: 3  # Retry attempts
   rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
   burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
-  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address
+  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_OPENALEX_MAILTO)
 
 crossref:
   base: "https://api.crossref.org"  # CrossRef API root URL
@@ -33,7 +33,7 @@ crossref:
   retries: 3
   rps: 4  # (env: CHEMBL_DA_CROSSREF_RPS)
   burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
-  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address
+  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_CROSSREF_MAILTO)
 
 uniprot:
   base: "https://rest.uniprot.org"  # UniProt REST API root
