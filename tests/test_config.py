@@ -3,14 +3,20 @@ import logging
 
 import pytest
 
-from library.config import ensure_dirs, load_config
+from library.config import ConfigError, ensure_dirs, load_config
 
 
 def test_load_minimal_config(tmp_path: Path) -> None:
-    cfg = load_config(tmp_path / "missing.yaml")
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cfg = load_config(path)
     assert cfg.api.rps == 5
-
     assert cfg.openalex.rps == 4
+
+
+def test_missing_config_raises(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="configuration file not found"):
+        load_config(tmp_path / "missing.yaml")
 
 
 def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,6 +51,23 @@ def test_alias_env_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert cfg.api.rps == 5
 
 
+def test_retry_and_log_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """New environment variable aliases should override retry and log defaults."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+
+    monkeypatch.setenv("CHEMBL_DA_RETRY_MAX_ATTEMPTS", "10")
+    monkeypatch.setenv("CHEMBL_DA_RETRY_BACKOFF_FACTOR", "2.0")
+    monkeypatch.setenv("CHEMBL_DA_LOG_FORMAT", "%(levelname)s")
+
+    cfg = load_config(path)
+
+    assert cfg.retry.max_attempts == 10
+    assert cfg.retry.backoff_factor == 2.0
+    assert cfg.log.format == "%(levelname)s"
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
@@ -73,8 +96,10 @@ def test_missing_dirs_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("CHEMBL_DA_OUTDIR", str(tmp_path / "out"))
     monkeypatch.setenv("CHEMBL_DA__IO__CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("CHEMBL_DA__IO__EXIST_OK", "false")
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
     with pytest.raises(FileNotFoundError):
-        load_config(tmp_path / "cfg.yaml")
+        load_config(path)
 
 
 def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,7 +107,9 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     cache = tmp_path / "cache"
     monkeypatch.setenv("CHEMBL_DA_OUTDIR", str(out))
     monkeypatch.setenv("CHEMBL_DA__IO__CACHE_DIR", str(cache))
-    cfg = load_config(tmp_path / "cfg.yaml")
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cfg = load_config(path)
     assert not out.exists() and not cache.exists()
     ensure_dirs(cfg)
     assert out.is_dir() and cache.is_dir()
@@ -106,11 +133,12 @@ def test_unknown_key_error(tmp_path: Path) -> None:
 def test_yaml_error_includes_path(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api: [\n")  # malformed YAML
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ConfigError) as excinfo:
         load_config(path)
     msg = str(excinfo.value)
     assert str(path) in msg
     assert "while parsing" in msg
+
 
 
 def test_user_agent_must_include_contact(tmp_path: Path) -> None:

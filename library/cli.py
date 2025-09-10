@@ -1,4 +1,8 @@
-"""Shared command-line helpers."""
+"""Shared command-line helpers.
+
+Configuration loading errors are converted to user-facing messages using
+``argparse.ArgumentParser.error``.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
-from .config import Config, load_config
+from .config import Config, ConfigError, load_config
 
 
 def _positive_int(value: str) -> int:
@@ -172,6 +176,11 @@ def apply_config_overrides(
     -------
     Config
         Loaded configuration object with overrides applied.
+
+    Raises
+    ------
+    SystemExit
+        If the configuration file cannot be loaded.
     """
 
     override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
@@ -185,7 +194,10 @@ def apply_config_overrides(
         if value != default:
             cli_overrides[key] = value
 
-    cfg = load_config(config_path, cli_overrides=cli_overrides)
+    try:
+        cfg = load_config(config_path, cli_overrides=cli_overrides)
+    except ConfigError as exc:
+        parser.error(str(exc))
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):
