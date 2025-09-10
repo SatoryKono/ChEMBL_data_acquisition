@@ -281,6 +281,8 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command-line arguments specific to the ``uniprot`` sub-command.
 
@@ -346,7 +348,21 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the ``chembl`` sub-command."""
+    """Execute the ``chembl`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -380,7 +396,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute the ``iuphar`` sub-command."""
+    """Execute the ``iuphar`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         data = ii.IUPHARData.from_files(
             target_path=args.target_csv,
@@ -415,6 +445,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command-line arguments specific to the ``all`` sub-command.
 
@@ -578,10 +610,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
+    """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg: Config = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     if hasattr(args, "func"):
