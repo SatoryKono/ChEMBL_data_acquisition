@@ -65,7 +65,20 @@ def build_parser() -> argparse.ArgumentParser:
     as well as a convenience ``all`` command that runs all pipelines and
     merges their outputs.
     """
-    parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
+
+    parser = argparse.ArgumentParser(description="Target data utilities")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Logging level (DEBUG, INFO, WARNING)",
+    )
+
+
+ #   parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
+
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # ----------------------------

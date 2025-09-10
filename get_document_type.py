@@ -78,7 +78,15 @@ def main() -> int:  # pragma: no cover - simple CLI
         Zero on success, non-zero on failure.
 
     """
-    parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to YAML configuration file"
+    )
+    parser.add_argument("--input", type=Path, required=True, help="Input CSV")
+    parser.add_argument("--output", type=Path, required=True, help="Output CSV")
+    parser.add_argument("--log-level", default="INFO")
+
     args = parser.parse_args()
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
