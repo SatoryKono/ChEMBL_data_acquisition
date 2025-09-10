@@ -1,13 +1,19 @@
 # Default configuration for ChEMBL data acquisition.
-# Values can be overridden via environment variables or CLI arguments.
+# Values can be overridden via CLI arguments or environment variables.
+# Environment variables follow the ``CHEMBL_DA__SECTION__KEY`` pattern and
+# many keys also provide short aliases such as ``CHEMBL_DA_RPS``.
+# For the complete alias table see ``library/config.py``.
+# Example:
+#   export CHEMBL_DA__API__CHEMBL_BASE=https://dev.example/chembl
+#   export CHEMBL_DA_BASE=https://dev.example/chembl  # short alias
 
 api:
-  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"  # Base URL for ChEMBL API
+  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"  # Base URL for ChEMBL API (env: CHEMBL_DA__API__CHEMBL_BASE / CHEMBL_DA_BASE)
   timeout_connect: 5  # Seconds to wait for a connection
   timeout_read: 30  # Seconds to wait for a response
   retries: 3  # HTTP retry attempts
   backoff_factor: 0.5  # Exponential backoff multiplier
-  rps: 5  # Requests per second limit
+  rps: 5  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
   burst: 5  # Burst size for token bucket limiter
   user_agent: "chembl-da/0.1 (+contact: unset)"  # Custom User-Agent header
 
