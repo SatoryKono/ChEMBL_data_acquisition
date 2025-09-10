@@ -12,12 +12,15 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
+from library.config import Config, load_config
+from library.cli import configure_logging
 from typing import Sequence
 
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
+cfg: Config = load_config()
 
 
 def run(args: argparse.Namespace) -> int:
@@ -108,17 +111,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def configure_logging(level: str) -> None:
-    """Configure logging at ``level``."""
-    numeric = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(level=numeric)
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point."""
     parser = build_parser()
+    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    configure_logging(args.log_level)
+    global cfg
+    cfg = load_config(args.config)
+
+    default_log = parser.get_default("log_level")
+    if args.log_level == default_log:
+        args.log_level = cfg.log.level
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(args)
 
 

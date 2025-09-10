@@ -13,16 +13,18 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-
 from . import validation
+from .config import Config, load_config
+
+cfg: Config = load_config()
 
 
 def read_ids(
     path: str | Path,
     *,
     column: str,
-    sep: str = ",",
-    encoding: str = "utf8",
+    sep: str = cfg.io.csv_sep,
+    encoding: str = cfg.io.csv_encoding,
 ) -> list[str]:
     """Return identifier values from ``column`` in ``path``.
 
@@ -71,8 +73,8 @@ def read_ids(
 def read_csv(
     path: str | Path,
     *,
-    sep: str = ",",
-    encoding: str = "utf8",
+    sep: str = cfg.io.csv_sep,
+    encoding: str = cfg.io.csv_encoding,
     required_columns: Iterable[str] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
@@ -105,8 +107,8 @@ def write_csv(
     df: pd.DataFrame,
     path: str | Path,
     *,
-    sep: str = ",",
-    encoding: str = "utf8",
+    sep: str = cfg.io.csv_sep,
+    encoding: str = cfg.io.csv_encoding,
 ) -> None:
     """Write ``df`` to ``path`` as CSV.
 

@@ -60,6 +60,30 @@ Running the CLI saves ``data_quality_report_table.csv`` and
 
 All scripts share a common set of flags:
 
+## Configuration
+
+Default settings live in `config.yaml`. Values can be overridden via environment variables using the `CHEMBL_DA__SECTION__KEY` pattern or short aliases like `CHEMBL_DA_RPS`.
+
+Example usage:
+
+```bash
+python get_activity_data.py --config config.yaml
+CHEMBL_DA__API__RPS=2 python get_assay_data.py
+```
+
+| Script | Config sections |
+| --- | --- |
+| get_activity_data.py | api, io, jobs, quality, log |
+| get_assay_data.py | api, io, jobs, quality, log |
+| get_document_data.py | api, io, jobs, quality, log |
+| get_document_type.py | io, log |
+| get_target_data.py | api, uniprot, iuphar, io, jobs, quality, log |
+| get_testitem_data.py | api, pubchem, io, jobs, quality, log |
+| get_input_initialisation.py | init, io, quality, log |
+| mapper_main.py | mapper, io, jobs, log |
+| table_quality_main.py | io, quality, log |
+
+
 * ``--input`` – input CSV file (default ``input.csv``)
 * ``--output`` – destination CSV file (default: auto-generated next to the input)
 * ``--log-level`` – logging verbosity (default ``INFO``)

@@ -8,6 +8,7 @@ from typing import Sequence
 
 import pandas as pd
 import requests
+from library.config import Config, load_config
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
@@ -16,6 +17,7 @@ from library.cli import build_parser as base_parser, configure_logging
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
+cfg: Config = load_config()
 
 
 def add_pubchem_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -158,8 +160,24 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
+    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    configure_logging(args.log_level)
+    global cfg
+    cfg = load_config(args.config)
+
+    default_chunk = parser.get_default("chunk_size")
+    if args.chunk_size == default_chunk:
+        args.chunk_size = cfg.jobs.chunk_size
+    default_sep = parser.get_default("sep")
+    if args.sep == default_sep:
+        args.sep = cfg.io.csv_sep
+    default_encoding = parser.get_default("encoding")
+    if args.encoding == default_encoding:
+        args.encoding = cfg.io.csv_encoding
+    default_log = parser.get_default("log_level")
+    if args.log_level == default_log:
+        args.log_level = cfg.log.level
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(args)
 
 

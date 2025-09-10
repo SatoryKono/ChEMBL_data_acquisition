@@ -9,10 +9,13 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+from library.config import Config, load_config
+from library.cli import configure_logging
 
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
+cfg: Config = load_config()
 
 
 def run(args: argparse.Namespace) -> int:
@@ -74,17 +77,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def configure_logging(level: str) -> None:
-    """Configure basic logging."""
-    numeric_level = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(level=numeric_level)
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
+    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
-    configure_logging(args.log_level)
+    global cfg
+    cfg = load_config(args.config)
+
+    default_sep = parser.get_default("sep")
+    if args.sep == default_sep:
+        args.sep = cfg.io.csv_sep
+    default_encoding = parser.get_default("encoding")
+    if args.encoding == default_encoding:
+        args.encoding = cfg.io.csv_encoding
+    default_log = parser.get_default("log_level")
+    if args.log_level == default_log:
+        args.log_level = cfg.log.level
+    configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     return args.func(args)
 
 
