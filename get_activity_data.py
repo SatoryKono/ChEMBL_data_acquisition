@@ -44,7 +44,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_activities(ids, chunk_size=args.chunk_size, timeout=args.timeout)
+        df = cl.get_activities(
+            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve activities: %s", exc)
         return 1

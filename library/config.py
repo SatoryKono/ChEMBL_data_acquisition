@@ -8,7 +8,11 @@ command line options. The order of precedence is:
 
 Environment variables follow the ``CHEMBL_DA__SECTION__KEY`` pattern where
 sections and keys are joined by double underscores. Short aliases such as
-``CHEMBL_DA_RPS`` are also recognised.
+``CHEMBL_DA_RPS`` are also recognised. Additional convenience aliases include:
+
+* ``CHEMBL_DA_BASE`` → ``api.chembl_base``
+* ``CHEMBL_DA_TIMEOUT_CONNECT`` → ``api.timeout_connect``
+* ``CHEMBL_DA_TIMEOUT_READ`` → ``api.timeout_read``
 """
 
 from __future__ import annotations
@@ -289,6 +293,9 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
 _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_RPS": ["api", "rps"],
     "CHEMBL_DA_BURST": ["api", "burst"],
+    "CHEMBL_DA_BASE": ["api", "chembl_base"],
+    "CHEMBL_DA_TIMEOUT_CONNECT": ["api", "timeout_connect"],
+    "CHEMBL_DA_TIMEOUT_READ": ["api", "timeout_read"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],

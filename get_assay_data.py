@@ -45,7 +45,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_assays(ids, chunk_size=args.chunk_size)
+        df = cl.get_assays(ids, cfg=cfg.api, chunk_size=args.chunk_size)
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve assays: %s", exc)
         return 1
