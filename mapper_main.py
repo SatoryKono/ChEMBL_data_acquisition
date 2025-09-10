@@ -64,7 +64,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             logger.warning("failed to map %s: %s", chembl_id, exc)
             uniprot_ids.append(None)
     df["mapping_uniprot_id"] = uniprot_ids
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("wrote %s", output)

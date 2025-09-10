@@ -147,16 +147,25 @@ def write_csv(
     _write_meta(Path(path), cfg)
 
 
-def default_output_path(input_path: str | Path) -> Path:
+def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     """Return the default output path for ``input_path``.
 
-    The generated name follows the pattern
-    ``output_<stem>_YYYYMMDD.csv`` and is placed next to
-    ``input_path``.
+    Parameters
+    ----------
+    input_path:
+        Source file path used only for deriving the stem name.
+    cfg:
+        I/O configuration providing the base directory for generated files.
+
+    Returns
+    -------
+    pathlib.Path
+        Path pointing inside ``cfg.output_dir`` following the
+        ``output_<stem>_YYYYMMDD.csv`` naming scheme.
     """
     inp = Path(input_path)
     date_str = datetime.now().strftime("%Y%m%d")
-    return inp.with_name(f"output_{inp.stem}_{date_str}.csv")
+    return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
 
 
 def _git_sha() -> str:

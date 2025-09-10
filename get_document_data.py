@@ -182,7 +182,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             args.workers,
             args.batch_size,
         )
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -229,7 +229,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -277,7 +277,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
         # Merge any columns not covered by ``postprocess_documents`` back
@@ -309,6 +309,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
+        args.sleep,
         cfg.openalex,
         cfg.crossref,
         args.workers,

@@ -139,7 +139,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     logger.info("Augmenting results with PubChem data")
     df = add_pubchem_data(df, cfg.pubchem)
     logger.info("PubChem augmentation completed")
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)

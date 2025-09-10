@@ -90,10 +90,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         return 1
 
-
     df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
     df_out = classify_dataframe(df_in)
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
     return 0
 
