@@ -82,6 +82,13 @@ def build_parser(
         default=chunk_size,
         help="Maximum IDs per request",
     )
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="YAML configuration file",
+    )
     return parser
 
 

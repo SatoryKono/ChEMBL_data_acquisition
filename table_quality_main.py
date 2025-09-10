@@ -10,7 +10,11 @@ from typing import Sequence
 
 import pandas as pd
 from library.config import Config, ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 
 from library.table_quality import analyze_table_quality
 
@@ -39,8 +43,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     original_cwd = Path.cwd()
     try:
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        os.chdir(args.output_dir)
+        args.output_csv.mkdir(parents=True, exist_ok=True)
+        os.chdir(args.output_csv)
         analyze_table_quality(df, table_name=args.table_name)
     finally:
         os.chdir(original_cwd)
@@ -49,42 +53,24 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line argument parser."""
-    parser = argparse.ArgumentParser(description="Table quality analysis")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
-    parser.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="Input CSV file",
-    )
+    parser = base_parser("Table quality analysis", column="chembl_id")
     parser.add_argument(
         "--table-name",
         required=True,
         help="Base name used for output report files",
     )
     parser.add_argument(
-        "--output",
-        dest="output_dir",
-        type=Path,
-        default=Path("."),
-        help="Directory to store generated reports",
-    )
-    parser.add_argument("--sep", default=",", help="CSV delimiter")
-    parser.add_argument("--encoding", default="utf-8-sig", help="File encoding")
-    parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print effective configuration and exit",
     )
-    parser.set_defaults(func=run)
+    parser.set_defaults(func=run, output_csv=Path("."), encoding="utf-8-sig")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
-    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)

@@ -7,13 +7,16 @@ scoring logic.
 
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
 from library.config import ensure_dirs
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
+from library import io
 
 from library.document_type_classifier import compute_scores, decide_label
 
@@ -75,21 +78,18 @@ def main() -> int:  # pragma: no cover - simple CLI
         Zero on success, non-zero on failure.
 
     """
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="config.yaml")
-    parser.add_argument("--input", type=Path, required=True, help="Input CSV")
-    parser.add_argument("--output", type=Path, required=True, help="Output CSV")
-    parser.add_argument("--log-level", default="INFO")
+    parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
     args = parser.parse_args()
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
 
-    df_in = pd.read_csv(args.input, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)
-    df_out = classify_dataframe(df_in)
-    df_out.to_csv(
-        args.output, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
+    df_in = pd.read_csv(
+        args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
     )
+    df_out = classify_dataframe(df_in)
+    output = args.output_csv or io.default_output_path(args.input_csv)
+    df_out.to_csv(output, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)
     return 0
 
 

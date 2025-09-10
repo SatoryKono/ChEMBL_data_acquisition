@@ -41,7 +41,11 @@ from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
 from library.table_quality import analyze_table_quality
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -289,8 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
         Parser populated with all sub-commands.
 
     """
-    parser = argparse.ArgumentParser(description="Document data utilities")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser = base_parser("Document data utilities", column="chembl_id", chunk_size=5)
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
@@ -398,7 +401,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     parser = build_parser()
-    parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args(argv)
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)

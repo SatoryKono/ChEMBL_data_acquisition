@@ -17,7 +17,11 @@ from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.cli import apply_config_overrides, configure_logging
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 from library.table_quality import analyze_table_quality
 
 logger = logging.getLogger(__name__)
@@ -61,14 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     as well as a convenience ``all`` command that runs all pipelines and
     merges their outputs.
     """
-    parser = argparse.ArgumentParser(description="Target data utilities")
-    parser.add_argument("--config", default="config.yaml")
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        help="Logging level (DEBUG, INFO, WARNING)",
-    )
-
+    parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # ----------------------------
