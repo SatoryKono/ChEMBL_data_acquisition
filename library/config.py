@@ -404,19 +404,38 @@ _ALIAS_MAP: Dict[str, List[str]] = {
 
 
 def _apply_env_overrides(cfg: Config) -> None:
-    """Apply environment variable overrides to ``cfg``."""
+    """Apply environment variable overrides to ``cfg``.
+
+    Environment variables that do not map to known configuration paths are
+    ignored and generate a warning.
+    """
 
     prefix = "CHEMBL_DA"
     for env_key, env_val in os.environ.items():
         key = env_key.upper()
         if key in _ALIAS_MAP:
-            _set_by_path(cfg, _ALIAS_MAP[key], env_val)
+            path = _ALIAS_MAP[key]
+            try:
+                _set_by_path(cfg, path, env_val)
+            except KeyError:
+                logger.warning(
+                    "Environment variable %s ignored: unknown config path %s",
+                    key,
+                    ".".join(path),
+                )
             continue
         if not key.startswith(prefix + "__"):
             continue
         parts = key.split("__")[1:]
         path_parts = [p.lower() for p in parts]
-        _set_by_path(cfg, path_parts, env_val)
+        try:
+            _set_by_path(cfg, path_parts, env_val)
+        except KeyError:
+            logger.warning(
+                "Environment variable %s ignored: unknown config path %s",
+                key,
+                ".".join(path_parts),
+            )
 
 
 def _serialize_paths(data: Any) -> Any:
