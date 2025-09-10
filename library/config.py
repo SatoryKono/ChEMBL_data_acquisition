@@ -60,7 +60,7 @@ def _valid_url(url: str) -> bool:
 
 
 class ConfigError(RuntimeError):
-    """Raised when configuration loading or validation fails."""
+    """Raised when configuration loading fails."""
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +337,7 @@ def _update_from_dict(
         if is_dataclass(current):
             if not isinstance(val, dict):
                 joined = ".".join(path + [key])
-                raise ConfigError(f"{joined} must be a mapping")
+                raise TypeError(f"{joined} must be a mapping")
             _update_from_dict(current, val, path + [key], unknown_keys=unknown_keys)
             continue
         if isinstance(val, str):
@@ -345,23 +345,17 @@ def _update_from_dict(
                 val = _coerce(val, current)
             except Exception as exc:  # pragma: no cover - defensive
                 joined = ".".join(path + [key])
-                raise ConfigError(
+                raise TypeError(
                     f"{joined} must be {type(current).__name__}, got {val!r}"
                 ) from exc
         if not isinstance(val, type(current)):
             joined = ".".join(path + [key])
-            raise ConfigError(f"{joined} must be {type(current).__name__}, got {val!r}")
+            raise TypeError(f"{joined} must be {type(current).__name__}, got {val!r}")
         setattr(obj, key, val)
 
 
 def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
-    """Set ``value`` at ``path`` inside ``cfg`` with type coercion.
-
-    Raises
-    ------
-    ConfigError
-        If ``path`` is unknown or ``value`` cannot be coerced to the target type.
-    """
+    """Set ``value`` at ``path`` inside ``cfg`` with type coercion."""
 
     obj: Any = cfg
     for name in path[:-1]:
@@ -380,15 +374,14 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
     except Exception as exc:  # pragma: no cover - defensive
         joined = ".".join(path)
         if isinstance(exc, ValueError):
-            raise ConfigError(f"{joined}: {exc}") from exc
-        raise ConfigError(
+            raise ValueError(f"{joined}: {exc}") from exc
+        raise TypeError(
             f"{joined} must be {type(current).__name__}, got {value!r}"
         ) from exc
     setattr(obj, field_name, value)
 
 
-# Environment variable aliases mapping to configuration paths.
-ENV_ALIASES: Dict[str, List[str]] = {
+_ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_RPS": ["api", "rps"],
     "CHEMBL_DA_BURST": ["api", "burst"],
     "CHEMBL_DA_BASE": ["api", "chembl_base"],
@@ -427,16 +420,6 @@ ENV_ALIASES: Dict[str, List[str]] = {
     "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["retry", "backoff_factor"],
 }
 
-# Mapping of common CLI argument names to configuration paths.
-ALIASES: Dict[str, str] = {
-    "sep": "io.csv_sep",
-    "encoding": "io.csv_encoding",
-    "log_level": "log.level",
-    "chunk_size": "jobs.chunk_size",
-    "timeout": "api.timeout_read",
-    "outdir": "io.output_dir",
-}
-
 
 def _apply_env_overrides(cfg: Config) -> None:
     """Apply environment variable overrides to ``cfg``.
@@ -448,8 +431,8 @@ def _apply_env_overrides(cfg: Config) -> None:
     prefix = "CHEMBL_DA"
     for env_key, env_val in os.environ.items():
         key = env_key.upper()
-        if key in ENV_ALIASES:
-            path = ENV_ALIASES[key]
+        if key in _ALIAS_MAP:
+            path = _ALIAS_MAP[key]
             try:
                 _set_by_path(cfg, path, env_val)
             except KeyError:
@@ -458,8 +441,6 @@ def _apply_env_overrides(cfg: Config) -> None:
                     key,
                     ".".join(path),
                 )
-            except ConfigError as exc:
-                raise ConfigError(f"{key}: {exc}") from exc
             continue
         if not key.startswith(prefix + "__"):
             continue
@@ -473,8 +454,6 @@ def _apply_env_overrides(cfg: Config) -> None:
                 key,
                 ".".join(path_parts),
             )
-        except ConfigError as exc:
-            raise ConfigError(f"{key}: {exc}") from exc
 
 
 def _serialize_paths(data: Any) -> Any:
@@ -758,43 +737,33 @@ CONFIG_SCHEMA: Dict[str, Any] = {
 }
 
 
-def validate_config(cfg: Config) -> None:
-    """Validate ``cfg`` against :data:`CONFIG_SCHEMA` and sanity-check values.
-
-    Raises
-    ------
-    ConfigError
-        If ``cfg`` violates schema or contains invalid values.
-    """
+def _validate(cfg: Config) -> None:
+    """Validate ``cfg`` against :data:`CONFIG_SCHEMA`."""
 
     validator = jsonschema.Draft202012Validator(
         CONFIG_SCHEMA, format_checker=jsonschema.FormatChecker()
     )
     # ``cfg`` contains ``Path`` instances; convert them to strings before validation
-    try:
-        validator.validate(_serialize_paths(cfg.to_dict()))
-    except jsonschema.ValidationError as exc:
-        raise ConfigError(str(exc)) from exc
+    validator.validate(_serialize_paths(cfg.to_dict()))
 
     # Validate logging level (case-insensitive)
     if cfg.log.level.upper() not in logging._nameToLevel:
         valid = ", ".join(sorted(logging._nameToLevel))
-        raise ConfigError(f"log.level must be one of {valid}, got {cfg.log.level!r}")
+        raise ValueError(f"log.level must be one of {valid}, got {cfg.log.level!r}")
 
+    """Basic sanity checks for configuration values."""
     if not _valid_url(cfg.api.chembl_base):
-        raise ConfigError("api.chembl_base must be a valid URL")
+        raise ValueError("api.chembl_base must be a valid URL")
     if cfg.api.timeout_connect <= 0 or cfg.api.timeout_read <= 0:
-        raise ConfigError("api timeouts must be positive")
+        raise ValueError("api timeouts must be positive")
     if cfg.api.retries < 0 or cfg.api.backoff_factor < 0:
-        raise ConfigError(
+        raise ValueError(
             "api.retries must be non-negative and backoff_factor non-negative"
         )
-    if cfg.api.rps <= 0:
-        raise ConfigError(f"api.rps must be > 0 (got {cfg.api.rps})")
-    if cfg.api.burst < 0:
-        raise ConfigError(f"api.burst must be >= 0 (got {cfg.api.burst})")
+    if cfg.api.rps <= 0 or cfg.api.burst <= 0:
+        raise ValueError("api.rps and api.burst must be positive")
     if not _EMAIL_RE.search(cfg.api.user_agent):
-        raise ConfigError(
+        raise ValueError(
             "api.user_agent must include contact information such as an email"
         )
 
@@ -807,40 +776,39 @@ def validate_config(cfg: Config) -> None:
     ]
     for name, service in services:
         if not _valid_url(service.base):
-            raise ConfigError(f"{name}.base must be a valid URL")
+            raise ValueError(f"{name}.base must be a valid URL")
         if service.timeout_connect <= 0 or service.timeout_read <= 0:
-            raise ConfigError(f"{name} timeouts must be positive")
+            raise ValueError(f"{name} timeouts must be positive")
         if service.retries < 0:
-            raise ConfigError(f"{name}.retries must be non-negative")
-        if service.rps <= 0 or service.burst < 0:
-            raise ConfigError(f"{name}.rps must be > 0 and {name}.burst must be >= 0")
+            raise ValueError(f"{name}.retries must be non-negative")
+        if service.rps <= 0 or service.burst <= 0:
+            raise ValueError(f"{name}.rps and {name}.burst must be positive")
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
         ("crossref", cfg.crossref.mailto),
     ]:
         if not mail or not _EMAIL_RE.fullmatch(mail):
-            raise ConfigError(f"{name}.mailto must be a valid email address")
+            raise ValueError(f"{name}.mailto must be a valid email address")
 
-    if cfg.jobs.concurrency <= 0:
-        raise ConfigError(f"jobs.concurrency must be > 0 (got {cfg.jobs.concurrency})")
-    if cfg.jobs.chunk_size <= 0:
-        raise ConfigError(f"jobs.chunk_size must be > 0 (got {cfg.jobs.chunk_size})")
+    if cfg.jobs.concurrency <= 0 or cfg.jobs.chunk_size <= 0:
+        raise ValueError("jobs.concurrency and jobs.chunk_size must be positive")
     if cfg.batch.size <= 0 or cfg.batch.concurrency <= 0:
-        raise ConfigError("batch.size and batch.concurrency must be positive")
-    if cfg.rate.global_rps <= 0 or cfg.rate.global_burst < 0:
-        raise ConfigError("rate.global_rps must be > 0 and global_burst must be >= 0")
+        raise ValueError("batch.size and batch.concurrency must be positive")
+    if cfg.rate.global_rps <= 0 or cfg.rate.global_burst <= 0:
+        raise ValueError("rate.global_rps and rate.global_burst must be positive")
     if cfg.retry.max_attempts <= 0 or cfg.retry.backoff_factor < 0:
-        raise ConfigError(
+        raise ValueError(
             "retry.max_attempts must be positive and backoff_factor non-negative"
         )
 
-    if len(cfg.io.csv_sep) != 1:
-        raise ConfigError(
-            f"io.csv_sep must be a single character (got {cfg.io.csv_sep!r})"
-        )
-
-    ensure_dirs(cfg)
+    out_dir = cfg.io.output_dir
+    cache_dir = cfg.io.cache_dir
+    for path in (out_dir, cache_dir):
+        if not path.exists() and not cfg.io.exist_ok:
+            raise FileNotFoundError(f"{path} does not exist")
+        if path.exists() and not path.is_dir():
+            raise NotADirectoryError(f"{path} is not a directory")
 
 
 # ---------------------------------------------------------------------------
@@ -849,33 +817,39 @@ def validate_config(cfg: Config) -> None:
 
 
 def ensure_dirs(cfg: Config) -> None:
-    """Create required directories.
+    """Create I/O directories if required.
 
-    This function creates ``io.output_dir``, ``io.cache_dir`` and
-    ``init.output_dir``. Existing directories are left untouched making the
-    operation idempotent.
+    Parameters
+    ----------
+    cfg : Config
+        Configuration settings containing ``io`` paths.
 
     Raises
     ------
-    ConfigError
-        If a path exists but is not a directory or directory creation fails.
+    FileNotFoundError
+        If a directory is missing and ``cfg.io.exist_ok`` is ``False``.
+    NotADirectoryError
+        If an existing path is not a directory.
     """
 
-    paths = [cfg.io.output_dir, cfg.io.cache_dir, cfg.init.output_dir]
-    for path in paths:
-        try:
-            if path.exists():
-                if not path.is_dir():
-                    raise ConfigError(f"{path} is not a directory")
-            else:
+    out_dir = cfg.io.output_dir
+    cache_dir = cfg.io.cache_dir
+    for path in (out_dir, cache_dir):
+        if path.exists():
+            if not path.is_dir():
+                raise NotADirectoryError(f"{path} is not a directory")
+        else:
+            if cfg.io.exist_ok:
                 path.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:  # pragma: no cover - filesystem errors
-            raise ConfigError(f"failed to create directory {path}: {exc}") from exc
+            else:
+                raise FileNotFoundError(f"{path} does not exist")
 
 
 def load_config(
     path: str | Path = "config.yaml",
     cli_overrides: Dict[str, Any] | None = None,
+    *,
+    strict: bool = False,
 ) -> Config:
     """Load configuration from ``path`` applying environment and CLI overrides.
 
@@ -886,6 +860,9 @@ def load_config(
     cli_overrides:
         Mapping of ``"section.key"`` paths to values coming from the command
         line.
+    strict:
+        When ``True`` raise :class:`ValueError` for unknown configuration keys;
+        otherwise a warning is emitted.
 
     Returns
     -------
@@ -896,8 +873,10 @@ def load_config(
     ------
     ConfigError
         If ``path`` does not exist or contains invalid YAML.
-    ConfigError
-        If unknown configuration keys are present or values have incorrect types.
+    ValueError
+        If ``strict`` is ``True`` and unknown configuration keys are present.
+    TypeError
+        If configuration values have incorrect types.
     """
 
     cfg = Config()
@@ -912,12 +891,15 @@ def load_config(
             f"failed to parse YAML configuration at {path}: {err}"
         ) from err
     if not isinstance(data, dict):
-        raise ConfigError("top-level structure in config file must be a mapping")
+        raise TypeError("top-level structure in config file must be a mapping")
     _update_from_dict(cfg, data, unknown_keys=unknown_keys)
 
     if unknown_keys:
         joined = ", ".join(sorted(unknown_keys))
-        raise ConfigError(f"Unknown configuration key(s) in {path}: {joined}")
+        msg = f"Unknown configuration key(s) in {path}: {joined}"
+        if strict:
+            raise ValueError(msg)
+        logger.warning(msg)
 
     _apply_env_overrides(cfg)
 
@@ -925,7 +907,7 @@ def load_config(
         for key, val in cli_overrides.items():
             _set_by_path(cfg, key.split("."), val)
 
-    validate_config(cfg)
+    _validate(cfg)
     return cfg
 
 
@@ -947,8 +929,6 @@ __all__ = [
     "LogCfg",
     "Config",
     "ConfigError",
-    "ALIASES",
-    "validate_config",
     "ensure_dirs",
     "load_config",
 ]

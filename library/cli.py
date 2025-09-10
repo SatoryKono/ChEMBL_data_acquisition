@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
-from .config import ALIASES, Config, ConfigError, load_config
+from .config import Config, ConfigError, load_config
 
 
 def _positive_int(value: str) -> int:
@@ -93,11 +93,6 @@ def build_parser(
         default=Path("config.yaml"),
         help="YAML configuration file",
     )
-    parser.add_argument(
-        "--print-config",
-        action="store_true",
-        help="Print merged configuration and exit",
-    )
     return parser
 
 
@@ -126,8 +121,13 @@ def configure_logging(
 # ---------------------------------------------------------------------------
 
 # Mapping of common CLI argument names to configuration paths.
-# Scripts may extend this by passing a ``mapping`` argument to
-# :func:`apply_config_overrides`.
+_DEFAULT_OVERRIDES: Dict[str, str] = {
+    "sep": "io.csv_sep",
+    "encoding": "io.csv_encoding",
+    "log_level": "log.level",
+    "chunk_size": "jobs.chunk_size",
+    "timeout": "api.timeout_read",
+}
 
 
 def _get_cfg_value(cfg: Config, path: str) -> Any:
@@ -183,7 +183,7 @@ def apply_config_overrides(
         If the configuration file cannot be loaded.
     """
 
-    override_map = {**ALIASES, **(mapping or {})}
+    override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
 
     cli_overrides: Dict[str, Any] = {}
     for arg, key in override_map.items():
@@ -198,10 +198,6 @@ def apply_config_overrides(
         cfg = load_config(config_path, cli_overrides=cli_overrides)
     except ConfigError as exc:
         parser.error(str(exc))
-
-    if getattr(args, "print_config", False):
-        print(cfg.to_yaml())
-        raise SystemExit(0)
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):
