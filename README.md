@@ -105,6 +105,12 @@ Environment variables override values from the YAML file. Variables use the
 * ``CHEMBL_DA__JOBS__CONCURRENCY`` / ``CHEMBL_DA_CONCURRENCY``
 * ``CHEMBL_DA__JOBS__CHUNK_SIZE`` / ``CHEMBL_DA_CHUNK_SIZE``
 
+### Schema validation
+
+Configuration values are validated against a JSON Schema via the
+``jsonschema`` package. The schema mirrors the dataclass structure and checks
+types and value ranges, producing helpful error messages for nested fields.
+
 Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective
 values after all overrides have been applied. The final precedence is::
