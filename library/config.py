@@ -111,8 +111,8 @@ class PubChemCfg:
 class IoCfg:
     """Input/output defaults."""
 
-    output_dir: str = "data/output"
-    cache_dir: str = ".cache"
+    output_dir: Path = Path("data/output")
+    cache_dir: Path = Path(".cache")
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
     csv_index: bool = False
@@ -140,9 +140,9 @@ class LogCfg:
 class InitCfg:
     """Workbook paths for ``get_input_initialisation``."""
 
-    same_doc: str = "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"
-    all_doc: str = "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
-    output_dir: str = "data/output/ChEMBL/processed"
+    same_doc: Path = Path("data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx")
+    all_doc: Path = Path("data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx")
+    output_dir: Path = Path("data/output/ChEMBL/processed")
 
 
 @dataclass
@@ -239,6 +239,8 @@ def _coerce(value: str, current: Any) -> Any:
         return int(value)
     if isinstance(current, float):
         return float(value)
+    if isinstance(current, Path):
+        return Path(value)
     return value
 
 
@@ -258,10 +260,17 @@ def _update_from_dict(
                 raise TypeError(f"{joined} must be a mapping")
             _update_from_dict(current, val, path + [key])
             continue
-        expected = type(current)
-        if not isinstance(val, expected):
+        if isinstance(val, str):
+            try:
+                val = _coerce(val, current)
+            except Exception as exc:  # pragma: no cover - defensive
+                joined = ".".join(path + [key])
+                raise TypeError(
+                    f"{joined} must be {type(current).__name__}, got {val!r}"
+                ) from exc
+        if not isinstance(val, type(current)):
             joined = ".".join(path + [key])
-            raise TypeError(f"{joined} must be {expected.__name__}, got {val!r}")
+            raise TypeError(f"{joined} must be {type(current).__name__}, got {val!r}")
         setattr(obj, key, val)
 
 
@@ -367,15 +376,15 @@ def _validate(cfg: Config) -> None:
             "retry.max_attempts must be positive and backoff_factor non-negative"
         )
 
-    out_dir = Path(cfg.io.output_dir)
-    cache_dir = Path(cfg.io.cache_dir)
+    out_dir = cfg.io.output_dir
+    cache_dir = cfg.io.cache_dir
     for path in (out_dir, cache_dir):
         if not path.exists() and not cfg.io.exist_ok:
             raise FileNotFoundError(f"{path} does not exist")
         elif path.exists() and not path.is_dir():
             raise NotADirectoryError(f"{path} is not a directory")
 
-    if not cfg.init.same_doc.strip() or not cfg.init.all_doc.strip():
+    if not cfg.init.same_doc.name or not cfg.init.all_doc.name:
         raise ValueError("init.same_doc and init.all_doc must not be empty")
 
 
@@ -400,8 +409,8 @@ def ensure_dirs(cfg: Config) -> None:
         If an existing path is not a directory.
     """
 
-    out_dir = Path(cfg.io.output_dir)
-    cache_dir = Path(cfg.io.cache_dir)
+    out_dir = cfg.io.output_dir
+    cache_dir = cfg.io.cache_dir
     for path in (out_dir, cache_dir):
         if path.exists():
             if not path.is_dir():
