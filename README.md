@@ -108,6 +108,9 @@ python scripts/get_target_data.py chembl \
 Replace ``path/to/targets.csv`` with a CSV containing a ``chembl_id``
 column.
 
+The generated output will expose the same identifiers under the column
+``target_chembl_id`` to align with validation schemas.
+
 ## Updating Dependencies
 
 To keep the environment current, periodically refresh the pinned
