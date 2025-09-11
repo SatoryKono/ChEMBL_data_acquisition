@@ -5,9 +5,9 @@ import io
 import json
 from pathlib import Path
 
-import get_activity_data as gad
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
+from scripts import get_activity_data as gad
 
 
 def test_dry_run_no_input(tmp_path: Path) -> None:
