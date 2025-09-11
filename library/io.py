@@ -11,12 +11,14 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
-from typing import Iterable, Iterator
+from typing import Any, Hashable, Iterable, Iterator, Mapping, Sequence
 import subprocess
 import sys
 
 
 import pandas as pd
+import yaml
+from pandera import DataFrameModel, DataFrameSchema
 
 from . import validation
 
@@ -24,7 +26,6 @@ from .config import Config, IoCfg, _serialize_paths
 from .csv_utils import write_csv_deterministic
 
 from .log import logger
-
 
 
 def read_ids(
@@ -88,6 +89,10 @@ def read_csv(
     sep: str | None = None,
     encoding: str | None = None,
     required_columns: Iterable[str] | None = None,
+    dtype: Mapping[Hashable, Any] | type | None = None,
+    na_values: Sequence[str] | str | None = None,
+    parse_dates: Sequence[str] | None = None,
+    schema: DataFrameSchema | type[DataFrameModel] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
@@ -104,6 +109,19 @@ def read_csv(
     required_columns:
         Optional list of column names that must be present in the loaded
         DataFrame. A :class:`ValueError` is raised if any are missing.
+    dtype:
+        Data type specification forwarded to :func:`pandas.read_csv`.
+        Can be a single type applied to all columns or a mapping of
+        column names to types.
+    na_values:
+        Additional strings to recognize as NA/NaN. Passed to
+        :func:`pandas.read_csv`.
+    parse_dates:
+        Column names to parse as dates using :func:`pandas.read_csv`.
+    schema:
+        Optional :class:`pandera.DataFrameSchema` or
+        :class:`pandera.DataFrameModel` used for advanced validation and
+        dtype coercion.
 
     Returns
     -------
@@ -113,8 +131,20 @@ def read_csv(
     """
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
-    df = pd.read_csv(path, sep=sep, encoding=encoding)
-    if required_columns is not None:
+    df = pd.read_csv(
+        path,
+        sep=sep,
+        encoding=encoding,
+        dtype=dtype,
+        na_values=na_values,
+        parse_dates=list(parse_dates) if parse_dates is not None else None,
+    )
+    if schema is not None:
+        if isinstance(schema, DataFrameSchema):
+            df = schema.validate(df)
+        else:
+            df = schema.to_schema().validate(df)
+    elif required_columns is not None:
         validation.validate_columns(df, required_columns)
     return df
 
@@ -187,7 +217,6 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
 
 
-
 def _git_sha() -> str:
     """Return the current Git commit hash.
 
@@ -227,4 +256,3 @@ def _write_meta(path: Path, cfg: Config) -> None:
     meta_path = Path(f"{path}.meta.yaml")
     with meta_path.open("w", encoding="utf8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
-

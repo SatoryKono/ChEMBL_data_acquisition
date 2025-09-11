@@ -12,6 +12,7 @@ from typing import Any, NoReturn
 import pandas as pd
 import pytest
 import yaml
+import pandera as pa
 
 from library import io
 from library.config import Config, IoCfg
@@ -36,6 +37,31 @@ def test_read_csv_missing_column(tmp_path: Path) -> None:
         writer.writerow(["1"])
     with pytest.raises(ValueError):
         io.read_csv(path, cfg=IoCfg(), required_columns=["a", "b"])
+
+
+def test_read_csv_types_and_na_values() -> None:
+    path = Path("tests/data/io_types.csv")
+    schema = pa.DataFrameSchema(
+        {
+            "flag": pa.Column("boolean", nullable=True),
+            "date": pa.Column("datetime64[ns]", nullable=True),
+            "count": pa.Column("Int64", nullable=True),
+        },
+    )
+    df = io.read_csv(
+        path,
+        cfg=IoCfg(),
+        dtype={"flag": "boolean", "count": "Int64"},
+        na_values=["---", "missing", ""],
+        parse_dates=["date"],
+        schema=schema,
+    )
+    assert df["flag"].dtype == "boolean"
+    assert df["date"].dtype == "datetime64[ns]"
+    assert df["count"].dtype == "Int64"
+    assert pd.isna(df.loc[2, "flag"])  # custom NA token
+    assert pd.isna(df.loc[1, "date"])  # empty string -> NA
+    assert pd.isna(df.loc[2, "count"])  # custom NA token
 
 
 def test_write_csv_creates_metadata_file(tmp_path: Path) -> None:
@@ -85,7 +111,6 @@ def test_write_csv_with_key_cols(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
-
 def test_write_csv_normalises_types(tmp_path: Path) -> None:
     df = pd.DataFrame(
         {
@@ -98,6 +123,7 @@ def test_write_csv_normalises_types(tmp_path: Path) -> None:
     io.write_csv(df, path, cfg=cfg, key_cols=["d"])
     text = path.read_text(encoding="utf-8-sig")
     assert text == ("b,d\n" "false,2020-01-01\n" "true,2020-01-02\n")
+
 
 def test_git_sha_timeout_returns_unknown(
     monkeypatch: pytest.MonkeyPatch,
@@ -119,4 +145,3 @@ def test_git_sha_timeout_returns_unknown(
 
     assert io._git_sha() == "unknown"
     assert "timed out" in stream.getvalue()
-
