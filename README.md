@@ -10,9 +10,13 @@ parsing, validation, aggregation and export of tabular data.
 
    ```bash
    pip install -r requirements.txt
-   # Development extras (black, ruff, mypy, pytest, ...)
+   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, ...)
    pip install -r requirements.txt -r requirements-dev.txt
    ```
+
+   The second command installs optional tooling for development and testing,
+   including property-based tests powered by ``hypothesis`` and HTTP mocking
+   via ``responses``.
 
 2. **Run a sample script**
 
@@ -104,7 +108,7 @@ git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
 pip install -r requirements.txt
 
-# Development tools (black, ruff, mypy, pytest, ...)
+# Development tools (black, ruff, mypy, pytest, hypothesis, responses)
 pip install -r requirements.txt -r requirements-dev.txt
 ```
 
