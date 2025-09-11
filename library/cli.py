@@ -8,10 +8,45 @@ from __future__ import annotations
 
 import argparse
 import logging
+import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
 from .config import Config, ConfigError, load_config
+
+
+@dataclass
+class LoggerConfig:
+    """Configuration for pipeline logging.
+
+    Parameters
+    ----------
+    run_id:
+        Unique identifier for the current run.
+    level:
+        Textual logging level such as ``"INFO"`` or ``"DEBUG"``.
+    """
+
+    run_id: str
+    level: str
+
+
+def create_logger_config(level: str) -> LoggerConfig:
+    """Return :class:`LoggerConfig` with a random ``run_id``.
+
+    Parameters
+    ----------
+    level:
+        Desired logging level.
+
+    Returns
+    -------
+    LoggerConfig
+        Configuration containing ``run_id`` and ``level``.
+    """
+
+    return LoggerConfig(run_id=uuid.uuid4().hex, level=level)
 
 
 def _positive_int(value: str) -> int:
@@ -44,8 +79,8 @@ def _positive_int(value: str) -> int:
 
 def build_parser(
     description: str, *, column: str, chunk_size: int = 10
-) -> argparse.ArgumentParser:
-    """Return an argument parser with shared options.
+) -> tuple[argparse.ArgumentParser, LoggerConfig]:
+    """Return a parser with shared options and logging configuration.
 
     Parameters
     ----------
@@ -56,6 +91,10 @@ def build_parser(
     chunk_size:
         Default chunk size for API requests.
 
+    Returns
+    -------
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        The parser and associated :class:`LoggerConfig`.
     """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--log-level", default="INFO", help="Logging level")
@@ -98,11 +137,12 @@ def build_parser(
         action="store_true",
         help="Print effective configuration and exit",
     )
-    return parser
+    log_cfg = create_logger_config(parser.get_default("log_level"))
+    return parser, log_cfg
 
 
-def build_root_parser() -> argparse.ArgumentParser:
-    """Return a parser containing root-level options.
+def build_root_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
+    """Return a parser containing root-level options and logging config.
 
     The parser is created with ``add_help=False`` so it can be used as a parent
     for both the top-level parser and sub-commands, allowing shared options such
@@ -124,7 +164,8 @@ def build_root_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print effective configuration and exit",
     )
-    return parser
+    log_cfg = create_logger_config(parser.get_default("log_level"))
+    return parser, log_cfg
 
 
 def configure_logging(
@@ -145,6 +186,36 @@ def configure_logging(
         datefmt=datefmt,
         force=True,
     )
+
+
+def configure_logger(
+    cfg: LoggerConfig, *, fmt: str | None = None, datefmt: str | None = None
+) -> logging.Logger:
+    """Configure and return a logger based on ``cfg``.
+
+    Parameters
+    ----------
+    cfg:
+        Logging configuration containing ``run_id`` and ``level``.
+    fmt:
+        Optional message format.
+    datefmt:
+        Optional date format.
+
+    Returns
+    -------
+    logging.Logger
+        Configured logger instance.
+    """
+
+    numeric = getattr(logging, cfg.level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=numeric,
+        format=fmt or "%(levelname)s: %(message)s",
+        datefmt=datefmt,
+        force=True,
+    )
+    return logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -241,8 +312,11 @@ def apply_config_overrides(
 
 
 __all__ = [
+    "LoggerConfig",
+    "create_logger_config",
     "build_parser",
     "build_root_parser",
     "configure_logging",
+    "configure_logger",
     "apply_config_overrides",
 ]

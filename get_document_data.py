@@ -56,7 +56,8 @@ from library.table_quality import analyze_table_quality
 from library.cli import (
     apply_config_overrides,
     build_root_parser,
-    configure_logging,
+    configure_logger,
+    LoggerConfig,
 )
 from pandera.errors import SchemaErrors
 from schemas import DocumentsSchema, normalize_documents
@@ -574,16 +575,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     return exit_code
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the argument parser for document utilities.
 
     Returns
     -------
-    argparse.ArgumentParser
-        Parser populated with all sub-commands.
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        Parser populated with all sub-commands and logging configuration.
 
     """
-    root = build_root_parser()
+    root, log_cfg = build_root_parser()
     parser = argparse.ArgumentParser(
         description="Document data utilities", parents=[root]
     )
@@ -712,13 +713,16 @@ def build_parser() -> argparse.ArgumentParser:
         {"pubmed": pubmed, "chembl": chembl, "all": all_cmd},
     )
 
-    return parser
+    return parser, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
-    parser = build_parser()
+    parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    log_cfg.level = args.log_level
+    logger = configure_logger(log_cfg)
+    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     try:
@@ -727,16 +731,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if args.print_config:
             print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
+            )
             return 0
         ensure_dirs(cfg)
-        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
         return 1
-    return args.func(cfg, args)
+    exit_code = args.func(cfg, args)
+    if exit_code == 0:
+        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+    else:
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
