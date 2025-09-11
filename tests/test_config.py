@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from jsonschema import ValidationError
+from pydantic import ValidationError
 
 from library.cli import LoggerConfig, configure_logger
 from library.config import ConfigError, ensure_dirs, load_config
@@ -171,7 +171,7 @@ def test_doc_type_cli_override(tmp_path: Path) -> None:
 def test_type_validation(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text("api:\n  rps: fast\n")
-    with pytest.raises(TypeError, match="api.rps must be int"):
+    with pytest.raises(ValidationError, match="api.rps"):
         load_config(path)
 
 
@@ -205,7 +205,7 @@ def test_invalid_bool_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     path = tmp_path / "cfg.yaml"
     path.write_text("")
     monkeypatch.setenv("CHEMBL_DA__IO__EXIST_OK", "maybe")
-    with pytest.raises(ValueError, match="Invalid boolean value"):
+    with pytest.raises(ValidationError, match="Invalid boolean value"):
         load_config(path)
 
 
@@ -275,21 +275,21 @@ def test_user_agent_must_include_contact(tmp_path: Path) -> None:
         "openalex:\n  mailto: info@example.org\n"
         "crossref:\n  mailto: info@example.org\n"
     )
-    with pytest.raises(ValueError, match="user_agent"):
+    with pytest.raises(ValidationError, match="user_agent"):
         load_config(path)
 
 
 def test_openalex_mailto_required(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("openalex:\n  mailto: ''\ncrossref:\n  mailto: info@example.org\n")
-    with pytest.raises(ValueError, match="openalex.mailto"):
+    with pytest.raises(ValidationError, match="openalex.mailto"):
         load_config(path)
 
 
 def test_crossref_mailto_format(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("crossref:\n  mailto: not-an-email\n")
-    with pytest.raises(ValueError, match="crossref.mailto"):
+    with pytest.raises(ValidationError, match="crossref.mailto"):
         load_config(path)
 
 
@@ -309,7 +309,7 @@ def test_invalid_urls_raise(tmp_path: Path, snippet: str, match: str) -> None:
 
     path = tmp_path / "cfg.yaml"
     path.write_text(snippet)
-    with pytest.raises(ValueError, match=match):
+    with pytest.raises(ValidationError, match=match):
         load_config(path)
 
 
@@ -339,10 +339,10 @@ def test_log_level_valid(tmp_path: Path) -> None:
 def test_log_level_invalid(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("log:\n  level: verbose\n")
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValidationError) as exc:
         load_config(path)
     valid = ", ".join(sorted(logging.getLevelNamesMapping()))
-    assert str(exc.value) == f"log.level must be one of {valid}, got 'verbose'"
+    assert f"log.level must be one of {valid}, got 'verbose'" in str(exc.value)
 
 
 def test_log_level_valid_no_mapping(
@@ -365,8 +365,8 @@ def test_log_level_invalid_no_mapping(
     path = tmp_path / "cfg.yaml"
     path.write_text("log:\n  level: verbose\n")
     monkeypatch.delattr(logging, "getLevelNamesMapping", raising=False)
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValidationError) as exc:
         load_config(path)
     level_names = {name.upper(): level for name, level in logging._nameToLevel.items()}
     valid = ", ".join(sorted(level_names))
-    assert str(exc.value) == f"log.level must be one of {valid}, got 'verbose'"
+    assert f"log.level must be one of {valid}, got 'verbose'" in str(exc.value)
