@@ -31,7 +31,12 @@ from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
 from .log import logger
 from .rate_limiter import get_limiter
 
-_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+# Default session with placeholder user agent; callers should override via
+# :func:`init_session` with a configuration that provides their own contact
+# information.
+_session: Session = session_with_retry(
+    ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"), RetryCfg()
+)
 _session_lock = threading.Lock()
 
 

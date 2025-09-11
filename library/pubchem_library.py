@@ -20,7 +20,11 @@ from .rate_limiter import get_limiter
 
 _CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
 
-_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+# Shared session with placeholder user agent; production code should call
+# :func:`init_session` to supply real contact details.
+_session: Session = session_with_retry(
+    ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"), RetryCfg()
+)
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:

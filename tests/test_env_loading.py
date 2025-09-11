@@ -15,6 +15,9 @@ def test_env_file_overrides(tmp_path, monkeypatch) -> None:
     for line in env_path.read_text(encoding="utf8").splitlines():
         key, value = line.split("=", 1)
         monkeypatch.setenv(key, value)
+    monkeypatch.setenv(
+        "CHEMBL_DA__API__USER_AGENT", "test-agent/1.0 (mailto:test@example.org)"
+    )
 
     cfg = load_config(cfg_path)
     assert cfg.api.rps == 7

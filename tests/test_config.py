@@ -10,6 +10,15 @@ from library.cli import LoggerConfig, configure_logger
 from library.config import ConfigError, ensure_dirs, load_config
 
 
+@pytest.fixture(autouse=True)
+def _user_agent_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provide a default user agent for configuration loading."""
+
+    monkeypatch.setenv(
+        "CHEMBL_DA__API__USER_AGENT", "test-agent/1.0 (mailto:test@example.org)"
+    )
+
+
 def test_config_to_dict(tmp_path: Path) -> None:
     """``Config.to_dict`` should mirror :meth:`model_dump`."""
 
@@ -288,15 +297,46 @@ def test_yaml_error_includes_path(tmp_path: Path) -> None:
     assert "while parsing" in msg
 
 
-def test_user_agent_must_include_contact(tmp_path: Path) -> None:
+def test_user_agent_must_include_contact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text(
         "api:\n  user_agent: chembl-da/0.1\n"
         "openalex:\n  mailto: info@example.org\n"
         "crossref:\n  mailto: info@example.org\n"
     )
+    # Ensure the invalid YAML value is used rather than the environment
+    # override provided by the autouse fixture.
+    monkeypatch.delenv("CHEMBL_DA__API__USER_AGENT", raising=False)
     with pytest.raises(ValidationError, match="user_agent"):
         load_config(path)
+
+
+def test_user_agent_required_env_or_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Loading without a user agent should raise ``ConfigError``."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        "openalex:\n  mailto: info@example.org\ncrossref:\n  mailto: info@example.org\n"
+    )
+    monkeypatch.delenv("CHEMBL_DA__API__USER_AGENT", raising=False)
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+    monkeypatch.setenv(
+        "CHEMBL_DA__API__USER_AGENT", "cli-agent/1.0 (mailto:test@example.org)"
+    )
+    cfg = load_config(path)
+    assert cfg.api.user_agent == "cli-agent/1.0 (mailto:test@example.org)"
+
+    monkeypatch.delenv("CHEMBL_DA__API__USER_AGENT", raising=False)
+    cfg = load_config(
+        path, cli_overrides={"api.user_agent": "override/1 (mailto:me@example.org)"}
+    )
+    assert cfg.api.user_agent == "override/1 (mailto:me@example.org)"
 
 
 def test_openalex_mailto_required(tmp_path: Path) -> None:

@@ -6,6 +6,8 @@ import responses
 
 from library.config import ApiCfg, RetryCfg, session_with_retry
 
+USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
+
 
 @responses.activate
 def test_session_with_retry_retries_post() -> None:
@@ -15,7 +17,10 @@ def test_session_with_retry_retries_post() -> None:
     responses.add(responses.POST, url, status=500)
     responses.add(responses.POST, url, json={"ok": True}, status=200)
 
-    session = session_with_retry(ApiCfg(), RetryCfg(max_attempts=2, backoff_factor=0))
+    session = session_with_retry(
+        ApiCfg(user_agent=USER_AGENT),
+        RetryCfg(max_attempts=2, backoff_factor=0),
+    )
     response = session.post(url)
 
     assert response.status_code == 200
