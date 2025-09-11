@@ -6,12 +6,15 @@ parsing, validation, aggregation and export of tabular data.
 
 ## Installation
 
-Clone the repository and install the runtime and development dependencies:
+Clone the repository and install the runtime dependencies. Optional tooling for
+formatting, linting and type checking lives in ``requirements-dev.txt``:
 
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
 pip install -r requirements.txt
+# Development extras
+pip install -r requirements-dev.txt
 ```
 
 ## Project structure
@@ -326,10 +329,11 @@ in ``--out-dir``.
 
 ## Development
 
-Formatting, linting and type checking are handled by *black*, *ruff* and
-*mypy* respectively. Run the following before committing changes:
+Install the optional developer tools and then run formatting, linting and type
+checking via *black*, *ruff* and *mypy* respectively:
 
 ```bash
+pip install -r requirements-dev.txt
 black get_*.py library mapper_main.py table_quality_main.py
 ruff check get_*.py library mapper_main.py table_quality_main.py
 mypy get_*.py library mapper_main.py table_quality_main.py
