@@ -790,8 +790,14 @@ def _validate(cfg: Config) -> None:
     validator.validate(_serialize_paths(cfg.to_dict()))
 
     # Validate logging level (case-insensitive)
-    # Use public API introduced in Python 3.11 to map names to levels
-    level_names = logging.getLevelNamesMapping()
+    # ``logging.getLevelNamesMapping`` was added in Python 3.11. Fallback to the
+    # private ``logging._nameToLevel`` mapping for older versions.
+    try:
+        level_names = logging.getLevelNamesMapping()
+    except AttributeError:  # pragma: no cover - python <3.11 only
+        level_names = {
+            name.upper(): level for name, level in logging._nameToLevel.items()
+        }
     if cfg.log.level.upper() not in level_names:
         valid = ", ".join(sorted(level_names))
         raise ValueError(f"log.level must be one of {valid}, got {cfg.log.level!r}")
