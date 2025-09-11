@@ -16,6 +16,7 @@ from library.cli import LoggerConfig, configure_logger
 from library.cli_utils import build_parser
 from library.csv_utils import write_csv_deterministic
 from library.log import logger
+from library.parser_schema import CSVExportArgs
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -33,7 +34,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
 
     parser = build_parser()
-    args = parser.parse_args(argv)
+    ns = parser.parse_args(argv)
+    args = CSVExportArgs.model_validate(vars(ns))
     configure_logger(LoggerConfig(level=args.log_level))
 
     start = time.perf_counter()
@@ -46,6 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output,
         col_order=args.col_order or None,
         key_cols=args.key_cols or None,
+        drop_unexpected_cols=True,
     )
     elapsed = time.perf_counter() - start
     logger.info("written %s", output)
