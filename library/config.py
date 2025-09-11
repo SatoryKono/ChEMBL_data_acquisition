@@ -805,6 +805,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             "required": ["weights", "thresholds"],
             "additionalProperties": False,
         },
+
         "resources": {
             "type": "object",
             "properties": {
