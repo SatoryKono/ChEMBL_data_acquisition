@@ -21,11 +21,6 @@ def test_classify_dataframe_basic() -> None:
         }
     )
 
-    result = classify_dataframe(
-        df,
-        min_review_score=1,
-        min_unknown_score=1,
-        min_experimental_score=1,
-    )
+    result = classify_dataframe(df)
 
     assert result.loc[0, "class_label"] == "review"
