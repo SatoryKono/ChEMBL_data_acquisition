@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Iterator
 
-import time
-
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .config import ApiCfg
+from .rate_limiter import rate_limiter
 from .log import logger
 
 _CACHE: Dict[str, dict[str, Any]] = {}
@@ -86,7 +85,7 @@ def request_json(
                         "request_fail", extra={"stage": "request_fail", "url": url}
                     )
                     raise
-                time.sleep(cfg.backoff_factor * attempt)
+                rate_limiter.wait(cfg.backoff_factor * attempt)
     raise requests.RequestException(f"request_json failed for url: {url}")
 
 

@@ -10,7 +10,6 @@ import argparse
 import csv
 import json
 import sys
-import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -21,6 +20,7 @@ from urllib.parse import quote
 from .log import logger
 
 from .config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
+from .rate_limiter import rate_limiter
 
 
 def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str]:
@@ -101,8 +101,7 @@ def _do_request(
     for attempt in range(retries + 1):
         event = "request_start" if attempt == 0 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt + 1})
-        if attempt:
-            time.sleep(sleep * attempt)
+        rate_limiter.wait(sleep * (attempt or 1))
 
         try:
             if method.upper() == "POST":
@@ -651,7 +650,6 @@ def fetch_openalex(
     """
 
     delay = 1 / cfg.rps if cfg.rps else 0
-    time.sleep(delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
@@ -727,7 +725,6 @@ def fetch_crossref(
         }
 
     delay = 1 / cfg.rps if cfg.rps else 0
-    time.sleep(delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)

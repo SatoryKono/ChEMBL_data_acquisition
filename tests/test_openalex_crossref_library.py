@@ -16,8 +16,6 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
         return {}, ""
 
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
-    sleeps: list[float] = []
-    monkeypatch.setattr("library.pubmed_library.time.sleep", lambda s: sleeps.append(s))
 
     cfg = OpenAlexCfg(
         base="https://example.org",
@@ -30,7 +28,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     ocl.fetch_openalex(requests.Session(), "123", cfg)
     assert called["url"] == "https://example.org/works/pmid:123?mailto=x%40y.com"
     assert called["timeout"] == (1, 2)
-    assert sleeps and sleeps[0] == pytest.approx(0.5)
+    assert called["sleep"] == pytest.approx(0.5)
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
@@ -44,8 +42,6 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
         return {}, ""
 
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
-    sleeps: list[float] = []
-    monkeypatch.setattr("library.pubmed_library.time.sleep", lambda s: sleeps.append(s))
 
     cfg = CrossRefCfg(
         base="https://cr.example.org",
@@ -58,4 +54,4 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg)
     assert called["url"] == "https://cr.example.org/works/10.1%2Fabc?mailto=z%40e.com"
     assert called["timeout"] == (1, 2)
-    assert sleeps and sleeps[0] == pytest.approx(0.25)
+    assert called["sleep"] == pytest.approx(0.25)
