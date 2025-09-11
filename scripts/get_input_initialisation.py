@@ -18,7 +18,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from library import input_initialisation_library as lib
+from library import input_initialisation_library  as lib
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
