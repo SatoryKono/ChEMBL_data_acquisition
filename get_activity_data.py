@@ -11,7 +11,7 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
-from library import io, write_csv_deterministic
+from library import io
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -27,8 +27,6 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import ActivitiesSchema, normalize_activities
-
-ORIG_WRITE_CSV = io.write_csv
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -120,27 +118,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["activity_id"] if c in df.columns]
-        csv_path = write_csv_deterministic(
+        csv_path = io.write_csv(
             df,
             output,
-            col_order=[
-                "activity_id",
-                "testitem_id",
-                "target_id",
-                "standard_type",
-                "standard_value",
-                "pA_value",
-            ],
+            cfg=cfg,
             key_cols=key_cols or None,
         )
-        if io.write_csv is not ORIG_WRITE_CSV:
-            io.write_csv(
-                df,
-                output,
-                cfg=cfg,
-                sep=cfg.io.csv_sep,
-                encoding=cfg.io.csv_encoding,
-            )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)

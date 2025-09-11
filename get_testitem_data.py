@@ -11,7 +11,7 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
-from library import io, write_csv_deterministic
+from library import io
 from library import pubchem_library as pl
 from library.chembl_client import ChemblClient
 from library.cli import (
@@ -178,18 +178,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["salt_chembl_id"] if c in df.columns]
-        csv_path = write_csv_deterministic(
+        csv_path = io.write_csv(
             df,
             output,
-            col_order=[
-                "salt_chembl_id",
-                "molecule_chembl_id",
-                "molecule_type",
-                "chirality",
-                "mw_freebase",
-                "num_ro5_violations",
-                "is_radical",
-            ],
+            cfg=cfg,
             key_cols=key_cols or None,
         )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)

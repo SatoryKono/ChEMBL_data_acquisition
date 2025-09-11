@@ -35,7 +35,7 @@ from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
 from library import document_postprocessing as dp
-from library import io, write_csv_deterministic
+from library import io
 from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
@@ -215,18 +215,10 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         rows_kept = len(df)
         rows_dropped = rows_total - rows_kept
         key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-        csv_path = write_csv_deterministic(
+        csv_path = io.write_csv(
             df,
             output,
-            col_order=[
-                "document_chembl_id",
-                "doi",
-                "title",
-                "year",
-                "month",
-                "day",
-                "citation",
-            ],
+            cfg=cfg,
             key_cols=key_cols or None,
         )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)
@@ -320,18 +312,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-        csv_path = write_csv_deterministic(
+        csv_path = io.write_csv(
             df,
             output,
-            col_order=[
-                "document_chembl_id",
-                "doi",
-                "title",
-                "year",
-                "month",
-                "day",
-                "citation",
-            ],
+            cfg=cfg,
             key_cols=key_cols or None,
         )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)
@@ -431,18 +415,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         rows_dropped = rows_total - rows_kept
         try:
             key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
-            csv_path = write_csv_deterministic(
+            csv_path = io.write_csv(
                 processed,
                 output,
-                col_order=[
-                    "document_chembl_id",
-                    "doi",
-                    "title",
-                    "year",
-                    "month",
-                    "day",
-                    "citation",
-                ],
+                cfg=cfg,
                 key_cols=key_cols or None,
             )
             logger.info("Wrote %d rows to %s", rows_kept, csv_path)
@@ -526,18 +502,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
-        csv_path = write_csv_deterministic(
+        csv_path = io.write_csv(
             processed,
             output,
-            col_order=[
-                "document_chembl_id",
-                "doi",
-                "title",
-                "year",
-                "month",
-                "day",
-                "citation",
-            ],
+            cfg=cfg,
             key_cols=key_cols or None,
         )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)
