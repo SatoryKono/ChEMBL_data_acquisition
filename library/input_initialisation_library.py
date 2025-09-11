@@ -465,7 +465,6 @@ def process_activity_table(
         )
         raise FileNotFoundError(msg)
 
-
     targets = pd.read_csv(
         targets_path,
         dtype={
