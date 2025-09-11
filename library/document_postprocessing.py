@@ -7,14 +7,13 @@ translation of a Power Query script into ``pandas`` operations.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 
 from . import validation
 from .config import IoCfg
-
 
 # Columns that should be treated as text
 TEXT_COLUMNS: list[str] = [

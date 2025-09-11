@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pandera import Check, Column, DataFrameSchema
 
-
 DocumentsSchema: DataFrameSchema = DataFrameSchema(
     {
         "document_chembl_id": Column(str, required=True),

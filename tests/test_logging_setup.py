@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any
 
 import pytest
-import threading
 
 from library.logging_setup import LoggerConfig, configure_logger
 

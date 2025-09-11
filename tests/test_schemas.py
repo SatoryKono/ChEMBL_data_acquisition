@@ -6,10 +6,12 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from pandera.errors import SchemaError, SchemaErrors
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
+from pandera.errors import SchemaError, SchemaErrors
 
+from library.normalization import normalize_activities
 from schemas import (
     ActivitiesSchema,
     AssaysSchema,
@@ -17,7 +19,6 @@ from schemas import (
     TargetsSchema,
     TestitemsSchema,
 )
-from library.normalization import normalize_activities
 
 
 def test_activities_schema_validation() -> None:

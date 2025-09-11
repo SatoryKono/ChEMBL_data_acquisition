@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
+import argparse
 import io
 import json
-import argparse
+from pathlib import Path
 
-from library.cli import LoggerConfig, configure_logger
 import get_activity_data as gad
+from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 
 

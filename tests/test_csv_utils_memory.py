@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import multiprocessing as mp
 import time
 from pathlib import Path
-import multiprocessing as mp
 
 import pandas as pd
 import psutil

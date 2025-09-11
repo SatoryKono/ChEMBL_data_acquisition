@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, cast
+from typing import Any, cast
 
-import requests
 import pytest
+import requests
 
-from library import pubmed_library as pl
 import library.rate_limiter as rl
+from library import pubmed_library as pl
 from library.config import (
     Config,
     CrossRefCfg,
@@ -17,7 +17,6 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
 )
-
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -38,13 +37,13 @@ def test_read_pmids_missing_column(tmp_path: Path) -> None:
 
 class DummyResponse:
     def __init__(
-        self, status: int, text: str = "", json_data: Dict[str, Any] | None = None
+        self, status: int, text: str = "", json_data: dict[str, Any] | None = None
     ) -> None:
         self.status_code = status
         self._text = text
         self._json = json_data
 
-    def __enter__(self) -> "DummyResponse":
+    def __enter__(self) -> DummyResponse:
         return self
 
     def __exit__(
@@ -56,7 +55,7 @@ class DummyResponse:
     def text(self) -> str:
         return self._text
 
-    def json(self) -> Dict[str, Any]:
+    def json(self) -> dict[str, Any]:
         if self._json is None:
             raise ValueError("no json")
         return self._json
@@ -105,7 +104,7 @@ def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
         retries=4,
         encodings=["utf-8"],
     )
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     def fake_do_request(
         session,
@@ -151,7 +150,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
         )
     )
 
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     def fake_do_request(
         session,
@@ -210,7 +209,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
         )
     )
 
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     def fake_do_request(
         session,
@@ -259,7 +258,7 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch) -> None:
         retries=4,
         encodings=["utf-8"],
     )
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     def fake_do_request(
         session,

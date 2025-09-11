@@ -3,7 +3,6 @@ import pytest
 import requests
 import responses
 
-
 from library import iuphar_library as ii
 from library.config import IupharCfg, RetryCfg
 

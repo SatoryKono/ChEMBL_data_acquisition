@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
-import shutil
 import yaml
 
 from library.metadata import Stats, write_meta_yaml

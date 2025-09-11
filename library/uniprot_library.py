@@ -36,16 +36,16 @@ from __future__ import annotations
 
 import csv
 import json
-from .log import logger
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Set
+from typing import Any
 
 import requests
 from requests import Session
 
 from .config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
+from .log import logger
 from .rate_limiter import get_limiter, sleep
-
 
 _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 
@@ -85,7 +85,7 @@ class UniProtFetchError(RuntimeError):
     """Raised when a UniProt record cannot be retrieved or decoded."""
 
 
-def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
+def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
     """Fetch a UniProt JSON record from the public REST API.
 
     Parameters
@@ -127,11 +127,11 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
         ) from exc
 
 
-def _collect_name_fields(name_obj: Dict[str, Any]) -> Iterable[str]:
+def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
     """Yield all full and short names from a UniProt name object."""
     if not isinstance(name_obj, dict):
         return []
-    names: List[str] = []
+    names: list[str] = []
     full = name_obj.get("fullName")
     if isinstance(full, dict):
         value = full.get("value")
@@ -151,8 +151,8 @@ def _collect_name_fields(name_obj: Dict[str, Any]) -> Iterable[str]:
     return names
 
 
-def _extract_protein_names(desc: Dict[str, Any]) -> Set[str]:
-    names: Set[str] = set()
+def _extract_protein_names(desc: dict[str, Any]) -> set[str]:
+    names: set[str] = set()
     if not isinstance(desc, dict):
         return names
     rec = desc.get("recommendedName")
@@ -165,8 +165,8 @@ def _extract_protein_names(desc: Dict[str, Any]) -> Set[str]:
     return names
 
 
-def _extract_gene_names(entry: Dict[str, Any]) -> Set[str]:
-    names: Set[str] = set()
+def _extract_gene_names(entry: dict[str, Any]) -> set[str]:
+    names: set[str] = set()
     for gene in entry.get("genes", []):
         if not isinstance(gene, dict):
             continue
@@ -183,7 +183,7 @@ def _extract_gene_names(entry: Dict[str, Any]) -> Set[str]:
     return names
 
 
-def extract_names(data: Any) -> Set[str]:
+def extract_names(data: Any) -> set[str]:
     """Return all protein and gene names found in ``data``.
 
     Args:
@@ -194,7 +194,7 @@ def extract_names(data: Any) -> Set[str]:
         A set of name strings aggregated from protein and gene sections.
 
     """
-    names: Set[str] = set()
+    names: set[str] = set()
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -209,7 +209,7 @@ def extract_names(data: Any) -> Set[str]:
     return names
 
 
-def extract_organism(data: Any) -> Dict[str, str]:
+def extract_organism(data: Any) -> dict[str, str]:
     """Return organism taxonomy information for the entry in ``data``.
 
     Args:
@@ -284,7 +284,7 @@ def extract_uniprotkb_id(data: Any) -> str | None:
     return None
 
 
-def extract_secondary_accessions(data: Any) -> List[str]:
+def extract_secondary_accessions(data: Any) -> list[str]:
     """Return secondary accession IDs from ``data``.
 
     Args:
@@ -416,7 +416,7 @@ def extract_names_for_secondary_accessions(data: Any, *, cfg: UniprotCfg) -> str
         Pipe-separated protein names for all secondary accessions.
 
     """
-    names: Set[str] = set()
+    names: set[str] = set()
     for acc in extract_secondary_accessions(data):
         try:
             entry = fetch_uniprot(acc, cfg=cfg)
@@ -429,11 +429,11 @@ def extract_names_for_secondary_accessions(data: Any, *, cfg: UniprotCfg) -> str
     return "|".join(sorted(names))
 
 
-def _collect_ec_numbers(name_obj: Dict[str, Any]) -> Iterable[str]:
+def _collect_ec_numbers(name_obj: dict[str, Any]) -> Iterable[str]:
     """Yield EC numbers from a UniProt name object."""
     if not isinstance(name_obj, dict):
         return []
-    numbers: List[str] = []
+    numbers: list[str] = []
     ec = name_obj.get("ecNumbers") or name_obj.get("ecNumber")
     if isinstance(ec, list):
         for item in ec:
@@ -452,7 +452,7 @@ def _collect_ec_numbers(name_obj: Dict[str, Any]) -> Iterable[str]:
     return numbers
 
 
-def extract_keywords(data: Any) -> Dict[str, Any]:
+def extract_keywords(data: Any) -> dict[str, Any]:
     """Return keyword and feature information found in ``data``.
 
     The function gathers functional keywords, EC numbers, subcellular
@@ -471,7 +471,7 @@ def extract_keywords(data: Any) -> Dict[str, Any]:
         booleans.
 
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "molecular_function": set(),
         "cellular_component": set(),
         "ec_numbers": set(),
@@ -555,7 +555,7 @@ def extract_keywords(data: Any) -> Dict[str, Any]:
     return result
 
 
-def extract_ptm(data: Any) -> Dict[str, bool]:
+def extract_ptm(data: Any) -> dict[str, bool]:
     """Return post-translational modification flags found in ``data``.
 
     Args:
@@ -582,7 +582,7 @@ def extract_ptm(data: Any) -> Dict[str, bool]:
         "propeptide": "PROPEPTIDE",
         "transmembrane": "TRANSMEMBRANE",
     }
-    result: Dict[str, bool] = {key: False for key in feature_map}
+    result: dict[str, bool] = {key: False for key in feature_map}
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -608,7 +608,7 @@ def extract_ptm(data: Any) -> Dict[str, bool]:
     return result
 
 
-def extract_isoform(data: Any) -> Dict[str, str]:
+def extract_isoform(data: Any) -> dict[str, str]:
     """Return isoform information found in ``data``.
 
     The function inspects ``ALTERNATIVE PRODUCTS`` comments and gathers the
@@ -626,9 +626,9 @@ def extract_isoform(data: Any) -> Dict[str, str]:
         ``isoform_synonyms`` mapping to pipe separated strings.
 
     """
-    names: List[str] = []
-    ids: List[str] = []
-    syns: List[str] = []
+    names: list[str] = []
+    ids: list[str] = []
+    syns: list[str] = []
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -660,13 +660,13 @@ def extract_isoform(data: Any) -> Dict[str, str]:
                 if isinstance(name, str):
                     names.append(name)
                 # IDs
-                iso_ids: List[str] = []
+                iso_ids: list[str] = []
                 for iid in iso.get("isoformIds", []) or []:
                     if isinstance(iid, str):
                         iso_ids.append(iid)
                 ids.append(":".join(iso_ids) if iso_ids else "N/A")
                 # Synonyms
-                syn_list: List[str] = []
+                syn_list: list[str] = []
                 for syn in iso.get("synonyms", []) or []:
                     if isinstance(syn, dict):
                         value = syn.get("value")
@@ -681,7 +681,7 @@ def extract_isoform(data: Any) -> Dict[str, str]:
     return result
 
 
-def extract_crossrefs(data: Any) -> Dict[str, str]:
+def extract_crossrefs(data: Any) -> dict[str, str]:
     """Return cross-reference identifiers for selected databases.
 
     The UniProt record contains a list of cross references for many external
@@ -711,7 +711,7 @@ def extract_crossrefs(data: Any) -> Dict[str, str]:
         "PRINTS",
         "TCDB",
     ]
-    result: Dict[str, List[str]] = {db: [] for db in dbs}
+    result: dict[str, list[str]] = {db: [] for db in dbs}
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -740,7 +740,7 @@ def extract_crossrefs(data: Any) -> Dict[str, str]:
     return {db: "|".join(ids) for db, ids in result.items()}
 
 
-def extract_activity(data: Any) -> Dict[str, str]:
+def extract_activity(data: Any) -> dict[str, str]:
     """Return catalytic reaction names and EC numbers found in ``data``.
 
     The UniProt record may list one or more "CATALYTIC ACTIVITY" comments,
@@ -756,8 +756,8 @@ def extract_activity(data: Any) -> Dict[str, str]:
         Missing information yields empty strings.
 
     """
-    reactions: List[str] = []
-    numbers: List[str] = []
+    reactions: list[str] = []
+    numbers: list[str] = []
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -825,7 +825,7 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
 
 def collect_info(
     uid: str, data_dir: Path | str | None = None, *, cfg: UniprotCfg
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return names, organism, keyword, PTM, isoform, cross-ref, and activity data for ``uid``.
 
     Parameters
@@ -892,7 +892,7 @@ def collect_info(
         "secondaryAccessionNames": "",
     }
     try:
-        with open(json_path, "r", encoding="utf-8") as handle:
+        with open(json_path, encoding="utf-8") as handle:
             data = json.load(handle)
     except FileNotFoundError:
         logger.info("downloading UniProt JSON for %s", uid)

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import tracemalloc
 from collections import deque
 from pathlib import Path
-import tracemalloc
 
 from library import io
 from library.config import IoCfg

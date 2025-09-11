@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Iterable, Iterator, cast
-
 import random
 import threading
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field
+from typing import Any, cast
+
 import requests
+from cachetools import TTLCache  # type: ignore[import-untyped]
 from requests import Session
 
-from cachetools import TTLCache  # type: ignore[import-untyped]
-
 from .config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
-from .rate_limiter import get_limiter, sleep
 from .log import logger
+from .rate_limiter import get_limiter, sleep
 
 
 @dataclass

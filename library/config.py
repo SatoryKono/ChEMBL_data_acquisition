@@ -23,22 +23,21 @@ appropriate built-in exceptions during validation.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass
 import logging
-
-from .log import logger
 import os
 import re
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from urllib.parse import urlparse
 
-import yaml
 import jsonschema
+import yaml
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .log import logger
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
@@ -182,7 +181,7 @@ class PubMedCfg:
     timeout_connect: int = 5
     timeout_read: int = 10
     retries: int = 2
-    encodings: List[str] = field(
+    encodings: list[str] = field(
         default_factory=lambda: ["utf-8-sig", "cp1251", "latin1"]
     )
 
@@ -195,17 +194,17 @@ class SemanticScholarCfg:
     timeout_connect: int = 5
     timeout_read: int = 10
     retries: int = 2
-    encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
+    encodings: list[str] = field(default_factory=lambda: ["utf-8-sig"])
 
 
 @dataclass
 class DocTypeCfg:
     """Settings for document type classification."""
 
-    weights: Dict[str, int] = field(
+    weights: dict[str, int] = field(
         default_factory=lambda: {"pubmed": 4, "openalex": 3, "scholar": 2}
     )
-    thresholds: Dict[str, int] = field(
+    thresholds: dict[str, int] = field(
         default_factory=lambda: {"review": 1, "experimental": 1, "unknown": 2}
     )
 
@@ -305,7 +304,7 @@ class RetryCfg:
 
     max_attempts: int = 3
     backoff_factor: float = 0.5
-    status_forcelist: List[int] = field(
+    status_forcelist: list[int] = field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
 
@@ -494,7 +493,7 @@ class Config:
     retry: RetryCfg = field(default_factory=RetryCfg)
     log: LogCfg = field(default_factory=LogCfg)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Return the configuration as a plain dictionary."""
 
         return asdict(self)
@@ -540,10 +539,10 @@ def _coerce(value: str, current: Any) -> Any:
 
 def _update_from_dict(
     obj: Any,
-    data: Dict[str, Any],
-    path: List[str] | None = None,
+    data: dict[str, Any],
+    path: list[str] | None = None,
     *,
-    unknown_keys: List[str] | None = None,
+    unknown_keys: list[str] | None = None,
 ) -> None:
     """Recursively update dataclass ``obj`` with ``data`` validating types.
 
@@ -587,7 +586,7 @@ def _update_from_dict(
         setattr(obj, key, val)
 
 
-def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
+def _set_by_path(cfg: Config, path: list[str], value: Any) -> None:
     """Set ``value`` at ``path`` inside ``cfg`` with type coercion."""
 
     obj: Any = cfg
@@ -627,7 +626,7 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
         setattr(obj, field_name, value)
 
 
-_ALIAS_MAP: Dict[str, List[str]] = {
+_ALIAS_MAP: dict[str, list[str]] = {
     "CHEMBL_DA_RPS": ["api", "rps"],
     "CHEMBL_DA_BURST": ["api", "burst"],
     "CHEMBL_DA_BASE": ["api", "chembl_base"],
@@ -742,7 +741,7 @@ def _mask_secrets(data: Any) -> Any:
 
     secret_tokens = {"key", "token", "secret", "password"}
     if isinstance(data, dict):
-        masked: Dict[str, Any] = {}
+        masked: dict[str, Any] = {}
         for k, v in data.items():
             if any(tok in k.lower() for tok in secret_tokens):
                 masked[k] = "***"
@@ -769,7 +768,7 @@ def print_config(cfg: Config) -> None:
 
 
 # JSON schema describing the configuration structure.
-CONFIG_SCHEMA: Dict[str, Any] = {
+CONFIG_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "api": {
@@ -1465,7 +1464,7 @@ def ensure_dirs(cfg: Config) -> None:
 
 def load_config(
     path: str | Path = "config.yaml",
-    cli_overrides: Dict[str, Any] | None = None,
+    cli_overrides: dict[str, Any] | None = None,
     *,
     strict: bool = False,
 ) -> Config:
@@ -1498,7 +1497,7 @@ def load_config(
     """
 
     cfg = Config()
-    unknown_keys: List[str] = []
+    unknown_keys: list[str] = []
     try:
         with Path(path).open("r", encoding="utf8") as fh:
             data = yaml.safe_load(fh) or {}

@@ -8,23 +8,20 @@ command line utilities.
 from __future__ import annotations
 
 import csv
-from datetime import datetime
-from pathlib import Path
-
-from typing import Any, Hashable, Iterable, Iterator, Mapping, Sequence
 import subprocess
 import sys
-import yaml
-
+from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
+import yaml
 from pandera import DataFrameModel, DataFrameSchema
 
 from . import validation
-
 from .config import Config, IoCfg, _serialize_paths
 from .csv_utils import write_csv_deterministic
-
 from .log import logger
 
 

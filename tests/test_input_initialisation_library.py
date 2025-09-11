@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-import pandas as pd
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from library.input_initialisation_library import (
-    _ensure_openpyxl,
-    TableDict,
-    append_entities,
-    generate_pair_entity_tables,
-    build_combined_tables,
-    unify_dtypes,
-    save_tables,
-    process_activity_table,
-)
 import library.input_initialisation_library as lib
 from library.config import Config
+from library.input_initialisation_library import (
+    TableDict,
+    _ensure_openpyxl,
+    append_entities,
+    build_combined_tables,
+    generate_pair_entity_tables,
+    process_activity_table,
+    save_tables,
+    unify_dtypes,
+)
 
 
 def test_unify_dtypes_basic() -> None:

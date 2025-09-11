@@ -10,19 +10,20 @@ Exports pair tables without merging:
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
-
-from library.config import Config, ensure_dirs, print_config
-from library.cli import (
-    apply_config_overrides,
-    build_parser as base_parser,
-    configure_logger,
-    LoggerConfig,
-)
-from library.log import logger
 
 from library import input_initialisation_library as lib
+from library.cli import (
+    LoggerConfig,
+    apply_config_overrides,
+    configure_logger,
+)
+from library.cli import (
+    build_parser as base_parser,
+)
+from library.config import Config, ensure_dirs, print_config
+from library.log import logger
 from library.table_quality import analyze_table_quality
 
 

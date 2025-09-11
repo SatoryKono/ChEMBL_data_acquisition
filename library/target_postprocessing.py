@@ -6,14 +6,13 @@ merged target information produced by :mod:`get_target_data`.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 
 from .config import Config, IoCfg
 from .log import logger
-
 
 # Columns removed in the final export
 REMOVE_COLUMNS: list[str] = [

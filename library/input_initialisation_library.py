@@ -6,16 +6,16 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Literal, Mapping
-from .log import logger
+from typing import Any, Literal
 
 import pandas as pd
 
 from .config import Config
 from .io import write_csv
-
+from .log import logger
 
 EntityName = Literal[
     "activity",
@@ -30,7 +30,7 @@ EntityName = Literal[
 # Mapping of entity names to their corresponding dataframes.  The dictionary
 # may contain additional keys such as ``"activity_status"`` produced during
 # processing, hence the generic ``str`` key type.
-TableDict = Dict[str, pd.DataFrame]
+TableDict = dict[str, pd.DataFrame]
 
 
 # Mapping of sheet names to entity identifiers
@@ -735,9 +735,9 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
             return pd.NA
         if isinstance(value, str):
             value = value.strip().lower()
-        if value in {True, 1, "1", "true", "t"}:
+        if value in {True, "1", "true", "t"}:
             return True
-        if value in {False, 0, "0", "false", "f"}:
+        if value in {False, "0", "false", "f"}:
             return False
         raise ValueError(f"invalid boolean value: {value}")
 
@@ -811,7 +811,7 @@ def generate_pair_entity_tables(
         logger.warning("'activity' table missing column 'activity_chembl_id'")
         return result
 
-    entity_cols: Dict[str, str] = {
+    entity_cols: dict[str, str] = {
         "assay": "assay_chembl_id",
         "document": "document_chembl_id",
         "target": "target_chembl_id",
@@ -1097,7 +1097,7 @@ def save_tables(
     out_dir: Path,
     cfg: Config,
     fmt: str = "csv",
-) -> Dict[str, Path]:
+) -> dict[str, Path]:
     """Persist combined tables to ``out_dir``.
 
     Parameters
@@ -1119,7 +1119,7 @@ def save_tables(
     if fmt != "csv":
         raise ValueError("only csv output is supported")
 
-    paths: Dict[str, Path] = {}
+    paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
         if entity.endswith("_non_independent_status"):
@@ -1167,8 +1167,8 @@ class StatusAPI:
     table: pd.DataFrame
     status_list: list[str]
     conditions: list[str]
-    order_map: Dict[str, int]
-    score_map: Dict[str, int]
+    order_map: dict[str, int]
+    score_map: dict[str, int]
 
     def pair(self, s1: str, s2: str) -> str:
         """Return the lower-ranked status between ``s1`` and ``s2``.
@@ -1453,8 +1453,8 @@ def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
         .unique()
         .tolist()
     )
-    order_map = dict(zip(status_df["status"], status_df["order"]))
-    score_map = dict(zip(status_df["status"], status_df["score"]))
+    order_map = dict(zip(status_df["status"], status_df["order"], strict=False))
+    score_map = dict(zip(status_df["status"], status_df["score"], strict=False))
     return StatusAPI(status_df, status_list, conditions, order_map, score_map)
 
 
@@ -1483,7 +1483,9 @@ def initialize_activity_status(
 
     # Map condition fields to their corresponding status and order
     cond_rows = status_api.table[status_api.table["condition_value"] != "null"]
-    field_to_status = dict(zip(cond_rows["condition_field"], cond_rows["status"]))
+    field_to_status = dict(
+        zip(cond_rows["condition_field"], cond_rows["status"], strict=False)
+    )
     order_to_status = {v: k for k, v in status_api.order_map.items()}
     default_order = status_api.order_map[status_api.status_list[-1]]
 
@@ -1584,7 +1586,7 @@ def _aggregate_entity(
 
 def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
-) -> Dict[str, pd.DataFrame]:
+) -> dict[str, pd.DataFrame]:
     """Aggregate status metrics across entities.
 
     The function combines activity pair information with per-activity
