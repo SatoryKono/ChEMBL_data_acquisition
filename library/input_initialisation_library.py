@@ -447,7 +447,6 @@ def process_activity_table(
     )
 
     # --- target types ------------------------------------------------------
-    targets_path = Path(dictionary_dir) / "targets_type.csv"
 
     targets = pd.read_csv(
         targets_path,
