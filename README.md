@@ -72,6 +72,17 @@ tokens should be stored in a local ``.env`` file – see
    The suite exercises the library modules using fixtures from
    ``tests/data``.
 
+
+## Генерация данных
+
+Скрипты из каталога `scripts/` создают CSV-файлы и сохраняют их в `data/output/`. Пример:
+
+```bash
+python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
+```
+
+Результирующие файлы располагаются в `data/output/`. Каталог игнорируется Git и автоматически публикуется как артефакт CI.
+
 ## Usage
 
 The examples below illustrate how to run the main CLI tools with common
