@@ -14,6 +14,10 @@ def _create_config(tmp_path: Path) -> Path:
         "io:\n  csv_sep: '|'\n  csv_encoding: iso-8859-1\n"
         "log:\n  level: INFO\n"
         "api:\n  timeout_read: 30\n"
+        "resources:\n"
+        "  dictionary_dir: dictionary\n"
+        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
     )
     return cfg
 

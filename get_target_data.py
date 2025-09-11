@@ -192,14 +192,20 @@ def build_parser() -> argparse.ArgumentParser:
     iuphar.add_argument(
         "--target-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_target.csv"),
-        help="Path to the _IUPHAR_target.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_target.csv file "
+            "(default: config resources.iuphar_target_csv)"
+        ),
     )
     iuphar.add_argument(
         "--family-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
-        help="Path to the _IUPHAR_family.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_family.csv file "
+            "(default: config resources.iuphar_family_csv)"
+        ),
     )
     iuphar.add_argument("--sep", default=",", help="CSV delimiter for I/O")
     iuphar.add_argument(
@@ -257,14 +263,20 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument(
         "--target-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_target.csv"),
-        help="Path to the _IUPHAR_target.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_target.csv file "
+            "(default: config resources.iuphar_target_csv)"
+        ),
     )
     all_cmd.add_argument(
         "--family-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
-        help="Path to the _IUPHAR_family.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_family.csv file "
+            "(default: config resources.iuphar_family_csv)"
+        ),
     )
     all_cmd.add_argument(
         "--timeout",
@@ -649,7 +661,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparser = subparser_map.get(args.command, parser)
     try:
         cfg: Config = apply_config_overrides(
-            args, subparser, args.config, mapping={"timeout": "api.timeout_read"}
+            args,
+            subparser,
+            args.config,
+            mapping={
+                "timeout": "api.timeout_read",
+                "target_csv": "resources.iuphar_target_csv",
+                "family_csv": "resources.iuphar_family_csv",
+            },
         )
         if args.print_config:
             print_config(cfg)

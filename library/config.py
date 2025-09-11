@@ -155,6 +155,15 @@ class PubChemCfg:
 
 
 @dataclass
+class ResourcesCfg:
+    """Paths to static resource files used by the application."""
+
+    dictionary_dir: Path = Path("dictionary")
+    iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
+    iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+
+
+@dataclass
 class IoCfg:
     """Input/output defaults."""
 
@@ -251,6 +260,7 @@ class Config:
     uniprot: UniprotCfg = field(default_factory=UniprotCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
+    resources: ResourcesCfg = field(default_factory=ResourcesCfg)
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -416,6 +426,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
+    "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
+    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
+    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -643,6 +656,20 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+        "resources": {
+            "type": "object",
+            "properties": {
+                "dictionary_dir": {"type": "string", "minLength": 1},
+                "iuphar_target_csv": {"type": "string", "minLength": 1},
+                "iuphar_family_csv": {"type": "string", "minLength": 1},
+            },
+            "required": [
+                "dictionary_dir",
+                "iuphar_target_csv",
+                "iuphar_family_csv",
+            ],
+            "additionalProperties": False,
+        },
         "io": {
             "type": "object",
             "properties": {
@@ -766,6 +793,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "uniprot",
         "iuphar",
         "pubchem",
+        "resources",
         "io",
         "jobs",
         "batch",
@@ -963,6 +991,7 @@ __all__ = [
     "UniprotCfg",
     "IupharCfg",
     "PubChemCfg",
+    "ResourcesCfg",
     "IoCfg",
     "JobsCfg",
     "BatchCfg",
