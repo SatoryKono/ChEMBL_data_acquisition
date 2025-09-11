@@ -131,6 +131,15 @@ class UniprotCfg:
 
 
 @dataclass
+class UniprotMappingCfg:
+    """Settings for the UniProt ID Mapping API."""
+
+    base: str = "https://rest.uniprot.org/idmapping"
+    poll_interval: float = 0.5
+    timeout: float = 300.0
+
+
+@dataclass
 class IupharCfg:
     """Settings for the IUPHAR API."""
 
@@ -249,6 +258,7 @@ class Config:
     openalex: OpenAlexCfg = field(default_factory=OpenAlexCfg)
     crossref: CrossRefCfg = field(default_factory=CrossRefCfg)
     uniprot: UniprotCfg = field(default_factory=UniprotCfg)
+    uniprot_mapping: UniprotMappingCfg = field(default_factory=UniprotMappingCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
     io: IoCfg = field(default_factory=IoCfg)
@@ -404,6 +414,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_UNIPROT_TIMEOUT_READ": ["uniprot", "timeout_read"],
     "CHEMBL_DA_UNIPROT_RPS": ["uniprot", "rps"],
     "CHEMBL_DA_UNIPROT_BURST": ["uniprot", "burst"],
+    "CHEMBL_DA_UNIPROT_MAPPING_BASE": ["uniprot_mapping", "base"],
+    "CHEMBL_DA_UNIPROT_MAPPING_POLL_INTERVAL": ["uniprot_mapping", "poll_interval"],
+    "CHEMBL_DA_UNIPROT_MAPPING_TIMEOUT": ["uniprot_mapping", "timeout"],
     "CHEMBL_DA_IUPHAR_BASE": ["iuphar", "base"],
     "CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT": ["iuphar", "timeout_connect"],
     "CHEMBL_DA_IUPHAR_TIMEOUT_READ": ["iuphar", "timeout_read"],
@@ -603,6 +616,16 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+        "uniprot_mapping": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "poll_interval": {"type": "number", "exclusiveMinimum": 0},
+                "timeout": {"type": "number", "minimum": 1},
+            },
+            "required": ["base", "poll_interval", "timeout"],
+            "additionalProperties": False,
+        },
         "iuphar": {
             "type": "object",
             "properties": {
@@ -764,6 +787,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "openalex",
         "crossref",
         "uniprot",
+        "uniprot_mapping",
         "iuphar",
         "pubchem",
         "io",
@@ -828,6 +852,12 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
+
+    mapping = cfg.uniprot_mapping
+    if not _valid_url(mapping.base):
+        raise ValueError("uniprot_mapping.base must be a valid URL")
+    if mapping.poll_interval <= 0 or mapping.timeout <= 0:
+        raise ValueError("uniprot_mapping.poll_interval and timeout must be positive")
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
@@ -961,6 +991,7 @@ __all__ = [
     "OpenAlexCfg",
     "CrossRefCfg",
     "UniprotCfg",
+    "UniprotMappingCfg",
     "IupharCfg",
     "PubChemCfg",
     "IoCfg",

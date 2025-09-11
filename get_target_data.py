@@ -407,7 +407,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_targets(ids, cfg=cfg.api, timeout=args.timeout)
+        df = cl.get_targets(
+            ids, cfg=cfg.api, mapping_cfg=cfg.uniprot_mapping, timeout=args.timeout
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1

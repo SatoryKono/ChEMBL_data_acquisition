@@ -9,7 +9,7 @@ import logging
 import pandas as pd
 
 from .chembl_client import _chunked, request_json
-from .config import ApiCfg
+from .config import ApiCfg, UniprotMappingCfg
 from .mapper_library import map_chembl_to_uniprot
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,9 @@ def _parse_alt_names(synonyms: list[dict[str, str]]) -> str:
     return "|".join(sorted(names))
 
 
-def _parse_uniprot_id(xrefs: list[dict[str, str]], chembl_id: str) -> tuple[str, str]:
+def _parse_uniprot_id(
+    xrefs: list[dict[str, str]], chembl_id: str, mapping_cfg: UniprotMappingCfg
+) -> tuple[str, str]:
     """Return UniProt IDs from cross references and mapping."""
     uniprot_id = ""
     for x in xrefs:
@@ -67,7 +69,7 @@ def _parse_uniprot_id(xrefs: list[dict[str, str]], chembl_id: str) -> tuple[str,
                 uniprot_id = ident
                 break
     try:
-        mapping_uniprot_id = map_chembl_to_uniprot(chembl_id) or ""
+        mapping_uniprot_id = map_chembl_to_uniprot(chembl_id, mapping_cfg) or ""
     except Exception as exc:  # pragma: no cover - network failure paths
         logger.warning("UniProt mapping request failed for %s: %s", chembl_id, exc)
         mapping_uniprot_id = ""
@@ -98,7 +100,9 @@ def _get_items(container: Any, key: str) -> list[Any]:
     return []
 
 
-def _parse_target_record(data: dict[str, Any]) -> dict[str, Any]:
+def _parse_target_record(
+    data: dict[str, Any], mapping_cfg: UniprotMappingCfg
+) -> dict[str, Any]:
     """Transform a raw target record into a flat dictionary."""
     components = _get_items(data.get("target_components"), "target_component")
     if not components:
@@ -115,7 +119,7 @@ def _parse_target_record(data: dict[str, Any]) -> dict[str, Any]:
     ec_code = _parse_ec_codes(synonyms)
     alt_name = _parse_alt_names(synonyms)
     uniprot_id, mapping_uniprot_id = _parse_uniprot_id(
-        xrefs, data.get("target_chembl_id", "")
+        xrefs, data.get("target_chembl_id", ""), mapping_cfg
     )
     hgnc_name, hgnc_id = _parse_hgnc(xrefs)
 
@@ -140,9 +144,25 @@ def _parse_target_record(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_target(
-    chembl_target_id: str, *, cfg: ApiCfg, timeout: float | None = None
+    chembl_target_id: str,
+    *,
+    cfg: ApiCfg,
+    mapping_cfg: UniprotMappingCfg,
+    timeout: float | None = None,
 ) -> dict[str, str]:
-    """Fetch target information for a single ChEMBL identifier."""
+    """Fetch target information for a single ChEMBL identifier.
+
+    Parameters
+    ----------
+    chembl_target_id:
+        ChEMBL target identifier (e.g., ``"CHEMBL203"``).
+    cfg:
+        API configuration providing base URL and timeouts.
+    mapping_cfg:
+        Configuration for the UniProt mapping service.
+    timeout:
+        Optional override for the HTTP request timeout.
+    """
     if chembl_target_id in {"", "#N/A"}:
         return dict(EMPTY_TARGET)
     base = cfg.chembl_base.rstrip("/")
@@ -152,17 +172,32 @@ def get_target(
     target_list = _get_items(data, "target")
     if not target_list:
         return dict(EMPTY_TARGET)
-    return _parse_target_record(target_list[0])
+    return _parse_target_record(target_list[0], mapping_cfg)
 
 
 def get_targets(
     ids: Iterable[str],
     *,
     cfg: ApiCfg,
+    mapping_cfg: UniprotMappingCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
 ) -> pd.DataFrame:
-    """Fetch target records for ``ids``."""
+    """Fetch target records for ``ids``.
+
+    Parameters
+    ----------
+    ids:
+        ChEMBL target identifiers to retrieve.
+    cfg:
+        API configuration with base URL and timeouts.
+    mapping_cfg:
+        Settings for the UniProt mapping service.
+    chunk_size:
+        Number of identifiers to request per HTTP call.
+    timeout:
+        Optional override for the HTTP request timeout.
+    """
     valid = [i for i in ids if i not in {"", "#N/A"}]
     if not valid:
         return pd.DataFrame(columns=TARGET_FIELDS)
@@ -174,7 +209,7 @@ def get_targets(
         url = f"{base}&target_chembl_id__in={','.join(chunk)}"
         data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("targets") or data.get("target") or []
-        records.extend(_parse_target_record(item) for item in items)
+        records.extend(_parse_target_record(item, mapping_cfg) for item in items)
     if not records:
         return pd.DataFrame(columns=TARGET_FIELDS)
     df = pd.DataFrame(records)
@@ -182,7 +217,11 @@ def get_targets(
 
 
 def extend_target(
-    df: pd.DataFrame, *, cfg: ApiCfg, id_column: str = "target_chembl_id"
+    df: pd.DataFrame,
+    *,
+    cfg: ApiCfg,
+    mapping_cfg: UniprotMappingCfg,
+    id_column: str = "target_chembl_id",
 ) -> pd.DataFrame:
     """Augment ``df`` with columns returned from :func:`get_target`.
 
@@ -192,13 +231,18 @@ def extend_target(
         DataFrame containing a column with ChEMBL target identifiers.
     cfg:
         API configuration providing base URL and timeouts.
+    mapping_cfg:
+        Settings for the UniProt mapping service.
     id_column:
         Name of the column holding the identifiers.
 
     """
     if id_column not in df.columns:
         raise ValueError(f"missing required column: {id_column}")
-    targets = [get_target(i, cfg=cfg) for i in df[id_column].fillna("")]
+    targets = [
+        get_target(i, cfg=cfg, mapping_cfg=mapping_cfg)
+        for i in df[id_column].fillna("")
+    ]
     extra = pd.DataFrame(targets)
     return pd.concat([df.reset_index(drop=True), extra], axis=1)
 
