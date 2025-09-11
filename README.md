@@ -41,11 +41,44 @@ parsing, validation, aggregation and export of tabular data.
 3. **Run the tests**
 
    ```bash
-   pytest
-    ```
+    pytest
+     ```
 
    The suite exercises the library modules using fixtures from
    ``tests/data``.
+
+## Usage
+
+### scripts/get_document_data.py
+
+Retrieve document metadata for a list of PubMed IDs using the bundled
+sample file:
+
+```bash
+python get_document_data.py pubmed \
+    --input tests/data/pmids.csv \
+    --output out/documents.csv \
+    --limit 5 \
+    --log-level INFO
+```
+
+The ``tests/data/pmids.csv`` file contains a small set of PMIDs for
+experimentation.
+
+### scripts/get_target_data.py
+
+Fetch basic target information from ChEMBL:
+
+```bash
+python get_target_data.py chembl \
+    --input path/to/targets.csv \
+    --output out/targets.csv \
+    --limit 5 \
+    --log-level INFO
+```
+
+Replace ``path/to/targets.csv`` with a CSV containing a ``chembl_id``
+column.
 
 ## Updating Dependencies
 
