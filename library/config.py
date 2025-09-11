@@ -16,8 +16,9 @@ from __future__ import annotations
 import logging
 import os
 import re
+from collections.abc import Collection
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import yaml
@@ -53,7 +54,6 @@ class _BaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_dict(self) -> dict[str, Any]:
- 
         """Return the model as a plain dictionary.
 
         Uses :meth:`pydantic.BaseModel.model_dump` to obtain a standard
@@ -63,8 +63,8 @@ class _BaseModel(BaseModel):
         -------
         dict[str, Any]
             Dictionary representation of the model.
- 
- 
+
+
         """
 
         return self.model_dump()
@@ -495,13 +495,32 @@ class Config(_BaseModel):
 
 
 def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
-    """Return an HTTP session configured for retries and user agent."""
+    """Return an HTTP session configured for retries and user agent.
+
+    The returned session retries failed requests for *all* HTTP methods,
+    including ``POST``. It also avoids raising exceptions on HTTP error status
+    codes, allowing callers to handle responses manually.
+
+    Parameters
+    ----------
+    api:
+        API configuration containing the user agent string.
+    retry:
+        Retry configuration with maximum attempts and backoff strategy.
+
+    Returns
+    -------
+    Session
+        A ``requests.Session`` instance with retry logic applied.
+    """
 
     session = Session()
     retry_cfg = Retry(
         total=retry.max_attempts,
         backoff_factor=retry.backoff_factor,
         status_forcelist=retry.status_forcelist,
+        allowed_methods=cast(Collection[str] | None, False),
+        raise_on_status=False,
     )
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("http://", adapter)
@@ -660,7 +679,7 @@ def _mask_secrets(data: Any) -> Any:
 def print_config(cfg: Config) -> None:
     """Print ``cfg`` as YAML masking secret values."""
 
-    data = _serialize_paths(cfg.model_dump())
+    data = _serialize_paths(cfg.to_dict())
     masked = _mask_secrets(data)
     print(yaml.safe_dump(masked, sort_keys=False))
 
