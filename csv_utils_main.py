@@ -8,39 +8,18 @@ from __future__ import annotations
 
 
 import logging
- 
-import argparse
- 
+
 import time
 from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
 
-
 from library.csv_utils import write_csv_deterministic
 from library.cli_utils import build_parser
 
 
- 
-from library.log import logger
-from library.logging_setup import LoggerConfig, configure_logger
-
-from library.cli import add_common_arguments
-
 logger = logging.getLogger(__name__)
-
-
-
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    add_common_arguments(parser)
-    parser.add_argument("--col-order", nargs="*", help="Preferred column order")
-    parser.add_argument("--key-cols", nargs="*", help="Columns used for sorting")
-    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
