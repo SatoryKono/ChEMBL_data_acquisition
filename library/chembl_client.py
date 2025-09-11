@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Iterator
 
-import time
-
 import requests
 from requests import Session
 
 from .config import ApiCfg, RetryCfg, session_with_retry
+from .rate_limiter import sleep
 from .log import logger
 
 _CACHE: Dict[str, dict[str, Any]] = {}
@@ -92,7 +91,7 @@ def request_json(
                     "request_fail", extra={"stage": "request_fail", "url": url}
                 )
                 raise
-            time.sleep(cfg.backoff_factor * attempt)
+            sleep(cfg.backoff_factor * attempt)
     raise requests.RequestException(f"request_json failed for url: {url}")
 
 
