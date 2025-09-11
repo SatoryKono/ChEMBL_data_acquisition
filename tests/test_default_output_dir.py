@@ -33,6 +33,7 @@ def test_mapper_run_defaults_to_io_output_dir(
         column="chembl_id",
         sep=",",
         encoding="utf8",
+        key_cols=None,
     )
 
     monkeypatch.setattr(mapper_main, "map_chembl_to_uniprot", lambda _i, _cfg: "P12345")

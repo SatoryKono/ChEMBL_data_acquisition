@@ -67,7 +67,14 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     df["mapping_uniprot_id"] = uniprot_ids
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
-        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
+        io.write_csv(
+            df,
+            output,
+            cfg=cfg,
+            sep=args.sep,
+            encoding=args.encoding,
+            key_cols=args.key_cols,
+        )
         logger.info("wrote %s", output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -81,6 +88,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "Map ChEMBL target IDs to UniProt accessions",
         column="chembl_id",
         chunk_size=1,
+    )
+    parser.add_argument(
+        "--key-cols",
+        nargs="*",
+        help="Columns used to sort the output CSV deterministically",
     )
     parser.set_defaults(func=run)
     return parser, log_cfg

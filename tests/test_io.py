@@ -77,3 +77,15 @@ def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
     io.write_csv(shuffled, path, cfg=cfg)
     second_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     assert first_hash == second_hash
+
+
+def test_write_csv_with_key_cols(tmp_path: Path) -> None:
+    df = pd.DataFrame({"a": [2, 1], "b": ["x", "y"]})
+    path = tmp_path / "out.csv"
+    cfg = Config()
+    io.write_csv(df, path, cfg=cfg, key_cols=["a"])
+    first_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    shuffled = df.sample(frac=1).reset_index(drop=True)
+    io.write_csv(shuffled, path, cfg=cfg, key_cols=["a"])
+    second_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert first_hash == second_hash

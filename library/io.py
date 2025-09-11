@@ -123,6 +123,7 @@ def write_csv(
     cfg: Config,
     sep: str | None = None,
     encoding: str | None = None,
+    key_cols: Iterable[str] | None = None,
 ) -> None:
     """Write ``df`` to ``path`` as CSV and store metadata.
 
@@ -142,13 +143,22 @@ def write_csv(
         Field delimiter used in the CSV file. Defaults to ``cfg.io.csv_sep``.
     encoding:
         Character encoding of the CSV file. Defaults to ``cfg.io.csv_encoding``.
+    key_cols:
+        Optional columns to determine row order. When provided, rows are
+        sorted by these columns. Otherwise all columns are used, preserving
+        the previous deterministic behaviour.
 
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     sorted_df = df.sort_index(axis=1)
-    sorted_df = sorted_df.sort_values(by=list(sorted_df.columns))
+    if key_cols is not None:
+        # Only sort by the specified key columns for determinism.
+        sorted_df = sorted_df.sort_values(by=list(key_cols))
+    else:
+        # Fall back to the original behaviour of sorting by all columns.
+        sorted_df = sorted_df.sort_values(by=list(sorted_df.columns))
     sorted_df.to_csv(
         path,
         index=False,
