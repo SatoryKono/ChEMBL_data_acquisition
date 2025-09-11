@@ -16,6 +16,7 @@ def test_cli_utils_flags_and_help() -> None:
         "--encoding",
         "--col-order",
         "--key-cols",
+        "--chunk-size",
     }
     assert set(actions) == expected
     assert actions["--log-level"].help == "Logging level"
@@ -28,6 +29,7 @@ def test_cli_utils_flags_and_help() -> None:
     assert actions["--encoding"].help == "File encoding"
     assert actions["--col-order"].help == "Preferred column order"
     assert actions["--key-cols"].help == "Columns used for sorting"
+    assert actions["--chunk-size"].help == "Number of rows read per chunk"
     assert parser.description is not None
     assert parser.description.startswith(
         "CLI wrapper for :func:`write_csv_deterministic`"

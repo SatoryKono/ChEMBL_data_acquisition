@@ -26,4 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_arguments(parser)
     parser.add_argument("--col-order", nargs="*", help="Preferred column order")
     parser.add_argument("--key-cols", nargs="*", help="Columns used for sorting")
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=1000,
+        help="Number of rows read per chunk",
+    )
     return parser
