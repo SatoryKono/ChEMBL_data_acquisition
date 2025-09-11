@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from typing import Any, Dict, Iterable, Iterator, cast
+from typing import Any, Iterable, Iterator, cast
 
 
 import random
@@ -14,7 +14,7 @@ from requests import Session
 from cachetools import LRUCache
 
 from .config import ApiCfg, RetryCfg, session_with_retry
-from .rate_limiter import sleep
+from .rate_limiter import get_limiter, sleep
 from .log import logger
 
 _CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
@@ -65,6 +65,7 @@ def request_json(
         If the response body is not valid JSON.
 
     """
+    limiter = get_limiter("chembl", cfg.rps, cfg.burst)
     read_timeout = timeout if timeout is not None else cfg.timeout_read
     cache_key = url
     if cache_key in _CACHE:
@@ -81,6 +82,7 @@ def request_json(
     assert session is not None  # noqa: S101 - ensure session exists
 
     for attempt in range(1, cfg.retries + 1):
+        limiter.acquire()
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
         try:
