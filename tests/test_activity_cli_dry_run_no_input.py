@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
+import argparse
 import io
 import json
-import argparse
+from pathlib import Path
 
-from library.cli import LoggerConfig, configure_logger
 import get_activity_data as gad
+from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 
 
@@ -25,5 +25,6 @@ def test_dry_run_no_input(tmp_path: Path) -> None:
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
+    assert record.get("event") == "dry_run"
     assert "dry run selected" in record.get("msg", "")
     assert "5 identifiers" in record.get("msg", "")
