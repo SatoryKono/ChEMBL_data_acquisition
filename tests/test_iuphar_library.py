@@ -5,19 +5,20 @@ from library import iuphar_library as ii
 from library.config import IupharCfg
 
 
-def test_websearch_gene_to_id_uses_cfg(monkeypatch):
+def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
+    """``websearch_gene_to_id`` should honour the supplied configuration."""
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
-    called = {}
+    called: dict[str, object] = {}
 
-    def fake_get(url: str, timeout: tuple[int, int]):
+    def fake_get(url: str, timeout: tuple[int, int]) -> object:
         called["url"] = url
         called["timeout"] = timeout
 
         class Resp:
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 return None
 
-            def json(self):
+            def json(self) -> list[dict[str, int]]:
                 return [{"id": 1}]
 
         return Resp()
@@ -40,7 +41,8 @@ def test_websearch_gene_to_id_uses_cfg(monkeypatch):
     assert sleeps and sleeps[0] == pytest.approx(0.2)
 
 
-def test_iuphar_upload_uses_cfg(monkeypatch):
+def test_iuphar_upload_uses_cfg(monkeypatch) -> None:
+    """Uploading auxiliary data should use configured HTTP timeouts."""
     target_df = pd.DataFrame({"target_id": [1], "family_id": ["F1"]})
     family_df = pd.DataFrame(
         {"family_id": ["F1"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
@@ -51,7 +53,7 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
     uni_csv = "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
     hgnc_csv = "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
 
-    def fake_get(url: str, timeout: tuple[int, int]):
+    def fake_get(url: str, timeout: tuple[int, int]) -> object:
         calls.append((url, timeout))
         text = uni_csv if "UniProt" in url else hgnc_csv
 
@@ -59,7 +61,7 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
             def __init__(self, text: str) -> None:
                 self.text = text
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 return None
 
         return Resp(text)
