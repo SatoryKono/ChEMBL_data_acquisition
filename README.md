@@ -4,19 +4,27 @@ Utilities for downloading and processing biological data from public APIs.
 The project demonstrates a typical Python 3.12 data pipeline including
 parsing, validation, aggregation and export of tabular data.
 
-## Quick Start
+## Установка
 
-1. **Install dependencies**
-
+```bash
+pip install .[dev]
+```
+ 
    ```bash
    pip install .
-   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, pre-commit, ...)
+   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, psutil, pre-commit, ...)
    pip install .[dev]
    ```
+ 
+The command installs the project together with development tools such as
+``black``, ``ruff``, ``mypy`` and ``pytest``. Sensitive configuration like API
+tokens should be stored in a local ``.env`` file – see
+[`Конфигурация через .env`](#конфигурация-через-env) for details.
 
-   The second command installs optional tooling for development and testing,
-   including property-based tests powered by ``hypothesis`` and HTTP mocking
-   via ``responses``.
+## Quick Start
+ 
+
+1. **Install dependencies** – see [Установка](#установка).
 
 2. **Initialise pre-commit hooks**
 
@@ -32,15 +40,15 @@ parsing, validation, aggregation and export of tabular data.
 3. **Run a sample script**
 
    ```bash
-   python get_assay_data.py --input tests/data/assays.csv \
-       --output out/assays.csv --log-level INFO
+   python get_activity_data.py --input tests/data/activity_ids_small.csv \
+       --output out/activities.csv --limit 10 --log-level INFO
    ```
 
-   The command reads the bundled test dataset and writes a normalised CSV
-   to ``out/assays.csv``. All CLI tools support common flags such as
-   ``--input`` and ``--output`` for file paths, ``--log-level`` for
-   verbosity, ``--sep`` for CSV delimiter and ``--encoding`` for file
-   encoding. Additional examples:
+   The command reads the bundled test identifiers and writes a normalised CSV
+   to ``out/activities.csv``. Common CLI flags include ``--input`` and
+   ``--output`` for file paths, ``--limit`` to cap processed records,
+   ``--log-level`` for verbosity, ``--sep`` for CSV delimiter and
+   ``--encoding`` for file encoding. Additional examples:
 
    ```bash
    python mapper_main.py --input tests/data/assays.csv \
@@ -61,6 +69,9 @@ parsing, validation, aggregation and export of tabular data.
    ``tests/data``.
 
 ## Usage
+
+The examples below illustrate how to run the main CLI tools with common
+options like ``--input``, ``--output`` and ``--limit``.
 
 ### scripts/get_document_data.py
 

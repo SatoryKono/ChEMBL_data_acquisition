@@ -12,7 +12,10 @@ from __future__ import annotations
 import threading
 import time
 
-from cachetools import TTLCache
+from typing import cast
+
+from cachetools import TTLCache  # type: ignore[import-untyped]
+
 
 
 class RateLimiter:

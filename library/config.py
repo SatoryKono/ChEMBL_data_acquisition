@@ -270,7 +270,7 @@ class BatchCfg:
     """Batch processing parameters."""
 
     size: int = 1000
-    pause: float = 0
+    pause: float = 0.0
     concurrency: int = 2
     fail_fast: bool = True
     retry_failed: bool = True

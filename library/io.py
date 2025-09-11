@@ -27,11 +27,11 @@ import sys
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
+import pandera.pandas as pa
 import yaml
-from pandera import DataFrameModel, DataFrameSchema
 
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
@@ -103,7 +103,7 @@ def read_csv(
     dtype: Mapping[Hashable, Any] | type | None = None,
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
-    schema: DataFrameSchema | type[DataFrameModel] | None = None,
+    schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
@@ -130,8 +130,8 @@ def read_csv(
     parse_dates:
         Column names to parse as dates using :func:`pandas.read_csv`.
     schema:
-        Optional :class:`pandera.DataFrameSchema` or
-        :class:`pandera.DataFrameModel` used for advanced validation and
+        Optional :class:`pa.DataFrameSchema` or
+        :class:`pa.DataFrameModel` used for advanced validation and
         dtype coercion.
 
     Returns
@@ -151,7 +151,7 @@ def read_csv(
         parse_dates=list(parse_dates) if parse_dates is not None else None,
     )
     if schema is not None:
-        if isinstance(schema, DataFrameSchema):
+        if isinstance(schema, pa.DataFrameSchema):
             df = schema.validate(df)
         else:
             df = schema.to_schema().validate(df)
@@ -212,14 +212,17 @@ def write_csv(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    return write_csv_deterministic(
-        df,
-        path,
-        key_cols=list(key_cols) if key_cols is not None else None,
-        chunksize=chunksize,
-        sep=sep,
-        encoding=encoding,
-        cfg=cfg,
+    return cast(
+        Path,
+        write_csv_deterministic(
+            df,
+            path,
+            key_cols=list(key_cols) if key_cols is not None else None,
+            chunksize=chunksize,
+            sep=sep,
+            encoding=encoding,
+            cfg=cfg,
+        ),
     )
 
 

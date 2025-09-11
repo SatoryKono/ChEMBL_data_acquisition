@@ -4,28 +4,23 @@ from __future__ import annotations
 
 import argparse
 import sys
-
 from collections.abc import Iterable, Sequence
 from itertools import islice
 
 import requests
-
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
 from library import io, write_csv_deterministic
-
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
     configure_logger,
 )
-
 from library.cli import (
     build_parser as base_parser,
 )
-
 from library.config import Config, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml

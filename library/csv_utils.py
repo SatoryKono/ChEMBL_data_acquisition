@@ -86,9 +86,10 @@ def _normalise_dates(series: pd.Series) -> pd.Series:
 
     if (
         ptypes.is_object_dtype(series)
-        and series.dropna().map(lambda x: isinstance(x, (date, datetime))).all()
+        and series.dropna().map(lambda x: isinstance(x, date | datetime)).all()
     ):
-        return pd.to_datetime(series).dt.strftime("%Y-%m-%d")
+        result: pd.Series = pd.to_datetime(series).dt.strftime("%Y-%m-%d")
+        return result
 
     return series
 
@@ -103,6 +104,7 @@ def write_csv_deterministic(
     sep: str = ",",
     encoding: str = "utf-8-sig",
     cfg: Config | None = None,
+    drop_unexpected_cols: bool = False,
 ) -> Path:
     """Serialise ``df`` to ``path`` as a deterministic CSV file.
 
@@ -114,7 +116,8 @@ def write_csv_deterministic(
         Destination file path.
     col_order:
         Optional preferred column ordering. Columns not listed here are
-        appended in lexicographical order.
+        appended in lexicographical order unless ``drop_unexpected_cols`` is
+        ``True``, in which case they are omitted with a warning.
     key_cols:
         Optional sequence of column names defining row ordering.  If omitted
         all columns are used as sort keys.
@@ -123,6 +126,9 @@ def write_csv_deterministic(
         streaming output via :meth:`pandas.DataFrame.to_csv`, reducing peak
         memory usage for large tables. ``None`` (the default) writes the
         dataframe in a single call.
+    drop_unexpected_cols:
+        When ``True`` and ``col_order`` is provided, columns not present in
+        ``col_order`` are dropped from the output with a log warning.
 
     Notes
     -----
@@ -155,7 +161,11 @@ def write_csv_deterministic(
     if col_order is not None:
         head = [c for c in col_order if c in work.columns]
         tail = sorted(c for c in work.columns if c not in head)
-        work = work.reindex(columns=head + tail, copy=False)
+        if drop_unexpected_cols and tail:
+            logger.warning("Dropping unexpected columns: %s", tail)
+            work = work.reindex(columns=head, copy=False)
+        else:
+            work = work.reindex(columns=head + tail, copy=False)
     else:
         work = work.reindex(columns=sorted(work.columns), copy=False)
 

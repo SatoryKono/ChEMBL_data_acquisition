@@ -7,6 +7,8 @@ so that ``python`` can resolve them correctly regardless of the working
 directory.
 """
 
+from __future__ import annotations
+
 from . import io, validation
 from .config import Config, load_config
 from .csv_utils import sha256_file, write_csv_deterministic
@@ -18,6 +20,7 @@ from .document_type_terms import (
     parse_terms,
 )
 from .logging_setup import Logger, LoggerConfig, configure_logger
+from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors
 
 __all__ = [
@@ -37,4 +40,5 @@ __all__ = [
     "Logger",
     "LoggerConfig",
     "configure_logger",
+    "CSVExportArgs",
 ]
