@@ -10,15 +10,14 @@ import urllib.request
 from typing import Any, Callable, Optional
 from urllib.error import HTTPError
 
-API_BASE = "https://rest.uniprot.org/idmapping"
+from .config import UniprotMappingCfg
 
 logger = logging.getLogger(__name__)
 
 
 def map_chembl_to_uniprot(
     chembl_target_id: str,
-    poll_interval: float = 0.5,
-    timeout: float = 300.0,  # Reduced timeout for faster failure if something is wrong
+    cfg: UniprotMappingCfg,
     opener: Optional[Callable[..., Any]] = None,
 ) -> str | None:
     """Map a ChEMBL target identifier to a UniProt accession.
@@ -27,10 +26,9 @@ def map_chembl_to_uniprot(
     ----------
     chembl_target_id:
         ChEMBL target identifier (e.g., ``"CHEMBL204"``).
-    poll_interval:
-        Seconds to wait between polling the UniProt API for job completion.
-    timeout:
-        Maximum number of seconds to wait for the mapping job to finish.
+    cfg:
+        Configuration for the UniProt ID Mapping API including base URL,
+        poll interval and timeout settings.
     opener:
         Optional callable with the same signature as :func:`urllib.request.urlopen`
         used to perform HTTP requests. Primarily intended for testing.
@@ -46,7 +44,7 @@ def map_chembl_to_uniprot(
     ValueError
         If the API reports failure or returns an unexpected response format.
     TimeoutError
-        If the mapping job does not complete within ``timeout`` seconds.
+        If the mapping job does not complete within ``cfg.timeout`` seconds.
     URLError
         If a network-related error occurs.
 
@@ -81,13 +79,14 @@ def map_chembl_to_uniprot(
         {"from": "ChEMBL", "to": "UniProtKB", "ids": chembl_target_id}
     ).encode()
     logging.debug("Submitting ID mapping job for %s", chembl_target_id)
-    run_data = _open_json(f"{API_BASE}/run", data=data)
+    base = cfg.base.rstrip("/")
+    run_data = _open_json(f"{base}/run", data=data)
     job_id = run_data.get("jobId")
     if not job_id:
         raise ValueError("UniProt ID Mapping API did not return a job ID")
 
     # Poll the job status until it finishes
-    status_url = f"{API_BASE}/status/{job_id}"
+    status_url = f"{base}/status/{job_id}"
     start = time.time()
     result_data = {}  # Initialize result_data
     while True:
@@ -105,14 +104,14 @@ def map_chembl_to_uniprot(
             break
         if status == "FAILED":
             raise ValueError("UniProt ID mapping job failed")
-        if time.time() - start > timeout:
+        if time.time() - start > cfg.timeout:
             raise TimeoutError("UniProt ID mapping job timed out")
-        time.sleep(poll_interval)
+        time.sleep(cfg.poll_interval)
 
     # Retrieve the results
     # If the last status check was a redirect, status_data already contains the results
     if not result_data:
-        result_url = f"{API_BASE}/uniprotkb/results/{job_id}?format=json"
+        result_url = f"{base}/uniprotkb/results/{job_id}?format=json"
         result_data = _open_json(result_url)
 
     results = result_data.get("results", [])

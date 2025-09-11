@@ -54,7 +54,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             uniprot_ids.append(None)
             continue
         try:
-            uniprot_id = map_chembl_to_uniprot(str(chembl_id))
+            uniprot_id = map_chembl_to_uniprot(str(chembl_id), cfg.uniprot_mapping)
             uniprot_ids.append(uniprot_id)
             if uniprot_id:
                 logger.info("mapped %s -> %s", chembl_id, uniprot_id)

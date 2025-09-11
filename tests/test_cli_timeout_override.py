@@ -129,7 +129,7 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch) -> None:
         gtd, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
     )
 
-    def fake_get_targets(ids, cfg, timeout):
+    def fake_get_targets(ids, cfg, mapping_cfg, timeout):
         called["timeout"] = timeout
         return pd.DataFrame({"target_chembl_id": ids})
 
