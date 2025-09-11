@@ -286,6 +286,44 @@ class Logger:
 
 
 def configure_logger(cfg: LoggerConfig) -> Logger:
-    """Return a :class:`Logger` instance configured with ``cfg``."""
+    """Return a :class:`Logger` instance configured with ``cfg``.
 
-    return Logger(cfg)
+    The root :mod:`logging` logger is configured to forward records to the
+    structured :class:`Logger` instance. This ensures a single log format is
+    used for both direct :class:`Logger` calls and the standard :mod:`logging`
+    module, including messages originating from :func:`warnings.warn` when
+    :func:`logging.captureWarnings` is enabled.
+
+    Parameters
+    ----------
+    cfg:
+        Logger configuration.
+
+    Returns
+    -------
+    Logger
+        Configured logger instance.
+    """
+
+    logger = Logger(cfg)
+
+    class _ForwardHandler(logging.Handler):
+        """Forward ``logging`` records to :class:`Logger` as JSON lines."""
+
+        def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - thin
+            # ``record.name`` acts as the event identifier while the formatted
+            # message is stored in ``msg`` for human readability.
+            logger.log(record.levelname, record.name, msg=record.getMessage())
+
+    root_logger = logging.getLogger()
+    handler = _ForwardHandler()
+    root_logger.handlers = [handler]
+    root_logger.setLevel(_level_no(cfg.level))
+
+    logging.captureWarnings(True)
+    warnings_logger = logging.getLogger("py.warnings")
+    warnings_logger.handlers = [handler]
+    warnings_logger.setLevel(_level_no(cfg.level))
+    warnings_logger.propagate = False
+
+    return logger
