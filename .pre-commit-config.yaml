@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        exclude: ^tests/
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.1
+    hooks:
+      - id: ruff
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        exclude: ^tests/
+        additional_dependencies:
+          - pandas
+          - pandas-stubs
+          - requests
+          - types-requests
+          - PyYAML
+          - types-PyYAML
+          - jsonschema
+          - types-jsonschema
+          - pandera
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        args: ["--ignore=tests/test_cli_bad_config.py"]
