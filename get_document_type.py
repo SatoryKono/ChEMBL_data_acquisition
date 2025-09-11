@@ -16,7 +16,7 @@ from library.config import Config, ensure_dirs, print_config
 from library.cli import (
     apply_config_overrides,
     build_parser as base_parser,
-    configure_logging,
+    configure_logger,
 )
 from library import io
 
@@ -81,7 +81,9 @@ def classify_dataframe(
 def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point for document type classification."""
 
-    parser = base_parser(__doc__ or "Document type classification", column="chembl_id")
+    parser, log_cfg = base_parser(
+        __doc__ or "Document type classification", column="chembl_id"
+    )
     parser.add_argument(
         "--weight-pubmed",
         dest="weight_pubmed",
@@ -125,6 +127,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Minimum score for unknown label",
     )
     args = parser.parse_args(argv)
+    log_cfg.level = args.log_level
+    logger_inst = configure_logger(log_cfg)
+    logger_inst.info(
+        "pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"}
+    )
 
     try:
         cfg: Config = apply_config_overrides(
@@ -142,14 +149,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if args.print_config:
             print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger_inst.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
+            )
             return 0
         ensure_dirs(cfg)
-        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        logger_inst = configure_logger(
+            log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt
+        )
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
+        logger_inst.info(
+            "pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"}
+        )
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
+        logger_inst.info(
+            "pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"}
+        )
         return 1
 
     df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
@@ -160,6 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
+    logger_inst.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
     return 0
 
 

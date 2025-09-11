@@ -30,7 +30,8 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.cli import (
     apply_config_overrides,
     build_root_parser,
-    configure_logging,
+    configure_logger,
+    LoggerConfig,
 )
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
@@ -72,7 +73,7 @@ def _first_token(value: str | None) -> str:
     return ""
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create and return the top-level CLI argument parser.
 
     The command line interface is organised into sub-commands for retrieving
@@ -81,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     outputs.
     """
 
-    root = build_root_parser()
+    root, log_cfg = build_root_parser()
     parser = argparse.ArgumentParser(
         description="Target data utilities", parents=[root]
     )
@@ -332,7 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
         },
     )
 
-    return parser
+    return parser, log_cfg
 
 
 def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
@@ -742,8 +743,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
-    parser = build_parser()
+    parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    log_cfg.level = args.log_level
+    logger = configure_logger(log_cfg)
+    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     try:
@@ -761,18 +765,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if args.print_config:
             print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
+            )
             return 0
         ensure_dirs(cfg)
-        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
         return 1
     if hasattr(args, "func"):
-        return args.func(cfg, args)
+        exit_code = args.func(cfg, args)
+        if exit_code == 0:
+            logger.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
+            )
+        else:
+            logger.info(
+                "pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"}
+            )
+        return exit_code
     parser.print_help()
+    logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
     return 1
 
 
