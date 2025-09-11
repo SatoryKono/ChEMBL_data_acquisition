@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from . import log
 from .config import Config, ConfigError, load_config
 from .logging_setup import Logger, LoggerConfig
@@ -286,6 +288,8 @@ def apply_config_overrides(
     except ConfigError as exc:
         log.logger.error("%s", exc)
         parser.error(str(exc))
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from library.config import load_config
 
@@ -13,5 +14,5 @@ def test_env_alias_invalid_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     path = tmp_path / "cfg.yaml"
     path.write_text("")
     monkeypatch.setenv("CHEMBL_DA_BASE", "https://")
-    with pytest.raises(ValueError, match="api.chembl_base"):
+    with pytest.raises(ValidationError, match="api.chembl_base"):
         load_config(path)
