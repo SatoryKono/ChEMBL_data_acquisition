@@ -37,7 +37,6 @@ from __future__ import annotations
 import csv
 import json
 import logging
-import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Set
 
@@ -45,6 +44,7 @@ import requests
 from requests import Session
 
 from .config import ApiCfg, RetryCfg, UniprotCfg, load_config, session_with_retry
+from .rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
         If the request fails or the payload cannot be decoded as JSON.
 
     """
-    time.sleep(cfg.delay)
+    rate_limiter.wait(cfg.delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/uniprotkb/{uniprot_id}.json"
     timeout = (cfg.timeout_connect, cfg.timeout_read)

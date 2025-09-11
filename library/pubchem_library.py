@@ -7,7 +7,6 @@ The implementation is a Python translation of a PowerQuery script.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -15,6 +14,7 @@ import requests
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
+from .rate_limiter import rate_limiter
 from .log import logger
 
 _CACHE: Dict[str, Dict[str, Any]] = {}
@@ -152,7 +152,7 @@ def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
-        time.sleep(cfg.delay)
+        rate_limiter.wait(cfg.delay)
         try:
             response = _session.get(
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)

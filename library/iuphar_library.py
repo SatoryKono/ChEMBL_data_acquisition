@@ -20,7 +20,6 @@ from typing import Iterable, List, Optional
 import io
 import logging
 import random
-import time
 from urllib.parse import quote
 
 import pandas as pd
@@ -28,6 +27,7 @@ import requests
 from requests import Session
 
 from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
+from .rate_limiter import rate_limiter
 
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
 
     for attempt in range(1, retry.max_attempts + 1):
         if rate_delay:
-            time.sleep(rate_delay)
+            rate_limiter.wait(rate_delay)
         try:
             with _session.get(url, timeout=timeout) as response:
                 response.raise_for_status()
@@ -186,7 +186,7 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
             jitter = random.uniform(0, backoff)
-            time.sleep(backoff + jitter)
+            rate_limiter.wait(backoff + jitter)
     return {}
 
 
@@ -653,7 +653,7 @@ class IUPHARData:
         def _download(url: str) -> pd.DataFrame:
             for attempt in range(1, retry_cfg.max_attempts + 1):
                 if rate_delay:
-                    time.sleep(rate_delay)
+                    rate_limiter.wait(rate_delay)
                 try:
                     with _session.get(url, timeout=timeout) as resp:
                         resp.raise_for_status()
@@ -664,7 +664,7 @@ class IUPHARData:
                         raise
                     backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
                     jitter = random.uniform(0, backoff)
-                    time.sleep(backoff + jitter)
+                    rate_limiter.wait(backoff + jitter)
             raise RuntimeError("Failed to download mapping")
 
         uni_df = _download(f"{data_base}/GtP_to_UniProt_mapping.csv")
