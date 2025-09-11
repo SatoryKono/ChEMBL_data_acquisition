@@ -48,6 +48,19 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
+### Pre-commit hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to run formatting, linting, type checking and tests. Install the hooks and run them across the codebase:
+
+```bash
+pre-commit install
+pre-commit run --all-files
+```
+
+Continuous integration executes the same checks.
+
+
+
 After installation, running a tool prints JSONL logs to standard output. A
 quick smoke test using bundled data might look like:
 

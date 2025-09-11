@@ -585,7 +585,7 @@ def _read_sheet(
                 return pd.DataFrame()
             header = raw.iloc[0].astype(str).tolist()
             df = raw.iloc[1:].reset_index(drop=True)
-            df.columns = header
+            df.columns = pd.Index(header)
             return df
         return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
     except ValueError as exc:  # missing sheet

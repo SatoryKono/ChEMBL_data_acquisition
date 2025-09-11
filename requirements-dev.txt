@@ -2,7 +2,10 @@ pytest>=7.0
 black>=23.0
 ruff>=0.0.290
 mypy>=1.8
+
+pre-commit>=3.6
 pandas-stubs>=2.3
+
 PyYAML>=6.0
 jsonschema>=4.0
 pandera>=0.26
