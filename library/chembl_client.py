@@ -14,7 +14,7 @@ from requests import Session
 from cachetools import TTLCache  # type: ignore[import-untyped]
 
 from .config import ApiCfg, RetryCfg, session_with_retry
-from .rate_limiter import sleep
+from .rate_limiter import get_limiter, sleep
 from .log import logger
 
 # Cache entries expire after one hour to avoid serving stale data. The TTL can
@@ -67,6 +67,7 @@ def request_json(
         If the response body is not valid JSON.
 
     """
+    limiter = get_limiter("chembl", cfg.rps, cfg.burst)
     read_timeout = timeout if timeout is not None else cfg.timeout_read
     cache_key = url
     if cache_key in _CACHE:
@@ -85,6 +86,7 @@ def request_json(
     last_exc: requests.RequestException | ValueError | None = None
 
     for attempt in range(1, cfg.retries + 1):
+        limiter.acquire()
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
         try:
