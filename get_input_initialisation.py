@@ -56,7 +56,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
         logger.info("Combining tables")
         tables = lib.build_combined_tables(
-            same, all_, dictionary_dir=args.dictionary_dir
+            same,
+            all_,
+            dictionary_dir=args.dictionary_dir,
+            status_csv=cfg.resources.status_csv,
+            targets_type_csv=cfg.resources.targets_type_csv,
         )
         logger.info("Computing status percentages")
         for key, df in list(tables.items()):

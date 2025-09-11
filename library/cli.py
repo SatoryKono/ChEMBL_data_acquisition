@@ -61,6 +61,40 @@ def _positive_int(value: str) -> int:
     return ivalue
 
 
+def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """Add shared CLI arguments to ``parser``.
+
+    Parameters
+    ----------
+    parser:
+        Parser to be extended with common arguments.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        The parser instance for convenience.
+    """
+
+    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument(
+        "--input",
+        dest="input_csv",
+        type=Path,
+        default=Path("input.csv"),
+        help="Input CSV file",
+    )
+    parser.add_argument(
+        "--output",
+        dest="output_csv",
+        type=Path,
+        default=None,
+        help="Destination CSV file (default: auto-generate)",
+    )
+    parser.add_argument("--sep", default=",", help="CSV delimiter")
+    parser.add_argument("--encoding", default="utf8", help="File encoding")
+    return parser
+
+
 def build_parser(
     description: str, *, column: str, chunk_size: int = 10
 ) -> tuple[argparse.ArgumentParser, LoggerConfig]:
@@ -81,28 +115,12 @@ def build_parser(
         The parser and associated :class:`LoggerConfig`.
     """
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
-    parser.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="Input CSV file",
-    )
-    parser.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file (default: auto-generate)",
-    )
+    add_common_arguments(parser)
     parser.add_argument(
         "--column",
         default=column,
         help="Identifier column in input CSV",
     )
-    parser.add_argument("--sep", default=",", help="CSV delimiter")
-    parser.add_argument("--encoding", default="utf8", help="File encoding")
     parser.add_argument(
         "--chunk-size",
         type=_positive_int,
@@ -135,6 +153,7 @@ def build_root_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """
 
     parser = argparse.ArgumentParser(add_help=False)
+    add_common_arguments(parser)
     parser.add_argument(
         "--config",
         dest="config",
@@ -142,7 +161,6 @@ def build_root_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=Path("config.yaml"),
         help="YAML configuration file",
     )
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
         "--print-config",
         action="store_true",
@@ -280,6 +298,7 @@ def apply_config_overrides(
 __all__ = [
     "LoggerConfig",
     "create_logger_config",
+    "add_common_arguments",
     "build_parser",
     "build_root_parser",
     "configure_logger",

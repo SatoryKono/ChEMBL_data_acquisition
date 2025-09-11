@@ -150,7 +150,7 @@ def test_build_combined_tables_handles_status(
     )
 
     # Simplify heavy processing steps
-    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir, _p=None: df)
     monkeypatch.setattr(
         lib,
         "initialize_activity_status",
@@ -191,7 +191,7 @@ def test_build_combined_tables_initializes_pair_tables(
         "bad,null,null,1,0\n"
     )
 
-    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir, _p=None: df)
 
     def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
         mapping = {1: "good", 2: "bad"}
@@ -251,7 +251,7 @@ def test_build_combined_tables_initializes_pair_segments(
         "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
 
-    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir, _p=None: df)
 
     def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
         mapping = {1: "good", 2: "good"}
@@ -299,7 +299,7 @@ def test_build_combined_tables_aggregates_all_pair_segments(
         "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
 
-    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir, _p=None: df)
     monkeypatch.setattr(
         lib,
         "initialize_activity_status",
@@ -357,7 +357,7 @@ def test_build_combined_tables_normalizes_pair_column_names(
         "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
 
-    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
+    monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir, _p=None: df)
 
     def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
         mapping = {1: "good", 2: "good"}

@@ -290,7 +290,9 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
 
 
 def process_activity_table(
-    df_activity: pd.DataFrame, dictionary_dir: Path | str
+    df_activity: pd.DataFrame,
+    dictionary_dir: Path | str,
+    targets_csv: Path | str | None = None,
 ) -> pd.DataFrame:
     """Transform the combined activity table.
 
@@ -299,9 +301,14 @@ def process_activity_table(
     df_activity:
         Deduplicated activity dataframe.
     dictionary_dir:
-        Directory containing ``citation_fraction.csv`` and ``targets_type.csv``.
-        The latter may reside either directly inside ``dictionary_dir`` or in a
-        ``_Target`` subdirectory.
+        Directory containing ``citation_fraction.csv`` and optionally
+        ``targets_type.csv`` when ``targets_csv`` is not provided. The latter may
+        reside either directly inside ``dictionary_dir`` or in a ``_Target``
+        subdirectory.
+    targets_csv:
+        Optional explicit path to ``targets_type.csv``. When provided, the file
+        is loaded from this location instead of searching within
+        ``dictionary_dir``.
 
     Returns
     -------
@@ -446,22 +453,19 @@ def process_activity_table(
     )
 
     # --- target types ------------------------------------------------------
-    targets_path = Path(dictionary_dir) / "_Target/targets_type.csv"
-
-    # ``targets_type.csv`` may reside either directly inside ``dictionary_dir``
-    # or within a ``_Target`` subdirectory depending on how the dictionary
-    # archive was extracted. Try the top-level location first and fall back to
-    # the nested variant if necessary.
-    targets_path = Path(dictionary_dir) / "targets_type.csv"
-    if not targets_path.exists():
-        targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
-    if not targets_path.exists():
-        msg = (
-            "targets_type.csv not found in the provided dictionary directory. "
-            "Expected at either 'dictionary/targets_type.csv' or "
-            "'dictionary/_Target/targets_type.csv'."
-        )
-        raise FileNotFoundError(msg)
+    if targets_csv is not None:
+        targets_path = Path(targets_csv)
+    else:
+        targets_path = Path(dictionary_dir) / "targets_type.csv"
+        if not targets_path.exists():
+            targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
+        if not targets_path.exists():
+            msg = (
+                "targets_type.csv not found in the provided dictionary directory. "
+                "Expected at either 'dictionary/targets_type.csv' or "
+                "'dictionary/_Target/targets_type.csv'."
+            )
+            raise FileNotFoundError(msg)
 
     targets = pd.read_csv(
         targets_path,
@@ -820,9 +824,51 @@ def build_combined_tables(
     same: TableDict,
     all_: TableDict,
     dictionary_dir: Path | str | None = None,
+    *,
+    status_csv: Path | str | None = None,
+    targets_type_csv: Path | str | None = None,
 ) -> TableDict:
-    """Combine entity tables from ``same`` and ``all_`` sources."""
+    """Combine entity tables from ``same`` and ``all_`` sources.
+
+    Parameters
+    ----------
+    same:
+        Tables generated from the "same document" workbook.
+    all_:
+        Tables generated from the "all document" workbook.
+    dictionary_dir:
+        Optional directory containing auxiliary CSV dictionaries used during
+        processing.
+    status_csv:
+        Optional path to ``status.csv``. If relative, it is resolved against
+        ``dictionary_dir``.
+    targets_type_csv:
+        Optional path to ``targets_type.csv``. If relative, it is resolved
+        against ``dictionary_dir``.
+
+    Returns
+    -------
+    TableDict
+        Mapping of entity names to combined tables.
+
+    """
     combined: TableDict = {}
+    dict_dir = Path(dictionary_dir) if dictionary_dir is not None else None
+    status_path = Path(status_csv) if status_csv is not None else None
+    targets_path = Path(targets_type_csv) if targets_type_csv is not None else None
+
+    if (
+        status_path is not None
+        and not status_path.is_absolute()
+        and dict_dir is not None
+    ):
+        status_path = dict_dir / status_path.name
+    if (
+        targets_path is not None
+        and not targets_path.is_absolute()
+        and dict_dir is not None
+    ):
+        targets_path = dict_dir / targets_path.name
 
     # --- regular entities -------------------------------------------------
     regular_entities: tuple[EntityName, ...] = (
@@ -859,8 +905,8 @@ def build_combined_tables(
         df_activity = concat.drop_duplicates(subset=concat.columns[0], keep="first")
     else:
         df_activity = concat
-    if dictionary_dir is not None:
-        df_activity = process_activity_table(df_activity, dictionary_dir)
+    if dict_dir is not None:
+        df_activity = process_activity_table(df_activity, dict_dir, targets_path)
     logger.info(
         "Entity activity: rows_same=%d rows_all=%d rows_concat=%d rows_after_dedup=%d",
         len(df_same_act),
@@ -898,8 +944,8 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
-    if dictionary_dir is not None:
-        status_df = load_status_table(dictionary_dir)
+    if dict_dir is not None:
+        status_df = load_status_table(status_path or dict_dir)
         status_api = build_status_helpers(status_df)
         combined["activity"] = initialize_activity_status(
             combined["activity"], status_api
@@ -1254,13 +1300,13 @@ class StatusAPI:
         return self.descending(s1, s2)
 
 
-def load_status_table(dictionary_dir: Path | str) -> pd.DataFrame:
-    """Load ``status.csv`` from ``dictionary_dir``.
+def load_status_table(path: Path | str) -> pd.DataFrame:
+    """Load the status configuration table.
 
     Parameters
     ----------
-    dictionary_dir:
-        Directory containing ``status.csv``.
+    path:
+        Path to ``status.csv`` or directory containing the file.
 
     Returns
     -------
@@ -1268,7 +1314,9 @@ def load_status_table(dictionary_dir: Path | str) -> pd.DataFrame:
         Status table sorted by ``order`` with proper dtypes.
 
     """
-    path = Path(dictionary_dir) / "status.csv"
+    path = Path(path)
+    if path.is_dir():
+        path = path / "status.csv"
     df = pd.read_csv(
         path,
         dtype={

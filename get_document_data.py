@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
@@ -35,10 +34,12 @@ from library.config import (
     Config,
     OpenAlexCfg,
     CrossRefCfg,
+    RetryCfg,
     ensure_dirs,
     print_config,
     _serialize_paths,
 )
+from library.chembl_client import init_session
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -274,6 +275,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    # Configure session for ChEMBL requests
+    init_session(cfg.api, RetryCfg())
+
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -381,6 +385,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    # Prepare shared session before performing any API calls
+    init_session(cfg.api, RetryCfg())
+
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -592,24 +599,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "pubmed", parents=[root], help="Fetch data from PubMed and related APIs"
     )
     pubmed.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV with a PMID column",
-    )
-    pubmed.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file (default: auto-generate)",
-    )
-    pubmed.add_argument(
         "--column", default="PMID", help="Column name containing identifiers"
     )
-    pubmed.add_argument("--sep", default=",", help="CSV delimiter")
-    pubmed.add_argument("--encoding", default="utf8", help="File encoding")
     pubmed.add_argument(
         "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
     )
@@ -628,24 +619,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "chembl", parents=[root], help="Fetch document information from ChEMBL"
     )
     chembl.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV with document_chembl_id column",
-    )
-    chembl.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file (default: auto-generate)",
-    )
-    chembl.add_argument(
         "--column", default="chembl_id", help="Column name containing identifiers"
     )
-    chembl.add_argument("--sep", default=",", help="CSV delimiter")
-    chembl.add_argument("--encoding", default="utf8", help="File encoding")
     chembl.add_argument(
         "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
     )
@@ -661,24 +636,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "all", parents=[root], help="Run both ChEMBL and PubMed pipelines"
     )
     all_cmd.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV with document_chembl_id column",
-    )
-    all_cmd.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file (default: auto-generate)",
-    )
-    all_cmd.add_argument(
         "--column", default="chembl_id", help="Column in the input CSV"
     )
-    all_cmd.add_argument("--sep", default=",", help="CSV delimiter")
-    all_cmd.add_argument("--encoding", default="utf8", help="File encoding")
     all_cmd.add_argument(
         "--chunk-size", type=int, default=5, help="Maximum IDs per request"
     )

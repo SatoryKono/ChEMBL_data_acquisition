@@ -150,14 +150,23 @@ Individual scripts provide specialised data retrieval utilities:
 * ``get_testitem_data.py`` – download compound data and enrich with PubChem.
 * ``get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
 
-### Deterministic CSV output
+For a quick connectivity check without writing any files, limit the number of
+records and enable dry-run mode:
+
+```bash
+python get_activity_data.py --limit 10 --dry-run
+```
+
+### Deterministic CSV output and metadata
 
 The function ``library.csv_utils.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
 files. The helper script ``scripts/check_determinism.py`` writes a sample CSV
-twice and compares SHA-256 hashes to catch nondeterministic behaviour.
-The script requires the ``pandas`` package; install it with ``pip install pandas``
-if it is not already available in your environment.
+twice and compares SHA-256 hashes to catch nondeterministic behaviour. Each
+execution also writes a sidecar ``<output>.meta.yaml`` file capturing the Git
+commit, command line invocation and relevant configuration values so results can
+be reproduced. The script requires the ``pandas`` package; install it with
+``pip install pandas`` if it is not already available in your environment.
 
 Each command-line tool emits a ``<output>.meta.yaml`` sidecar file alongside
 every CSV. The YAML document records the SHA-256 checksum, command-line
@@ -170,6 +179,8 @@ with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
 
 Detailed command line examples using the bundled smoke datasets can be found in
 ``docs/USAGE.md``.
+An overview of the output directory layout and metadata sidecars is available in
+``docs/OUTPUT.md``.
 
 ### Table quality analysis
 

@@ -33,7 +33,17 @@ def test_malformed_config_exits(
     tmp_path: Path, entry, extra, use_sys, monkeypatch
 ) -> None:
     cfg = tmp_path / "config.yaml"
-    cfg.write_text("jobs:\n  chunk_size: bad\n")
+    cfg.write_text(
+        "jobs:\n  chunk_size: bad\n"
+        "resources:\n"
+        "  dictionary_dir: dictionary\n"
+        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "  uniprot_data_dir: uniprot\n"
+        "  organism_csv: dictionary/organism.csv\n"
+        "  status_csv: dictionary/status.csv\n"
+        "  targets_type_csv: dictionary/targets_type.csv\n"
+    )
     argv = [*extra, "--config", str(cfg)]
     buf = io.StringIO()
     orig = configure_logger
@@ -49,3 +59,7 @@ def test_malformed_config_exits(
     else:
         rc = entry(argv)
     assert rc != 0
+
+    if caplog.text:
+        assert "jobs.chunk_size" in caplog.text
+

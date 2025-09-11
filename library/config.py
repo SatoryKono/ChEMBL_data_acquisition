@@ -212,6 +212,8 @@ class ResourcesCfg:
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
     uniprot_data_dir: Path = Path("uniprot")
     organism_csv: Path = Path("dictionary/organism.csv")
+    status_csv: Path = Path("dictionary/status.csv")
+    targets_type_csv: Path = Path("dictionary/targets_type.csv")
 
 
 @dataclass
@@ -536,6 +538,8 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
     "CHEMBL_DA_UNIPROT_DATA_DIR": ["resources", "uniprot_data_dir"],
     "CHEMBL_DA_ORGANISM_CSV": ["resources", "organism_csv"],
+    "CHEMBL_DA_STATUS_CSV": ["resources", "status_csv"],
+    "CHEMBL_DA_TARGETS_TYPE_CSV": ["resources", "targets_type_csv"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -854,6 +858,8 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "iuphar_family_csv": {"type": "string", "minLength": 1},
                 "uniprot_data_dir": {"type": "string", "minLength": 1},
                 "organism_csv": {"type": "string", "minLength": 1},
+                "status_csv": {"type": "string", "minLength": 1},
+                "targets_type_csv": {"type": "string", "minLength": 1},
             },
             "required": [
                 "dictionary_dir",
@@ -861,6 +867,8 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "iuphar_family_csv",
                 "uniprot_data_dir",
                 "organism_csv",
+                "status_csv",
+                "targets_type_csv",
             ],
             "additionalProperties": False,
         },

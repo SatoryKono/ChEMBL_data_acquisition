@@ -1,14 +1,24 @@
-import time
-
-from library.rate_limiter import RateLimiter
+import library.rate_limiter as rl
 
 
-def test_rate_limiter_enforces_rps() -> None:
+class FakeTime:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, delay: float) -> None:
+        self.sleeps.append(delay)
+        self.now += delay
+
+
+def test_rate_limiter_enforces_rps(monkeypatch) -> None:
     """Ensure the limiter respects the configured requests per second."""
-    limiter = RateLimiter(rps=5, burst=1)
-    n_calls = 5
-    start = time.monotonic()
-    for _ in range(n_calls):
+    fake_time = FakeTime()
+    monkeypatch.setattr(rl, "time", fake_time)
+    limiter = rl.RateLimiter(rps=5, burst=1)
+    for _ in range(5):
         limiter.acquire()
-    elapsed = time.monotonic() - start
-    assert elapsed >= (n_calls - 1) / 5
+    assert fake_time.sleeps == [0.2, 0.2, 0.2, 0.2]
