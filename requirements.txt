@@ -1,5 +1,5 @@
 numpy==2.3.3
-pandas==2.3.2
+pandas==2.3.2  # Required for scripts/check_determinism.py
 requests==2.32.5
 PyYAML==6.0.2
 openpyxl==3.1.5

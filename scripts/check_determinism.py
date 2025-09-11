@@ -15,7 +15,13 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError as exc:  # pragma: no cover - import-time check
+    raise SystemExit(
+        "pandas is required to run scripts/check_determinism.py."
+        " Install it with 'pip install pandas'."
+    ) from exc
 
 # Ensure the repository root is on ``sys.path`` when executed as a script.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
