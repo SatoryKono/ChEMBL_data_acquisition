@@ -14,5 +14,8 @@ def test_env_alias_invalid_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     path = tmp_path / "cfg.yaml"
     path.write_text("")
     monkeypatch.setenv("CHEMBL_DA_BASE", "https://")
+    monkeypatch.setenv(
+        "CHEMBL_DA__API__USER_AGENT", "test-agent/1.0 (mailto:test@example.org)"
+    )
     with pytest.raises(ValidationError, match="api.chembl_base"):
         load_config(path)
