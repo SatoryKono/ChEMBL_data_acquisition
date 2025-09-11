@@ -68,10 +68,30 @@ api:
   chembl_base: https://www.ebi.ac.uk/chembl/api/data
 ```
 
-## Logging
+## Логирование
 
-All command-line tools emit structured logs as one JSON object per line
-(JSONL). Each log entry provides a consistent set of fields:
+Пример включения JSON‑формата через переменную окружения:
+
+```bash
+LOG_FORMAT=json python get_assay_data.py --input tests/data/assays.csv \
+    --output out/assays.csv --log-level INFO
+```
+
+Уровень логов можно задать флагом `--log-level` или переменной
+`CHEMBL_DA_LOG_LEVEL`:
+
+```bash
+CHEMBL_DA_LOG_LEVEL=DEBUG python get_assay_data.py --input tests/data/assays.csv \
+    --output out/assays.csv
+```
+
+Пример строки лога:
+
+```json
+{"ts":"2024-05-01T12:00:00Z","level":"INFO","event":"pipeline_start","run_id":"abc123","stage":"pipeline"}
+```
+
+Ключевые поля:
 
 * `ts` – UTC timestamp in ISO 8601 format.
 * `level` – severity such as `DEBUG`, `INFO`, `WARN` or `ERROR`.
