@@ -37,15 +37,15 @@ Typical log entries look like:
 
 ## Installation
 
-Clone the repository and install the runtime dependencies. Optional tooling for
-formatting, linting and type checking lives in ``requirements-dev.txt``:
+Clone the repository and install the pinned runtime dependencies:
 
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
 pip install -r requirements.txt
-# Development extras
-pip install -r requirements-dev.txt
+
+# Development tools (black, ruff, mypy, pytest, ...)
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ### Pre-commit hooks

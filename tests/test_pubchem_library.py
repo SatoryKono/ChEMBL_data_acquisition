@@ -1,6 +1,11 @@
 import responses
 
 from library import pubchem_library as pl
+@responses.activate
+def test_get_cid_from_smiles_uses_base() -> None:
+
+
+from library import pubchem_library as pl
 
 
 
@@ -13,6 +18,7 @@ def test_get_cid_from_smiles_uses_base(monkeypatch) -> None:
         return {"IdentifierList": {"CID": [1]}}
 
     monkeypatch.setattr(pl, "make_request", fake_request)
+
     cfg = pl.PubChemCfg(base="https://example.org/api", delay=0)
     url = "https://example.org/api/compound/smiles/C/cids/JSON"
     responses.add(responses.GET, url, json={"IdentifierList": {"CID": [1]}}, status=200)
@@ -33,6 +39,7 @@ def test_make_request_uses_timeout(monkeypatch) -> None:
 
     monkeypatch.setattr(pl._session, "get", capture)
     monkeypatch.setattr(pl.time, "sleep", lambda s: None)
+
 
 
     class Resp:
