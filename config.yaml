@@ -20,6 +20,7 @@ api:
 
 chembl:
   cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA__CHEMBL__CACHE_TTL / CHEMBL_DA_CACHE_TTL)
+  cache_maxsize: 1024  # Max cached ChEMBL responses (env: CHEMBL_DA__CHEMBL__CACHE_MAXSIZE / CHEMBL_DA_CACHE_MAXSIZE)
 
 openalex:
   base: "https://api.openalex.org"  # OpenAlex API root URL (env: CHEMBL_DA__OPENALEX__BASE / CHEMBL_DA_OPENALEX_BASE)
