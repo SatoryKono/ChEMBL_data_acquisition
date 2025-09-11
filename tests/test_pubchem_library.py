@@ -4,7 +4,7 @@ from library import pubchem_library as pl
 def test_get_cid_from_smiles_uses_base(monkeypatch):
     called = {}
 
-    def fake_request(url: str, cfg: pl.PubChemCfg, delay: float = 3.0):
+    def fake_request(url: str, cfg: pl.PubChemCfg):
         called["url"] = url
         return {"IdentifierList": {"CID": [1]}}
 
@@ -34,6 +34,6 @@ def test_make_request_uses_timeout(monkeypatch):
 
     monkeypatch.setattr(pl._session, "get", fake_get)
     monkeypatch.setattr(pl.time, "sleep", lambda s: None)
-    cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2)
-    pl.make_request("https://example.org", cfg, delay=0)
+    cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, delay=0)
+    pl.make_request("https://example.org", cfg)
     assert called["timeout"] == (1, 2)

@@ -43,6 +43,7 @@ uniprot:
   retries: 3
   rps: 4  # (env: CHEMBL_DA_UNIPROT_RPS)
   burst: 5  # (env: CHEMBL_DA_UNIPROT_BURST)
+  delay: 0.25  # Delay between requests in seconds
 
 uniprot_mapping:
   base: "https://rest.uniprot.org/idmapping"  # UniProt ID mapping API (env: CHEMBL_DA__UNIPROT_MAPPING__BASE / CHEMBL_DA_UNIPROT_MAPPING_BASE)
@@ -66,6 +67,7 @@ pubchem:
   retries: 3
   rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
   burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
+  delay: 3  # Delay between requests in seconds
 
 
 pubmed:

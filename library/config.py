@@ -33,6 +33,9 @@ from urllib.parse import urlparse
 
 import yaml
 import jsonschema
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 logger = logging.getLogger(__name__)
@@ -128,6 +131,7 @@ class UniprotCfg:
     retries: int = 3
     rps: int = 4
     burst: int = 5
+    delay: float = 0.25
 
 
 @dataclass
@@ -161,6 +165,7 @@ class PubChemCfg:
     retries: int = 3
     rps: int = 3
     burst: int = 5
+    delay: float = 3.0
 
 
 @dataclass
@@ -295,6 +300,36 @@ class RetryCfg:
     )
 
 
+def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
+    """Return an HTTP session configured for retries and user agent.
+
+    Parameters
+    ----------
+    api:
+        Global API settings providing the ``User-Agent`` header.
+    retry:
+        Retry configuration specifying backoff behaviour.
+
+    Returns
+    -------
+    Session
+        Configured :class:`requests.Session` instance.
+    """
+
+    retry_cfg = Retry(
+        total=retry.max_attempts,
+        backoff_factor=retry.backoff_factor,
+        status_forcelist=retry.status_forcelist,
+        allowed_methods=["GET"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_cfg)
+    session = Session()
+    session.headers["User-Agent"] = api.user_agent
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 @dataclass
 class Config:
     """Aggregate project configuration."""
@@ -309,7 +344,9 @@ class Config:
 
     pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
+
     doc_type: DocTypeCfg = field(default_factory=DocTypeCfg)
+
 
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
 
@@ -673,6 +710,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "retries": {"type": "integer", "minimum": 0},
                 "rps": {"type": "integer", "minimum": 1},
                 "burst": {"type": "integer", "minimum": 1},
+                "delay": {"type": "number", "minimum": 0},
             },
             "required": [
                 "base",
@@ -723,6 +761,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "retries": {"type": "integer", "minimum": 0},
                 "rps": {"type": "integer", "minimum": 1},
                 "burst": {"type": "integer", "minimum": 1},
+                "delay": {"type": "number", "minimum": 0},
             },
             "required": [
                 "base",
@@ -778,6 +817,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+
         "doc_type": {
             "type": "object",
             "properties": {
@@ -805,6 +845,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             "required": ["weights", "thresholds"],
             "additionalProperties": False,
         },
+
 
         "resources": {
             "type": "object",
@@ -1016,6 +1057,8 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
+        if hasattr(service, "delay") and service.delay < 0:
+            raise ValueError(f"{name}.delay must be non-negative")
 
     basic_services: list[tuple[str, Any]] = [
         ("pubmed", cfg.pubmed),
@@ -1175,6 +1218,7 @@ __all__ = [
     "PubMedCfg",
     "SemanticScholarCfg",
     "DocTypeCfg",
+
     "ResourcesCfg",
     "IoCfg",
     "JobsCfg",
@@ -1184,6 +1228,7 @@ __all__ = [
     "InitCfg",
     "RateCfg",
     "RetryCfg",
+    "session_with_retry",
     "LogCfg",
     "Config",
     "ConfigError",

@@ -43,25 +43,23 @@ from typing import Any, Dict, Iterable, List, Set
 
 import requests
 from requests import Session
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
-from .config import UniprotCfg
+from .config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
 
 logger = logging.getLogger(__name__)
 
-# Shared HTTP session with retry/backoff to make network calls more robust.
-_retry = Retry(
-    total=3,
-    backoff_factor=1.0,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["GET"],
-)
-_session: Session = requests.Session()
-_session.mount("http://", HTTPAdapter(max_retries=_retry))
-_session.mount("https://", HTTPAdapter(max_retries=_retry))
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+
+
+def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+    """Initialise the shared HTTP session."""
+
+    global _session
+    _session = session_with_retry(api, retry)
+
 
 __all__ = [
+    "init_session",
     "fetch_uniprot",
     "extract_names",
     "extract_uniprotkb_id",
@@ -107,8 +105,7 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
         If the request fails or the payload cannot be decoded as JSON.
 
     """
-    delay = 1 / cfg.rps if cfg.rps else 0
-    time.sleep(delay)
+    time.sleep(cfg.delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/uniprotkb/{uniprot_id}.json"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
