@@ -19,7 +19,6 @@ import pandas as pd
 import requests
 from library.config import (
     Config,
-    RetryCfg,
     ensure_dirs,
     print_config,
     _serialize_paths,
@@ -347,7 +346,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Set up HTTP session with proper headers and retry behaviour
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
         ids = io.read_ids(

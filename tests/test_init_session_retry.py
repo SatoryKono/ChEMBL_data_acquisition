@@ -1,0 +1,69 @@
+import argparse
+from importlib import import_module
+from pathlib import Path
+
+import pytest
+
+from library.config import Config
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_name"),
+    [
+        ("get_activity_data", "run_chembl"),
+        ("get_assay_data", "run_chembl"),
+        ("get_document_data", "run_chembl"),
+        ("get_document_data", "run_all"),
+        ("get_target_data", "run_chembl"),
+        ("get_testitem_data", "run_chembl"),
+    ],
+)
+def test_init_session_uses_cfg_retry(
+    module_name: str, func_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure CLI scripts use retry settings from :class:`Config`.
+
+    The test verifies that each script passes ``cfg.retry`` to
+    :func:`library.chembl_client.init_session` by monkeypatching the
+    function and capturing the supplied arguments.
+    """
+
+    module = import_module(module_name)
+    cfg = Config()
+    captured: dict[str, object] = {}
+
+    def fake_init(api: object, retry: object, *_args: object) -> None:
+        """Record parameters supplied to :func:`init_session`.
+
+        Parameters
+        ----------
+        api : object
+            API configuration object.
+        retry : object
+            Retry configuration to apply.
+        *_args : object
+            Additional positional arguments, ignored.
+        """
+
+        captured["api"] = api
+        captured["retry"] = retry
+
+    monkeypatch.setattr(module, "init_session", fake_init)
+
+    args = argparse.Namespace(
+        input_csv=Path("missing.csv"),
+        output_csv=None,
+        column="id",
+        sep=",",
+        encoding="utf8",
+        chunk_size=1,
+        timeout=1.0,
+        limit=None,
+        dry_run=False,
+    )
+
+    result = getattr(module, func_name)(cfg, args)
+
+    assert result == 1
+    assert captured["api"] is cfg.api
+    assert captured["retry"] is cfg.retry
