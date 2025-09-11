@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from typing import Sequence
 
@@ -14,6 +13,7 @@ from library.chembl_client import init_session
 from library import chembl_library as cl
 from library import io
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.log import logger
 from library.cli import (
     apply_config_overrides,
     build_parser as base_parser,
@@ -28,8 +28,6 @@ from schemas import ActivitiesSchema, normalize_activities
 from library import write_csv_deterministic
 
 ORIG_WRITE_CSV = io.write_csv
-
-logger = logging.getLogger(__name__)
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -187,7 +185,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
-    logger = configure_logger(log_cfg)
+    configure_logger(log_cfg)
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     try:
         cfg: Config = apply_config_overrides(
@@ -204,7 +202,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         ensure_dirs(cfg)
-        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
         logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})

@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import csv
 import json
-import logging
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Set
 
@@ -45,8 +44,7 @@ from requests import Session
 
 from .config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
 from .rate_limiter import get_limiter, sleep
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")

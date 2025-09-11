@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 import io
-import logging
 import random
 import time
 from urllib.parse import quote
@@ -30,9 +29,7 @@ import requests
 from requests import Session
 
 from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
-
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())

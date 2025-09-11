@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-import logging
-
 import pandas as pd
 
 from .chembl_client import _chunked, request_json
 from .config import ApiCfg, UniprotMappingCfg
 from .mapper_library import map_chembl_to_uniprot
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 TARGET_FIELDS = [
     "pref_name",

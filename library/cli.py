@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .config import Config, ConfigError, load_config
+from .log import logger as shared_logger
 
 
 @dataclass
@@ -233,7 +234,7 @@ def configure_logger(
         datefmt=datefmt,
         force=True,
     )
-    return logging.getLogger(__name__)
+    return shared_logger
 
 
 # ---------------------------------------------------------------------------

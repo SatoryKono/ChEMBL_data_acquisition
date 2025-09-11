@@ -9,15 +9,13 @@ Power Query script used in the original workflow.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pandas as pd
 
 from .config import IoCfg
 from .validation import validate_schema
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:

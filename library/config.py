@@ -24,7 +24,6 @@ appropriate built-in exceptions during validation.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-import logging
 import os
 import re
 from pathlib import Path
@@ -35,10 +34,10 @@ import yaml
 import jsonschema
 from requests import Session
 from requests.adapters import HTTPAdapter
+import logging
 from urllib3.util.retry import Retry
 
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")

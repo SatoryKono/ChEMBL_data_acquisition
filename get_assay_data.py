@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from typing import Sequence
 
@@ -27,8 +26,7 @@ from pandera.errors import SchemaErrors
 from schemas import AssaysSchema, normalize_assays
 
 from library import write_csv_deterministic
-
-logger = logging.getLogger(__name__)
+from library.log import logger
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -158,7 +156,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
-    logger = configure_logger(log_cfg)
+    configure_logger(log_cfg)
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     try:
         cfg: Config = apply_config_overrides(
@@ -172,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         ensure_dirs(cfg)
-        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
         logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})

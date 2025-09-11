@@ -9,7 +9,6 @@ summary statistics.
 from __future__ import annotations
 
 import hashlib
-import logging
 import platform
 import subprocess
 from datetime import datetime, timezone
@@ -19,8 +18,7 @@ from typing import Any, Dict, Mapping, TypedDict
 import yaml
 
 from .config import _mask_secrets
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 class Stats(TypedDict):

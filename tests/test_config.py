@@ -223,7 +223,7 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 def test_unknown_key_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\napi:\n  rps: 1\n")
-    with caplog.at_level(logging.WARNING, logger="library.config"):
+    with caplog.at_level(logging.WARNING, logger="chembl_da"):
         load_config(path)
     assert "Unknown configuration key" in caplog.text
 
@@ -308,7 +308,7 @@ def test_unknown_env_var_warning(
     path = tmp_path / "cfg.yaml"
     path.write_text("")
     monkeypatch.setenv("CHEMBL_DA__FOO__BAR", "1")
-    with caplog.at_level(logging.WARNING, logger="library.config"):
+    with caplog.at_level(logging.WARNING, logger="chembl_da"):
         load_config(path)
     assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in caplog.text
 

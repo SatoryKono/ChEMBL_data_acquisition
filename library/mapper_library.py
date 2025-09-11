@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 import urllib.parse
 import urllib.request
@@ -12,8 +11,7 @@ from urllib.error import HTTPError
 
 from .config import UniprotMappingCfg
 from .rate_limiter import get_limiter
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 def map_chembl_to_uniprot(
@@ -79,7 +77,7 @@ def map_chembl_to_uniprot(
     data = urllib.parse.urlencode(
         {"from": "ChEMBL", "to": "UniProtKB", "ids": chembl_target_id}
     ).encode()
-    logging.debug("Submitting ID mapping job for %s", chembl_target_id)
+    logger.debug("Submitting ID mapping job for %s", chembl_target_id)
     base = cfg.base.rstrip("/")
     run_data = _open_json(f"{base}/run", data=data)
     job_id = run_data.get("jobId")
@@ -104,7 +102,7 @@ def map_chembl_to_uniprot(
         else:
             status = status_data.get("jobStatus") or status_data.get("status")
 
-        logging.debug("Job %s status: %s", job_id, status)
+        logger.debug("Job %s status: %s", job_id, status)
         if status == "FINISHED":
             break
         if status == "FAILED":

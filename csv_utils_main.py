@@ -7,18 +7,16 @@ This script reads an input CSV file and re-serialises it deterministically using
 from __future__ import annotations
 
 import argparse
-import logging
 import time
 from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
 
+import logging
 from library.csv_utils import write_csv_deterministic
 from library.cli import add_common_arguments
-
-
-logger = logging.getLogger(__name__)
+from library.log import logger
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
