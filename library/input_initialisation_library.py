@@ -304,10 +304,8 @@ def process_activity_table(
     df_activity:
         Deduplicated activity dataframe.
     dictionary_dir:
-        Directory containing ``citation_fraction.csv`` and optionally
-        ``targets_type.csv`` when ``targets_csv`` is not provided. The latter may
-        reside either directly inside ``dictionary_dir`` or in a ``_Target``
-        subdirectory.
+        Directory containing ``citation_fraction.csv`` and ``targets_type.csv``
+         in a ``_Target`` subdirectory.    
     targets_csv:
         Optional explicit path to ``targets_type.csv``. When provided, the file
         is loaded from this location instead of searching within
@@ -459,7 +457,7 @@ def process_activity_table(
     if targets_csv is not None:
         targets_path = Path(targets_csv)
     else:
-        targets_path = Path(dictionary_dir) / "targets_type.csv"
+        targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
         if not targets_path.exists():
             targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
         if not targets_path.exists():
@@ -473,18 +471,22 @@ def process_activity_table(
     targets = pd.read_csv(
         targets_path,
         dtype={
-            "chembl_id": "string",
+            "target_chembl_id": "string",
+            "organism_type": "string",
+            "target_sort_order": "string",
             "IUPHAR_class": "string",
             "IUPHAR_subclass": "string",
-            "type": "string",
+            "gene_index": "string",
+            "taxon_index": "string",
+            "multifunctional": "boolean",
         },
     )
 
     df = df.merge(
-        targets[["chembl_id", "IUPHAR_class", "IUPHAR_subclass", "type"]],
+        targets[["target_chembl_id", "target_sort_order", "organism_type", "multifunctional"]],
         how="left",
         left_on="target_id",
-        right_on="chembl_id",
+        right_on="target_chembl_id",
     )
     mapping = {
         "Multicellular organism": False,
@@ -492,12 +494,12 @@ def process_activity_table(
         "Unicellular organism": True,
     }
     df["unicellular_organism"] = (
-        df["type"].map(mapping).astype("boolean").fillna(False).astype(bool)
+        df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
     )
 
-    df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
+    df["multifunctional_enzyme"] = df["multifunctional"]
 
-    df.drop(columns=["chembl_id", "type"], inplace=True)
+    df.drop(columns=["target_chembl_id", "organism_type"], inplace=True)
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
@@ -525,8 +527,7 @@ def process_activity_table(
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
-        "IUPHAR_class",
-        "IUPHAR_subclass",
+        "target_sort_order",
         "unicellular_organism",
         "multifunctional_enzyme",
     ]
