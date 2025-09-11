@@ -1,64 +1,85 @@
+"""Tests for :mod:`library.pubchem_library`."""
+
+from __future__ import annotations
+
+from typing import Dict, Tuple
+
 import responses
 
+import library.rate_limiter as rl
 from library import pubchem_library as pl
+
+
 @responses.activate
 def test_get_cid_from_smiles_uses_base() -> None:
-
-
-from library import pubchem_library as pl
-
-
-
-def test_get_cid_from_smiles_uses_base(monkeypatch) -> None:
     """PubChem requests should respect the configured base URL."""
-    called: dict[str, object] = {}
-
-    def fake_request(url: str, cfg: pl.PubChemCfg) -> dict[str, dict[str, list[int]]]:
-        called["url"] = url
-        return {"IdentifierList": {"CID": [1]}}
-
-    monkeypatch.setattr(pl, "make_request", fake_request)
-
-    cfg = pl.PubChemCfg(base="https://example.org/api", delay=0)
+    cfg = pl.PubChemCfg(base="https://example.org/api", rps=0)
     url = "https://example.org/api/compound/smiles/C/cids/JSON"
     responses.add(responses.GET, url, json={"IdentifierList": {"CID": [1]}}, status=200)
     cid = pl.get_cid_from_smiles("C", cfg)
     assert responses.calls[0].request.url == url
     assert cid == "1"
-    assert called["url"] == url
 
 
+@responses.activate
 def test_make_request_uses_timeout(monkeypatch) -> None:
-    called: dict[str, tuple[int, int]] = {}
-
-    orig_get = pl._session.get
-
-    def capture(url: str, timeout: tuple[int, int]):
-        called["timeout"] = timeout
-        return orig_get(url, timeout=timeout)
-
-    monkeypatch.setattr(pl._session, "get", capture)
-    monkeypatch.setattr(pl.time, "sleep", lambda s: None)
-
-
+    """Requests should apply configured timeouts."""
+    called: Dict[str, Tuple[int, int]] = {}
 
     class Resp:
         status_code = 200
 
+        def json(self) -> Dict[str, object]:
+            return {}
+
         def raise_for_status(self) -> None:  # pragma: no cover - no error
             return None
 
-        def json(self) -> dict[str, object]:
-            return {}
-
-    def capture(url: str, timeout: tuple[int, int]) -> Resp:
+    def capture(url: str, timeout: Tuple[int, int]) -> Resp:
         called["timeout"] = timeout
         return Resp()
 
     monkeypatch.setattr(pl._session, "get", capture)
-    monkeypatch.setattr(pl, "sleep", lambda s: None)
 
-    cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, delay=0, retries=1)
+    cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1, rps=0)
     responses.add(responses.GET, "https://example.org", json={}, status=200)
     pl.make_request("https://example.org", cfg)
     assert called["timeout"] == (1, 2)
+
+
+def test_make_request_rate_limited(monkeypatch) -> None:
+    """``make_request`` should pause when RPS is exceeded."""
+
+    class FakeTime:
+        def __init__(self) -> None:
+            self.current = 0.0
+            self.sleeps: list[float] = []
+
+        def monotonic(self) -> float:
+            return self.current
+
+        def sleep(self, delay: float) -> None:
+            self.sleeps.append(delay)
+            self.current += delay
+
+    fake_time = FakeTime()
+    monkeypatch.setattr(rl, "time", fake_time)
+    rl._limiters.clear()
+
+    class Resp:
+        status_code = 200
+
+        def json(self) -> Dict[str, object]:
+            return {}
+
+        def raise_for_status(self) -> None:  # pragma: no cover - no error
+            return None
+
+    monkeypatch.setattr(pl._session, "get", lambda url, timeout: Resp())
+    pl._CACHE.clear()
+
+    cfg = pl.PubChemCfg(rps=1, burst=1, retries=1)
+    pl.make_request("https://example.org/a", cfg)
+    pl.make_request("https://example.org/b", cfg)
+
+    assert fake_time.sleeps == [1.0]
