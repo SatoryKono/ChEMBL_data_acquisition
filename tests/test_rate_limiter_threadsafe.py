@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 
-import library.rate_limiter as rl
+from library import rate_limiter as rl
 
 
 def test_get_limiter_thread_safe() -> None:
