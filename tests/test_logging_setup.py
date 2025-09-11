@@ -17,6 +17,7 @@ import sys
 from typing import Any
 
 import pytest
+import threading
 
 from library.logging_setup import LoggerConfig, configure_logger
 
@@ -90,3 +91,27 @@ def test_stage_context_manager_failure(
     assert fail["event"] == "load_fail"
     assert start["stage"] == fail["stage"] == "load"
     assert start["run_id"] == fail["run_id"] == "rid"
+
+
+def test_multithreaded_logging_emits_valid_json(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Concurrent logging should emit one JSON object per line."""
+
+    logger = configure_logger(
+        LoggerConfig(level="INFO", run_id="rid", stream=sys.stdout)
+    )
+
+    def worker(idx: int) -> None:
+        logger.info("event", thread=idx)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    lines = capfd.readouterr().out.strip().splitlines()
+    assert len(lines) == 10
+    for line in lines:
+        json.loads(line)

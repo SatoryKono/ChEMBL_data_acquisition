@@ -15,6 +15,7 @@ import logging
 import sys
 import time
 import traceback
+import threading
 from contextlib import contextmanager
 from typing import Any, IO, Iterator, Optional
 
@@ -27,6 +28,9 @@ _LEVELS = {
     "WARNING": logging.WARNING,
     "ERROR": logging.ERROR,
 }
+
+# Global lock ensuring thread-safe writes to the log stream.
+_EMIT_LOCK = threading.Lock()
 
 
 def _level_no(name: str) -> int:
@@ -99,9 +103,10 @@ class Logger:
         return redacted
 
     def _emit(self, record: dict[str, Any]) -> None:
-        json.dump(record, self._cfg.stream)
-        self._cfg.stream.write("\n")
-        self._cfg.stream.flush()
+        with _EMIT_LOCK:
+            json.dump(record, self._cfg.stream)
+            self._cfg.stream.write("\n")
+            self._cfg.stream.flush()
 
     # ------------------------------------------------------------------
     # Public API
