@@ -1,5 +1,7 @@
 """Compatibility layer aggregating ChEMBL helpers."""
 
+from __future__ import annotations
+
 from . import chembl_assay as _chembl_assay
 from . import chembl_target as _chembl_target
 from .chembl_assay import *  # noqa: F401,F403
