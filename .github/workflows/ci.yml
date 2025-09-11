@@ -18,7 +18,8 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-      - run: python scripts/check_determinism.py --log-level DEBUG
+      - name: Verify deterministic CSV output
+        run: python scripts/check_determinism.py --log-level DEBUG
       - name: Run pre-commit
         uses: pre-commit/action@v3
       - name: Smoke test cache

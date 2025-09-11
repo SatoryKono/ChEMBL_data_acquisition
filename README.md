@@ -287,6 +287,8 @@ python scripts/check_determinism.py --log-level INFO
 The script writes a sample CSV twice using ``write_csv_deterministic`` and
 compares SHA-256 hashes. It requires the ``pandas`` package; install it with
 ``pip install pandas`` if it is not already available in your environment.
+This check also runs in the project's CI pipeline and will fail the build
+if the hashes differ.
 
 For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
 argument which streams the CSV in smaller pieces to reduce memory usage:
