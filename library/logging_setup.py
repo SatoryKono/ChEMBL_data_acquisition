@@ -42,7 +42,13 @@ def _level_no(name: str) -> int:
     return _LEVELS.get(name.upper(), logging.INFO)
 
 
-@dataclass(slots=True)
+if sys.version_info >= (3, 10):  # pragma: no branch
+    _dataclass = dataclass(slots=True)
+else:  # pragma: no cover - Py<3.10 compatibility
+    _dataclass = dataclass
+
+
+@_dataclass
 class LoggerConfig:
     """Configuration for :class:`Logger`.
 
