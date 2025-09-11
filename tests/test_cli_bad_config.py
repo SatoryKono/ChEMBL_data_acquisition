@@ -33,7 +33,7 @@ def test_malformed_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text("jobs:\n  chunk_size: bad\n")
-    argv = ["--config", str(cfg), *extra]
+    argv = [*extra, "--config", str(cfg)]
     with caplog.at_level(logging.ERROR):
         if use_sys:
             monkeypatch.setattr(sys, "argv", ["prog", *argv])

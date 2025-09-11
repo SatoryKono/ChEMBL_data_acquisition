@@ -164,6 +164,7 @@ class PubChemCfg:
 
 
 @dataclass
+ 
 class PubMedCfg:
     """Settings for the PubMed API and related I/O."""
 
@@ -185,6 +186,14 @@ class SemanticScholarCfg:
     timeout_read: int = 10
     retries: int = 2
     encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
+ 
+class ResourcesCfg:
+    """Paths to static resource files used by the application."""
+
+    dictionary_dir: Path = Path("dictionary")
+    iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
+    iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+ 
 
 
 @dataclass
@@ -285,8 +294,12 @@ class Config:
     uniprot_mapping: UniprotMappingCfg = field(default_factory=UniprotMappingCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
+ 
     pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
+ 
+    resources: ResourcesCfg = field(default_factory=ResourcesCfg)
+ 
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -455,6 +468,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
+    "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
+    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
+    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -692,6 +708,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+ 
         "pubmed": {
             "type": "object",
             "properties": {
@@ -733,6 +750,19 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "timeout_read",
                 "retries",
                 "encodings",
+ 
+        "resources": {
+            "type": "object",
+            "properties": {
+                "dictionary_dir": {"type": "string", "minLength": 1},
+                "iuphar_target_csv": {"type": "string", "minLength": 1},
+                "iuphar_family_csv": {"type": "string", "minLength": 1},
+            },
+            "required": [
+                "dictionary_dir",
+                "iuphar_target_csv",
+                "iuphar_family_csv",
+ 
             ],
             "additionalProperties": False,
         },
@@ -862,6 +892,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "pubchem",
         "pubmed",
         "semantic_scholar",
+        "resources",
         "io",
         "jobs",
         "batch",
@@ -1088,8 +1119,12 @@ __all__ = [
     "UniprotMappingCfg",
     "IupharCfg",
     "PubChemCfg",
+
     "PubMedCfg",
     "SemanticScholarCfg",
+
+    "ResourcesCfg",
+
     "IoCfg",
     "JobsCfg",
     "BatchCfg",

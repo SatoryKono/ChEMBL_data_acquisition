@@ -107,8 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dictionary-dir",
         type=Path,
-        default=Path("dictionary"),
-        help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
+        default=None,
+        help=(
+            "Directory with targets_type.csv, citation_fraction.csv and status.csv "
+            "(default: config resources.dictionary_dir)"
+        ),
     )
     parser.add_argument(
         "--out-dir",
@@ -136,6 +139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "same_doc": "init.same_doc",
                 "all_doc": "init.all_doc",
                 "out_dir": "init.output_dir",
+                "dictionary_dir": "resources.dictionary_dir",
             },
         )
         if args.print_config:
@@ -146,6 +150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.same_doc = Path(args.same_doc)
         args.all_doc = Path(args.all_doc)
         args.out_dir = Path(args.out_dir)
+        args.dictionary_dir = Path(args.dictionary_dir)
 
         configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
