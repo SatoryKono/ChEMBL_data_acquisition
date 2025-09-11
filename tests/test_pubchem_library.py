@@ -1,10 +1,11 @@
 from library import pubchem_library as pl
 
 
-def test_get_cid_from_smiles_uses_base(monkeypatch):
-    called = {}
+def test_get_cid_from_smiles_uses_base(monkeypatch) -> None:
+    """PubChem requests should respect the configured base URL."""
+    called: dict[str, object] = {}
 
-    def fake_request(url: str, cfg: pl.PubChemCfg):
+    def fake_request(url: str, cfg: pl.PubChemCfg) -> dict[str, dict[str, list[int]]]:
         called["url"] = url
         return {"IdentifierList": {"CID": [1]}}
 
@@ -15,19 +16,20 @@ def test_get_cid_from_smiles_uses_base(monkeypatch):
     assert cid == "1"
 
 
-def test_make_request_uses_timeout(monkeypatch):
-    called = {}
+def test_make_request_uses_timeout(monkeypatch) -> None:
+    """``make_request`` should use timeout values from configuration."""
+    called: dict[str, object] = {}
 
-    def fake_get(url: str, timeout: tuple[int, int]):
+    def fake_get(url: str, timeout: tuple[int, int]) -> object:
         called["timeout"] = timeout
 
         class Resp:
             status_code = 200
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 return None
 
-            def json(self):
+            def json(self) -> dict[str, object]:
                 return {}
 
         return Resp()

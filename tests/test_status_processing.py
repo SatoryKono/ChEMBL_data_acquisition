@@ -15,7 +15,7 @@ from library.input_initialisation_library import (
 )
 
 
-def test_status_pipeline(tmp_path):
+def test_status_pipeline(tmp_path) -> None:
     """Smoke test the status workflow end-to-end."""
     (tmp_path / "status.csv").write_text(
         "\n".join(
@@ -166,4 +166,3 @@ def test_aggregate_activity_handles_missing_testitem_id(tmp_path: Path) -> None:
     assert agg["system"].empty
     assert agg["testitem"].empty
     assert agg["target"].set_index("target_id").loc["TG1", "independent_IC50"] == 1
-
