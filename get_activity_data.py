@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Sequence
 
 import requests
+from pandera.errors import SchemaErrors
+from schemas.activities import ActivitiesSchema
+from library.normalization import normalize_activities
+from library.sidecar_errors import SidecarErrors
 
 from library import chembl_library as cl
 from library import io
@@ -50,6 +54,17 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("failed to retrieve activities: %s", exc)
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
+    df = normalize_activities(df)
+    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    try:
+        df = ActivitiesSchema.validate(df, lazy=True)
+    except SchemaErrors as err:
+        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
+        sidecar.add(str(err))
+        bad_idx = err.failure_cases["index"].dropna().unique()
+        logger.warning("schema validation failed for %d rows", len(bad_idx))
+        df = df.drop(index=bad_idx)
+    sidecar.write()
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -72,9 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout",
         type=float,
-
         default=DEFAULT_CONFIG.timeouts.read,
-
         help="Timeout in seconds for each HTTP request",
     )
     parser.set_defaults(func=run_chembl)

@@ -9,6 +9,10 @@ from typing import Sequence
 
 import pandas as pd
 import requests
+from pandera.errors import SchemaErrors
+from schemas.testitems import TestitemsSchema
+from library.normalization import normalize_testitems
+from library.sidecar_errors import SidecarErrors
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
@@ -132,6 +136,17 @@ def run_chembl(args: argparse.Namespace) -> int:
     df = add_pubchem_data(df)
     logger.info("PubChem augmentation completed")
     output = args.output_csv or io.default_output_path(args.input_csv)
+    df = normalize_testitems(df)
+    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    try:
+        df = TestitemsSchema.validate(df, lazy=True)
+    except SchemaErrors as err:
+        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
+        sidecar.add(str(err))
+        bad_idx = err.failure_cases["index"].dropna().unique()
+        logger.warning("schema validation failed for %d rows", len(bad_idx))
+        df = df.drop(index=bad_idx)
+    sidecar.write()
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
