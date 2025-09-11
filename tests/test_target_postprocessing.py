@@ -12,7 +12,7 @@ import pandas as pd
 import warnings
 
 from library import target_postprocessing as tp
-from library.config import IoCfg
+from library.config import Config, IoCfg
 
 
 def test_postprocess_targets_merges_and_normalises() -> None:
@@ -135,7 +135,9 @@ def test_finalise_file_roundtrip(tmp_path: Path) -> None:
     organism.to_csv(organism_path, index=False)
     output_path = tmp_path / "out.csv"
 
-    tp.finalise_file(input_path, organism_path, output_path)
+    cfg = Config()
+    cfg.resources.organism_csv = organism_path
+    tp.finalise_file(input_path, output_path, cfg=cfg)
 
     expected = tp.finalise_targets(df, organism).astype(str)
     result = pd.read_csv(output_path, dtype=str)

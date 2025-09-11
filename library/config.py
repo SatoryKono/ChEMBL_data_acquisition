@@ -212,6 +212,7 @@ class ResourcesCfg:
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
     uniprot_data_dir: Path = Path("uniprot")
+    organism_csv: Path = Path("dictionary/organism.csv")
 
 
 @dataclass
@@ -535,6 +536,7 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
     "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
     "CHEMBL_DA_UNIPROT_DATA_DIR": ["resources", "uniprot_data_dir"],
+    "CHEMBL_DA_ORGANISM_CSV": ["resources", "organism_csv"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -852,12 +854,14 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "iuphar_target_csv": {"type": "string", "minLength": 1},
                 "iuphar_family_csv": {"type": "string", "minLength": 1},
                 "uniprot_data_dir": {"type": "string", "minLength": 1},
+                "organism_csv": {"type": "string", "minLength": 1},
             },
             "required": [
                 "dictionary_dir",
                 "iuphar_target_csv",
                 "iuphar_family_csv",
                 "uniprot_data_dir",
+                "organism_csv",
             ],
             "additionalProperties": False,
         },

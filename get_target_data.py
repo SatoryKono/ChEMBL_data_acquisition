@@ -295,8 +295,11 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument(
         "--organism-csv",
         type=Path,
-        default=Path("dictionary/organism.csv"),
-        help="CSV mapping 'genus' to organism 'type' for finalisation",
+        default=None,
+        help=(
+            "CSV mapping 'genus' to organism 'type' for finalisation "
+            "(default: config resources.organism_csv)"
+        ),
     )
     all_cmd.add_argument(
         "--uniprot-column",
@@ -679,6 +682,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "target_csv": "resources.iuphar_target_csv",
                 "family_csv": "resources.iuphar_family_csv",
                 "data_dir": "resources.uniprot_data_dir",
+                "organism_csv": "resources.organism_csv",
             },
         )
         if args.print_config:
