@@ -135,3 +135,32 @@ def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
 
     assert cli.run(cfg, args) == 0
     assert (cfg.init.output_dir / "assay.csv").exists()
+
+
+def test_main_missing_dictionary_dir(tmp_path: Path, monkeypatch) -> None:
+    """``main`` should handle absent dictionary directory gracefully."""
+
+    cfg_path = tmp_path / "cfg.yaml"
+    cfg_path.write_text('log:\n  level: "ERROR"\n')
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+    out_dir = tmp_path / "out"
+
+    # Skip heavy processing by stubbing ``run``
+    monkeypatch.setattr(cli, "run", lambda _cfg, _args: 0)
+
+    result = cli.main(
+        [
+            "--config",
+            str(cfg_path),
+            "--same-doc",
+            str(same_doc),
+            "--all-doc",
+            str(all_doc),
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert result == 0
