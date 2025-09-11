@@ -1,8 +1,9 @@
 import requests
 import pytest
 
+import library.rate_limiter as rl
 from library import openalex_crossref_library as ocl
-from library.config import OpenAlexCfg, CrossRefCfg
+from library.config import Config, OpenAlexCfg, CrossRefCfg
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
@@ -16,31 +17,22 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
         return {}, ""
 
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
-    rps: dict[str, float] = {}
 
-    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
-        rps["value"] = rps_val
-
-        class Dummy:
-            def acquire(self) -> None:
-                pass
-
-        return Dummy()
-
-    monkeypatch.setattr("library.pubmed_library.get_limiter", fake_get_limiter)
-
-    cfg = OpenAlexCfg(
-        base="https://example.org",
-        timeout_connect=1,
-        timeout_read=2,
-        rps=2,
-        burst=5,
-        mailto="x@y.com",
+    cfg = Config(
+        openalex=OpenAlexCfg(
+            base="https://example.org",
+            timeout_connect=1,
+            timeout_read=2,
+            rps=2,
+            burst=5,
+            mailto="x@y.com",
+        )
     )
-    ocl.fetch_openalex(requests.Session(), "123", cfg)
+    limiter = rl.RateLimiter(2)
+    ocl.fetch_openalex(requests.Session(), "123", cfg.openalex, limiter)
     assert called["url"] == "https://example.org/works/pmid:123?mailto=x%40y.com"
     assert called["timeout"] == (1, 2)
-    assert rps["value"] == pytest.approx(2)
+    assert called["sleep"] == pytest.approx(0.5)
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
@@ -54,28 +46,37 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
         return {}, ""
 
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
-    rps: dict[str, float] = {}
 
-    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
-        rps["value"] = rps_val
-
-        class Dummy:
-            def acquire(self) -> None:
-                pass
-
-        return Dummy()
-
-    monkeypatch.setattr("library.pubmed_library.get_limiter", fake_get_limiter)
-
-    cfg = CrossRefCfg(
-        base="https://cr.example.org",
-        timeout_connect=1,
-        timeout_read=2,
-        rps=4,
-        burst=5,
-        mailto="z@e.com",
+    cfg = Config(
+        crossref=CrossRefCfg(
+            base="https://cr.example.org",
+            timeout_connect=1,
+            timeout_read=2,
+            rps=4,
+            burst=5,
+            mailto="z@e.com",
+        )
     )
-    ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg)
+    limiter = rl.RateLimiter(4)
+    ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg.crossref, limiter)
     assert called["url"] == "https://cr.example.org/works/10.1%2Fabc?mailto=z%40e.com"
     assert called["timeout"] == (1, 2)
-    assert rps["value"] == pytest.approx(4)
+    assert called["sleep"] == pytest.approx(0.25)
+
+
+def test_rate_limiter_shared(monkeypatch) -> None:
+    """Limiter should throttle subsequent calls when reused."""
+    delays: list[float] = []
+
+    def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr(rl, "sleep", fake_sleep)
+    monkeypatch.setattr("library.pubmed_library._do_request", lambda *a, **k: ({}, ""))
+
+    cfg = Config(openalex=OpenAlexCfg(rps=1, mailto="x@y.com"))
+    limiter = rl.RateLimiter(1)
+    session = requests.Session()
+    ocl.fetch_openalex(session, "1", cfg.openalex, limiter)
+    ocl.fetch_openalex(session, "2", cfg.openalex, limiter)
+    assert delays and delays[0] == pytest.approx(1.0, rel=0.1)

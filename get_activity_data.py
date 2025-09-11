@@ -49,12 +49,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    if args.limit is not None and args.limit < 0:
-        logger.error("--limit must be non-negative")
+    limit = cfg.activity.limit
+    if limit is not None and limit < 0:
+        logger.error("activity.limit must be non-negative")
         return 1
 
-    if args.dry_run:
-        expected = args.limit if args.limit is not None else 0
+    if cfg.activity.dry_run:
+        expected = limit if limit is not None else 0
         logger.info("dry run selected; would process at most %d identifiers", expected)
         return 0
 
@@ -62,24 +63,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     init_session(cfg.api, cfg.retry)
 
     try:
-        ids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
-        )
+        ids = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
-    if args.limit is not None:
-        ids = islice(ids, args.limit)
-        logger.info("processing at most %d identifiers", args.limit)
+
+    if limit is not None:
+        ids = ids[:limit]
+        logger.info("processing at most %d identifiers", len(ids))
+
 
     try:
         df = cl.get_activities(
-            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            chunk_size=cfg.activity.chunk_size,
+            timeout=cfg.activity.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve activities: %s", exc)
@@ -126,7 +126,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             key_cols=key_cols or None,
         )
         if io.write_csv is not ORIG_WRITE_CSV:
-            io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
+            io.write_csv(
+                df,
+                output,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+            )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -193,7 +199,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             args,
             parser,
             args.config,
-            mapping={"timeout": "api.timeout_read"},
+            mapping={
+                "timeout": "activity.timeout",
+                "column": "activity.column",
+                "chunk_size": "activity.chunk_size",
+                "limit": "activity.limit",
+                "dry_run": "activity.dry_run",
+            },
         )
         if args.print_config:
             print_config(cfg)
