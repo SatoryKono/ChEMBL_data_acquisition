@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import requests
+
 import time
 from library.chembl_client import init_session, request_json
 from library.config import ApiCfg, RetryCfg
@@ -38,6 +39,7 @@ class DummySession:
         return DummyResponse()
 
 
+@responses.activate
 def test_request_json_uses_cfg(monkeypatch) -> None:
     session = DummySession(fail_first=True)
     monkeypatch.setattr("library.chembl_client._session", session)
