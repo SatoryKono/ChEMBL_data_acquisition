@@ -626,7 +626,9 @@ def load_config(
     if "api" not in data or "user_agent" not in data.get("api", {}):
         raise ConfigError(
             "api.user_agent must be provided via environment variable "
-            "CHEMBL_DA__API__USER_AGENT or CLI option --api.user_agent"
+            "CHEMBL_DA__API__USER_AGENT or CLI option --api.user_agent. "
+            "See README.md for details and example: "
+            "'my-app/1.0 (mailto:me@example.org)'."
         )
 
     cfg = Config.model_validate(data)
