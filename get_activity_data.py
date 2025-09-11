@@ -39,7 +39,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     cfg : Config
         Application configuration.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments. ``args.limit`` constrains the number of
+        identifiers processed, while ``args.dry_run`` skips network calls and
+        file generation.
 
     Returns
     -------
@@ -58,6 +60,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
+
+    if args.limit is not None:
+        if args.limit < 0:
+            logger.error("--limit must be non-negative")
+            return 1
+        ids = ids[: args.limit]
+        logger.info("processing at most %d identifiers", len(ids))
+
+    if args.dry_run:
+        logger.info("dry run selected; skipping data retrieval")
+        return 0
 
     try:
         df = cl.get_activities(
@@ -147,6 +160,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=30.0,
         help="Timeout in seconds for each HTTP request",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Read input and exit without contacting the API or writing files",
     )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg

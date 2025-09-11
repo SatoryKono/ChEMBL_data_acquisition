@@ -83,7 +83,9 @@ config.yaml       Global configuration defaults
 
 Individual scripts provide specialised data retrieval utilities:
 
-* ``get_activity_data.py`` – fetch ChEMBL activity information.
+* ``get_activity_data.py`` – fetch ChEMBL activity information. Supports
+  ``--limit`` to process only the first *N* identifiers and ``--dry-run`` to
+  skip API calls and file output.
 * ``get_assay_data.py`` – retrieve assay descriptions from ChEMBL.
 * ``get_document_data.py`` – gather publication metadata.
 * ``get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.

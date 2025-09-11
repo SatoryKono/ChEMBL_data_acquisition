@@ -18,6 +18,8 @@ def test_run_chembl_handles_request_error(monkeypatch, caplog) -> None:
         encoding="utf8",
         chunk_size=5,
         timeout=30.0,
+        limit=None,
+        dry_run=False,
     )
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["1"])
 
