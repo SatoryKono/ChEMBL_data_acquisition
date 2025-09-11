@@ -6,7 +6,7 @@ This script reads an input CSV file and re-serialises it deterministically using
 
 from __future__ import annotations
 
- 
+
 import logging
  
 import argparse
@@ -17,8 +17,10 @@ from typing import Sequence
 
 import pandas as pd
 
-from library.csv_utils import write_csv_deterministic, build_parser
- 
+
+from library.csv_utils import write_csv_deterministic
+from library.cli_utils import build_parser
+
 
  
 from library.log import logger
@@ -27,6 +29,7 @@ from library.logging_setup import LoggerConfig, configure_logger
 from library.cli import add_common_arguments
 
 logger = logging.getLogger(__name__)
+
 
 
 
