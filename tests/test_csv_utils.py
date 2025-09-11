@@ -6,7 +6,7 @@ import hashlib
 import pandas as pd
 import pytest
 
-from chembl_da.library.csv_utils import sha256_file, write_csv_deterministic
+from library.csv_utils import sha256_file, write_csv_deterministic
 
 
 def test_write_csv_deterministic(tmp_path: Path) -> None:

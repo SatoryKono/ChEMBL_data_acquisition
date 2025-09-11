@@ -1,3 +1,6 @@
+
+"""Tests for :mod:`library.logging_setup`."""
+
 """Structured logging tests for :mod:`chembl_da.library.logging_setup`.
 
 Example
@@ -10,6 +13,7 @@ Run linters and tests on this module with::
     pytest tests/test_logging_setup.py
 """
 
+
 from __future__ import annotations
 
 import json
@@ -18,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from chembl_da.library.logging_setup import LoggerConfig, configure_logger
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 def _parse(out: str) -> list[dict[str, Any]]:
