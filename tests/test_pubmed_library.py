@@ -53,7 +53,7 @@ def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
     monkeypatch.setattr(pl, "_do_request", fake_do_request)
-    monkeypatch.setattr(pl.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(pl, "sleep", lambda s: sleeps.append(s))
 
     session = requests.Session()
     res = pl.fetch_pubmed(session, "1", 0.5, cfg=cfg)
@@ -104,7 +104,19 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
     monkeypatch.setattr(pl, "_do_request", fake_do_request)
-    monkeypatch.setattr(pl.time, "sleep", lambda s: sleeps.append(s))
+    rps: dict[str, float] = {}
+
+    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
+        rps["value"] = rps_val
+
+        class Dummy:
+            def acquire(self) -> None:
+                pass
+
+        return Dummy()
+
+    monkeypatch.setattr(pl, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(pl, "sleep", lambda s: sleeps.append(s))
 
     session = requests.Session()
     res = pl.fetch_openalex(session, "1", cfg=cfg)
@@ -115,7 +127,8 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     assert captured["timeout"] == (1, 2)
     assert captured["retries"] == 4
     assert captured["sleep"] == pytest.approx(0.1)
-    assert sleeps == [pytest.approx(0.1)]
+    assert rps["value"] == pytest.approx(10)
+    assert sleeps == []
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
@@ -147,7 +160,19 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
     monkeypatch.setattr(pl, "_do_request", fake_do_request)
-    monkeypatch.setattr(pl.time, "sleep", lambda s: sleeps.append(s))
+    rps: dict[str, float] = {}
+
+    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
+        rps["value"] = rps_val
+
+        class Dummy:
+            def acquire(self) -> None:
+                pass
+
+        return Dummy()
+
+    monkeypatch.setattr(pl, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(pl, "sleep", lambda s: sleeps.append(s))
 
     session = requests.Session()
     res = pl.fetch_crossref(session, "10.1000/xyz", cfg=cfg)
@@ -159,7 +184,8 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     assert captured["timeout"] == (2, 3)
     assert captured["retries"] == 5
     assert captured["sleep"] == pytest.approx(1 / 8)
-    assert sleeps == [pytest.approx(1 / 8)]
+    assert rps["value"] == pytest.approx(8)
+    assert sleeps == []
 
 
 def test_fetch_semantic_scholar_uses_cfg(monkeypatch) -> None:
@@ -189,7 +215,7 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
     monkeypatch.setattr(pl, "_do_request", fake_do_request)
-    monkeypatch.setattr(pl.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(pl, "sleep", lambda s: sleeps.append(s))
 
     session = requests.Session()
     res = pl.fetch_semantic_scholar(session, "1", 0.2, cfg=cfg)

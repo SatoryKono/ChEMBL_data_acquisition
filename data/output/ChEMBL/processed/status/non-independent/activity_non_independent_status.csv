@@ -1,0 +1,12 @@
+﻿Filtered,Count,independent_IC50,non_independent_IC50,independent_Ki,non_independent_Ki,"activity.Percentage, %"
+exact data citation,16551,0,24877,0,433797,34.0
+high citation rate,586,0,1273,0,618,1.2
+highly correlated assays,7837,0,10615,0,27706,16.1
+multifunctional enzyme,2563,0,12374,0,808,5.27
+multiply activity for same test item,2746,0,2828,0,7479,5.64
+no issue,10695,0,16385,0,8933,22.0
+review,322,0,364,0,140,0.661
+rounded data citation,1591,0,7224,0,1740,3.27
+shuffled assays,646,0,2688,0,1309,1.33
+test Item with unknown chirality,5142,0,8906,0,6454,10.6
+Total,48679,0,87534,0,488984,48679.0
