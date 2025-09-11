@@ -97,6 +97,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
             entity = key.split("_")[0]
+
             base_key = key[: -len("_status")]
             # Preserve the original table with ``Filtered`` column before
             # aggregation statistics are computed.  The table is renamed to
@@ -106,6 +107,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 df, entity
             )
             del tables[key]
+
 
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)

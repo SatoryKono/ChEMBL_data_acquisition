@@ -250,7 +250,7 @@ def add_percentage(
     return merged[ordered]
 
 
-def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+def compute_status(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """Prepare status statistics with percentage distribution.
 
     Parameters
@@ -280,8 +280,25 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
         for c in df_tmp.columns
         if c != "Filtered" and pd.api.types.is_numeric_dtype(df_tmp[c])
     ]
+    return df_tmp
 
-    grouped = df_tmp.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
+def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+    """Prepare status statistics with percentage distribution.
+
+    Parameters
+    ----------
+    df:
+        Status dataframe containing ``Filtered`` and metric columns.
+    table_name:
+        Entity name used for percentage column prefix.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Aggregated table grouped by ``Filtered`` with counts and percentage
+        information appended.
+    """
+    grouped = df.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
     totals = {col: grouped[col].sum() for col in metric_cols}
     grouped = pd.concat(
         [grouped, pd.DataFrame([{"Filtered": "Total", **totals}])],
