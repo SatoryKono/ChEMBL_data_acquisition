@@ -82,7 +82,7 @@ config:
     dictionary_dir: dictionary
     iuphar_target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
     iuphar_family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
-    uniprot_data_dir: uniprot
+    uniprot_data_dir: dictionary\uniprot
     organism_csv: dictionary\_Target\target.csv
   io:
     output_dir: data\output
