@@ -11,25 +11,28 @@ import csv
 import json
 import logging
 import sys
-
-from .rate_limiter import RateLimiter, get_limiter, sleep
-
 from datetime import date
-
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
-
-import pandas as pd
-from .rate_limiter import get_limiter, sleep
-
-import requests
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
 from xml.etree import ElementTree as ET
 from urllib.parse import quote
 
+import pandas as pd
+import requests
+
 from .log import logger
-
-
-
+from .rate_limiter import get_limiter, sleep
 from .config import (
     Config,
     CrossRefCfg,
@@ -40,6 +43,8 @@ from .config import (
 )
 from .csv_utils import write_csv_deterministic
 
+if TYPE_CHECKING:
+    from .rate_limiter import RateLimiter
 
 
 def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str]:
@@ -867,7 +872,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
     delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
 
-
     cfg = Config()
     pubmed_cfg = cfg.pubmed
     semsch_cfg = cfg.semantic_scholar
@@ -893,7 +897,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pmid = pubmed.get("PubMed.PMID", "")
                 semsch = semsch_map.get(pmid, {})
 
-
                 # Still fetching these individually
 
                 openalex = fetch_openalex(
@@ -903,7 +906,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 crossref = fetch_crossref(
                     session, doi, cfg=cfg.crossref, limiter=crossref_limiter
                 )
-
 
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)
