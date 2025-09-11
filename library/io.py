@@ -30,7 +30,14 @@ from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
-import pandera.pandas as pa
+
+try:
+    import pandera.pandas as pa
+except (ImportError, TypeError) as exc:
+    raise RuntimeError(
+        "pandera is required for schema validation; install a compatible "
+        "version of pandera for your Python interpreter."
+    ) from exc
 import yaml
 
 from . import validation
