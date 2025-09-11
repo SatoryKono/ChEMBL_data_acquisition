@@ -122,7 +122,27 @@ def test_write_csv_normalises_types(tmp_path: Path) -> None:
     cfg = Config()
     io.write_csv(df, path, cfg=cfg, key_cols=["d"])
     text = path.read_text(encoding="utf-8-sig")
-    assert text == ("b,d\n" "false,2020-01-01\n" "true,2020-01-02\n")
+    assert text == ("b,d\nfalse,2020-01-01\ntrue,2020-01-02\n")
+
+
+def test_write_csv_chunksize(tmp_path: Path) -> None:
+    """Chunked writes yield the same output as unchunked writes."""
+
+    rows = 1500
+    df = pd.DataFrame(
+        {
+            "a": range(rows),
+            "b": [i % 2 == 0 for i in range(rows)],
+            "d": pd.date_range("2020-01-01", periods=rows, freq="D"),
+            "f": [i / 3 for i in range(rows)],
+        }
+    )
+    cfg = Config()
+    path1 = tmp_path / "plain.csv"
+    path2 = tmp_path / "chunked.csv"
+    io.write_csv(df, path1, cfg=cfg)
+    io.write_csv(df, path2, cfg=cfg, chunksize=500)
+    assert path1.read_bytes() == path2.read_bytes()
 
 
 def test_git_sha_timeout_returns_unknown(

@@ -18,7 +18,6 @@ import yaml
 
 
 import pandas as pd
-import yaml
 from pandera import DataFrameModel, DataFrameSchema
 
 from . import validation
@@ -158,6 +157,7 @@ def write_csv(
     sep: str | None = None,
     encoding: str | None = None,
     key_cols: Iterable[str] | None = None,
+    chunksize: int | None = None,
 ) -> Path:
     """Write ``df`` to ``path`` as CSV and store metadata.
 
@@ -179,6 +179,10 @@ def write_csv(
     key_cols:
         Optional columns to determine row order. When provided, rows are
         sorted by these columns. Otherwise all columns are used.
+    chunksize:
+        Optional number of rows per chunk to stream when writing the CSV.
+        Passed through to :meth:`pandas.DataFrame.to_csv` and
+        :func:`library.csv_utils.write_csv_deterministic`.
 
     Returns
     -------
@@ -191,6 +195,7 @@ def write_csv(
         df,
         path,
         key_cols=list(key_cols) if key_cols is not None else None,
+        chunksize=chunksize,
         sep=sep,
         encoding=encoding,
         cfg=cfg,
