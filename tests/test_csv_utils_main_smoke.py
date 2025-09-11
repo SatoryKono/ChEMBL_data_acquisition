@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 import sys
+import json
 
 
 def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
@@ -27,5 +28,6 @@ def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
         text=True,
         check=True,
     )
-    assert "completed in" in proc.stderr
+    record = json.loads(proc.stdout.splitlines()[-1])
+    assert "completed" in record.get("msg", "")
     assert output_csv.exists()

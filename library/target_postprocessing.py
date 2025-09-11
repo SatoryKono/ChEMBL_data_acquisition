@@ -8,13 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable
-import logging
 
 import pandas as pd
 
 from .config import Config, IoCfg
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 # Columns removed in the final export

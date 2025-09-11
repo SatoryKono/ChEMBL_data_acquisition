@@ -12,10 +12,12 @@ import time
 
 import pytest
 
-from cachetools import TTLCache
+
+from cachetools import TTLCache  # type: ignore[import-untyped]
 
 
 from library import chembl_client
+
 
 
 from library.chembl_client import clear_cache, init_session, request_json
@@ -199,9 +201,11 @@ def test_clear_cache(monkeypatch) -> None:
     assert len(chembl_client._CACHE) == 0
 
 
+
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     fake_time = FakeTime()
     monkeypatch.setattr(rl, "time", fake_time)
+    monkeypatch.setattr(rl, "sleep", fake_time.sleep)
     with rl._limiters_lock:
         rl._limiters.clear()
     session = DummySession()
@@ -213,3 +217,4 @@ def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     assert fake_time.sleeps == [1.0]
     with rl._limiters_lock:
         rl._limiters.clear()
+

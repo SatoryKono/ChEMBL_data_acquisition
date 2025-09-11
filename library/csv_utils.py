@@ -58,6 +58,7 @@ def write_csv_deterministic(
     *,
     col_order: Sequence[str] | None = None,
     key_cols: Sequence[str] | None = None,
+    chunksize: int | None = None,
 ) -> Path:
     """Serialise ``df`` to ``path`` as a deterministic CSV file.
 
@@ -73,6 +74,11 @@ def write_csv_deterministic(
     key_cols:
         Optional sequence of column names defining row ordering.  If omitted
         all columns are used as sort keys.
+    chunksize:
+        Optional number of rows to write per chunk. Passing a value enables
+        streaming output via :meth:`pandas.DataFrame.to_csv`, reducing peak
+        memory usage for large tables. ``None`` (the default) writes the
+        dataframe in a single call.
 
     Returns
     -------
@@ -82,6 +88,11 @@ def write_csv_deterministic(
 
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Validate optional chunksize to avoid infinite loops or crashes
+    if chunksize is not None and chunksize <= 0:
+        msg = f"chunksize must be a positive integer, got {chunksize}"
+        raise ValueError(msg)
 
     work = df.copy()
 
@@ -110,7 +121,13 @@ def write_csv_deterministic(
         "w", encoding="utf-8-sig", newline="\n", delete=False, dir=str(out_path.parent)
     ) as fh:
         tmp_path = Path(fh.name)
-        work.to_csv(fh, index=False, float_format="%.6g", na_rep="")
+        work.to_csv(
+            fh,
+            index=False,
+            float_format="%.6g",
+            na_rep="",
+            chunksize=chunksize,
+        )
     os.replace(tmp_path, out_path)
     return out_path
 

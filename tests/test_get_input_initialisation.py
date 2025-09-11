@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
+import io
 from pathlib import Path
 
 import pandas as pd
+from library.cli import LoggerConfig, configure_logger
 import get_input_initialisation as cli
 from library.config import Config
 
@@ -69,7 +72,7 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         assert "column" in df.columns
 
 
-def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch, caplog) -> None:
+def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     """``run`` should report missing required tables."""
     same_doc = tmp_path / "same.xlsx"
     all_doc = tmp_path / "all.xlsx"
@@ -96,10 +99,14 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch, caplog) ->
         format="csv",
         dictionary_dir=tmp_path,
     )
-    with caplog.at_level("ERROR"):
-        result = cli.run(Config(), args)
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    result = cli.run(Config(), args)
     assert result == 1
-    assert "required table 'activity' missing" in caplog.text
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    assert "required table 'activity' missing" in record.get("msg", "")
 
 
 def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:

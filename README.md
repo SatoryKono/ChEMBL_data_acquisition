@@ -42,10 +42,34 @@ parsing, validation, aggregation and export of tabular data.
 
    ```bash
    pytest
-   ```
+    ```
 
-   The suite exercises the library modules using fixtures from
-   ``tests/data``.
+    The suite exercises the library modules using fixtures from
+    ``tests/data``.
+
+## Конфигурация через `.env`
+
+Часть параметров утилит можно задавать через переменные окружения.
+Чтобы не экспортировать их вручную при каждом запуске, поместите пары
+``NAME=value`` в файл `.env` и загрузите их с помощью пакета
+[`python-dotenv`](https://pypi.org/project/python-dotenv/).
+
+Пример файла:
+
+```dotenv
+CHEMBL_DA_LOG_LEVEL=INFO
+CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
+```
+
+Запустить скрипт с автоматической подгрузкой настроек можно так:
+
+```bash
+python -m dotenv run -- python get_assay_data.py --input tests/data/assays.csv \\
+    --output out/assays.csv
+```
+
+Утилиты читают переменные окружения автоматически, поэтому значения из
+`.env` доступны всем CLI без дополнительных аргументов.
 
 ## Валидация конфигурации
 
@@ -68,10 +92,30 @@ api:
   chembl_base: https://www.ebi.ac.uk/chembl/api/data
 ```
 
-## Logging
+## Логирование
 
-All command-line tools emit structured logs as one JSON object per line
-(JSONL). Each log entry provides a consistent set of fields:
+Пример включения JSON‑формата через переменную окружения:
+
+```bash
+LOG_FORMAT=json python get_assay_data.py --input tests/data/assays.csv \
+    --output out/assays.csv --log-level INFO
+```
+
+Уровень логов можно задать флагом `--log-level` или переменной
+`CHEMBL_DA_LOG_LEVEL`:
+
+```bash
+CHEMBL_DA_LOG_LEVEL=DEBUG python get_assay_data.py --input tests/data/assays.csv \
+    --output out/assays.csv
+```
+
+Пример строки лога:
+
+```json
+{"ts":"2024-05-01T12:00:00Z","level":"INFO","event":"pipeline_start","run_id":"abc123","stage":"pipeline"}
+```
+
+Ключевые поля:
 
 * `ts` – UTC timestamp in ISO 8601 format.
 * `level` – severity such as `DEBUG`, `INFO`, `WARN` or `ERROR`.
@@ -167,6 +211,20 @@ execution also writes a sidecar ``<output>.meta.yaml`` file capturing the Git
 commit, command line invocation and relevant configuration values so results can
 be reproduced. The script requires the ``pandas`` package; install it with
 ``pip install pandas`` if it is not already available in your environment.
+
+For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
+argument which streams the CSV in smaller pieces to reduce memory usage:
+
+```python
+from library.csv_utils import write_csv_deterministic
+import pandas as pd
+
+df = pd.read_csv("large.csv")
+write_csv_deterministic(df, "out.csv", chunksize=1000)
+```
+
+Rows are still sorted deterministically before writing; ``chunksize`` only
+affects how data is flushed to disk.
 
 Each command-line tool emits a ``<output>.meta.yaml`` sidecar file alongside
 every CSV. The YAML document records the SHA-256 checksum, command-line

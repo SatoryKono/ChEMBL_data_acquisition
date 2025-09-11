@@ -1,15 +1,17 @@
 import argparse
-import logging
+import json
 from pathlib import Path
+import io
 
 import requests
 
+from library.cli import LoggerConfig, configure_logger
 import get_activity_data as gad
-from library import chembl_library as cl, io
+from library import chembl_library as cl, io as lib_io
 from library.config import Config
 
 
-def test_run_chembl_handles_request_error(monkeypatch, caplog) -> None:
+def test_run_chembl_handles_request_error(monkeypatch) -> None:
     args = argparse.Namespace(
         input_csv=Path("dummy.csv"),
         output_csv=None,
@@ -21,13 +23,17 @@ def test_run_chembl_handles_request_error(monkeypatch, caplog) -> None:
         limit=None,
         dry_run=False,
     )
-    monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["1"])
+    monkeypatch.setattr(lib_io, "read_ids", lambda *a, **k: ["1"])
 
     def _raise(*_a, **_k):
         raise requests.RequestException("boom")
 
     monkeypatch.setattr(cl, "get_activities", _raise)
-    with caplog.at_level(logging.ERROR):
-        result = gad.run_chembl(Config(), args)
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    result = gad.run_chembl(Config(), args)
     assert result == 1
-    assert "boom" in caplog.text
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    assert "boom" in record.get("msg", "")
