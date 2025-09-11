@@ -12,6 +12,10 @@ from .logging_setup import Logger, LoggerConfig, configure_logger
 
 # Default logger used throughout the codebase.  The configuration is replaced
 # by :func:`library.cli.configure_logger` when a CLI entry point starts up.
-logger: Logger = configure_logger(LoggerConfig())
+#
+# The logger is bound with ``status`` and ``rps`` fields to ensure that each
+# emitted record contains these keys. Callers can override them by supplying
+# values via the ``extra`` argument when logging.
+logger: Logger = configure_logger(LoggerConfig()).bind(status=None, rps=None)
 
 __all__ = ["logger"]

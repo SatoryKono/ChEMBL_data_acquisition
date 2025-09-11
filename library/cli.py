@@ -198,7 +198,8 @@ def configure_logger(
     # Update the shared logger instance in place so existing references remain
     # valid across the code base.
     log.logger._cfg = new_logger._cfg
-    log.logger._context = {}
+    # Preserve default structured fields for downstream log records.
+    log.logger._context = {"status": None, "rps": None}
     return log.logger
 
 

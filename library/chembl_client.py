@@ -86,16 +86,22 @@ class ChemblClient:
         with self._cache_lock:
             cached = self.cache.get(cache_key)
             if cached is not None:
-                logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
-                return cached
-            logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
+
+                logger.info(
+                    "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
+                )
+                return cast(dict[str, Any], cached)
+            logger.info(
+                "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
+            )
+
 
         last_exc: requests.RequestException | ValueError | None = None
 
         for attempt in range(1, cfg.retries + 1):
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
-            logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
+            logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
             try:
                 with self.session.get(
                     url, timeout=(cfg.timeout_connect, read_timeout)
@@ -105,9 +111,9 @@ class ChemblClient:
                     logger.info(
                         "request_ok",
                         extra={
-                            "stage": "request_ok",
                             "url": url,
                             "status": getattr(response, "status_code", None),
+                            "rps": cfg.rps,
                         },
                     )
                     with self._cache_lock:
@@ -115,15 +121,14 @@ class ChemblClient:
                         if cached is not None:
                             return cached
                         self.cache[cache_key] = data
-                        logger.info(
-                            "cache_set", extra={"stage": "cache_set", "url": url}
-                        )
+                        logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
                         return data
             except (requests.RequestException, ValueError) as exc:
                 last_exc = exc
                 if attempt >= cfg.retries:
                     logger.exception(
-                        "request_fail", extra={"stage": "request_fail", "url": url}
+                        "request_fail",
+                        extra={"url": url, "status": None, "rps": cfg.rps},
                     )
                     break
                 delay = cfg.backoff_factor * (2 ** (attempt - 1))
