@@ -567,11 +567,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # We add the original IDs to uniprot_df to allow merging with chembl_df.
         uniprot_df["original_id"] = uids
 
-        # To avoid column name collisions during the merge, we drop 'uniprot_id'
-        # from chembl_df and rely on the canonical 'uniprot_id' from uniprot_df.
-        chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
+        # To avoid column name collisions during the merge, drop "uniprot_id"
+        # from the ChEMBL frame only when it is *not* used as the merge key.
+        # When "uniprot_id" is the join column we keep it for the merge and
+        # replace it afterwards with the canonical value from ``uniprot_df``.
+        if cfg.target.all.uniprot_column != "uniprot_id":
+            chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
+        else:
+            chembl_for_merge = chembl_df.copy()
 
-        # Prepare combined input for IUPHAR containing ChEMBL and UniProt data
+        # Prepare combined input for IUPHAR containing ChEMBL and UniProt data.
         combined_df = pd.merge(
             chembl_for_merge,
             uniprot_df,
@@ -579,6 +584,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             right_on="original_id",
             how="left",
         ).drop(columns=["original_id"])
+        if cfg.target.all.uniprot_column == "uniprot_id":
+            # ``uniprot_df`` contains the authoritative ID, so discard the one
+            # from ChEMBL and rename the UniProt column back to ``uniprot_id``.
+            combined_df = combined_df.drop(columns=["uniprot_id_x"], errors="ignore")
+            combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
 
         # Consolidate synonym and EC number information for classification
         combined_df["synonyms"] = combined_df.apply(
