@@ -23,7 +23,7 @@ def test_run_chembl_handles_request_error(monkeypatch) -> None:
         limit=None,
         dry_run=False,
     )
-    monkeypatch.setattr(lib_io, "read_ids", lambda *a, **k: ["1"])
+    monkeypatch.setattr(lib_io, "read_ids", lambda *a, **k: iter(["1"]))
 
     def _raise(*_a, **_k):
         raise requests.RequestException("boom")

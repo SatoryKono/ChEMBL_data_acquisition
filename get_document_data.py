@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Sequence
+from typing import Iterable, Sequence
 
 import pandas as pd
 
@@ -34,12 +34,11 @@ from library.config import (
     Config,
     OpenAlexCfg,
     CrossRefCfg,
-    RetryCfg,
     ensure_dirs,
     print_config,
     _serialize_paths,
 )
-from library.chembl_client import init_session
+from library.chembl_client import init_session, _chunked
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -67,14 +66,14 @@ from library import write_csv_deterministic
 
 
 def fetch_pubmed_records(
-    pmids: list[str],
+    pmids: Iterable[str],
     sleep: float,
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
     max_workers: int = 1,
     batch_size: int = 100,
 ) -> pd.DataFrame:
-    """Retrieve metadata for a list of PubMed identifiers.
+    """Retrieve metadata for a sequence of PubMed identifiers.
 
     Parameters
     ----------
@@ -144,21 +143,19 @@ def fetch_pubmed_records(
             logger.warning("failed to fetch PMIDs %s: %s", batch, exc)
             return [{} for _ in batch]
 
-    if not pmids:
-        return pd.DataFrame()
-
+    iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
-    batches = [pmids[i : i + batch_size] for i in range(0, len(pmids), batch_size)]
-    total = len(pmids)
-    processed = 0
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(_fetch_batch, batch): len(batch) for batch in batches}
+        futures = {
+            ex.submit(_fetch_batch, batch): len(batch)
+            for batch in _chunked(iterator, batch_size)
+        }
+        processed = 0
         for future in as_completed(futures):
             batch_len = futures[future]
             records.extend(future.result())
             processed += batch_len
-            percent = processed / total * 100
-            logger.info("Processed %d/%d documents (%.1f%%)", processed, total, percent)
+            logger.info("Processed %d documents", processed)
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
@@ -276,7 +273,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Configure session for ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
         ids = io.read_ids(
@@ -386,7 +383,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare shared session before performing any API calls
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
         ids = io.read_ids(
