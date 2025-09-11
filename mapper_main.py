@@ -38,7 +38,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     """
     try:
         df = io.read_csv(
-            args.input_csv, cfg=cfg.io, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
+            dtype=str,
+            na_values=["#N/A", ""],
         )
     except (FileNotFoundError, OSError) as exc:
         logger.error("%s", exc)
