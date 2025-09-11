@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -16,7 +17,12 @@ import pandas as pd
 from library.csv_utils import write_csv_deterministic
 
 
+logger = logging.getLogger(__name__)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="input.csv", help="Input CSV path")
     parser.add_argument(
@@ -41,8 +47,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success.
+    """
+
     args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
+    start = time.perf_counter()
     df = pd.read_csv(args.input, sep=args.sep, encoding=args.encoding)
     output = args.output or Path(args.input).with_name(
         f"output_{Path(args.input).stem}.csv"
@@ -53,7 +73,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         col_order=args.col_order or None,
         key_cols=args.key_cols or None,
     )
-    logging.info("written %s", output)
+    elapsed = time.perf_counter() - start
+    logger.info("written %s", output)
+    logger.info("completed in %.3f seconds", elapsed)
     return 0
 
 
