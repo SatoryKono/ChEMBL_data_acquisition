@@ -31,7 +31,14 @@ from typing import Sequence
 
 import pandas as pd
 
-from library.config import Config, ensure_dirs, OpenAlexCfg, CrossRefCfg, print_config
+from library.config import (
+    Config,
+    ensure_dirs,
+    OpenAlexCfg,
+    CrossRefCfg,
+    PubMedCfg,
+    print_config,
+)
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -54,11 +61,9 @@ logger = logging.getLogger(__name__)
 
 def fetch_pubmed_records(
     pmids: list[str],
-    sleep: float,
+    cfg: PubMedCfg,
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
-    max_workers: int = 1,
-    batch_size: int = 100,
 ) -> pd.DataFrame:
     """Retrieve metadata for a list of PubMed identifiers.
 
@@ -66,18 +71,12 @@ def fetch_pubmed_records(
     ----------
     pmids:
         Identifiers to query.
-    sleep:
-
-        Seconds to pause between PubMed and Semantic Scholar requests.
+    cfg:
+        PubMed-specific configuration.
     openalex_cfg:
         Configuration for OpenAlex API access.
     crossref_cfg:
         Configuration for CrossRef API access.
-
-    max_workers:
-        Maximum number of concurrent threads.
-    batch_size:
-        Maximum number of PMIDs per PubMed request.
 
     Returns
     -------
@@ -97,12 +96,12 @@ def fetch_pubmed_records(
         """
         try:
             with requests.Session() as session:
-                pubmed_list = pl.fetch_pubmed_batch(session, batch, sleep)
+                pubmed_list = pl.fetch_pubmed_batch(session, batch, cfg.sleep)
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
 
                 # Fetch Semantic Scholar data in a single batch
                 semsch_list = ssl.fetch_semantic_scholar_batch(
-                    session, pmids_in_batch, sleep
+                    session, pmids_in_batch, cfg.sleep
                 )
 
                 # Create a map for easy lookup
@@ -134,10 +133,12 @@ def fetch_pubmed_records(
         return pd.DataFrame()
 
     records: list[dict[str, str]] = []
-    batches = [pmids[i : i + batch_size] for i in range(0, len(pmids), batch_size)]
+    batches = [
+        pmids[i : i + cfg.batch_size] for i in range(0, len(pmids), cfg.batch_size)
+    ]
     total = len(pmids)
     processed = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+    with ThreadPoolExecutor(max_workers=cfg.workers) as ex:
         futures = {ex.submit(_fetch_batch, batch): len(batch) for batch in batches}
         for future in as_completed(futures):
             batch_len = futures[future]
@@ -176,11 +177,9 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         )
         df = fetch_pubmed_records(
             pmids,
-            args.sleep,
+            cfg.pubmed,
             cfg.openalex,
             cfg.crossref,
-            args.workers,
-            args.batch_size,
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
@@ -319,11 +318,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        args.sleep,
+        cfg.pubmed,
         cfg.openalex,
         cfg.crossref,
-        args.workers,
-        args.batch_size,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
@@ -399,15 +396,15 @@ def build_parser() -> argparse.ArgumentParser:
     pubmed.add_argument("--sep", default=",", help="CSV delimiter")
     pubmed.add_argument("--encoding", default="utf8", help="File encoding")
     pubmed.add_argument(
-        "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
+        "--sleep", type=float, default=None, help="Seconds to sleep between requests"
     )
     pubmed.add_argument(
-        "--workers", type=int, default=1, help="Number of concurrent requests"
+        "--workers", type=int, default=None, help="Number of concurrent requests"
     )
     pubmed.add_argument(
         "--batch-size",
         type=int,
-        default=100,
+        default=None,
         help="Maximum PMIDs per PubMed request",
     )
     pubmed.set_defaults(func=run_pubmed)
@@ -473,16 +470,16 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument(
         "--sleep",
         type=float,
-        default=5.0,
+        default=None,
         help="Seconds to sleep between PubMed requests",
     )
     all_cmd.add_argument(
-        "--workers", type=int, default=1, help="Number of concurrent PubMed requests"
+        "--workers", type=int, default=None, help="Number of concurrent PubMed requests"
     )
     all_cmd.add_argument(
         "--batch-size",
         type=int,
-        default=50,
+        default=None,
         help="Maximum PMIDs per PubMed request",
     )
     all_cmd.add_argument(
@@ -510,7 +507,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparser = subparser_map.get(args.command, parser)
     try:
         cfg: Config = apply_config_overrides(
-            args, subparser, args.config, mapping={"timeout": "api.timeout_read"}
+            args,
+            subparser,
+            args.config,
+            mapping={
+                "timeout": "api.timeout_read",
+                "sleep": "pubmed.sleep",
+                "workers": "pubmed.workers",
+                "batch_size": "pubmed.batch_size",
+            },
         )
         if args.print_config:
             print_config(cfg)

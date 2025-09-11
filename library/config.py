@@ -155,6 +155,15 @@ class PubChemCfg:
 
 
 @dataclass
+class PubMedCfg:
+    """Settings for retrieving PubMed metadata."""
+
+    sleep: float = 5.0
+    workers: int = 1
+    batch_size: int = 100
+
+
+@dataclass
 class IoCfg:
     """Input/output defaults."""
 
@@ -251,6 +260,7 @@ class Config:
     uniprot: UniprotCfg = field(default_factory=UniprotCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
+    pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -414,6 +424,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_PUBCHEM_TIMEOUT_READ": ["pubchem", "timeout_read"],
     "CHEMBL_DA_PUBCHEM_RPS": ["pubchem", "rps"],
     "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
+    "CHEMBL_DA_PUBMED_SLEEP": ["pubmed", "sleep"],
+    "CHEMBL_DA_PUBMED_WORKERS": ["pubmed", "workers"],
+    "CHEMBL_DA_PUBMED_BATCH_SIZE": ["pubmed", "batch_size"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
@@ -643,6 +656,16 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+        "pubmed": {
+            "type": "object",
+            "properties": {
+                "sleep": {"type": "number", "minimum": 0},
+                "workers": {"type": "integer", "minimum": 1},
+                "batch_size": {"type": "integer", "minimum": 1},
+            },
+            "required": ["sleep", "workers", "batch_size"],
+            "additionalProperties": False,
+        },
         "io": {
             "type": "object",
             "properties": {
@@ -766,6 +789,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "uniprot",
         "iuphar",
         "pubchem",
+        "pubmed",
         "io",
         "jobs",
         "batch",
@@ -852,6 +876,10 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "retry.max_attempts must be positive and backoff_factor non-negative"
         )
+    if cfg.pubmed.sleep < 0:
+        raise ValueError("pubmed.sleep must be non-negative")
+    if cfg.pubmed.workers <= 0 or cfg.pubmed.batch_size <= 0:
+        raise ValueError("pubmed.workers and pubmed.batch_size must be positive")
 
     out_dir = cfg.io.output_dir
     cache_dir = cfg.io.cache_dir
@@ -969,6 +997,7 @@ __all__ = [
     "UniprotCfg",
     "IupharCfg",
     "PubChemCfg",
+    "PubMedCfg",
     "IoCfg",
     "JobsCfg",
     "BatchCfg",
