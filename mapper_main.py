@@ -63,7 +63,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             uniprot_id = map_chembl_to_uniprot(str(chembl_id), cfg.uniprot_mapping)
             uniprot_ids.append(uniprot_id)
             if uniprot_id:
-                logger.info("mapped %s -> %s", chembl_id, uniprot_id)
+                logger.info(
+                    "mapped",
+                    extra={"chembl_id": str(chembl_id), "uniprot_id": uniprot_id},
+                )
             else:
                 logger.warning("no UniProt ID for %s", chembl_id)
         except (ValueError, TimeoutError, URLError) as exc:
@@ -80,7 +83,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             encoding=args.encoding,
             key_cols=args.key_cols,
         )
-        logger.info("wrote %s", output)
+        logger.info("write_done", extra={"path": str(output)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -110,31 +113,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
     try:
         cfg: Config = apply_config_overrides(args, parser, args.config)
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     exit_code = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
     return exit_code
 
 
