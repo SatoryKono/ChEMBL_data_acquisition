@@ -87,6 +87,17 @@ def test_cache_dir_alias(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert cfg.io.cache_dir == cache
 
 
+def test_chembl_cache_maxsize_from_yaml(tmp_path: Path) -> None:
+    """Custom ``chembl.cache_maxsize`` should override the default."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("chembl:\n  cache_maxsize: 42\n")
+
+    cfg = load_config(path)
+
+    assert cfg.chembl.cache_maxsize == 42
+
+
 def test_mailto_aliases_override_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

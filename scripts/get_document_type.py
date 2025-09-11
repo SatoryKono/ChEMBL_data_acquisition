@@ -134,9 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger_inst = configure_logger(log_cfg)
-    logger_inst.info(
-        "pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"}
-    )
+    logger_inst.info("pipeline_start", extra={"run_id": log_cfg.run_id})
 
     try:
         cfg: Config = apply_config_overrides(
@@ -155,9 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger_inst.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger_inst.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
         logger_inst = configure_logger(
@@ -165,15 +161,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger_inst.info(
-            "pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"}
-        )
+        logger_inst.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger_inst.info(
-            "pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"}
-        )
+        logger_inst.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
 
     df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
@@ -184,7 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
-    logger_inst.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+    logger_inst.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     return 0
 
 

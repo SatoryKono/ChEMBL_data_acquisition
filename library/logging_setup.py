@@ -36,6 +36,10 @@ _LEVELS = {
 # Global lock ensuring thread-safe writes to the log stream.
 _EMIT_LOCK = threading.Lock()
 
+# Default attributes present on :class:`logging.LogRecord` instances.  Used to
+# extract ``extra`` fields supplied via the standard :mod:`logging` API.
+_LOG_RECORD_DEFAULT_KEYS = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
+
 
 def _level_no(name: str) -> int:
     """Return numeric value for ``name``.
@@ -315,9 +319,13 @@ def configure_logger(cfg: LoggerConfig) -> Logger:
         """Forward ``logging`` records to :class:`Logger` as JSON lines."""
 
         def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - thin
-            # ``record.name`` acts as the event identifier while the formatted
-            # message is stored in ``msg`` for human readability.
-            logger.log(record.levelname, record.name, msg=record.getMessage())
+            extras = {
+                k: v
+                for k, v in record.__dict__.items()
+                if k not in _LOG_RECORD_DEFAULT_KEYS
+            }
+            extras["logger"] = record.name
+            logger.log(record.levelname, record.getMessage(), extra=extras)
 
     root_logger = logging.getLogger()
     handler = _ForwardHandler()

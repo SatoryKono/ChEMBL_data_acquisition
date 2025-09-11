@@ -164,7 +164,7 @@ def fetch_pubmed_records(
             batch_len = futures[future]
             records.extend(future.result())
             processed += batch_len
-            logger.info("Processed %d documents", processed)
+            logger.info("documents_processed", extra={"count": processed})
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
@@ -226,7 +226,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
 
         stats: Stats = {
             "rows_total": rows_total,
@@ -323,7 +323,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -426,7 +426,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 key_cols=key_cols or None,
             )
-            logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+            logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
             return 1
@@ -513,7 +513,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -659,7 +659,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     mapping = {"column": f"document.{args.command}.column"}
@@ -702,25 +702,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     exit_code = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
     return exit_code
 
 
