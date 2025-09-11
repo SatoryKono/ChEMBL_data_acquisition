@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import logging
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -33,14 +32,13 @@ from library.cli import (
     configure_logger,
     LoggerConfig,
 )
+from library.log import logger
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from pandera.errors import SchemaErrors
 from schemas import TargetsSchema, normalize_targets
 
 from library import write_csv_deterministic
-
-logger = logging.getLogger(__name__)
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:

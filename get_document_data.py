@@ -25,7 +25,6 @@ The input file must contain a ``PMID`` column.
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -59,12 +58,11 @@ from library.cli import (
     configure_logger,
     LoggerConfig,
 )
+from library.log import logger
 from pandera.errors import SchemaErrors
 from schemas import DocumentsSchema, normalize_documents
 
 from library import write_csv_deterministic
-
-logger = logging.getLogger(__name__)
 
 
 def fetch_pubmed_records(

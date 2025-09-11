@@ -9,13 +9,10 @@ request retries.
 from __future__ import annotations
 
 from typing import Dict, List
-import logging
 
 import requests
 
 from . import pubmed_library as _pl
-
-logger = logging.getLogger(__name__)
 
 
 def fetch_semantic_scholar(

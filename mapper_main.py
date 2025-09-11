@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from typing import Sequence
 from urllib.error import URLError
 
@@ -17,9 +16,8 @@ from library.cli import (
     configure_logger,
     LoggerConfig,
 )
+from library.log import logger
 from library.mapper_library import map_chembl_to_uniprot
-
-logger = logging.getLogger(__name__)
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

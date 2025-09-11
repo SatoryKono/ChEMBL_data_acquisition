@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from typing import Sequence
 
@@ -20,14 +19,13 @@ from library.cli import (
     configure_logger,
     LoggerConfig,
 )
+from library.log import logger
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from pandera.errors import SchemaErrors
 from schemas import AssaysSchema, normalize_assays
 
 from library import write_csv_deterministic
-
-logger = logging.getLogger(__name__)
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:

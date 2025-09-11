@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from typing import Any, Dict, Iterable, Iterator, cast
+from typing import Any, Iterable, Iterator, cast
 
 
 import random

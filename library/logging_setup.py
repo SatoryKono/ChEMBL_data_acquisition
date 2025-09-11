@@ -118,6 +118,7 @@ class Logger:
         *,
         stage: Optional[str] = None,
         msg: Optional[str] = None,
+        extra: Optional[dict[str, Any]] = None,
         **kv: Any,
     ) -> None:
         """Emit a log record.
@@ -146,6 +147,8 @@ class Logger:
         }
 
         merged: dict[str, Any] = {**self._context, **kv}
+        if extra:
+            merged.update(extra)
 
         run_id = merged.pop("run_id", self._cfg.run_id)
         stage = stage if stage is not None else merged.pop("stage", None)
@@ -160,31 +163,84 @@ class Logger:
         self._emit(record)
 
     # Convenience wrappers ------------------------------------------------
-    def debug(self, event: str, **kv: Any) -> None:
-        self.log("DEBUG", event, **kv)
+    def debug(
+        self,
+        event: str,
+        *args: Any,
+        extra: Optional[dict[str, Any]] = None,
+        **kv: Any,
+    ) -> None:
+        msg = event % args if args else None
+        self.log("DEBUG", event, msg=msg, extra=extra, **kv)
 
-    def info(self, event: str, **kv: Any) -> None:
-        self.log("INFO", event, **kv)
+    def info(
+        self,
+        event: str,
+        *args: Any,
+        extra: Optional[dict[str, Any]] = None,
+        **kv: Any,
+    ) -> None:
+        msg = event % args if args else None
+        self.log("INFO", event, msg=msg, extra=extra, **kv)
 
-    def warn(self, event: str, **kv: Any) -> None:
-        self.log("WARN", event, **kv)
+    def warn(
+        self,
+        event: str,
+        *args: Any,
+        extra: Optional[dict[str, Any]] = None,
+        **kv: Any,
+    ) -> None:
+        msg = event % args if args else None
+        self.log("WARN", event, msg=msg, extra=extra, **kv)
 
-    def error(self, event: str, **kv: Any) -> None:
-        self.log("ERROR", event, **kv)
+    # ``warning`` is an alias for compatibility with :mod:`logging` APIs.
+    warning = warn
 
-    def exception(self, event: str, exc: BaseException, **kv: Any) -> None:
-        """Log ``exc`` at ``ERROR`` level."""
+    def error(
+        self,
+        event: str,
+        *args: Any,
+        extra: Optional[dict[str, Any]] = None,
+        **kv: Any,
+    ) -> None:
+        msg = event % args if args else None
+        self.log("ERROR", event, msg=msg, extra=extra, **kv)
 
+    def exception(
+        self,
+        event: str,
+        *args: Any,
+        exc: BaseException | None = None,
+        extra: Optional[dict[str, Any]] = None,
+        **kv: Any,
+    ) -> None:
+        """Log an exception at ``ERROR`` level.
+
+        Parameters
+        ----------
+        event:
+            Event name.
+        exc:
+            Exception instance. If ``None`` the current exception from
+            :func:`sys.exc_info` is used.
+        """
+
+        if exc is None:
+            exc = sys.exc_info()[1]
+        if exc is None:  # pragma: no cover - defensive
+            exc = Exception("unknown")
+        msg = event % args if args else str(exc)
         tb = "".join(
             traceback.format_exception(exc.__class__, exc, exc.__traceback__, limit=3)
         ).strip()
         self.log(
             "ERROR",
             event,
-            msg=str(exc),
+            msg=msg,
             exc_type=exc.__class__.__name__,
             exc_message=str(exc),
             traceback=tb,
+            extra=extra,
             **kv,
         )
 
@@ -206,7 +262,7 @@ class Logger:
         try:
             yield bound
         except Exception as exc:  # pragma: no cover - branch exercised in tests
-            bound.exception(f"{name}_fail", exc)
+            bound.exception(f"{name}_fail", exc=exc)
             raise
         else:
             elapsed = time.perf_counter() - start

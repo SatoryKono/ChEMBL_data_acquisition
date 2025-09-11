@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping, Sequence
 
-import logging
-
 import pandas as pd
 from library.config import Config, ensure_dirs, print_config
 from library.cli import (
@@ -18,11 +16,10 @@ from library.cli import (
     build_parser as base_parser,
     configure_logger,
 )
+from library.log import logger
 from library import io
 
 from library.document_type_classifier import compute_scores, decide_label
-
-logger = logging.getLogger(__name__)
 
 
 def _split_terms(value: object) -> Iterable[str]:

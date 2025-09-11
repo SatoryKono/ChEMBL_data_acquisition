@@ -7,29 +7,13 @@ Configuration loading errors are converted to user-facing messages using
 from __future__ import annotations
 
 import argparse
-import logging
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
 from .config import Config, ConfigError, load_config
-
-
-@dataclass
-class LoggerConfig:
-    """Configuration for pipeline logging.
-
-    Parameters
-    ----------
-    run_id:
-        Unique identifier for the current run.
-    level:
-        Textual logging level such as ``"INFO"`` or ``"DEBUG"``.
-    """
-
-    run_id: str
-    level: str
+from . import log
+from .logging_setup import Logger, LoggerConfig, configure_logger as _configure_logger
 
 
 def create_logger_config(level: str) -> LoggerConfig:
@@ -168,54 +152,35 @@ def build_root_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return parser, log_cfg
 
 
-def configure_logging(
-    level: str, *, fmt: str | None = None, datefmt: str | None = None
-) -> None:
-    """Configure root logging for command-line utilities.
-
-    Parameters
-    ----------
-    level:
-        Textual logging level (e.g. ``"INFO"``, ``"DEBUG"``).
-
-    """
-    numeric = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(
-        level=numeric,
-        format=fmt or "%(levelname)s: %(message)s",
-        datefmt=datefmt,
-        force=True,
-    )
-
-
 def configure_logger(
     cfg: LoggerConfig, *, fmt: str | None = None, datefmt: str | None = None
-) -> logging.Logger:
-    """Configure and return a logger based on ``cfg``.
+) -> Logger:
+    """Configure and return a structured logger based on ``cfg``.
 
     Parameters
     ----------
     cfg:
         Logging configuration containing ``run_id`` and ``level``.
-    fmt:
-        Optional message format.
-    datefmt:
-        Optional date format.
+    fmt, datefmt:
+        Unused parameters retained for backward compatibility.
 
     Returns
     -------
-    logging.Logger
-        Configured logger instance.
+    Logger
+        Configured logger instance shared across the package.
     """
 
-    numeric = getattr(logging, cfg.level.upper(), logging.INFO)
-    logging.basicConfig(
-        level=numeric,
-        format=fmt or "%(levelname)s: %(message)s",
-        datefmt=datefmt,
-        force=True,
+    # ``fmt`` and ``datefmt`` are ignored because JSON logs have a fixed
+    # structure.  They are accepted to remain API compatible with the previous
+    # implementation that configured :mod:`logging`.
+    new_logger = _configure_logger(
+        LoggerConfig(level=cfg.level, run_id=cfg.run_id, stream=cfg.stream)
     )
-    return logging.getLogger(__name__)
+    # Update the shared logger instance in place so existing references remain
+    # valid across the code base.
+    log.logger._cfg = new_logger._cfg
+    log.logger._context = {}
+    return log.logger
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +264,7 @@ def apply_config_overrides(
     try:
         cfg = load_config(config_path, cli_overrides=cli_overrides)
     except ConfigError as exc:
+        log.logger.error("%s", exc)
         parser.error(str(exc))
 
     for arg, key in override_map.items():
@@ -316,7 +282,6 @@ __all__ = [
     "create_logger_config",
     "build_parser",
     "build_root_parser",
-    "configure_logging",
     "configure_logger",
     "apply_config_overrides",
 ]
