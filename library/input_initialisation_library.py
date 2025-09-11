@@ -828,6 +828,12 @@ def generate_pair_entity_tables(
             logger.warning("pair table '%s' missing", pair_key)
             continue
 
+        # Harmonise activity identifier column names to ensure downstream
+        # processing can rely on a consistent schema regardless of the source
+        # workbook's naming conventions.
+        pairs_df = normalize_pair_columns(pairs_df)
+        result[pair_key] = pairs_df
+
         required = {"activity_chembl_id1", "activity_chembl_id2"}
         missing = required - set(pairs_df.columns)
         if missing:
@@ -1019,8 +1025,12 @@ def build_combined_tables(
     combined["activity"] = df_activity
 
     # --- pairs ------------------------------------------------------------
-    df_pairs_same = add_pair_metric_columns(unify_dtypes(same["pairs_same_document"]))
-    df_pairs = add_pair_metric_columns(unify_dtypes(all_["pairs"]))
+    df_pairs_same = normalize_pair_columns(
+        add_pair_metric_columns(unify_dtypes(same["pairs_same_document"]))
+    )
+    df_pairs = normalize_pair_columns(
+        add_pair_metric_columns(unify_dtypes(all_["pairs"]))
+    )
     logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
     logger.info("Entity pairs: rows=%d", len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
@@ -1029,14 +1039,12 @@ def build_combined_tables(
         indep_series = _safe_to_bool(df_pairs["INDEPENDENT"], "INDEPENDENT").fillna(
             False
         )
-        df_pairs_independent = normalize_pair_columns(df_pairs[indep_series].copy())
-        df_pairs_non_independent = normalize_pair_columns(
-            df_pairs[~indep_series].copy()
-        )
+        df_pairs_independent = df_pairs[indep_series].copy()
+        df_pairs_non_independent = df_pairs[~indep_series].copy()
     else:
         logger.warning("INDEPENDENT column missing; creating empty pair segments")
-        df_pairs_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
-        df_pairs_non_independent = normalize_pair_columns(df_pairs.iloc[0:0].copy())
+        df_pairs_independent = df_pairs.iloc[0:0].copy()
+        df_pairs_non_independent = df_pairs.iloc[0:0].copy()
 
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
