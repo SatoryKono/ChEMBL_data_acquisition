@@ -62,22 +62,22 @@ pubchem:
 
 io:
   output_dir: "data/output"  # Directory for generated datasets
-  cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
+  cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA__IO__CACHE_DIR)
   csv_sep: ","  # CSV field separator
   csv_encoding: "utf-8-sig"  # Encoding for CSV files
   csv_index: false  # Include index column when writing CSV
   exist_ok: true  # Create directories with ensure_dirs if missing
 
 jobs:
-  concurrency: 8  # Number of parallel workers
-  chunk_size: 500  # Records per job chunk
+  concurrency: 8  # Number of parallel workers (env: CHEMBL_DA__JOBS__CONCURRENCY / CHEMBL_DA_CONCURRENCY)
+  chunk_size: 500  # Records per job chunk (env: CHEMBL_DA__JOBS__CHUNK_SIZE / CHEMBL_DA_CHUNK_SIZE)
 
 batch:
-  size: 1000  # Number of rows per batch
-  pause: 0  # Delay between batches in seconds
-  concurrency: 2  # Number of concurrent batch workers
-  fail_fast: true  # Abort on first error
-  retry_failed: true  # Retry failed batches
+  size: 1000  # Number of rows per batch (env: CHEMBL_DA__BATCH__SIZE)
+  pause: 0  # Delay between batches in seconds (env: CHEMBL_DA__BATCH__PAUSE)
+  concurrency: 2  # Number of concurrent batch workers (env: CHEMBL_DA__BATCH__CONCURRENCY)
+  fail_fast: true  # Abort on first error (env: CHEMBL_DA__BATCH__FAIL_FAST)
+  retry_failed: true  # Retry failed batches (env: CHEMBL_DA__BATCH__RETRY_FAILED)
 
 quality:
   sample_rows: 0  # Rows to sample for previews (0 = all)
@@ -112,5 +112,6 @@ retry:
 log:
   level: "INFO"  # Default logging level (env: CHEMBL_DA_LOG_LEVEL)
   format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format (env: CHEMBL_DA_LOG_FORMAT)
-  datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format (env: CHEMBL_DA_LOG_DATEFMT)
+  datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format (env: CHEMBL_DA__LOG__DATEFMT)
+
 
