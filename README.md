@@ -262,15 +262,23 @@ records and enable dry-run mode:
 python get_activity_data.py --limit 10 --dry-run
 ```
 
-### Deterministic CSV output and metadata
+## Reproducibility
 
 The function ``library.csv_utils.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
-files. The helper script ``scripts/check_determinism.py`` writes a sample CSV
-twice and compares SHA-256 hashes to catch nondeterministic behaviour. Each
-execution also writes a sidecar ``<output>.meta.yaml`` file capturing the Git
-commit, command line invocation and relevant configuration values so results can
-be reproduced. The script requires the ``pandas`` package; install it with
+files. Every CSV must be stored alongside a ``<name>.meta.yaml`` file capturing
+the Git commit, command-line arguments and relevant configuration to allow
+others to reproduce the output. Commit both the CSV and its metadata sidecar to
+version control.
+
+Verify deterministic behaviour with the helper script ``scripts/check_determinism.py``:
+
+```bash
+python scripts/check_determinism.py --log-level INFO
+```
+
+The script writes a sample CSV twice using ``write_csv_deterministic`` and
+compares SHA-256 hashes. It requires the ``pandas`` package; install it with
 ``pip install pandas`` if it is not already available in your environment.
 
 For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
