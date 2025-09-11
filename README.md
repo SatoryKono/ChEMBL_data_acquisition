@@ -168,6 +168,20 @@ commit, command line invocation and relevant configuration values so results can
 be reproduced. The script requires the ``pandas`` package; install it with
 ``pip install pandas`` if it is not already available in your environment.
 
+For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
+argument which streams the CSV in smaller pieces to reduce memory usage:
+
+```python
+from library.csv_utils import write_csv_deterministic
+import pandas as pd
+
+df = pd.read_csv("large.csv")
+write_csv_deterministic(df, "out.csv", chunksize=1000)
+```
+
+Rows are still sorted deterministically before writing; ``chunksize`` only
+affects how data is flushed to disk.
+
 Each command-line tool emits a ``<output>.meta.yaml`` sidecar file alongside
 every CSV. The YAML document records the SHA-256 checksum, command-line
 arguments and timestamps to make results reproducible. The determinism check is
