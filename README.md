@@ -93,6 +93,15 @@ python scripts/get_document_data.py pubmed \
 The ``tests/data/pmids.csv`` file contains a small set of PMIDs for
 experimentation.
 
+You can also run the PubMed pipeline directly using the library module:
+
+```bash
+python -m library.pubmed_library \
+    --input-csv tests/data/pmids.csv \
+    --output out/documents.csv \
+    --log-level INFO
+```
+
 ### scripts/get_target_data.py
 
 Fetch basic target information from ChEMBL:
