@@ -5,6 +5,8 @@ import hashlib
 
 import pandas as pd
 import pytest
+from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 from library.csv_utils import sha256_file, write_csv_deterministic
 
@@ -55,6 +57,39 @@ def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
     write_csv_deterministic(df1, path1, col_order=["a", "b", "d", "f"], key_cols=["a"])
     write_csv_deterministic(df2, path2, col_order=["a", "b", "d", "f"], key_cols=["a"])
 
+    assert path1.read_bytes() == path2.read_bytes()
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    df=data_frames(
+        columns=[
+            column("a", elements=st.integers(min_value=0, max_value=10), unique=True),
+            column("b", elements=st.booleans()),
+            column(
+                "d",
+                elements=st.datetimes(
+                    min_value=pd.Timestamp("1970-01-01").to_pydatetime(),
+                    max_value=pd.Timestamp("2100-12-31").to_pydatetime(),
+                ),
+            ),
+            column(
+                "f",
+                elements=st.floats(allow_nan=False, allow_infinity=False, width=32),
+            ),
+        ],
+        index=range_indexes(min_size=1, max_size=5),
+    )
+)
+def test_write_csv_deterministic_hypothesis(tmp_path: Path, df: pd.DataFrame) -> None:
+    """Repeated writes yield identical outputs for random data."""
+
+    path1 = tmp_path / "first.csv"
+    path2 = tmp_path / "second.csv"
+    df1 = df.sample(frac=1).reset_index(drop=True)
+    df2 = df.sample(frac=1).reset_index(drop=True)
+    write_csv_deterministic(df1, path1, col_order=["a", "b", "d", "f"], key_cols=["a"])
+    write_csv_deterministic(df2, path2, col_order=["a", "b", "d", "f"], key_cols=["a"])
     assert path1.read_bytes() == path2.read_bytes()
 
 
