@@ -9,7 +9,9 @@ import requests
 import pytest
 
 from library import pubmed_library as pl
+import library.rate_limiter as rl
 from library.config import (
+    Config,
     CrossRefCfg,
     OpenAlexCfg,
     PubMedCfg,
@@ -69,13 +71,15 @@ def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
-    cfg = OpenAlexCfg(
-        base="https://example.org",
-        timeout_connect=1,
-        timeout_read=2,
-        retries=4,
-        rps=10,
-        mailto="info@example.org",
+    cfg = Config(
+        openalex=OpenAlexCfg(
+            base="https://example.org",
+            timeout_connect=1,
+            timeout_read=2,
+            retries=4,
+            rps=10,
+            mailto="info@example.org",
+        )
     )
 
     captured: Dict[str, Any] = {}
@@ -102,24 +106,19 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
             "mesh": [],
         }, ""
 
-    sleeps: list[float] = []
     monkeypatch.setattr(pl, "_do_request", fake_do_request)
-    rps: dict[str, float] = {}
 
-    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
-        rps["value"] = rps_val
+    class DummyLimiter(rl.RateLimiter):
+        def __init__(self) -> None:
+            super().__init__(rps=1)
+            self.calls = 0
 
-        class Dummy:
-            def acquire(self) -> None:
-                pass
+        def acquire(self) -> None:  # type: ignore[override]
+            self.calls += 1
 
-        return Dummy()
-
-    monkeypatch.setattr(pl, "get_limiter", fake_get_limiter)
-    monkeypatch.setattr(pl, "sleep", lambda s: sleeps.append(s))
-
+    limiter = DummyLimiter()
     session = requests.Session()
-    res = pl.fetch_openalex(session, "1", cfg=cfg)
+    res = pl.fetch_openalex(session, "1", cfg=cfg.openalex, limiter=limiter)
     assert res["OpenAlex.Error"] == ""
     assert (
         captured["url"] == "https://example.org/works/pmid:1?mailto=info%40example.org"
@@ -127,18 +126,19 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     assert captured["timeout"] == (1, 2)
     assert captured["retries"] == 4
     assert captured["sleep"] == pytest.approx(0.1)
-    assert rps["value"] == pytest.approx(10)
-    assert sleeps == []
+    assert limiter.calls == 1
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
-    cfg = CrossRefCfg(
-        base="https://api.example.org",
-        timeout_connect=2,
-        timeout_read=3,
-        retries=5,
-        rps=8,
-        mailto="info@example.org",
+    cfg = Config(
+        crossref=CrossRefCfg(
+            base="https://api.example.org",
+            timeout_connect=2,
+            timeout_read=3,
+            retries=5,
+            rps=8,
+            mailto="info@example.org",
+        )
     )
 
     captured: Dict[str, Any] = {}
@@ -158,24 +158,19 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
         )
         return {"message": {}}, ""
 
-    sleeps: list[float] = []
     monkeypatch.setattr(pl, "_do_request", fake_do_request)
-    rps: dict[str, float] = {}
 
-    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
-        rps["value"] = rps_val
+    class DummyLimiter(rl.RateLimiter):
+        def __init__(self) -> None:
+            super().__init__(rps=1)
+            self.calls = 0
 
-        class Dummy:
-            def acquire(self) -> None:
-                pass
+        def acquire(self) -> None:  # type: ignore[override]
+            self.calls += 1
 
-        return Dummy()
-
-    monkeypatch.setattr(pl, "get_limiter", fake_get_limiter)
-    monkeypatch.setattr(pl, "sleep", lambda s: sleeps.append(s))
-
+    limiter = DummyLimiter()
     session = requests.Session()
-    res = pl.fetch_crossref(session, "10.1000/xyz", cfg=cfg)
+    res = pl.fetch_crossref(session, "10.1000/xyz", cfg=cfg.crossref, limiter=limiter)
     assert res["crossref.Error"] == ""
     assert (
         captured["url"]
@@ -184,8 +179,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     assert captured["timeout"] == (2, 3)
     assert captured["retries"] == 5
     assert captured["sleep"] == pytest.approx(1 / 8)
-    assert rps["value"] == pytest.approx(8)
-    assert sleeps == []
+    assert limiter.calls == 1
 
 
 def test_fetch_semantic_scholar_uses_cfg(monkeypatch) -> None:
