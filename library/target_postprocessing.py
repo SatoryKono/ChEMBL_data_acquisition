@@ -303,7 +303,7 @@ def postprocess_file(
     Parameters
     ----------
     input_path:
-        Path to the CSV file produced by ``get_target_data.py all``.
+        Path to the CSV file produced by ``scripts/get_target_data.py all``.
     output_path:
         Destination path for the cleaned CSV file.
     cfg:

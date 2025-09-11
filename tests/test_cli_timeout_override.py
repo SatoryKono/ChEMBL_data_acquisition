@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pandas as pd
 
-import get_assay_data as gas
-import get_document_data as gdd
-import get_target_data as gtd
-import get_testitem_data as gtdt
 from library import chembl_library as cl
 from library import io
 from library.config import Config
+from scripts import get_assay_data as gas
+from scripts import get_document_data as gdd
+from scripts import get_target_data as gtd
+from scripts import get_testitem_data as gtdt
 
 
 def _create_config(tmp_path: Path) -> Path:

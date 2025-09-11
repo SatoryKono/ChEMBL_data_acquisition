@@ -101,6 +101,7 @@ class ApiCfg(_BaseModel):
 
 class ChemblCfg(_BaseModel):
     cache_ttl: int = Field(3600, ge=1)
+    cache_maxsize: int = Field(1024, ge=1)
 
 
 class OpenAlexCfg(_BaseModel):
@@ -684,6 +685,7 @@ _ALIAS_MAP: dict[str, list[str]] = {
     "CHEMBL_DA_PUBCHEM_RPS": ["pubchem", "rps"],
     "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
     "CHEMBL_DA_CACHE_TTL": ["chembl", "cache_ttl"],
+    "CHEMBL_DA_CACHE_MAXSIZE": ["chembl", "cache_maxsize"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
     "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],

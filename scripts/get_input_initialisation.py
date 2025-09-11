@@ -15,21 +15,26 @@ suffixes, for example ``activity_independent.csv`` or
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from library import input_initialisation_library as lib
-from library.cli import (
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from library import input_initialisation_library as lib  # noqa: E402
+from library.cli import (  # noqa: E402
     LoggerConfig,
     apply_config_overrides,
     configure_logger,
 )
-from library.cli import (
+from library.cli import (  # noqa: E402
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config
-from library.log import logger
-from library.table_quality import analyze_table_quality
+from library.config import Config, ensure_dirs, print_config  # noqa: E402
+from library.log import logger  # noqa: E402
+from library.table_quality import analyze_table_quality  # noqa: E402
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -60,11 +65,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         out_dir = Path(args.out_dir or cfg.init.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info("Loading source workbooks")
+        logger.info("load_workbooks")
         same = lib.load_same_doc(args.same_doc)
         all_ = lib.load_all_doc(args.all_doc)
 
-        logger.info("Combining tables")
+        logger.info("combine_tables")
         tables = lib.build_combined_tables(
             same,
             all_,
@@ -72,7 +77,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             status_csv=cfg.resources.status_csv,
             targets_type_csv=cfg.resources.targets_type_csv,
         )
-        logger.info("Generating entity tables for pair segments")
+        logger.info("generate_pair_tables")
         tables = lib.generate_pair_entity_tables(
             tables,
             {
@@ -81,7 +86,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 "pairs_same_document": "same_document",
             },
         )
-        logger.info("Computing status percentages")
+        logger.info("compute_status_percentages")
         for key, df in list(tables.items()):
             if not key.endswith("_status"):
                 continue
@@ -91,21 +96,21 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             entity = key.split("_")[0]
             tables[key] = lib.compute_status_statistics(df, entity)
 
-        logger.info("Saving output")
+        logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
         # Ensure that files were actually written to disk
         missing = [str(p) for p in paths.values() if not p.exists()]
         if missing:
             raise RuntimeError("failed to write output files: " + ", ".join(missing))
 
-        logger.info("Generating data quality reports")
+        logger.info("generate_quality_reports")
         report_dir = out_dir / "data_validity_report"
         report_dir.mkdir(parents=True, exist_ok=True)
         for entity, path in paths.items():
-            logger.info("Profiling %s", entity)
+            logger.info("profiling", extra={"entity": entity})
             analyze_table_quality(path, table_name=str(report_dir / path.stem))
 
-        logger.info("Saved %d tables and quality reports to %s", len(paths), out_dir)
+        logger.info("save_done", extra={"tables": len(paths), "path": str(out_dir)})
         return 0
     except KeyError as exc:
         logger.error("required table '%s' missing", exc.args[0])
@@ -153,7 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
     try:
         cfg: Config = apply_config_overrides(
             args,
@@ -169,9 +174,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
 
@@ -197,17 +200,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     exit_code = int(args.func(cfg, args))
     if exit_code == 0:
-        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
     return exit_code
 
 

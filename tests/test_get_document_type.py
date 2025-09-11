@@ -1,10 +1,10 @@
-"""Tests for :mod:`get_document_type` utilities."""
+"""Tests for :mod:`scripts.get_document_type` utilities."""
 
 from __future__ import annotations
 
 import pandas as pd
 
-from get_document_type import classify_dataframe
+from scripts.get_document_type import classify_dataframe
 
 
 def test_classify_dataframe_basic() -> None:

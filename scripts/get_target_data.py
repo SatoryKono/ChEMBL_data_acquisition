@@ -4,7 +4,7 @@ Example
 -------
 Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
-    python get_target_data.py chembl --config config.yaml --input targets.csv
+    python scripts/get_target_data.py chembl --config config.yaml --input targets.csv
 """
 
 from __future__ import annotations
@@ -19,29 +19,33 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import chembl_library as cl
-from library import io
-from library import iuphar_library as ii
-from library import target_postprocessing as tp
-from library import uniprot_library as uu
-from library.chembl_client import ChemblClient
-from library.cli import (
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from library import chembl_library as cl  # noqa: E402
+from library import io, write_csv_deterministic  # noqa: E402
+from library import iuphar_library as ii  # noqa: E402
+from library import target_postprocessing as tp  # noqa: E402
+from library import uniprot_library as uu  # noqa: E402
+from library.chembl_client import ChemblClient  # noqa: E402
+from library.cli import (  # noqa: E402
     LoggerConfig,
     apply_config_overrides,
     build_root_parser,
     configure_logger,
 )
-from library.config import (
+from library.config import (  # noqa: E402
     Config,
     _serialize_paths,
     ensure_dirs,
     print_config,
 )
-from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
-from schemas import TargetsSchema, normalize_targets
+from library.log import logger  # noqa: E402
+from library.metadata import Stats, file_sha256, write_meta_yaml  # noqa: E402
+from library.sidecar import SidecarErrors  # noqa: E402
+from library.table_quality import analyze_table_quality  # noqa: E402
+from schemas import TargetsSchema, normalize_targets  # noqa: E402
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -403,7 +407,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -693,7 +697,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     try:
@@ -731,33 +735,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     if hasattr(args, "func"):
         exit_code = args.func(cfg, args)
         if exit_code == 0:
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
         else:
-            logger.info(
-                "pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"}
-            )
+            logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return exit_code
     parser.print_help()
-    logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+    logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
     return 1
 
 

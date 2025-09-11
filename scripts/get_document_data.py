@@ -2,7 +2,7 @@
 
 The tool integrates :mod:`library.pubmed_library` and
 :mod:`library.chembl_library` to collect information about publications from
-several public APIs.  The interface mirrors :mod:`get_target_data.py` and
+several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and
 provides three sub-commands:
 
 ``pubmed``
@@ -16,7 +16,7 @@ Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python get_document_data.py pubmed --config config.yaml --input pmids.csv --output output.csv
+    python scripts/get_document_data.py pubmed --config config.yaml --input pmids.csv --output output.csv
 
 The input file must contain a ``PMID`` column.
 
@@ -28,25 +28,30 @@ import argparse
 import sys
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import chembl_library as cl
-from library import document_postprocessing as dp
-from library import io
-from library import openalex_crossref_library as ocl
-from library import pubmed_library as pl
-from library import semantic_scholar_library as ssl
-from library.chembl_client import ChemblClient, _chunked
-from library.cli import (
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from library import chembl_library as cl  # noqa: E402
+from library import document_postprocessing as dp  # noqa: E402
+from library import io, write_csv_deterministic  # noqa: E402
+from library import openalex_crossref_library as ocl  # noqa: E402
+from library import pubmed_library as pl  # noqa: E402
+from library import semantic_scholar_library as ssl  # noqa: E402
+from library.chembl_client import ChemblClient, _chunked  # noqa: E402
+from library.cli import (  # noqa: E402
     LoggerConfig,
     apply_config_overrides,
     build_root_parser,
     configure_logger,
 )
-from library.config import (
+from library.config import (  # noqa: E402
     Config,
     CrossRefCfg,
     OpenAlexCfg,
@@ -54,12 +59,12 @@ from library.config import (
     ensure_dirs,
     print_config,
 )
-from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.rate_limiter import get_limiter
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
-from schemas import DocumentsSchema, normalize_documents
+from library.log import logger  # noqa: E402
+from library.metadata import Stats, file_sha256, write_meta_yaml  # noqa: E402
+from library.rate_limiter import get_limiter  # noqa: E402
+from library.sidecar import SidecarErrors  # noqa: E402
+from library.table_quality import analyze_table_quality  # noqa: E402
+from schemas import DocumentsSchema, normalize_documents  # noqa: E402
 
 
 def fetch_pubmed_records(
@@ -159,7 +164,7 @@ def fetch_pubmed_records(
             batch_len = futures[future]
             records.extend(future.result())
             processed += batch_len
-            logger.info("Processed %d documents", processed)
+            logger.info("documents_processed", extra={"count": processed})
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
@@ -221,7 +226,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
 
         stats: Stats = {
             "rows_total": rows_total,
@@ -318,7 +323,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -421,7 +426,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 key_cols=key_cols or None,
             )
-            logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+            logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
             return 1
@@ -508,7 +513,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -654,7 +659,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     mapping = {"column": f"document.{args.command}.column"}
@@ -697,25 +702,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     exit_code = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
     return exit_code
 
 
