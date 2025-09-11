@@ -58,6 +58,13 @@ python get_input_initialisation.py \
     --out-dir data/output-smoke
 ```
 
+The command writes the merged entity tables along with pair tables
+(`pairs_same_document.csv`, `pairs_independent.csv` and
+`pairs_non_independent.csv`). For each pair segment (``independent``,
+``non_independent`` and ``same_document``) additional status summaries are
+produced for the activity, assay, document, system, testitem and target
+entities, e.g. ``activity_independent_status.csv``.
+
 Each command supports the common flags `--sep`, `--encoding` and
 `--log-level`. The default output path mirrors the input location and can be
 manually overridden with `--output` where available.

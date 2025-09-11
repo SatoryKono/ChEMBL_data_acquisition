@@ -6,16 +6,16 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Literal
-from .log import logger
+from typing import Any, Literal
 
 import pandas as pd
 
 from .config import Config
 from .io import write_csv
-
+from .log import logger
 
 EntityName = Literal[
     "activity",
@@ -30,7 +30,7 @@ EntityName = Literal[
 # Mapping of entity names to their corresponding dataframes.  The dictionary
 # may contain additional keys such as ``"activity_status"`` produced during
 # processing, hence the generic ``str`` key type.
-TableDict = Dict[str, pd.DataFrame]
+TableDict = dict[str, pd.DataFrame]
 
 
 # Mapping of sheet names to entity identifiers
@@ -187,8 +187,9 @@ def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """
 
     if "Filtered" not in df.columns:
+        cols = ", ".join(df.columns)
         raise KeyError(
-            f"table '{table_name}' missing column 'Filtered'; available: {', '.join(df.columns)}"
+            f"table '{table_name}' missing column 'Filtered'; available: {cols}"
         )
 
     counts = df.groupby("Filtered", dropna=False).size().rename("Count").reset_index()
@@ -267,8 +268,9 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
     """
 
     if "Filtered.new" not in df.columns:
+        cols = ", ".join(df.columns)
         raise KeyError(
-            f"table '{table_name}' missing column 'Filtered.new'; available: {', '.join(df.columns)}"
+            f"table '{table_name}' missing column 'Filtered.new'; available: {cols}"
         )
 
     df_tmp = df.rename(columns={"Filtered.new": "Filtered"}).copy()
@@ -735,9 +737,9 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
             return pd.NA
         if isinstance(value, str):
             value = value.strip().lower()
-        if value in {True, 1, "1", "true", "t"}:
+        if value in {True, "1", "true", "t"}:
             return True
-        if value in {False, 0, "0", "false", "f"}:
+        if value in {False, "0", "false", "f"}:
             return False
         raise ValueError(f"invalid boolean value: {value}")
 
@@ -971,7 +973,8 @@ def build_combined_tables(
                 combined[pair_key] = df_pair
 
                 logger.warning(
-                    "skip initialize_pairs: table '%s' missing or has no activity_chembl_id1/activity_chembl_id2",
+                    "skip initialize_pairs: table '%s' missing or has no "
+                    "activity_chembl_id1/activity_chembl_id2",
                     pair_key,
                 )
 
@@ -992,7 +995,8 @@ def build_combined_tables(
                 )
             else:
                 logger.warning(
-                    "%s table missing or lacks Filtered columns; skipping status aggregation",
+                    "%s table missing or lacks Filtered columns; "
+                    "skipping status aggregation",
                     pair_key,
                 )
 
@@ -1004,7 +1008,7 @@ def save_tables(
     out_dir: Path,
     cfg: Config,
     fmt: str = "csv",
-) -> Dict[str, Path]:
+) -> dict[str, Path]:
     """Persist combined tables to ``out_dir``.
 
     Parameters
@@ -1026,7 +1030,7 @@ def save_tables(
     if fmt != "csv":
         raise ValueError("only csv output is supported")
 
-    paths: Dict[str, Path] = {}
+    paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
         if entity.endswith("_non_independent_status"):
@@ -1074,8 +1078,8 @@ class StatusAPI:
     table: pd.DataFrame
     status_list: list[str]
     conditions: list[str]
-    order_map: Dict[str, int]
-    score_map: Dict[str, int]
+    order_map: dict[str, int]
+    score_map: dict[str, int]
 
     def pair(self, s1: str, s2: str) -> str:
         """Return the lower-ranked status between ``s1`` and ``s2``.
@@ -1360,8 +1364,8 @@ def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
         .unique()
         .tolist()
     )
-    order_map = dict(zip(status_df["status"], status_df["order"]))
-    score_map = dict(zip(status_df["status"], status_df["score"]))
+    order_map = dict(zip(status_df["status"], status_df["order"], strict=False))
+    score_map = dict(zip(status_df["status"], status_df["score"], strict=False))
     return StatusAPI(status_df, status_list, conditions, order_map, score_map)
 
 
@@ -1390,7 +1394,13 @@ def initialize_activity_status(
 
     # Map condition fields to their corresponding status and order
     cond_rows = status_api.table[status_api.table["condition_value"] != "null"]
-    field_to_status = dict(zip(cond_rows["condition_field"], cond_rows["status"]))
+    field_to_status = dict(
+        zip(
+            cond_rows["condition_field"],
+            cond_rows["status"],
+            strict=False,
+        )
+    )
     order_to_status = {v: k for k, v in status_api.order_map.items()}
     default_order = status_api.order_map[status_api.status_list[-1]]
 
@@ -1417,8 +1427,9 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
     The Excel sources occasionally vary in the casing or use of underscores
-    for ``activity_chembl_id1`` and ``activity_chembl_id2``.  This helper normalises these
-    column names so downstream processing can rely on a consistent schema.
+    for ``activity_chembl_id1`` and ``activity_chembl_id2``. This helper
+    normalises these column names so downstream processing can rely on a
+    consistent schema.
 
     Parameters
     ----------
@@ -1491,7 +1502,7 @@ def _aggregate_entity(
 
 def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
-) -> Dict[str, pd.DataFrame]:
+) -> dict[str, pd.DataFrame]:
     """Aggregate status metrics across entities.
 
     The function combines activity pair information with per-activity
@@ -1604,3 +1615,57 @@ def aggregate_activity(
         "testitem": testitem_status,
         "target": target_status,
     }
+
+
+def generate_pair_entity_tables(
+    tables: TableDict, *, status_csv: Path | None = None
+) -> TableDict:
+    """Create entity-level summaries from pair tables.
+
+    Parameters
+    ----------
+    tables:
+        Mapping containing at least the activity table and pair variants.
+    status_csv:
+        Optional path to ``status.csv`` describing status ordering. If missing
+        or the file does not exist, no tables are generated.
+
+    Returns
+    -------
+    TableDict
+        New entity status tables keyed as ``<entity>_<segment>_status`` where
+        ``<segment>`` is one of ``independent``, ``non_independent`` or
+        ``same_document``.
+    """
+
+    if status_csv is None or not Path(status_csv).exists():
+        logger.warning("status CSV %s missing; skipping pair entity tables", status_csv)
+        return {}
+
+    activity = tables.get("activity")
+    if activity is None:
+        logger.warning("activity table missing; skipping pair entity tables")
+        return {}
+
+    status_df = load_status_table(status_csv)
+    status_api = build_status_helpers(status_df)
+
+    result: TableDict = {}
+    for suffix, pair_key in [
+        ("independent", "pairs_independent"),
+        ("non_independent", "pairs_non_independent"),
+        ("same_document", "pairs_same_document"),
+    ]:
+        pair_table = tables.get(pair_key)
+        if pair_table is None or not {"Filtered1", "Filtered2"}.issubset(
+            pair_table.columns
+        ):
+            logger.warning(
+                "pair table '%s' missing or lacks Filtered columns; skipping",
+                pair_key,
+            )
+            continue
+        aggregates = aggregate_activity(pair_table, activity, status_api)
+        result.update({f"{k}_{suffix}_status": v for k, v in aggregates.items()})
+
+    return result

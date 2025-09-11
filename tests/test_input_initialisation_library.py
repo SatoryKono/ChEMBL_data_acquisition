@@ -1,22 +1,23 @@
 from __future__ import annotations
 
-import pandas as pd
 import sys
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 import pytest
 
-from library.input_initialisation_library import (
-    _ensure_openpyxl,
-    TableDict,
-    append_entities,
-    build_combined_tables,
-    unify_dtypes,
-    save_tables,
-    process_activity_table,
-)
 import library.input_initialisation_library as lib
 from library.config import Config
+from library.input_initialisation_library import (
+    TableDict,
+    _ensure_openpyxl,
+    append_entities,
+    build_combined_tables,
+    process_activity_table,
+    save_tables,
+    unify_dtypes,
+)
 
 
 def test_unify_dtypes_basic() -> None:
@@ -306,14 +307,18 @@ def test_build_combined_tables_aggregates_all_pair_segments(
         lambda df, _api: df.assign(**{"Filtered.init": "good"}),
     )
 
-    def fake_init_pairs(pair_df: pd.DataFrame, *_args, **_kwargs) -> pd.DataFrame:
+    def fake_init_pairs(
+        pair_df: pd.DataFrame, *_args: Any, **_kwargs: Any
+    ) -> pd.DataFrame:
         return pair_df.assign(Filtered1="good", Filtered2="good", Filtered="good")
 
     monkeypatch.setattr(lib, "initialize_pairs", fake_init_pairs)
 
     captured: list[pd.DataFrame] = []
 
-    def fake_aggregate(pair_df: pd.DataFrame, *_args, **_kwargs):
+    def fake_aggregate(
+        pair_df: pd.DataFrame, *_args: Any, **_kwargs: Any
+    ) -> dict[str, pd.DataFrame]:
         captured.append(pair_df)
         return {"activity": pd.DataFrame({"id": [1]})}
 
@@ -453,7 +458,8 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n2,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
-        "chembl_id,type,IUPHAR_class,IUPHAR_subclass\nT1,Unicellular organism,ClassA,Multifunctional\n"
+        "chembl_id,type,IUPHAR_class,IUPHAR_subclass\n"
+        "T1,Unicellular organism,ClassA,Multifunctional\n"
     )
 
     res = process_activity_table(df, tmp_path)
@@ -580,3 +586,44 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
     res = process_activity_table(df, tmp_path)
     assert "unicellular_organism" in res.columns
     assert res.loc[0, "unicellular_organism"]
+
+
+def test_generate_pair_entity_tables_basic(tmp_path: Path) -> None:
+    status_csv = tmp_path / "status.csv"
+    status_csv.write_text(
+        "status,condition_field,condition_value,order,score\nok,null,null,0,0\n"
+    )
+
+    activity = pd.DataFrame(
+        {
+            "activity_id": [1, 2],
+            "assay_id": [10, 20],
+            "document_id": [100, 200],
+            "testitem_id": [1000, 2000],
+            "target_id": [10000, 20000],
+            "standard_type": ["IC50", "IC50"],
+            "Filtered.init": ["ok", "ok"],
+        }
+    )
+    pair_df = pd.DataFrame(
+        {
+            "activity_chembl_id1": [1],
+            "activity_chembl_id2": [2],
+            "Filtered1": ["ok"],
+            "Filtered2": ["ok"],
+            "independent_IC50": [1],
+            "non_independent_IC50": [0],
+            "independent_Ki": [0],
+            "non_independent_Ki": [0],
+        }
+    )
+    tables: TableDict = {
+        "activity": activity,
+        "pairs_independent": pair_df,
+        "pairs_non_independent": pair_df.iloc[0:0],
+        "pairs_same_document": pair_df.iloc[0:0],
+    }
+
+    res = lib.generate_pair_entity_tables(tables, status_csv=status_csv)
+    assert "activity_independent_status" in res
+    assert res["activity_independent_status"].loc[0, "Filtered.new"] == "ok"
