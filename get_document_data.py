@@ -42,12 +42,15 @@ from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
+from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.cli import (
     apply_config_overrides,
     build_root_parser,
     configure_logging,
 )
+from pandera.errors import SchemaErrors
+from schemas import DocumentsSchema, normalize_documents
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +186,23 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             args.batch_size,
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        df = normalize_documents(df)
+        exit_code = 0
+        try:
+            df = DocumentsSchema.validate(df, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            df = exc.validated_data  # type: ignore[attr-defined]
+            exit_code = 1
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -193,7 +213,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -235,6 +255,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    df = normalize_documents(df)
+    exit_code = 0
+    try:
+        df = DocumentsSchema.validate(df, lazy=True)
+    except SchemaErrors as exc:
+        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+        errors = SidecarErrors()
+        for row in exc.failure_cases.to_dict("records"):
+            errors.add_error(row)
+        errors.save(failure_path)
+        logger.error(
+            "validation failed; wrote %d failure cases to %s",
+            len(exc.failure_cases),
+            failure_path,
+        )
+        df = exc.validated_data  # type: ignore[attr-defined]
+        exit_code = 1
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -246,7 +283,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
@@ -299,6 +336,23 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 on="document_chembl_id",
                 how="left",
             )
+        processed = normalize_documents(processed)
+        exit_code = 0
+        try:
+            processed = DocumentsSchema.validate(processed, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            processed = exc.validated_data  # type: ignore[attr-defined]
+            exit_code = 1
         try:
             io.write_csv(
                 processed, output, cfg=cfg, sep=args.sep, encoding=args.encoding
@@ -312,7 +366,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         except ValueError as exc:
             logger.error("failed to generate quality report: %s", exc)
             return 1
-        return 0
+        return exit_code
 
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
@@ -347,6 +401,23 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             on="document_chembl_id",
             how="left",
         )
+    processed = normalize_documents(processed)
+    exit_code = 0
+    try:
+        processed = DocumentsSchema.validate(processed, lazy=True)
+    except SchemaErrors as exc:
+        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+        errors = SidecarErrors()
+        for row in exc.failure_cases.to_dict("records"):
+            errors.add_error(row)
+        errors.save(failure_path)
+        logger.error(
+            "validation failed; wrote %d failure cases to %s",
+            len(exc.failure_cases),
+            failure_path,
+        )
+        processed = exc.validated_data  # type: ignore[attr-defined]
+        exit_code = 1
     try:
         io.write_csv(processed, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(processed), output)
@@ -358,7 +429,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
 def build_parser() -> argparse.ArgumentParser:
