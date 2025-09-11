@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 import requests
 import pytest
@@ -26,6 +26,75 @@ def test_read_pmids() -> None:
     path = DATA_DIR / "pmids.csv"
     pmids = pl.read_pmids(path)
     assert pmids == ["1", "2"]
+
+
+def test_read_pmids_missing_column(tmp_path: Path) -> None:
+    """Ensure ``read_pmids`` validates presence of the PMID column."""
+    path = tmp_path / "bad.csv"
+    path.write_text("ID\n1\n")
+    with pytest.raises(ValueError, match="PMID"):
+        pl.read_pmids(path)
+
+
+class DummyResponse:
+    def __init__(
+        self, status: int, text: str = "", json_data: Dict[str, Any] | None = None
+    ) -> None:
+        self.status_code = status
+        self._text = text
+        self._json = json_data
+
+    def __enter__(self) -> "DummyResponse":
+        return self
+
+    def __exit__(
+        self, exc_type, exc, tb
+    ) -> None:  # pragma: no cover - no cleanup needed
+        return None
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    def json(self) -> Dict[str, Any]:
+        if self._json is None:
+            raise ValueError("no json")
+        return self._json
+
+
+class DummySession:
+    def __init__(self, response: DummyResponse) -> None:
+        self._response = response
+
+    def get(
+        self, url: str, timeout: float | tuple[float, float], **kwargs: Any
+    ) -> DummyResponse:
+        return self._response
+
+    def post(
+        self, url: str, timeout: float | tuple[float, float], **kwargs: Any
+    ) -> DummyResponse:
+        return self._response
+
+
+def test_do_request_success() -> None:
+    """Successful call returns parsed JSON and empty error string."""
+    session = DummySession(DummyResponse(200, text="{}", json_data={"a": 1}))
+    data, err = pl._do_request(
+        cast(requests.Session, session), "http://example.org", delay=0
+    )
+    assert data == {"a": 1}
+    assert err == ""
+
+
+def test_do_request_404() -> None:
+    """404 response is reported as 'PMID not found'."""
+    session = DummySession(DummyResponse(404, text="not found", json_data={}))
+    data, err = pl._do_request(
+        cast(requests.Session, session), "http://example.org", delay=0
+    )
+    assert data is None
+    assert err == "PMID not found"
 
 
 def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
