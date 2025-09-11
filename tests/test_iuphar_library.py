@@ -1,8 +1,9 @@
 import pandas as pd
 import pytest
+import requests
 
 from library import iuphar_library as ii
-from library.config import IupharCfg
+from library.config import IupharCfg, RetryCfg
 
 
 def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
@@ -15,7 +16,15 @@ def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
         called["timeout"] = timeout
 
         class Resp:
-            def raise_for_status(self) -> None:
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+
                 return None
 
             def json(self) -> list[dict[str, int]]:
@@ -24,7 +33,7 @@ def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
         return Resp()
 
     sleeps: list[float] = []
-    monkeypatch.setattr(ii.requests, "get", fake_get)
+    monkeypatch.setattr(ii._session, "get", fake_get)
     monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
@@ -61,13 +70,21 @@ def test_iuphar_upload_uses_cfg(monkeypatch) -> None:
             def __init__(self, text: str) -> None:
                 self.text = text
 
-            def raise_for_status(self) -> None:
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+
                 return None
 
         return Resp(text)
 
     sleeps: list[float] = []
-    monkeypatch.setattr(ii.requests, "get", fake_get)
+    monkeypatch.setattr(ii._session, "get", fake_get)
     monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
@@ -83,3 +100,47 @@ def test_iuphar_upload_uses_cfg(monkeypatch) -> None:
     assert calls[0][1] == (1, 2)
     assert calls[1][0] == "https://example.org/DATA/GtP_to_HGNC_mapping.csv"
     assert sleeps and sleeps[0] == pytest.approx(0.1)
+
+
+def test_query_gene_symbol_backoff(monkeypatch):
+    cfg = IupharCfg(
+        base="https://example.org/services",
+        timeout_connect=1,
+        timeout_read=2,
+        rps=5,
+        burst=5,
+    )
+    retry = RetryCfg(max_attempts=2, backoff_factor=1)
+    calls: list[tuple[str, tuple[int, int]]] = []
+
+    def fake_get(url: str, timeout: tuple[int, int]):
+        calls.append((url, timeout))
+        if len(calls) == 1:
+            raise requests.RequestException("boom")
+
+        class Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return [{"id": 1}]
+
+        return Resp()
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(ii._session, "get", fake_get)
+    monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ii.random, "uniform", lambda a, b: 0)
+
+    result = ii._query_gene_symbol("GENE", cfg, retry)
+    assert result == {"id": 1}
+    assert calls[0][0] == "https://example.org/services/targets/?geneSymbol=GENE"
+    assert sleeps[0] == pytest.approx(0.2)
+    assert sleeps[1] == pytest.approx(1.0)
+    assert sleeps[2] == pytest.approx(0.2)

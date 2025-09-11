@@ -17,18 +17,30 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+import io
 import logging
+import random
 import time
 from urllib.parse import quote
-import io
 
 import pandas as pd
 import requests
+from requests import Session
 
-from .config import IupharCfg
+from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
 
 
 logger = logging.getLogger(__name__)
+
+
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+
+
+def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+    """Initialise the shared HTTP session."""
+
+    global _session
+    _session = session_with_retry(api, retry)
 
 
 EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (
@@ -135,6 +147,47 @@ def load_families(path: str | Path, *, encoding: str = "utf-8") -> pd.DataFrame:
     df = pd.read_csv(path, encoding=encoding, dtype=str).fillna("")
     _validate_columns(df, EXPECTED_FAMILY_COLUMNS)
     return df
+
+
+def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
+    """Return the first IUPHAR result for *gene_name*.
+
+    Parameters
+    ----------
+    gene_name:
+        Gene symbol to search for.
+    cfg:
+        API configuration controlling base URL, timeouts and rate limits.
+    retry:
+        Retry configuration specifying backoff behaviour.
+
+    Returns
+    -------
+    dict
+        First result dictionary or an empty dict on failure.
+    """
+
+    base = cfg.base.rstrip("/")
+    url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    rate_delay = 1 / cfg.rps if cfg.rps else 0
+
+    for attempt in range(1, retry.max_attempts + 1):
+        if rate_delay:
+            time.sleep(rate_delay)
+        try:
+            with _session.get(url, timeout=timeout) as response:
+                response.raise_for_status()
+                data = response.json()
+                return data[0] if data else {}
+        except requests.RequestException as exc:  # pragma: no cover - network errors
+            if attempt >= retry.max_attempts:
+                logger.error("IUPHAR web request failed: %s", exc)
+                break
+            backoff = retry.backoff_factor * (2 ** (attempt - 1))
+            jitter = random.uniform(0, backoff)
+            time.sleep(backoff + jitter)
+    return {}
 
 
 @dataclass
@@ -542,7 +595,9 @@ class IUPHARData:
     # Web search
     # ------------------------------------------------------------------
 
-    def websearch_gene_to_id(self, gene_name: str, cfg: IupharCfg) -> dict:
+    def websearch_gene_to_id(
+        self, gene_name: str, cfg: IupharCfg, retry: RetryCfg | None = None
+    ) -> dict:
         """Query the IUPHAR web API for ``gene_name``.
 
         Parameters
@@ -551,38 +606,33 @@ class IUPHARData:
             Gene symbol to search for.
         cfg:
             API configuration controlling base URL, timeouts and rate limits.
+        retry:
+            Optional retry configuration.  Defaults to :class:`RetryCfg`.
 
         Returns
         -------
         dict
             First result dictionary or an empty dict on failure.
         """
-        delay = 1 / cfg.rps if cfg.rps else 0
-        time.sleep(delay)
-        base = cfg.base.rstrip("/")
-        url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
-        try:
-            response = requests.get(
-                url, timeout=(cfg.timeout_connect, cfg.timeout_read)
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data[0] if data else {}
-        except requests.RequestException as exc:  # pragma: no cover - network errors
-            logger.error("IUPHAR web request failed: %s", exc)
-            return {}
+
+        retry_cfg = retry or RetryCfg()
+        return _query_gene_symbol(gene_name, cfg, retry_cfg)
 
     # ------------------------------------------------------------------
     # IUPHAR upload processing
     # ------------------------------------------------------------------
 
-    def iuphar_upload(self, cfg: IupharCfg) -> pd.DataFrame:
+    def iuphar_upload(
+        self, cfg: IupharCfg, retry: RetryCfg | None = None
+    ) -> pd.DataFrame:
         """Reproduce the ``IUPHAR_upload`` transformation.
 
         Parameters
         ----------
         cfg:
             API configuration controlling base URL, timeouts and rate limits.
+        retry:
+            Optional retry configuration.  Defaults to :class:`RetryCfg`.
 
         Returns
         -------
@@ -592,25 +642,33 @@ class IUPHARData:
         The function downloads mapping files from the IUPHAR service and
         combines them with the local target and family tables.
         """
+        retry_cfg = retry or RetryCfg()
         base_root = cfg.base.rstrip("/")
         if base_root.endswith("services"):
             base_root = base_root.rsplit("/", 1)[0]
         data_base = f"{base_root}/DATA"
-        delay = 1 / cfg.rps if cfg.rps else 0
-        time.sleep(delay)
-        uni_resp = requests.get(
-            f"{data_base}/GtP_to_UniProt_mapping.csv",
-            timeout=(cfg.timeout_connect, cfg.timeout_read),
-        )
-        uni_resp.raise_for_status()
-        uni_df = pd.read_csv(io.StringIO(uni_resp.text))
-        time.sleep(delay)
-        hgnc_resp = requests.get(
-            f"{data_base}/GtP_to_HGNC_mapping.csv",
-            timeout=(cfg.timeout_connect, cfg.timeout_read),
-        )
-        hgnc_resp.raise_for_status()
-        hgnc_df = pd.read_csv(io.StringIO(hgnc_resp.text))
+        rate_delay = 1 / cfg.rps if cfg.rps else 0
+        timeout = (cfg.timeout_connect, cfg.timeout_read)
+
+        def _download(url: str) -> pd.DataFrame:
+            for attempt in range(1, retry_cfg.max_attempts + 1):
+                if rate_delay:
+                    time.sleep(rate_delay)
+                try:
+                    with _session.get(url, timeout=timeout) as resp:
+                        resp.raise_for_status()
+                        return pd.read_csv(io.StringIO(resp.text))
+                except requests.RequestException as exc:  # pragma: no cover - network
+                    if attempt >= retry_cfg.max_attempts:
+                        logger.error("IUPHAR mapping request failed: %s", exc)
+                        raise
+                    backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
+                    jitter = random.uniform(0, backoff)
+                    time.sleep(backoff + jitter)
+            raise RuntimeError("Failed to download mapping")
+
+        uni_df = _download(f"{data_base}/GtP_to_UniProt_mapping.csv")
+        hgnc_df = _download(f"{data_base}/GtP_to_HGNC_mapping.csv")
         hgnc_df = hgnc_df.rename(columns={"IUPHAR ID": "GtoPdb IUPHAR ID"})
         mapping = pd.merge(
             hgnc_df,
