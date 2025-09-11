@@ -10,6 +10,15 @@ from library.cli import LoggerConfig, configure_logger
 from library.config import ConfigError, ensure_dirs, load_config
 
 
+def test_config_to_dict(tmp_path: Path) -> None:
+    """``Config.to_dict`` should mirror :meth:`model_dump`."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cfg = load_config(path)
+    assert cfg.to_dict() == cfg.model_dump()
+
+
 def test_load_minimal_config(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("")
