@@ -43,6 +43,27 @@ parsing, validation, aggregation and export of tabular data.
    The suite exercises the library modules using fixtures from
    ``tests/data``.
 
+## Валидация конфигурации
+
+`library.config.load_config` проверяет корректность значений в `config.yaml`.
+Некорректный URL приводит к `ValueError` при загрузке:
+
+```yaml
+api:
+  chembl_base: https://
+```
+
+```
+ValueError: api.chembl_base must be a valid URL
+```
+
+Исправленный вариант задаёт полный адрес службы:
+
+```yaml
+api:
+  chembl_base: https://www.ebi.ac.uk/chembl/api/data
+```
+
 ## Logging
 
 All command-line tools emit structured logs as one JSON object per line

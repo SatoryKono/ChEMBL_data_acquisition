@@ -448,6 +448,7 @@ def process_activity_table(
     )
 
     # --- target types ------------------------------------------------------
+
     # ``targets_type.csv`` may reside either directly inside ``dictionary_dir``
     # or within a ``_Target`` subdirectory depending on how the dictionary
     # archive was extracted. Try the top-level location first and fall back to
@@ -462,6 +463,7 @@ def process_activity_table(
             "'dictionary/_Target/targets_type.csv'."
         )
         raise FileNotFoundError(msg)
+
 
     targets = pd.read_csv(
         targets_path,

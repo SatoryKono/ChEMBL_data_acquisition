@@ -99,3 +99,16 @@ def test_request_json_reuses_session(monkeypatch) -> None:
     request_json("http://example.com/2", cfg=ApiCfg())
 
     assert dummy.calls == [id(dummy), id(dummy)]
+
+
+@responses.activate
+def test_request_json_cache(monkeypatch) -> None:
+    monkeypatch.setattr("library.chembl_client._CACHE", {})
+    url = "http://example.com/cache"
+    responses.add(responses.GET, url, json={"ok": True}, status=200)
+
+    request_json(url, cfg=ApiCfg())
+    assert len(responses.calls) == 1
+
+    request_json(url, cfg=ApiCfg())
+    assert len(responses.calls) == 1
