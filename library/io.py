@@ -27,23 +27,25 @@ import sys
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, cast
 
 import pandas as pd
-
-try:
-    import pandera.pandas as pa
-except (ImportError, TypeError) as exc:
-    raise RuntimeError(
-        "pandera is required for schema validation; install a compatible "
-        "version of pandera for your Python interpreter."
-    ) from exc
 import yaml
 
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
 from .csv_utils import write_csv_deterministic
 from .log import logger
+
+if TYPE_CHECKING:  # pragma: no cover - only for type checking
+    import pandera.pandas as pa
+
+pa: ModuleType | None = None
+try:  # pragma: no cover - exercised in tests via monkeypatch
+    import pandera.pandas as pa
+except (ImportError, TypeError):
+    pa = None
 
 
 def read_ids(
@@ -139,7 +141,7 @@ def read_csv(
     schema:
         Optional :class:`pa.DataFrameSchema` or
         :class:`pa.DataFrameModel` used for advanced validation and
-        dtype coercion.
+        dtype coercion. Requires :mod:`pandera` when provided.
 
     Returns
     -------
@@ -158,6 +160,10 @@ def read_csv(
         parse_dates=list(parse_dates) if parse_dates is not None else None,
     )
     if schema is not None:
+        if pa is None:
+            raise RuntimeError(
+                "pandera is required for schema validation; install pandera to use the 'schema' argument"
+            )
         if isinstance(schema, pa.DataFrameSchema):
             df = schema.validate(df)
         else:
