@@ -24,7 +24,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from library import chembl_library as cl  # noqa: E402
-from library import io, write_csv_deterministic  # noqa: E402
+from library import io  # noqa: E402
 from library import iuphar_library as ii  # noqa: E402
 from library import target_postprocessing as tp  # noqa: E402
 from library import uniprot_library as uu  # noqa: E402
@@ -377,8 +377,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     df = normalize_targets(df)
     rows_total = len(df)
     exit_code = 0
-    required_cols = set(TargetsSchema.columns.keys())
-    if required_cols.issubset(df.columns):
+    # Only enforce columns marked as ``required`` in the schema. Optional columns
+    # may be absent in the input dataset without preventing validation.
+    required_cols = {
+        name for name, col in TargetsSchema.columns.items() if col.required
+    }
+    missing_required = required_cols.difference(df.columns)
+    if not missing_required:
         try:
             df = TargetsSchema.validate(df, lazy=True)
         except SchemaErrors as exc:
@@ -395,8 +400,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             df = getattr(exc, "validated_data", df)
             exit_code = 1
     else:
-        missing = required_cols.difference(df.columns)
-        logger.warning("Skipping validation due to missing columns: %s", missing)
+        logger.warning(
+            "Skipping validation due to missing columns: %s", missing_required
+        )
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
     try:

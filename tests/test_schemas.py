@@ -86,8 +86,6 @@ def test_targets_schema_validation() -> None:
     valid = pd.DataFrame(
         {
             "target_chembl_id": ["CHEMBL1"],
-            "organism": ["Homo sapiens"],
-            "target_uniprot_id": ["P12345"],
             "pH_dependence": [7.0],
             "isoforms": [2.0],
         }
@@ -98,6 +96,12 @@ def test_targets_schema_validation() -> None:
     invalid.loc[0, "pH_dependence"] = 20.0
     with pytest.raises(SchemaError):
         TargetsSchema.validate(invalid)
+
+
+def test_targets_schema_allows_missing_optional_columns() -> None:
+    """Schema validation succeeds when optional columns are absent."""
+    df = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+    TargetsSchema.validate(df)
 
 
 def test_testitems_schema_validation() -> None:
