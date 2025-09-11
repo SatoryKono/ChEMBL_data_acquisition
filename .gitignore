@@ -1,2 +1,4 @@
 *.xlsx
 data/input/pairs.csv
+data/input/pairs_independent.csv
+data/input/pairs_non_independent.csv
