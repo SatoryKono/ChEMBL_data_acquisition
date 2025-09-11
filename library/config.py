@@ -991,6 +991,168 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             "required": ["weights", "thresholds"],
             "additionalProperties": False,
         },
+        "activity": {
+            "type": "object",
+            "properties": {
+                "column": {"type": "string", "minLength": 1},
+                "chunk_size": {"type": "integer", "minimum": 1},
+                "timeout": {"type": "number", "minimum": 1},
+                "limit": {
+                    "anyOf": [
+                        {"type": "integer", "minimum": 1},
+                        {"type": "null"},
+                    ]
+                },
+                "dry_run": {"type": "boolean"},
+            },
+            "required": ["column", "chunk_size", "timeout", "dry_run"],
+            "additionalProperties": False,
+        },
+        "assay": {
+            "type": "object",
+            "properties": {
+                "column": {"type": "string", "minLength": 1},
+                "chunk_size": {"type": "integer", "minimum": 1},
+                "timeout": {"type": "number", "minimum": 1},
+            },
+            "required": ["column", "chunk_size", "timeout"],
+            "additionalProperties": False,
+        },
+        "testitem": {
+            "type": "object",
+            "properties": {
+                "column": {"type": "string", "minLength": 1},
+                "chunk_size": {"type": "integer", "minimum": 1},
+                "timeout": {"type": "number", "minimum": 1},
+            },
+            "required": ["column", "chunk_size", "timeout"],
+            "additionalProperties": False,
+        },
+        "document": {
+            "type": "object",
+            "properties": {
+                "pubmed": {
+                    "type": "object",
+                    "properties": {
+                        "column": {"type": "string", "minLength": 1},
+                        "sleep": {"type": "number", "minimum": 0},
+                        "workers": {"type": "integer", "minimum": 1},
+                        "batch_size": {"type": "integer", "minimum": 1},
+                    },
+                    "required": [
+                        "column",
+                        "sleep",
+                        "workers",
+                        "batch_size",
+                    ],
+                    "additionalProperties": False,
+                },
+                "chembl": {
+                    "type": "object",
+                    "properties": {
+                        "column": {"type": "string", "minLength": 1},
+                        "chunk_size": {"type": "integer", "minimum": 1},
+                        "timeout": {"type": "number", "minimum": 1},
+                    },
+                    "required": ["column", "chunk_size", "timeout"],
+                    "additionalProperties": False,
+                },
+                "all": {
+                    "type": "object",
+                    "properties": {
+                        "column": {"type": "string", "minLength": 1},
+                        "chunk_size": {"type": "integer", "minimum": 1},
+                        "sleep": {"type": "number", "minimum": 0},
+                        "workers": {"type": "integer", "minimum": 1},
+                        "batch_size": {"type": "integer", "minimum": 1},
+                        "timeout": {"type": "number", "minimum": 1},
+                    },
+                    "required": [
+                        "column",
+                        "chunk_size",
+                        "sleep",
+                        "workers",
+                        "batch_size",
+                        "timeout",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["pubmed", "chembl", "all"],
+            "additionalProperties": False,
+        },
+        "target": {
+            "type": "object",
+            "properties": {
+                "uniprot": {
+                    "type": "object",
+                    "properties": {
+                        "column": {"type": "string", "minLength": 1},
+                        "data_dir": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["column", "data_dir"],
+                    "additionalProperties": False,
+                },
+                "chembl": {
+                    "type": "object",
+                    "properties": {
+                        "column": {"type": "string", "minLength": 1},
+                        "timeout": {"type": "number", "minimum": 1},
+                    },
+                    "required": ["column", "timeout"],
+                    "additionalProperties": False,
+                },
+                "iuphar": {
+                    "type": "object",
+                    "properties": {
+                        "target_csv": {"type": "string", "minLength": 1},
+                        "family_csv": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["target_csv", "family_csv"],
+                    "additionalProperties": False,
+                },
+                "all": {
+                    "type": "object",
+                    "properties": {
+                        "data_dir": {"type": "string", "minLength": 1},
+                        "target_csv": {"type": "string", "minLength": 1},
+                        "family_csv": {"type": "string", "minLength": 1},
+                        "timeout": {"type": "number", "minimum": 1},
+                        "organism_csv": {"type": "string", "minLength": 1},
+                        "uniprot_column": {"type": "string", "minLength": 1},
+                        "chembl_out": {
+                            "anyOf": [
+                                {"type": "string", "minLength": 1},
+                                {"type": "null"},
+                            ]
+                        },
+                        "uniprot_out": {
+                            "anyOf": [
+                                {"type": "string", "minLength": 1},
+                                {"type": "null"},
+                            ]
+                        },
+                        "iuphar_out": {
+                            "anyOf": [
+                                {"type": "string", "minLength": 1},
+                                {"type": "null"},
+                            ]
+                        },
+                    },
+                    "required": [
+                        "data_dir",
+                        "target_csv",
+                        "family_csv",
+                        "timeout",
+                        "organism_csv",
+                        "uniprot_column",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["uniprot", "chembl", "iuphar", "all"],
+            "additionalProperties": False,
+        },
         "resources": {
             "type": "object",
             "properties": {
@@ -1141,6 +1303,11 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "pubmed",
         "semantic_scholar",
         "doc_type",
+        "activity",
+        "assay",
+        "testitem",
+        "document",
+        "target",
         "resources",
         "io",
         "jobs",
