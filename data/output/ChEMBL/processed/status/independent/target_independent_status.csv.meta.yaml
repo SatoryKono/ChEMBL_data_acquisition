@@ -84,6 +84,8 @@ config:
     iuphar_family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
     uniprot_data_dir: dictionary\uniprot
     organism_csv: dictionary\_Target\organism.csv
+    status_csv: dictionary\status.csv
+    targets_type_csv: dictionary\targets_type.csv
   io:
     output_dir: data\output
     cache_dir: .cache
