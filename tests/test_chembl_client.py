@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import random
 import requests
 import responses
 import time
@@ -26,27 +27,28 @@ class DummyResponse:
 
 
 class DummySession:
-    def __init__(self, *, fail_first: bool = False) -> None:
+    def __init__(self, *, failures: int = 0) -> None:
         self.timeout: Any = None
         self.calls: list[int] = []
-        self.fail_first = fail_first
+        self.failures = failures
 
     def get(self, url: str, timeout: Any) -> DummyResponse:
         self.calls.append(id(self))
         self.timeout = timeout
-        if self.fail_first and len(self.calls) == 1:
+        if len(self.calls) <= self.failures:
             raise requests.RequestException("boom")
         return DummyResponse()
 
 
 @responses.activate
 def test_request_json_uses_cfg(monkeypatch) -> None:
-    session = DummySession(fail_first=True)
+    session = DummySession(failures=1)
     monkeypatch.setattr("library.chembl_client._session", session)
     monkeypatch.setattr("library.chembl_client._CACHE", {})
 
     sleep_times: list[float] = []
     monkeypatch.setattr(time, "sleep", lambda t: sleep_times.append(t))
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
 
     def fail_session(*args, **kwargs):  # pragma: no cover - ensure no new session
         raise AssertionError("requests.Session should not be called")
@@ -59,6 +61,21 @@ def test_request_json_uses_cfg(monkeypatch) -> None:
     assert session.timeout == (1, 2)
     assert len(session.calls) == 2
     assert sleep_times == [0.5]
+
+
+def test_request_json_backoff_grows(monkeypatch) -> None:
+    session = DummySession(failures=2)
+    monkeypatch.setattr("library.chembl_client._session", session)
+    monkeypatch.setattr("library.chembl_client._CACHE", {})
+
+    sleep_times: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda t: sleep_times.append(t))
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
+
+    cfg = ApiCfg(timeout_connect=1, timeout_read=2, retries=3, backoff_factor=1)
+    request_json("http://example.com", cfg=cfg)
+
+    assert sleep_times == [1.0, 2.0]
 
 
 def test_request_json_reuses_session(monkeypatch) -> None:

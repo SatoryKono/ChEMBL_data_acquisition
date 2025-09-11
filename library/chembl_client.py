@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Iterator
 
+import random
 import requests
 from requests import Session
 
@@ -91,7 +92,10 @@ def request_json(
                     "request_fail", extra={"stage": "request_fail", "url": url}
                 )
                 raise
-            sleep(cfg.backoff_factor * attempt)
+            # Exponential backoff with jitter to avoid thundering herd problems
+            delay = cfg.backoff_factor * (2 ** (attempt - 1))
+            delay += random.uniform(0, cfg.backoff_factor)
+            sleep(delay)
     raise requests.RequestException(f"request_json failed for url: {url}")
 
 
