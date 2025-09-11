@@ -10,7 +10,7 @@ parsing, validation, aggregation and export of tabular data.
 
    ```bash
    pip install .
-   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, pre-commit, ...)
+   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, psutil, pre-commit, ...)
    pip install .[dev]
    ```
 

@@ -39,6 +39,7 @@ dev = [
   "types-openpyxl>=3.1.5",
   "hypothesis==6.138.15",
   "responses>=0.25",
+  "psutil>=6.0.0",
 ]
 
 [tool.black]
