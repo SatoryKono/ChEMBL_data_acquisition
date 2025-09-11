@@ -53,7 +53,8 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         format="csv",
         dictionary_dir=tmp_path,
     )
-    result = cli.run(Config(), args)
+    cfg = Config(api={"user_agent": "test/1.0 (mailto:test@example.org)"})
+    result = cli.run(cfg, args)
     assert result == 0
 
     assert (
@@ -102,12 +103,53 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     )
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    result = cli.run(Config(), args)
+    cfg = Config(api={"user_agent": "test/1.0 (mailto:test@example.org)"})
+    result = cli.run(cfg, args)
     assert result == 1
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
     assert "required table 'activity' missing" in record.get("msg", "")
+
+
+def test_run_missing_columns_logs_error(tmp_path: Path, monkeypatch) -> None:
+    """``run`` should report missing required columns."""
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+
+    def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
+        return {}
+
+    def fake_load_all_doc(path: Path):  # pragma: no cover - simple stub
+        return {}
+
+    def fake_build_combined_tables(*_args, **_kwargs):
+        raise KeyError("['target_chembl_id', 'gene_index'] not in index")
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", fake_load_same_doc)
+    monkeypatch.setattr(cli.lib, "load_all_doc", fake_load_all_doc)
+    monkeypatch.setattr(cli.lib, "build_combined_tables", fake_build_combined_tables)
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=tmp_path / "out",
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    cfg = Config(api={"user_agent": "test/1.0 (mailto:test@example.org)"})
+    result = cli.run(cfg, args)
+    assert result == 1
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    msg = record.get("msg", "")
+    assert "required column(s) missing" in msg
+    assert "target_chembl_id" in msg
 
 
 def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
@@ -116,7 +158,7 @@ def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
     same_doc.write_text("dummy")
     all_doc.write_text("dummy")
 
-    cfg = Config()
+    cfg = Config(api={"user_agent": "test/1.0 (mailto:test@example.org)"})
     cfg.init.output_dir = tmp_path / "default"
 
     tables = {"assay": pd.DataFrame({"id": [1]})}
