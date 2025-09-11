@@ -192,6 +192,19 @@ class SemanticScholarCfg:
     encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
 
 
+@dataclass
+class DocTypeCfg:
+    """Settings for document type classification."""
+
+    weights: Dict[str, int] = field(
+        default_factory=lambda: {"pubmed": 4, "openalex": 3, "scholar": 2}
+    )
+    thresholds: Dict[str, int] = field(
+        default_factory=lambda: {"review": 1, "experimental": 1, "unknown": 2}
+    )
+
+
+@dataclass
 class ResourcesCfg:
     """Paths to static resource files used by the application."""
 
@@ -332,6 +345,9 @@ class Config:
     pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
 
+    doc_type: DocTypeCfg = field(default_factory=DocTypeCfg)
+
+
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
 
     io: IoCfg = field(default_factory=IoCfg)
@@ -442,13 +458,23 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
 
     obj: Any = cfg
     for name in path[:-1]:
+        if isinstance(obj, dict):
+            if name not in obj:
+                raise KeyError(f"unknown config key: {'.'.join(path)}")
+            obj = obj[name]
+            continue
         if not hasattr(obj, name):
             raise KeyError(f"unknown config key: {'.'.join(path)}")
         obj = getattr(obj, name)
     field_name = path[-1]
-    if not hasattr(obj, field_name):
-        raise KeyError(f"unknown config key: {'.'.join(path)}")
-    current = getattr(obj, field_name)
+    if isinstance(obj, dict):
+        if field_name not in obj:
+            raise KeyError(f"unknown config key: {'.'.join(path)}")
+        current = obj[field_name]
+    else:
+        if not hasattr(obj, field_name):
+            raise KeyError(f"unknown config key: {'.'.join(path)}")
+        current = getattr(obj, field_name)
     try:
         if isinstance(value, str):
             value = _coerce(value, current)
@@ -461,7 +487,10 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
         raise TypeError(
             f"{joined} must be {type(current).__name__}, got {value!r}"
         ) from exc
-    setattr(obj, field_name, value)
+    if isinstance(obj, dict):
+        obj[field_name] = value
+    else:
+        setattr(obj, field_name, value)
 
 
 _ALIAS_MAP: Dict[str, List[str]] = {
@@ -788,6 +817,36 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+
+        "doc_type": {
+            "type": "object",
+            "properties": {
+                "weights": {
+                    "type": "object",
+                    "properties": {
+                        "pubmed": {"type": "integer", "minimum": 0},
+                        "openalex": {"type": "integer", "minimum": 0},
+                        "scholar": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["pubmed", "openalex", "scholar"],
+                    "additionalProperties": False,
+                },
+                "thresholds": {
+                    "type": "object",
+                    "properties": {
+                        "review": {"type": "integer", "minimum": 0},
+                        "experimental": {"type": "integer", "minimum": 0},
+                        "unknown": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["review", "experimental", "unknown"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["weights", "thresholds"],
+            "additionalProperties": False,
+        },
+
+
         "resources": {
             "type": "object",
             "properties": {
@@ -928,6 +987,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "pubchem",
         "pubmed",
         "semantic_scholar",
+        "doc_type",
         "resources",
         "io",
         "jobs",
@@ -1157,6 +1217,8 @@ __all__ = [
     "PubChemCfg",
     "PubMedCfg",
     "SemanticScholarCfg",
+    "DocTypeCfg",
+
     "ResourcesCfg",
     "IoCfg",
     "JobsCfg",

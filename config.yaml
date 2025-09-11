@@ -48,7 +48,9 @@ uniprot:
 uniprot_mapping:
   base: "https://rest.uniprot.org/idmapping"  # UniProt ID mapping API (env: CHEMBL_DA__UNIPROT_MAPPING__BASE / CHEMBL_DA_UNIPROT_MAPPING_BASE)
   poll_interval: 0.5  # Seconds between polling attempts (env: CHEMBL_DA_UNIPROT_MAPPING_POLL_INTERVAL)
-  timeout: 300  # Maximum time in seconds to wait for a mapping job (env: CHEMBL_DA_UNIPROT_MAPPING_TIMEOUT)
+
+  timeout: 300.0  # Maximum time in seconds to wait for a mapping job (env: CHEMBL_DA_UNIPROT_MAPPING_TIMEOUT)
+
 
 iuphar:
   base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base (env: CHEMBL_DA__IUPHAR__BASE / CHEMBL_DA_IUPHAR_BASE)
@@ -85,6 +87,16 @@ semantic_scholar:
   retries: 2  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_RETRIES)
   encodings:  # Placeholder for potential text encodings
     - "utf-8-sig"
+
+doc_type:
+  weights:
+    pubmed: 4
+    openalex: 3
+    scholar: 2
+  thresholds:
+    review: 1
+    experimental: 1
+    unknown: 2
  
 resources:
   dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
