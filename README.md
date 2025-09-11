@@ -44,8 +44,23 @@ parsing, validation, aggregation and export of tabular data.
    pytest
     ```
 
-    The suite exercises the library modules using fixtures from
-    ``tests/data``.
+   The suite exercises the library modules using fixtures from
+   ``tests/data``.
+
+## Updating Dependencies
+
+To keep the environment current, periodically refresh the pinned
+libraries and verify that the project remains compatible:
+
+```bash
+pip install -U -r requirements.txt -r requirements-dev.txt
+pre-commit run --all-files
+```
+
+The first command upgrades both runtime and development requirements to
+the newest minor releases permitted by the version ranges. The second
+command formats code, lints, runs static type checks and executes the
+test suite to confirm nothing broke during the upgrade.
 
 ## Конфигурация через `.env`
 

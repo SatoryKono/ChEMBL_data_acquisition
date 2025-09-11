@@ -38,7 +38,7 @@ from library.config import (
     print_config,
     _serialize_paths,
 )
-from library.chembl_client import init_session, _chunked
+from library.chembl_client import ChemblClient, _chunked
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -277,7 +277,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Configure session for ChEMBL requests
-    init_session(cfg.api, cfg.retry)
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io)
@@ -289,6 +289,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
             cfg=cfg.api,
+            client=client,
             chunk_size=cfg.document.chembl.chunk_size,
             timeout=cfg.document.chembl.timeout,
         )
@@ -381,7 +382,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare shared session before performing any API calls
-    init_session(cfg.api, cfg.retry)
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(args.input_csv, column=cfg.document.all.column, cfg=cfg.io)
@@ -393,6 +394,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         doc_df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
             cfg=cfg.api,
+            client=client,
             chunk_size=cfg.document.all.chunk_size,
             timeout=cfg.document.all.timeout,
         )
@@ -723,7 +725,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     try:
         cfg: Config = apply_config_overrides(
-
             args,
             subparser,
             args.config,
@@ -732,7 +733,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "openalex_rps": "openalex.rps",
                 "crossref_rps": "crossref.rps",
             },
-
         )
         if args.print_config:
             print_config(cfg)
