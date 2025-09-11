@@ -8,7 +8,7 @@ from .log import logger
 
 import pandas as pd
 
-from .chembl_client import _chunked, request_json
+from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg, UniprotMappingCfg
 from .mapper_library import map_chembl_to_uniprot
 
@@ -146,6 +146,7 @@ def get_target(
     chembl_target_id: str,
     *,
     cfg: ApiCfg,
+    client: ChemblClient,
     mapping_cfg: UniprotMappingCfg,
     timeout: float | None = None,
 ) -> dict[str, str]:
@@ -157,6 +158,8 @@ def get_target(
         ChEMBL target identifier (e.g., ``"CHEMBL203"``).
     cfg:
         API configuration providing base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
     mapping_cfg:
         Configuration for the UniProt mapping service.
     timeout:
@@ -167,7 +170,7 @@ def get_target(
     base = cfg.chembl_base.rstrip("/")
     url = f"{base}/target/{chembl_target_id}.json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    data = request_json(url, cfg=cfg, timeout=effective_timeout)
+    data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
     target_list = _get_items(data, "target")
     if not target_list:
         return dict(EMPTY_TARGET)
@@ -178,6 +181,7 @@ def get_targets(
     ids: Iterable[str],
     *,
     cfg: ApiCfg,
+    client: ChemblClient,
     mapping_cfg: UniprotMappingCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
@@ -190,6 +194,8 @@ def get_targets(
         ChEMBL target identifiers to retrieve.
     cfg:
         API configuration with base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
     mapping_cfg:
         Settings for the UniProt mapping service.
     chunk_size:
@@ -206,7 +212,7 @@ def get_targets(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&target_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, cfg=cfg, timeout=effective_timeout)
+        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("targets") or data.get("target") or []
         records.extend(_parse_target_record(item, mapping_cfg) for item in items)
     if not records:
@@ -219,6 +225,7 @@ def extend_target(
     df: pd.DataFrame,
     *,
     cfg: ApiCfg,
+    client: ChemblClient,
     mapping_cfg: UniprotMappingCfg,
     id_column: str = "target_chembl_id",
 ) -> pd.DataFrame:
@@ -230,6 +237,8 @@ def extend_target(
         DataFrame containing a column with ChEMBL target identifiers.
     cfg:
         API configuration providing base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
     mapping_cfg:
         Settings for the UniProt mapping service.
     id_column:
@@ -239,7 +248,7 @@ def extend_target(
     if id_column not in df.columns:
         raise ValueError(f"missing required column: {id_column}")
     targets = [
-        get_target(i, cfg=cfg, mapping_cfg=mapping_cfg)
+        get_target(i, cfg=cfg, client=client, mapping_cfg=mapping_cfg)
         for i in df[id_column].fillna("")
     ]
     extra = pd.DataFrame(targets)

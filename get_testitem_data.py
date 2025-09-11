@@ -9,7 +9,7 @@ from typing import Sequence
 import pandas as pd
 import requests
 from library.config import Config, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
@@ -124,14 +124,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Initialise HTTP session for subsequent ChEMBL requests
-    init_session(cfg.api, cfg.retry)
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
-
 
     logger.info("Retrieved %d identifiers", len(ids))
     logger.info("Fetching ChEMBL data in chunks of %d", cfg.testitem.chunk_size)
@@ -140,6 +139,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = cl.get_testitem(
             ids,
             cfg=cfg.api,
+            client=client,
             chunk_size=cfg.testitem.chunk_size,
             timeout=cfg.testitem.timeout,
         )
