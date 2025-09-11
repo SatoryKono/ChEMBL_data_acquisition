@@ -49,10 +49,14 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     try:
-        if not args.same_doc.exists():
+        # ``same_doc`` and ``all_doc`` may be ``None`` when the caller bypasses
+        # :func:`main` and invokes :func:`run` directly.  Guard against this to
+        # avoid ``AttributeError`` when accessing ``Path.exists``.
+        if args.same_doc is None or not args.same_doc.exists():
             raise FileNotFoundError(f"{args.same_doc} does not exist")
-        if not args.all_doc.exists():
+        if args.all_doc is None or not args.all_doc.exists():
             raise FileNotFoundError(f"{args.all_doc} does not exist")
+
         out_dir = Path(args.out_dir or cfg.init.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -176,7 +180,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         # when values are available to avoid ``TypeError`` on ``None``.
         args.same_doc = Path(args.same_doc) if args.same_doc is not None else None
         args.all_doc = Path(args.all_doc) if args.all_doc is not None else None
-        args.out_dir = Path(args.out_dir)
+        # ``out_dir`` is mandatory but may originate from the configuration
+        # file.  Resolve to :class:`Path` lazily to avoid ``TypeError`` when both
+        # sources are missing.
+        args.out_dir = (
+            Path(args.out_dir)
+            if args.out_dir is not None
+            else Path(cfg.init.output_dir)
+        )
         args.dictionary_dir = (
             Path(args.dictionary_dir) if args.dictionary_dir is not None else None
         )
