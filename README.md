@@ -4,6 +4,45 @@ Utilities for downloading and processing biological data from public APIs.
 The project demonstrates a typical Python 3.12 data pipeline including
 parsing, validation, aggregation and export of tabular data.
 
+## Quick Start
+
+1. **Install dependencies**
+
+   ```bash
+   pip install -r requirements.txt
+   # Development extras (black, ruff, mypy, pytest, ...)
+   pip install -r requirements.txt -r requirements-dev.txt
+   ```
+
+2. **Run a sample script**
+
+   ```bash
+   python get_assay_data.py --input tests/data/assays.csv \
+       --output out/assays.csv --log-level INFO
+   ```
+
+   The command reads the bundled test dataset and writes a normalised CSV
+   to ``out/assays.csv``. All CLI tools support common flags such as
+   ``--input`` and ``--output`` for file paths, ``--log-level`` for
+   verbosity, ``--sep`` for CSV delimiter and ``--encoding`` for file
+   encoding. Additional examples:
+
+   ```bash
+   python mapper_main.py --input tests/data/assays.csv \
+       --output out/mapped.csv --log-level DEBUG
+   python table_quality_main.py --input tests/data/assays.csv \
+       --output out/report.csv --log-level INFO
+   ```
+
+3. **Run the tests**
+
+   ```bash
+   pytest
+   ```
+
+   The suite exercises the library modules using fixtures from
+   ``tests/data``.
+
 ## Logging
 
 All command-line tools emit structured logs as one JSON object per line
@@ -60,23 +99,6 @@ pre-commit run --all-files
 Continuous integration executes the same checks.
 
 
-
-After installation, running a tool prints JSONL logs to standard output. A
-quick smoke test using bundled data might look like:
-
-```bash
-python get_assay_data.py --input tests/data/assays.csv --log-level INFO
-```
-
-Example output:
-
-```json
-{"ts":"2024-05-01T12:00:00Z","level":"INFO","event":"pipeline_start","run_id":"..."}
-{"ts":"2024-05-01T12:00:00Z","level":"INFO","event":"pipeline_done","run_id":"...","elapsed":0.1}
-```
-
-This command installs all required libraries, including
-[pandera](https://pandera.readthedocs.io) for DataFrame schema validation.
 
 ## Project structure
 
