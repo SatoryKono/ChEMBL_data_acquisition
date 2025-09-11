@@ -59,3 +59,23 @@ def test_single_session_created(monkeypatch) -> None:
 
     assert create_calls == 1
     assert all(r == {"ok": True} for r in results)
+
+
+def test_cache_shared_across_threads(monkeypatch) -> None:
+    clear_cache()
+    dummy = DummySession()
+    monkeypatch.setattr("library.chembl_client._session", dummy)
+
+    url = "http://example.com/data"
+    assert request_json(url, cfg=ApiCfg()) == {"ok": True}
+    assert len(dummy.calls) == 1
+
+    def worker() -> dict[str, Any]:
+        return request_json(url, cfg=ApiCfg())
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(worker) for _ in range(5)]
+        results = [f.result() for f in futures]
+
+    assert all(r == {"ok": True} for r in results)
+    assert len(dummy.calls) == 1
