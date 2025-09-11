@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import sys
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date
@@ -23,6 +22,8 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import requests
 
+from .cli import LoggerConfig, configure_logger
+from .cli import build_parser as base_parser
 from .config import (
     Config,
     CrossRefCfg,
@@ -798,7 +799,7 @@ def print_results(records: list[dict[str, str]]) -> None:
     records:
         Sequence of result dictionaries produced by ``main``.
     """
-    log = logging.getLogger(__name__)
+    log = logger
     try:
         from tabulate import tabulate
 
@@ -830,23 +831,18 @@ def print_results(records: list[dict[str, str]]) -> None:
         sys.stdout.buffer.write(encoded + b"\n")
 
 
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+def parse_args(
+    argv: Sequence[str] | None = None,
+) -> tuple[argparse.Namespace, LoggerConfig]:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Fetch publication metadata by PMID")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser, log_cfg = base_parser("Fetch publication metadata by PMID", column="PMID")
     parser.add_argument(
         "--input-csv",
         dest="input_csv",
-        default="input.csv",
         help="Input CSV path with PMID column",
     )
-    parser.add_argument(
-        "--output",
-        dest="output_csv",
-        default=None,
-        help="Output CSV path (default: auto-generated)",
-    )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    return args, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -862,9 +858,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     int
         Zero on success.
     """
-    args = parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    log = logging.getLogger(__name__)
+    args, log_cfg = parse_args(argv)
+    log_cfg.level = args.log_level
+    configure_logger(log_cfg)
 
     cfg = Config()
     pubmed_cfg = cfg.pubmed
@@ -923,7 +919,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else Path(f"output_{Path(args.input_csv).stem}_{date.today():%Y%m%d}.csv")
     )
     write_csv_deterministic(df, output_path)
-    log.info("written %s", output_path)
+    logger.info("written %s", output_path)
     return 0
 
 
