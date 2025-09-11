@@ -5,30 +5,28 @@ from __future__ import annotations
 import argparse
 import sys
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from itertools import islice
 
-
 import requests
-from library.config import Config, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import ChemblClient
 
 from library import chembl_library as cl
 from library import io
-from library.metadata import Stats, file_sha256, write_meta_yaml
+from library import write_csv_deterministic
+from library.chembl_client import ChemblClient
 from library.cli import (
+    LoggerConfig,
     apply_config_overrides,
     build_parser as base_parser,
     configure_logger,
-    LoggerConfig,
 )
+from library.config import Config, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
+from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from pandera.errors import SchemaErrors
 from schemas import ActivitiesSchema, normalize_activities
-
-from library import write_csv_deterministic
 
 ORIG_WRITE_CSV = io.write_csv
 
@@ -70,7 +68,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-
     # Apply the ``limit`` without materialising the entire iterator first.
     # ``itertools.islice`` allows lazy slicing; converting to ``list`` enables
     # length calculation for logging purposes.
@@ -79,7 +76,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         limited = list(islice(ids_iter, limit))
         ids = limited
         logger.info("processing at most %d identifiers", len(limited))
-
 
     try:
         df = cl.get_activities(
@@ -199,6 +195,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit <= 0:
+        # Reject non-positive limits early to provide clear CLI feedback.
+        parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
