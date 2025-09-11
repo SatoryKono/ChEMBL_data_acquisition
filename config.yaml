@@ -16,7 +16,7 @@ api:
   backoff_factor: 0.5  # Exponential backoff multiplier
   rps: 5  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
   burst: 5  # Burst size for token bucket limiter
-  # user_agent: "my-app/1.0 (mailto:me@example.org)"  # Example User-Agent header; must include contact info
+  user_agent: "your-app/1.0 (mailto:you@example.org)"  # Required User-Agent header; replace with your contact info
 
 chembl:
   cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA__CHEMBL__CACHE_TTL / CHEMBL_DA_CACHE_TTL)

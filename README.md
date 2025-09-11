@@ -182,6 +182,21 @@ python -m dotenv run -- python scripts/get_assay_data.py --input tests/data/assa
 Утилиты читают переменные окружения автоматически, поэтому значения из
 `.env` доступны всем CLI без дополнительных аргументов.
 
+## Обязательное поле `api.user_agent`
+
+Для доступа к API необходимо заполнить параметр `api.user_agent` в
+`config.yaml`. Значение должно идентифицировать ваше приложение и содержать
+контактную информацию.
+
+```yaml
+api:
+  user_agent: "my-app/1.0 (mailto:me@example.org)"
+```
+
+Скрипты завершаются с `ConfigError`, если поле не задано. Параметр можно
+передать через переменную окружения `CHEMBL_DA__API__USER_AGENT` или флаг
+CLI `--api.user_agent`.
+
 ## Валидация конфигурации
 
 `library.config.load_config` проверяет корректность значений в `config.yaml`.
