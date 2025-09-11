@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from collections.abc import Sequence
 
+from library import cli
 from library.activities import get_activities
+from library.log import logger
 
-logger = logging.getLogger(__name__)
 
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+def parse_args(
+    argv: Sequence[str] | None = None,
+) -> tuple[argparse.Namespace, cli.LoggerConfig]:
     """Parse command-line arguments.
 
     Parameters
@@ -21,10 +22,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     Returns
     -------
-    argparse.Namespace
-        Parsed arguments containing ``limit`` and ``dry_run``.
+    tuple[argparse.Namespace, cli.LoggerConfig]
+        Parsed arguments and logging configuration.
     """
-    parser = argparse.ArgumentParser(description="Generate dummy activity data")
+    parser, log_cfg = cli.build_parser("Generate dummy activity data", column="id")
     parser.add_argument(
         "--limit",
         type=int,
@@ -36,7 +37,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Log actions without generating data",
     )
-    return parser.parse_args(argv)
+    return parser.parse_args(argv), log_cfg
 
 
 def run(limit: int, dry_run: bool) -> int:
@@ -65,8 +66,9 @@ def run(limit: int, dry_run: bool) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command-line entry point."""
-    args = parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
+    args, log_cfg = parse_args(argv)
+    log_cfg.level = args.log_level
+    cli.configure_logger(log_cfg)
     return run(limit=args.limit, dry_run=args.dry_run)
 
 
