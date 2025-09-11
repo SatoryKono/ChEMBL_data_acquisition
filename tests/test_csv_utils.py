@@ -31,6 +31,28 @@ def test_write_csv_deterministic(tmp_path: Path) -> None:
     )
 
 
+def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
+    """Generated CSV has stable SHA-256 hash."""
+
+    df = pd.DataFrame(
+        {
+            "b": [True, False],
+            "a": [2, 1],
+            "d": [pd.Timestamp("2020-01-02"), pd.Timestamp("2020-01-01")],
+            "f": [1.23456789, 2.3456789],
+        }
+    )
+    path = tmp_path / "out.csv"
+    write_csv_deterministic(df, path, col_order=["a", "b", "d", "f"], key_cols=["a"])
+
+    expected_bytes = (
+        "a,b,d,f\n" "1,false,2020-01-01,2.34568\n" "2,true,2020-01-02,1.23457\n"
+    ).encode("utf-8-sig")
+    expected_hash = hashlib.sha256(expected_bytes).hexdigest()
+
+    assert sha256_file(path) == expected_hash
+
+
 def test_default_sorting_and_order(tmp_path: Path) -> None:
     df = pd.DataFrame(
         {
