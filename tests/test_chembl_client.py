@@ -6,14 +6,18 @@ from typing import Any
 
 import random
 import requests
-import responses
+import responses  # type: ignore[import-not-found]
 import time
 
-from cachetools import TTLCache  # type: ignore[import-untyped]
-from library import chembl_client
+
+import library.chembl_client as chembl_client
+
+from cachetools import LRUCache
+
 
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
+import library.rate_limiter as rl
 
 
 class DummyResponse:
@@ -42,6 +46,19 @@ class DummySession:
         if len(self.calls) <= self.failures:
             raise requests.RequestException("boom")
         return DummyResponse()
+
+
+class FakeTime:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, delay: float) -> None:
+        self.sleeps.append(delay)
+        self.now += delay
 
 
 @responses.activate
@@ -143,9 +160,19 @@ def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     assert len(responses.calls) == 2
 
 
-def test_clear_cache(monkeypatch) -> None:
-    cache = TTLCache(maxsize=2, ttl=100)
-    monkeypatch.setattr(chembl_client, "_CACHE", cache)
-    chembl_client._CACHE["x"] = {"ok": True}
+
+def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
+    fake_time = FakeTime()
+    monkeypatch.setattr(rl, "time", fake_time)
+    with rl._limiters_lock:
+        rl._limiters.clear()
+    session = DummySession()
+    monkeypatch.setattr("library.chembl_client._session", session)
     clear_cache()
-    assert len(chembl_client._CACHE) == 0
+    cfg = ApiCfg(rps=1, burst=1)
+    request_json("http://example.com/1", cfg=cfg)
+    request_json("http://example.com/2", cfg=cfg)
+    assert fake_time.sleeps == [1.0]
+    with rl._limiters_lock:
+        rl._limiters.clear()
+
