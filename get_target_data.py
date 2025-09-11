@@ -381,11 +381,12 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             tmp_path = Path(tmp.name)
 
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        data_dir = args.data_dir or cfg.resources.uniprot_data_dir
         try:
             uu.process(
                 input_csv=str(tmp_path),
                 output_csv=str(output),
-                data_dir=args.data_dir,
+                data_dir=data_dir,
                 cfg=cfg.uniprot,
                 sep=args.sep,
                 encoding=args.encoding,

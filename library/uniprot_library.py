@@ -24,10 +24,10 @@ The most commonly used functions are:
 
 ``collect_info(uid, data_dir="uniprot")``
     Given a UniProt accession and directory containing ``<uid>.json`` files
-    (default: ``cfg.resources.uniprot_data_dir``), return a dictionary with the
-    accession, all names, and organism taxonomy data.
+    (default: ``"uniprot"``), return a dictionary with the accession, all
+    names, and organism taxonomy data.
 
-``process(input_csv, output_csv, data_dir=cfg.resources.uniprot_data_dir)``
+``process(input_csv, output_csv, data_dir="uniprot")``
     Batch-process a CSV of UniProt IDs and write an output CSV with names and
     organism information for each ID.
 """
@@ -43,16 +43,13 @@ from typing import Any, Dict, Iterable, List, Set
 import requests
 from requests import Session
 
-from .config import ApiCfg, RetryCfg, UniprotCfg, load_config, session_with_retry
-from .rate_limiter import get_limiter
+from .config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
+from .rate_limiter import get_limiter, sleep
 
 logger = logging.getLogger(__name__)
 
 
-try:
-    _DEFAULT_UNIPROT_DATA_DIR = load_config().resources.uniprot_data_dir
-except Exception:
-    _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
+_DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 
@@ -111,6 +108,8 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
         If the request fails or the payload cannot be decoded as JSON.
 
     """
+    if cfg.delay:
+        sleep(cfg.delay)
     get_limiter("uniprot", 1 / cfg.delay if cfg.delay else 0).acquire()
     base = cfg.base.rstrip("/")
     url = f"{base}/uniprotkb/{uniprot_id}.json"
