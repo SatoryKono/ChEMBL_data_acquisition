@@ -250,38 +250,6 @@ def add_percentage(
     return merged[ordered]
 
 
-def compute_status(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    """Prepare status statistics with percentage distribution.
-
-    Parameters
-    ----------
-    df:
-        Status dataframe containing ``Filtered.new`` and metric columns.
-    table_name:
-        Entity name used for percentage column prefix.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Aggregated table grouped by ``Filtered`` with counts and percentage
-        information appended.
-    """
-
-    if "Filtered.new" not in df.columns:
-        available = ", ".join(df.columns)
-        raise KeyError(
-            f"table '{table_name}' missing column 'Filtered.new'; "
-            f"available: {available}"
-        )
-
-    df_tmp = df.rename(columns={"Filtered.new": "Filtered"}).copy()
-    metric_cols = [
-        c
-        for c in df_tmp.columns
-        if c != "Filtered" and pd.api.types.is_numeric_dtype(df_tmp[c])
-    ]
-    return df_tmp
-
 def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """Prepare status statistics with percentage distribution.
 
@@ -298,7 +266,13 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
         Aggregated table grouped by ``Filtered`` with counts and percentage
         information appended.
     """
-    grouped = df.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
+    df_tmp = df.copy()
+    metric_cols = [
+        c
+        for c in df_tmp.columns
+        if c != "Filtered" and pd.api.types.is_numeric_dtype(df_tmp[c])
+    ]
+    grouped = df_tmp.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
     totals = {col: grouped[col].sum() for col in metric_cols}
     grouped = pd.concat(
         [grouped, pd.DataFrame([{"Filtered": "Total", **totals}])],
@@ -1156,6 +1130,8 @@ def save_tables(
     - ``*_non_independent`` → ``non_independent/``
     - ``*_status`` tables are placed under ``status/`` with the above
       variants nested within it.
+    - ``*_status_statistics`` tables follow the same directory rules as
+      ``*_status``.
 
     Parameters
     ----------
@@ -1179,7 +1155,15 @@ def save_tables(
     paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
-        if entity.endswith("_non_independent_status"):
+        if entity.endswith("_non_independent_status_statistics"):
+            sub_dir = out_dir / "status" / "non-independent"
+        elif entity.endswith("_independent_status_statistics"):
+            sub_dir = out_dir / "status" / "independent"
+        elif entity.endswith("_same_document_status_statistics"):
+            sub_dir = out_dir / "status" / "same_document"
+        elif entity.endswith("_status_statistics"):
+            sub_dir = out_dir / "status"
+        elif entity.endswith("_non_independent_status"):
             sub_dir = out_dir / "status" / "non-independent"
         elif entity.endswith("_independent_status"):
             sub_dir = out_dir / "status" / "independent"

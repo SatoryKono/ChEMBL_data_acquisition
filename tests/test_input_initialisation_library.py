@@ -492,6 +492,15 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "activity_independent_status": pd.DataFrame({"id": [1]}),
         "activity_non_independent_status": pd.DataFrame({"id": [1]}),
         "activity_same_document_status": pd.DataFrame({"id": [1]}),
+        "activity_independent_status_statistics": pd.DataFrame(
+            {"Filtered": ["good"], "Count": [1]}
+        ),
+        "activity_non_independent_status_statistics": pd.DataFrame(
+            {"Filtered": ["good"], "Count": [1]}
+        ),
+        "activity_same_document_status_statistics": pd.DataFrame(
+            {"Filtered": ["good"], "Count": [1]}
+        ),
     }
     paths = save_tables(tables, tmp_path, Config())
     for entity, path in paths.items():
@@ -511,6 +520,18 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     )
     assert (
         paths["activity_same_document_status"].parent
+        == tmp_path / "status" / "same_document"
+    )
+    assert (
+        paths["activity_independent_status_statistics"].parent
+        == tmp_path / "status" / "independent"
+    )
+    assert (
+        paths["activity_non_independent_status_statistics"].parent
+        == tmp_path / "status" / "non-independent"
+    )
+    assert (
+        paths["activity_same_document_status_statistics"].parent
         == tmp_path / "status" / "same_document"
     )
     assert paths["pairs_same_document"].parent == tmp_path / "same_document"
