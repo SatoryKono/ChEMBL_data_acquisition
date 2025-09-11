@@ -53,10 +53,18 @@ class _BaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_dict(self) -> dict[str, Any]:
-        """Return model data as a plain ``dict``.
+ 
+        """Return the model as a plain dictionary.
 
-        This is a small compatibility shim around :meth:`model_dump` for code
-        that still expects a ``to_dict`` method as provided by Pydantic v1.
+        Uses :meth:`pydantic.BaseModel.model_dump` to obtain a standard
+        ``dict`` representation, ensuring compatibility with Pydantic v2.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary representation of the model.
+ 
+ 
         """
 
         return self.model_dump()
