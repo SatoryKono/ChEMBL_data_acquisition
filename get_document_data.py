@@ -26,12 +26,20 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
 
-from library.config import Config, ensure_dirs, OpenAlexCfg, CrossRefCfg, print_config
+from library.config import (
+    Config,
+    OpenAlexCfg,
+    CrossRefCfg,
+    ensure_dirs,
+    print_config,
+    _serialize_paths,
+)
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -42,6 +50,7 @@ from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
+from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.cli import (
@@ -51,6 +60,8 @@ from library.cli import (
 )
 from pandera.errors import SchemaErrors
 from schemas import DocumentsSchema, normalize_documents
+
+from chembl_da.library import write_csv_deterministic
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +198,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_documents(df)
+        rows_total = len(df)
         exit_code = 0
         try:
             df = DocumentsSchema.validate(df, lazy=True)
@@ -201,10 +213,41 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
                 len(exc.failure_cases),
                 failure_path,
             )
-            df = exc.validated_data  # type: ignore[attr-defined]
+            df = getattr(exc, "validated_data", df)
             exit_code = 1
-        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), output)
+        rows_kept = len(df)
+        rows_dropped = rows_total - rows_kept
+        key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+        csv_path = write_csv_deterministic(
+            df,
+            output,
+            col_order=[
+                "document_chembl_id",
+                "doi",
+                "title",
+                "year",
+                "month",
+                "day",
+                "citation",
+            ],
+            key_cols=key_cols or None,
+        )
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            stats=stats,
+            schema="DocumentsSchema",
+        )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -256,28 +299,65 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df = normalize_documents(df)
+    rows_total = len(df)
     exit_code = 0
+    required_cols = set(DocumentsSchema.columns.keys())
+    if required_cols.issubset(df.columns):
+        try:
+            df = DocumentsSchema.validate(df, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            df = getattr(exc, "validated_data", df)
+            exit_code = 1
+    else:
+        missing = required_cols.difference(df.columns)
+        logger.warning("Skipping validation due to missing columns: %s", missing)
+    rows_kept = len(df)
+    rows_dropped = rows_total - rows_kept
     try:
-        df = DocumentsSchema.validate(df, lazy=True)
-    except SchemaErrors as exc:
-        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-        errors = SidecarErrors()
-        for row in exc.failure_cases.to_dict("records"):
-            errors.add_error(row)
-        errors.save(failure_path)
-        logger.error(
-            "validation failed; wrote %d failure cases to %s",
-            len(exc.failure_cases),
-            failure_path,
+        key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+        csv_path = write_csv_deterministic(
+            df,
+            output,
+            col_order=[
+                "document_chembl_id",
+                "doi",
+                "title",
+                "year",
+                "month",
+                "day",
+                "citation",
+            ],
+            key_cols=key_cols or None,
         )
-        df = exc.validated_data  # type: ignore[attr-defined]
-        exit_code = 1
-    try:
-        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), output)
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+
+    stats_all: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats_all,
+        schema="DocumentsSchema",
+    )
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
@@ -337,6 +417,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 how="left",
             )
         processed = normalize_documents(processed)
+        rows_total = len(processed)
         exit_code = 0
         try:
             processed = DocumentsSchema.validate(processed, lazy=True)
@@ -351,16 +432,45 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 len(exc.failure_cases),
                 failure_path,
             )
-            processed = exc.validated_data  # type: ignore[attr-defined]
+            processed = getattr(exc, "validated_data", processed)
             exit_code = 1
+        rows_kept = len(processed)
+        rows_dropped = rows_total - rows_kept
         try:
-            io.write_csv(
-                processed, output, cfg=cfg, sep=args.sep, encoding=args.encoding
+            key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
+            csv_path = write_csv_deterministic(
+                processed,
+                output,
+                col_order=[
+                    "document_chembl_id",
+                    "doi",
+                    "title",
+                    "year",
+                    "month",
+                    "day",
+                    "citation",
+                ],
+                key_cols=key_cols or None,
             )
-            logger.info("Wrote %d rows to %s", len(processed), output)
+            logger.info("Wrote %d rows to %s", rows_kept, csv_path)
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
             return 1
+
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            stats=stats,
+            schema="DocumentsSchema",
+        )
         try:
             analyze_table_quality(processed, table_name=str(output.with_suffix("")))
         except ValueError as exc:
@@ -402,6 +512,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             how="left",
         )
     processed = normalize_documents(processed)
+    rows_total = len(processed)
     exit_code = 0
     try:
         processed = DocumentsSchema.validate(processed, lazy=True)
@@ -416,14 +527,45 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             len(exc.failure_cases),
             failure_path,
         )
-        processed = exc.validated_data  # type: ignore[attr-defined]
+        processed = getattr(exc, "validated_data", processed)
         exit_code = 1
+    rows_kept = len(processed)
+    rows_dropped = rows_total - rows_kept
     try:
-        io.write_csv(processed, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(processed), output)
+        key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
+        csv_path = write_csv_deterministic(
+            processed,
+            output,
+            col_order=[
+                "document_chembl_id",
+                "doi",
+                "title",
+                "year",
+                "month",
+                "day",
+                "citation",
+            ],
+            key_cols=key_cols or None,
+        )
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+
+    stats_all: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats_all,
+        schema="DocumentsSchema",
+    )
     try:
         analyze_table_quality(processed, table_name=str(output.with_suffix("")))
     except ValueError as exc:

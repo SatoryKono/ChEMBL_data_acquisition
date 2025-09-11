@@ -8,6 +8,7 @@ summary statistics.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import platform
 import subprocess
@@ -29,6 +30,27 @@ class Stats(TypedDict):
     rows_kept: int
     rows_dropped: int
     output_sha256: str
+
+
+def file_sha256(path: Path | str) -> str:
+    """Return the SHA256 checksum of ``path``.
+
+    Parameters
+    ----------
+    path:
+        File path for which the digest should be computed.
+
+    Returns
+    -------
+    str
+        Hex encoded SHA256 digest of the file contents.
+    """
+
+    h = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _git_sha() -> str:
