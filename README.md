@@ -108,6 +108,17 @@ python scripts/get_target_data.py chembl \
 Replace ``path/to/targets.csv`` with a CSV containing a ``chembl_id``
 column.
 
+### scripts/get_activities.py
+
+Generate dummy activity entries without contacting external services:
+
+```bash
+python scripts/get_activities.py --limit 500 --dry-run
+```
+
+The command logs that it would generate 500 activity rows and exits without
+creating any files.
+
 ## Updating Dependencies
 
 To keep the environment current, periodically refresh the pinned
