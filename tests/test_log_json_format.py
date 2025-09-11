@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import io
 import json
-
 import sys
-from library.cli import LoggerConfig, configure_logger
+
 from library import log
+from library.cli import LoggerConfig, configure_logger
 
 
 def test_logger_emits_required_fields() -> None:

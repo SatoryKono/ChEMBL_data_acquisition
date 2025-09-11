@@ -8,17 +8,17 @@ in the data are automatically redacted before output.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import logging
 import sys
+import threading
 import time
 import traceback
-import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, IO, Iterator, Optional
-
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import IO, Any
 
 _SECRET_SUFFIXES: tuple[str, ...] = ("token", "key", "secret", "password")
 _LEVELS = {
@@ -88,7 +88,7 @@ class Logger:
     """
 
     def __init__(
-        self, cfg: LoggerConfig, context: Optional[dict[str, Any]] = None
+        self, cfg: LoggerConfig, context: dict[str, Any] | None = None
     ) -> None:
         self._cfg = cfg
         self._context: dict[str, Any] = context or {}
@@ -117,7 +117,7 @@ class Logger:
 
     # ------------------------------------------------------------------
     # Public API
-    def bind(self, **ctx: Any) -> "Logger":
+    def bind(self, **ctx: Any) -> Logger:
         """Return a new logger with ``ctx`` merged into the context."""
 
         new_ctx = {**self._context, **ctx}
@@ -128,9 +128,9 @@ class Logger:
         level: str,
         event: str,
         *,
-        stage: Optional[str] = None,
-        msg: Optional[str] = None,
-        extra: Optional[dict[str, Any]] = None,
+        stage: str | None = None,
+        msg: str | None = None,
+        extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
         """Emit a log record.
@@ -153,7 +153,7 @@ class Logger:
             return
 
         record: dict[str, Any] = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "level": level.upper(),
             "event": event,
         }
@@ -179,7 +179,7 @@ class Logger:
         self,
         event: str,
         *args: Any,
-        extra: Optional[dict[str, Any]] = None,
+        extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
         msg = event % args if args else None
@@ -189,7 +189,7 @@ class Logger:
         self,
         event: str,
         *args: Any,
-        extra: Optional[dict[str, Any]] = None,
+        extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
         msg = event % args if args else None
@@ -199,7 +199,7 @@ class Logger:
         self,
         event: str,
         *args: Any,
-        extra: Optional[dict[str, Any]] = None,
+        extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
         msg = event % args if args else None
@@ -212,7 +212,7 @@ class Logger:
         self,
         event: str,
         *args: Any,
-        extra: Optional[dict[str, Any]] = None,
+        extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
         msg = event % args if args else None
@@ -223,7 +223,7 @@ class Logger:
         event: str,
         *args: Any,
         exc: BaseException | None = None,
-        extra: Optional[dict[str, Any]] = None,
+        extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
         """Log an exception at ``ERROR`` level.
@@ -257,7 +257,7 @@ class Logger:
         )
 
     @contextmanager
-    def stage(self, name: str, **kv: Any) -> Iterator["Logger"]:
+    def stage(self, name: str, **kv: Any) -> Iterator[Logger]:
         """Context manager logging stage start/done/fail events.
 
         Parameters

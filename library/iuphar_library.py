@@ -13,25 +13,22 @@ comments to aid maintenance.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Iterable, List, Optional
-
 import io
-from .log import logger
 import random
 import threading
 import time
+from collections.abc import Iterable
+from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import quote
-
-from .rate_limiter import get_limiter
 
 import pandas as pd
 import requests
 from requests import Session
 
 from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
-
+from .log import logger
+from .rate_limiter import get_limiter
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 _session_lock = threading.Lock()
@@ -206,7 +203,7 @@ class IUPHARData:
         family_path: str | Path,
         *,
         encoding: str = "utf-8",
-    ) -> "IUPHARData":
+    ) -> IUPHARData:
         """Load CSV files and return an :class:`IUPHARData` instance."""
         target_df = load_targets(target_path, encoding=encoding)
         family_df = load_families(family_path, encoding=encoding)
@@ -216,13 +213,13 @@ class IUPHARData:
     # Chain-related helpers
     # ------------------------------------------------------------------
 
-    def family_chain(self, start_id: str) -> List[str]:
+    def family_chain(self, start_id: str) -> list[str]:
         """Return the family hierarchy starting from *start_id*.
 
         The chain is built by following ``parent_family_id`` links until a
         root family is reached.
         """
-        chain: List[str] = []
+        chain: list[str] = []
         current = start_id
         while current:
             chain.append(current)
@@ -267,7 +264,7 @@ class IUPHARData:
     # Target ID mapping functions
     # ------------------------------------------------------------------
 
-    def _select_target_ids(self, mask: pd.Series) -> List[str]:
+    def _select_target_ids(self, mask: pd.Series) -> list[str]:
         rows = self.target_df.loc[mask, "target_id"].dropna().astype(str)
         return list(rows.unique())
 
@@ -323,7 +320,7 @@ class IUPHARData:
     def target_ids_by_synonyms(self, synonyms: Iterable[str]) -> str:
         """Return target IDs derived from a collection of ``synonyms``."""
         valid = [s for s in synonyms if s and len(s) > 3]
-        ids: List[str] = []
+        ids: list[str] = []
         for syn in valid:
             mapped = self.target_id_by_name(syn)
             if mapped and "|" not in mapped:
@@ -497,14 +494,14 @@ class IUPHARData:
     # fromTargetID functions
     # ------------------------------------------------------------------
 
-    def from_target_record(self, target_id: str) -> Optional[pd.Series]:
+    def from_target_record(self, target_id: str) -> pd.Series | None:
         """Return the raw target record for ``target_id`` if present."""
         rows = self.target_df[self.target_df["target_id"] == target_id]
         if rows.empty:
             return None
         return rows.iloc[0]
 
-    def from_target_family_record(self, target_id: str) -> Optional[pd.Series]:
+    def from_target_family_record(self, target_id: str) -> pd.Series | None:
         """Return the family record associated with ``target_id``."""
         mask = (
             self.family_df["target_id"]
@@ -578,7 +575,7 @@ class IUPHARData:
         value = record.get("type")
         return str(value) if pd.notna(value) else ""
 
-    def from_family_record(self, family_id: str) -> Optional[pd.Series]:
+    def from_family_record(self, family_id: str) -> pd.Series | None:
         """Return the raw family record for ``family_id`` if present."""
         rows = self.family_df[self.family_df["family_id"] == family_id]
         if rows.empty:
@@ -718,11 +715,11 @@ class ClassificationRecord:
     IUPHAR_class: str = "Other Protein Target"
     IUPHAR_subclass: str = "Other Protein Target"
 
-    IUPHAR_tree: List[str] = field(default_factory=lambda: ["0864-1", "0864"])
+    IUPHAR_tree: list[str] = field(default_factory=lambda: ["0864-1", "0864"])
 
     IUPHAR_type: str = "Other Protein Target.Other Protein Target"
     IUPHAR_name: str = "N/A"
-    IUPHAR_ecNumber: List[str] = field(default_factory=list)
+    IUPHAR_ecNumber: list[str] = field(default_factory=list)
     STATUS: str = "N/A"
 
     def __post_init__(self) -> None:
@@ -750,7 +747,7 @@ class IUPHARClassifier:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _is_valid_parameter(parameter: Optional[str]) -> bool:
+    def _is_valid_parameter(parameter: str | None) -> bool:
         return bool(parameter) and parameter not in {"N/A", "Other Protein Target"}
 
     @staticmethod
@@ -771,12 +768,12 @@ class IUPHARClassifier:
             return self.data.from_family_type(family_id) or "N/A"
         return "N/A"
 
-    def _family_to_chain(self, family_id: str) -> List[str]:
+    def _family_to_chain(self, family_id: str) -> list[str]:
         if self._is_valid_parameter(family_id):
             return self.data.family_chain(family_id)
         return []
 
-    def _target_record(self, target_id: str) -> Optional[pd.Series]:
+    def _target_record(self, target_id: str) -> pd.Series | None:
         if self._is_valid_parameter(target_id):
             return self.data.from_target_record(target_id)
         return None
@@ -851,7 +848,7 @@ class IUPHARClassifier:
     }
 
     @staticmethod
-    def _ec_number_to_type(ec_numbers: List[str]) -> str:
+    def _ec_number_to_type(ec_numbers: list[str]) -> str:
         if not IUPHARClassifier._is_valid_list(ec_numbers):
             return ""
         prefixes = {n.split(".")[0] for n in ec_numbers if "." in n and n.split(".")[0]}
@@ -872,7 +869,7 @@ class IUPHARClassifier:
         return mapping.get(code, "")
 
     @classmethod
-    def _ec_number_to_chain(cls, ec_numbers: List[str]) -> List[str]:
+    def _ec_number_to_chain(cls, ec_numbers: list[str]) -> list[str]:
         target_type = cls._ec_number_to_type(ec_numbers)
         return cls._CHAIN_MAP.get(target_type, ["0864-1", "0864"])
 
@@ -885,8 +882,8 @@ class IUPHARClassifier:
         iuphar_target_id: str,
         iuphar_family_id: str,
         iuphar_name: str,
-        status: Optional[str] = None,
-        ec_numbers: Optional[List[str]] = None,
+        status: str | None = None,
+        ec_numbers: list[str] | None = None,
     ) -> ClassificationRecord:
         """Construct a :class:`ClassificationRecord` from IUPHAR inputs.
 
@@ -962,7 +959,7 @@ class IUPHARClassifier:
         )
 
     def by_target_id(
-        self, iuphar_target_id: str, optional_name: Optional[str] = None
+        self, iuphar_target_id: str, optional_name: str | None = None
     ) -> ClassificationRecord:
         """Classify a target given its IUPHAR target identifier."""
         if not self._is_valid_parameter(iuphar_target_id) or "|" in iuphar_target_id:
@@ -983,7 +980,7 @@ class IUPHARClassifier:
         return self.by_target_id(target_id)
 
     def by_family_id(
-        self, iuphar_family_id: str, optional_name: Optional[str] = None
+        self, iuphar_family_id: str, optional_name: str | None = None
     ) -> ClassificationRecord:
         """Classify a target given an IUPHAR family identifier."""
         if not self._is_valid_parameter(iuphar_family_id) or "|" in iuphar_family_id:
@@ -991,7 +988,7 @@ class IUPHARClassifier:
         return self.set_record("N/A", iuphar_family_id, optional_name or "")
 
     def by_ec_number(
-        self, iuphar_ec_number: str, optional_name: Optional[str] = None
+        self, iuphar_ec_number: str, optional_name: str | None = None
     ) -> ClassificationRecord:
         """Classify based on an EC number string."""
         numbers = (

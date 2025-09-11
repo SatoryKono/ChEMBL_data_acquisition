@@ -10,22 +10,27 @@ from itertools import islice
 
 import requests
 
+
 from library import chembl_library as cl
 from library import io
 from library import write_csv_deterministic
+
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
-    build_parser as base_parser,
     configure_logger,
 )
+
+from library.cli import (
+    build_parser as base_parser,
+)
+
 from library.config import Config, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
-from pandera.errors import SchemaErrors
 from schemas import ActivitiesSchema, normalize_activities
 
 ORIG_WRITE_CSV = io.write_csv
