@@ -24,3 +24,10 @@ jobs:
         uses: pre-commit/action@v3
       - name: Smoke test cache
         run: pytest -q tests/test_chembl_client.py::test_request_json_cache
+      - name: Upload output data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-output
+          path: data/output
+          if-no-files-found: ignore
