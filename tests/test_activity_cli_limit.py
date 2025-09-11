@@ -33,11 +33,12 @@ def test_activity_cli_limit(tmp_path: Path, monkeypatch) -> None:
     config_path = _create_config(tmp_path)
 
     called: dict[str, object] = {"ids": None, "written": False}
-    monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["1", "2", "3"])
+    monkeypatch.setattr(io, "read_ids", lambda *a, **k: iter(["1", "2", "3"]))
 
     def fake_get(ids, cfg, chunk_size, timeout):
-        called["ids"] = ids
-        return pd.DataFrame({"activity_id": ids})
+        data = list(ids)
+        called["ids"] = data
+        return pd.DataFrame({"activity_id": data})
 
     def fake_write(df, output, cfg, sep, encoding):
         called["written"] = True

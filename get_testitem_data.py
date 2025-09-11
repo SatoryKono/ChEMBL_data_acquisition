@@ -138,7 +138,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-    logger.info("Retrieved %d identifiers", len(ids))
     logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
     try:
         df = cl.get_testitem(
