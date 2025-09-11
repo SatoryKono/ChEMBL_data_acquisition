@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterable, Iterator
 import subprocess
 import sys
+import yaml
 
 
 import pandas as pd
@@ -24,7 +25,6 @@ from .config import Config, IoCfg, _serialize_paths
 from .csv_utils import write_csv_deterministic
 
 from .log import logger
-
 
 
 def read_ids(
@@ -187,7 +187,6 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
 
 
-
 def _git_sha() -> str:
     """Return the current Git commit hash.
 
@@ -227,4 +226,3 @@ def _write_meta(path: Path, cfg: Config) -> None:
     meta_path = Path(f"{path}.meta.yaml")
     with meta_path.open("w", encoding="utf8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
-
