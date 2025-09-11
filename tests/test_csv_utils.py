@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 import hashlib
+import logging
+import subprocess
 
 import pandas as pd
 import pytest
 from hypothesis import HealthCheck, given, settings, strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
+from unittest.mock import patch
 
-from library.csv_utils import sha256_file, write_csv_deterministic
+from library.csv_utils import _git_sha, sha256_file, write_csv_deterministic
 from library.config import Config
 
 
@@ -129,3 +132,20 @@ def test_sha256_file_missing(tmp_path: Path) -> None:
     missing = tmp_path / "missing.csv"
     with pytest.raises(FileNotFoundError, match=str(missing)):
         sha256_file(missing)
+
+
+def test_git_sha_timeout_returns_unknown_and_logs_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """_git_sha returns 'unknown' and logs a warning on timeout."""
+
+    with patch(
+        "library.csv_utils.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(
+            cmd=["git", "rev-parse", "HEAD"], timeout=5
+        ),
+    ):
+        with caplog.at_level(logging.WARNING):
+            result = _git_sha()
+    assert result == "unknown"
+    assert "timed out" in caplog.text
