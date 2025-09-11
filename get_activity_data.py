@@ -4,30 +4,30 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 from typing import Sequence
 
 import requests
-from pandera.errors import SchemaErrors
-from schemas.activities import ActivitiesSchema
-from library.normalization import normalize_activities
-from library.sidecar import SidecarErrors
+from library.config import Config, ensure_dirs, print_config
 
 from library import chembl_library as cl
 from library import io
-from library.cli import build_parser as base_parser, configure_logging
-from library.config import load_config
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
 from library.table_quality import analyze_table_quality
-from library.config import DEFAULT_CONFIG
 
 logger = logging.getLogger(__name__)
 
 
-def run_chembl(args: argparse.Namespace) -> int:
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args : argparse.Namespace
         Parsed command-line arguments.
 
@@ -41,6 +41,7 @@ def run_chembl(args: argparse.Namespace) -> int:
         ids = io.read_ids(
             args.input_csv,
             column=args.column,
+            cfg=cfg.io,
             sep=args.sep,
             encoding=args.encoding,
         )
@@ -49,25 +50,15 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_activities(ids, chunk_size=args.chunk_size, timeout=args.timeout)
+        df = cl.get_activities(
+            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve activities: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
-    df = normalize_activities(df)
-    sidecar = SidecarErrors()
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
-        df = ActivitiesSchema.validate(df, lazy=True)
-    except SchemaErrors as err:
-        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        for row in err.failure_cases.to_dict(orient="records"):
-            sidecar.add_error(row)
-        bad_idx = err.failure_cases["index"].dropna().unique()
-        logger.warning("schema validation failed for %d rows", len(bad_idx))
-        df = df.drop(index=bad_idx)
-    sidecar.save(output.with_suffix(".errors.csv"))
-    try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -88,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=DEFAULT_CONFIG.timeouts.read,
+        default=30.0,
         help="Timeout in seconds for each HTTP request",
     )
     parser.set_defaults(func=run_chembl)
@@ -96,20 +87,28 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
+    """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if args.timeout is None:
-        args.timeout = float(config.get("timeouts", {}).get("read", 30.0))
-    if args.output_csv is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
-            )
-    configure_logging(args.log_level)
-    return args.func(args)
+    try:
+        cfg: Config = apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={"timeout": "api.timeout_read"},
+        )
+        if args.print_config:
+            print_config(cfg)
+            return 0
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        return 1
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

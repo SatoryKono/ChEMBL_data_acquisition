@@ -18,20 +18,29 @@ import requests
 from xml.etree import ElementTree as ET
 from urllib.parse import quote
 
-from .config import DEFAULT_CONFIG
-
-ENCODINGS = ["utf-8-sig", "cp1251", "latin1"]
-TIMEOUT = DEFAULT_CONFIG.timeouts.read
+from .config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
 
 
-def read_pmids(path: Union[str, Path]) -> List[str]:
+def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str]:
     """Read PMID column from a CSV file.
 
-    Tries several encodings before failing to decode the file.
+    Parameters
+    ----------
+    path:
+        CSV file containing a ``PMID`` column.
+    cfg:
+        Optional :class:`PubMedCfg` providing fallback encodings.
+
+    Returns
+    -------
+    list of str
+        Extracted PMIDs.
+
     """
     path = Path(path)
     last_exc: Optional[Exception] = None
-    for enc in ENCODINGS:
+    encodings = (cfg or PubMedCfg()).encodings
+    for enc in encodings:
         try:
             with path.open(encoding=enc, newline="") as f:
                 reader = csv.DictReader(f)
@@ -42,7 +51,7 @@ def read_pmids(path: Union[str, Path]) -> List[str]:
             last_exc = exc
             continue
     raise ValueError(
-        f"Could not decode {path} with encodings {ENCODINGS}. Last error: {last_exc}"
+        f"Could not decode {path} with encodings {encodings}. Last error: {last_exc}"
     )
 
 
@@ -51,9 +60,9 @@ def _do_request(
     url: str,
     sleep: float,
     expect_json: bool = True,
-    retries: int = DEFAULT_CONFIG.rate_limits.max_retries,
+    retries: int = 2,
     method: str = "GET",
-    timeout: float = TIMEOUT,
+    timeout: float | tuple[float, float] = 10,
     **kwargs: Any,
 ) -> Tuple[Union[Dict[str, Any], str, None], str]:
     """Perform an HTTP request with retry and error handling.
@@ -69,12 +78,14 @@ def _do_request(
     expect_json:
         Whether to parse the response as JSON.
     retries:
-        Number of additional attempts after the initial one. Defaults to
-        :data:`library.config.DEFAULT_CONFIG.rate_limits.max_retries`.
+        Number of additional attempts after the initial one.
     method:
         HTTP method to use, either "GET" or "POST".
     timeout:
-        Maximum seconds to wait for each HTTP request.
+
+        Maximum seconds to wait for each HTTP request. May be a single float
+        or a ``(connect, read)`` tuple.
+
     **kwargs:
         Additional parameters passed to ``session.get`` or ``session.post``.
 
@@ -127,7 +138,10 @@ def _do_request(
 
 
 def fetch_pubmed_batch(
-    session: requests.Session, pmids: List[str], sleep: float
+    session: requests.Session,
+    pmids: List[str],
+    sleep: float,
+    cfg: PubMedCfg | None = None,
 ) -> List[Dict[str, str]]:
     """Fetch metadata for multiple PMIDs using a single API request.
 
@@ -139,6 +153,8 @@ def fetch_pubmed_batch(
         List of PubMed identifiers.
     sleep:
         Seconds to pause after the request.
+    cfg:
+        Optional :class:`PubMedCfg` with API settings.
 
     Returns
     -------
@@ -146,12 +162,14 @@ def fetch_pubmed_batch(
         One metadata dictionary per PMID in ``pmids``.
 
     """
+    cfg = cfg or PubMedCfg()
     ids = ",".join(pmids)
-    url = (
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id="
-        f"{ids}&retmode=xml"
+    base = cfg.base.rstrip("/")
+    url = f"{base}/efetch.fcgi?db=pubmed&id={ids}&retmode=xml"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    text, error = _do_request(
+        session, url, sleep, expect_json=False, retries=cfg.retries, timeout=timeout
     )
-    text, error = _do_request(session, url, sleep, expect_json=False)
     results: List[Dict[str, str]] = []
     if error:
         for pid in pmids:
@@ -359,13 +377,29 @@ EMPTY_PUBMED: Dict[str, str] = {
 }
 
 
-def fetch_pubmed(session: requests.Session, pmid: str, sleep: float) -> Dict[str, str]:
-    """Fetch metadata for a PMID from the PubMed API."""
-    url = (
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id="
-        f"{pmid}&retmode=xml"
+def fetch_pubmed(
+    session: requests.Session, pmid: str, sleep: float, cfg: PubMedCfg | None = None
+) -> Dict[str, str]:
+    """Fetch metadata for a PMID from the PubMed API.
+
+    Parameters
+    ----------
+    session:
+        Active :class:`requests.Session`.
+    pmid:
+        PubMed identifier to query.
+    sleep:
+        Seconds to pause before making the request.
+    cfg:
+        Optional :class:`PubMedCfg` with API settings.
+    """
+    cfg = cfg or PubMedCfg()
+    base = cfg.base.rstrip("/")
+    url = f"{base}/efetch.fcgi?db=pubmed&id={pmid}&retmode=xml"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    text, error = _do_request(
+        session, url, sleep, expect_json=False, retries=cfg.retries, timeout=timeout
     )
-    text, error = _do_request(session, url, sleep, expect_json=False)
     result = EMPTY_PUBMED.copy()
     if error:
         result["PubMed.Error"] = error
@@ -384,7 +418,10 @@ def fetch_pubmed(session: requests.Session, pmid: str, sleep: float) -> Dict[str
 
 
 def fetch_semantic_scholar(
-    session: requests.Session, pmid: str, sleep: float
+    session: requests.Session,
+    pmid: str,
+    sleep: float,
+    cfg: SemanticScholarCfg | None = None,
 ) -> Dict[str, str]:
     """Retrieve Semantic Scholar metadata for a single PMID.
 
@@ -396,6 +433,8 @@ def fetch_semantic_scholar(
         PubMed identifier to query.
     sleep:
         Seconds to pause before making the request.
+    cfg:
+        Optional :class:`SemanticScholarCfg` with API settings.
 
     Returns
     -------
@@ -405,13 +444,18 @@ def fetch_semantic_scholar(
     """
     fields = "publicationTypes,externalIds,paperId,venue"
     headers = {"Accept": "application/json"}
-    url = f"https://api.semanticscholar.org/graph/v1/paper/PMID:{pmid}"
+    cfg = cfg or SemanticScholarCfg()
+    base = cfg.base.rstrip("/")
+    url = f"{base}/paper/PMID:{pmid}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
     data, error = _do_request(
         session,
         url,
         sleep * 5,
         headers=headers,
         params={"fields": fields},
+        retries=cfg.retries,
+        timeout=timeout,
     )
     if error or not isinstance(data, dict):
         return {
@@ -438,17 +482,35 @@ def fetch_semantic_scholar(
 
 
 def fetch_semantic_scholar_batch(
-    session: requests.Session, pmids: List[str], sleep: float
+    session: requests.Session,
+    pmids: List[str],
+    sleep: float,
+    cfg: SemanticScholarCfg | None = None,
 ) -> List[Dict[str, str]]:
-    """Fetch metadata for multiple PMIDs using Semantic Scholar's batch API."""
+    """Fetch metadata for multiple PMIDs using Semantic Scholar's batch API.
+
+    Parameters
+    ----------
+    session:
+        Active :class:`requests.Session`.
+    pmids:
+        List of PubMed identifiers.
+    sleep:
+        Seconds to pause before the request.
+    cfg:
+        Optional :class:`SemanticScholarCfg` with API settings.
+    """
     if not pmids:
         return []
 
+    cfg = cfg or SemanticScholarCfg()
     fields = "publicationTypes,externalIds,paperId,venue"
     headers = {"Accept": "application/json"}
-    url = "https://api.semanticscholar.org/graph/v1/paper/batch"
+    base = cfg.base.rstrip("/")
+    url = f"{base}/paper/batch"
 
     prefixed_pmids = [f"PMID:{pmid}" for pmid in pmids]
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
 
     data, error = _do_request(
         session,
@@ -458,6 +520,8 @@ def fetch_semantic_scholar_batch(
         params={"fields": fields},
         json={"ids": prefixed_pmids},
         method="POST",
+        retries=cfg.retries,
+        timeout=timeout,
     )
 
     if error:
@@ -526,9 +590,8 @@ def fetch_semantic_scholar_batch(
 def fetch_openalex(
     session: requests.Session,
     pmid: str,
-    sleep: float,
     *,
-    timeout: float = TIMEOUT,
+    cfg: OpenAlexCfg,
 ) -> Dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``.
 
@@ -538,10 +601,10 @@ def fetch_openalex(
         Active :class:`requests.Session`.
     pmid:
         PubMed identifier to query.
-    sleep:
-        Seconds to pause before making the request.
-    timeout:
-        Maximum seconds to wait for the HTTP response. Defaults to ``TIMEOUT``.
+    cfg:
+
+        OpenAlex configuration providing base URL, timeouts and rate limits.
+
 
     Returns
     -------
@@ -549,8 +612,14 @@ def fetch_openalex(
         Mapping of OpenAlex fields and any error encountered.
 
     """
-    url = f"https://api.openalex.org/works/pmid:{pmid}"
-    data, error = _do_request(session, url, sleep, timeout=timeout)
+
+    delay = 1 / cfg.rps if cfg.rps else 0
+    time.sleep(delay)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    data, error = _do_request(session, url, delay, retries=cfg.retries, timeout=timeout)
+
     if error or not isinstance(data, dict):
         return {
             "OpenAlex.PublicationTypes": "",
@@ -588,9 +657,8 @@ def fetch_openalex(
 def fetch_crossref(
     session: requests.Session,
     doi: str,
-    sleep: float,
     *,
-    timeout: float = TIMEOUT,
+    cfg: CrossRefCfg,
 ) -> Dict[str, str]:
     """Retrieve Crossref metadata for a given DOI.
 
@@ -600,10 +668,10 @@ def fetch_crossref(
         Active :class:`requests.Session`.
     doi:
         Digital Object Identifier to query.
-    sleep:
-        Seconds to pause before making the request.
-    timeout:
-        Maximum seconds to wait for the HTTP response. Defaults to ``TIMEOUT``.
+    cfg:
+
+        CrossRef configuration providing base URL, timeouts and rate limits.
+
 
     Returns
     -------
@@ -621,8 +689,13 @@ def fetch_crossref(
             "crossref.Error": "Missing DOI",
         }
 
-    url = f"https://api.crossref.org/works/{quote(doi, safe='')}"
-    data, error = _do_request(session, url, sleep, timeout=timeout)
+    delay = 1 / cfg.rps if cfg.rps else 0
+    time.sleep(delay)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    data, error = _do_request(session, url, delay, retries=cfg.retries, timeout=timeout)
+
     if error or not isinstance(data, dict):
         return {
             "crossref.Type": "",
@@ -698,7 +771,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    pmids = read_pmids(args.input)
+    pubmed_cfg = PubMedCfg()
+    semsch_cfg = SemanticScholarCfg()
+    pmids = read_pmids(args.input, cfg=pubmed_cfg)
     records: List[Dict[str, str]] = []
     batch_size = 100  # A reasonable batch size
     with requests.Session() as session:
@@ -706,8 +781,12 @@ def main() -> None:
             batch_pmids = pmids[i : i + batch_size]
 
             # Batch fetch PubMed and Semantic Scholar
-            pubmed_list = fetch_pubmed_batch(session, batch_pmids, args.sleep)
-            semsch_list = fetch_semantic_scholar_batch(session, batch_pmids, args.sleep)
+            pubmed_list = fetch_pubmed_batch(
+                session, batch_pmids, args.sleep, cfg=pubmed_cfg
+            )
+            semsch_list = fetch_semantic_scholar_batch(
+                session, batch_pmids, args.sleep, cfg=semsch_cfg
+            )
 
             semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
 
@@ -716,9 +795,10 @@ def main() -> None:
                 semsch = semsch_map.get(pmid, {})
 
                 # Still fetching these individually
-                openalex = fetch_openalex(session, pmid, args.sleep)
+
+                openalex = fetch_openalex(session, pmid, cfg=OpenAlexCfg())
                 doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                crossref = fetch_crossref(session, doi, args.sleep)
+                crossref = fetch_crossref(session, doi, cfg=CrossRefCfg())
 
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)

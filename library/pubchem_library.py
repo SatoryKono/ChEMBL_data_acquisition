@@ -14,24 +14,28 @@ from urllib.parse import quote
 
 import requests
 from requests import Session
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+
+from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
 
 
 logger = logging.getLogger(__name__)
 
-# A single shared session with retry/backoff for all HTTP calls.  PubChem
-# enforces fairly strict rate limits; the retry configuration helps to recover
-# from transient failures such as HTTP 5xx responses.
-_retry = Retry(
-    total=3,
-    backoff_factor=1.0,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["GET"],
-)
-_session: Session = requests.Session()
-_session.mount("http://", HTTPAdapter(max_retries=_retry))
-_session.mount("https://", HTTPAdapter(max_retries=_retry))
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+
+
+def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+    """Initialise the shared HTTP session.
+
+    Parameters
+    ----------
+    api:
+        Global API settings providing the ``User-Agent`` header.
+    retry:
+        Retry configuration applied to all requests.
+    """
+
+    global _session
+    _session = session_with_retry(api, retry)
 
 
 def url_encode(text: str) -> str:
@@ -56,13 +60,15 @@ def _cids_from_identifier_list(data: Dict[str, Any]) -> List[str]:
     return [str(cid) for cid in data.get("IdentifierList", {}).get("CID", [])]
 
 
-def get_cid_from_smiles(smiles: str) -> Optional[str]:
+def get_cid_from_smiles(smiles: str, cfg: PubChemCfg) -> Optional[str]:
     """Retrieve PubChem CID(s) for a SMILES string.
 
     Parameters
     ----------
     smiles: str
         SMILES representation of a compound.
+    cfg:
+        API configuration providing base URL and timeouts.
 
     Returns
     -------
@@ -72,11 +78,9 @@ def get_cid_from_smiles(smiles: str) -> Optional[str]:
 
     """
     safe_smiles = url_encode(smiles)
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/"
-        f"{safe_smiles}/cids/JSON"
-    )
-    response = make_request(url)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/compound/smiles/{safe_smiles}/cids/JSON"
+    response = make_request(url, cfg)
     if not response:
         return None
     cids = _cids_from_identifier_list(response)
@@ -84,13 +88,15 @@ def get_cid_from_smiles(smiles: str) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_cid_from_inchi(inchi: str) -> Optional[str]:
+def get_cid_from_inchi(inchi: str, cfg: PubChemCfg) -> Optional[str]:
     """Retrieve PubChem CID(s) for an InChI string.
 
     Parameters
     ----------
     inchi:
         InChI representation of a compound.
+    cfg:
+        API configuration providing base URL and timeouts.
 
     Returns
     -------
@@ -100,11 +106,9 @@ def get_cid_from_inchi(inchi: str) -> Optional[str]:
 
     """
     safe_inchi = url_encode(inchi)
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchi/"
-        f"{safe_inchi}/cids/JSON"
-    )
-    response = make_request(url)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/compound/inchi/{safe_inchi}/cids/JSON"
+    response = make_request(url, cfg)
     if not response:
         return None
     cids = _cids_from_identifier_list(response)
@@ -112,14 +116,26 @@ def get_cid_from_inchi(inchi: str) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_cid_from_inchikey(inchikey: str) -> Optional[str]:
-    """Retrieve PubChem CID(s) for an InChIKey."""
+def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> Optional[str]:
+    """Retrieve PubChem CID(s) for an InChIKey.
+
+    Parameters
+    ----------
+    inchikey:
+        InChIKey representation of a compound.
+    cfg:
+        API configuration providing base URL and timeouts.
+
+    Returns
+    -------
+    str or None
+        Pipe-separated list of CIDs or ``None`` if the structure is
+        unknown to PubChem.
+    """
     safe_inchikey = url_encode(inchikey)
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchikey/"
-        f"{safe_inchikey}/cids/JSON"
-    )
-    response = make_request(url)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/compound/inchikey/{safe_inchikey}/cids/JSON"
+    response = make_request(url, cfg)
     if not response:
         return None
     cids = _cids_from_identifier_list(response)
@@ -127,10 +143,10 @@ def get_cid_from_inchikey(inchikey: str) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def make_request(url: str, delay: float = 3.0) -> Optional[Dict[str, Any]]:
+def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
     """Make an HTTP GET request and return parsed JSON.
 
-    The function sleeps for ``delay`` seconds before issuing the request in
+    The function sleeps for ``cfg.delay`` seconds before issuing the request in
     order to respect PubChem rate limits.  A shared session configured with
     retries is used to automatically retry transient failures.
 
@@ -138,9 +154,8 @@ def make_request(url: str, delay: float = 3.0) -> Optional[Dict[str, Any]]:
     ----------
     url:
         Endpoint URL to query.
-    delay:
-        Time in seconds to wait before making the request. Defaults to three
-        seconds.
+    cfg:
+        API configuration providing base URL and timeouts.
 
     Returns
     -------
@@ -149,9 +164,9 @@ def make_request(url: str, delay: float = 3.0) -> Optional[Dict[str, Any]]:
         returns a non-success status code, or the payload cannot be decoded.
 
     """
-    time.sleep(delay)
+    time.sleep(cfg.delay)
     try:
-        response = _session.get(url, timeout=10)
+        response = _session.get(url, timeout=(cfg.timeout_connect, cfg.timeout_read))
         if response.status_code == 404:
             logger.warning("Request returned 404 for url %s", url)
             return None
@@ -206,13 +221,15 @@ def _extract_cids(bindings: List[Dict[str, Any]]) -> List[str]:
     return cids
 
 
-def get_cid(compound_name: str) -> Optional[str]:
+def get_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
     """Retrieve PubChem CID(s) for *compound_name* (exact match).
 
     Parameters
     ----------
     compound_name: str
         Compound name to query.
+    cfg:
+        API configuration providing base URL and timeouts.
 
     Returns
     -------
@@ -221,11 +238,9 @@ def get_cid(compound_name: str) -> Optional[str]:
 
     """
     safe_name = url_encode(compound_name)
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/rdf/query?graph=synonym&"
-        f"return=cid&format=json&name={safe_name}"
-    )
-    response = make_request(url)
+    rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
+    url = f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={safe_name}"
+    response = make_request(url, cfg)
     if not response:
         return None
     bindings = response.get("results", {}).get("bindings", [])
@@ -234,14 +249,25 @@ def get_cid(compound_name: str) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_all_cid(compound_name: str) -> Optional[str]:
-    """Retrieve PubChem CID(s) for *compound_name* (partial match)."""
+def get_all_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
+    """Retrieve PubChem CID(s) for *compound_name* (partial match).
+
+    Parameters
+    ----------
+    compound_name: str
+        Compound name to query.
+    cfg:
+        API configuration providing base URL and timeouts.
+
+    Returns
+    -------
+    str or None
+        Pipe-separated list of CIDs or ``None`` if not found.
+    """
     safe_name = url_encode(compound_name)
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/rdf/query?graph=synonym&"
-        f"return=cid&format=json&name={safe_name}&contain=true"
-    )
-    response = make_request(url)
+    rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
+    url = f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={safe_name}&contain=true"
+    response = make_request(url, cfg)
     if not response:
         return None
     bindings = response.get("results", {}).get("bindings", [])
@@ -250,16 +276,27 @@ def get_all_cid(compound_name: str) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_standard_name(cid: str) -> Optional[str]:
-    """Retrieve the standard compound name for a given CID."""
+def get_standard_name(cid: str, cfg: PubChemCfg) -> Optional[str]:
+    """Retrieve the standard compound name for a given CID.
+
+    Parameters
+    ----------
+    cid: str
+        Candidate CID.
+    cfg:
+        API configuration providing base URL and timeouts.
+
+    Returns
+    -------
+    str or None
+        Standard compound name or ``None`` if ``cid`` is invalid or unknown.
+    """
     validated = validate_cid(cid)
     if not validated:
         return None
-    url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/"
-        f"{validated}/description/JSON"
-    )
-    response = make_request(url)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/compound/cid/{validated}/description/JSON"
+    response = make_request(url, cfg)
     if not response:
         return None
     info = response.get("InformationList", {}).get("Information", [])
@@ -280,19 +317,32 @@ class Properties:
     InChIKey: str
 
 
-def get_properties(cid: str) -> Properties:
-    """Retrieve chemical properties for a compound by CID."""
+def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
+    """Retrieve chemical properties for a compound by CID.
+
+    Parameters
+    ----------
+    cid: str
+        Candidate CID.
+    cfg:
+        API configuration providing base URL and timeouts.
+
+    Returns
+    -------
+    Properties
+        Chemical property record. Missing values are returned as ``"Not Found"``.
+    """
     validated = validate_cid(cid)
     if not validated:
         return Properties(
             "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
         )
+    base = cfg.base.rstrip("/")
     url = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/"
-        f"{validated}/property/MolecularFormula,IUPACName,IsomericSMILES,"
+        f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,IsomericSMILES,"
         "CanonicalSMILES,InChI,InChIKey/JSON"
     )
-    response = make_request(url)
+    response = make_request(url, cfg)
     if not response:
         return Properties(
             "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
@@ -313,13 +363,15 @@ def get_properties(cid: str) -> Properties:
     )
 
 
-def process_compound(compound_name: str) -> Dict[str, str]:
+def process_compound(compound_name: str, cfg: PubChemCfg) -> Dict[str, str]:
     """Process *compound_name* into a structured record.
 
     Parameters
     ----------
     compound_name: str
         Name of the compound to look up.
+    cfg:
+        API configuration providing base URL and timeouts.
 
     Returns
     -------
@@ -327,10 +379,10 @@ def process_compound(compound_name: str) -> Dict[str, str]:
         Dictionary containing compound details.
 
     """
-    cid = get_cid(compound_name)
-    standard = get_standard_name(cid) if cid else None
+    cid = get_cid(compound_name, cfg)
+    standard = get_standard_name(cid, cfg) if cid else None
     props = (
-        get_properties(cid)
+        get_properties(cid, cfg)
         if cid
         else Properties(
             "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
@@ -351,6 +403,7 @@ def process_compound(compound_name: str) -> Dict[str, str]:
 
 __all__ = [
     "url_encode",
+    "init_session",
     "make_request",
     "validate_cid",
     "get_cid",

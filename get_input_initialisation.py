@@ -14,6 +14,13 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from library.config import Config, ensure_dirs, print_config
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logging,
+)
+
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
 from library.config import load_config
@@ -21,11 +28,13 @@ from library.config import load_config
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute table combination routine.
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command line arguments.
 
@@ -85,27 +94,31 @@ def run(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser = base_parser(__doc__ or "Input initialisation", column="chembl_id")
     parser.add_argument(
-        "--config",
+        "--same-doc",
         type=Path,
-        default=Path("config.yaml"),
-        help="Path to YAML configuration file",
+        help="Path to same document workbook (default: config init.same_doc)",
     )
     parser.add_argument(
-        "--same-doc", type=Path, required=True, help="Path to same document workbook"
-    )
-    parser.add_argument(
-        "--all-doc", type=Path, required=True, help="Path to all document workbook"
+        "--all-doc",
+        type=Path,
+        help="Path to all document workbook (default: config init.all_doc)",
     )
     parser.add_argument(
         "--dictionary-dir",
         type=Path,
-        default=Path("dictionary"),
-        help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
+        default=None,
+        help=(
+            "Directory with targets_type.csv, citation_fraction.csv and status.csv "
+            "(default: config resources.dictionary_dir)"
+        ),
     )
-    parser.add_argument("--out-dir", type=Path, default=None, help="Output directory")
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        help="Output directory (default: config init.output_dir)",
+    )
     parser.add_argument(
         "--format", choices=["csv"], default="csv", help="Output format"
     )
@@ -113,21 +126,41 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def configure_logging(level: str) -> None:
-    """Configure logging at ``level``."""
-    numeric = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(level=numeric)
-
-
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point."""
+    """Entry point using :class:`Config` for defaults."""
     parser = build_parser()
+
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if args.out_dir is None:
-        args.out_dir = Path(config.get("output", {}).get("data_dir", "."))
-    configure_logging(args.log_level)
-    return args.func(args)
+    try:
+        cfg: Config = apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={
+                "same_doc": "init.same_doc",
+                "all_doc": "init.all_doc",
+                "out_dir": "init.output_dir",
+                "dictionary_dir": "resources.dictionary_dir",
+            },
+        )
+        if args.print_config:
+            print_config(cfg)
+            return 0
+        ensure_dirs(cfg)
+
+        args.same_doc = Path(args.same_doc)
+        args.all_doc = Path(args.all_doc)
+        args.out_dir = Path(args.out_dir)
+        args.dictionary_dir = Path(args.dictionary_dir)
+
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        return 1
+    return args.func(cfg, args)
 
 
 if __name__ == "__main__":  # pragma: no cover

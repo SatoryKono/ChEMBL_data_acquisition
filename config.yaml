@@ -1,70 +1,162 @@
-
-# Global configuration for ChEMBL data acquisition utilities.
-#
-# This file provides default values for all scripts. Each field includes a
-# comment explaining its purpose and the fallback applied when the value is
-# missing. Individual scripts may override any setting via command-line
-# arguments or environment variables.
-#
-# Environment variables override YAML values when present. For example,
-# ``CHEMBL_API_BASE_URL`` replaces the value of ``api.chembl_base_url`` and
-# ``TIMEOUT_CONNECT`` updates ``timeouts.connect``. Short aliases are also
-# recognised for convenience; e.g. ``api.chembl.url`` maps to
-# ``api.chembl_base_url``.
+# Default configuration for ChEMBL data acquisition.
+# Values can be overridden via CLI arguments or environment variables.
+# Environment variables follow the ``CHEMBL_DA__SECTION__KEY`` pattern and
+# many keys also provide short aliases such as ``CHEMBL_DA_RPS``.
+# For the complete alias table see ``library/config.py``.
+# Example:
+#   export CHEMBL_DA__API__CHEMBL_BASE=https://dev.example/chembl
+#   export CHEMBL_DA_BASE=https://dev.example/chembl  # short alias
 
 api:
-  # Base URLs for external services. Network timeouts are configured in the
-  # `timeouts` section below. Fallback: built-in defaults.
-  # Base URL for the ChEMBL API. Fallback: default hard-coded endpoint.
-  chembl_base_url: "https://www.ebi.ac.uk/chembl/api/data"
+  # Base URL for ChEMBL API (env: CHEMBL_DA__API__CHEMBL_BASE / CHEMBL_DA_BASE)
+  chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
+  timeout_connect: 5  # Seconds to wait for a connection
+  timeout_read: 30  # Seconds to wait for a response
+  retries: 3  # HTTP retry attempts
+  backoff_factor: 0.5  # Exponential backoff multiplier
+  rps: 5  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
+  burst: 5  # Burst size for token bucket limiter
+  user_agent: "chembl-da/0.1 (mailto:info@example.org)"  # Custom User-Agent header; must include contact info in the form "app/version (mailto:email@example.org)"
 
-  # Base URL for PubChem REST services. Fallback: built-in default.
-  pubchem_base_url: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+openalex:
+  base: "https://api.openalex.org"  # OpenAlex API root URL (env: CHEMBL_DA__OPENALEX__BASE / CHEMBL_DA_OPENALEX_BASE)
+  timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)
+  timeout_read: 30  # Read timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_READ)
+  retries: 3  # Retry attempts
+  rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
+  burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
+  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_OPENALEX_MAILTO)
 
-  # Base URL for UniProt REST services. Fallback: built-in default.
-  uniprot_base_url: "https://rest.uniprot.org"
+crossref:
+  base: "https://api.crossref.org"  # CrossRef API root URL (env: CHEMBL_DA__CROSSREF__BASE / CHEMBL_DA_CROSSREF_BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
+  timeout_read: 30  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_READ)
+  retries: 3
+  rps: 4  # (env: CHEMBL_DA_CROSSREF_RPS)
+  burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
+  mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_CROSSREF_MAILTO)
 
-  # Base URL for NCBI E-utilities (PubMed). Fallback: built-in default.
-  eutils_base_url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+uniprot:
+  base: "https://rest.uniprot.org"  # UniProt REST API root (env: CHEMBL_DA__UNIPROT__BASE / CHEMBL_DA_UNIPROT_BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT)
+  timeout_read: 30  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_READ)
+  retries: 3
+  rps: 4  # (env: CHEMBL_DA_UNIPROT_RPS)
+  burst: 5  # (env: CHEMBL_DA_UNIPROT_BURST)
+  delay: 0.25  # Delay between requests in seconds
 
-  # Base URL for Semantic Scholar API. Fallback: built-in default.
-  semanticscholar_base_url: "https://api.semanticscholar.org/graph/v1"
+uniprot_mapping:
+  base: "https://rest.uniprot.org/idmapping"  # UniProt ID mapping API (env: CHEMBL_DA__UNIPROT_MAPPING__BASE / CHEMBL_DA_UNIPROT_MAPPING_BASE)
+  poll_interval: 0.5  # Seconds between polling attempts (env: CHEMBL_DA_UNIPROT_MAPPING_POLL_INTERVAL)
 
-  # Base URL for OpenAlex API. Fallback: built-in default.
-  openalex_base_url: "https://api.openalex.org"
+  timeout: 300.0  # Maximum time in seconds to wait for a mapping job (env: CHEMBL_DA_UNIPROT_MAPPING_TIMEOUT)
 
-  # Base URL for CrossRef API. Fallback: built-in default.
-  crossref_base_url: "https://api.crossref.org"
 
-  # Base URL for Guide to Pharmacology services. Fallback: built-in default.
-  gtp_base_url: "https://www.guidetopharmacology.org"
+iuphar:
+  base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base (env: CHEMBL_DA__IUPHAR__BASE / CHEMBL_DA_IUPHAR_BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT)
+  timeout_read: 30  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_READ)
+  retries: 3
+  rps: 4  # (env: CHEMBL_DA_IUPHAR_RPS)
+  burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
 
-timeouts:
-  # Seconds to wait for a connection to the server. Fallback: 10 seconds.
-  connect: 10
+pubchem:
+  base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
+  timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
+  retries: 3
+  rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
+  burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
+  delay: 3  # Delay between requests in seconds
 
-  # Seconds to wait for a server response after connection. Fallback: 30 seconds.
-  read: 30
 
-rate_limits:
-  # Maximum number of requests per second allowed by the client.
-  # Fallback: 5 requests per second.
-  max_requests_per_second: 5
+pubmed:
+  base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__PUBMED__BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
+  timeout_read: 10  # (env: CHEMBL_DA_PUBMED_TIMEOUT_READ)
+  retries: 2  # (env: CHEMBL_DA_PUBMED_RETRIES)
+  encodings:  # Attempt when reading PMID CSV files
+    - "utf-8-sig"
+    - "cp1251"
+    - "latin1"
 
-  # Number of times to retry a request after transient failures.
-  # Fallback: 3 retries.
-  max_retries: 3
+semantic_scholar:
+  base: "https://api.semanticscholar.org/graph/v1"  # Semantic Scholar API root (env: CHEMBL_DA__SEMANTIC_SCHOLAR__BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_TIMEOUT_CONNECT)
+  timeout_read: 10  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_TIMEOUT_READ)
+  retries: 2  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_RETRIES)
+  encodings:  # Placeholder for potential text encodings
+    - "utf-8-sig"
 
-  # Exponential backoff factor between retries. Fallback: 0.3.
-  backoff_factor: 0.3
+doc_type:
+  weights:
+    pubmed: 4
+    openalex: 3
+    scholar: 2
+  thresholds:
+    review: 1
+    experimental: 1
+    unknown: 2
+ 
+resources:
+  dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
+  iuphar_target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
+  iuphar_family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
+  uniprot_data_dir: "uniprot"  # Directory containing cached UniProt JSON files
+  organism_csv: "dictionary/organism.csv"  # Organism taxonomy mapping file
 
-output:
-  # Directory where output datasets are written. Fallback: ./data
-  data_dir: "data"
+io:
+  output_dir: "data/output"  # Directory for generated datasets
+  cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA__IO__CACHE_DIR)
+  csv_sep: ","  # CSV field separator
+  csv_encoding: "utf-8-sig"  # Encoding for CSV files
+  csv_index: false  # Include index column when writing CSV
+  exist_ok: true  # Create directories with ensure_dirs if missing
 
-  # Directory for log files. Fallback: ./logs
-  logs_dir: "logs"
+jobs:
+  concurrency: 8  # Number of parallel workers (env: CHEMBL_DA__JOBS__CONCURRENCY / CHEMBL_DA_CONCURRENCY)
+  chunk_size: 500  # Records per job chunk (env: CHEMBL_DA__JOBS__CHUNK_SIZE / CHEMBL_DA_CHUNK_SIZE)
 
-  # Directory for temporary files. Fallback: ./tmp
-  tmp_dir: "tmp"
+batch:
+  size: 1000  # Number of rows per batch (env: CHEMBL_DA__BATCH__SIZE)
+  pause: 0  # Delay between batches in seconds (env: CHEMBL_DA__BATCH__PAUSE)
+  concurrency: 2  # Number of concurrent batch workers (env: CHEMBL_DA__BATCH__CONCURRENCY)
+  fail_fast: true  # Abort on first error (env: CHEMBL_DA__BATCH__FAIL_FAST)
+  retry_failed: true  # Retry failed batches (env: CHEMBL_DA__BATCH__RETRY_FAILED)
+
+quality:
+  sample_rows: 0  # Rows to sample for previews (0 = all)
+  corr_method: "pearson"  # Correlation method
+  max_unique_preview: 50  # Preview unique values up to this count
+  bin_count: 20  # Histogram bins for numeric columns
+
+mapper:
+  enable_cache: true  # Cache mapping results
+  strict_schema: true  # Enforce input schema
+  warn_on_cast: true  # Warn when casting types
+
+init:
+  same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook
+  all_doc: "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
+  output_dir: "data/output/ChEMBL/processed"  # Output directory for processed files
+
+rate:
+  global_rps: 8  # Global requests-per-second limit
+  global_burst: 8  # Global burst size
+
+retry:
+  max_attempts: 3  # HTTP retry attempts (env: CHEMBL_DA_RETRY_MAX_ATTEMPTS)
+  backoff_factor: 0.5  # Base delay multiplier (env: CHEMBL_DA_RETRY_BACKOFF_FACTOR)
+  status_forcelist:
+    - 429  # Too Many Requests
+    - 500
+    - 502
+    - 503
+    - 504
+
+log:
+  level: "INFO"  # Default logging level (env: CHEMBL_DA_LOG_LEVEL)
+  format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format (env: CHEMBL_DA_LOG_FORMAT)
+  datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format (env: CHEMBL_DA__LOG__DATEFMT)
+
 

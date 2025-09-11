@@ -18,9 +18,14 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 import logging
+import time
+from urllib.parse import quote
+import io
 
 import pandas as pd
 import requests
+
+from .config import IupharCfg
 
 
 logger = logging.getLogger(__name__)
@@ -537,17 +542,29 @@ class IUPHARData:
     # Web search
     # ------------------------------------------------------------------
 
-    def websearch_gene_to_id(self, gene_name: str) -> dict:
-        """Query the IUPHAR web API for *gene_name*.
+    def websearch_gene_to_id(self, gene_name: str, cfg: IupharCfg) -> dict:
+        """Query the IUPHAR web API for ``gene_name``.
 
-        Returns a dictionary with the first hit or an empty dict on failure.
+        Parameters
+        ----------
+        gene_name:
+            Gene symbol to search for.
+        cfg:
+            API configuration controlling base URL, timeouts and rate limits.
+
+        Returns
+        -------
+        dict
+            First result dictionary or an empty dict on failure.
         """
-        url = (
-            "https://www.guidetopharmacology.org/services/targets/?geneSymbol="
-            + gene_name
-        )
+        delay = 1 / cfg.rps if cfg.rps else 0
+        time.sleep(delay)
+        base = cfg.base.rstrip("/")
+        url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(
+                url, timeout=(cfg.timeout_connect, cfg.timeout_read)
+            )
             response.raise_for_status()
             data = response.json()
             return data[0] if data else {}
@@ -559,17 +576,41 @@ class IUPHARData:
     # IUPHAR upload processing
     # ------------------------------------------------------------------
 
-    def iuphar_upload(self) -> pd.DataFrame:
+    def iuphar_upload(self, cfg: IupharCfg) -> pd.DataFrame:
         """Reproduce the ``IUPHAR_upload`` transformation.
+
+        Parameters
+        ----------
+        cfg:
+            API configuration controlling base URL, timeouts and rate limits.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Combined mapping of IUPHAR targets and families.
 
         The function downloads mapping files from the IUPHAR service and
         combines them with the local target and family tables.
         """
-        uni_url = "https://www.guidetopharmacology.org/DATA/GtP_to_UniProt_mapping.csv"
-        hgnc_url = "https://www.guidetopharmacology.org/DATA/GtP_to_HGNC_mapping.csv"
-
-        uni_df = pd.read_csv(uni_url)
-        hgnc_df = pd.read_csv(hgnc_url)
+        base_root = cfg.base.rstrip("/")
+        if base_root.endswith("services"):
+            base_root = base_root.rsplit("/", 1)[0]
+        data_base = f"{base_root}/DATA"
+        delay = 1 / cfg.rps if cfg.rps else 0
+        time.sleep(delay)
+        uni_resp = requests.get(
+            f"{data_base}/GtP_to_UniProt_mapping.csv",
+            timeout=(cfg.timeout_connect, cfg.timeout_read),
+        )
+        uni_resp.raise_for_status()
+        uni_df = pd.read_csv(io.StringIO(uni_resp.text))
+        time.sleep(delay)
+        hgnc_resp = requests.get(
+            f"{data_base}/GtP_to_HGNC_mapping.csv",
+            timeout=(cfg.timeout_connect, cfg.timeout_read),
+        )
+        hgnc_resp.raise_for_status()
+        hgnc_df = pd.read_csv(io.StringIO(hgnc_resp.text))
         hgnc_df = hgnc_df.rename(columns={"IUPHAR ID": "GtoPdb IUPHAR ID"})
         mapping = pd.merge(
             hgnc_df,

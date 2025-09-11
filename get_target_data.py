@@ -1,4 +1,11 @@
-"""Command line interface for retrieving target data from external sources."""
+"""Command line interface for retrieving target data from external sources.
+
+Example
+-------
+Fetch ChEMBL target information for identifiers in ``targets.csv``::
+
+    python get_target_data.py chembl --config config.yaml --input targets.csv
+"""
 
 from __future__ import annotations
 
@@ -10,19 +17,21 @@ from typing import Sequence
 
 import pandas as pd
 import requests
-from pandera.errors import SchemaErrors
-from schemas.targets import TargetsSchema
-from library.normalization import normalize_targets
-from library.sidecar import SidecarErrors
+from library.config import Config, ensure_dirs, print_config
 
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.cli import configure_logging
+
+from library.cli import (
+    apply_config_overrides,
+    build_root_parser,
+    configure_logging,
+)
+
 from library.table_quality import analyze_table_quality
-from library.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -60,31 +69,25 @@ def _first_token(value: str | None) -> str:
 def build_parser() -> argparse.ArgumentParser:
     """Create and return the top-level CLI argument parser.
 
-    The command line interface is organised into sub-commands for
-    retrieving data from individual sources (UniProt, ChEMBL and IUPHAR)
-    as well as a convenience ``all`` command that runs all pipelines and
-    merges their outputs.
+    The command line interface is organised into sub-commands for retrieving
+    data from individual sources (UniProt, ChEMBL and IUPHAR) as well as a
+    convenience ``all`` command that runs all pipelines and merges their
+    outputs.
     """
-    parser = argparse.ArgumentParser(description="Target data utilities")
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        help="Logging level (DEBUG, INFO, WARNING)",
-    )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config.yaml"),
-        help="Path to YAML configuration file",
-    )
 
+    root = build_root_parser()
+    parser = argparse.ArgumentParser(
+        description="Target data utilities", parents=[root]
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # ----------------------------
     # UniProt sub-command
     # ----------------------------
     uniprot = subparsers.add_parser(
-        "uniprot", help="Extract information for UniProt accessions"
+        "uniprot",
+        parents=[root],
+        help="Extract information for UniProt accessions",
     )
     uniprot.add_argument(
         "--input",
@@ -118,8 +121,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     uniprot.add_argument(
         "--data-dir",
-        default="uniprot",
-        help="Directory containing '<uniprot_id>.json' files",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing '<uniprot_id>.json' files "
+            "(default: config resources.uniprot_data_dir)"
+        ),
     )
     uniprot.set_defaults(func=run_uniprot)
 
@@ -127,7 +134,9 @@ def build_parser() -> argparse.ArgumentParser:
     # ChEMBL sub-command
     # ----------------------------
     chembl = subparsers.add_parser(
-        "chembl", help="Retrieve target information from ChEMBL"
+        "chembl",
+        parents=[root],
+        help="Retrieve target information from ChEMBL",
     )
     chembl.add_argument(
         "--input",
@@ -154,13 +163,21 @@ def build_parser() -> argparse.ArgumentParser:
         default="utf8",
         help="File encoding for input and output CSV files",
     )
+    chembl.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
     # IUPHAR sub-command
     # ----------------------------
     iuphar = subparsers.add_parser(
-        "iuphar", help="Map UniProt accessions to IUPHAR classifications"
+        "iuphar",
+        parents=[root],
+        help="Map UniProt accessions to IUPHAR classifications",
     )
     iuphar.add_argument(
         "--input",
@@ -179,14 +196,20 @@ def build_parser() -> argparse.ArgumentParser:
     iuphar.add_argument(
         "--target-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_target.csv"),
-        help="Path to the _IUPHAR_target.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_target.csv file "
+            "(default: config resources.iuphar_target_csv)"
+        ),
     )
     iuphar.add_argument(
         "--family-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
-        help="Path to the _IUPHAR_family.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_family.csv file "
+            "(default: config resources.iuphar_family_csv)"
+        ),
     )
     iuphar.add_argument("--sep", default=",", help="CSV delimiter for I/O")
     iuphar.add_argument(
@@ -201,6 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ----------------------------
     all_cmd = subparsers.add_parser(
         "all",
+        parents=[root],
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
     )
     all_cmd.add_argument(
@@ -237,26 +261,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     all_cmd.add_argument(
         "--data-dir",
-        default="uniprot",
-        help="Directory containing '<uniprot_id>.json' files",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing '<uniprot_id>.json' files "
+            "(default: config resources.uniprot_data_dir)"
+        ),
     )
     all_cmd.add_argument(
         "--target-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_target.csv"),
-        help="Path to the _IUPHAR_target.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_target.csv file "
+            "(default: config resources.iuphar_target_csv)"
+        ),
     )
     all_cmd.add_argument(
         "--family-csv",
         type=Path,
-        default=Path("dictionary/_IUPHAR/_IUPHAR_family.csv"),
-        help="Path to the _IUPHAR_family.csv file",
+        default=None,
+        help=(
+            "Path to the _IUPHAR_family.csv file "
+            "(default: config resources.iuphar_family_csv)"
+        ),
+    )
+    all_cmd.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
     )
     all_cmd.add_argument(
         "--organism-csv",
         type=Path,
-        default=Path("dictionary/organism.csv"),
-        help="CSV mapping 'genus' to organism 'type' for finalisation",
+        default=None,
+        help=(
+            "CSV mapping 'genus' to organism 'type' for finalisation "
+            "(default: config resources.organism_csv)"
+        ),
     )
     all_cmd.add_argument(
         "--uniprot-column",
@@ -272,14 +315,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     all_cmd.set_defaults(func=run_all)
 
+    setattr(
+        parser,
+        "subparsers_map",
+        {
+            "uniprot": uniprot,
+            "chembl": chembl,
+            "iuphar": iuphar,
+            "all": all_cmd,
+        },
+    )
+
     return parser
 
 
-def run_uniprot(args: argparse.Namespace) -> int:
+def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``uniprot`` sub-command.
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command-line arguments specific to the ``uniprot`` sub-command.
 
@@ -317,12 +373,13 @@ def run_uniprot(args: argparse.Namespace) -> int:
                 writer.writerow({"uniprot_id": uid})
             tmp_path = Path(tmp.name)
 
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         try:
             uu.process(
                 input_csv=str(tmp_path),
                 output_csv=str(output),
-                data_dir=str(args.data_dir),
+                data_dir=args.data_dir,
+                cfg=cfg.uniprot,
                 sep=args.sep,
                 encoding=args.encoding,
             )
@@ -332,7 +389,7 @@ def run_uniprot(args: argparse.Namespace) -> int:
         out_df = pd.read_csv(output, sep=args.sep, encoding=args.encoding, dtype=str)
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
-        io.write_csv(out_df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(out_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -344,36 +401,44 @@ def run_uniprot(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_chembl(args: argparse.Namespace) -> int:
-    """Execute the ``chembl`` sub-command."""
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the ``chembl`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         ids = io.read_ids(
-            args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            column=args.column,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
     try:
-        df = cl.get_targets(ids)
+        df = cl.get_targets(
+            ids, cfg=cfg.api, mapping_cfg=cfg.uniprot_mapping, timeout=args.timeout
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
-    df = normalize_targets(df)
-    sidecar = SidecarErrors()
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
-        df = TargetsSchema.validate(df, lazy=True)
-    except SchemaErrors as err:
-        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        for row in err.failure_cases.to_dict(orient="records"):
-            sidecar.add_error(row)
-        bad_idx = err.failure_cases["index"].dropna().unique()
-        logger.warning("schema validation failed for %d rows", len(bad_idx))
-        df = df.drop(index=bad_idx)
-    sidecar.save(output.with_suffix(".errors.csv"))
-    try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -386,15 +451,29 @@ def run_chembl(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_iuphar(args: argparse.Namespace) -> int:
-    """Execute the ``iuphar`` sub-command."""
+def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the ``iuphar`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         data = ii.IUPHARData.from_files(
             target_path=args.target_csv,
             family_path=args.family_csv,
             encoding=args.encoding,
         )
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
             input_path=args.input_csv,
             output_path=output,
@@ -412,7 +491,7 @@ def run_iuphar(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_all(args: argparse.Namespace) -> int:
+def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """Run ChEMBL, UniProt and IUPHAR pipelines and merge their outputs.
 
     The merged table is cleaned and normalised using
@@ -422,6 +501,8 @@ def run_all(args: argparse.Namespace) -> int:
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command-line arguments specific to the ``all`` sub-command.
 
@@ -437,7 +518,7 @@ def run_all(args: argparse.Namespace) -> int:
 
     """
     try:
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         chembl_out = args.chembl_out or output.with_name(output.stem + "_chembl.csv")
         uniprot_out = args.uniprot_out or output.with_name(output.stem + "_uniprot.csv")
         iuphar_out = args.iuphar_out or output.with_name(output.stem + "_iuphar.csv")
@@ -449,8 +530,9 @@ def run_all(args: argparse.Namespace) -> int:
             column="chembl_id",
             sep=args.sep,
             encoding=args.encoding,
+            timeout=args.timeout,
         )
-        if run_chembl(chembl_args) != 0:
+        if run_chembl(cfg, chembl_args) != 0:
             return 1
         chembl_df = pd.read_csv(
             chembl_out, sep=args.sep, encoding=args.encoding, dtype=str
@@ -483,7 +565,7 @@ def run_all(args: argparse.Namespace) -> int:
             column="uniprot_id",
         )
         try:
-            if run_uniprot(uniprot_args) != 0:
+            if run_uniprot(cfg, uniprot_args) != 0:
                 return 1
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -549,7 +631,7 @@ def run_all(args: argparse.Namespace) -> int:
             encoding=args.encoding,
         )
         try:
-            if run_iuphar(iuphar_args) != 0:
+            if run_iuphar(cfg, iuphar_args) != 0:
                 return 1
         finally:
             iuphar_input.unlink(missing_ok=True)
@@ -572,7 +654,7 @@ def run_all(args: argparse.Namespace) -> int:
         )
         final_df = tp.finalise_targets(processed, organism_df)
 
-        io.write_csv(final_df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(final_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -585,19 +667,37 @@ def run_all(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
+    """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if hasattr(args, "output_csv") and args.output_csv is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
-            )
-    configure_logging(args.log_level)
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
+    try:
+        cfg: Config = apply_config_overrides(
+            args,
+            subparser,
+            args.config,
+            mapping={
+                "timeout": "api.timeout_read",
+                "target_csv": "resources.iuphar_target_csv",
+                "family_csv": "resources.iuphar_family_csv",
+                "data_dir": "resources.uniprot_data_dir",
+                "organism_csv": "resources.organism_csv",
+            },
+        )
+        if args.print_config:
+            print_config(cfg)
+            return 0
+        ensure_dirs(cfg)
+        configure_logging(args.log_level, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        return 1
     if hasattr(args, "func"):
-        return args.func(args)
+        return args.func(cfg, args)
     parser.print_help()
     return 1
 

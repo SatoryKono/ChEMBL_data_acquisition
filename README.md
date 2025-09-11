@@ -61,11 +61,88 @@ Running the CLI saves ``data_quality_report_table.csv`` and
 
 All scripts share a common set of flags:
 
+## Configuration
+
+
+Default settings live in ``config.yaml`` and are split into sections for each
+API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
+I/O and processing (``io``, ``jobs``, ``batch``, ``quality``, ``mapper``) and
+general infrastructure (``init``, ``rate``, ``retry``, ``log``). A minimal
+configuration looks like::
+
+
+    api:
+      rps: 5
+    io:
+      output_dir: data/output
+    jobs:
+      concurrency: 8
+
+Environment variables override values from the YAML file. Variables use the
+``CHEMBL_DA__SECTION__KEY`` pattern and also support short aliases:
+
+* ``CHEMBL_DA__API__CHEMBL_BASE`` / ``CHEMBL_DA_BASE``
+* ``CHEMBL_DA__API__TIMEOUT_CONNECT`` / ``CHEMBL_DA_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__API__TIMEOUT_READ`` / ``CHEMBL_DA_TIMEOUT_READ``
+* ``CHEMBL_DA__API__RPS`` / ``CHEMBL_DA_RPS``
+
+* ``CHEMBL_DA__OPENALEX__TIMEOUT_CONNECT`` / ``CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__OPENALEX__TIMEOUT_READ`` / ``CHEMBL_DA_OPENALEX_TIMEOUT_READ``
+* ``CHEMBL_DA__OPENALEX__RPS`` / ``CHEMBL_DA_OPENALEX_RPS``
+* ``CHEMBL_DA__CROSSREF__TIMEOUT_CONNECT`` / ``CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__CROSSREF__TIMEOUT_READ`` / ``CHEMBL_DA_CROSSREF_TIMEOUT_READ``
+* ``CHEMBL_DA__CROSSREF__RPS`` / ``CHEMBL_DA_CROSSREF_RPS``
+* ``CHEMBL_DA__UNIPROT__TIMEOUT_CONNECT`` / ``CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__UNIPROT__TIMEOUT_READ`` / ``CHEMBL_DA_UNIPROT_TIMEOUT_READ``
+* ``CHEMBL_DA__UNIPROT__RPS`` / ``CHEMBL_DA_UNIPROT_RPS``
+* ``CHEMBL_DA__IUPHAR__TIMEOUT_CONNECT`` / ``CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__IUPHAR__TIMEOUT_READ`` / ``CHEMBL_DA_IUPHAR_TIMEOUT_READ``
+* ``CHEMBL_DA__IUPHAR__RPS`` / ``CHEMBL_DA_IUPHAR_RPS``
+* ``CHEMBL_DA__PUBCHEM__TIMEOUT_CONNECT`` / ``CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT``
+* ``CHEMBL_DA__PUBCHEM__TIMEOUT_READ`` / ``CHEMBL_DA_PUBCHEM_TIMEOUT_READ``
+* ``CHEMBL_DA__PUBCHEM__RPS`` / ``CHEMBL_DA_PUBCHEM_RPS``
+
+* ``CHEMBL_DA__IO__OUTPUT_DIR`` / ``CHEMBL_DA_OUTDIR``
+* ``CHEMBL_DA__JOBS__CONCURRENCY`` / ``CHEMBL_DA_CONCURRENCY``
+* ``CHEMBL_DA__JOBS__CHUNK_SIZE`` / ``CHEMBL_DA_CHUNK_SIZE``
+* ``CHEMBL_DA__RETRY__MAX_ATTEMPTS`` / ``CHEMBL_DA_RETRY_MAX_ATTEMPTS``
+* ``CHEMBL_DA__RETRY__BACKOFF_FACTOR`` / ``CHEMBL_DA_RETRY_BACKOFF_FACTOR``
+* ``CHEMBL_DA__LOG__LEVEL`` / ``CHEMBL_DA_LOG_LEVEL``
+* ``CHEMBL_DA__LOG__FORMAT`` / ``CHEMBL_DA_LOG_FORMAT``
+
+### Schema validation
+
+Configuration values are validated against a JSON Schema via the
+``jsonschema`` package. The schema mirrors the dataclass structure and checks
+types and value ranges, producing helpful error messages for nested fields.
+
+Command line flags have the highest priority. All utilities accept ``--config``
+to point at a configuration file and ``--print-config`` to show the effective
+values after all overrides have been applied. The final precedence is::
+
+    YAML < environment variables < CLI options
+
+Only the top-level command line scripts read the configuration file. Modules
+under ``library/`` expect a :class:`Config` (or one of its subsections) to be
+passed explicitly, making dependencies clear and avoiding hidden global state.
+The directories referenced by ``io.output_dir`` and ``io.cache_dir`` are checked
+but not created when loading the configuration. Scripts that need these paths
+can call :func:`library.config.ensure_dirs` after :func:`load_config` to create
+them if they are missing and ``io.exist_ok`` permits it.
+
+Path values such as ``io.output_dir``, ``io.cache_dir`` and the ``init``
+workbook paths are exposed as :class:`pathlib.Path` objects. String values in
+``config.yaml`` or overrides from the environment and command line are
+automatically converted.
+
+
+Common flags shared by scripts include:
+
 * ``--input`` – input CSV file (default ``input.csv``)
 * ``--output`` – destination CSV file (default: auto-generated next to the input)
 * ``--log-level`` – logging verbosity (default ``INFO``)
-* ``--sep`` – CSV delimiter (default ``,``)
-* ``--encoding`` – file encoding (default ``utf8``)
+* ``--sep`` – CSV delimiter (default taken from configuration)
+* ``--encoding`` – file encoding (default taken from configuration)
 * ``--column`` – column containing identifiers (script specific)
 
 Example fetching assay data::
@@ -85,6 +162,11 @@ if the entry is missing. See `docs/CONFIG.md` for a detailed description of all
 available options.
 
 Example merging initialisation tables::
+
+    python get_input_initialisation.py --config config.yaml
+
+The ``same_doc`` and ``all_doc`` workbook paths default to values from
+``config.yaml`` but can be overridden on the command line::
 
     python get_input_initialisation.py \
       --same-doc path/to/ChEMBL_same_document_20_05.xlsx \
