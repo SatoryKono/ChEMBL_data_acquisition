@@ -280,45 +280,56 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     """
     try:
         df = pd.read_csv(
-            args.input_csv, sep=args.sep, encoding=args.encoding, dtype=str
+            args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
-        if args.column not in df.columns:
-            raise ValueError(f"column '{args.column}' not found in {args.input_csv}")
+        column = cfg.target.uniprot.column
+        if column not in df.columns:
+            raise ValueError(f"column '{column}' not found in {args.input_csv}")
         df = df.fillna("")
-        df = df[
-            (df[args.column].str.strip() != "") & (df[args.column] != "#N/A")
-        ].reset_index(drop=True)
-        ids = df[args.column].tolist()
+        df = df[(df[column].str.strip() != "") & (df[column] != "#N/A")].reset_index(
+            drop=True
+        )
+        ids = df[column].tolist()
 
         from tempfile import NamedTemporaryFile
 
         with NamedTemporaryFile(
-            "w", delete=False, encoding=args.encoding, newline=""
+            "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
         ) as tmp:
-            writer = csv.DictWriter(tmp, fieldnames=["uniprot_id"], delimiter=args.sep)
+            writer = csv.DictWriter(
+                tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
+            )
             writer.writeheader()
             for uid in ids:
                 writer.writerow({"uniprot_id": uid})
             tmp_path = Path(tmp.name)
 
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        data_dir = args.data_dir or cfg.resources.uniprot_data_dir
+        data_dir = cfg.target.uniprot.data_dir
         try:
             uu.process(
                 input_csv=str(tmp_path),
                 output_csv=str(output),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
-                sep=args.sep,
-                encoding=args.encoding,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
             )
         finally:
             tmp_path.unlink(missing_ok=True)
 
-        out_df = pd.read_csv(output, sep=args.sep, encoding=args.encoding, dtype=str)
+        out_df = pd.read_csv(
+            output, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+        )
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
-        io.write_csv(out_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
+        io.write_csv(
+            out_df,
+            output,
+            cfg=cfg,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -350,20 +361,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     init_session(cfg.api, RetryCfg())
 
     try:
-        ids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
-        )
+        ids = io.read_ids(args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
     try:
         df = cl.get_targets(
-            ids, cfg=cfg.api, mapping_cfg=cfg.uniprot_mapping, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            mapping_cfg=cfg.uniprot_mapping,
+            timeout=cfg.target.chembl.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)
@@ -453,16 +461,16 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     """
     try:
         data = ii.IUPHARData.from_files(
-            target_path=args.target_csv,
-            family_path=args.family_csv,
-            encoding=args.encoding,
+            target_path=cfg.target.iuphar.target_csv,
+            family_path=cfg.target.iuphar.family_csv,
+            encoding=cfg.io.csv_encoding,
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
             input_path=args.input_csv,
             output_path=output,
-            encoding=args.encoding,
-            sep=args.sep,
+            encoding=cfg.io.csv_encoding,
+            sep=cfg.io.csv_sep,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
@@ -503,37 +511,41 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """
     try:
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        chembl_out = args.chembl_out or output.with_name(output.stem + "_chembl.csv")
-        uniprot_out = args.uniprot_out or output.with_name(output.stem + "_uniprot.csv")
-        iuphar_out = args.iuphar_out or output.with_name(output.stem + "_iuphar.csv")
+        chembl_out = cfg.target.all.chembl_out or output.with_name(
+            output.stem + "_chembl.csv"
+        )
+        uniprot_out = cfg.target.all.uniprot_out or output.with_name(
+            output.stem + "_uniprot.csv"
+        )
+        iuphar_out = cfg.target.all.iuphar_out or output.with_name(
+            output.stem + "_iuphar.csv"
+        )
 
         # Run ChEMBL retrieval and capture results
         chembl_args = argparse.Namespace(
             input_csv=args.input_csv,
             output_csv=chembl_out,
-            column="chembl_id",
-            sep=args.sep,
-            encoding=args.encoding,
-            timeout=args.timeout,
         )
         if run_chembl(cfg, chembl_args) != 0:
             return 1
         chembl_df = pd.read_csv(
-            chembl_out, sep=args.sep, encoding=args.encoding, dtype=str
+            chembl_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         ).rename(columns={"target_chembl_id": "chembl_id"})
 
         # Extract UniProt IDs and write temporary CSV for downstream steps
         uids = [
             u
-            for u in chembl_df.get(args.uniprot_column, [])
+            for u in chembl_df.get(cfg.target.all.uniprot_column, [])
             if isinstance(u, str) and u
         ]
         from tempfile import NamedTemporaryFile
 
         with NamedTemporaryFile(
-            "w", delete=False, encoding=args.encoding, newline=""
+            "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
         ) as tmp:
-            writer = csv.DictWriter(tmp, fieldnames=["uniprot_id"], delimiter=args.sep)
+            writer = csv.DictWriter(
+                tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
+            )
             writer.writeheader()
             for uid in uids:
                 writer.writerow({"uniprot_id": uid})
@@ -543,20 +555,19 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         uniprot_args = argparse.Namespace(
             input_csv=tmp_path,
             output_csv=uniprot_out,
-            data_dir=args.data_dir,
-            sep=args.sep,
-            encoding=args.encoding,
-            column="uniprot_id",
         )
+        orig_dir = cfg.target.uniprot.data_dir
+        cfg.target.uniprot.data_dir = cfg.target.all.data_dir
         try:
             if run_uniprot(cfg, uniprot_args) != 0:
                 return 1
         finally:
+            cfg.target.uniprot.data_dir = orig_dir
             tmp_path.unlink(missing_ok=True)
 
         # Load UniProt output
         uniprot_df = pd.read_csv(
-            uniprot_out, sep=args.sep, encoding=args.encoding, dtype=str
+            uniprot_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
         # The uids list holds the original identifiers used to query UniProt,
         # and uniprot_df contains the corresponding results in the same order.
@@ -571,7 +582,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         combined_df = pd.merge(
             chembl_for_merge,
             uniprot_df,
-            left_on=args.uniprot_column,
+            left_on=cfg.target.all.uniprot_column,
             right_on="original_id",
             how="left",
         ).drop(columns=["original_id"])
@@ -600,30 +611,34 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         )
 
         with NamedTemporaryFile(
-            "w", delete=False, encoding=args.encoding, newline=""
+            "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
         ) as tmp:
-            combined_df.to_csv(tmp, index=False, sep=args.sep, encoding=args.encoding)
+            combined_df.to_csv(
+                tmp, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
+            )
             iuphar_input = Path(tmp.name)
 
         # Run IUPHAR mapping using combined data
         iuphar_args = argparse.Namespace(
             input_csv=iuphar_input,
             output_csv=iuphar_out,
-            target_csv=args.target_csv,
-            family_csv=args.family_csv,
-            sep=args.sep,
-            encoding=args.encoding,
         )
+        orig_target = cfg.target.iuphar.target_csv
+        orig_family = cfg.target.iuphar.family_csv
+        cfg.target.iuphar.target_csv = cfg.target.all.target_csv
+        cfg.target.iuphar.family_csv = cfg.target.all.family_csv
         try:
             if run_iuphar(cfg, iuphar_args) != 0:
                 return 1
         finally:
+            cfg.target.iuphar.target_csv = orig_target
+            cfg.target.iuphar.family_csv = orig_family
             iuphar_input.unlink(missing_ok=True)
 
         # Merge results using pandas
 
         iuphar_df = pd.read_csv(
-            iuphar_out, sep=args.sep, encoding=args.encoding, dtype=str
+            iuphar_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
         existing_cols = set(chembl_df.columns) | set(uniprot_df.columns)
         classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
@@ -634,7 +649,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # Apply domain-specific clean-up and finalise table before exporting
         processed = tp.postprocess_targets(merged)
         organism_df = pd.read_csv(
-            args.organism_csv, sep=args.sep, encoding=args.encoding, dtype=str
+            cfg.target.all.organism_csv,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            dtype=str,
         )
         final_df = tp.finalise_targets(processed, organism_df)
         final_df = normalize_targets(final_df)
@@ -654,7 +672,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             )
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
-        io.write_csv(final_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
+        io.write_csv(
+            final_df,
+            output,
+            cfg=cfg,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -676,17 +700,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     try:
+        mapping: dict[str, str] = {}
+        if args.command == "uniprot":
+            mapping = {
+                "column": "target.uniprot.column",
+                "data_dir": "target.uniprot.data_dir",
+            }
+        elif args.command == "chembl":
+            mapping = {
+                "column": "target.chembl.column",
+                "timeout": "target.chembl.timeout",
+            }
+        elif args.command == "iuphar":
+            mapping = {
+                "target_csv": "target.iuphar.target_csv",
+                "family_csv": "target.iuphar.family_csv",
+            }
+        elif args.command == "all":
+            mapping = {
+                "timeout": "target.all.timeout",
+                "data_dir": "target.all.data_dir",
+                "target_csv": "target.all.target_csv",
+                "family_csv": "target.all.family_csv",
+                "organism_csv": "target.all.organism_csv",
+                "uniprot_column": "target.all.uniprot_column",
+                "chembl_out": "target.all.chembl_out",
+                "uniprot_out": "target.all.uniprot_out",
+                "iuphar_out": "target.all.iuphar_out",
+            }
         cfg: Config = apply_config_overrides(
-            args,
-            subparser,
-            args.config,
-            mapping={
-                "timeout": "api.timeout_read",
-                "target_csv": "resources.iuphar_target_csv",
-                "family_csv": "resources.iuphar_family_csv",
-                "data_dir": "resources.uniprot_data_dir",
-                "organism_csv": "resources.organism_csv",
-            },
+            args, subparser, args.config, mapping=mapping
         )
         if args.print_config:
             print_config(cfg)

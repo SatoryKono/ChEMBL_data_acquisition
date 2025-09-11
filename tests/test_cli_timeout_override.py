@@ -37,9 +37,13 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch) -> None:
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["a1"])
-    monkeypatch.setattr(
-        gas, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
-    )
+
+    def fake_apply(a, p, c, mapping=None):
+        cfg = Config()
+        cfg.assay.timeout = float(a.timeout)
+        return cfg
+
+    monkeypatch.setattr(gas, "apply_config_overrides", fake_apply)
 
     def fake_get_assays(ids, cfg, chunk_size, timeout):
         called["timeout"] = timeout
@@ -69,9 +73,13 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["d1"])
-    monkeypatch.setattr(
-        gdd, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
-    )
+
+    def fake_apply_doc(a, p, c, mapping=None):
+        cfg = Config()
+        cfg.document.chembl.timeout = float(a.timeout)
+        return cfg
+
+    monkeypatch.setattr(gdd, "apply_config_overrides", fake_apply_doc)
 
     def fake_get_documents(ids, cfg, chunk_size, timeout):
         called["timeout"] = timeout
@@ -101,9 +109,13 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch) -> None:
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
-    monkeypatch.setattr(
-        gtdt, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
-    )
+
+    def fake_apply_test(a, p, c, mapping=None):
+        cfg = Config()
+        cfg.testitem.timeout = float(a.timeout)
+        return cfg
+
+    monkeypatch.setattr(gtdt, "apply_config_overrides", fake_apply_test)
 
     def fake_get_testitem(ids, cfg, chunk_size, timeout):
         called["timeout"] = timeout
@@ -133,9 +145,13 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch) -> None:
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
-    monkeypatch.setattr(
-        gtd, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
-    )
+
+    def fake_apply_target(a, p, c, mapping=None):
+        cfg = Config()
+        cfg.target.chembl.timeout = float(a.timeout)
+        return cfg
+
+    monkeypatch.setattr(gtd, "apply_config_overrides", fake_apply_target)
 
     def fake_get_targets(ids, cfg, mapping_cfg, timeout):
         called["timeout"] = timeout

@@ -9,7 +9,7 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
     """``organism_csv`` argument should default to the config value."""
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
-        "jobs:\n  chunk_size: 10\n"
+        "target:\n  all:\n    organism_csv: dictionary/organism.csv\n"
         "io:\n  csv_sep: ','\n  csv_encoding: utf8\n"
         "log:\n  level: INFO\n"
         "api:\n  timeout_read: 30\n"
@@ -17,7 +17,6 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
         "  dictionary_dir: dictionary\n"
         "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
         "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
-        "  organism_csv: dictionary/organism.csv\n"
         "  status_csv: dictionary/status.csv\n"
         "  targets_type_csv: dictionary/targets_type.csv\n"
     )
