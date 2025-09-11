@@ -58,7 +58,9 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     result = cli.run(Config(), args)
     assert result == 0
 
+
     assert (out_dir / "activity_independent.csv").exists()
+
     assert (
         out_dir
         / "status"
@@ -69,6 +71,7 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     expected = set(tables)
     expected.remove("activity_independent_status")
     expected.update({"activity_independent", "activity_independent_status_statistics"})
+
     for name in expected:
         quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
         corr = (

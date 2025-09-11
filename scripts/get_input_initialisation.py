@@ -96,11 +96,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             if "Filtered.new" not in df.columns:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
+
             base_name = key.removesuffix("_status")
             raw = df.rename(columns={"Filtered.new": "Filtered"})
             tables[base_name] = raw
             tables[f"{key}_statistics"] = lib.compute_status_statistics(raw, base_name)
             del tables[key]
+
 
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
