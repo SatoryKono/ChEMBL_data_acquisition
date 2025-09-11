@@ -53,7 +53,7 @@ def test_fetch_uniprot_network_error(monkeypatch) -> None:
 
     monkeypatch.setattr(ul._session, "get", fake_get)
     with pytest.raises(ul.UniProtFetchError):
-        ul.fetch_uniprot("P12345", cfg=UniprotCfg())
+        ul.fetch_uniprot("P12345", cfg=UniprotCfg(delay=0))
 
 
 def test_fetch_uniprot_bad_json(monkeypatch) -> None:
@@ -64,7 +64,7 @@ def test_fetch_uniprot_bad_json(monkeypatch) -> None:
 
     monkeypatch.setattr(ul._session, "get", fake_get)
     with pytest.raises(ul.UniProtFetchError):
-        ul.fetch_uniprot("P12345", cfg=UniprotCfg())
+        ul.fetch_uniprot("P12345", cfg=UniprotCfg(delay=0))
 
 
 def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
@@ -83,8 +83,7 @@ def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
         base="https://example.org/api",
         timeout_connect=1,
         timeout_read=2,
-        rps=2,
-        burst=5,
+        delay=0.5,
     )
     ul.fetch_uniprot("P12345", cfg=cfg)
     assert called["url"] == "https://example.org/api/uniprotkb/P12345.json"

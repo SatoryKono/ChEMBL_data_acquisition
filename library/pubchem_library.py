@@ -14,26 +14,28 @@ from urllib.parse import quote
 
 import requests
 from requests import Session
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
-from .config import PubChemCfg
+from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
 
 
 logger = logging.getLogger(__name__)
 
-# A single shared session with retry/backoff for all HTTP calls.  PubChem
-# enforces fairly strict rate limits; the retry configuration helps to recover
-# from transient failures such as HTTP 5xx responses.
-_retry = Retry(
-    total=3,
-    backoff_factor=1.0,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["GET"],
-)
-_session: Session = requests.Session()
-_session.mount("http://", HTTPAdapter(max_retries=_retry))
-_session.mount("https://", HTTPAdapter(max_retries=_retry))
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+
+
+def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+    """Initialise the shared HTTP session.
+
+    Parameters
+    ----------
+    api:
+        Global API settings providing the ``User-Agent`` header.
+    retry:
+        Retry configuration applied to all requests.
+    """
+
+    global _session
+    _session = session_with_retry(api, retry)
 
 
 def url_encode(text: str) -> str:
@@ -141,12 +143,10 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def make_request(
-    url: str, cfg: PubChemCfg, delay: float = 3.0
-) -> Optional[Dict[str, Any]]:
+def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
     """Make an HTTP GET request and return parsed JSON.
 
-    The function sleeps for ``delay`` seconds before issuing the request in
+    The function sleeps for ``cfg.delay`` seconds before issuing the request in
     order to respect PubChem rate limits.  A shared session configured with
     retries is used to automatically retry transient failures.
 
@@ -156,9 +156,6 @@ def make_request(
         Endpoint URL to query.
     cfg:
         API configuration providing base URL and timeouts.
-    delay:
-        Time in seconds to wait before making the request. Defaults to three
-        seconds.
 
     Returns
     -------
@@ -167,7 +164,7 @@ def make_request(
         returns a non-success status code, or the payload cannot be decoded.
 
     """
-    time.sleep(delay)
+    time.sleep(cfg.delay)
     try:
         response = _session.get(url, timeout=(cfg.timeout_connect, cfg.timeout_read))
         if response.status_code == 404:
@@ -406,6 +403,7 @@ def process_compound(compound_name: str, cfg: PubChemCfg) -> Dict[str, str]:
 
 __all__ = [
     "url_encode",
+    "init_session",
     "make_request",
     "validate_cid",
     "get_cid",

@@ -33,6 +33,9 @@ from urllib.parse import urlparse
 
 import yaml
 import jsonschema
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 logger = logging.getLogger(__name__)
@@ -128,6 +131,7 @@ class UniprotCfg:
     retries: int = 3
     rps: int = 4
     burst: int = 5
+    delay: float = 0.25
 
 
 @dataclass
@@ -161,10 +165,10 @@ class PubChemCfg:
     retries: int = 3
     rps: int = 3
     burst: int = 5
+    delay: float = 3.0
 
 
 @dataclass
- 
 class PubMedCfg:
     """Settings for the PubMed API and related I/O."""
 
@@ -186,14 +190,14 @@ class SemanticScholarCfg:
     timeout_read: int = 10
     retries: int = 2
     encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
- 
+
+
 class ResourcesCfg:
     """Paths to static resource files used by the application."""
 
     dictionary_dir: Path = Path("dictionary")
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
- 
 
 
 @dataclass
@@ -283,6 +287,36 @@ class RetryCfg:
     )
 
 
+def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
+    """Return an HTTP session configured for retries and user agent.
+
+    Parameters
+    ----------
+    api:
+        Global API settings providing the ``User-Agent`` header.
+    retry:
+        Retry configuration specifying backoff behaviour.
+
+    Returns
+    -------
+    Session
+        Configured :class:`requests.Session` instance.
+    """
+
+    retry_cfg = Retry(
+        total=retry.max_attempts,
+        backoff_factor=retry.backoff_factor,
+        status_forcelist=retry.status_forcelist,
+        allowed_methods=["GET"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_cfg)
+    session = Session()
+    session.headers["User-Agent"] = api.user_agent
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 @dataclass
 class Config:
     """Aggregate project configuration."""
@@ -294,12 +328,12 @@ class Config:
     uniprot_mapping: UniprotMappingCfg = field(default_factory=UniprotMappingCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
- 
+
     pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
- 
+
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
- 
+
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -647,6 +681,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "retries": {"type": "integer", "minimum": 0},
                 "rps": {"type": "integer", "minimum": 1},
                 "burst": {"type": "integer", "minimum": 1},
+                "delay": {"type": "number", "minimum": 0},
             },
             "required": [
                 "base",
@@ -697,6 +732,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "retries": {"type": "integer", "minimum": 0},
                 "rps": {"type": "integer", "minimum": 1},
                 "burst": {"type": "integer", "minimum": 1},
+                "delay": {"type": "number", "minimum": 0},
             },
             "required": [
                 "base",
@@ -708,7 +744,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
- 
         "pubmed": {
             "type": "object",
             "properties": {
@@ -750,7 +785,9 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "timeout_read",
                 "retries",
                 "encodings",
- 
+            ],
+            "additionalProperties": False,
+        },
         "resources": {
             "type": "object",
             "properties": {
@@ -762,7 +799,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "dictionary_dir",
                 "iuphar_target_csv",
                 "iuphar_family_csv",
- 
             ],
             "additionalProperties": False,
         },
@@ -961,8 +997,9 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
+        if hasattr(service, "delay") and service.delay < 0:
+            raise ValueError(f"{name}.delay must be non-negative")
 
- 
     basic_services: list[tuple[str, Any]] = [
         ("pubmed", cfg.pubmed),
         ("semantic_scholar", cfg.semantic_scholar),
@@ -976,13 +1013,12 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if not service.encodings:
             raise ValueError(f"{name}.encodings must not be empty")
- 
+
     mapping = cfg.uniprot_mapping
     if not _valid_url(mapping.base):
         raise ValueError("uniprot_mapping.base must be a valid URL")
     if mapping.poll_interval <= 0 or mapping.timeout <= 0:
         raise ValueError("uniprot_mapping.poll_interval and timeout must be positive")
- 
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
@@ -1119,12 +1155,9 @@ __all__ = [
     "UniprotMappingCfg",
     "IupharCfg",
     "PubChemCfg",
-
     "PubMedCfg",
     "SemanticScholarCfg",
-
     "ResourcesCfg",
-
     "IoCfg",
     "JobsCfg",
     "BatchCfg",
@@ -1133,6 +1166,7 @@ __all__ = [
     "InitCfg",
     "RateCfg",
     "RetryCfg",
+    "session_with_retry",
     "LogCfg",
     "Config",
     "ConfigError",
