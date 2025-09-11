@@ -828,7 +828,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch publication metadata by PMID")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
-        "--input",
+        "--input-csv",
         dest="input_csv",
         default="input.csv",
         help="Input CSV path with PMID column",
@@ -868,7 +868,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = Config()
     pubmed_cfg = cfg.pubmed
     semsch_cfg = cfg.semantic_scholar
-    pmids = read_pmids(args.input, cfg=pubmed_cfg)
+    pmids = read_pmids(args.input_csv, cfg=pubmed_cfg)
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
 

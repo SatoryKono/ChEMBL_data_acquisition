@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from library import chembl_library as cl  # noqa: E402
-from library import io, write_csv_deterministic  # noqa: E402
+from library import io  # noqa: E402
 from library import pubchem_library as pl  # noqa: E402
 from library.chembl_client import ChemblClient  # noqa: E402
 from library.cli import (  # noqa: E402

@@ -93,6 +93,15 @@ python scripts/get_document_data.py pubmed \
 The ``tests/data/pmids.csv`` file contains a small set of PMIDs for
 experimentation.
 
+You can also run the PubMed pipeline directly using the library module:
+
+```bash
+python -m library.pubmed_library \
+    --input-csv tests/data/pmids.csv \
+    --output out/documents.csv \
+    --log-level INFO
+```
+
 ### scripts/get_target_data.py
 
 Fetch basic target information from ChEMBL:
@@ -107,9 +116,21 @@ python scripts/get_target_data.py chembl \
 
 Replace ``path/to/targets.csv`` with a CSV containing a ``chembl_id``
 column.
-
+ 
 The generated output will expose the same identifiers under the column
 ``target_chembl_id`` to align with validation schemas.
+ 
+### scripts/get_activities.py
+
+Generate dummy activity entries without contacting external services:
+
+```bash
+python scripts/get_activities.py --limit 500 --dry-run
+```
+
+The command logs that it would generate 500 activity rows and exits without
+creating any files.
+ 
 
 ## Updating Dependencies
 

@@ -35,10 +35,10 @@ def test_pubmed_library_main_smoke(
             for pid in pmids
         ]
 
-    def fake_fetch_openalex(session, pmid, cfg=None):
+    def fake_fetch_openalex(session, pmid, cfg=None, limiter=None):
         return {"OpenAlex.Error": ""}
 
-    def fake_fetch_crossref(session, doi, cfg=None):
+    def fake_fetch_crossref(session, doi, cfg=None, limiter=None):
         return {"crossref.Error": ""}
 
     class DummyLimiter:
@@ -54,7 +54,14 @@ def test_pubmed_library_main_smoke(
     monkeypatch.setattr(pl, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
     exit_code = pl.main(
-        ["--input", str(input_csv), "--output", str(output_csv), "--log-level", "ERROR"]
+        [
+            "--input-csv",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+            "--log-level",
+            "ERROR",
+        ]
     )
     assert exit_code == 0
     assert output_csv.exists()

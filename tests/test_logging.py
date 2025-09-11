@@ -1,9 +1,13 @@
 """Tests that warnings are redirected to the structured logger.
 
-ruff tests/test_warning_capture.py
-black tests/test_warning_capture.py
-mypy tests/test_warning_capture.py
-pytest tests/test_warning_capture.py
+Example
+-------
+Run linters and tests on this module with::
+
+    ruff tests/test_logging.py
+    black tests/test_logging.py
+    mypy tests/test_logging.py
+    pytest tests/test_logging.py
 """
 
 from __future__ import annotations
@@ -34,6 +38,6 @@ def test_warnings_are_logged() -> None:
     )
     record = _parse(result.stdout)[0]
     assert record["level"] == "WARNING"
-    assert record["event"] == "py.warnings"
-    assert "problem occurred" in str(record.get("msg"))
+    assert record["logger"] == "py.warnings"
+    assert "problem occurred" in str(record.get("event"))
     assert record["run_id"] == "rid"
