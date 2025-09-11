@@ -24,6 +24,7 @@ tests/            Pytest suite and sample datasets
 get_*.py          Command-line utilities for specific tasks
 mapper_main.py    Mapping CLI
 table_quality_main.py  CSV profiling CLI
+scripts/          Development helpers
 config.yaml       Global configuration defaults
 ```
 
@@ -37,6 +38,7 @@ Individual scripts provide specialised data retrieval utilities:
 * ``get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.
 * ``get_testitem_data.py`` – download compound data and enrich with PubChem.
 * ``get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
+* ``scripts/check_determinism.py`` – ensure deterministic CSV output.
 
 Detailed command line examples using the bundled smoke datasets can be found in
 ``docs/USAGE.md``.
@@ -330,9 +332,10 @@ Formatting, linting and type checking are handled by *black*, *ruff* and
 *mypy* respectively. Run the following before committing changes:
 
 ```bash
-black get_*.py library mapper_main.py table_quality_main.py
-ruff check get_*.py library mapper_main.py table_quality_main.py
-mypy get_*.py library mapper_main.py table_quality_main.py
+black get_*.py library mapper_main.py table_quality_main.py scripts
+ruff check get_*.py library mapper_main.py table_quality_main.py scripts
+mypy get_*.py library mapper_main.py table_quality_main.py scripts
+python scripts/check_determinism.py
 pytest
 ```
 

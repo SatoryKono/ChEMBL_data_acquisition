@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python scripts/check_determinism.py
+      - run: black get_*.py library mapper_main.py table_quality_main.py scripts --check
+      - run: ruff check get_*.py library mapper_main.py table_quality_main.py scripts
+      - run: mypy get_*.py library mapper_main.py table_quality_main.py scripts
+      - run: pytest
