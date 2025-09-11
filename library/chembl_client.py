@@ -28,6 +28,10 @@ _session_lock = threading.Lock()
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session.
 
+    The provided ``api`` and ``retry`` configurations are forwarded to
+    :func:`session_with_retry`, ensuring that subsequent requests use the
+    correct ``User-Agent`` and retry policy.
+
     Parameters
     ----------
     api:

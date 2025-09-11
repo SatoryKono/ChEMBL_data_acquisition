@@ -14,7 +14,9 @@ import pytest
 
 from cachetools import LRUCache
 
+
 from library import chembl_client
+
 
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
@@ -49,6 +51,16 @@ class DummySession:
         return DummyResponse()
 
 
+
+def test_init_session_sets_user_agent(monkeypatch) -> None:
+    """Session should include the configured ``User-Agent`` header."""
+    monkeypatch.setattr("library.chembl_client._session", None)
+    cfg = ApiCfg(user_agent="test-agent/1.0 (mailto:test@example.org)")
+    init_session(cfg, RetryCfg())
+    session = chembl_client._session
+    assert session is not None
+    assert session.headers.get("User-Agent") == cfg.user_agent
+
 class FakeTime:
     def __init__(self) -> None:
         self.now = 0.0
@@ -60,6 +72,7 @@ class FakeTime:
     def sleep(self, delay: float) -> None:
         self.sleeps.append(delay)
         self.now += delay
+
 
 
 @responses.activate
@@ -188,6 +201,10 @@ def test_clear_cache(monkeypatch) -> None:
  
 
 
+    assert urls[0] not in chembl_client._CACHE
+    assert len(chembl_client._CACHE) == 2
+
+
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     fake_time = FakeTime()
     monkeypatch.setattr(rl, "time", fake_time)
@@ -202,4 +219,3 @@ def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     assert fake_time.sleeps == [1.0]
     with rl._limiters_lock:
         rl._limiters.clear()
-
