@@ -291,5 +291,7 @@ def test_log_level_valid(tmp_path: Path) -> None:
 def test_log_level_invalid(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("log:\n  level: verbose\n")
-    with pytest.raises(ValueError, match="log.level"):
+    with pytest.raises(ValueError) as exc:
         load_config(path)
+    valid = ", ".join(sorted(logging.getLevelNamesMapping()))
+    assert str(exc.value) == f"log.level must be one of {valid}, got 'verbose'"
