@@ -3,6 +3,7 @@ import responses
 from library import pubchem_library as pl
 
 
+
 def test_get_cid_from_smiles_uses_base(monkeypatch) -> None:
     """PubChem requests should respect the configured base URL."""
     called: dict[str, object] = {}
@@ -24,6 +25,16 @@ def test_get_cid_from_smiles_uses_base(monkeypatch) -> None:
 def test_make_request_uses_timeout(monkeypatch) -> None:
     called: dict[str, tuple[int, int]] = {}
 
+    orig_get = pl._session.get
+
+    def capture(url: str, timeout: tuple[int, int]):
+        called["timeout"] = timeout
+        return orig_get(url, timeout=timeout)
+
+    monkeypatch.setattr(pl._session, "get", capture)
+    monkeypatch.setattr(pl.time, "sleep", lambda s: None)
+
+
     class Resp:
         status_code = 200
 
@@ -39,6 +50,7 @@ def test_make_request_uses_timeout(monkeypatch) -> None:
 
     monkeypatch.setattr(pl._session, "get", capture)
     monkeypatch.setattr(pl, "sleep", lambda s: None)
+
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, delay=0, retries=1)
     responses.add(responses.GET, "https://example.org", json={}, status=200)
     pl.make_request("https://example.org", cfg)
