@@ -5,44 +5,80 @@ from __future__ import annotations
 from typing import Any
 
 import requests
-import responses
-from library.chembl_client import request_json
-from library.config import ApiCfg
+
+import time
+from library.chembl_client import init_session, request_json
+from library.config import ApiCfg, RetryCfg
 
 
-class CaptureSession(requests.Session):
-    def __init__(self) -> None:
-        super().__init__()
+class DummyResponse:
+    def __enter__(self) -> "DummyResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        pass
+
+    def raise_for_status(self) -> None:  # pragma: no cover - no error
+        pass
+
+    def json(self) -> dict[str, Any]:
+        return {"ok": True}
+
+
+class DummySession:
+    def __init__(self, *, fail_first: bool = False) -> None:
         self.timeout: Any = None
+        self.calls: list[int] = []
+        self.fail_first = fail_first
 
-    def get(self, url: str, timeout: Any | None = None, **kwargs):  # type: ignore[override]
+    def get(self, url: str, timeout: Any) -> DummyResponse:
+        self.calls.append(id(self))
         self.timeout = timeout
-        return super().get(url, timeout=timeout, **kwargs)
+        if self.fail_first and len(self.calls) == 1:
+            raise requests.RequestException("boom")
+        return DummyResponse()
 
 
 @responses.activate
 def test_request_json_uses_cfg(monkeypatch) -> None:
-    captured: dict[str, Any] = {}
+    session = DummySession(fail_first=True)
+    monkeypatch.setattr("library.chembl_client._session", session)
+    monkeypatch.setattr("library.chembl_client._CACHE", {})
 
-    def fake_session() -> CaptureSession:
-        sess = CaptureSession()
-        captured["session"] = sess
-        return sess
+    sleep_times: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda t: sleep_times.append(t))
 
-    def fake_adapter(max_retries):
-        captured["retries"] = max_retries.total
-        captured["backoff"] = max_retries.backoff_factor
-        return requests.adapters.HTTPAdapter(max_retries=max_retries)
+    def fail_session(*args, **kwargs):  # pragma: no cover - ensure no new session
+        raise AssertionError("requests.Session should not be called")
 
-    monkeypatch.setattr(requests, "Session", fake_session)
-    monkeypatch.setattr("library.chembl_client.HTTPAdapter", fake_adapter)
-    responses.add(responses.GET, "http://example.com", json={"ok": True})
+    monkeypatch.setattr(requests, "Session", fail_session)
 
-    cfg = ApiCfg(timeout_connect=1, timeout_read=2, retries=4, backoff_factor=0.1)
-    data = request_json("http://example.com", cfg=cfg)
-    assert data == {"ok": True}
+    cfg = ApiCfg(timeout_connect=1, timeout_read=2, retries=2, backoff_factor=0.5)
+    request_json("http://example.com", cfg=cfg)
 
-    session = captured["session"]
     assert session.timeout == (1, 2)
-    assert captured["retries"] == 4
-    assert captured["backoff"] == 0.1
+    assert len(session.calls) == 2
+    assert sleep_times == [0.5]
+
+
+def test_request_json_reuses_session(monkeypatch) -> None:
+    dummy = DummySession()
+
+    def fake_session_with_retry(api: ApiCfg, retry: RetryCfg) -> DummySession:
+        return dummy
+
+    monkeypatch.setattr(
+        "library.chembl_client.session_with_retry", fake_session_with_retry
+    )
+    init_session(ApiCfg(), RetryCfg())
+
+    def fail_session(*args, **kwargs):  # pragma: no cover - ensure no new session
+        raise AssertionError("requests.Session should not be called")
+
+    monkeypatch.setattr(requests, "Session", fail_session)
+    monkeypatch.setattr("library.chembl_client._CACHE", {})
+
+    request_json("http://example.com/1", cfg=ApiCfg())
+    request_json("http://example.com/2", cfg=ApiCfg())
+
+    assert dummy.calls == [id(dummy), id(dummy)]
