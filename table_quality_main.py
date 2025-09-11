@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import os
 from pathlib import Path
 from typing import Sequence
@@ -16,11 +15,9 @@ from library.cli import (
     configure_logger,
     LoggerConfig,
 )
+from library.log import logger
 
 from library.table_quality import analyze_table_quality
-
-
-logger = logging.getLogger(__name__)
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

@@ -7,7 +7,6 @@ This script reads an input CSV file and re-serialises it deterministically using
 from __future__ import annotations
 
 import argparse
-import logging
 import time
 from pathlib import Path
 from typing import Sequence
@@ -15,10 +14,15 @@ from typing import Sequence
 import pandas as pd
 
 from library.csv_utils import write_csv_deterministic
+
+from library.log import logger
+from library.logging_setup import LoggerConfig, configure_logger
+
 from library.cli import add_common_arguments
 
 
 logger = logging.getLogger(__name__)
+
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -46,7 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
 
     args = parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper()))
+    configure_logger(LoggerConfig(level=args.log_level))
     start = time.perf_counter()
     df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
     output = args.output_csv or Path(args.input_csv).with_name(
