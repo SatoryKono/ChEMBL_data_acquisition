@@ -35,6 +35,13 @@ parameters or environment variables.
 | `max_retries` | `3` | `3` | Number of automatic retries for transient errors. |
 | `backoff_factor` | `0.3` | `0.3` | Exponential backoff multiplier between retries. |
 
+### `chembl`
+
+| Field | Default | Fallback | Description |
+|-------|---------|----------|-------------|
+| `cache_ttl` | `3600` | `3600` | Seconds to cache ChEMBL API responses. |
+| `cache_maxsize` | `1024` | `1024` | Maximum number of cached ChEMBL responses. |
+
 ### `output`
 
 | Field | Default | Fallback | Description |
@@ -70,6 +77,8 @@ to the same configuration keys as their longer forms:
 | `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__API__TIMEOUT_READ` |
 | `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
 | `CHEMBL_DA_CACHE_DIR` | `CHEMBL_DA__IO__CACHE_DIR` |
+| `CHEMBL_DA_CACHE_TTL` | `CHEMBL_DA__CHEMBL__CACHE_TTL` |
+| `CHEMBL_DA_CACHE_MAXSIZE` | `CHEMBL_DA__CHEMBL__CACHE_MAXSIZE` |
 | `CHEMBL_DA_LIMITER_CACHE_MAXSIZE` | `CHEMBL_DA__RATE__LIMITER_CACHE_MAXSIZE` |
 | `CHEMBL_DA_LIMITER_CACHE_TTL` | `CHEMBL_DA__RATE__LIMITER_CACHE_TTL` |
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |

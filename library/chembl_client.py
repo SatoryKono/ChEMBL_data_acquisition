@@ -28,7 +28,7 @@ class ChemblClient:
     retry:
         Retry configuration applied to all requests.
     chembl:
-        Optional ChEMBL-specific configuration controlling cache TTL.
+        Optional ChEMBL-specific configuration controlling cache TTL and size.
     session:
         Optional pre-configured :class:`requests.Session` instance; primarily
         intended for tests.
@@ -50,7 +50,10 @@ class ChemblClient:
         retry = retry or RetryCfg()
         self.session = session or session_with_retry(api, retry)
         ttl = chembl.cache_ttl if chembl is not None else ChemblCfg().cache_ttl
-        self.cache = TTLCache(maxsize=1024, ttl=ttl)
+        maxsize = (
+            chembl.cache_maxsize if chembl is not None else ChemblCfg().cache_maxsize
+        )
+        self.cache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._cache_lock = threading.Lock()
 
     def request_json(
@@ -86,7 +89,6 @@ class ChemblClient:
         with self._cache_lock:
             cached = self.cache.get(cache_key)
             if cached is not None:
-
                 logger.info(
                     "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
                 )
@@ -94,7 +96,6 @@ class ChemblClient:
             logger.info(
                 "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
             )
-
 
         last_exc: requests.RequestException | ValueError | None = None
 
