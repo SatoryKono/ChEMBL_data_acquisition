@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import requests
-from cachetools import LRUCache
+from cachetools import LRUCache  # type: ignore[import-untyped]
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry

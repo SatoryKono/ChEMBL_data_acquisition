@@ -9,14 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Literal
-import logging
+from .log import logger
 
 import pandas as pd
 
 from .config import Config
 from .io import write_csv
-
-logger = logging.getLogger(__name__)
 
 
 EntityName = Literal[

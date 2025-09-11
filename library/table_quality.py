@@ -8,7 +8,6 @@ use without external dependencies beyond :mod:`pandas` and :mod:`numpy`.
 
 from __future__ import annotations
 
-import logging
 import re
 import warnings
 from pathlib import Path
@@ -19,7 +18,7 @@ import numpy as np
 import pandas as pd
 from pandas.errors import DtypeWarning
 
-logger = logging.getLogger(__name__)
+from .log import logger
 
 # Precompiled regular expressions for pattern coverage
 _DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
