@@ -9,9 +9,10 @@ hashes differ.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 import argparse
 import logging
-from pathlib import Path
 from tempfile import TemporaryDirectory
 import sys
 
@@ -27,7 +28,10 @@ except ImportError as exc:  # pragma: no cover - import-time check
         " Install it with 'pip install pandas'."
     ) from exc
 
-from library.csv_utils import sha256_file, write_csv_deterministic  # noqa: E402
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from library.csv_utils import sha256_file, write_csv_deterministic
+
 
 
 def run_check(tmp_dir: Path) -> bool:
