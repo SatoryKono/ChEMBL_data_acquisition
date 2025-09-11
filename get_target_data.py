@@ -1,4 +1,11 @@
-"""Command line interface for retrieving target data from external sources."""
+"""Command line interface for retrieving target data from external sources.
+
+Example
+-------
+Fetch ChEMBL target information for identifiers in ``targets.csv``::
+
+    python get_target_data.py chembl --config config.yaml --input targets.csv
+"""
 
 from __future__ import annotations
 
@@ -20,6 +27,7 @@ from library import uniprot_library as uu
 
 from library.cli import (
     apply_config_overrides,
+    build_root_parser,
     configure_logging,
 )
 
@@ -61,36 +69,25 @@ def _first_token(value: str | None) -> str:
 def build_parser() -> argparse.ArgumentParser:
     """Create and return the top-level CLI argument parser.
 
-    The command line interface is organised into sub-commands for
-    retrieving data from individual sources (UniProt, ChEMBL and IUPHAR)
-    as well as a convenience ``all`` command that runs all pipelines and
-    merges their outputs.
+    The command line interface is organised into sub-commands for retrieving
+    data from individual sources (UniProt, ChEMBL and IUPHAR) as well as a
+    convenience ``all`` command that runs all pipelines and merges their
+    outputs.
     """
 
-    parser = argparse.ArgumentParser(description="Target data utilities")
-    parser.add_argument(
-        "--config", default="config.yaml", help="Path to YAML configuration file"
+    root = build_root_parser()
+    parser = argparse.ArgumentParser(
+        description="Target data utilities", parents=[root]
     )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        help="Logging level (DEBUG, INFO, WARNING)",
-    )
-    parser.add_argument(
-        "--print-config",
-        action="store_true",
-        help="Print effective configuration and exit",
-    )
-
-    #   parser = base_parser("Target data utilities", column="chembl_id", chunk_size=5)
-
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # ----------------------------
     # UniProt sub-command
     # ----------------------------
     uniprot = subparsers.add_parser(
-        "uniprot", help="Extract information for UniProt accessions"
+        "uniprot",
+        parents=[root],
+        help="Extract information for UniProt accessions",
     )
     uniprot.add_argument(
         "--input",
@@ -133,7 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
     # ChEMBL sub-command
     # ----------------------------
     chembl = subparsers.add_parser(
-        "chembl", help="Retrieve target information from ChEMBL"
+        "chembl",
+        parents=[root],
+        help="Retrieve target information from ChEMBL",
     )
     chembl.add_argument(
         "--input",
@@ -172,7 +171,9 @@ def build_parser() -> argparse.ArgumentParser:
     # IUPHAR sub-command
     # ----------------------------
     iuphar = subparsers.add_parser(
-        "iuphar", help="Map UniProt accessions to IUPHAR classifications"
+        "iuphar",
+        parents=[root],
+        help="Map UniProt accessions to IUPHAR classifications",
     )
     iuphar.add_argument(
         "--input",
@@ -213,6 +214,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ----------------------------
     all_cmd = subparsers.add_parser(
         "all",
+        parents=[root],
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
     )
     all_cmd.add_argument(
@@ -289,6 +291,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="File encoding for input and output CSV files",
     )
     all_cmd.set_defaults(func=run_all)
+
+    setattr(
+        parser,
+        "subparsers_map",
+        {
+            "uniprot": uniprot,
+            "chembl": chembl,
+            "iuphar": iuphar,
+            "all": all_cmd,
+        },
+    )
 
     return parser
 
@@ -632,9 +645,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
     try:
         cfg: Config = apply_config_overrides(
-            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+            args, subparser, args.config, mapping={"timeout": "api.timeout_read"}
         )
         if args.print_config:
             print_config(cfg)

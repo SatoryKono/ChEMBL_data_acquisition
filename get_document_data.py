@@ -12,11 +12,11 @@ provides three sub-commands:
 ``all``
     Run the ChEMBL and PubMed pipelines and merge the results.
 
-Example:
+Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python get_document_data.py pubmed pmids.csv output.csv
+    python get_document_data.py pubmed --config config.yaml --input pmids.csv --output output.csv
 
 The input file must contain a ``PMID`` column.
 
@@ -45,7 +45,7 @@ from library import document_postprocessing as dp
 from library.table_quality import analyze_table_quality
 from library.cli import (
     apply_config_overrides,
-    build_parser as base_parser,
+    build_root_parser,
     configure_logging,
 )
 
@@ -225,12 +225,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_documents(
+        df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
             cfg=cfg.api,
             chunk_size=args.chunk_size,
             timeout=args.timeout,
-        )  # type: ignore[attr-defined]
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -278,12 +278,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(
+        doc_df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
             cfg=cfg.api,
             chunk_size=args.chunk_size,
             timeout=args.timeout,
-        )  # type: ignore[attr-defined]
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
@@ -370,10 +370,15 @@ def build_parser() -> argparse.ArgumentParser:
         Parser populated with all sub-commands.
 
     """
-    parser = base_parser("Document data utilities", column="chembl_id", chunk_size=5)
+    root = build_root_parser()
+    parser = argparse.ArgumentParser(
+        description="Document data utilities", parents=[root]
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
+    pubmed = sub.add_parser(
+        "pubmed", parents=[root], help="Fetch data from PubMed and related APIs"
+    )
     pubmed.add_argument(
         "--input",
         dest="input_csv",
@@ -407,7 +412,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pubmed.set_defaults(func=run_pubmed)
 
-    chembl = sub.add_parser("chembl", help="Fetch document information from ChEMBL")
+    chembl = sub.add_parser(
+        "chembl", parents=[root], help="Fetch document information from ChEMBL"
+    )
     chembl.add_argument(
         "--input",
         dest="input_csv",
@@ -438,7 +445,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chembl.set_defaults(func=run_chembl)
 
-    all_cmd = sub.add_parser("all", help="Run both ChEMBL and PubMed pipelines")
+    all_cmd = sub.add_parser(
+        "all", parents=[root], help="Run both ChEMBL and PubMed pipelines"
+    )
     all_cmd.add_argument(
         "--input",
         dest="input_csv",
@@ -484,6 +493,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     all_cmd.set_defaults(func=run_all)
 
+    setattr(
+        parser,
+        "subparsers_map",
+        {"pubmed": pubmed, "chembl": chembl, "all": all_cmd},
+    )
+
     return parser
 
 
@@ -491,9 +506,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
     try:
         cfg: Config = apply_config_overrides(
-            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+            args, subparser, args.config, mapping={"timeout": "api.timeout_read"}
         )
         if args.print_config:
             print_config(cfg)
