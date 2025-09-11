@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import pandera as pa
 import yaml
 
 from library import io
@@ -30,6 +31,27 @@ def test_read_csv_missing_column(tmp_path: Path) -> None:
         writer.writerow(["1"])
     with pytest.raises(ValueError):
         io.read_csv(path, cfg=IoCfg(), required_columns=["a", "b"])
+
+
+def test_read_csv_handles_dtype_and_na() -> None:
+    path = Path("tests/data/io_types.csv")
+    schema = pa.DataFrameSchema(
+        {
+            "date": pa.Column(pa.DateTime, nullable=True),
+        }
+    )
+    df = io.read_csv(
+        path,
+        cfg=IoCfg(),
+        dtype={"flag": "boolean"},
+        na_values=["#N/A"],
+        parse_dates=["date"],
+        schema=schema,
+    )
+    assert df["flag"].tolist() == [True, False, pd.NA]
+    assert df["flag"].dtype == "boolean"
+    assert str(df["date"].dtype).startswith("datetime64")
+    assert pd.isna(df.loc[2, "date"])
 
 
 def test_write_csv_creates_single_metadata_file(

@@ -10,11 +10,12 @@ from __future__ import annotations
 import csv
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Any
 import subprocess
 import sys
 
 import pandas as pd
+import pandera as pa
 import yaml
 
 
@@ -84,7 +85,11 @@ def read_csv(
     cfg: IoCfg,
     sep: str | None = None,
     encoding: str | None = None,
+    dtype: Any = None,
+    na_values: Any = None,
+    parse_dates: Any = None,
     required_columns: Iterable[str] | None = None,
+    schema: pa.DataFrameSchema | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
@@ -98,9 +103,19 @@ def read_csv(
         Field delimiter used in the CSV file. Defaults to ``cfg.csv_sep``.
     encoding:
         Character encoding of the CSV file. Defaults to ``cfg.csv_encoding``.
+    dtype:
+        Optional mapping of column names to data types forwarded to
+        :func:`pandas.read_csv`.
+        na_values:
+            Additional strings to recognise as ``NA``/missing values.
+        parse_dates:
+            Column names to parse as dates via :func:`pandas.read_csv`.
     required_columns:
         Optional list of column names that must be present in the loaded
         DataFrame. A :class:`ValueError` is raised if any are missing.
+    schema:
+        Optional :class:`pandera.DataFrameSchema` used for advanced
+        validation and type coercion.
 
     Returns
     -------
@@ -110,7 +125,16 @@ def read_csv(
     """
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
-    df = pd.read_csv(path, sep=sep, encoding=encoding)
+    df = pd.read_csv(
+        path,
+        sep=sep,
+        encoding=encoding,
+        dtype=dtype,
+        na_values=na_values,
+        parse_dates=parse_dates,
+    )
+    if schema is not None:
+        df = schema.validate(df)
     if required_columns is not None:
         validation.validate_columns(df, required_columns)
     return df
