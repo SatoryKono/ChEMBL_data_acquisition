@@ -6,7 +6,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from .chembl_client import _chunked, request_json
+from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg
 from .log import logger
 
@@ -90,7 +90,11 @@ TESTITEM_COLUMNS = [
 
 
 def get_assay(
-    chembl_assay_id: str, *, cfg: ApiCfg, timeout: float | None = None
+    chembl_assay_id: str,
+    *,
+    client: ChemblClient,
+    cfg: ApiCfg,
+    timeout: float | None = None,
 ) -> pd.DataFrame:
     """Retrieve assay information as a DataFrame.
 
@@ -98,6 +102,8 @@ def get_assay(
     ----------
     chembl_assay_id:
         Identifier of the assay to fetch.
+    client:
+        Instance used for HTTP requests and caching.
     cfg:
         API configuration providing base URL and timeouts.
     timeout:
@@ -114,7 +120,7 @@ def get_assay(
     base = cfg.chembl_base.rstrip("/")
     url = f"{base}/assay/{chembl_assay_id}?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    data = request_json(url, cfg=cfg, timeout=effective_timeout)
+    data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
     items = data.get("assays") or data.get("assay") or []
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
@@ -127,6 +133,7 @@ def get_assay(
 def get_assays(
     ids: Iterable[str],
     *,
+    client: ChemblClient,
     cfg: ApiCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
@@ -138,6 +145,8 @@ def get_assays(
     ----------
     ids:
         Assay identifiers to retrieve.
+    client:
+        Instance used for HTTP requests and caching.
     cfg:
         API configuration providing base URL and timeouts.
     chunk_size:
@@ -168,7 +177,7 @@ def get_assays(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
         )
         url = f"{base}&assay_chembl_id__in={chunk_key}"
-        data = request_json(url, cfg=cfg, timeout=effective_timeout)
+        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
             df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
@@ -191,6 +200,7 @@ def get_assays(
 def get_activities(
     ids: Iterable[str],
     *,
+    client: ChemblClient,
     cfg: ApiCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
@@ -201,6 +211,8 @@ def get_activities(
     ----------
     ids:
         Activity identifiers to retrieve.
+    client:
+        Instance used for HTTP requests and caching.
     cfg:
         API configuration providing base URL and timeouts.
     chunk_size:
@@ -226,7 +238,7 @@ def get_activities(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
         )
         url = f"{base}&activity_id__in={chunk_key}"
-        data = request_json(url, cfg=cfg, timeout=effective_timeout)
+        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
@@ -246,6 +258,7 @@ def get_activities(
 def get_testitem(
     ids: Iterable[str],
     *,
+    client: ChemblClient,
     cfg: ApiCfg,
     chunk_size: int = 5,
     timeout: float | None = None,
@@ -256,6 +269,8 @@ def get_testitem(
     ----------
     ids:
         Molecule identifiers to retrieve.
+    client:
+        Instance used for HTTP requests and caching.
     cfg:
         API configuration providing base URL and timeouts.
     chunk_size:
@@ -281,7 +296,7 @@ def get_testitem(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
         )
         url = f"{base}&molecule_chembl_id__in={chunk_key}"
-        data = request_json(url, cfg=cfg, timeout=effective_timeout)
+        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]

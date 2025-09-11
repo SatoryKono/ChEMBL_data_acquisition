@@ -9,7 +9,7 @@ from typing import Sequence
 import pandas as pd
 import requests
 from library.config import Config, RetryCfg, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
@@ -124,7 +124,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Initialise HTTP session for subsequent ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    client = ChemblClient(cfg.api, RetryCfg())
 
     try:
         ids = io.read_ids(
@@ -142,7 +142,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
     try:
         df = cl.get_testitem(
-            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+            ids,
+            client=client,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve compounds: %s", exc)

@@ -39,7 +39,7 @@ from library.config import (
     print_config,
     _serialize_paths,
 )
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -276,7 +276,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Configure session for ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    client = ChemblClient(cfg.api, RetryCfg())
 
     try:
         ids = io.read_ids(
@@ -293,6 +293,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     try:
         df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
+            client=client,
             cfg=cfg.api,
             chunk_size=args.chunk_size,
             timeout=args.timeout,
@@ -386,7 +387,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare shared session before performing any API calls
-    init_session(cfg.api, RetryCfg())
+    client = ChemblClient(cfg.api, RetryCfg())
 
     try:
         ids = io.read_ids(
@@ -403,6 +404,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     try:
         doc_df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
+            client=client,
             cfg=cfg.api,
             chunk_size=args.chunk_size,
             timeout=args.timeout,
