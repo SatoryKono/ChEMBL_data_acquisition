@@ -1,7 +1,7 @@
 """Post-processing utilities for document metadata.
 
 This module normalises and enriches the combined document information
-produced by :mod:`get_document_data.py`.  The transformation is a
+produced by :mod:`scripts.get_document_data`.  The transformation is a
 translation of a Power Query script into ``pandas`` operations.
 """
 
@@ -167,7 +167,7 @@ def postprocess_documents(
     Parameters
     ----------
     df:
-        Combined table produced by :mod:`get_document_data.py`.
+        Combined table produced by :mod:`scripts.get_document_data`.
     required_columns:
         Optional columns that must exist in ``df`` before processing. If
         ``None`` (the default), no schema validation is performed.
@@ -266,7 +266,7 @@ def postprocess_file(
     Parameters
     ----------
     input_path:
-        CSV file produced by ``get_document_data.py all``.
+        CSV file produced by ``scripts/get_document_data.py all``.
     output_path:
         Destination for the cleaned CSV file.
     cfg:
