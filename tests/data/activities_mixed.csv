@@ -1,0 +1,3 @@
+activity_id,testitem_id,target_id,standard_type,standard_value,relation,units
+1,CHEMBL1,CHEMBL2,IC50,5.0,<,5 μM
+2,CHEMBL3,CHEMBL4,IC50,-1.0,>,10 μM
