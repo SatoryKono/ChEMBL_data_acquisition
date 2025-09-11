@@ -12,6 +12,8 @@ import logging
 
 import pandas as pd
 
+from .config import IoCfg
+
 logger = logging.getLogger(__name__)
 
 
@@ -295,8 +297,9 @@ def postprocess_file(
     input_path: Path | str,
     output_path: Path | str,
     *,
-    sep: str = ",",
-    encoding: str = "utf8",
+    cfg: IoCfg,
+    sep: str | None = None,
+    encoding: str | None = None,
 ) -> None:
     """Read a CSV, post-process and write the result.
 
@@ -306,10 +309,12 @@ def postprocess_file(
         Path to the CSV file produced by ``get_target_data.py all``.
     output_path:
         Destination path for the cleaned CSV file.
+    cfg:
+        I/O configuration providing default CSV parameters.
     sep:
-        Field delimiter of the CSV files.
+        Field delimiter of the CSV files. Defaults to ``cfg.csv_sep``.
     encoding:
-        Text encoding of the CSV files.
+        Text encoding of the CSV files. Defaults to ``cfg.csv_encoding``.
 
     Tests
     -----
@@ -317,6 +322,8 @@ def postprocess_file(
     :func:`tests.test_target_postprocessing.test_postprocess_file_roundtrip`.
 
     """
+    sep = sep or cfg.csv_sep
+    encoding = encoding or cfg.csv_encoding
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_targets(df)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
