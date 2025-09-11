@@ -125,6 +125,12 @@ def write_csv_deterministic(
         memory usage for large tables. ``None`` (the default) writes the
         dataframe in a single call.
 
+    Notes
+    -----
+    The input ``df`` is mutated in-place (column order, sorting and normalisation)
+    to minimise memory usage. Callers that need to preserve the original data
+    should pass ``df.copy()``.
+
     Returns
     -------
     pathlib.Path
@@ -139,21 +145,26 @@ def write_csv_deterministic(
         msg = f"chunksize must be a positive integer, got {chunksize}"
         raise ValueError(msg)
 
-    work = df.copy()
+    # Operations below mutate ``df`` directly to avoid unnecessary copies.
+    # Callers should pass ``df.copy()`` if the original frame must remain
+    # unchanged.
+    work = df
 
-    # Determine column order
+    # Determine column order using ``reindex`` which can avoid materialising
+    # a full copy when ``copy=False`` is passed.  This keeps memory overhead
+    # proportional to the number of columns rather than the entire DataFrame.
     if col_order is not None:
         head = [c for c in col_order if c in work.columns]
         tail = sorted(c for c in work.columns if c not in head)
-        work = work[head + tail]
+        work = work.reindex(columns=head + tail, copy=False)
     else:
-        work = work[sorted(work.columns)]
+        work = work.reindex(columns=sorted(work.columns), copy=False)
 
-    # Sort rows deterministically without creating a new DataFrame
+    # Sort rows deterministically in-place using a stable algorithm.
     sort_cols = list(key_cols) if key_cols is not None else list(work.columns)
     work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
-    # Normalise bool and date columns
+    # Normalise bool and date columns without creating intermediary frames.
     for col in work.columns:
         s = work[col]
         if ptypes.is_bool_dtype(s):

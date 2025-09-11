@@ -21,3 +21,4 @@ types-openpyxl>=3.1.5
 hypothesis==6.138.15
 responses==0.25.8
 cachetools==5.3.2
+psutil>=5.9.0

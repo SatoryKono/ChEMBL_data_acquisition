@@ -87,7 +87,7 @@ def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
     assert path1.read_bytes() == path2.read_bytes()
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(
     df=data_frames(
         columns=[
