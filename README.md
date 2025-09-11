@@ -9,13 +9,20 @@ parsing, validation, aggregation and export of tabular data.
 ```bash
 pip install .[dev]
 ```
-
+ 
+   ```bash
+   pip install .
+   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, psutil, pre-commit, ...)
+   pip install .[dev]
+   ```
+ 
 The command installs the project together with development tools such as
 ``black``, ``ruff``, ``mypy`` and ``pytest``. Sensitive configuration like API
 tokens should be stored in a local ``.env`` file – see
 [`Конфигурация через .env`](#конфигурация-через-env) for details.
 
 ## Quick Start
+ 
 
 1. **Install dependencies** – see [Установка](#установка).
 
