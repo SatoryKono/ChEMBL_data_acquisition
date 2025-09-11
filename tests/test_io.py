@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 from pathlib import Path
 
 import pandas as pd
@@ -64,3 +65,15 @@ def test_write_meta_serialises_paths(tmp_path: Path) -> None:
     meta = yaml.safe_load(meta_path.read_text())
     assert isinstance(meta["config"]["io"]["output_dir"], str)
     assert meta["config"]["io"]["output_dir"] == str(cfg.io.output_dir)
+
+
+def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
+    df = pd.DataFrame({"b": [3, 1], "a": [4.0, 2.0]})
+    path = tmp_path / "out.csv"
+    cfg = Config()
+    io.write_csv(df, path, cfg=cfg)
+    first_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    shuffled = df.sample(frac=1).reset_index(drop=True)[["b", "a"]]
+    io.write_csv(shuffled, path, cfg=cfg)
+    second_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert first_hash == second_hash

@@ -126,6 +126,10 @@ def write_csv(
 ) -> None:
     """Write ``df`` to ``path`` as CSV and store metadata.
 
+    Columns are sorted alphabetically and rows lexicographically to ensure
+    deterministic output. Values are written using Unix line endings and a
+    consistent floating-point representation.
+
     Parameters
     ----------
     df:
@@ -143,7 +147,16 @@ def write_csv(
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, sep=sep, encoding=encoding)
+    sorted_df = df.sort_index(axis=1)
+    sorted_df = sorted_df.sort_values(by=list(sorted_df.columns))
+    sorted_df.to_csv(
+        path,
+        index=False,
+        sep=sep,
+        encoding=encoding,
+        lineterminator="\n",
+        float_format="%.6g",
+    )
     _write_meta(Path(path), cfg)
 
 
