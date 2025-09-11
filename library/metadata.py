@@ -25,6 +25,9 @@ from .log import logger
 # ``timezone.utc`` provides the same value and works on older versions.
 UTC = timezone.utc  # noqa: UP017
 
+# Cached Git SHA for the repository, populated on first lookup.
+_GIT_SHA: str | None = None
+
 
 class Stats(TypedDict):
     """Execution statistics written to the metadata file."""
@@ -62,13 +65,18 @@ def _git_sha() -> str:
     If Git is unavailable, ``"UNKNOWN"`` is returned and a warning is logged.
     """
 
-    repo_root = Path(__file__).resolve().parent.parent
-    try:
-        result = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root)
-        return result.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        logger.warning("Unable to determine git SHA: %s", exc)
-        return "UNKNOWN"
+    global _GIT_SHA
+    if _GIT_SHA is None:
+        repo_root = Path(__file__).resolve().parent.parent
+        try:
+            result = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=repo_root
+            )
+            _GIT_SHA = result.decode().strip()
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            logger.warning("Unable to determine git SHA: %s", exc)
+            _GIT_SHA = "UNKNOWN"
+    return _GIT_SHA
 
 
 def write_meta_yaml(

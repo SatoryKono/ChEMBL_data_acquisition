@@ -47,6 +47,9 @@ try:  # pragma: no cover - exercised in tests via monkeypatch
 except (ImportError, TypeError):
     pa = None
 
+# Cached Git SHA for the repository, populated on first lookup.
+_GIT_SHA: str | None = None
+
 
 def read_ids(
     path: str | Path,
@@ -268,20 +271,24 @@ def _git_sha() -> str:
     returned and a warning is logged.
     """
 
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip()
-    except subprocess.TimeoutExpired as exc:
-        logger.warning("git command timed out: %s", exc)
-    except Exception as exc:  # pragma: no cover - git may be unavailable
-        logger.warning("unable to determine git SHA: %s", exc)
-    return "unknown"
+    global _GIT_SHA
+    if _GIT_SHA is None:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            _GIT_SHA = result.stdout.strip()
+        except subprocess.TimeoutExpired as exc:
+            logger.warning("git command timed out: %s", exc)
+            _GIT_SHA = "unknown"
+        except Exception as exc:  # pragma: no cover - git may be unavailable
+            logger.warning("unable to determine git SHA: %s", exc)
+            _GIT_SHA = "unknown"
+    return _GIT_SHA
 
 
 def _write_meta(path: Path, cfg: Config) -> None:
