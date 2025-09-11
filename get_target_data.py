@@ -20,7 +20,7 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
-from library import io, write_csv_deterministic
+from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
@@ -397,16 +397,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["target_chembl_id"] if c in df.columns]
-        csv_path = write_csv_deterministic(
+        csv_path = io.write_csv(
             df,
             output,
-            col_order=[
-                "target_chembl_id",
-                "organism",
-                "target_uniprot_id",
-                "pH_dependence",
-                "isoforms",
-            ],
+            cfg=cfg,
             key_cols=key_cols or None,
         )
         logger.info("Wrote %d rows to %s", rows_kept, csv_path)
