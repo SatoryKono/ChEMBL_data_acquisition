@@ -56,11 +56,24 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     result = cli.run(Config(), args)
     assert result == 0
 
+    assert (out_dir / "independent" / "activity_independent.csv").exists()
     assert (
-        out_dir / "status" / "independent" / "activity_independent_status.csv"
+        out_dir
+        / "status"
+        / "independent"
+        / "activity_independent_status_statistics.csv"
     ).exists()
 
-    for name in tables:
+    expected = [
+        "assay",
+        "activity",
+        "pairs_same_document",
+        "pairs_independent",
+        "pairs_non_independent",
+        "activity_independent",
+        "activity_independent_status_statistics",
+    ]
+    for name in expected:
         quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
         corr = (
             out_dir

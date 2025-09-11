@@ -97,7 +97,15 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
             entity = key.split("_")[0]
-            tables[key] = lib.compute_status_statistics(df, entity)
+            base_key = key[: -len("_status")]
+            # Preserve the original table with ``Filtered`` column before
+            # aggregation statistics are computed.  The table is renamed to
+            # drop the ``_status`` suffix.
+            tables[base_key] = df.rename(columns={"Filtered.new": "Filtered"})
+            tables[f"{base_key}_status_statistics"] = lib.compute_status_statistics(
+                df, entity
+            )
+            del tables[key]
 
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
