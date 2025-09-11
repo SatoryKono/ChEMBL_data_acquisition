@@ -97,7 +97,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
             entity = key.split("_")[0]
-            tables[key] = lib.compute_status_statistics(df, entity)
+            tables[key] = lib.compute_status(df, entity)
 
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
