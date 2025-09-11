@@ -34,7 +34,7 @@ import requests
 from pandera.errors import SchemaErrors
 from schemas.documents import DocumentsSchema
 from library.normalization import normalize_documents
-from library.sidecar_errors import SidecarErrors
+from library.sidecar import SidecarErrors
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from library import chembl_library as cl
@@ -150,16 +150,17 @@ def run_pubmed(args: argparse.Namespace) -> int:
         df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
         output = args.output_csv or io.default_output_path(args.input_csv)
         df = normalize_documents(df)
-        sidecar = SidecarErrors(output.with_suffix(".errors"))
+        sidecar = SidecarErrors()
         try:
             df = DocumentsSchema.validate(df, lazy=True)
         except SchemaErrors as err:
             err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-            sidecar.add(str(err))
+            for row in err.failure_cases.to_dict(orient="records"):
+                sidecar.add_error(row)
             bad_idx = err.failure_cases["index"].dropna().unique()
             logger.warning("schema validation failed for %d rows", len(bad_idx))
             df = df.drop(index=bad_idx)
-        sidecar.write()
+        sidecar.save(output.with_suffix(".errors.csv"))
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -190,16 +191,17 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     df = normalize_documents(df)
-    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    sidecar = SidecarErrors()
     try:
         df = DocumentsSchema.validate(df, lazy=True)
     except SchemaErrors as err:
         err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        sidecar.add(str(err))
+        for row in err.failure_cases.to_dict(orient="records"):
+            sidecar.add_error(row)
         bad_idx = err.failure_cases["index"].dropna().unique()
         logger.warning("schema validation failed for %d rows", len(bad_idx))
         df = df.drop(index=bad_idx)
-    sidecar.write()
+    sidecar.save(output.with_suffix(".errors.csv"))
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -242,16 +244,17 @@ def run_all(args: argparse.Namespace) -> int:
                 how="left",
             )
         processed = normalize_documents(processed)
-        sidecar = SidecarErrors(output.with_suffix(".errors"))
+        sidecar = SidecarErrors()
         try:
             processed = DocumentsSchema.validate(processed, lazy=True)
         except SchemaErrors as err:
             err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-            sidecar.add(str(err))
+            for row in err.failure_cases.to_dict(orient="records"):
+                sidecar.add_error(row)
             bad_idx = err.failure_cases["index"].dropna().unique()
             logger.warning("schema validation failed for %d rows", len(bad_idx))
             processed = processed.drop(index=bad_idx)
-        sidecar.write()
+        sidecar.save(output.with_suffix(".errors.csv"))
         try:
             io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
             logger.info("Wrote %d rows to %s", len(processed), output)
@@ -291,16 +294,17 @@ def run_all(args: argparse.Namespace) -> int:
             how="left",
         )
     processed = normalize_documents(processed)
-    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    sidecar = SidecarErrors()
     try:
         processed = DocumentsSchema.validate(processed, lazy=True)
     except SchemaErrors as err:
         err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        sidecar.add(str(err))
+        for row in err.failure_cases.to_dict(orient="records"):
+            sidecar.add_error(row)
         bad_idx = err.failure_cases["index"].dropna().unique()
         logger.warning("schema validation failed for %d rows", len(bad_idx))
         processed = processed.drop(index=bad_idx)
-    sidecar.write()
+    sidecar.save(output.with_suffix(".errors.csv"))
     try:
         io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(processed), output)
