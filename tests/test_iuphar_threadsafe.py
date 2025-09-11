@@ -1,12 +1,13 @@
- 
 """Thread-safety tests for :mod:`library.iuphar_library`."""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import time
 
 import pandas as pd
+import pytest
 
 import library.iuphar_library as ii
 from library.config import IupharCfg
@@ -56,19 +57,9 @@ def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
 
     assert all(r == {"id": 1} for r in results)
     assert len(dummy.calls) == 10
- 
+
+
 """Thread-safety tests for IUPHAR session handling."""
-
-from __future__ import annotations
-
-import threading
-import time
-
-import pandas as pd
-import pytest
-
-from library import iuphar_library as ii
-from library.config import IupharCfg
 
 
 def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
