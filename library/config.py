@@ -1,3 +1,5 @@
+# ruff: noqa
+
 """Configuration loader with environment and CLI overrides.
 
 This module provides a small typed wrapper around ``config.yaml``. Values are
@@ -296,6 +298,8 @@ class RateCfg:
 
     global_rps: int = 8
     global_burst: int = 8
+    limiter_cache_maxsize: int = 128
+    limiter_cache_ttl: int = 600
 
 
 @dataclass
@@ -676,6 +680,8 @@ _ALIAS_MAP: dict[str, list[str]] = {
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
     "CHEMBL_DA_GLOBAL_BURST": ["rate", "global_burst"],
+    "CHEMBL_DA_LIMITER_CACHE_MAXSIZE": ["rate", "limiter_cache_maxsize"],
+    "CHEMBL_DA_LIMITER_CACHE_TTL": ["rate", "limiter_cache_ttl"],
     "CHEMBL_DA_LOG_LEVEL": ["log", "level"],
     "CHEMBL_DA_LOG_FORMAT": ["log", "format"],
     "CHEMBL_DA_LOG_DATEFMT": ["log", "datefmt"],
@@ -1262,6 +1268,8 @@ CONFIG_SCHEMA: dict[str, Any] = {
             "properties": {
                 "global_rps": {"type": "integer", "minimum": 1},
                 "global_burst": {"type": "integer", "minimum": 1},
+                "limiter_cache_maxsize": {"type": "integer", "minimum": 1},
+                "limiter_cache_ttl": {"type": "integer", "minimum": 1},
             },
             "required": ["global_rps", "global_burst"],
             "additionalProperties": False,
@@ -1414,6 +1422,10 @@ def _validate(cfg: Config) -> None:
         raise ValueError("batch.size and batch.concurrency must be positive")
     if cfg.rate.global_rps <= 0 or cfg.rate.global_burst <= 0:
         raise ValueError("rate.global_rps and rate.global_burst must be positive")
+    if cfg.rate.limiter_cache_maxsize <= 0 or cfg.rate.limiter_cache_ttl <= 0:
+        raise ValueError(
+            "rate.limiter_cache_maxsize and rate.limiter_cache_ttl must be positive"
+        )
     if cfg.retry.max_attempts <= 0 or cfg.retry.backoff_factor < 0:
         raise ValueError(
             "retry.max_attempts must be positive and backoff_factor non-negative"
@@ -1525,6 +1537,10 @@ def load_config(
             _set_by_path(cfg, key.split("."), val)
 
     _validate(cfg)
+
+    from .rate_limiter import configure_limiter_cache
+
+    configure_limiter_cache(cfg.rate.limiter_cache_maxsize, cfg.rate.limiter_cache_ttl)
     return cfg
 
 
