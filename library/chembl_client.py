@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from typing import Any, Dict, Iterable, Iterator, cast
+from typing import Any, Iterable, Iterator, cast
 
 
 import random
@@ -80,6 +80,8 @@ def request_json(
     session = _session
     assert session is not None  # noqa: S101 - ensure session exists
 
+    last_exc: requests.RequestException | ValueError | None = None
+
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
@@ -100,17 +102,20 @@ def request_json(
                 _CACHE[cache_key] = data
                 logger.info("cache_set", extra={"stage": "cache_set", "url": url})
                 return data
-        except (requests.RequestException, ValueError):
+        except (requests.RequestException, ValueError) as exc:
+            last_exc = exc
             if attempt >= cfg.retries:
                 logger.exception(
                     "request_fail", extra={"stage": "request_fail", "url": url}
                 )
-                raise
+                break
             # Exponential backoff with jitter to avoid thundering herd problems
             delay = cfg.backoff_factor * (2 ** (attempt - 1))
             delay += random.uniform(0, cfg.backoff_factor)
             sleep(delay)
-    raise requests.RequestException(f"request_json failed for url: {url}")
+
+    assert last_exc is not None
+    raise last_exc
 
 
 def clear_cache() -> None:
