@@ -164,7 +164,6 @@ class PubChemCfg:
 
 
 @dataclass
- 
 class PubMedCfg:
     """Settings for the PubMed API and related I/O."""
 
@@ -186,14 +185,15 @@ class SemanticScholarCfg:
     timeout_read: int = 10
     retries: int = 2
     encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
- 
+
+
+@dataclass
 class ResourcesCfg:
     """Paths to static resource files used by the application."""
 
     dictionary_dir: Path = Path("dictionary")
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
- 
 
 
 @dataclass
@@ -294,12 +294,12 @@ class Config:
     uniprot_mapping: UniprotMappingCfg = field(default_factory=UniprotMappingCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
- 
+
     pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
- 
+
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
- 
+
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -708,7 +708,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
- 
         "pubmed": {
             "type": "object",
             "properties": {
@@ -750,7 +749,9 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "timeout_read",
                 "retries",
                 "encodings",
- 
+            ],
+            "additionalProperties": False,
+        },
         "resources": {
             "type": "object",
             "properties": {
@@ -762,7 +763,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "dictionary_dir",
                 "iuphar_target_csv",
                 "iuphar_family_csv",
- 
             ],
             "additionalProperties": False,
         },
@@ -962,8 +962,6 @@ def _validate(cfg: Config) -> None:
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
 
-
- 
     basic_services: list[tuple[str, Any]] = [
         ("pubmed", cfg.pubmed),
         ("semantic_scholar", cfg.semantic_scholar),
@@ -977,14 +975,12 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if not service.encodings:
             raise ValueError(f"{name}.encodings must not be empty")
- 
 
     mapping = cfg.uniprot_mapping
     if not _valid_url(mapping.base):
         raise ValueError("uniprot_mapping.base must be a valid URL")
     if mapping.poll_interval <= 0 or mapping.timeout <= 0:
         raise ValueError("uniprot_mapping.poll_interval and timeout must be positive")
-
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
@@ -1121,12 +1117,9 @@ __all__ = [
     "UniprotMappingCfg",
     "IupharCfg",
     "PubChemCfg",
-
     "PubMedCfg",
     "SemanticScholarCfg",
-
     "ResourcesCfg",
-
     "IoCfg",
     "JobsCfg",
     "BatchCfg",
