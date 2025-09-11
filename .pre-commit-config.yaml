@@ -23,6 +23,11 @@ repos:
           - pandera
   - repo: local
     hooks:
+      - id: check-determinism
+        name: check deterministic CSV output
+        entry: python scripts/check_determinism.py
+        language: system
+        pass_filenames: false
       - id: pytest
         name: pytest
         entry: pytest
