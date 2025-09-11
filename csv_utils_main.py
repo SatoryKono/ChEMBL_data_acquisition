@@ -15,6 +15,7 @@ from typing import Sequence
 import pandas as pd
 
 from library.csv_utils import write_csv_deterministic
+from library.cli import add_common_arguments
 
 
 logger = logging.getLogger(__name__)
@@ -24,25 +25,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", default="input.csv", help="Input CSV path")
-    parser.add_argument(
-        "--output",
-        default=None,
-        help="Output CSV path (default: derive from input name)",
-    )
+    add_common_arguments(parser)
     parser.add_argument("--col-order", nargs="*", help="Preferred column order")
     parser.add_argument("--key-cols", nargs="*", help="Columns used for sorting")
-    parser.add_argument("--sep", default=",", help="Input CSV delimiter")
-    parser.add_argument(
-        "--encoding",
-        default="utf8",
-        help="Input CSV encoding",
-    )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        help="Logging level",
-    )
     return parser.parse_args(argv)
 
 
@@ -63,9 +48,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
     start = time.perf_counter()
-    df = pd.read_csv(args.input, sep=args.sep, encoding=args.encoding)
-    output = args.output or Path(args.input).with_name(
-        f"output_{Path(args.input).stem}.csv"
+    df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
+    output = args.output_csv or Path(args.input_csv).with_name(
+        f"output_{Path(args.input_csv).stem}.csv"
     )
     write_csv_deterministic(
         df,

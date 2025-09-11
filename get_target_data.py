@@ -97,34 +97,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Extract information for UniProt accessions",
     )
     uniprot.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV file containing a 'uniprot_id' column",
-    )
-    uniprot.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file for the extracted information (default: auto-generate)",
-    )
-    uniprot.add_argument(
         "--column",
         default="uniprot_id",
         choices=["uniprot_id", "mapping_uniprot_id"],
         help="Column in the input CSV containing UniProt accessions",
-    )
-    uniprot.add_argument(
-        "--sep",
-        default=",",
-        help="CSV delimiter used for input and output files",
-    )
-    uniprot.add_argument(
-        "--encoding",
-        default="utf8",
-        help="File encoding for input and output CSV files",
     )
     uniprot.add_argument(
         "--data-dir",
@@ -146,29 +122,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Retrieve target information from ChEMBL",
     )
     chembl.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV file containing ChEMBL target identifiers",
-    )
-    chembl.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file for target information (default: auto-generate)",
-    )
-    chembl.add_argument(
         "--column",
         default="chembl_id",
         help="Column name in the input CSV containing identifiers",
-    )
-    chembl.add_argument("--sep", default=",", help="CSV delimiter for I/O")
-    chembl.add_argument(
-        "--encoding",
-        default="utf8",
-        help="File encoding for input and output CSV files",
     )
     chembl.add_argument(
         "--timeout",
@@ -185,20 +141,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "iuphar",
         parents=[root],
         help="Map UniProt accessions to IUPHAR classifications",
-    )
-    iuphar.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV file containing a 'uniprot_id' column",
-    )
-    iuphar.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file for the mapping results (default: auto-generate)",
     )
     iuphar.add_argument(
         "--target-csv",
@@ -218,12 +160,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config resources.iuphar_family_csv)"
         ),
     )
-    iuphar.add_argument("--sep", default=",", help="CSV delimiter for I/O")
-    iuphar.add_argument(
-        "--encoding",
-        default="utf8",
-        help="File encoding for input and output CSV files",
-    )
     iuphar.set_defaults(func=run_iuphar)
 
     # ----------------------------
@@ -233,20 +169,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "all",
         parents=[root],
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
-    )
-    all_cmd.add_argument(
-        "--input",
-        dest="input_csv",
-        type=Path,
-        default=Path("input.csv"),
-        help="CSV with a 'chembl_id' column",
-    )
-    all_cmd.add_argument(
-        "--output",
-        dest="output_csv",
-        type=Path,
-        default=None,
-        help="Destination CSV file for the merged table (default: auto-generate)",
     )
     all_cmd.add_argument(
         "--chembl-out",
@@ -313,12 +235,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default="uniprot_id",
         choices=["uniprot_id", "mapping_uniprot_id"],
         help="Column from ChEMBL output to use for UniProt processing",
-    )
-    all_cmd.add_argument("--sep", default=",", help="CSV delimiter for I/O")
-    all_cmd.add_argument(
-        "--encoding",
-        default="utf8",
-        help="File encoding for input and output CSV files",
     )
     all_cmd.set_defaults(func=run_all)
 
