@@ -14,6 +14,9 @@ cd ChEMBL_data_acquisition
 pip install -r requirements.txt
 ```
 
+This command installs all required libraries, including
+[pandera](https://pandera.readthedocs.io) for DataFrame schema validation.
+
 ## Project structure
 
 ```
