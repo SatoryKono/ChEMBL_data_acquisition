@@ -54,7 +54,6 @@ class _BaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_dict(self) -> dict[str, Any]:
- 
         """Return the model as a plain dictionary.
 
         Uses :meth:`pydantic.BaseModel.model_dump` to obtain a standard
@@ -64,8 +63,8 @@ class _BaseModel(BaseModel):
         -------
         dict[str, Any]
             Dictionary representation of the model.
- 
- 
+
+
         """
 
         return self.model_dump()
