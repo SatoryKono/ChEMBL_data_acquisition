@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
-
 import responses
 
 import library.rate_limiter as rl
@@ -33,18 +31,18 @@ def test_get_cid_from_smiles_uses_base() -> None:
 @responses.activate
 def test_make_request_uses_timeout(monkeypatch) -> None:
     """`make_request` passes configured timeouts to the session."""
-    called: Dict[str, Tuple[int, int]] = {}
+    called: dict[str, tuple[int, int]] = {}
 
     class Resp:
         status_code = 200
 
-        def json(self) -> Dict[str, object]:
+        def json(self) -> dict[str, object]:
             return {}
 
         def raise_for_status(self) -> None:  # pragma: no cover - no error
             return None
 
-    def capture(url: str, timeout: Tuple[int, int]) -> Resp:
+    def capture(url: str, timeout: tuple[int, int]) -> Resp:
         called["timeout"] = timeout
         return Resp()
 
@@ -80,7 +78,7 @@ def test_make_request_rate_limited(monkeypatch) -> None:
     class Resp:
         status_code = 200
 
-        def json(self) -> Dict[str, object]:
+        def json(self) -> dict[str, object]:
             return {}
 
         def raise_for_status(self) -> None:  # pragma: no cover - no error
