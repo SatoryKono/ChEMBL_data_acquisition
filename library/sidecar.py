@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, List
 import csv
+from pathlib import Path
+from typing import Any
 
 
 class SidecarErrors:
@@ -17,9 +17,9 @@ class SidecarErrors:
 
     def __init__(self) -> None:
         """Initialize an empty error collection."""
-        self._errors: List[Dict[str, Any]] = []
+        self._errors: list[dict[str, Any]] = []
 
-    def add_error(self, row: Dict[str, Any]) -> None:
+    def add_error(self, row: dict[str, Any]) -> None:
         """Add a validation error description.
 
         Parameters

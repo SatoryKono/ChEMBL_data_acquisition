@@ -12,8 +12,10 @@ from library.input_initialisation_library import (
     TableDict,
     _ensure_openpyxl,
     append_entities,
-    generate_pair_entity_tables,
     build_combined_tables,
+
+    generate_pair_entity_tables,
+
     process_activity_table,
     save_tables,
     unify_dtypes,

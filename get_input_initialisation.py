@@ -4,25 +4,31 @@ Exports pair tables without merging:
 
 - ``pairs_same_document.csv`` from sheet ``pairs_same_doc`` in ``--same-doc``
 - ``pairs_independent.csv`` and ``pairs_non_independent.csv`` derived from
-  ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag
+  ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag.
+
+Additionally, for each pair table the corresponding ``activity``, ``assay``,
+``document``, ``target`` and ``testitem`` entries are exported with matching
+suffixes, for example ``activity_independent.csv`` or
+``assay_same_document.csv``.
 """
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
-
-from library.config import Config, ensure_dirs, print_config
-from library.cli import (
-    apply_config_overrides,
-    build_parser as base_parser,
-    configure_logger,
-    LoggerConfig,
-)
-from library.log import logger
 
 from library import input_initialisation_library as lib
+from library.cli import (
+    LoggerConfig,
+    apply_config_overrides,
+    configure_logger,
+)
+from library.cli import (
+    build_parser as base_parser,
+)
+from library.config import Config, ensure_dirs, print_config
+from library.log import logger
 from library.table_quality import analyze_table_quality
 
 
@@ -61,6 +67,15 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             dictionary_dir=args.dictionary_dir,
             status_csv=cfg.resources.status_csv,
             targets_type_csv=cfg.resources.targets_type_csv,
+        )
+        logger.info("Generating entity tables for pair segments")
+        tables = lib.generate_pair_entity_tables(
+            tables,
+            {
+                "pairs_independent": "independent",
+                "pairs_non_independent": "non_independent",
+                "pairs_same_document": "same_document",
+            },
         )
         logger.info("Computing status percentages")
         for key, df in list(tables.items()):
@@ -170,7 +185,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code = int(args.func(cfg, args))
     if exit_code == 0:
         logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
     else:

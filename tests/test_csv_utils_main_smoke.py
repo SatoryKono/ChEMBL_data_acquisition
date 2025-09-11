@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
 import subprocess
 import sys
-import json
+from pathlib import Path
 
 
 def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:

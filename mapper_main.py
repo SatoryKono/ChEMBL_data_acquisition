@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import argparse
-from typing import Sequence
+from collections.abc import Sequence
 from urllib.error import URLError
 
 import pandas as pd
-from library.config import Config, ensure_dirs, print_config
 
 from library import io
 from library.cli import (
-    apply_config_overrides,
-    build_parser as base_parser,
-    configure_logger,
     LoggerConfig,
+    apply_config_overrides,
+    configure_logger,
 )
+from library.cli import (
+    build_parser as base_parser,
+)
+from library.config import Config, ensure_dirs, print_config
 from library.log import logger
 from library.mapper_library import map_chembl_to_uniprot
 

@@ -37,7 +37,7 @@ dev = [
   "pytest==8.4.2",
   "types-openpyxl>=3.1.5",
   "hypothesis==6.138.15",
-  "responses==0.25.8",
+  "responses>=0.25",
 ]
 
 [tool.black]
@@ -47,7 +47,10 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

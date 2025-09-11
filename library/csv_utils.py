@@ -8,22 +8,21 @@ runs produce identical files.
 
 from __future__ import annotations
 
-from datetime import date, datetime
 import hashlib
 import logging
 import os
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
+from datetime import date, datetime
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 import yaml
 from pandas.api import types as ptypes
 
 from .config import Config, _serialize_paths
-
 
 logger = logging.getLogger(__name__)
 

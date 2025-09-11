@@ -70,6 +70,8 @@ to the same configuration keys as their longer forms:
 | `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__API__TIMEOUT_READ` |
 | `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
 | `CHEMBL_DA_CACHE_DIR` | `CHEMBL_DA__IO__CACHE_DIR` |
+| `CHEMBL_DA_LIMITER_CACHE_MAXSIZE` | `CHEMBL_DA__RATE__LIMITER_CACHE_MAXSIZE` |
+| `CHEMBL_DA_LIMITER_CACHE_TTL` | `CHEMBL_DA__RATE__LIMITER_CACHE_TTL` |
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
 
 The loader warns about unknown variables and ignores them. All overrides are

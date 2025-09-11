@@ -26,44 +26,40 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Iterable, Sequence
-
-import pandas as pd
-
-from library.config import (
-    Config,
-    OpenAlexCfg,
-    CrossRefCfg,
-    ensure_dirs,
-    print_config,
-    _serialize_paths,
-)
-from library.chembl_client import ChemblClient, _chunked
-
-import requests
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import pandas as pd
+import requests
+from pandera.errors import SchemaErrors
+
 from library import chembl_library as cl
+from library import document_postprocessing as dp
+from library import io, write_csv_deterministic
+from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
-from library import openalex_crossref_library as ocl
-from library import io
-from library import document_postprocessing as dp
-from library.rate_limiter import get_limiter
-from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.chembl_client import ChemblClient, _chunked
 from library.cli import (
+    LoggerConfig,
     apply_config_overrides,
     build_root_parser,
     configure_logger,
-    LoggerConfig,
+)
+from library.config import (
+    Config,
+    CrossRefCfg,
+    OpenAlexCfg,
+    _serialize_paths,
+    ensure_dirs,
+    print_config,
 )
 from library.log import logger
-from pandera.errors import SchemaErrors
+from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.rate_limiter import get_limiter
+from library.sidecar import SidecarErrors
+from library.table_quality import analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
-
-from library import write_csv_deterministic
 
 
 def fetch_pubmed_records(
@@ -679,11 +675,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.set_defaults(func=run_all)
 
-    setattr(
-        parser,
-        "subparsers_map",
-        {"pubmed": pubmed, "chembl": chembl, "all": all_cmd},
-    )
+    parser.subparsers_map = {"pubmed": pubmed, "chembl": chembl, "all": all_cmd}
 
     return parser, log_cfg
 

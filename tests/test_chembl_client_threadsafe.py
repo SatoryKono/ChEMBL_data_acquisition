@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg
@@ -17,7 +16,7 @@ class DummyResponse:
     def __init__(self, call_no: int) -> None:
         self._call_no = call_no
 
-    def __enter__(self) -> "DummyResponse":
+    def __enter__(self) -> DummyResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op
@@ -44,7 +43,7 @@ class DummySession:
 class ThreadTrackingResponse:
     """Response returning a constant payload."""
 
-    def __enter__(self) -> "ThreadTrackingResponse":
+    def __enter__(self) -> ThreadTrackingResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op

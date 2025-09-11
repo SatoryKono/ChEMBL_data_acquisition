@@ -8,8 +8,6 @@ request retries.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 import requests
 
 from . import pubmed_library as _pl
@@ -17,7 +15,7 @@ from . import pubmed_library as _pl
 
 def fetch_semantic_scholar(
     session: requests.Session, pmid: str, sleep: float
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Return Semantic Scholar metadata for ``pmid``.
 
     Parameters
@@ -42,8 +40,8 @@ def fetch_semantic_scholar(
 
 
 def fetch_semantic_scholar_batch(
-    session: requests.Session, pmids: List[str], sleep: float
-) -> List[Dict[str, str]]:
+    session: requests.Session, pmids: list[str], sleep: float
+) -> list[dict[str, str]]:
     """Return Semantic Scholar metadata for a batch of ``pmids``.
 
     Parameters

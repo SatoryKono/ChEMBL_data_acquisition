@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 import get_activity_data as gad
-from library import chembl_library as cl, io
+from library import chembl_library as cl
+from library import io
 from library.config import Config
 
 
