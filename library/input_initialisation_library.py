@@ -305,7 +305,7 @@ def process_activity_table(
         Deduplicated activity dataframe.
     dictionary_dir:
         Directory containing ``citation_fraction.csv`` and ``targets_type.csv``
-         in a ``_Target`` subdirectory.    
+         in a ``_Target`` subdirectory.
     targets_csv:
         Optional explicit path to ``targets_type.csv``. When provided, the file
         is loaded from this location instead of searching within
@@ -483,7 +483,14 @@ def process_activity_table(
     )
 
     df = df.merge(
-        targets[["target_chembl_id", "target_sort_order", "organism_type", "multifunctional"]],
+        targets[
+            [
+                "target_chembl_id",
+                "target_sort_order",
+                "organism_type",
+                "multifunctional",
+            ]
+        ],
         how="left",
         left_on="target_id",
         right_on="target_chembl_id",
@@ -758,8 +765,15 @@ def unify_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """Softly cast frequent columns to expected dtypes.
 
     Unrecognised values fall back to ``string`` dtype while emitting a warning.
+    Duplicate column names are removed with the first occurrence kept to avoid
+    issues when concatenating data frames.
     """
-    result = df.copy()
+    # ``df`` may originate from external sources that accidentally contain
+    # duplicate column names. Pandas operations such as ``pd.concat`` require
+    # a unique column index and will raise ``InvalidIndexError`` otherwise.
+    # ``loc`` with ``~df.columns.duplicated()`` selects the first occurrence of
+    # each column name and discards subsequent duplicates.
+    result = df.loc[:, ~df.columns.duplicated()].copy()
     for col in STRING_COLS & set(result.columns):
         result[col] = result[col].astype("string")
     for col in INT_COLS & set(result.columns):
@@ -1587,12 +1601,18 @@ def initialize_pairs(
     df = pair_df.copy()
     mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
     df = df.merge(
-        mapping, left_on="activity_chembl_id1", right_on="activity_chembl_id", how="left"
+        mapping,
+        left_on="activity_chembl_id1",
+        right_on="activity_chembl_id",
+        how="left",
     )
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
     df.drop(columns=["activity_chembl_id"], inplace=True)
     df = df.merge(
-        mapping, left_on="activity_chembl_id2", right_on="activity_chembl_id", how="left"
+        mapping,
+        left_on="activity_chembl_id2",
+        right_on="activity_chembl_id",
+        how="left",
     )
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
     df.drop(columns=["activity_chembl_id"], inplace=True)
@@ -1658,13 +1678,21 @@ def aggregate_activity(
             df_pairs[col] = 0
 
     left = df_pairs.rename(
-        columns={"activity_chembl_id1": "activity_chembl_id", "Filtered1": "Filtered.new"}
+        columns={
+            "activity_chembl_id1": "activity_chembl_id",
+            "Filtered1": "Filtered.new",
+        }
     )[["activity_chembl_id", "Filtered.new", *metrics]]
     right = df_pairs.rename(
-        columns={"activity_chembl_id2": "activity_chembl_id", "Filtered2": "Filtered.new"}
+        columns={
+            "activity_chembl_id2": "activity_chembl_id",
+            "Filtered2": "Filtered.new",
+        }
     )[["activity_chembl_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
-    activity_status = _aggregate_entity(activity_pairs, "activity_chembl_id", status_api)
+    activity_status = _aggregate_entity(
+        activity_pairs, "activity_chembl_id", status_api
+    )
 
     merged = activity_df.merge(activity_status, on="activity_chembl_id", how="left")
     merged["Filtered.new"] = merged["Filtered.new"].fillna(merged["Filtered.init"])
