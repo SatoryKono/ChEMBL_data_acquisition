@@ -14,9 +14,7 @@ def test_analyze_table_quality(tmp_path: Path) -> None:
         {
             "num": [1, 2, 3, 4],
             "str": ["10.1234/abc", "", None, "test"],
-
             "flag": pd.Series([True, False, True, False], dtype="boolean"),
-
         }
     )
     cwd = os.getcwd()
@@ -46,4 +44,3 @@ def test_analyze_table_quality_suppresses_warnings(tmp_path: Path) -> None:
         os.chdir(cwd)
 
     assert (tmp_path / "mixed_quality_report_table.csv").exists()
-
