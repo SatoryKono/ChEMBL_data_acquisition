@@ -30,7 +30,10 @@ import os
 import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
-from typing import Any
+
+from types import UnionType
+from typing import Any, Union, get_args, get_origin, get_type_hints
+
 from urllib.parse import urlparse
 
 import jsonschema
@@ -513,17 +516,41 @@ class Config:
 # ---------------------------------------------------------------------------
 
 
-def _coerce(value: str, current: Any) -> Any:
-    """Coerce ``value`` (from env/CLI) to the type of ``current``.
+def _unwrap_optional(tp: Any) -> tuple[type[Any], bool]:
+    """Return the underlying type for ``Optional`` hints.
 
-    When ``current`` is :class:`bool`, only a restricted set of string
-    representations is accepted. Truthy values are ``{"1", "true", "yes",
-    "on"}`` and falsy values are ``{"0", "false", "no", "off"}``.
-    Any other value raises :class:`ValueError` to avoid silently interpreting
-    unexpected input.
+    Parameters
+    ----------
+    tp:
+        Type annotation potentially containing ``None``.
+
+    Returns
+    -------
+    tuple[type[Any], bool]
+        ``(inner_type, True)`` if ``tp`` is ``Optional[inner_type]``;
+        otherwise ``(tp, False)``.
     """
 
-    if isinstance(current, bool):
+    origin = get_origin(tp)
+    if origin in (Union, UnionType):
+        args = [a for a in get_args(tp) if a is not type(None)]
+        if len(args) == 1:
+            inner = get_origin(args[0]) or args[0]
+            return inner, True
+    return get_origin(tp) or tp, False
+
+
+def _coerce(value: str, target_type: type[Any]) -> Any:
+    """Coerce string ``value`` to ``target_type``.
+
+    The function recognises basic scalar types and ``pathlib.Path``. Boolean
+    conversion accepts a limited set of case-insensitive truthy/falsy values to
+    avoid silently interpreting unexpected input.
+    """
+
+    if target_type is Any:
+        return value
+    if target_type is bool:
         val = value.strip().lower()
         truthy = {"1", "true", "yes", "on"}
         falsy = {"0", "false", "no", "off"}
@@ -532,11 +559,11 @@ def _coerce(value: str, current: Any) -> Any:
         if val in falsy:
             return False
         raise ValueError(f"Invalid boolean value: {value!r}")
-    if isinstance(current, int):
+    if target_type is int:
         return int(value)
-    if isinstance(current, float):
+    if target_type is float:
         return float(value)
-    if isinstance(current, Path):
+    if target_type is Path:
         return Path(value)
     return value
 
@@ -565,6 +592,7 @@ def _update_from_dict(
     path = [] if path is None else path
     if unknown_keys is None:
         unknown_keys = []
+    type_hints = get_type_hints(obj.__class__)
     for key, val in data.items():
         if not hasattr(obj, key):
             unknown_keys.append(".".join(path + [key]))
@@ -576,17 +604,30 @@ def _update_from_dict(
                 raise TypeError(f"{joined} must be a mapping")
             _update_from_dict(current, val, path + [key], unknown_keys=unknown_keys)
             continue
+        expected, optional = _unwrap_optional(type_hints.get(key, Any))
         if isinstance(val, str):
             try:
-                val = _coerce(val, current)
+                val = _coerce(val, expected)
             except Exception as exc:  # pragma: no cover - defensive
                 joined = ".".join(path + [key])
                 raise TypeError(
-                    f"{joined} must be {type(current).__name__}, got {val!r}"
+                    f"{joined} must be {expected.__name__}, got {val!r}"
                 ) from exc
-        if not isinstance(val, type(current)):
+        if val is None:
+            if not optional:
+                joined = ".".join(path + [key])
+                msg = (
+                    f"{joined} must be {getattr(expected, '__name__', expected)}, "
+                    f"got {val!r}"
+                )
+                raise TypeError(msg)
+        elif expected is not Any and not isinstance(val, expected):
             joined = ".".join(path + [key])
-            raise TypeError(f"{joined} must be {type(current).__name__}, got {val!r}")
+            msg = (
+                f"{joined} must be {getattr(expected, '__name__', expected)}, "
+                f"got {val!r}"
+            )
+            raise TypeError(msg)
         setattr(obj, key, val)
 
 
@@ -608,21 +649,29 @@ def _set_by_path(cfg: Config, path: list[str], value: Any) -> None:
         if field_name not in obj:
             raise KeyError(f"unknown config key: {'.'.join(path)}")
         current = obj[field_name]
+        expected = type(current)
+        optional = False
     else:
         if not hasattr(obj, field_name):
             raise KeyError(f"unknown config key: {'.'.join(path)}")
         current = getattr(obj, field_name)
+        type_hints = get_type_hints(obj.__class__)
+        field_type = type_hints.get(field_name, Any)
+        expected, optional = _unwrap_optional(field_type)
     try:
         if isinstance(value, str):
-            value = _coerce(value, current)
-        elif not isinstance(value, type(current)):
+            value = _coerce(value, expected)
+        if value is None:
+            if not optional:
+                raise TypeError
+        elif expected is not Any and not isinstance(value, expected):
             raise TypeError
     except Exception as exc:  # pragma: no cover - defensive
         joined = ".".join(path)
         if isinstance(exc, ValueError):
             raise ValueError(f"{joined}: {exc}") from exc
         raise TypeError(
-            f"{joined} must be {type(current).__name__}, got {value!r}"
+            f"{joined} must be {getattr(expected, '__name__', expected)}, got {value!r}"
         ) from exc
     if isinstance(obj, dict):
         obj[field_name] = value
