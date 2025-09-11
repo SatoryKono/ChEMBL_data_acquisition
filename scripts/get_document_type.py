@@ -7,27 +7,21 @@ scoring logic.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Iterable, Mapping, Sequence
-from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from library import io  # noqa: E402
-from library.cli import (  # noqa: E402
+from library import io
+from library.cli import (
     apply_config_overrides,
     configure_logger,
 )
-from library.cli import (  # noqa: E402
+from library.cli import (
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config  # noqa: E402
-from library.document_type_classifier import compute_scores, decide_label  # noqa: E402
-from library.log import logger  # noqa: E402
+from library.config import Config, ensure_dirs, print_config
+from library.document_type_classifier import compute_scores, decide_label
+from library.log import logger
 
 
 def _split_terms(value: object) -> Iterable[str]:

@@ -9,6 +9,12 @@ from typing import Any
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg
 
+USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
+
+
+def api_cfg(**kwargs: Any) -> ApiCfg:
+    return ApiCfg(user_agent=USER_AGENT, **kwargs)
+
 
 class DummyResponse:
     """Minimal response object returning a unique call identifier."""
@@ -26,7 +32,7 @@ class DummyResponse:
         pass
 
     def json(self) -> dict[str, Any]:
-        return {"call": self._call_no}
+        return {"ok": True}
 
 
 class DummySession:
@@ -71,11 +77,11 @@ def test_request_json_threadsafe(monkeypatch) -> None:
     """Concurrent calls should yield the same result as sequential ones."""
 
     session = DummySession()
-    client = ChemblClient(ApiCfg(), RetryCfg(), session=session)
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
     client.clear_cache()
 
     url = "http://example.com/threadsafe"
-    cfg = ApiCfg()
+    cfg = api_cfg()
 
     # Sequential calls: only the first should trigger a real request.
     sequential = [client.request_json(url, cfg=cfg) for _ in range(5)]
@@ -116,10 +122,10 @@ def test_single_session_created(monkeypatch) -> None:
     monkeypatch.setattr(
         "library.chembl_client.session_with_retry", fake_session_with_retry
     )
-    client = ChemblClient(ApiCfg(), RetryCfg())
+    client = ChemblClient(api_cfg(), RetryCfg())
 
     def worker() -> dict[str, Any]:
-        return client.request_json("http://example.com", cfg=ApiCfg())
+        return client.request_json("http://example.com", cfg=api_cfg())
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = [pool.submit(worker) for _ in range(5)]
@@ -130,19 +136,19 @@ def test_single_session_created(monkeypatch) -> None:
 
 
 def test_cache_shared_across_threads(monkeypatch) -> None:
-    client = ChemblClient(ApiCfg(), RetryCfg(), session=DummySession())
+    client = ChemblClient(api_cfg(), RetryCfg(), session=DummySession())
     client.clear_cache()
 
     url = "http://example.com/data"
-    assert client.request_json(url, cfg=ApiCfg()) == {"ok": True}
-    assert len(client.session.calls) == 1  # type: ignore[attr-defined]
+    assert client.request_json(url, cfg=api_cfg()) == {"ok": True}
+    assert client.session.calls == 1
 
     def worker() -> dict[str, Any]:
-        return client.request_json(url, cfg=ApiCfg())
+        return client.request_json(url, cfg=api_cfg())
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = [pool.submit(worker) for _ in range(5)]
         results = [f.result() for f in futures]
 
     assert all(r == {"ok": True} for r in results)
-    assert len(client.session.calls) == 1  # type: ignore[attr-defined]
+    assert client.session.calls == 1

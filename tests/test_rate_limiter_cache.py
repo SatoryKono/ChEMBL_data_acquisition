@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import library.rate_limiter as rl
+from library import rate_limiter as rl
 
 
 def test_limiter_cache_respects_maxsize() -> None:

@@ -15,26 +15,21 @@ suffixes, for example ``activity_independent.csv`` or
 from __future__ import annotations
 
 import argparse
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from library import input_initialisation_library as lib  # noqa: E402
-from library.cli import (  # noqa: E402
+from library import input_initialisation_library as lib
+from library.cli import (
     LoggerConfig,
     apply_config_overrides,
     configure_logger,
 )
-from library.cli import (  # noqa: E402
+from library.cli import (
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config  # noqa: E402
-from library.log import logger  # noqa: E402
-from library.table_quality import analyze_table_quality  # noqa: E402
+from library.config import Config, ensure_dirs, print_config
+from library.log import logger
+from library.table_quality import analyze_table_quality
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

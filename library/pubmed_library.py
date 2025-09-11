@@ -7,9 +7,7 @@ OpenAlex and Crossref and consolidate it into tabular form.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-import logging
 import sys
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date
@@ -24,6 +22,8 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import requests
 
+from .cli import LoggerConfig, configure_logger
+from .cli import build_parser as base_parser
 from .config import (
     Config,
     CrossRefCfg,
@@ -40,8 +40,8 @@ if TYPE_CHECKING:
     from .rate_limiter import RateLimiter
 
 
-def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> list[str]:
-    """Read PMID column from a CSV file.
+def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> pd.DataFrame:
+    """Read the ``PMID`` column from ``path`` as a DataFrame.
 
     Parameters
     ----------
@@ -52,23 +52,31 @@ def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> list[str]:
 
     Returns
     -------
-    list of str
-        Extracted PMIDs.
+    pandas.DataFrame
+        DataFrame with a single ``PMID`` column containing non-empty values.
 
+    Raises
+    ------
+    ValueError
+        If the file cannot be decoded using the configured encodings or
+        the ``PMID`` column is missing.
     """
+
     path = Path(path)
     last_exc: Exception | None = None
     encodings = (cfg or PubMedCfg()).encodings
     for enc in encodings:
         try:
-            with path.open(encoding=enc, newline="") as f:
-                reader = csv.DictReader(f)
-                if reader.fieldnames is None or "PMID" not in reader.fieldnames:
-                    raise ValueError("Input CSV must contain 'PMID' column")
-                return [pmid for row in reader if (pmid := row.get("PMID", "").strip())]
-        except UnicodeDecodeError as exc:
+            df = pd.read_csv(path, encoding=enc, dtype=str)
+        except UnicodeDecodeError as exc:  # pragma: no cover - depends on filesystem
             last_exc = exc
             continue
+        if "PMID" not in df.columns:
+            raise ValueError("Input CSV must contain 'PMID' column")
+        pmid_df = df[["PMID"]].copy()
+        pmid_df["PMID"] = pmid_df["PMID"].fillna("").astype(str).str.strip()
+        pmid_df = pmid_df[pmid_df["PMID"].astype(bool)]
+        return pmid_df
     raise ValueError(
         f"Could not decode {path} with encodings {encodings}. Last error: {last_exc}"
     )
@@ -791,7 +799,7 @@ def print_results(records: list[dict[str, str]]) -> None:
     records:
         Sequence of result dictionaries produced by ``main``.
     """
-    log = logging.getLogger(__name__)
+    log = logger
     try:
         from tabulate import tabulate
 
@@ -823,23 +831,18 @@ def print_results(records: list[dict[str, str]]) -> None:
         sys.stdout.buffer.write(encoded + b"\n")
 
 
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+def parse_args(
+    argv: Sequence[str] | None = None,
+) -> tuple[argparse.Namespace, LoggerConfig]:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Fetch publication metadata by PMID")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser, log_cfg = base_parser("Fetch publication metadata by PMID", column="PMID")
     parser.add_argument(
         "--input-csv",
         dest="input_csv",
-        default="input.csv",
         help="Input CSV path with PMID column",
     )
-    parser.add_argument(
-        "--output",
-        dest="output_csv",
-        default=None,
-        help="Output CSV path (default: auto-generated)",
-    )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    return args, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -855,9 +858,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     int
         Zero on success.
     """
-    args = parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    log = logging.getLogger(__name__)
+    args, log_cfg = parse_args(argv)
+    log_cfg.level = args.log_level
+    configure_logger(log_cfg)
 
     cfg = Config()
     pubmed_cfg = cfg.pubmed
@@ -868,7 +871,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = Config()
     pubmed_cfg = cfg.pubmed
     semsch_cfg = cfg.semantic_scholar
-    pmids = read_pmids(args.input_csv, cfg=pubmed_cfg)
+    pmid_df = read_pmids(args.input_csv, cfg=pubmed_cfg)
+    pmids = pmid_df["PMID"].tolist()
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
 
@@ -915,7 +919,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else Path(f"output_{Path(args.input_csv).stem}_{date.today():%Y%m%d}.csv")
     )
     write_csv_deterministic(df, output_path)
-    log.info("written %s", output_path)
+    logger.info("written %s", output_path)
     return 0
 
 

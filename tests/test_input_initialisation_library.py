@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import library.input_initialisation_library as lib
+from library import input_initialisation_library as lib
 from library.config import Config
 from library.input_initialisation_library import (
     TableDict,

@@ -21,7 +21,10 @@ def test_cli_utils_flags_and_help() -> None:
     assert set(actions) == expected
     assert actions["--log-level"].help == "Logging level"
     assert actions["--input"].help == "Input CSV file"
-    assert actions["--output"].help == "Destination CSV file (default: auto-generate)"
+    assert (
+        actions["--output"].help
+        == "Destination CSV file (default: output_<stem>_<YYYYMMDD>.csv)"
+    )
     assert actions["--sep"].help == "CSV delimiter"
     assert actions["--encoding"].help == "File encoding"
     assert actions["--col-order"].help == "Preferred column order"

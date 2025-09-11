@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import pytest
 
-import library.iuphar_library as ii
+from library import iuphar_library as ii
 from library.config import IupharCfg
 
 
