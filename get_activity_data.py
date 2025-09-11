@@ -49,6 +49,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    if args.limit is not None and args.limit < 0:
+        logger.error("--limit must be non-negative")
+        return 1
+
+    if args.dry_run:
+        expected = args.limit if args.limit is not None else 0
+        logger.info("dry run selected; would process at most %d identifiers", expected)
+        return 0
+
     try:
         ids = io.read_ids(
             args.input_csv,
@@ -62,15 +71,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     if args.limit is not None:
-        if args.limit < 0:
-            logger.error("--limit must be non-negative")
-            return 1
         ids = ids[: args.limit]
         logger.info("processing at most %d identifiers", len(ids))
-
-    if args.dry_run:
-        logger.info("dry run selected; skipping data retrieval")
-        return 0
 
     try:
         df = cl.get_activities(
