@@ -6,7 +6,6 @@ This script reads an input CSV file and re-serialises it deterministically using
 
 from __future__ import annotations
 
-import argparse
 import logging
 import time
 from pathlib import Path
@@ -15,20 +14,10 @@ from typing import Sequence
 import pandas as pd
 
 from library.csv_utils import write_csv_deterministic
-from library.cli import add_common_arguments
+from library.cli_utils import build_parser
 
 
 logger = logging.getLogger(__name__)
-
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    add_common_arguments(parser)
-    parser.add_argument("--col-order", nargs="*", help="Preferred column order")
-    parser.add_argument("--key-cols", nargs="*", help="Columns used for sorting")
-    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -45,7 +34,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         Zero on success.
     """
 
-    args = parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
     start = time.perf_counter()
     df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
