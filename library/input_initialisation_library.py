@@ -1156,6 +1156,8 @@ def save_tables(
     - ``*_non_independent`` → ``non_independent/``
     - ``*_status`` tables are placed under ``status/`` with the above
       variants nested within it.
+    - ``*_status_statistics`` tables follow the same directory rules as
+      ``*_status``.
 
     Parameters
     ----------
@@ -1179,7 +1181,15 @@ def save_tables(
     paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
-        if entity.endswith("_non_independent_status"):
+        if entity.endswith("_non_independent_status_statistics"):
+            sub_dir = out_dir / "status" / "non-independent"
+        elif entity.endswith("_independent_status_statistics"):
+            sub_dir = out_dir / "status" / "independent"
+        elif entity.endswith("_same_document_status_statistics"):
+            sub_dir = out_dir / "status" / "same_document"
+        elif entity.endswith("_status_statistics"):
+            sub_dir = out_dir / "status"
+        elif entity.endswith("_non_independent_status"):
             sub_dir = out_dir / "status" / "non-independent"
         elif entity.endswith("_independent_status"):
             sub_dir = out_dir / "status" / "independent"
