@@ -1,4 +1,4 @@
-"""Tests for :mod:`chembl_da.library.logging_setup`."""
+"""Tests for :mod:`library.logging_setup`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from io import StringIO
 import json
 import pytest
 
-from chembl_da.library.logging_setup import LoggerConfig, configure_logger
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 def parse_lines(buffer: StringIO) -> list[dict[str, object]]:

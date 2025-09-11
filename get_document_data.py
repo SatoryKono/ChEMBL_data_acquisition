@@ -62,7 +62,7 @@ from library.cli import (
 from pandera.errors import SchemaErrors
 from schemas import DocumentsSchema, normalize_documents
 
-from chembl_da.library import write_csv_deterministic
+from library import write_csv_deterministic
 
 logger = logging.getLogger(__name__)
 
