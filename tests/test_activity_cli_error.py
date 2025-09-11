@@ -5,11 +5,11 @@ from pathlib import Path
 
 import requests
 
-import get_activity_data as gad
 from library import chembl_library as cl
 from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
+from scripts import get_activity_data as gad
 
 
 def test_run_chembl_handles_request_error(monkeypatch) -> None:

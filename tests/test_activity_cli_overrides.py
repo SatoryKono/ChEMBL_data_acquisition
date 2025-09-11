@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-import get_activity_data as gad
 from library import chembl_library as cl
 from library import io
+from scripts import get_activity_data as gad
 
 
 def _create_config(tmp_path: Path) -> Path:
@@ -37,7 +37,7 @@ def _run(
     called: dict[str, object] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: iter(["1"]))
 
-    def fake_get(ids, cfg, chunk_size, timeout):
+    def fake_get(ids, cfg, client, chunk_size, timeout):
         data = list(ids)
         called["chunk_size"] = chunk_size
         return pd.DataFrame({"activity_id": data})

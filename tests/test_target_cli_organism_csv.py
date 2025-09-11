@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import get_target_data as gtd
+from scripts import get_target_data as gtd
 
 
 def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
