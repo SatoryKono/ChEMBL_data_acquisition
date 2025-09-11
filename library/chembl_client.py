@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator
+from typing import Any, Dict, Iterable, Iterator
 
-import logging
+import time
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .config import ApiCfg
+from .log import logger
 
-logger = logging.getLogger(__name__)
+_CACHE: Dict[str, dict[str, Any]] = {}
 
 
 def request_json(
@@ -42,6 +43,13 @@ def request_json(
         If the response body is not valid JSON.
 
     """
+    read_timeout = timeout if timeout is not None else cfg.timeout_read
+    cache_key = url
+    if cache_key in _CACHE:
+        logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
+        return _CACHE[cache_key]
+    logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
+
     retry = Retry(
         total=cfg.retries,
         backoff_factor=cfg.backoff_factor,
@@ -52,10 +60,34 @@ def request_json(
     with requests.Session() as session:
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        read_timeout = timeout if timeout is not None else cfg.timeout_read
-        with session.get(url, timeout=(cfg.timeout_connect, read_timeout)) as response:
-            response.raise_for_status()
-            return response.json()
+        for attempt in range(1, cfg.retries + 1):
+            event = "request_start" if attempt == 1 else "request_retry"
+            logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
+            try:
+                with session.get(
+                    url, timeout=(cfg.timeout_connect, read_timeout)
+                ) as response:
+                    response.raise_for_status()
+                    data = response.json()
+                    logger.info(
+                        "request_ok",
+                        extra={
+                            "stage": "request_ok",
+                            "url": url,
+                            "status": getattr(response, "status_code", None),
+                        },
+                    )
+                    _CACHE[cache_key] = data
+                    logger.info("cache_set", extra={"stage": "cache_set", "url": url})
+                    return data
+            except (requests.RequestException, ValueError):
+                if attempt >= cfg.retries:
+                    logger.exception(
+                        "request_fail", extra={"stage": "request_fail", "url": url}
+                    )
+                    raise
+                time.sleep(cfg.backoff_factor * attempt)
+    raise requests.RequestException(f"request_json failed for url: {url}")
 
 
 def _chunked(items: Iterable[str], size: int) -> Iterator[list[str]]:

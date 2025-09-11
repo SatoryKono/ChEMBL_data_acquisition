@@ -18,6 +18,8 @@ import requests
 from xml.etree import ElementTree as ET
 from urllib.parse import quote
 
+from .log import logger
+
 from .config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
 
 
@@ -97,6 +99,8 @@ def _do_request(
 
     """
     for attempt in range(retries + 1):
+        event = "request_start" if attempt == 0 else "request_retry"
+        logger.info(event, extra={"stage": event, "url": url, "attempt": attempt + 1})
         if attempt:
             time.sleep(sleep * attempt)
 
@@ -117,23 +121,56 @@ def _do_request(
                     parse_error = ""
         except requests.RequestException as exc:
             if attempt >= retries:  # pragma: no cover - network errors
+                logger.exception(
+                    "request_fail", extra={"stage": "request_fail", "url": url}
+                )
                 return None, str(exc)
             continue
         if status_code in (429, 500, 502, 503, 504):
             if attempt >= retries:
+                logger.info(
+                    "request_fail",
+                    extra={
+                        "stage": "request_fail",
+                        "url": url,
+                        "status": status_code,
+                    },
+                )
                 return None, f"HTTP {status_code}: {text[:100]}"
             continue
         if status_code == 404:
+            logger.info(
+                "request_fail",
+                extra={"stage": "request_fail", "url": url, "status": status_code},
+            )
             return None, "PMID not found"
         if status_code == 400:
+            logger.info(
+                "request_fail",
+                extra={"stage": "request_fail", "url": url, "status": status_code},
+            )
             return None, f"Bad request: {text[:100]}"
         if status_code != 200:
+            logger.info(
+                "request_fail",
+                extra={"stage": "request_fail", "url": url, "status": status_code},
+            )
             return None, f"HTTP {status_code}: {text[:100]}"
         if expect_json:
             if parse_error:
+                logger.info("request_fail", extra={"stage": "request_fail", "url": url})
                 return None, f"Invalid JSON: {parse_error}"
+            logger.info(
+                "request_ok",
+                extra={"stage": "request_ok", "url": url, "status": status_code},
+            )
             return content, ""
+        logger.info(
+            "request_ok",
+            extra={"stage": "request_ok", "url": url, "status": status_code},
+        )
         return content or "", ""
+    logger.info("request_fail", extra={"stage": "request_fail", "url": url})
     return None, "Request failed"
 
 
