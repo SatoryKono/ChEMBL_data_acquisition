@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Iterator
+from typing import Any, Dict, Iterable, Iterator, cast
 
 import random
 import threading
@@ -84,7 +84,7 @@ def request_json(
                 url, timeout=(cfg.timeout_connect, read_timeout)
             ) as response:
                 response.raise_for_status()
-                data = response.json()
+                data: dict[str, Any] = cast(dict[str, Any], response.json())
                 logger.info(
                     "request_ok",
                     extra={
