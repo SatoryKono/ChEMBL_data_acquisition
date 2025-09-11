@@ -51,6 +51,7 @@ class RateLimiter:
 
 
 _limiters: Dict[str, RateLimiter] = {}
+_limiters_lock = threading.Lock()
 
 
 def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
@@ -66,15 +67,16 @@ def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
     burst:
         Maximum burst size.  Defaults to ``ceil(rps)``.
     """
-    limiter = _limiters.get(name)
-    if (
-        limiter is None
-        or limiter.rps != rps
-        or (burst is not None and limiter.burst != burst)
-    ):
-        limiter = RateLimiter(rps, burst)
-        _limiters[name] = limiter
-    return limiter
+    with _limiters_lock:
+        limiter = _limiters.get(name)
+        if (
+            limiter is None
+            or limiter.rps != rps
+            or (burst is not None and limiter.burst != burst)
+        ):
+            limiter = RateLimiter(rps, burst)
+            _limiters[name] = limiter
+        return limiter
 
 
 def sleep(delay: float) -> None:
