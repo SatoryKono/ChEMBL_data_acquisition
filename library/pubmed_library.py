@@ -7,7 +7,6 @@ OpenAlex and Crossref and consolidate it into tabular form.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import logging
 import sys
@@ -40,8 +39,8 @@ if TYPE_CHECKING:
     from .rate_limiter import RateLimiter
 
 
-def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> list[str]:
-    """Read PMID column from a CSV file.
+def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> pd.DataFrame:
+    """Read the ``PMID`` column from ``path`` as a DataFrame.
 
     Parameters
     ----------
@@ -52,23 +51,31 @@ def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> list[str]:
 
     Returns
     -------
-    list of str
-        Extracted PMIDs.
+    pandas.DataFrame
+        DataFrame with a single ``PMID`` column containing non-empty values.
 
+    Raises
+    ------
+    ValueError
+        If the file cannot be decoded using the configured encodings or
+        the ``PMID`` column is missing.
     """
+
     path = Path(path)
     last_exc: Exception | None = None
     encodings = (cfg or PubMedCfg()).encodings
     for enc in encodings:
         try:
-            with path.open(encoding=enc, newline="") as f:
-                reader = csv.DictReader(f)
-                if reader.fieldnames is None or "PMID" not in reader.fieldnames:
-                    raise ValueError("Input CSV must contain 'PMID' column")
-                return [pmid for row in reader if (pmid := row.get("PMID", "").strip())]
-        except UnicodeDecodeError as exc:
+            df = pd.read_csv(path, encoding=enc, dtype=str)
+        except UnicodeDecodeError as exc:  # pragma: no cover - depends on filesystem
             last_exc = exc
             continue
+        if "PMID" not in df.columns:
+            raise ValueError("Input CSV must contain 'PMID' column")
+        pmid_df = df[["PMID"]].copy()
+        pmid_df["PMID"] = pmid_df["PMID"].fillna("").astype(str).str.strip()
+        pmid_df = pmid_df[pmid_df["PMID"].astype(bool)]
+        return pmid_df
     raise ValueError(
         f"Could not decode {path} with encodings {encodings}. Last error: {last_exc}"
     )
@@ -868,7 +875,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = Config()
     pubmed_cfg = cfg.pubmed
     semsch_cfg = cfg.semantic_scholar
-    pmids = read_pmids(args.input_csv, cfg=pubmed_cfg)
+    pmid_df = read_pmids(args.input_csv, cfg=pubmed_cfg)
+    pmids = pmid_df["PMID"].tolist()
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
 
