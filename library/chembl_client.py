@@ -20,6 +20,7 @@ from .log import logger
 # Cache entries expire after one hour to avoid serving stale data. The TTL can
 # be adjusted in the future via configuration if required.
 _CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=1024, ttl=3600)
+_CACHE_LOCK = threading.Lock()
 
 _session: Session | None = None
 _session_lock = threading.Lock()
@@ -74,10 +75,12 @@ def request_json(
     limiter = get_limiter("chembl", cfg.rps, cfg.burst)
     read_timeout = timeout if timeout is not None else cfg.timeout_read
     cache_key = url
-    if cache_key in _CACHE:
-        logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
-        return _CACHE[cache_key]
-    logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
+    with _CACHE_LOCK:
+        cached = _CACHE.get(cache_key)
+        if cached is not None:
+            logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
+            return cached
+        logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
     global _session
     if _session is None:
@@ -107,9 +110,13 @@ def request_json(
                         "status": getattr(response, "status_code", None),
                     },
                 )
-                _CACHE[cache_key] = data
-                logger.info("cache_set", extra={"stage": "cache_set", "url": url})
-                return data
+                with _CACHE_LOCK:
+                    cached = _CACHE.get(cache_key)
+                    if cached is not None:
+                        return cached
+                    _CACHE[cache_key] = data
+                    logger.info("cache_set", extra={"stage": "cache_set", "url": url})
+                    return data
         except (requests.RequestException, ValueError) as exc:
             last_exc = exc
             if attempt >= cfg.retries:
@@ -132,8 +139,8 @@ def clear_cache() -> None:
     This helper is primarily intended for tests to avoid interference
     from previously cached responses.
     """
-
-    _CACHE.clear()
+    with _CACHE_LOCK:
+        _CACHE.clear()
 
 
 def _chunked(items: Iterable[str], size: int) -> Iterator[list[str]]:
