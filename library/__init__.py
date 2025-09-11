@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from . import io, validation
 from .config import Config, load_config
-from .csv_utils import sha256_file, write_csv_deterministic
+from .csv_utils import (
+    sha256_file,
+    write_csv_chunks_deterministic,
+    write_csv_deterministic,
+)
 from .document_type_classifier import compute_scores, decide_label
 from .document_type_terms import (
     EXPERIMENTAL_TERMS,
@@ -36,6 +40,7 @@ __all__ = [
     "load_config",
     "SidecarErrors",
     "write_csv_deterministic",
+    "write_csv_chunks_deterministic",
     "sha256_file",
     "Logger",
     "LoggerConfig",

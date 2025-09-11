@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
 
@@ -197,6 +197,95 @@ def write_csv_deterministic(
     os.replace(tmp_path, out_path)
     _write_meta(out_path, cfg)
     return out_path
+
+
+def write_csv_chunks_deterministic(
+    chunks: Iterable[pd.DataFrame],
+    path: str | Path,
+    *,
+    col_order: Sequence[str] | None = None,
+    key_cols: Sequence[str] | None = None,
+    chunksize: int = 1000,
+    sep: str = ",",
+    encoding: str = "utf-8-sig",
+    cfg: Config | None = None,
+    drop_unexpected_cols: bool = False,
+) -> Path:
+    """Write DataFrame chunks to ``path`` deterministically.
+
+    Each ``df_chunk`` is immediately normalised and written to a temporary
+    file using :func:`write_csv_deterministic` with ``chunksize`` to reduce
+    peak memory usage. After all chunks are processed the temporary files are
+    reloaded via a :class:`~collections.abc.Generator` and combined with
+    :func:`pandas.concat`. The concatenated frame is finally serialised
+    deterministically to ``path``.
+
+    Parameters
+    ----------
+    chunks:
+        Iterable yielding :class:`pandas.DataFrame` objects.
+    path:
+        Destination CSV file.
+    col_order:
+        Optional preferred column order. Forwarded to
+        :func:`write_csv_deterministic`.
+    key_cols:
+        Optional columns defining row order. Forwarded to
+        :func:`write_csv_deterministic`.
+    chunksize:
+        Number of rows written per chunk.
+    sep:
+        Field delimiter.
+    encoding:
+        Output character encoding.
+    cfg:
+        Optional configuration used for metadata sidecar creation.
+    drop_unexpected_cols:
+        When ``True`` unexpected columns are dropped.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the written CSV file.
+    """
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_paths: list[Path] = []
+        for idx, chunk in enumerate(chunks):
+            tmp_path = Path(tmpdir) / f"chunk_{idx}.csv"
+            write_csv_deterministic(
+                chunk,
+                tmp_path,
+                col_order=col_order,
+                key_cols=key_cols,
+                chunksize=chunksize,
+                sep=sep,
+                encoding=encoding,
+                cfg=None,
+                drop_unexpected_cols=drop_unexpected_cols,
+            )
+            meta = tmp_path.with_suffix(tmp_path.suffix + ".meta.yaml")
+            if meta.exists():
+                meta.unlink()
+            tmp_paths.append(tmp_path)
+
+        if tmp_paths:
+            frames = (pd.read_csv(p, sep=sep, encoding=encoding) for p in tmp_paths)
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame()
+
+    return write_csv_deterministic(
+        combined,
+        path,
+        col_order=col_order,
+        key_cols=key_cols,
+        chunksize=chunksize,
+        sep=sep,
+        encoding=encoding,
+        cfg=cfg,
+        drop_unexpected_cols=drop_unexpected_cols,
+    )
 
 
 def sha256_file(path: Path, *, block_size: int = 64 * 1024) -> str:
