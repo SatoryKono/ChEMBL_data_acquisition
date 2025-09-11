@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 import requests
-from cachetools import TTLCache  # type: ignore[import-untyped]
+from cachetools import TTLCache
 from requests import Session
 
 from .config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
@@ -87,7 +87,7 @@ class ChemblClient:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
-                return cast(dict[str, Any], cached)
+                return cached
             logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
         last_exc: requests.RequestException | ValueError | None = None
@@ -113,7 +113,7 @@ class ChemblClient:
                     with self._cache_lock:
                         cached = self.cache.get(cache_key)
                         if cached is not None:
-                            return cast(dict[str, Any], cached)
+                            return cached
                         self.cache[cache_key] = data
                         logger.info(
                             "cache_set", extra={"stage": "cache_set", "url": url}

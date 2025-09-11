@@ -32,11 +32,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 
 from typing import Any, Union, get_args, get_origin, get_type_hints
-
-try:
-    from types import UnionType
-except ImportError:  # pragma: no cover - Python <3.10
-    UnionType = None  # type: ignore[assignment]
+from types import UnionType
 
 from urllib.parse import urlparse
 
