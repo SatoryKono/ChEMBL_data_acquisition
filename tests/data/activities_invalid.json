@@ -1,0 +1,11 @@
+[
+    {
+        "activity_id": 2,
+        "testitem_id": "CHEMBL3",
+        "target_id": "CHEMBL4",
+        "standard_type": "IC50",
+        "standard_value": -1.0,
+        "relation": ">",
+        "units": "10 μM",
+    }
+]
