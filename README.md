@@ -96,15 +96,19 @@ config.yaml       Global configuration defaults
 
 Individual scripts provide specialised data retrieval utilities:
 
-* ``get_activity_data.py`` – fetch ChEMBL activity information. Supports
-  ``--limit`` to process only the first *N* identifiers and ``--dry-run`` to
-  skip API calls and file output.
+* ``get_activity_data.py`` – fetch ChEMBL activity information.
 * ``get_assay_data.py`` – retrieve assay descriptions from ChEMBL.
 * ``get_document_data.py`` – gather publication metadata.
 * ``get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.
 * ``get_testitem_data.py`` – download compound data and enrich with PubChem.
 * ``get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
-* ``scripts/check_determinism.py`` – ensure deterministic CSV output.
+
+### Deterministic CSV output
+
+The function ``library.csv_utils.write_csv_deterministic`` normalises column
+order, row sorting and value serialisation so repeated runs produce identical
+files. The helper script ``scripts/check_determinism.py`` writes a sample CSV
+twice and compares SHA-256 hashes to catch nondeterministic behaviour.
 
 All commands emit the structured JSON logs described above. Adjust verbosity
 with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
@@ -397,17 +401,23 @@ in ``--out-dir``.
 
 ## Development
 
-Install the optional developer tools and then run formatting, linting and type
-checking via *black*, *ruff* and *mypy* respectively:
+Install the optional developer tools and run the standard quality checks:
 
-```bash
-black get_*.py library mapper_main.py table_quality_main.py scripts
-ruff check get_*.py library mapper_main.py table_quality_main.py scripts
-mypy get_*.py library mapper_main.py table_quality_main.py scripts
-python scripts/check_determinism.py
+* ``black`` – auto-format the code::
 
-pytest
-```
+      black get_*.py library mapper_main.py table_quality_main.py scripts
 
-Test data live in ``tests/data`` and provide coverage for utility
-functions in the library modules.
+* ``ruff`` – lint the project::
+
+      ruff check get_*.py library mapper_main.py table_quality_main.py scripts
+
+* ``mypy`` – perform static type checks::
+
+      mypy get_*.py library mapper_main.py table_quality_main.py scripts
+
+* ``python scripts/check_determinism.py`` – verify deterministic CSV output.
+
+* ``pytest`` – run the unit tests.
+
+Test data live in ``tests/data`` and provide coverage for utility functions in
+the library modules.

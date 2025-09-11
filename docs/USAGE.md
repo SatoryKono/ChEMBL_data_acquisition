@@ -16,13 +16,6 @@ python get_activity_data.py \
     --column activity_id
 ```
 
-Limit processing and skip network requests during development::
-
-    python get_activity_data.py \
-        --input data/input-smoke/activity.csv \
-        --column activity_id \
-        --limit 5 --dry-run
-
 ## Assay descriptions
 
 ```bash
@@ -89,6 +82,13 @@ python table_quality_main.py \
 The profiler writes `<table-name>_quality_report_table.csv` and
 `<table-name>_data_correlation_report_table.csv` in the current directory.
 
+## Deterministic CSV output
+
+``library.csv_utils.write_csv_deterministic`` serialises DataFrames with a
+stable column order, row sorting and value formatting so repeated runs produce
+identical files. The ``scripts/check_determinism.py`` utility writes a sample
+dataset twice and compares SHA-256 hashes to verify reproducibility.
+
 ## Running the tests
 
 The repository contains a small regression suite using `pytest`:
@@ -107,7 +107,8 @@ changes. Install the developer extras first:
 
 ```bash
 pip install -r requirements-dev.txt
-black get_*.py library mapper_main.py table_quality_main.py
-ruff check get_*.py library mapper_main.py table_quality_main.py
-mypy get_*.py library mapper_main.py table_quality_main.py
+black get_*.py library mapper_main.py table_quality_main.py scripts
+ruff check get_*.py library mapper_main.py table_quality_main.py scripts
+mypy get_*.py library mapper_main.py table_quality_main.py scripts
+python scripts/check_determinism.py
 ```
