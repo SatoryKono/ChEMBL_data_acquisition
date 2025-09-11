@@ -9,7 +9,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+
+from typing import Any, Dict, Iterable, Literal, Mapping
+from .log import logger
+
 
 import pandas as pd
 
@@ -775,6 +778,99 @@ def append_entities(df_a: pd.DataFrame, df_b: pd.DataFrame) -> pd.DataFrame:
     """Vertically concatenate ``df_a`` and ``df_b`` and remove duplicates."""
     combined = pd.concat([df_a, df_b], ignore_index=True, sort=False)
     return combined.drop_duplicates(keep="first")
+
+
+def generate_pair_entity_tables(
+    tables: TableDict, pair_keys: Mapping[str, str]
+) -> TableDict:
+    """Generate entity subtables for each pair type.
+
+    For every pair table listed in ``pair_keys`` the function extracts unique
+    activity identifiers, filters the ``activity`` table accordingly and
+    produces corresponding ``assay``, ``document``, ``target`` and ``testitem``
+    subtables. New tables are appended to a copy of ``tables`` using the
+    provided suffixes.
+
+    Args:
+        tables: Mapping of entity names to their dataframes. Must include the
+            ``activity`` table and the pair tables referenced in ``pair_keys``.
+        pair_keys: Mapping of pair table keys to suffixes used for naming the
+            resulting subtables. For example ``{"pairs_independent": "ind"}``
+            would create tables named ``activity_ind``, ``assay_ind`` etc.
+
+    Returns:
+        TableDict: Copy of ``tables`` extended with newly generated entity
+        tables.
+
+    Warns:
+        logger.warning: If required tables or columns are missing. In such
+        cases the corresponding subtables are skipped.
+    """
+
+    result: TableDict = {**tables}
+
+    activity_df = tables.get("activity")
+    if activity_df is None:
+        logger.warning("'activity' table missing; cannot generate pair tables")
+        return result
+    if "activity_chembl_id" not in activity_df.columns:
+        logger.warning("'activity' table missing column 'activity_chembl_id'")
+        return result
+
+    entity_cols: Dict[str, str] = {
+        "assay": "assay_chembl_id",
+        "document": "document_chembl_id",
+        "target": "target_chembl_id",
+        "testitem": "molecule_chembl_id",
+    }
+
+    for pair_key, suffix in pair_keys.items():
+        pairs_df = tables.get(pair_key)
+        if pairs_df is None:
+            logger.warning("pair table '%s' missing", pair_key)
+            continue
+
+        required = {"activity_chembl_id1", "activity_chembl_id2"}
+        missing = required - set(pairs_df.columns)
+        if missing:
+            logger.warning(
+                "pair table '%s' missing columns %s", pair_key, sorted(missing)
+            )
+            continue
+
+        activity_ids = pd.unique(
+            pd.concat(
+                [pairs_df["activity_chembl_id1"], pairs_df["activity_chembl_id2"]],
+                ignore_index=True,
+            ).dropna()
+        )
+
+        filtered_activity = activity_df[
+            activity_df["activity_chembl_id"].isin(activity_ids)
+        ].copy()
+        result[f"activity_{suffix}"] = filtered_activity
+
+        for entity, id_col in entity_cols.items():
+            if id_col not in filtered_activity.columns:
+                logger.warning(
+                    "activity table missing column '%s'; skipping %s_%s",
+                    id_col,
+                    entity,
+                    suffix,
+                )
+                continue
+
+            ids = pd.unique(filtered_activity[id_col].dropna())
+            entity_df = tables.get(entity)
+            if entity_df is None:
+                logger.warning("entity table '%s' missing", entity)
+                continue
+            if id_col not in entity_df.columns:
+                logger.warning("entity table '%s' missing column '%s'", entity, id_col)
+                continue
+            result[f"{entity}_{suffix}"] = entity_df[entity_df[id_col].isin(ids)].copy()
+
+    return result
 
 
 def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
