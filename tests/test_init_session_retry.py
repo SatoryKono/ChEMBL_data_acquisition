@@ -24,31 +24,22 @@ def test_init_session_uses_cfg_retry(
     """Ensure CLI scripts use retry settings from :class:`Config`.
 
     The test verifies that each script passes ``cfg.retry`` to
-    :func:`library.chembl_client.init_session` by monkeypatching the
-    function and capturing the supplied arguments.
+    :class:`library.chembl_client.ChemblClient` by monkeypatching the
+    class and capturing the supplied arguments.
     """
 
     module = import_module(module_name)
     cfg = Config()
     captured: dict[str, object] = {}
 
-    def fake_init(api: object, retry: object, *_args: object) -> None:
-        """Record parameters supplied to :func:`init_session`.
+    class FakeClient:
+        def __init__(
+            self, api: object, retry: object, *_args: object, **_kwargs: object
+        ) -> None:
+            captured["api"] = api
+            captured["retry"] = retry
 
-        Parameters
-        ----------
-        api : object
-            API configuration object.
-        retry : object
-            Retry configuration to apply.
-        *_args : object
-            Additional positional arguments, ignored.
-        """
-
-        captured["api"] = api
-        captured["retry"] = retry
-
-    monkeypatch.setattr(module, "init_session", fake_init)
+    monkeypatch.setattr(module, "ChemblClient", FakeClient)
 
     args = argparse.Namespace(
         input_csv=Path("missing.csv"),

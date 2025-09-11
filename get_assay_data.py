@@ -8,7 +8,7 @@ from typing import Sequence
 
 import requests
 from library.config import Config, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
@@ -46,7 +46,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare HTTP session for ChEMBL requests
-    init_session(cfg.api, cfg.retry)
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
@@ -58,6 +58,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = cl.get_assays(
             ids,
             cfg=cfg.api,
+            client=client,
             chunk_size=cfg.assay.chunk_size,
             timeout=cfg.assay.timeout,
         )

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 import hashlib
+import logging
 import os
 import subprocess
 import sys
@@ -24,6 +25,9 @@ from pandas.api import types as ptypes
 from .config import Config, _serialize_paths
 
 
+logger = logging.getLogger(__name__)
+
+
 def _git_sha() -> str:
     """Return the current Git commit hash or ``"unknown"`` if unavailable."""
 
@@ -33,8 +37,12 @@ def _git_sha() -> str:
             check=True,
             capture_output=True,
             text=True,
+            timeout=5,
         )
         return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        logger.warning("git rev-parse timed out")
+        return "unknown"
     except Exception:  # pragma: no cover - git may be unavailable
         return "unknown"
 

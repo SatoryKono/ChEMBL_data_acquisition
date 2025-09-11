@@ -6,9 +6,6 @@ using :func:`library.csv_utils.write_csv_deterministic`.
 
 from __future__ import annotations
 
-
-import logging
-
 import time
 from pathlib import Path
 from typing import Sequence
@@ -17,14 +14,8 @@ import pandas as pd
 
 from library.csv_utils import write_csv_deterministic
 from library.cli_utils import build_parser
-
-
-
-logger = logging.getLogger(__name__)
-
 from library.log import logger
-from library.logging_setup import LoggerConfig, configure_logger
-
+from library.cli import LoggerConfig, configure_logger
 
 
 def main(argv: Sequence[str] | None = None) -> int:

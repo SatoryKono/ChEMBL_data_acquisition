@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Sequence
+
+from typing import Iterable, Sequence
 from itertools import islice
+
 
 import requests
 from library.config import Config, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import chembl_library as cl
 from library import io
@@ -60,24 +62,30 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 0
 
     # Configure HTTP session with the supplied User-Agent and retry policy
-    init_session(cfg.api, cfg.retry)
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
-        ids = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
+        ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
 
+    # Apply the ``limit`` without materialising the entire iterator first.
+    # ``itertools.islice`` allows lazy slicing; converting to ``list`` enables
+    # length calculation for logging purposes.
+    ids: Iterable[str] = ids_iter
     if limit is not None:
-        ids = ids[:limit]
-        logger.info("processing at most %d identifiers", len(ids))
+        limited = list(islice(ids_iter, limit))
+        ids = limited
+        logger.info("processing at most %d identifiers", len(limited))
 
 
     try:
         df = cl.get_activities(
             ids,
             cfg=cfg.api,
+            client=client,
             chunk_size=cfg.activity.chunk_size,
             timeout=cfg.activity.timeout,
         )
