@@ -53,7 +53,6 @@ class _BaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_dict(self) -> dict[str, Any]:
- 
         """Return the model as a plain dictionary.
 
         Uses :meth:`pydantic.BaseModel.model_dump` to obtain a standard
@@ -63,8 +62,8 @@ class _BaseModel(BaseModel):
         -------
         dict[str, Any]
             Dictionary representation of the model.
- 
- 
+
+
         """
 
         return self.model_dump()
@@ -660,7 +659,7 @@ def _mask_secrets(data: Any) -> Any:
 def print_config(cfg: Config) -> None:
     """Print ``cfg`` as YAML masking secret values."""
 
-    data = _serialize_paths(cfg.model_dump())
+    data = _serialize_paths(cfg.to_dict())
     masked = _mask_secrets(data)
     print(yaml.safe_dump(masked, sort_keys=False))
 

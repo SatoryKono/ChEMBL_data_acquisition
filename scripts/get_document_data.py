@@ -40,7 +40,7 @@ if str(ROOT) not in sys.path:
 
 from library import chembl_library as cl  # noqa: E402
 from library import document_postprocessing as dp  # noqa: E402
-from library import io, write_csv_deterministic  # noqa: E402
+from library import io  # noqa: E402
 from library import openalex_crossref_library as ocl  # noqa: E402
 from library import pubmed_library as pl  # noqa: E402
 from library import semantic_scholar_library as ssl  # noqa: E402

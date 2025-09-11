@@ -146,11 +146,9 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
 def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
     if url in _CACHE:
-
         logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
         return cast(dict[str, Any], _CACHE[url])
     logger.info("cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"})
-
 
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
