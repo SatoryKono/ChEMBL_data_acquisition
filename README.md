@@ -153,6 +153,152 @@ Example fetching assay data::
 Each command validates required columns before querying external APIs and
 writes the resulting table to the specified output file.
 
+## Data contracts
+
+Each output table is validated with ``pandera`` to guarantee a consistent
+layout. Columns must satisfy the following contracts.
+
+### Activities
+
+Required columns
+
+* ``activity_id`` (*int*, ``>= 0``)
+* ``testitem_id`` (*str*)
+* ``standard_value`` (*float*, ``>= 0``)
+
+Optional columns
+
+* ``target_id`` (*str*)
+* ``standard_type`` (*str*, one of ``IC50``, ``EC50``, ``Ki``, ``Kd``)
+* ``pA_value`` (*float*, ``0–14``)
+
+Valid row
+
+```csv
+activity_id,testitem_id,target_id,standard_type,standard_value,pA_value
+1,TST1,TGT1,IC50,50,9
+```
+
+Invalid row (``standard_type`` outside enum, ``pA_value`` > 14)
+
+```csv
+activity_id,testitem_id,target_id,standard_type,standard_value,pA_value
+2,TST2,TGT2,IC90,100,20
+```
+
+### Assays
+
+Required columns
+
+* ``assay_chembl_id`` (*str*)
+* ``document_chembl_id`` (*str*)
+* ``year`` (*int*, ``1900–2100``)
+* ``month`` (*int*, ``1–12``)
+
+Optional columns
+
+* ``target_chembl_id`` (*str*)
+
+Valid row
+
+```csv
+assay_chembl_id,document_chembl_id,target_chembl_id,year,month
+A1,D1,T1,2023,5
+```
+
+Invalid row (``month`` > 12)
+
+```csv
+assay_chembl_id,document_chembl_id,target_chembl_id,year,month
+A2,D2,T2,2023,13
+```
+
+### Documents
+
+Required columns
+
+* ``document_chembl_id`` (*str*)
+* ``title`` (*str*)
+* ``year`` (*int*, ``1900–2100``)
+* ``month`` (*int*, ``1–12``)
+
+Optional columns
+
+* ``doi`` (*str*)
+* ``day`` (*int*, ``1–31``)
+* ``citation`` (*int*, ``>= 0``)
+
+Valid row
+
+```csv
+document_chembl_id,doi,title,year,month,day,citation
+D1,10.1000/test,A study,2022,7,15,3
+```
+
+Invalid row (``day`` > 31, ``citation`` < 0)
+
+```csv
+document_chembl_id,doi,title,year,month,day,citation
+D2,10.1000/test2,Another study,2022,7,45,-1
+```
+
+### Targets
+
+Required columns
+
+* ``target_chembl_id`` (*str*)
+* ``organism`` (*str*)
+
+Optional columns
+
+* ``target_uniprot_id`` (*str*)
+* ``pH_dependence`` (*float*, ``0–14``)
+* ``isoforms`` (*float*, ``>= 0``)
+
+Valid row
+
+```csv
+target_chembl_id,organism,target_uniprot_id,pH_dependence,isoforms
+T1,Homo sapiens,P12345,7.4,2
+```
+
+Invalid row (``pH_dependence`` > 14)
+
+```csv
+target_chembl_id,organism,target_uniprot_id,pH_dependence,isoforms
+T2,Mus musculus,P67890,15,1
+```
+
+### Testitems
+
+Required columns
+
+* ``salt_chembl_id`` (*str*)
+* ``molecule_chembl_id`` (*str*)
+* ``molecule_type`` (*str*, ``Small molecule``, ``Biopolymer``,
+  ``Oligosaccharide``, ``Unknown``)
+* ``mw_freebase`` (*float*, ``0–2000``)
+
+Optional columns
+
+* ``chirality`` (*int*, ``-1``, ``0``, ``1``, ``2``)
+* ``num_ro5_violations`` (*float*, ``0–5``)
+* ``is_radical`` (*bool*)
+
+Valid row
+
+```csv
+salt_chembl_id,molecule_chembl_id,molecule_type,chirality,mw_freebase,num_ro5_violations,is_radical
+S1,M1,Small molecule,1,350.5,0,false
+```
+
+Invalid row (``molecule_type`` outside enum, ``mw_freebase`` > 2000)
+
+```csv
+salt_chembl_id,molecule_chembl_id,molecule_type,chirality,mw_freebase,num_ro5_violations,is_radical
+S2,M2,Peptide,0,2500,1,true
+```
+
 ## Configuration
 
 Default settings such as API endpoints, network timeouts, rate limits and
