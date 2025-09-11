@@ -6,16 +6,10 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-
-from typing import Any, Dict, Iterable, Literal, Mapping
-from .log import logger
-
-
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -748,7 +742,6 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
         if value in (True, 1, "1", "true", "t"):
             return True
         if value in (False, 0, "0", "false", "f"):
-
             return False
         raise ValueError(f"invalid boolean value: {value}")
 
