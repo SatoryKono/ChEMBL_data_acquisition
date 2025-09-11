@@ -155,6 +155,12 @@ twice and compares SHA-256 hashes to catch nondeterministic behaviour.
 The script requires the ``pandas`` package; install it with ``pip install pandas``
 if it is not already available in your environment.
 
+Each command-line tool emits a ``<output>.meta.yaml`` sidecar file alongside
+every CSV. The YAML document records the SHA-256 checksum, command-line
+arguments and timestamps to make results reproducible. The determinism check is
+executed in both pre-commit and continuous integration to guarantee that
+regressions are detected early.
+
 All commands emit the structured JSON logs described above. Adjust verbosity
 with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
 

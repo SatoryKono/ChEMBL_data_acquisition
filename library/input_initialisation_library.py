@@ -465,7 +465,6 @@ def process_activity_table(
         )
         raise FileNotFoundError(msg)
 
-
     targets = pd.read_csv(
         targets_path,
         dtype={
@@ -565,7 +564,7 @@ def _ensure_openpyxl() -> None:
 
     """
     try:
-        import openpyxl  # type: ignore
+        import openpyxl
     except Exception as exc:  # pragma: no cover - import error path
         raise RuntimeError("openpyxl>=3.1 is required to read Excel files") from exc
     version = tuple(int(v) for v in openpyxl.__version__.split(".")[:3])
