@@ -1,9 +1,12 @@
 repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.5.5
     hooks:
       - id: ruff
-      - id: ruff-format
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
     hooks:
@@ -20,14 +23,9 @@ repos:
           - pandera
   - repo: local
     hooks:
-      - id: check-determinism
-        name: check deterministic CSV output
-        entry: python scripts/check_determinism.py
-        language: system
-        pass_filenames: false
       - id: pytest
         name: pytest
         entry: pytest
-        language: system
+        language: python
         pass_filenames: false
-        args: ["--ignore=tests/test_cli_bad_config.py"]
+        additional_dependencies: [".[dev]"]

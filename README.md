@@ -9,16 +9,23 @@ parsing, validation, aggregation and export of tabular data.
 1. **Install dependencies**
 
    ```bash
-   pip install -r requirements.txt
+   pip install .
    # Development extras (black, ruff, mypy, pytest, hypothesis, responses, ...)
-   pip install -r requirements.txt -r requirements-dev.txt
+   pip install ".[dev]"
    ```
 
    The second command installs optional tooling for development and testing,
    including property-based tests powered by ``hypothesis`` and HTTP mocking
    via ``responses``.
 
-2. **Run a sample script**
+2. **Set up pre-commit hooks**
+
+   ```bash
+   pre-commit install
+   pre-commit run --all-files
+   ```
+
+3. **Run a sample script**
 
    ```bash
    python get_assay_data.py --input tests/data/assays.csv \
@@ -38,14 +45,14 @@ parsing, validation, aggregation and export of tabular data.
        --output out/report.csv --log-level INFO
    ```
 
-3. **Run the tests**
+4. **Run the tests**
 
    ```bash
    pytest
-    ```
+   ```
 
-    The suite exercises the library modules using fixtures from
-    ``tests/data``.
+   The suite exercises the library modules using fixtures from
+   ``tests/data``.
 
 ## Конфигурация через `.env`
 
@@ -150,10 +157,10 @@ Clone the repository and install the pinned runtime dependencies:
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install -r requirements.txt
+pip install .
 
 # Development tools (black, ruff, mypy, pytest, hypothesis, responses)
-pip install -r requirements.txt -r requirements-dev.txt
+pip install ".[dev]"
 ```
 
 ### Pre-commit hooks
