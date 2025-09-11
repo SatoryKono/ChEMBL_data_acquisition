@@ -20,6 +20,8 @@ def _create_config(tmp_path: Path) -> Path:
         "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
         "  uniprot_data_dir: uniprot\n"
         "  organism_csv: dictionary/organism.csv\n"
+        "  status_csv: dictionary/status.csv\n"
+        "  targets_type_csv: dictionary/targets_type.csv\n"
     )
     return cfg
 
