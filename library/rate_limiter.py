@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Dict
+from typing import cast
+
+from cachetools import TTLCache  # type: ignore[import-untyped]
 
 
 class RateLimiter:
@@ -50,8 +52,24 @@ class RateLimiter:
             self._updated = now
 
 
-_limiters: Dict[str, RateLimiter] = {}
+_limiters: TTLCache[str, RateLimiter] = TTLCache(maxsize=128, ttl=600)
 _limiters_lock = threading.Lock()
+
+
+def configure_limiter_cache(maxsize: int, ttl: int) -> None:
+    """Configure the cache storing :class:`RateLimiter` instances.
+
+    Parameters
+    ----------
+    maxsize:
+        Maximum number of cached limiters.
+    ttl:
+        Time-to-live for cache entries in seconds.
+    """
+
+    global _limiters
+    with _limiters_lock:
+        _limiters = TTLCache(maxsize=maxsize, ttl=ttl)
 
 
 def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
@@ -68,7 +86,7 @@ def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
         Maximum burst size.  Defaults to ``ceil(rps)``.
     """
     with _limiters_lock:
-        limiter = _limiters.get(name)
+        limiter = cast(RateLimiter | None, _limiters.get(name))
         if (
             limiter is None
             or limiter.rps != rps

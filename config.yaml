@@ -204,6 +204,8 @@ init:
 rate:
   global_rps: 8  # Global requests-per-second limit
   global_burst: 8  # Global burst size
+  limiter_cache_maxsize: 128  # Max cached limiters
+  limiter_cache_ttl: 600  # Time-to-live for cached limiters in seconds
 
 retry:
   max_attempts: 3  # HTTP retry attempts (env: CHEMBL_DA_RETRY_MAX_ATTEMPTS)
