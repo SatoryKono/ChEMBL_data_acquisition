@@ -1,6 +1,7 @@
 pandas>=2.0
 numpy>=1.21
 requests>=2.31
+PyYAML>=6.0  # YAML configuration parsing
 pytest>=7.0
 black>=23.0
 ruff>=0.0.290

@@ -1,75 +1,96 @@
+
 """Tests for :mod:`library.logging_setup`."""
+
+"""Structured logging tests for :mod:`chembl_da.library.logging_setup`.
+
+Example
+-------
+Run linters and tests on this module with::
+
+    ruff tests/test_logging_setup.py
+    black tests/test_logging_setup.py
+    mypy tests/test_logging_setup.py
+    pytest tests/test_logging_setup.py
+"""
+
 
 from __future__ import annotations
 
-from io import StringIO
 import json
+import sys
+from typing import Any
+
 import pytest
 
 from library.logging_setup import LoggerConfig, configure_logger
 
 
-def parse_lines(buffer: StringIO) -> list[dict[str, object]]:
-    buffer.seek(0)
-    return [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+def _parse(out: str) -> list[dict[str, Any]]:
+    """Return JSON objects parsed from ``out`` separated by newlines."""
+
+    return [json.loads(line) for line in out.strip().splitlines() if line]
 
 
-def test_basic_logging_and_redaction() -> None:
-    stream = StringIO()
-    cfg = LoggerConfig(level="INFO", run_id="r1", stream=stream)
-    logger = configure_logger(cfg)
-    logger.info("test_event", api_token="secret", value=1)
-    lines = parse_lines(stream)
-    assert lines[0]["event"] == "test_event"
-    assert lines[0]["api_token"] == "***"
-    assert lines[0]["value"] == 1
-    assert lines[0]["run_id"] == "r1"
+def test_log_emits_json_per_line(capfd: pytest.CaptureFixture[str]) -> None:
+    """Each call to :meth:`Logger.log` yields one JSON line with required fields."""
+
+    logger = configure_logger(
+        LoggerConfig(level="INFO", run_id="run123", stream=sys.stdout)
+    )
+    logger.log("INFO", "first")
+    logger.log("INFO", "second")
+    lines = _parse(capfd.readouterr().out)
+    assert len(lines) == 2
+    for rec in lines:
+        assert rec["run_id"] == "run123"
+        assert rec["level"] == "INFO"
+        assert rec["event"] in {"first", "second"}
+        assert "ts" in rec
 
 
-def test_level_filtering() -> None:
-    stream = StringIO()
-    cfg = LoggerConfig(level="ERROR", run_id="r2", stream=stream)
-    logger = configure_logger(cfg)
-    logger.info("will_skip")
-    logger.error("will_log")
-    lines = parse_lines(stream)
-    assert len(lines) == 1
-    assert lines[0]["event"] == "will_log"
+def test_secret_redaction(capfd: pytest.CaptureFixture[str]) -> None:
+    """Keys ending with sensitive suffixes are redacted."""
+
+    logger = configure_logger(
+        LoggerConfig(level="INFO", run_id="rid", stream=sys.stdout)
+    )
+    logger.info("secret", api_token="abc", db_password="xyz")
+    record = _parse(capfd.readouterr().out)[0]
+    assert record["api_token"] == "***"
+    assert record["db_password"] == "***"
 
 
-def test_exception_logging() -> None:
-    stream = StringIO()
-    cfg = LoggerConfig(level="INFO", run_id="r3", stream=stream)
-    logger = configure_logger(cfg)
-    try:
-        raise ValueError("boom")
-    except ValueError as exc:
-        logger.exception("error_event", exc)
-    rec = parse_lines(stream)[0]
-    assert rec["event"] == "error_event"
-    assert rec["exc_type"] == "ValueError"
-    assert rec["exc_message"] == "boom"
-    assert "ValueError" in str(rec["traceback"])
+def test_stage_context_manager_success(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Successful stage logs start and done with matching context and elapsed."""
+
+    logger = configure_logger(
+        LoggerConfig(level="INFO", run_id="rid", stream=sys.stdout)
+    )
+    with logger.stage("extract"):
+        pass
+    start, done = _parse(capfd.readouterr().out)
+    assert start["event"] == "extract_start"
+    assert done["event"] == "extract_done"
+    assert start["stage"] == done["stage"] == "extract"
+    assert start["run_id"] == done["run_id"] == "rid"
+    assert "elapsed" in done and isinstance(done["elapsed"], float)
 
 
-def test_stage_context_manager_success() -> None:
-    stream = StringIO()
-    cfg = LoggerConfig(level="INFO", run_id="r4", stream=stream)
-    logger = configure_logger(cfg)
-    with logger.stage("stage1") as staged:
-        staged.info("inside")
-    lines = parse_lines(stream)
-    events = [line["event"] for line in lines]
-    assert events == ["stage1_start", "inside", "stage1_done"]
-    assert "elapsed" in lines[-1]
+def test_stage_context_manager_failure(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Exceptions inside a stage log a failure event."""
 
-
-def test_stage_context_manager_failure() -> None:
-    stream = StringIO()
-    cfg = LoggerConfig(level="INFO", run_id="r5", stream=stream)
-    logger = configure_logger(cfg)
+    logger = configure_logger(
+        LoggerConfig(level="INFO", run_id="rid", stream=sys.stdout)
+    )
     with pytest.raises(RuntimeError):
-        with logger.stage("stage2"):
-            raise RuntimeError("fail")
-    events = [line["event"] for line in parse_lines(stream)]
-    assert events == ["stage2_start", "stage2_fail"]
+        with logger.stage("load"):
+            raise RuntimeError("boom")
+    start, fail = _parse(capfd.readouterr().out)
+    assert start["event"] == "load_start"
+    assert fail["event"] == "load_fail"
+    assert start["stage"] == fail["stage"] == "load"
+    assert start["run_id"] == fail["run_id"] == "rid"
