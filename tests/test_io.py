@@ -38,27 +38,15 @@ def test_read_csv_missing_column(tmp_path: Path) -> None:
         io.read_csv(path, cfg=IoCfg(), required_columns=["a", "b"])
 
 
-def test_write_csv_creates_single_metadata_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_write_csv_creates_metadata_file(tmp_path: Path) -> None:
     df = pd.DataFrame({"a": [1]})
     path = tmp_path / "out.csv"
     cfg = Config()
-
-    calls: list[Path] = []
-
-    def spy(p: Path, cfg: Config) -> None:
-        calls.append(p)
-        # Create a dummy metadata file to emulate the original behaviour
-        Path(str(p) + ".meta.yaml").touch()
-
-    monkeypatch.setattr(io, "_write_meta", spy)
     io.write_csv(df, path, cfg=cfg)
-
-    meta_path = Path(str(path) + ".meta.yaml")
-    assert len(calls) == 1
+    meta_files = list(tmp_path.glob("*.meta.yaml"))
     assert path.exists()
-    assert meta_path.exists()
+    assert len(meta_files) == 1
+    assert meta_files[0].exists()
 
 
 def test_write_meta_serialises_paths(tmp_path: Path) -> None:
@@ -97,6 +85,20 @@ def test_write_csv_with_key_cols(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
+
+def test_write_csv_normalises_types(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "b": [True, False],
+            "d": [pd.Timestamp("2020-01-02"), pd.Timestamp("2020-01-01")],
+        }
+    )
+    path = tmp_path / "out.csv"
+    cfg = Config()
+    io.write_csv(df, path, cfg=cfg, key_cols=["d"])
+    text = path.read_text(encoding="utf-8-sig")
+    assert text == ("b,d\n" "false,2020-01-01\n" "true,2020-01-02\n")
+
 def test_git_sha_timeout_returns_unknown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -117,3 +119,4 @@ def test_git_sha_timeout_returns_unknown(
 
     assert io._git_sha() == "unknown"
     assert "timed out" in stream.getvalue()
+

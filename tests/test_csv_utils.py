@@ -9,6 +9,7 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 from library.csv_utils import sha256_file, write_csv_deterministic
+from library.config import Config
 
 
 def test_write_csv_deterministic(tmp_path: Path) -> None:
@@ -22,13 +23,14 @@ def test_write_csv_deterministic(tmp_path: Path) -> None:
     )
     path = tmp_path / "out.csv"
     result = write_csv_deterministic(
-        df, path, col_order=["a", "b", "d", "f"], key_cols=["a"]
+        df, path, col_order=["a", "b", "d", "f"], key_cols=["a"], cfg=Config()
     )
     assert result == path
     text = path.read_text(encoding="utf-8-sig")
     assert text == (
         "a,b,d,f\n" "1,false,2020-01-01,2.34568\n" "2,true,2020-01-02,1.23457\n"
     )
+    assert Path(str(path) + ".meta.yaml").exists()
 
 
 def test_write_csv_deterministic_hash(tmp_path: Path) -> None:

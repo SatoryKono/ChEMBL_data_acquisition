@@ -11,12 +11,46 @@ from __future__ import annotations
 from datetime import date, datetime
 import hashlib
 import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+import yaml
 from pandas.api import types as ptypes
+
+from .config import Config, _serialize_paths
+
+
+def _git_sha() -> str:
+    """Return the current Git commit hash or ``"unknown"`` if unavailable."""
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except Exception:  # pragma: no cover - git may be unavailable
+        return "unknown"
+
+
+def _write_meta(path: Path, cfg: Config | None) -> Path:
+    """Write a sidecar YAML file with basic provenance information."""
+
+    meta = {
+        "git_sha": _git_sha(),
+        "command": " ".join(sys.argv),
+        "config": _serialize_paths(cfg.to_dict()) if cfg is not None else {},
+    }
+    meta_path = Path(f"{path}.meta.yaml")
+    with meta_path.open("w", encoding="utf8") as fh:
+        yaml.safe_dump(meta, fh, sort_keys=False)
+    return meta_path
 
 
 def _normalise_bool(series: pd.Series) -> pd.Series:
@@ -59,6 +93,9 @@ def write_csv_deterministic(
     col_order: Sequence[str] | None = None,
     key_cols: Sequence[str] | None = None,
     chunksize: int | None = None,
+    sep: str = ",",
+    encoding: str = "utf-8-sig",
+    cfg: Config | None = None,
 ) -> Path:
     """Serialise ``df`` to ``path`` as a deterministic CSV file.
 
@@ -118,7 +155,7 @@ def write_csv_deterministic(
 
     # Write via temporary file for atomicity
     with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8-sig", newline="\n", delete=False, dir=str(out_path.parent)
+        "w", encoding=encoding, newline="\n", delete=False, dir=str(out_path.parent)
     ) as fh:
         tmp_path = Path(fh.name)
         work.to_csv(
@@ -127,8 +164,10 @@ def write_csv_deterministic(
             float_format="%.6g",
             na_rep="",
             chunksize=chunksize,
+            sep=sep,
         )
     os.replace(tmp_path, out_path)
+    _write_meta(out_path, cfg)
     return out_path
 
 
