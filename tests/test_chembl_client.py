@@ -10,10 +10,11 @@ import responses  # type: ignore[import-not-found]
 import time
 
 
-import library.chembl_client as chembl_client
+import pytest
 
 from cachetools import LRUCache
 
+from library import chembl_client
 
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
@@ -159,6 +160,32 @@ def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     # Two HTTP calls should have occurred because the cache entry expired.
     assert len(responses.calls) == 2
 
+
+ 
+@responses.activate
+def test_request_json_preserves_original_error_message(monkeypatch) -> None:
+    """Ensure the raised error retains status code and URL."""
+
+    clear_cache()
+    monkeypatch.setattr("library.chembl_client._session", None)
+    url = "http://example.com/notfound"
+    responses.add(responses.GET, url, status=404)
+
+    cfg = ApiCfg(retries=1)
+    with pytest.raises(requests.HTTPError) as exc_info:
+        request_json(url, cfg=cfg)
+
+    message = str(exc_info.value)
+    assert "404" in message
+    assert url in message
+ 
+def test_clear_cache(monkeypatch) -> None:
+    cache = TTLCache(maxsize=2, ttl=100)
+    monkeypatch.setattr(chembl_client, "_CACHE", cache)
+    chembl_client._CACHE["x"] = {"ok": True}
+    clear_cache()
+    assert len(chembl_client._CACHE) == 0
+ 
 
 
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
