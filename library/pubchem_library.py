@@ -146,13 +146,13 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
 def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
     if url in _CACHE:
-        logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
+        logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
         return cast(dict[str, Any], _CACHE[url])
-    logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
+    logger.info("cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"})
 
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
-        logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
+        logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             response = _session.get(
@@ -160,8 +160,16 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             )
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= cfg.retries:
-                logger.error("HTTP request failed for url %s: %s", url, exc)
-                logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+                logger.error(
+                    "HTTP request failed for url %s: %s",
+                    url,
+                    exc,
+                    extra={"url": url, "rps": cfg.rps},
+                )
+                logger.info(
+                    "request_fail",
+                    extra={"url": url, "status": None, "rps": cfg.rps},
+                )
                 return None
             continue
 
@@ -169,11 +177,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             logger.warning("Request returned %d for url %s", response.status_code, url)
             logger.info(
                 "request_fail",
-                extra={
-                    "stage": "request_fail",
-                    "url": url,
-                    "status": response.status_code,
-                },
+                extra={"url": url, "status": response.status_code, "rps": cfg.rps},
             )
             return None
         try:
@@ -181,28 +185,32 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             data = cast(dict[str, Any], response.json())
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= cfg.retries:
-                logger.error("HTTP request failed for url %s: %s", url, exc)
-                logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+                logger.error(
+                    "HTTP request failed for url %s: %s",
+                    url,
+                    exc,
+                    extra={"url": url, "rps": cfg.rps},
+                )
+                logger.info(
+                    "request_fail",
+                    extra={"url": url, "status": None, "rps": cfg.rps},
+                )
                 return None
             continue
         except ValueError:
             logger.warning("Non-JSON response for url %s", url)
             logger.info(
                 "request_fail",
-                extra={
-                    "stage": "request_fail",
-                    "url": url,
-                    "status": response.status_code,
-                },
+                extra={"url": url, "status": response.status_code, "rps": cfg.rps},
             )
             return None
 
         logger.info(
             "request_ok",
-            extra={"stage": "request_ok", "url": url, "status": response.status_code},
+            extra={"url": url, "status": response.status_code, "rps": cfg.rps},
         )
         _CACHE[url] = data
-        logger.info("cache_set", extra={"stage": "cache_set", "url": url})
+        logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
         return data
     return None
 
