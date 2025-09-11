@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from table_quality_main import main
+from scripts.table_quality_main import main
 
 
 def test_table_quality_cli_with_config(tmp_path: Path) -> None:

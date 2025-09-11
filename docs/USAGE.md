@@ -11,7 +11,7 @@ processing begins.
 ## Activity data
 
 ```bash
-python get_activity_data.py \
+python scripts/get_activity_data.py \
     --input data/input-smoke/activity.csv \
     --column activity_id
 ```
@@ -19,7 +19,7 @@ python get_activity_data.py \
 ## Assay descriptions
 
 ```bash
-python get_assay_data.py \
+python scripts/get_assay_data.py \
     --input data/input-smoke/assay.csv \
     --column assay_chembl_id
 ```
@@ -27,7 +27,7 @@ python get_assay_data.py \
 ## Document metadata
 
 ```bash
-python get_document_data.py \
+python scripts/get_document_data.py \
     --input data/input-smoke/documents.csv \
     --column document_chembl_id
 ```
@@ -36,7 +36,7 @@ python get_document_data.py \
 ## Target data aggregation
 
 ```bash
-python get_target_data.py \
+python scripts/get_target_data.py \
     --input data/input-smoke/targets.csv \
     --column target_chembl_id
 ```
@@ -44,7 +44,7 @@ python get_target_data.py \
 ## Test item data enrichment
 
 ```bash
-python get_testitem_data.py \
+python scripts/get_testitem_data.py \
     --input data/input-smoke/testitem.csv \
     --column compound_chembl_id
 ```
@@ -52,7 +52,7 @@ python get_testitem_data.py \
 ## Input initialisation merging
 
 ```bash
-python get_input_initialisation.py \
+python scripts/get_input_initialisation.py \
     --same-doc dictionary/classifications/assay_classification.csv \
     --all-doc dictionary/classifications/target_classification.csv \
     --out-dir data/output-smoke
@@ -81,7 +81,7 @@ replaces `io.csv_sep` and `io.csv_encoding` respectively. Likewise
 ## Table quality profiler
 
 ```bash
-python table_quality_main.py \
+python scripts/table_quality_main.py \
     --input data/input-smoke/activity.csv \
     --table-name activity
 ```
@@ -114,8 +114,8 @@ changes. Install the developer extras first:
 
 ```bash
 pip install -r requirements-dev.txt
-black get_*.py library mapper_main.py table_quality_main.py scripts
-ruff check get_*.py library mapper_main.py table_quality_main.py scripts
-mypy get_*.py library mapper_main.py table_quality_main.py scripts
+black library scripts
+ruff check library scripts
+mypy library scripts
 python scripts/check_determinism.py
 ```

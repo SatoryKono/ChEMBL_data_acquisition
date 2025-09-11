@@ -6,17 +6,22 @@ using :func:`library.csv_utils.write_csv_deterministic`.
 
 from __future__ import annotations
 
+import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
 
-from library.cli import LoggerConfig, configure_logger
-from library.cli_utils import build_parser
-from library.csv_utils import write_csv_deterministic
-from library.log import logger
-from library.parser_schema import CSVExportArgs
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from library.cli import LoggerConfig, configure_logger  # noqa: E402
+from library.cli_utils import build_parser  # noqa: E402
+from library.csv_utils import write_csv_deterministic  # noqa: E402
+from library.log import logger  # noqa: E402
+from library.parser_schema import CSVExportArgs  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import csv_utils_main as cli
+from scripts import csv_utils_main as cli
 
 
 def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:

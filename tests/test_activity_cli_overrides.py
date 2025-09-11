@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-import get_activity_data as gad
 from library import chembl_library as cl
 from library import io
+from scripts import get_activity_data as gad
 
 
 def _create_config(tmp_path: Path) -> Path:

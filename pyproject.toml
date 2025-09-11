@@ -49,33 +49,19 @@ dev = [
 ]
 
 [project.scripts]
-get-activity-data = "get_activity_data:main"
-get-assay-data = "get_assay_data:main"
-get-target-data = "get_target_data:main"
-get-document-data = "get_document_data:main"
-get-document-type = "get_document_type:main"
-get-input-initialisation = "get_input_initialisation:main"
-get-testitem-data = "get_testitem_data:main"
-csv-utils = "csv_utils_main:main"
-mapper = "mapper_main:main"
-table-quality = "table_quality_main:main"
-
-[tool.setuptools]
-py-modules = [
-  "get_activity_data",
-  "get_assay_data",
-  "get_target_data",
-  "get_document_data",
-  "get_document_type",
-  "get_input_initialisation",
-  "get_testitem_data",
-  "csv_utils_main",
-  "mapper_main",
-  "table_quality_main",
-]
+get-activity-data = "scripts.get_activity_data:main"
+get-assay-data = "scripts.get_assay_data:main"
+get-target-data = "scripts.get_target_data:main"
+get-document-data = "scripts.get_document_data:main"
+get-document-type = "scripts.get_document_type:main"
+get-input-initialisation = "scripts.get_input_initialisation:main"
+get-testitem-data = "scripts.get_testitem_data:main"
+csv-utils = "scripts.csv_utils_main:main"
+mapper = "scripts.mapper_main:main"
+table-quality = "scripts.table_quality_main:main"
 
 [tool.setuptools.packages.find]
-include = ["library", "schemas"]
+include = ["library", "schemas", "scripts"]
 
 [tool.black]
 line-length = 88

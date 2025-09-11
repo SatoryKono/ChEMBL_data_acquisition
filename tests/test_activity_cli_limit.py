@@ -1,6 +1,6 @@
 import pytest
 
-import get_activity_data as gad
+from scripts import get_activity_data as gad
 
 
 def test_negative_limit_rejected(capsys: pytest.CaptureFixture[str]) -> None:
