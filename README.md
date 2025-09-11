@@ -42,10 +42,34 @@ parsing, validation, aggregation and export of tabular data.
 
    ```bash
    pytest
-   ```
+    ```
 
-   The suite exercises the library modules using fixtures from
-   ``tests/data``.
+    The suite exercises the library modules using fixtures from
+    ``tests/data``.
+
+## Конфигурация через `.env`
+
+Часть параметров утилит можно задавать через переменные окружения.
+Чтобы не экспортировать их вручную при каждом запуске, поместите пары
+``NAME=value`` в файл `.env` и загрузите их с помощью пакета
+[`python-dotenv`](https://pypi.org/project/python-dotenv/).
+
+Пример файла:
+
+```dotenv
+CHEMBL_DA_LOG_LEVEL=INFO
+CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
+```
+
+Запустить скрипт с автоматической подгрузкой настроек можно так:
+
+```bash
+python -m dotenv run -- python get_assay_data.py --input tests/data/assays.csv \\
+    --output out/assays.csv
+```
+
+Утилиты читают переменные окружения автоматически, поэтому значения из
+`.env` доступны всем CLI без дополнительных аргументов.
 
 ## Валидация конфигурации
 
