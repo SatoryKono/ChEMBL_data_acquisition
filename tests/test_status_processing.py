@@ -92,7 +92,7 @@ def test_load_status_table_skips_empty_rows(tmp_path: Path) -> None:
 def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
     """``aggregate_activity`` should default missing metric columns to zeros."""
     (tmp_path / "status.csv").write_text(
-        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+        "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
     status_df = load_status_table(tmp_path)
     api = build_status_helpers(status_df)
@@ -134,7 +134,7 @@ def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
 def test_aggregate_activity_handles_missing_testitem_id(tmp_path: Path) -> None:
     """Missing ``testitem_id`` should not break aggregation."""
     (tmp_path / "status.csv").write_text(
-        "status,condition_field,condition_value,order,score\n" "good,null,null,0,0\n"
+        "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
     status_df = load_status_table(tmp_path)
     api = build_status_helpers(status_df)

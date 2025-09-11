@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import pytest
@@ -14,7 +14,7 @@ from library.config import IupharCfg
 
 
 class DummyResponse:
-    def __enter__(self) -> "DummyResponse":
+    def __enter__(self) -> DummyResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no errors

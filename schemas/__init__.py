@@ -3,8 +3,6 @@
 from .activities import ActivitiesSchema
 from .assays import AssaysSchema
 from .documents import DocumentsSchema
-from .targets import TargetsSchema
-from .testitems import TestitemsSchema
 from .normalize import (
     normalize_activities,
     normalize_assays,
@@ -12,6 +10,8 @@ from .normalize import (
     normalize_targets,
     normalize_testitems,
 )
+from .targets import TargetsSchema
+from .testitems import TestitemsSchema
 
 __all__ = [
     "ActivitiesSchema",

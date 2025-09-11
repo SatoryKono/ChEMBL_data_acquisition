@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
-
-from .log import logger
+from collections.abc import Iterable
+from typing import Any
 
 import pandas as pd
 
 from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg, UniprotMappingCfg
+from .log import logger
 from .mapper_library import map_chembl_to_uniprot
-
 
 TARGET_FIELDS = [
     "pref_name",

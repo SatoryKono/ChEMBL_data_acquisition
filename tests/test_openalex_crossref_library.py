@@ -1,9 +1,9 @@
-import requests
 import pytest
+import requests
 
 import library.rate_limiter as rl
 from library import openalex_crossref_library as ocl
-from library.config import Config, OpenAlexCfg, CrossRefCfg
+from library.config import Config, CrossRefCfg, OpenAlexCfg
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:

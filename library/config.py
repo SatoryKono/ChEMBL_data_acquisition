@@ -28,8 +28,10 @@ import os
 import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
+
 from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
+
 from urllib.parse import urlparse
 
 import jsonschema

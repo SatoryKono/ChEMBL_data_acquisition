@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import csv
 import hashlib
-from pathlib import Path
-
 import subprocess
 import time
 from io import StringIO
+from pathlib import Path
 from typing import Any, NoReturn
 
 import pandas as pd
+import pandera as pa
 import pytest
 import yaml
-import pandera as pa
 
 from library import io
 from library.config import Config, IoCfg

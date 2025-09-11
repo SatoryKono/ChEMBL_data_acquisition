@@ -12,39 +12,36 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 import requests
-from library.config import (
-    Config,
-    ensure_dirs,
-    print_config,
-    _serialize_paths,
-)
-from library.chembl_client import ChemblClient
+from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
-from library import io
+from library import io, write_csv_deterministic
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.metadata import Stats, file_sha256, write_meta_yaml
-
+from library.chembl_client import ChemblClient
 from library.cli import (
+    LoggerConfig,
     apply_config_overrides,
     build_root_parser,
     configure_logger,
-    LoggerConfig,
+)
+from library.config import (
+    Config,
+    _serialize_paths,
+    ensure_dirs,
+    print_config,
 )
 from library.log import logger
+from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
-from pandera.errors import SchemaErrors
 from schemas import TargetsSchema, normalize_targets
-
-from library import write_csv_deterministic
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -242,16 +239,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.set_defaults(func=run_all)
 
-    setattr(
-        parser,
-        "subparsers_map",
-        {
-            "uniprot": uniprot,
-            "chembl": chembl,
-            "iuphar": iuphar,
-            "all": all_cmd,
-        },
-    )
+    parser.subparsers_map = {
+        "uniprot": uniprot,
+        "chembl": chembl,
+        "iuphar": iuphar,
+        "all": all_cmd,
+    }
 
     return parser, log_cfg
 

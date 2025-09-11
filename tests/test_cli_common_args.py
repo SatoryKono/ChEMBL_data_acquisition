@@ -6,9 +6,7 @@ from library.cli import add_common_arguments, apply_config_overrides
 
 def _write_config(tmp_path: Path) -> Path:
     cfg = tmp_path / "config.yaml"
-    cfg.write_text(
-        "io:\n  csv_sep: '|'\n  csv_encoding: latin1\n" "log:\n  level: INFO\n"
-    )
+    cfg.write_text("io:\n  csv_sep: '|'\n  csv_encoding: latin1\nlog:\n  level: INFO\n")
     return cfg
 
 

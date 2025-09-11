@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
-import requests
+
 import pytest
+import requests
 import responses
 
 from library import uniprot_library as ul

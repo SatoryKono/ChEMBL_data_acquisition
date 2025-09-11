@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pandera import Check, Column, DataFrameSchema
 
-
 TestitemsSchema: DataFrameSchema = DataFrameSchema(
     {
         "salt_chembl_id": Column(str, required=True),

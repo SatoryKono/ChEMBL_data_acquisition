@@ -1,6 +1,6 @@
 """Tests for helper utilities in :mod:`get_target_data`."""
 
-from get_target_data import _pipe_merge, _first_token
+from get_target_data import _first_token, _pipe_merge
 
 
 def test_pipe_merge_deduplicates_and_sorts() -> None:

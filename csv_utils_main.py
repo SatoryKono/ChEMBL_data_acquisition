@@ -7,15 +7,15 @@ using :func:`library.csv_utils.write_csv_deterministic`.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 
-from library.csv_utils import write_csv_deterministic
-from library.cli_utils import build_parser
-from library.log import logger
 from library.cli import LoggerConfig, configure_logger
+from library.cli_utils import build_parser
+from library.csv_utils import write_csv_deterministic
+from library.log import logger
 
 
 def main(argv: Sequence[str] | None = None) -> int:

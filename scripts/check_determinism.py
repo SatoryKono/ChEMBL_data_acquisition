@@ -9,9 +9,9 @@ hashes differ.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
-import argparse
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,9 +28,9 @@ except ImportError as exc:  # pragma: no cover - import-time check
 
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+from library.cli import LoggerConfig, configure_logger  # noqa: E402
 from library.csv_utils import sha256_file, write_csv_deterministic  # noqa: E402
 from library.log import logger  # noqa: E402
-from library.cli import LoggerConfig, configure_logger  # noqa: E402
 
 
 def run_check(tmp_dir: Path) -> bool:

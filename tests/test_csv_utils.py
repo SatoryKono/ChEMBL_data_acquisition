@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
 import logging
 import subprocess
+from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
-from unittest.mock import patch
 
-from library.csv_utils import _git_sha, sha256_file, write_csv_deterministic
 from library.config import Config
+from library.csv_utils import _git_sha, sha256_file, write_csv_deterministic
 
 
 def test_write_csv_deterministic(tmp_path: Path) -> None:
@@ -30,9 +31,7 @@ def test_write_csv_deterministic(tmp_path: Path) -> None:
     )
     assert result == path
     text = path.read_text(encoding="utf-8-sig")
-    assert text == (
-        "a,b,d,f\n" "1,false,2020-01-01,2.34568\n" "2,true,2020-01-02,1.23457\n"
-    )
+    assert text == ("a,b,d,f\n1,false,2020-01-01,2.34568\n2,true,2020-01-02,1.23457\n")
     assert Path(str(path) + ".meta.yaml").exists()
 
 
@@ -51,7 +50,7 @@ def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
     write_csv_deterministic(df, path, col_order=["a", "b", "d", "f"], key_cols=["a"])
 
     expected_bytes = (
-        "a,b,d,f\n" "1,false,2020-01-01,2.34568\n" "2,true,2020-01-02,1.23457\n"
+        "a,b,d,f\n1,false,2020-01-01,2.34568\n2,true,2020-01-02,1.23457\n"
     ).encode("utf-8-sig")
     expected_hash = hashlib.sha256(expected_bytes).hexdigest()
 

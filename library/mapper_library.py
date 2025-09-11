@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 import json
-from .log import logger
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 from urllib.error import HTTPError
 
 from .config import UniprotMappingCfg
+from .log import logger
 from .rate_limiter import get_limiter
 
 
 def map_chembl_to_uniprot(
     chembl_target_id: str,
     cfg: UniprotMappingCfg,
-    opener: Optional[Callable[..., Any]] = None,
+    opener: Callable[..., Any] | None = None,
 ) -> str | None:
     """Map a ChEMBL target identifier to a UniProt accession.
 
