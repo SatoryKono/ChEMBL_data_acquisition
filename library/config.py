@@ -155,6 +155,30 @@ class PubChemCfg:
 
 
 @dataclass
+class PubMedCfg:
+    """Settings for the PubMed API and related I/O."""
+
+    base: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    timeout_connect: int = 5
+    timeout_read: int = 10
+    retries: int = 2
+    encodings: List[str] = field(
+        default_factory=lambda: ["utf-8-sig", "cp1251", "latin1"]
+    )
+
+
+@dataclass
+class SemanticScholarCfg:
+    """Settings for the Semantic Scholar API."""
+
+    base: str = "https://api.semanticscholar.org/graph/v1"
+    timeout_connect: int = 5
+    timeout_read: int = 10
+    retries: int = 2
+    encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
+
+
+@dataclass
 class IoCfg:
     """Input/output defaults."""
 
@@ -251,6 +275,8 @@ class Config:
     uniprot: UniprotCfg = field(default_factory=UniprotCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
+    pubmed: PubMedCfg = field(default_factory=PubMedCfg)
+    semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -643,6 +669,50 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+        "pubmed": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "encodings": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "encodings",
+            ],
+            "additionalProperties": False,
+        },
+        "semantic_scholar": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "encodings": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "encodings",
+            ],
+            "additionalProperties": False,
+        },
         "io": {
             "type": "object",
             "properties": {
@@ -766,6 +836,8 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "uniprot",
         "iuphar",
         "pubchem",
+        "pubmed",
+        "semantic_scholar",
         "io",
         "jobs",
         "batch",
@@ -812,14 +884,14 @@ def _validate(cfg: Config) -> None:
             "api.user_agent must include contact information such as an email"
         )
 
-    services: list[tuple[str, Any]] = [
+    services_full: list[tuple[str, Any]] = [
         ("openalex", cfg.openalex),
         ("crossref", cfg.crossref),
         ("uniprot", cfg.uniprot),
         ("iuphar", cfg.iuphar),
         ("pubchem", cfg.pubchem),
     ]
-    for name, service in services:
+    for name, service in services_full:
         if not _valid_url(service.base):
             raise ValueError(f"{name}.base must be a valid URL")
         if service.timeout_connect <= 0 or service.timeout_read <= 0:
@@ -828,6 +900,20 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
+
+    basic_services: list[tuple[str, Any]] = [
+        ("pubmed", cfg.pubmed),
+        ("semantic_scholar", cfg.semantic_scholar),
+    ]
+    for name, service in basic_services:
+        if not _valid_url(service.base):
+            raise ValueError(f"{name}.base must be a valid URL")
+        if service.timeout_connect <= 0 or service.timeout_read <= 0:
+            raise ValueError(f"{name} timeouts must be positive")
+        if service.retries < 0:
+            raise ValueError(f"{name}.retries must be non-negative")
+        if not service.encodings:
+            raise ValueError(f"{name}.encodings must not be empty")
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
@@ -963,6 +1049,8 @@ __all__ = [
     "UniprotCfg",
     "IupharCfg",
     "PubChemCfg",
+    "PubMedCfg",
+    "SemanticScholarCfg",
     "IoCfg",
     "JobsCfg",
     "BatchCfg",
