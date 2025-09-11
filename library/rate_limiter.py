@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import threading
 import time
-
 from typing import cast
 
 from cachetools import TTLCache  # type: ignore[import-untyped]
-
 
 
 class RateLimiter:
@@ -52,7 +50,6 @@ class RateLimiter:
                 self._tokens = min(float(self.burst), self._tokens + elapsed * self.rps)
             self._tokens -= 1
             self._updated = now
-
 
 
 _limiters: TTLCache[str, RateLimiter] = TTLCache(maxsize=128, ttl=600)

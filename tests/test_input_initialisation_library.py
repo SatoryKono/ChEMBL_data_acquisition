@@ -13,9 +13,7 @@ from library.input_initialisation_library import (
     _ensure_openpyxl,
     append_entities,
     build_combined_tables,
-
     generate_pair_entity_tables,
-
     process_activity_table,
     save_tables,
     unify_dtypes,
