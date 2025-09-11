@@ -1,10 +1,13 @@
+import json
 from pathlib import Path
 import logging
+import io
 
 import pytest
 
 from jsonschema import ValidationError
 
+from library.cli import LoggerConfig, configure_logger
 from library.config import ConfigError, ensure_dirs, load_config
 
 
@@ -220,12 +223,17 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert out.is_dir() and cache.is_dir()
 
 
-def test_unknown_key_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_unknown_key_warning(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\napi:\n  rps: 1\n")
-    with caplog.at_level(logging.WARNING, logger="library.config"):
-        load_config(path)
-    assert "Unknown configuration key" in caplog.text
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    load_config(path)
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    msg = record.get("msg", "") or record.get("event", "")
+    assert "Unknown configuration key" in msg
 
 
 def test_unknown_key_error(tmp_path: Path) -> None:
@@ -301,16 +309,19 @@ def test_invalid_urls_raise(tmp_path: Path, snippet: str, match: str) -> None:
 
 
 def test_unknown_env_var_warning(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("")
     monkeypatch.setenv("CHEMBL_DA__FOO__BAR", "1")
-    with caplog.at_level(logging.WARNING, logger="library.config"):
-        load_config(path)
-    assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in caplog.text
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    load_config(path)
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    msg = record.get("msg", "") or record.get("event", "")
+    assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in msg
 
 
 def test_log_level_valid(tmp_path: Path) -> None:
