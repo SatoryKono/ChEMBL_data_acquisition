@@ -274,6 +274,22 @@ write_csv_deterministic(df, "out.csv", chunksize=1000)
 Rows are still sorted deterministically before writing; ``chunksize`` only
 affects how data is flushed to disk.
 
+The higher-level wrapper ``library.io.write_csv`` exposes the same
+``chunksize`` argument and additionally writes a metadata sidecar alongside
+the CSV:
+
+```python
+from library import io, Config
+import pandas as pd
+
+cfg = Config()
+df = pd.read_csv("large.csv")
+io.write_csv(df, "out.csv", cfg=cfg, chunksize=1000)
+```
+
+The YAML sidecar records the Git commit and command-line parameters to aid
+reproducibility.
+
 Each command-line tool emits a ``<output>.meta.yaml`` sidecar file alongside
 every CSV. The YAML document records the SHA-256 checksum, command-line
 arguments and timestamps to make results reproducible. The determinism check is
