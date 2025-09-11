@@ -109,6 +109,8 @@ The function ``library.csv_utils.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
 files. The helper script ``scripts/check_determinism.py`` writes a sample CSV
 twice and compares SHA-256 hashes to catch nondeterministic behaviour.
+The script requires the ``pandas`` package; install it with ``pip install pandas``
+if it is not already available in your environment.
 
 All commands emit the structured JSON logs described above. Adjust verbosity
 with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
