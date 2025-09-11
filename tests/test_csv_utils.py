@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 
 import pandas as pd
+import pytest
 
-from chembl_da.library.csv_utils import write_csv_deterministic
+from chembl_da.library.csv_utils import sha256_file, write_csv_deterministic
 
 
 def test_write_csv_deterministic(tmp_path: Path) -> None:
@@ -54,3 +56,17 @@ def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
     write_csv_deterministic(df2, path2, col_order=["a", "b", "d", "f"], key_cols=["a"])
 
     assert path1.read_bytes() == path2.read_bytes()
+
+
+def test_sha256_file(tmp_path: Path) -> None:
+    data = b"hello world"
+    file_path = tmp_path / "data.txt"
+    file_path.write_bytes(data)
+    expected = hashlib.sha256(data).hexdigest()
+    assert sha256_file(file_path) == expected
+
+
+def test_sha256_file_missing(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.csv"
+    with pytest.raises(FileNotFoundError, match=str(missing)):
+        sha256_file(missing)

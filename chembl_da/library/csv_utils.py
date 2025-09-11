@@ -9,6 +9,7 @@ runs produce identical files.
 from __future__ import annotations
 
 from datetime import date, datetime
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -112,3 +113,37 @@ def write_csv_deterministic(
         work.to_csv(fh, index=False, float_format="%.6g", na_rep="")
     os.replace(tmp_path, out_path)
     return out_path
+
+
+def sha256_file(path: Path, *, block_size: int = 64 * 1024) -> str:
+    """Return SHA-256 hash of ``path``.
+
+    The file is read in chunks to avoid loading large files entirely into
+    memory.
+
+    Parameters
+    ----------
+    path:
+        Path to the input file.
+    block_size:
+        Number of bytes read per iteration. Defaults to ``64 * 1024``.
+
+    Returns
+    -------
+    str
+        Hexadecimal SHA-256 digest of the file contents.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``path`` does not exist.
+    """
+
+    if not path.is_file():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(block_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
