@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
+import pandas as pd
 import pytest
 import requests
 
@@ -24,7 +25,8 @@ DATA_DIR = Path(__file__).parent / "data"
 def test_read_pmids() -> None:
     path = DATA_DIR / "pmids.csv"
     pmids = pl.read_pmids(path)
-    assert pmids == ["1", "2"]
+    expected = pd.DataFrame({"PMID": ["1", "2"]})
+    pd.testing.assert_frame_equal(pmids.reset_index(drop=True), expected)
 
 
 def test_read_pmids_missing_column(tmp_path: Path) -> None:
