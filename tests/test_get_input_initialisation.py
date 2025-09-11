@@ -8,7 +8,8 @@ import get_input_initialisation as cli
 from library.config import Config
 
 
-def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
+def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
+    """``run`` should produce quality reports for all tables."""
     same_doc = tmp_path / "same.xlsx"
     all_doc = tmp_path / "all.xlsx"
     same_doc.write_text("dummy")
@@ -24,13 +25,17 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch):
         "activity_independent_status": pd.DataFrame({"id": [7]}),
     }
 
-    def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
+    def fake_load_same_doc(
+        path: Path,
+    ) -> dict[str, object]:  # pragma: no cover - simple stub
         return {}
 
-    def fake_load_all_doc(path: Path):  # pragma: no cover - simple stub
+    def fake_load_all_doc(
+        path: Path,
+    ) -> dict[str, object]:  # pragma: no cover - simple stub
         return {}
 
-    def fake_build_combined_tables(*_args, **_kwargs):
+    def fake_build_combined_tables(*_args, **_kwargs) -> dict[str, pd.DataFrame]:
         return tables
 
     monkeypatch.setattr(cli.lib, "load_same_doc", fake_load_same_doc)

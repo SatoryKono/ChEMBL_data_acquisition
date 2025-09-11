@@ -5,7 +5,8 @@ from pathlib import Path
 import get_target_data as gtd
 
 
-def test_organism_csv_default_from_config(tmp_path, monkeypatch):
+def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
+    """``organism_csv`` argument should default to the config value."""
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
         "jobs:\n  chunk_size: 10\n"
@@ -20,7 +21,7 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch):
     )
     captured: dict[str, Path] = {}
 
-    def fake_run_all(cfg, args):  # type: ignore[unused-argument]
+    def fake_run_all(cfg, args) -> int:  # type: ignore[unused-argument]
         captured["organism_csv"] = args.organism_csv
         return 0
 

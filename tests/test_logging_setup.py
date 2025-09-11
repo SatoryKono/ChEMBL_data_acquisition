@@ -1,7 +1,5 @@
 
-"""Tests for :mod:`library.logging_setup`."""
-
-"""Structured logging tests for :mod:`chembl_da.library.logging_setup`.
+"""Structured logging tests for :mod:`library.logging_setup`.
 
 Example
 -------
@@ -12,7 +10,6 @@ Run linters and tests on this module with::
     mypy tests/test_logging_setup.py
     pytest tests/test_logging_setup.py
 """
-
 
 from __future__ import annotations
 

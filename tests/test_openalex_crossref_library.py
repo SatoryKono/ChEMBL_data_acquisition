@@ -5,8 +5,9 @@ from library import openalex_crossref_library as ocl
 from library.config import OpenAlexCfg, CrossRefCfg
 
 
-def test_fetch_openalex_uses_cfg(monkeypatch):
-    called = {}
+def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
+    """Ensure OpenAlex requests respect configuration parameters."""
+    called: dict[str, object] = {}
 
     def fake_do_request(session, url, sleep, timeout=(), **kwargs):
         called["url"] = url
@@ -32,8 +33,9 @@ def test_fetch_openalex_uses_cfg(monkeypatch):
     assert sleeps and sleeps[0] == pytest.approx(0.5)
 
 
-def test_fetch_crossref_uses_cfg(monkeypatch):
-    called = {}
+def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
+    """Ensure CrossRef requests respect configuration parameters."""
+    called: dict[str, object] = {}
 
     def fake_do_request(session, url, sleep, timeout=(), **kwargs):
         called["url"] = url
