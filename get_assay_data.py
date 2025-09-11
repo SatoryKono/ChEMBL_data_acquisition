@@ -8,7 +8,7 @@ from typing import Sequence
 
 import requests
 from library.config import Config, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
@@ -45,8 +45,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    # Prepare HTTP session for ChEMBL requests
-    init_session(cfg.api, cfg.retry)
+    # Prepare HTTP client for ChEMBL requests
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(
@@ -62,7 +62,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     try:
         df = cl.get_assays(
-            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            client=client,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve assays: %s", exc)

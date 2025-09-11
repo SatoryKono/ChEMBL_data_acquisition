@@ -1,13 +1,10 @@
-"""Thread-safety tests for :mod:`library.chembl_client`."""
-
-from __future__ import annotations
-
-from typing import Any
-
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
-from library import chembl_client
+import pytest
+
+from library.chembl_client import ChemblClient
 from library.config import ApiCfg
 
 
@@ -68,30 +65,27 @@ class ThreadTrackingSession:
         return ThreadTrackingResponse()
 
 
-def test_request_json_threadsafe(monkeypatch) -> None:
+def test_request_json_threadsafe() -> None:
     """Concurrent calls should yield the same result as sequential ones."""
 
     session = DummySession()
-    monkeypatch.setattr("library.chembl_client._session", session)
-    chembl_client.clear_cache()
+    client = ChemblClient(session=session)
 
     url = "http://example.com/threadsafe"
     cfg = ApiCfg()
 
-    # Sequential calls: only the first should trigger a real request.
-    sequential = [chembl_client.request_json(url, cfg=cfg) for _ in range(5)]
+    sequential = [client.request_json(url, cfg=cfg) for _ in range(5)]
     assert session.calls == 1
 
-    chembl_client.clear_cache()
+    client.clear_cache()
     session.calls = 0
 
-    # Parallel calls starting at the same time.
     results: list[dict[str, Any]] = []
     start = threading.Event()
 
     def worker() -> None:
         start.wait()
-        results.append(chembl_client.request_json(url, cfg=cfg))
+        results.append(client.request_json(url, cfg=cfg))
 
     threads = [threading.Thread(target=worker) for _ in range(5)]
     for t in threads:
@@ -103,11 +97,8 @@ def test_request_json_threadsafe(monkeypatch) -> None:
     assert results == sequential
 
 
-def test_single_session_created(monkeypatch) -> None:
-    """Ensure only one HTTP session is initialised across threads."""
-
-    chembl_client.clear_cache()
-    monkeypatch.setattr("library.chembl_client._session", None)
+def test_single_session_created(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure only one HTTP session is initialised when constructing a client."""
 
     dummy = ThreadTrackingSession()
     create_calls = 0
@@ -121,8 +112,10 @@ def test_single_session_created(monkeypatch) -> None:
         "library.chembl_client.session_with_retry", fake_session_with_retry
     )
 
+    client = ChemblClient()
+
     def worker() -> dict[str, Any]:
-        return chembl_client.request_json("http://example.com", cfg=ApiCfg())
+        return client.request_json("http://example.com", cfg=ApiCfg())
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = [pool.submit(worker) for _ in range(5)]
@@ -132,21 +125,17 @@ def test_single_session_created(monkeypatch) -> None:
     assert all(r == {"ok": True} for r in results)
 
 
-def test_cache_shared_across_threads(monkeypatch) -> None:
-    clear_cache()
-    dummy = DummySession()
-    monkeypatch.setattr("library.chembl_client._session", dummy)
-
+def test_cache_shared_across_threads() -> None:
+    client = ChemblClient(session=DummySession())
     url = "http://example.com/data"
-    assert request_json(url, cfg=ApiCfg()) == {"ok": True}
-    assert len(dummy.calls) == 1
+    assert client.request_json(url, cfg=ApiCfg()) == {"call": 1}
 
     def worker() -> dict[str, Any]:
-        return request_json(url, cfg=ApiCfg())
+        return client.request_json(url, cfg=ApiCfg())
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = [pool.submit(worker) for _ in range(5)]
         results = [f.result() for f in futures]
 
-    assert all(r == {"ok": True} for r in results)
-    assert len(dummy.calls) == 1
+    assert all(r == {"call": 1} for r in results)
+    assert client.session.calls == 1

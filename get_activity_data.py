@@ -9,7 +9,7 @@ from itertools import islice
 
 import requests
 from library.config import Config, ensure_dirs, print_config, _serialize_paths
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import chembl_library as cl
 from library import io
@@ -58,8 +58,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("dry run selected; would process at most %d identifiers", expected)
         return 0
 
-    # Configure HTTP session with the supplied User-Agent and retry policy
-    init_session(cfg.api, cfg.retry)
+    # Configure HTTP client with the supplied User-Agent and retry policy
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(
@@ -79,7 +79,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     try:
         df = cl.get_activities(
-            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            client=client,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve activities: %s", exc)

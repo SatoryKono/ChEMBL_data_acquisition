@@ -1,12 +1,13 @@
- 
 """Thread-safety tests for :mod:`library.iuphar_library`."""
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
+import pytest
 
 import library.iuphar_library as ii
 from library.config import IupharCfg
@@ -40,7 +41,7 @@ class DummyLimiter:
         return None
 
 
-def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
+def test_websearch_gene_to_id_thread_safe(monkeypatch: pytest.MonkeyPatch) -> None:
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
     dummy = DummySession()
     monkeypatch.setattr(ii, "_session", dummy)
@@ -48,7 +49,7 @@ def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
 
     cfg = IupharCfg(base="https://example.org/services", rps=10, burst=10)
 
-    def worker() -> dict:
+    def worker() -> dict[str, int]:
         return data.websearch_gene_to_id("GENE", cfg)
 
     with ThreadPoolExecutor(max_workers=10) as pool:
@@ -56,19 +57,6 @@ def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
 
     assert all(r == {"id": 1} for r in results)
     assert len(dummy.calls) == 10
- 
-"""Thread-safety tests for IUPHAR session handling."""
-
-from __future__ import annotations
-
-import threading
-import time
-
-import pandas as pd
-import pytest
-
-from library import iuphar_library as ii
-from library.config import IupharCfg
 
 
 def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,11 +106,11 @@ def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
 
     threads = [
         threading.Thread(target=data.websearch_gene_to_id, args=("GENE", cfg))
-        for _ in range(2)
+        for _ in range(5)
     ]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
 
-    assert order == ["start", "end", "start", "end"]
+    assert order == ["start", "end"] * 5

@@ -23,7 +23,7 @@ from library.config import (
     print_config,
     _serialize_paths,
 )
-from library.chembl_client import init_session
+from library.chembl_client import ChemblClient
 
 from library import chembl_library as cl
 from library import io
@@ -345,8 +345,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    # Set up HTTP session with proper headers and retry behaviour
-    init_session(cfg.api, cfg.retry)
+    # Set up HTTP client with proper headers and retry behaviour
+    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
         ids = io.read_ids(
@@ -362,7 +362,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     try:
         df = cl.get_targets(
-            ids, cfg=cfg.api, mapping_cfg=cfg.uniprot_mapping, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            mapping_cfg=cfg.uniprot_mapping,
+            client=client,
+            timeout=args.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve targets: %s", exc)

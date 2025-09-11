@@ -41,7 +41,7 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch) -> None:
         gas, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
     )
 
-    def fake_get_assays(ids, cfg, chunk_size, timeout):
+    def fake_get_assays(ids, cfg, client, chunk_size, timeout):
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"assay_chembl_id": data})
@@ -74,7 +74,7 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
         gdd, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
     )
 
-    def fake_get_documents(ids, cfg, chunk_size, timeout):
+    def fake_get_documents(ids, cfg, client, chunk_size, timeout):
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"document_chembl_id": data})
@@ -107,7 +107,7 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch) -> None:
         gtdt, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
     )
 
-    def fake_get_testitem(ids, cfg, chunk_size, timeout):
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"molecule_chembl_id": data})
@@ -140,7 +140,7 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch) -> None:
         gtd, "apply_config_overrides", lambda a, p, c, mapping=None: Config()
     )
 
-    def fake_get_targets(ids, cfg, mapping_cfg, timeout):
+    def fake_get_targets(ids, cfg, mapping_cfg, client, timeout):
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"target_chembl_id": data})
