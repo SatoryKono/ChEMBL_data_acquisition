@@ -4,25 +4,31 @@ from __future__ import annotations
 
 import argparse
 import logging
-from pathlib import Path
 from typing import Sequence
 from urllib.error import URLError
 
 import pandas as pd
+from library.config import Config, ensure_dirs, print_config
 
 from library import io
-from library.cli import build_parser as base_parser, configure_logging
-from library.config import load_config
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logger,
+    LoggerConfig,
+)
 from library.mapper_library import map_chembl_to_uniprot
 
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(cfg: Config, args: argparse.Namespace) -> int:
     """Map ChEMBL target identifiers to UniProt accessions.
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command-line arguments.
 
@@ -33,7 +39,9 @@ def run(args: argparse.Namespace) -> int:
 
     """
     try:
-        df = io.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
+        df = io.read_csv(
+            args.input_csv, cfg=cfg.io, sep=args.sep, encoding=args.encoding
+        )
     except (FileNotFoundError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -47,7 +55,7 @@ def run(args: argparse.Namespace) -> int:
             uniprot_ids.append(None)
             continue
         try:
-            uniprot_id = map_chembl_to_uniprot(str(chembl_id))
+            uniprot_id = map_chembl_to_uniprot(str(chembl_id), cfg.uniprot_mapping)
             uniprot_ids.append(uniprot_id)
             if uniprot_id:
                 logger.info("mapped %s -> %s", chembl_id, uniprot_id)
@@ -57,9 +65,9 @@ def run(args: argparse.Namespace) -> int:
             logger.warning("failed to map %s: %s", chembl_id, exc)
             uniprot_ids.append(None)
     df["mapping_uniprot_id"] = uniprot_ids
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
+        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("wrote %s", output)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
@@ -67,30 +75,50 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the command-line argument parser."""
-    parser = base_parser(
+    parser, log_cfg = base_parser(
         "Map ChEMBL target IDs to UniProt accessions",
         column="chembl_id",
         chunk_size=1,
     )
     parser.set_defaults(func=run)
-    return parser
+    return parser, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
-    parser = build_parser()
+    """Command line entry point using :class:`Config` for defaults."""
+    parser, log_cfg = build_parser()
+
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if args.output_csv is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
+    log_cfg.level = args.log_level
+    logger = configure_logger(log_cfg)
+    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    try:
+        cfg: Config = apply_config_overrides(args, parser, args.config)
+        if args.print_config:
+            print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
             )
-    configure_logging(args.log_level)
-    return args.func(args)
+            return 0
+        ensure_dirs(cfg)
+        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        return 1
+    exit_code = args.func(cfg, args)
+    if exit_code == 0:
+        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+    else:
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

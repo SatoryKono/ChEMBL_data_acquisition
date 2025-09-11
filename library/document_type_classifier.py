@@ -6,7 +6,7 @@ from typing import Dict, Iterable, Mapping
 
 from .document_type_terms import REVIEW_TERMS, EXPERIMENTAL_TERMS, UNKNOWN_TERMS
 
-# Source weights used in weighted voting
+# Default source weights used in weighted voting
 SOURCE_WEIGHTS: Mapping[str, int] = {
     "pubmed": 4,
     "openalex": 3,
@@ -18,6 +18,8 @@ def compute_scores(
     pubmed_terms: Iterable[str],
     scholar_terms: Iterable[str],
     openalex_terms: Iterable[str],
+    *,
+    weights: Mapping[str, int] | None = None,
 ) -> Dict[str, int]:
     """Calculate scores for each class based on detected terms.
 
@@ -25,6 +27,9 @@ def compute_scores(
     ----------
     pubmed_terms, scholar_terms, openalex_terms:
         Normalised term lists from the respective sources.
+    weights:
+        Optional mapping of source names to weights. When ``None``,
+        :data:`SOURCE_WEIGHTS` is used.
 
     Returns
     -------
@@ -34,6 +39,7 @@ def compute_scores(
 
     """
     scores = {"review": 0, "experimental": 0, "unknown": 0}
+    source_weights = weights or SOURCE_WEIGHTS
 
     def add_scores(terms: Iterable[str], weight: int) -> None:
         for term in terms:
@@ -44,9 +50,9 @@ def compute_scores(
             if term in UNKNOWN_TERMS:
                 scores["unknown"] += weight
 
-    add_scores(pubmed_terms, SOURCE_WEIGHTS["pubmed"])
-    add_scores(scholar_terms, SOURCE_WEIGHTS["scholar"])
-    add_scores(openalex_terms, SOURCE_WEIGHTS["openalex"])
+    add_scores(pubmed_terms, source_weights["pubmed"])
+    add_scores(scholar_terms, source_weights["scholar"])
+    add_scores(openalex_terms, source_weights["openalex"])
     return scores
 
 

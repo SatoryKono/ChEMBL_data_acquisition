@@ -12,11 +12,11 @@ provides three sub-commands:
 ``all``
     Run the ChEMBL and PubMed pipelines and merge the results.
 
-Example:
+Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python get_document_data.py pubmed pmids.csv output.csv
+    python get_document_data.py pubmed --config config.yaml --input pmids.csv --output output.csv
 
 The input file must contain a ``PMID`` column.
 
@@ -26,15 +26,22 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+
+from library.config import (
+    Config,
+    OpenAlexCfg,
+    CrossRefCfg,
+    ensure_dirs,
+    print_config,
+    _serialize_paths,
+)
+
 import requests
-from pandera.errors import SchemaErrors
-from schemas.documents import DocumentsSchema
-from library.normalization import normalize_documents
-from library.sidecar_errors import SidecarErrors
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from library import chembl_library as cl
@@ -43,8 +50,19 @@ from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
+from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
-from library.config import load_config
+from library.cli import (
+    apply_config_overrides,
+    build_root_parser,
+    configure_logger,
+    LoggerConfig,
+)
+from pandera.errors import SchemaErrors
+from schemas import DocumentsSchema, normalize_documents
+
+from library import write_csv_deterministic
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +70,8 @@ logger = logging.getLogger(__name__)
 def fetch_pubmed_records(
     pmids: list[str],
     sleep: float,
+    openalex_cfg: OpenAlexCfg,
+    crossref_cfg: CrossRefCfg,
     max_workers: int = 1,
     batch_size: int = 100,
 ) -> pd.DataFrame:
@@ -62,7 +82,13 @@ def fetch_pubmed_records(
     pmids:
         Identifiers to query.
     sleep:
-        Seconds to pause between API requests.
+
+        Seconds to pause between PubMed and Semantic Scholar requests.
+    openalex_cfg:
+        Configuration for OpenAlex API access.
+    crossref_cfg:
+        Configuration for CrossRef API access.
+
     max_workers:
         Maximum number of concurrent threads.
     batch_size:
@@ -103,9 +129,10 @@ def fetch_pubmed_records(
                     semsch = semsch_map.get(pmid, {})
 
                     # Still fetching these individually for now
-                    openalex = ocl.fetch_openalex(session, pmid, sleep)
+
+                    openalex = ocl.fetch_openalex(session, pmid, openalex_cfg)
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                    crossref = ocl.fetch_crossref(session, doi, sleep)
+                    crossref = ocl.fetch_crossref(session, doi, crossref_cfg)
 
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
@@ -138,30 +165,90 @@ def fetch_pubmed_records(
     return pd.DataFrame(records)
 
 
-def run_pubmed(args: argparse.Namespace) -> int:
-    """Execute the ``pubmed`` sub-command."""
+def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the ``pubmed`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         pmids = io.read_ids(
             args.input_csv,
             column=args.column,
+            cfg=cfg.io,
             sep=args.sep,
             encoding=args.encoding,
         )
-        df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
-        output = args.output_csv or io.default_output_path(args.input_csv)
+        df = fetch_pubmed_records(
+            pmids,
+            args.sleep,
+            cfg.openalex,
+            cfg.crossref,
+            args.workers,
+            args.batch_size,
+        )
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_documents(df)
-        sidecar = SidecarErrors(output.with_suffix(".errors"))
+        rows_total = len(df)
+        exit_code = 0
         try:
             df = DocumentsSchema.validate(df, lazy=True)
-        except SchemaErrors as err:
-            err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-            sidecar.add(str(err))
-            bad_idx = err.failure_cases["index"].dropna().unique()
-            logger.warning("schema validation failed for %d rows", len(bad_idx))
-            df = df.drop(index=bad_idx)
-        sidecar.write()
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), output)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            df = getattr(exc, "validated_data", df)
+            exit_code = 1
+        rows_kept = len(df)
+        rows_dropped = rows_total - rows_kept
+        key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+        csv_path = write_csv_deterministic(
+            df,
+            output,
+            col_order=[
+                "document_chembl_id",
+                "doi",
+                "title",
+                "year",
+                "month",
+                "day",
+                "citation",
+            ],
+            key_cols=key_cols or None,
+        )
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            stats=stats,
+            schema="DocumentsSchema",
+        )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
@@ -170,66 +257,155 @@ def run_pubmed(args: argparse.Namespace) -> int:
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
-def run_chembl(args: argparse.Namespace) -> int:
-    """Execute the ``chembl`` sub-command."""
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the ``chembl`` sub-command.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         ids = io.read_ids(
-            args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            column=args.column,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
     try:
-        df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        df = cl.get_documents(  # type: ignore[attr-defined]
+            ids,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df = normalize_documents(df)
-    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    rows_total = len(df)
+    exit_code = 0
+    required_cols = set(DocumentsSchema.columns.keys())
+    if required_cols.issubset(df.columns):
+        try:
+            df = DocumentsSchema.validate(df, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            df = getattr(exc, "validated_data", df)
+            exit_code = 1
+    else:
+        missing = required_cols.difference(df.columns)
+        logger.warning("Skipping validation due to missing columns: %s", missing)
+    rows_kept = len(df)
+    rows_dropped = rows_total - rows_kept
     try:
-        df = DocumentsSchema.validate(df, lazy=True)
-    except SchemaErrors as err:
-        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        sidecar.add(str(err))
-        bad_idx = err.failure_cases["index"].dropna().unique()
-        logger.warning("schema validation failed for %d rows", len(bad_idx))
-        df = df.drop(index=bad_idx)
-    sidecar.write()
-    try:
-        io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), output)
+        key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+        csv_path = write_csv_deterministic(
+            df,
+            output,
+            col_order=[
+                "document_chembl_id",
+                "doi",
+                "title",
+                "year",
+                "month",
+                "day",
+                "citation",
+            ],
+            key_cols=key_cols or None,
+        )
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+
+    stats_all: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats_all,
+        schema="DocumentsSchema",
+    )
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
-def run_all(args: argparse.Namespace) -> int:
-    """Run ChEMBL and PubMed pipelines and merge their outputs."""
+def run_all(cfg: Config, args: argparse.Namespace) -> int:
+    """Run ChEMBL and PubMed pipelines and merge their outputs.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration.
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success, non-zero on failure.
+
+    """
     try:
         ids = io.read_ids(
-            args.input_csv, column=args.column, sep=args.sep, encoding=args.encoding
+            args.input_csv,
+            column=args.column,
+            cfg=cfg.io,
+            sep=args.sep,
+            encoding=args.encoding,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
     try:
-        doc_df = cl.get_documents(ids, chunk_size=args.chunk_size)  # type: ignore[attr-defined]
+        doc_df = cl.get_documents(  # type: ignore[attr-defined]
+            ids,
+            cfg=cfg.api,
+            chunk_size=args.chunk_size,
+            timeout=args.timeout,
+        )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
         # Merge any columns not covered by ``postprocess_documents`` back
@@ -242,32 +418,78 @@ def run_all(args: argparse.Namespace) -> int:
                 how="left",
             )
         processed = normalize_documents(processed)
-        sidecar = SidecarErrors(output.with_suffix(".errors"))
+        rows_total = len(processed)
+        exit_code = 0
         try:
             processed = DocumentsSchema.validate(processed, lazy=True)
-        except SchemaErrors as err:
-            err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-            sidecar.add(str(err))
-            bad_idx = err.failure_cases["index"].dropna().unique()
-            logger.warning("schema validation failed for %d rows", len(bad_idx))
-            processed = processed.drop(index=bad_idx)
-        sidecar.write()
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            processed = getattr(exc, "validated_data", processed)
+            exit_code = 1
+        rows_kept = len(processed)
+        rows_dropped = rows_total - rows_kept
         try:
-            io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
-            logger.info("Wrote %d rows to %s", len(processed), output)
+            key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
+            csv_path = write_csv_deterministic(
+                processed,
+                output,
+                col_order=[
+                    "document_chembl_id",
+                    "doi",
+                    "title",
+                    "year",
+                    "month",
+                    "day",
+                    "citation",
+                ],
+                key_cols=key_cols or None,
+            )
+            logger.info("Wrote %d rows to %s", rows_kept, csv_path)
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
             return 1
+
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            stats=stats,
+            schema="DocumentsSchema",
+        )
         try:
             analyze_table_quality(processed, table_name=str(output.with_suffix("")))
         except ValueError as exc:
             logger.error("failed to generate quality report: %s", exc)
             return 1
-        return 0
+        return exit_code
+
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
     pmids = pubmed_ids.dropna().astype(str).tolist()
-    pub_df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
+    pub_df = fetch_pubmed_records(
+        pmids,
+        args.sleep,
+        cfg.openalex,
+        cfg.crossref,
+        args.workers,
+        args.batch_size,
+    )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
         pub_df["PubMed.PMID"] = (
@@ -291,50 +513,86 @@ def run_all(args: argparse.Namespace) -> int:
             how="left",
         )
     processed = normalize_documents(processed)
-    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    rows_total = len(processed)
+    exit_code = 0
     try:
         processed = DocumentsSchema.validate(processed, lazy=True)
-    except SchemaErrors as err:
-        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        sidecar.add(str(err))
-        bad_idx = err.failure_cases["index"].dropna().unique()
-        logger.warning("schema validation failed for %d rows", len(bad_idx))
-        processed = processed.drop(index=bad_idx)
-    sidecar.write()
+    except SchemaErrors as exc:
+        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+        errors = SidecarErrors()
+        for row in exc.failure_cases.to_dict("records"):
+            errors.add_error(row)
+        errors.save(failure_path)
+        logger.error(
+            "validation failed; wrote %d failure cases to %s",
+            len(exc.failure_cases),
+            failure_path,
+        )
+        processed = getattr(exc, "validated_data", processed)
+        exit_code = 1
+    rows_kept = len(processed)
+    rows_dropped = rows_total - rows_kept
     try:
-        io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(processed), output)
+        key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
+        csv_path = write_csv_deterministic(
+            processed,
+            output,
+            col_order=[
+                "document_chembl_id",
+                "doi",
+                "title",
+                "year",
+                "month",
+                "day",
+                "citation",
+            ],
+            key_cols=key_cols or None,
+        )
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+
+    stats_all: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats_all,
+        schema="DocumentsSchema",
+    )
     try:
         analyze_table_quality(processed, table_name=str(output.with_suffix("")))
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the argument parser for document utilities.
 
     Returns
     -------
-    argparse.ArgumentParser
-        Parser populated with all sub-commands.
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        Parser populated with all sub-commands and logging configuration.
 
     """
-    parser = argparse.ArgumentParser(description="Document data utilities")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config.yaml"),
-        help="Path to YAML configuration file",
+    root, log_cfg = build_root_parser()
+    parser = argparse.ArgumentParser(
+        description="Document data utilities", parents=[root]
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    pubmed = sub.add_parser("pubmed", help="Fetch data from PubMed and related APIs")
+    pubmed = sub.add_parser(
+        "pubmed", parents=[root], help="Fetch data from PubMed and related APIs"
+    )
     pubmed.add_argument(
         "--input",
         dest="input_csv",
@@ -355,7 +613,7 @@ def build_parser() -> argparse.ArgumentParser:
     pubmed.add_argument("--sep", default=",", help="CSV delimiter")
     pubmed.add_argument("--encoding", default="utf8", help="File encoding")
     pubmed.add_argument(
-        "--sleep", type=float, default=None, help="Seconds to sleep between requests"
+        "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
     )
     pubmed.add_argument(
         "--workers", type=int, default=1, help="Number of concurrent requests"
@@ -368,7 +626,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pubmed.set_defaults(func=run_pubmed)
 
-    chembl = sub.add_parser("chembl", help="Fetch document information from ChEMBL")
+    chembl = sub.add_parser(
+        "chembl", parents=[root], help="Fetch document information from ChEMBL"
+    )
     chembl.add_argument(
         "--input",
         dest="input_csv",
@@ -391,9 +651,17 @@ def build_parser() -> argparse.ArgumentParser:
     chembl.add_argument(
         "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
     )
+    chembl.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     chembl.set_defaults(func=run_chembl)
 
-    all_cmd = sub.add_parser("all", help="Run both ChEMBL and PubMed pipelines")
+    all_cmd = sub.add_parser(
+        "all", parents=[root], help="Run both ChEMBL and PubMed pipelines"
+    )
     all_cmd.add_argument(
         "--input",
         dest="input_csv",
@@ -419,7 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument(
         "--sleep",
         type=float,
-        default=None,
+        default=5.0,
         help="Seconds to sleep between PubMed requests",
     )
     all_cmd.add_argument(
@@ -431,28 +699,59 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Maximum PMIDs per PubMed request",
     )
+    all_cmd.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds for each HTTP request",
+    )
     all_cmd.set_defaults(func=run_all)
 
-    return parser
+    setattr(
+        parser,
+        "subparsers_map",
+        {"pubmed": pubmed, "chembl": chembl, "all": all_cmd},
+    )
+
+    return parser, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point."""
-    parser = build_parser()
+    """Command line entry point using :class:`Config` for defaults."""
+    parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if hasattr(args, "output_csv") and getattr(args, "output_csv") is None:
-        out_dir = config.get("output", {}).get("data_dir")
-        if out_dir:
-            args.output_csv = (
-                Path(out_dir) / io.default_output_path(args.input_csv).name
+    log_cfg.level = args.log_level
+    logger = configure_logger(log_cfg)
+    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
+    try:
+        cfg: Config = apply_config_overrides(
+            args, subparser, args.config, mapping={"timeout": "api.timeout_read"}
+        )
+        if args.print_config:
+            print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
             )
-    if getattr(args, "sleep", None) is None:
-        rate = config.get("rate_limits", {}).get("max_requests_per_second")
-        if rate:
-            args.sleep = 1 / rate
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    return args.func(args)
+            return 0
+        ensure_dirs(cfg)
+        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        return 1
+    exit_code = args.func(cfg, args)
+    if exit_code == 0:
+        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+    else:
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
-from pandera.errors import SchemaError
+from pandera.errors import SchemaError, SchemaErrors
 
 from schemas import (
     ActivitiesSchema,
@@ -13,6 +15,7 @@ from schemas import (
     TargetsSchema,
     TestitemsSchema,
 )
+from library.normalization import normalize_activities
 
 
 def test_activities_schema_validation() -> None:
@@ -113,3 +116,25 @@ def test_testitems_schema_validation() -> None:
     invalid.loc[0, "molecule_type"] = "Peptide"
     with pytest.raises(SchemaError):
         TestitemsSchema.validate(invalid)
+
+
+def test_activities_from_files() -> None:
+    """Validate activities data from CSV/JSON files and capture failures."""
+    data_dir = Path(__file__).parent / "data"
+
+    # Positive case: CSV data passes validation after normalisation
+    valid = pd.read_csv(data_dir / "activities_valid.csv")
+    normalized = normalize_activities(valid)
+    assert normalized.loc[0, "relation"] == "<="
+    assert normalized.loc[0, "units"] == "5 uM"
+    ActivitiesSchema.validate(normalized)
+
+    # Negative case: JSON data with invalid standard_value
+    invalid = pd.read_json(data_dir / "activities_invalid.json")
+    invalid_norm = normalize_activities(invalid)
+    with pytest.raises(SchemaErrors) as exc_info:
+        ActivitiesSchema.validate(invalid_norm, lazy=True)
+
+    failure_cases = exc_info.value.failure_cases
+    assert (failure_cases["column"] == "standard_value").any()
+    assert (failure_cases["index"] == 0).any()

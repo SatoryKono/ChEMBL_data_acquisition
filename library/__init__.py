@@ -16,7 +16,9 @@ from .document_type_terms import (
     parse_terms,
 )
 from .document_type_classifier import compute_scores, decide_label
-from .sidecar_errors import SidecarErrors
+from .sidecar import SidecarErrors
+from .csv_utils import sha256_file, write_csv_deterministic
+from .logging_setup import Logger, LoggerConfig, configure_logger
 
 __all__ = [
     "parse_terms",
@@ -30,4 +32,9 @@ __all__ = [
     "Config",
     "load_config",
     "SidecarErrors",
+    "write_csv_deterministic",
+    "sha256_file",
+    "Logger",
+    "LoggerConfig",
+    "configure_logger",
 ]

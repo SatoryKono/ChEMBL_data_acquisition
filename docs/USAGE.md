@@ -4,6 +4,10 @@ This guide demonstrates how to run the command line tools on the bundled
 "smoke" datasets. Each example writes output next to the input file with a
 prefix of `output_` followed by the input stem and current date.
 
+All scripts call :func:`library.config.ensure_dirs` after loading the
+configuration so that the configured output and cache directories exist before
+processing begins.
+
 ## Activity data
 
 ```bash
@@ -58,6 +62,15 @@ Each command supports the common flags `--sep`, `--encoding` and
 `--log-level`. The default output path mirrors the input location and can be
 manually overridden with `--output` where available.
 
+### Configuration overrides
+
+Command line flags override values from `config.yaml`. Internally the scripts
+use `library.cli.apply_config_overrides` to merge provided options into the
+runtime configuration. For example, specifying `--sep` or `--encoding`
+replaces `io.csv_sep` and `io.csv_encoding` respectively. Likewise
+`--chunk-size` maps to `jobs.chunk_size`, `--timeout` to `api.timeout_read` and
+`--log-level` to `log.level`.
+
 ## Table quality profiler
 
 ```bash
@@ -79,3 +92,15 @@ pytest
 
 Test data resides in `tests/data` and offers realistic examples of the CSV
 structures expected by the command line tools.
+
+## Code style checks
+
+Run the standard formatting, linting and type checking tools before submitting
+changes. Install the developer extras first:
+
+```bash
+pip install -r requirements-dev.txt
+black get_*.py library mapper_main.py table_quality_main.py
+ruff check get_*.py library mapper_main.py table_quality_main.py
+mypy get_*.py library mapper_main.py table_quality_main.py
+```

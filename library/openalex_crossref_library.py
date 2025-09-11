@@ -7,21 +7,19 @@ are exposed in a separate module to provide a clear separation of concerns.
 from __future__ import annotations
 
 from typing import Dict
-import logging
+from urllib.parse import quote
 
 import requests
 
+from .config import CrossRefCfg, OpenAlexCfg
 from . import pubmed_library as _pl
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 def fetch_openalex(
     session: requests.Session,
     pmid: str,
-    sleep: float,
-    *,
-    timeout: float = _pl.TIMEOUT,
+    cfg: OpenAlexCfg,
 ) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -31,10 +29,10 @@ def fetch_openalex(
         Session used for the HTTP request.
     pmid: str
         PubMed identifier.
-    sleep: float
-        Delay before making the request in seconds.
-    timeout: float, optional
-        Maximum seconds to wait for the HTTP response.
+    cfg: OpenAlexCfg
+
+        Configuration specifying base URL, timeouts and rate limits.
+
 
     Returns
     -------
@@ -48,15 +46,22 @@ def fetch_openalex(
 
     """
 
-    return _pl.fetch_openalex(session, pmid, sleep, timeout=timeout)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
+    logger.info("request_start", extra={"stage": "request_start", "url": url})
+    try:
+        data = _pl.fetch_openalex(session, pmid, cfg=cfg)
+    except requests.RequestException:
+        logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
+        raise
+    logger.info("request_ok", extra={"stage": "request_ok", "url": url})
+    return data
 
 
 def fetch_crossref(
     session: requests.Session,
     doi: str,
-    sleep: float,
-    *,
-    timeout: float = _pl.TIMEOUT,
+    cfg: CrossRefCfg,
 ) -> Dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
@@ -66,10 +71,10 @@ def fetch_crossref(
         Session used for the HTTP request.
     doi: str
         Digital Object Identifier of the article.
-    sleep: float
-        Delay before making the request in seconds.
-    timeout: float, optional
-        Maximum seconds to wait for the HTTP response.
+    cfg: CrossRefCfg
+
+        Configuration specifying base URL, timeouts and rate limits.
+
 
     Returns
     -------
@@ -83,4 +88,13 @@ def fetch_crossref(
 
     """
 
-    return _pl.fetch_crossref(session, doi, sleep, timeout=timeout)
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/{quote(doi)}"
+    logger.info("request_start", extra={"stage": "request_start", "url": url})
+    try:
+        data = _pl.fetch_crossref(session, doi, cfg=cfg)
+    except requests.RequestException:
+        logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
+        raise
+    logger.info("request_ok", extra={"stage": "request_ok", "url": url})
+    return data

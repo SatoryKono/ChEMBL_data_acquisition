@@ -12,6 +12,8 @@ import logging
 
 import pandas as pd
 
+from .config import Config, IoCfg
+
 logger = logging.getLogger(__name__)
 
 
@@ -295,8 +297,9 @@ def postprocess_file(
     input_path: Path | str,
     output_path: Path | str,
     *,
-    sep: str = ",",
-    encoding: str = "utf8",
+    cfg: IoCfg,
+    sep: str | None = None,
+    encoding: str | None = None,
 ) -> None:
     """Read a CSV, post-process and write the result.
 
@@ -306,10 +309,12 @@ def postprocess_file(
         Path to the CSV file produced by ``get_target_data.py all``.
     output_path:
         Destination path for the cleaned CSV file.
+    cfg:
+        I/O configuration providing default CSV parameters.
     sep:
-        Field delimiter of the CSV files.
+        Field delimiter of the CSV files. Defaults to ``cfg.csv_sep``.
     encoding:
-        Text encoding of the CSV files.
+        Text encoding of the CSV files. Defaults to ``cfg.csv_encoding``.
 
     Tests
     -----
@@ -317,6 +322,8 @@ def postprocess_file(
     :func:`tests.test_target_postprocessing.test_postprocess_file_roundtrip`.
 
     """
+    sep = sep or cfg.csv_sep
+    encoding = encoding or cfg.csv_encoding
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_targets(df)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
@@ -393,11 +400,12 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
 
 def finalise_file(
     input_path: Path | str,
-    organism_path: Path | str,
     output_path: Path | str,
     *,
-    sep: str = ",",
-    encoding: str = "utf8",
+    cfg: Config,
+    organism_path: Path | str | None = None,
+    sep: str | None = None,
+    encoding: str | None = None,
 ) -> None:
     """Read CSV files, finalise the target table and write the result.
 
@@ -405,16 +413,22 @@ def finalise_file(
     ----------
     input_path:
         Path to the CSV file produced by :func:`postprocess_file`.
-    organism_path:
-        Path to a CSV containing organism ``genus`` and ``type`` columns.
     output_path:
         Destination path for the cleaned CSV file.
+    cfg:
+        Application configuration providing CSV defaults and resource paths.
+    organism_path:
+        Optional path to a CSV containing organism ``genus`` and ``type`` columns.
+        Defaults to ``cfg.resources.organism_csv``.
     sep:
-        Field delimiter of the CSV files.
+        Field delimiter of the CSV files. Defaults to ``cfg.io.csv_sep``.
     encoding:
-        Text encoding of the CSV files.
+        Text encoding of the CSV files. Defaults to ``cfg.io.csv_encoding``.
 
     """
+    sep = sep or cfg.io.csv_sep
+    encoding = encoding or cfg.io.csv_encoding
+    organism_path = organism_path or cfg.resources.organism_csv
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
     processed = finalise_targets(df, organism)

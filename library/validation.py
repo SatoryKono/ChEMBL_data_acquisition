@@ -7,6 +7,8 @@ from typing import Iterable, Mapping
 import pandas as pd
 import pandas.api.types as ptypes
 
+from .log import logger
+
 
 def validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
     """Ensure that all ``required`` columns exist in ``df``.
@@ -24,9 +26,16 @@ def validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
         If any columns are missing.
 
     """
-    missing = [col for col in required if col not in df.columns]
+    columns = list(required)
+    logger.info("validate_start", extra={"stage": "validate_start", "columns": columns})
+    missing = [col for col in columns if col not in df.columns]
     if missing:
+        logger.info(
+            "validate_done",
+            extra={"stage": "validate_done", "columns": columns, "missing": missing},
+        )
         raise ValueError(f"missing columns: {', '.join(missing)}")
+    logger.info("validate_done", extra={"stage": "validate_done", "columns": columns})
 
 
 def validate_schema(df: pd.DataFrame, schema: Mapping[str, str]) -> None:
@@ -47,9 +56,26 @@ def validate_schema(df: pd.DataFrame, schema: Mapping[str, str]) -> None:
         If a column has an unexpected dtype.
 
     """
-    validate_columns(df, schema.keys())
-    for column, dtype in schema.items():
+    schema_dict = dict(schema)
+    logger.info(
+        "validate_start", extra={"stage": "validate_start", "schema": schema_dict}
+    )
+    validate_columns(df, schema_dict.keys())
+    for column, dtype in schema_dict.items():
         if not ptypes.is_dtype_equal(df[column].dtype, dtype):
+            logger.info(
+                "validate_done",
+                extra={
+                    "stage": "validate_done",
+                    "schema": schema_dict,
+                    "column": column,
+                    "expected": dtype,
+                    "actual": str(df[column].dtype),
+                },
+            )
             raise TypeError(
                 f"column {column!r} has dtype {df[column].dtype}, expected {dtype}"
             )
+    logger.info(
+        "validate_done", extra={"stage": "validate_done", "schema": schema_dict}
+    )

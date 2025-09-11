@@ -14,18 +14,27 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from library.config import Config, ensure_dirs, print_config
+from library.cli import (
+    apply_config_overrides,
+    build_parser as base_parser,
+    configure_logger,
+    LoggerConfig,
+)
+
 from library import input_initialisation_library as lib
 from library.table_quality import analyze_table_quality
-from library.config import load_config
 
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute table combination routine.
 
     Parameters
     ----------
+    cfg : Config
+        Application configuration.
     args:
         Parsed command line arguments.
 
@@ -40,7 +49,8 @@ def run(args: argparse.Namespace) -> int:
             raise FileNotFoundError(f"{args.same_doc} does not exist")
         if not args.all_doc.exists():
             raise FileNotFoundError(f"{args.all_doc} does not exist")
-        args.out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = Path(args.out_dir or cfg.init.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("Loading source workbooks")
         same = lib.load_same_doc(args.same_doc)
@@ -61,73 +71,109 @@ def run(args: argparse.Namespace) -> int:
             tables[key] = lib.compute_status_statistics(df, entity)
 
         logger.info("Saving output")
-        paths = lib.save_tables(tables, args.out_dir, fmt=args.format)
+        paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
         # Ensure that files were actually written to disk
         missing = [str(p) for p in paths.values() if not p.exists()]
         if missing:
             raise RuntimeError("failed to write output files: " + ", ".join(missing))
 
         logger.info("Generating data quality reports")
-        report_dir = args.out_dir / "data_validity_report"
+        report_dir = out_dir / "data_validity_report"
         report_dir.mkdir(parents=True, exist_ok=True)
         for entity, path in paths.items():
             logger.info("Profiling %s", entity)
             analyze_table_quality(path, table_name=str(report_dir / path.stem))
 
-        logger.info(
-            "Saved %d tables and quality reports to %s", len(paths), args.out_dir
-        )
+        logger.info("Saved %d tables and quality reports to %s", len(paths), out_dir)
         return 0
     except KeyError as exc:
         logger.error("required table '%s' missing", exc.args[0])
         return 1
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create argument parser."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser, log_cfg = base_parser(__doc__ or "Input initialisation", column="chembl_id")
     parser.add_argument(
-        "--config",
+        "--same-doc",
         type=Path,
-        default=Path("config.yaml"),
-        help="Path to YAML configuration file",
+        help="Path to same document workbook (default: config init.same_doc)",
     )
     parser.add_argument(
-        "--same-doc", type=Path, required=True, help="Path to same document workbook"
-    )
-    parser.add_argument(
-        "--all-doc", type=Path, required=True, help="Path to all document workbook"
+        "--all-doc",
+        type=Path,
+        help="Path to all document workbook (default: config init.all_doc)",
     )
     parser.add_argument(
         "--dictionary-dir",
         type=Path,
-        default=Path("dictionary"),
-        help="Directory with targets_type.csv, citation_fraction.csv and status.csv",
+        default=None,
+        help=(
+            "Directory with targets_type.csv, citation_fraction.csv and status.csv "
+            "(default: config resources.dictionary_dir)"
+        ),
     )
-    parser.add_argument("--out-dir", type=Path, default=None, help="Output directory")
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        help="Output directory (default: config init.output_dir)",
+    )
     parser.add_argument(
         "--format", choices=["csv"], default="csv", help="Output format"
     )
     parser.set_defaults(func=run)
-    return parser
-
-
-def configure_logging(level: str) -> None:
-    """Configure logging at ``level``."""
-    numeric = getattr(logging, level.upper(), logging.INFO)
-    logging.basicConfig(level=numeric)
+    return parser, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point."""
-    parser = build_parser()
+    """Entry point using :class:`Config` for defaults."""
+    parser, log_cfg = build_parser()
+
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if args.out_dir is None:
-        args.out_dir = Path(config.get("output", {}).get("data_dir", "."))
-    configure_logging(args.log_level)
-    return args.func(args)
+    log_cfg.level = args.log_level
+    logger = configure_logger(log_cfg)
+    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    try:
+        cfg: Config = apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={
+                "same_doc": "init.same_doc",
+                "all_doc": "init.all_doc",
+                "out_dir": "init.output_dir",
+                "dictionary_dir": "resources.dictionary_dir",
+            },
+        )
+        if args.print_config:
+            print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger.info(
+                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
+            )
+            return 0
+        ensure_dirs(cfg)
+
+        args.same_doc = Path(args.same_doc)
+        args.all_doc = Path(args.all_doc)
+        args.out_dir = Path(args.out_dir)
+        args.dictionary_dir = Path(args.dictionary_dir)
+
+        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error("%s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("failed to set up directories: %s", exc)
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        return 1
+    exit_code = args.func(cfg, args)
+    if exit_code == 0:
+        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+    else:
+        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

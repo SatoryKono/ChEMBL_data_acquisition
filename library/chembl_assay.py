@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from typing import Iterable
 
-import logging
-
 import pandas as pd
 
 from .chembl_client import _chunked, request_json
+from .config import ApiCfg
+from .log import logger
 
-logger = logging.getLogger(__name__)
-
-ASSAY_URL = "https://www.ebi.ac.uk/chembl/api/data/assay/{id}?format=json"
 ASSAY_COLUMNS = [
     "aidx",
     "assay_category",
@@ -75,7 +72,6 @@ ACTIVITY_COLUMNS = [
     "assay_variant_mutation",
 ]
 
-TESTITEM_URL = "https://www.ebi.ac.uk/chembl/api/data/molecule/{id}?format=json"
 TESTITEM_COLUMNS = [
     "molecule_chembl_id",
     "pref_name",
@@ -93,12 +89,32 @@ TESTITEM_COLUMNS = [
 ]
 
 
-def get_assay(chembl_assay_id: str, *, timeout: float = 30.0) -> pd.DataFrame:
-    """Retrieve assay information as a DataFrame."""
+def get_assay(
+    chembl_assay_id: str, *, cfg: ApiCfg, timeout: float | None = None
+) -> pd.DataFrame:
+    """Retrieve assay information as a DataFrame.
+
+    Parameters
+    ----------
+    chembl_assay_id:
+        Identifier of the assay to fetch.
+    cfg:
+        API configuration providing base URL and timeouts.
+    timeout:
+        Optional override for the read timeout in seconds.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Normalised assay information or an empty frame when ``chembl_assay_id``
+        is empty or the record is missing.
+    """
     if chembl_assay_id in {"", "#N/A"}:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
-    url = ASSAY_URL.format(id=chembl_assay_id)
-    data = request_json(url, timeout=timeout)
+    base = cfg.chembl_base.rstrip("/")
+    url = f"{base}/assay/{chembl_assay_id}?format=json"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    data = request_json(url, cfg=cfg, timeout=effective_timeout)
     items = data.get("assays") or data.get("assay") or []
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
@@ -111,8 +127,9 @@ def get_assay(chembl_assay_id: str, *, timeout: float = 30.0) -> pd.DataFrame:
 def get_assays(
     ids: Iterable[str],
     *,
+    cfg: ApiCfg,
     chunk_size: int = 5,
-    timeout: float = 30.0,
+    timeout: float | None = None,
     require_variant_sequence: bool = False,
 ) -> pd.DataFrame:
     """Fetch assay records for *ids*.
@@ -121,10 +138,12 @@ def get_assays(
     ----------
     ids:
         Assay identifiers to retrieve.
+    cfg:
+        API configuration providing base URL and timeouts.
     chunk_size:
         Maximum number of IDs per HTTP request.
     timeout:
-        Timeout in seconds for each HTTP request.
+        Optional override for the read timeout in seconds.
     require_variant_sequence:
         If ``True``, only assays with a non-null ``variant_sequence`` are returned.
 
@@ -139,12 +158,17 @@ def get_assays(
         return pd.DataFrame(columns=ASSAY_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = "https://www.ebi.ac.uk/chembl/api/data/assay.json?format=json"
+    base = f"{cfg.chembl_base.rstrip('/')}/assay.json?format=json"
     if require_variant_sequence:
         base += "&variant_sequence__isnull=false"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&assay_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&assay_chembl_id__in={chunk_key}"
+        data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
             df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
@@ -152,6 +176,12 @@ def get_assays(
             )
             if not df_chunk.empty:
                 records.append(df_chunk)
+                logger.info(
+                    "chunk_done",
+                    extra={"stage": "chunk_done", "chunk_key": chunk_key},
+                )
+                continue
+        logger.info("chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key})
     if not records:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
@@ -161,8 +191,9 @@ def get_assays(
 def get_activities(
     ids: Iterable[str],
     *,
+    cfg: ApiCfg,
     chunk_size: int = 5,
-    timeout: float = 30.0,
+    timeout: float | None = None,
 ) -> pd.DataFrame:
     """Fetch activity records for *ids*.
 
@@ -170,29 +201,42 @@ def get_activities(
     ----------
     ids:
         Activity identifiers to retrieve.
+    cfg:
+        API configuration providing base URL and timeouts.
     chunk_size:
         Maximum number of IDs per HTTP request.
     timeout:
-        Timeout in seconds for each HTTP request.
+        Optional override for the read timeout in seconds.
 
     Returns
     -------
     pandas.DataFrame
         Combined activity records.
-
     """
     valid = [i for i in ids if i not in {"", "#N/A"}]
     if not valid:
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = "https://www.ebi.ac.uk/chembl/api/data/activity.json?format=json"
+    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&activity_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&activity_id__in={chunk_key}"
+        data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
     if not records:
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
@@ -202,22 +246,52 @@ def get_activities(
 def get_testitem(
     ids: Iterable[str],
     *,
+    cfg: ApiCfg,
     chunk_size: int = 5,
-    timeout: float = 30.0,
+    timeout: float | None = None,
 ) -> pd.DataFrame:
-    """Fetch compound records for *ids*."""
+    """Fetch compound records for *ids*.
+
+    Parameters
+    ----------
+    ids:
+        Molecule identifiers to retrieve.
+    cfg:
+        API configuration providing base URL and timeouts.
+    chunk_size:
+        Maximum number of IDs per HTTP request.
+    timeout:
+        Optional override for the read timeout in seconds.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Combined compound records.
+    """
     valid = [i for i in ids if i not in {"", "#N/A"}]
     if not valid:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = "https://www.ebi.ac.uk/chembl/api/data/molecule.json?format=json"
+    base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?format=json"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&molecule_chembl_id__in={','.join(chunk)}"
-        data = request_json(url, timeout=timeout)
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&molecule_chembl_id__in={chunk_key}"
+        data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)
