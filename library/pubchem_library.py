@@ -152,7 +152,7 @@ def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
-        get_limiter("pubchem", 1 / cfg.delay if cfg.delay else 0).acquire()
+        get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             response = _session.get(
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)
