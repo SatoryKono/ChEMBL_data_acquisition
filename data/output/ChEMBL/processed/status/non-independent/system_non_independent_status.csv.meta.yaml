@@ -80,6 +80,57 @@ config:
       review: 1
       experimental: 1
       unknown: 2
+  activity:
+    column: activity_id
+    chunk_size: 5
+    timeout: 30.0
+    limit: null
+    dry_run: false
+  assay:
+    column: assay_chembl_id
+    chunk_size: 10
+    timeout: 30.0
+  testitem:
+    column: molecule_chembl_id
+    chunk_size: 5
+    timeout: 30.0
+  document:
+    pubmed:
+      column: PMID
+      sleep: 5.0
+      workers: 1
+      batch_size: 100
+    chembl:
+      column: chembl_id
+      chunk_size: 5
+      timeout: 30.0
+    all:
+      column: chembl_id
+      chunk_size: 5
+      sleep: 5.0
+      workers: 1
+      batch_size: 50
+      timeout: 30.0
+  target:
+    uniprot:
+      column: uniprot_id
+      data_dir: dictionary\uniprot
+    chembl:
+      column: chembl_id
+      timeout: 30.0
+    iuphar:
+      target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
+      family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+    all:
+      data_dir: dictionary\uniprot
+      target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
+      family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+      timeout: 30.0
+      organism_csv: dictionary\_Target\organism.csv
+      uniprot_column: uniprot_id
+      chembl_out: null
+      uniprot_out: null
+      iuphar_out: null
   resources:
     dictionary_dir: dictionary
     iuphar_target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
