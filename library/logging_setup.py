@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -332,9 +333,15 @@ def configure_logger(cfg: LoggerConfig) -> Logger:
     root_logger.handlers = [handler]
     root_logger.setLevel(_level_no(cfg.level))
 
+    # Route ``warnings.warn`` calls through the structured logger.  ``logging``
+    # redirects warnings to the ``py.warnings`` logger when captureWarnings is
+    # enabled.  We attach the same handler used for the root logger to ensure
+    # a single JSON-formatted output.
     logging.captureWarnings(True)
+    warnings.simplefilter("default")
     warnings_logger = logging.getLogger("py.warnings")
-    warnings_logger.handlers = [handler]
+    warnings_logger.handlers.clear()
+    warnings_logger.addHandler(handler)
     warnings_logger.setLevel(_level_no(cfg.level))
     warnings_logger.propagate = False
 
