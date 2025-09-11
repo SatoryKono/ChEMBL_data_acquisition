@@ -14,6 +14,11 @@ from pathlib import Path
 import argparse
 import logging
 from tempfile import TemporaryDirectory
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     import pandas as pd
@@ -23,8 +28,10 @@ except ImportError as exc:  # pragma: no cover - import-time check
         " Install it with 'pip install pandas'."
     ) from exc
 
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from library.csv_utils import sha256_file, write_csv_deterministic
+
 
 
 def run_check(tmp_dir: Path) -> bool:
