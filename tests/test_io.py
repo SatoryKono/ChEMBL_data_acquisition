@@ -4,12 +4,18 @@ import csv
 import hashlib
 from pathlib import Path
 
+import subprocess
+import time
+from io import StringIO
+from typing import Any, NoReturn
+
 import pandas as pd
 import pytest
 import yaml
 
 from library import io
 from library.config import Config, IoCfg
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 def test_read_csv_validates_columns(tmp_path: Path) -> None:
@@ -79,6 +85,7 @@ def test_write_csv_with_key_cols(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
+
 def test_write_csv_normalises_types(tmp_path: Path) -> None:
     df = pd.DataFrame(
         {
@@ -91,3 +98,25 @@ def test_write_csv_normalises_types(tmp_path: Path) -> None:
     io.write_csv(df, path, cfg=cfg, key_cols=["d"])
     text = path.read_text(encoding="utf-8-sig")
     assert text == ("b,d\n" "false,2020-01-01\n" "true,2020-01-02\n")
+
+def test_git_sha_timeout_returns_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_git_sha returns ``"unknown"`` when the git command exceeds timeout."""
+
+    stream = StringIO()
+    monkeypatch.setattr(
+        io,
+        "logger",
+        configure_logger(LoggerConfig(level="WARNING", stream=stream)),
+    )
+
+    def slow_run(*args: Any, **kwargs: Any) -> NoReturn:
+        time.sleep(0.1)  # Simulate a hanging git command
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=5)
+
+    monkeypatch.setattr(io.subprocess, "run", slow_run)
+
+    assert io._git_sha() == "unknown"
+    assert "timed out" in stream.getvalue()
+

@@ -7,7 +7,7 @@ import sys
 from typing import Sequence
 
 import requests
-from library.config import Config, RetryCfg, ensure_dirs, print_config, _serialize_paths
+from library.config import Config, ensure_dirs, print_config, _serialize_paths
 from library.chembl_client import init_session
 
 from library import chembl_library as cl
@@ -58,7 +58,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 0
 
     # Configure HTTP session with the supplied User-Agent and retry policy
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
         ids = io.read_ids(

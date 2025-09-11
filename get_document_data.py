@@ -34,7 +34,6 @@ from library.config import (
     Config,
     OpenAlexCfg,
     CrossRefCfg,
-    RetryCfg,
     ensure_dirs,
     print_config,
     _serialize_paths,
@@ -276,7 +275,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Configure session for ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
         ids = io.read_ids(
@@ -386,7 +385,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare shared session before performing any API calls
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
         ids = io.read_ids(

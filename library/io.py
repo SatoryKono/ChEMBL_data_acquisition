@@ -15,8 +15,12 @@ from typing import Iterable
 import pandas as pd
 
 from . import validation
-from .config import Config, IoCfg
+
+from .config import Config, IoCfg, _serialize_paths
 from .csv_utils import write_csv_deterministic
+
+from .log import logger
+
 
 
 def read_ids(
@@ -179,3 +183,46 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     inp = Path(input_path)
     date_str = datetime.now().strftime("%Y%m%d")
     return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
+
+
+
+def _git_sha() -> str:
+    """Return the current Git commit hash.
+
+    The command is limited to a short timeout to avoid hanging when ``git``
+    is unavailable. If the call times out or fails, ``"unknown"`` is
+    returned and a warning is logged.
+    """
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired as exc:
+        logger.warning("git command timed out: %s", exc)
+    except Exception as exc:  # pragma: no cover - git may be unavailable
+        logger.warning("unable to determine git SHA: %s", exc)
+    return "unknown"
+
+
+def _write_meta(path: Path, cfg: Config) -> None:
+    """Write YAML metadata alongside the output file.
+
+    Paths inside the configuration are converted to plain strings so that the
+    resulting YAML does not contain :class:`~pathlib.Path` objects.
+    """
+
+    meta = {
+        "git_sha": _git_sha(),
+        "command": " ".join(sys.argv),
+        "config": _serialize_paths(cfg.to_dict()),
+    }
+    meta_path = Path(f"{path}.meta.yaml")
+    with meta_path.open("w", encoding="utf8") as fh:
+        yaml.safe_dump(meta, fh, sort_keys=False)
+

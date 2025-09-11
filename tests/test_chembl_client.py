@@ -13,19 +13,14 @@ import time
 import pytest
 
 
-
-
 from cachetools import TTLCache  # type: ignore[import-untyped]
-
-
 
 
 from library import chembl_client
 
 
-
 from library.chembl_client import clear_cache, init_session, request_json
-from library.config import ApiCfg, ChemblCfg, RetryCfg
+from library.config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
 import library.rate_limiter as rl
 
 
@@ -162,11 +157,9 @@ def test_request_json_cache(monkeypatch) -> None:
 def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     timer = [0.0]
 
-
     cache: TTLCache[str, dict[str, Any]] = TTLCache(
         maxsize=2, ttl=1, timer=lambda: timer[0]
     )
-
 
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
 
@@ -212,9 +205,7 @@ def test_request_json_preserves_original_error_message(monkeypatch) -> None:
 
 def test_clear_cache(monkeypatch) -> None:
 
-
     cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=2, ttl=100)
-
 
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
     chembl_client._CACHE["x"] = {"ok": True}
@@ -238,3 +229,17 @@ def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     with rl._limiters_lock:
         rl._limiters.clear()
 
+
+@responses.activate
+def test_session_with_retry_retries_post() -> None:
+    """Ensure POST requests are retried when configured."""
+
+    url = "http://example.com/post"
+    responses.add(responses.POST, url, status=500)
+    responses.add(responses.POST, url, json={"ok": True}, status=200)
+
+    session = session_with_retry(ApiCfg(), RetryCfg(max_attempts=2, backoff_factor=0))
+    response = session.post(url)
+
+    assert response.status_code == 200
+    assert len(responses.calls) == 2

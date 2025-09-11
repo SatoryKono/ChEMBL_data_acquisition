@@ -1,7 +1,7 @@
 """CLI wrapper for :func:`write_csv_deterministic`.
 
-This script reads an input CSV file and re-serialises it deterministically using
-:func:`library.csv_utils.write_csv_deterministic`.
+This script reads an input CSV file and re-serialises it deterministically
+using :func:`library.csv_utils.write_csv_deterministic`.
 """
 
 from __future__ import annotations
@@ -19,7 +19,12 @@ from library.csv_utils import write_csv_deterministic
 from library.cli_utils import build_parser
 
 
+
 logger = logging.getLogger(__name__)
+
+from library.log import logger
+from library.logging_setup import LoggerConfig, configure_logger
+
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -38,7 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper()))
+    configure_logger(LoggerConfig(level=args.log_level))
 
     start = time.perf_counter()
     df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)

@@ -141,9 +141,9 @@ def write_csv_deterministic(
     else:
         work = work[sorted(work.columns)]
 
-    # Sort rows deterministically
+    # Sort rows deterministically without creating a new DataFrame
     sort_cols = list(key_cols) if key_cols is not None else list(work.columns)
-    work = work.sort_values(by=sort_cols, kind="mergesort")
+    work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
     # Normalise bool and date columns
     for col in work.columns:
