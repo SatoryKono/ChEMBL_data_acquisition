@@ -89,15 +89,20 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 "pairs_same_document": "same_document",
             },
         )
-        logger.info("compute_status_percentages")
+        logger.info("prepare_status_outputs")
         for key, df in list(tables.items()):
             if not key.endswith("_status"):
                 continue
             if "Filtered.new" not in df.columns:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
-            entity = key.split("_")[0]
-            tables[key] = lib.compute_status(df, entity)
+
+            base_name = key.removesuffix("_status")
+            raw = df.rename(columns={"Filtered.new": "Filtered"})
+            tables[base_name] = raw
+            tables[f"{key}_statistics"] = lib.compute_status_statistics(raw, base_name)
+            del tables[key]
+
 
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
