@@ -12,8 +12,8 @@ import time
 
 import pytest
 
-from cachetools import TTLCache  # type: ignore[import-untyped]
 
+from cachetools import TTLCache  # type: ignore[import-untyped]
 
 
 from library import chembl_client
@@ -157,7 +157,7 @@ def test_request_json_cache(monkeypatch) -> None:
 @responses.activate
 def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     timer = [0.0]
-    cache = TTLCache(maxsize=2, ttl=1, timer=lambda: timer[0])
+    cache: TTLCache[str, Any] = TTLCache(maxsize=2, ttl=1, timer=lambda: timer[0])
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
     monkeypatch.setattr("library.chembl_client._session", None)
     clear_cache()
@@ -194,7 +194,7 @@ def test_request_json_preserves_original_error_message(monkeypatch) -> None:
 
 
 def test_clear_cache(monkeypatch) -> None:
-    cache = TTLCache(maxsize=2, ttl=100)
+    cache: TTLCache[str, Any] = TTLCache(maxsize=2, ttl=100)
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
     chembl_client._CACHE["x"] = {"ok": True}
     clear_cache()
