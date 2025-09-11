@@ -303,3 +303,30 @@ def test_log_level_invalid(tmp_path: Path) -> None:
         load_config(path)
     valid = ", ".join(sorted(logging.getLevelNamesMapping()))
     assert str(exc.value) == f"log.level must be one of {valid}, got 'verbose'"
+
+
+def test_log_level_valid_no_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fallback mapping should validate known log levels."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("log:\n  level: warn\n")
+    monkeypatch.delattr(logging, "getLevelNamesMapping", raising=False)
+    cfg = load_config(path)
+    assert cfg.log.level == "warn"
+
+
+def test_log_level_invalid_no_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fallback mapping should reject unknown levels."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("log:\n  level: verbose\n")
+    monkeypatch.delattr(logging, "getLevelNamesMapping", raising=False)
+    with pytest.raises(ValueError) as exc:
+        load_config(path)
+    level_names = {name.upper(): level for name, level in logging._nameToLevel.items()}
+    valid = ", ".join(sorted(level_names))
+    assert str(exc.value) == f"log.level must be one of {valid}, got 'verbose'"

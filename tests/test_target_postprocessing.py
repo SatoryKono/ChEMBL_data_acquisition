@@ -12,6 +12,7 @@ import pandas as pd
 import warnings
 
 from library import target_postprocessing as tp
+from library.config import IoCfg
 
 
 def test_postprocess_targets_merges_and_normalises() -> None:
@@ -51,7 +52,7 @@ def test_postprocess_targets_merges_and_normalises() -> None:
 
 
 def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
-    """Ensure ``postprocess_file`` writes the same result as ``postprocess_targets``."""
+    """``postprocess_file`` respects ``IoCfg`` defaults for CSV options."""
 
     df = pd.DataFrame(
         {
@@ -75,14 +76,17 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
         }
     )
 
+    cfg = IoCfg(csv_sep=";", csv_encoding="utf8")
     input_path = tmp_path / "in.csv"
-    df.to_csv(input_path, index=False)
+    df.to_csv(input_path, index=False, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
     output_path = tmp_path / "out.csv"
 
-    tp.postprocess_file(input_path, output_path)
+    tp.postprocess_file(input_path, output_path, cfg=cfg)
 
     expected = tp.postprocess_targets(df).astype(str)
-    result = pd.read_csv(output_path, dtype=str)
+    result = pd.read_csv(
+        output_path, dtype=str, sep=cfg.csv_sep, encoding=cfg.csv_encoding
+    )
     pd.testing.assert_frame_equal(result, expected)
 
 
