@@ -382,7 +382,8 @@ def process_activity_table(
 
     df = df.rename(
         columns={
-            "activity_chembl_id": "activity_chembl_id",
+            # Use a concise identifier to align with downstream processing
+            "activity_chembl_id": "activity_id",
             "salt_chembl_id": "saltform_id",
             "molecule_chembl_id": "testitem_id",
             "target_chembl_id": "target_id",
@@ -1566,7 +1567,7 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pandas.DataFrame
         Copy of ``df`` with recognised activity ID columns renamed to
-        ``activity_id1`` and ``activity_id2``.
+        ``activity_chembl_id1`` and ``activity_chembl_id2``.
 
     """
     rename: dict[str, str] = {}
@@ -1584,17 +1585,22 @@ def initialize_pairs(
 ) -> pd.DataFrame:
     """Merge activity statuses into ``pair_df``."""
     df = pair_df.copy()
-    mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
+    # Map each activity to its initial status using the canonical identifier
+    mapping = activity_df[["activity_id", "Filtered.init"]]
+
+    # Merge status for the first activity in the pair
     df = df.merge(
-        mapping, left_on="activity_chembl_id1", right_on="activity_chembl_id", how="left"
+        mapping, left_on="activity_chembl_id1", right_on="activity_id", how="left"
     )
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
-    df.drop(columns=["activity_chembl_id"], inplace=True)
+    df.drop(columns=["activity_id"], inplace=True)
+
+    # Merge status for the second activity in the pair
     df = df.merge(
-        mapping, left_on="activity_chembl_id2", right_on="activity_chembl_id", how="left"
+        mapping, left_on="activity_chembl_id2", right_on="activity_id", how="left"
     )
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
-    df.drop(columns=["activity_chembl_id"], inplace=True)
+    df.drop(columns=["activity_id"], inplace=True)
 
     order_map = status_api.order_map
     order_to_status = {v: k for k, v in order_map.items()}
@@ -1657,15 +1663,15 @@ def aggregate_activity(
             df_pairs[col] = 0
 
     left = df_pairs.rename(
-        columns={"activity_chembl_id1": "activity_chembl_id", "Filtered1": "Filtered.new"}
-    )[["activity_chembl_id", "Filtered.new", *metrics]]
+        columns={"activity_chembl_id1": "activity_id", "Filtered1": "Filtered.new"}
+    )[["activity_id", "Filtered.new", *metrics]]
     right = df_pairs.rename(
-        columns={"activity_chembl_id2": "activity_chembl_id", "Filtered2": "Filtered.new"}
-    )[["activity_chembl_id", "Filtered.new", *metrics]]
+        columns={"activity_chembl_id2": "activity_id", "Filtered2": "Filtered.new"}
+    )[["activity_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
-    activity_status = _aggregate_entity(activity_pairs, "activity_chembl_id", status_api)
+    activity_status = _aggregate_entity(activity_pairs, "activity_id", status_api)
 
-    merged = activity_df.merge(activity_status, on="activity_chembl_id", how="left")
+    merged = activity_df.merge(activity_status, on="activity_id", how="left")
     merged["Filtered.new"] = merged["Filtered.new"].fillna(merged["Filtered.init"])
     for m in metrics:
         merged[m] = merged[m].fillna(0)
