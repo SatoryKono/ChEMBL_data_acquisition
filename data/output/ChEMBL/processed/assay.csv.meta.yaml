@@ -1,5 +1,5 @@
 git_sha: unknown
-command: get_input_initialisation.py --config config.yaml
+command: scripts\get_input_initialisation.py --config config.yaml
 config:
   api:
     chembl_base: https://www.ebi.ac.uk/chembl/api/data
@@ -12,6 +12,7 @@ config:
     user_agent: chembl-da/0.1 (mailto:info@example.org)
   chembl:
     cache_ttl: 3600
+    cache_maxsize: 1024
   openalex:
     base: https://api.openalex.org
     timeout_connect: 5
@@ -80,6 +81,61 @@ config:
       review: 1
       experimental: 1
       unknown: 2
+  resources:
+    dictionary_dir: dictionary
+    iuphar_target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
+    iuphar_family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+    uniprot_data_dir: dictionary\uniprot
+    organism_csv: dictionary\_Target\organism.csv
+    status_csv: dictionary\status.csv
+    targets_type_csv: dictionary\targets_type.csv
+  io:
+    output_dir: data\output
+    cache_dir: .cache
+    csv_sep: ','
+    csv_encoding: utf-8-sig
+    csv_index: false
+    exist_ok: true
+  jobs:
+    concurrency: 8
+    chunk_size: 500
+  log:
+    level: INFO
+    format: '[%(asctime)s] %(levelname)s %(name)s: %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+  init:
+    same_doc: data\input\ChEMBL\ChEMBL_same_document_20_05.xlsx
+    all_doc: data\input\ChEMBL\ChEMBL_all_10_05_step5.xlsx
+    output_dir: data\output\ChEMBL\processed
+  batch:
+    size: 1000
+    pause: 0.0
+    concurrency: 2
+    fail_fast: true
+    retry_failed: true
+  quality:
+    sample_rows: 0
+    corr_method: pearson
+    max_unique_preview: 50
+    bin_count: 20
+  mapper:
+    enable_cache: true
+    strict_schema: true
+    warn_on_cast: true
+  rate:
+    global_rps: 8
+    global_burst: 8
+    limiter_cache_maxsize: 128
+    limiter_cache_ttl: 600
+  retry:
+    max_attempts: 3
+    backoff_factor: 0.5
+    status_forcelist:
+    - 429
+    - 500
+    - 502
+    - 503
+    - 504
   activity:
     column: activity_id
     chunk_size: 5
@@ -131,56 +187,3 @@ config:
       chembl_out: null
       uniprot_out: null
       iuphar_out: null
-  resources:
-    dictionary_dir: dictionary
-    iuphar_target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
-    iuphar_family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
-    uniprot_data_dir: dictionary\uniprot
-    organism_csv: dictionary\_Target\organism.csv
-    status_csv: dictionary\status.csv
-    targets_type_csv: dictionary\targets_type.csv
-  io:
-    output_dir: data\output
-    cache_dir: .cache
-    csv_sep: ','
-    csv_encoding: utf-8-sig
-    csv_index: false
-    exist_ok: true
-  jobs:
-    concurrency: 8
-    chunk_size: 500
-  batch:
-    size: 1000
-    pause: 0
-    concurrency: 2
-    fail_fast: true
-    retry_failed: true
-  quality:
-    sample_rows: 0
-    corr_method: pearson
-    max_unique_preview: 50
-    bin_count: 20
-  mapper:
-    enable_cache: true
-    strict_schema: true
-    warn_on_cast: true
-  init:
-    same_doc: data\input\ChEMBL\ChEMBL_same_document_20_05.xlsx
-    all_doc: data\input\ChEMBL\ChEMBL_all_10_05_step5.xlsx
-    output_dir: data\output\ChEMBL\processed
-  rate:
-    global_rps: 8
-    global_burst: 8
-  retry:
-    max_attempts: 3
-    backoff_factor: 0.5
-    status_forcelist:
-    - 429
-    - 500
-    - 502
-    - 503
-    - 504
-  log:
-    level: INFO
-    format: '[%(asctime)s] %(levelname)s %(name)s: %(message)s'
-    datefmt: '%Y-%m-%d %H:%M:%S'
