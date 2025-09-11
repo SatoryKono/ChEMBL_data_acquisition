@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pandera import Check, Column, DataFrameSchema
 
-
-TargetsSchema: DataFrameSchema = DataFrameSchema(
+TargetsSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
     {
         "target_chembl_id": Column(str, required=True),
         "organism": Column(str, required=True),

@@ -7,11 +7,11 @@ The implementation is a Python translation of a PowerQuery script.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from urllib.parse import quote
 
 import requests
-from cachetools import LRUCache  # type: ignore[import-untyped]
+from cachetools import LRUCache
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
@@ -178,7 +178,7 @@ def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
             return None
         try:
             response.raise_for_status()
-            data = response.json()
+            data = cast(Dict[str, Any], response.json())
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= cfg.retries:
                 logger.error("HTTP request failed for url %s: %s", url, exc)
@@ -289,7 +289,10 @@ def get_all_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
     """
     safe_name = url_encode(compound_name)
     rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
-    url = f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={safe_name}&contain=true"
+    url = (
+        f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={safe_name}"
+        "&contain=true"
+    )
     response = make_request(url, cfg)
     if not response:
         return None
@@ -325,7 +328,8 @@ def get_standard_name(cid: str, cfg: PubChemCfg) -> Optional[str]:
     info = response.get("InformationList", {}).get("Information", [])
     if not info:
         return None
-    return info[0].get("Title")
+    title = info[0].get("Title")
+    return cast(Optional[str], title)
 
 
 @dataclass

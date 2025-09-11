@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pandera import Check, Column, DataFrameSchema
 
-
-DocumentsSchema: DataFrameSchema = DataFrameSchema(
+DocumentsSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
     {
         "document_chembl_id": Column(str, required=True),
         "doi": Column(str, required=False),

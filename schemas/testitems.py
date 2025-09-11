@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pandera import Check, Column, DataFrameSchema
 
-
-TestitemsSchema: DataFrameSchema = DataFrameSchema(
+TestitemsSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
     {
         "salt_chembl_id": Column(str, required=True),
         "molecule_chembl_id": Column(str, required=True),

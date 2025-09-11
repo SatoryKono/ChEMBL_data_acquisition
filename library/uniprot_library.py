@@ -38,7 +38,7 @@ import csv
 import json
 from .log import logger
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Set
+from typing import Any, Dict, Iterable, List, Set, cast
 
 import requests
 from requests import Session
@@ -116,7 +116,8 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> Dict[str, Any]:
         with _session.get(url, timeout=timeout) as resp:
             resp.raise_for_status()
             try:
-                return resp.json()
+                data = cast(Dict[str, Any], resp.json())
+                return data
             except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
                 raise UniProtFetchError(
                     f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
@@ -826,7 +827,8 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
 def collect_info(
     uid: str, data_dir: Path | str | None = None, *, cfg: UniprotCfg
 ) -> Dict[str, Any]:
-    """Return names, organism, keyword, PTM, isoform, cross-ref, and activity data for ``uid``.
+    """Return names, organism, keyword, PTM, isoform,
+    cross-ref, and activity data for ``uid``.
 
     Parameters
     ----------

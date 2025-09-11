@@ -1,4 +1,6 @@
-"""Functions to map ChEMBL target IDs to UniProt accessions using the UniProt ID Mapping API."""
+"""Map ChEMBL target IDs to UniProt accessions.
+
+This module uses the UniProt ID Mapping API."""
 
 from __future__ import annotations
 
@@ -7,7 +9,7 @@ from .log import logger
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 from urllib.error import HTTPError
 
 from .config import UniprotMappingCfg
@@ -70,7 +72,8 @@ def map_chembl_to_uniprot(
                 except Exception:  # pragma: no cover - fallback if decode fails
                     body = ""
             raise ValueError(
-                f"UniProt API request to {url} failed with status {exc.code}: {body or exc.reason}"
+                f"UniProt API request to {url} failed with status {exc.code}: "
+                f"{body or exc.reason}"
             ) from exc
 
     # Submit the mapping job
@@ -121,9 +124,9 @@ def map_chembl_to_uniprot(
         return None
 
     first = results[0]
-    to = first.get("to", {})
+    to = cast(dict[str, Any], first.get("to", {}))
     accession = to.get("primaryAccession")
     if not accession:
         raise ValueError("Unexpected response format from UniProt ID mapping API")
 
-    return accession
+    return cast(str, accession)

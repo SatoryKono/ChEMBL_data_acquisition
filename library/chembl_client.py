@@ -10,7 +10,7 @@ import threading
 import requests
 from requests import Session
 
-from cachetools import TTLCache  # type: ignore[import-untyped]
+from cachetools import TTLCache
 
 from .config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
 from .rate_limiter import get_limiter, sleep
