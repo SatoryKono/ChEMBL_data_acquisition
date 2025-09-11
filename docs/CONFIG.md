@@ -49,3 +49,28 @@ All defaults are chosen to match the existing behaviour of the scripts. If
 `config.yaml` is missing or a field is undefined, the corresponding fallback is
 used. On multi-user systems, consider customising the output directories to
 avoid race conditions.
+
+## Environment variables
+
+Every configuration setting can be overridden via environment variables that
+follow the pattern `CHEMBL_DA__SECTION__KEY`. Sections and keys are separated
+by double underscores. For example, to increase the global request rate:
+
+```bash
+export CHEMBL_DA__API__RPS=10
+```
+
+Common options offer shorter aliases. The following environment variables map
+to the same configuration keys as their longer forms:
+
+| Alias | Equivalent key |
+|-------|----------------|
+| `CHEMBL_DA_BASE` | `CHEMBL_DA__API__CHEMBL_BASE` |
+| `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__API__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__API__TIMEOUT_READ` |
+| `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
+| `CHEMBL_DA_CACHE_DIR` | `CHEMBL_DA__IO__CACHE_DIR` |
+| `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
+
+The loader warns about unknown variables and ignores them. All overrides are
+applied after reading `config.yaml` and before command line options.
