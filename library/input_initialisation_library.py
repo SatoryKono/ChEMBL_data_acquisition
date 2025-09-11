@@ -301,8 +301,9 @@ def process_activity_table(
     df_activity:
         Deduplicated activity dataframe.
     dictionary_dir:
-        Directory containing ``targets_type.csv`` and
-        ``citation_fraction.csv``.
+        Directory containing ``citation_fraction.csv`` and ``targets_type.csv``.
+        The latter may reside either directly inside ``dictionary_dir`` or in a
+        ``_Target`` subdirectory.
 
     Returns
     -------
@@ -447,7 +448,20 @@ def process_activity_table(
     )
 
     # --- target types ------------------------------------------------------
+    # ``targets_type.csv`` may reside either directly inside ``dictionary_dir``
+    # or within a ``_Target`` subdirectory depending on how the dictionary
+    # archive was extracted. Try the top-level location first and fall back to
+    # the nested variant if necessary.
     targets_path = Path(dictionary_dir) / "targets_type.csv"
+    if not targets_path.exists():
+        targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
+    if not targets_path.exists():
+        msg = (
+            "targets_type.csv not found in the provided dictionary directory. "
+            "Expected at either 'dictionary/targets_type.csv' or "
+            "'dictionary/_Target/targets_type.csv'."
+        )
+        raise FileNotFoundError(msg)
 
     targets = pd.read_csv(
         targets_path,
