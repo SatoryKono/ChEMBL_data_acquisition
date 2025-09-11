@@ -114,3 +114,4 @@ log:
   format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format (env: CHEMBL_DA_LOG_FORMAT)
   datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format (env: CHEMBL_DA__LOG__DATEFMT)
 
+

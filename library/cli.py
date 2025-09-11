@@ -101,6 +101,32 @@ def build_parser(
     return parser
 
 
+def build_root_parser() -> argparse.ArgumentParser:
+    """Return a parser containing root-level options.
+
+    The parser is created with ``add_help=False`` so it can be used as a parent
+    for both the top-level parser and sub-commands, allowing shared options such
+    as ``--config`` and ``--log-level`` to be supplied before or after the
+    chosen sub-command.
+    """
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="YAML configuration file",
+    )
+    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
+    return parser
+
+
 def configure_logging(
     level: str, *, fmt: str | None = None, datefmt: str | None = None
 ) -> None:
@@ -214,4 +240,9 @@ def apply_config_overrides(
     return cfg
 
 
-__all__ = ["build_parser", "configure_logging", "apply_config_overrides"]
+__all__ = [
+    "build_parser",
+    "build_root_parser",
+    "configure_logging",
+    "apply_config_overrides",
+]

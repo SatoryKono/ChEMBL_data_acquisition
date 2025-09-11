@@ -74,9 +74,9 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
     rc = gdd.main(
         [
+            "chembl",
             "--config",
             str(config_path),
-            "chembl",
             "--input",
             str(input_csv),
             "--timeout",
@@ -138,9 +138,9 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
     rc = gtd.main(
         [
+            "chembl",
             "--config",
             str(config_path),
-            "chembl",
             "--input",
             str(input_csv),
             "--timeout",
