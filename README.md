@@ -9,16 +9,27 @@ parsing, validation, aggregation and export of tabular data.
 1. **Install dependencies**
 
    ```bash
-   pip install -r requirements.txt
-   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, ...)
-   pip install -r requirements.txt -r requirements-dev.txt
+   pip install .
+   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, pre-commit, ...)
+   pip install .[dev]
    ```
 
    The second command installs optional tooling for development and testing,
    including property-based tests powered by ``hypothesis`` and HTTP mocking
    via ``responses``.
 
-2. **Run a sample script**
+2. **Initialise pre-commit hooks**
+
+   ```bash
+   pre-commit install
+   pre-commit run --all-files
+   ```
+
+   The first command sets up Git hooks to run formatting, linting, static
+   type checking and tests before each commit. The second command executes
+   the hooks across the entire codebase.
+
+3. **Run a sample script**
 
    ```bash
    python get_assay_data.py --input tests/data/assays.csv \
@@ -38,11 +49,11 @@ parsing, validation, aggregation and export of tabular data.
        --output out/report.csv --log-level INFO
    ```
 
-3. **Run the tests**
+4. **Run the tests**
 
    ```bash
    pytest
-    ```
+   ```
 
    The suite exercises the library modules using fixtures from
    ``tests/data``.
@@ -53,14 +64,14 @@ To keep the environment current, periodically refresh the pinned
 libraries and verify that the project remains compatible:
 
 ```bash
-pip install -U -r requirements.txt -r requirements-dev.txt
+pip install -U .[dev]
 pre-commit run --all-files
 ```
 
-The first command upgrades both runtime and development requirements to
-the newest minor releases permitted by the version ranges. The second
-command formats code, lints, runs static type checks and executes the
-test suite to confirm nothing broke during the upgrade.
+The first command upgrades runtime and development dependencies to the
+newest minor releases permitted by the version ranges. The second command
+formats code, lints, runs static type checks and executes the test suite
+to confirm nothing broke during the upgrade.
 
 ## Конфигурация через `.env`
 
@@ -160,15 +171,15 @@ Typical log entries look like:
 
 ## Installation
 
-Clone the repository and install the pinned runtime dependencies:
+Clone the repository and install the runtime dependencies:
 
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install -r requirements.txt
+pip install .
 
-# Development tools (black, ruff, mypy, pytest, hypothesis, responses)
-pip install -r requirements.txt -r requirements-dev.txt
+# Development tools (black, ruff, mypy, pytest, hypothesis, responses, pre-commit)
+pip install .[dev]
 ```
 
 ### Pre-commit hooks
