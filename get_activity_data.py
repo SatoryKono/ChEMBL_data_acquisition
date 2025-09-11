@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from typing import Sequence
+from itertools import islice
 
 import requests
 from library.config import Config, RetryCfg, ensure_dirs, print_config, _serialize_paths
@@ -73,8 +74,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     if args.limit is not None:
-        ids = ids[: args.limit]
-        logger.info("processing at most %d identifiers", len(ids))
+        ids = islice(ids, args.limit)
+        logger.info("processing at most %d identifiers", args.limit)
 
     try:
         df = cl.get_activities(

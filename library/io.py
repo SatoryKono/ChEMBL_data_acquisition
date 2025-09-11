@@ -10,7 +10,7 @@ from __future__ import annotations
 import csv
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 import subprocess
 import sys
 
@@ -29,8 +29,8 @@ def read_ids(
     cfg: IoCfg,
     sep: str | None = None,
     encoding: str | None = None,
-) -> list[str]:
-    """Return identifier values from ``column`` in ``path``.
+) -> Iterator[str]:
+    """Yield identifier values from ``column`` in ``path``.
 
     Parameters
     ----------
@@ -45,9 +45,9 @@ def read_ids(
     encoding:
         Character encoding of the CSV file. Defaults to ``cfg.csv_encoding``.
 
-    Returns
-    -------
-    list[str]
+    Yields
+    ------
+    str
         Identifier values in the order they appear. Empty strings and
         ``"#N/A"`` markers are discarded.
 
@@ -66,12 +66,10 @@ def read_ids(
             reader = csv.DictReader(fh, delimiter=sep)
             if reader.fieldnames is None or column not in reader.fieldnames:
                 raise ValueError(f"column '{column}' not found in {path}")
-            ids: list[str] = []
             for row in reader:
                 value = (row.get(column) or "").strip()
                 if value and value != "#N/A":
-                    ids.append(value)
-            return ids
+                    yield value
     except FileNotFoundError:
         raise
     except csv.Error as exc:
