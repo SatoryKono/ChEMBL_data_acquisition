@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import time
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 import requests
@@ -94,6 +95,22 @@ def test_request_json_backoff_grows(monkeypatch) -> None:
     client.request_json("http://example.com", cfg=cfg)
 
     assert sleep_times == [1.0, 2.0]
+
+
+def test_request_json_retries_with_mocked_session() -> None:
+    """Failing requests should be retried using the provided session."""
+
+    response = DummyResponse()
+    session = MagicMock(spec=requests.Session)
+    session.get.side_effect = [requests.RequestException("boom"), response]
+    client = ChemblClient(ApiCfg(), RetryCfg(), session=session)
+    client.clear_cache()
+
+    cfg = ApiCfg(retries=2, backoff_factor=0)
+    result = client.request_json("http://example.com", cfg=cfg)
+
+    assert result == {"ok": True}
+    assert session.get.call_count == 2
 
 
 def test_request_json_reuses_session(monkeypatch) -> None:
