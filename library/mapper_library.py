@@ -127,4 +127,4 @@ def map_chembl_to_uniprot(
     if not accession:
         raise ValueError("Unexpected response format from UniProt ID mapping API")
 
-    return accession
+    return str(accession)

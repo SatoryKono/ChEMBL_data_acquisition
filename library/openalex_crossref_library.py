@@ -12,13 +12,14 @@ import requests
 
 from . import pubmed_library as _pl
 from .log import logger
+from .pubmed_library import CrossRefCfg, OpenAlexCfg  # type: ignore[attr-defined]
 from .rate_limiter import RateLimiter
 
 
 def fetch_openalex(
     session: requests.Session,
     pmid: str,
-    cfg: _pl.OpenAlexCfg,
+    cfg: OpenAlexCfg,
     limiter: RateLimiter | None = None,
 ) -> dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
@@ -62,7 +63,7 @@ def fetch_openalex(
 def fetch_crossref(
     session: requests.Session,
     doi: str,
-    cfg: _pl.CrossRefCfg,
+    cfg: CrossRefCfg,
     limiter: RateLimiter | None = None,
 ) -> dict[str, str]:
     """Return CrossRef metadata for ``doi``.

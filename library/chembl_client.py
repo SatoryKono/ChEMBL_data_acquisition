@@ -87,7 +87,7 @@ class ChemblClient:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
-                return cached
+                return cast(dict[str, Any], cached)
             logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
         last_exc: requests.RequestException | ValueError | None = None
@@ -113,7 +113,7 @@ class ChemblClient:
                     with self._cache_lock:
                         cached = self.cache.get(cache_key)
                         if cached is not None:
-                            return cached
+                            return cast(dict[str, Any], cached)
                         self.cache[cache_key] = data
                         logger.info(
                             "cache_set", extra={"stage": "cache_set", "url": url}
