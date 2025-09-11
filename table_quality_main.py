@@ -39,19 +39,23 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     try:
-        df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
-    except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
-        logger.error("%s", exc)
-        return 1
+        try:
+            df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
+        except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
+            logger.error("%s", exc)
+            return 1
 
-    original_cwd = Path.cwd()
-    try:
-        args.output_csv.mkdir(parents=True, exist_ok=True)
-        os.chdir(args.output_csv)
-        analyze_table_quality(df, table_name=args.table_name)
-    finally:
-        os.chdir(original_cwd)
-    return 0
+        original_cwd = Path.cwd()
+        try:
+            args.output_csv.mkdir(parents=True, exist_ok=True)
+            os.chdir(args.output_csv)
+            analyze_table_quality(df, table_name=args.table_name)
+        finally:
+            os.chdir(original_cwd)
+        return 0
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("run_fail", exc=exc)
+        return 1
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
