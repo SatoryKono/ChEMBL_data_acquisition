@@ -8,7 +8,7 @@ import random
 import requests
 import responses
 import time
-from library.chembl_client import init_session, request_json
+from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
 
 
@@ -44,7 +44,7 @@ class DummySession:
 def test_request_json_uses_cfg(monkeypatch) -> None:
     session = DummySession(failures=1)
     monkeypatch.setattr("library.chembl_client._session", session)
-    monkeypatch.setattr("library.chembl_client._CACHE", {})
+    clear_cache()
 
     sleep_times: list[float] = []
     monkeypatch.setattr(time, "sleep", lambda t: sleep_times.append(t))
@@ -66,7 +66,7 @@ def test_request_json_uses_cfg(monkeypatch) -> None:
 def test_request_json_backoff_grows(monkeypatch) -> None:
     session = DummySession(failures=2)
     monkeypatch.setattr("library.chembl_client._session", session)
-    monkeypatch.setattr("library.chembl_client._CACHE", {})
+    clear_cache()
 
     sleep_times: list[float] = []
     monkeypatch.setattr(time, "sleep", lambda t: sleep_times.append(t))
@@ -93,7 +93,7 @@ def test_request_json_reuses_session(monkeypatch) -> None:
         raise AssertionError("requests.Session should not be called")
 
     monkeypatch.setattr(requests, "Session", fail_session)
-    monkeypatch.setattr("library.chembl_client._CACHE", {})
+    clear_cache()
 
     request_json("http://example.com/1", cfg=ApiCfg())
     request_json("http://example.com/2", cfg=ApiCfg())

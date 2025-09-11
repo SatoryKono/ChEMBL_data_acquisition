@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, Iterator
 
 import random
+import threading
 import requests
 from requests import Session
 
@@ -14,7 +15,8 @@ from .log import logger
 
 _CACHE: Dict[str, dict[str, Any]] = {}
 
-_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+_session: Session | None = None
+_session_lock = threading.Lock()
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
@@ -66,11 +68,19 @@ def request_json(
         return _CACHE[cache_key]
     logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
+    global _session
+    if _session is None:
+        with _session_lock:
+            if _session is None:
+                _session = session_with_retry(ApiCfg(), RetryCfg())
+    session = _session
+    assert session is not None  # noqa: S101 - ensure session exists
+
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
         try:
-            with _session.get(
+            with session.get(
                 url, timeout=(cfg.timeout_connect, read_timeout)
             ) as response:
                 response.raise_for_status()
@@ -97,6 +107,16 @@ def request_json(
             delay += random.uniform(0, cfg.backoff_factor)
             sleep(delay)
     raise requests.RequestException(f"request_json failed for url: {url}")
+
+
+def clear_cache() -> None:
+    """Remove all entries from the in-memory cache.
+
+    This helper is primarily intended for tests to avoid interference
+    from previously cached responses.
+    """
+
+    _CACHE.clear()
 
 
 def _chunked(items: Iterable[str], size: int) -> Iterator[list[str]]:
