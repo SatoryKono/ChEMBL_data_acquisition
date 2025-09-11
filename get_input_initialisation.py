@@ -171,10 +171,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         ensure_dirs(cfg)
 
-        args.same_doc = Path(args.same_doc)
-        args.all_doc = Path(args.all_doc)
+        # ``dictionary_dir`` is optional and may be undefined in the
+        # configuration.  Convert provided paths to :class:`Path` objects only
+        # when values are available to avoid ``TypeError`` on ``None``.
+        args.same_doc = Path(args.same_doc) if args.same_doc is not None else None
+        args.all_doc = Path(args.all_doc) if args.all_doc is not None else None
         args.out_dir = Path(args.out_dir)
-        args.dictionary_dir = Path(args.dictionary_dir)
+        args.dictionary_dir = (
+            Path(args.dictionary_dir) if args.dictionary_dir is not None else None
+        )
+        if args.same_doc is None or args.all_doc is None:
+            raise ValueError("same_doc and all_doc paths must be provided")
 
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
