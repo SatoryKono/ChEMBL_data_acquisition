@@ -9,7 +9,7 @@ import requests
 import responses
 from cachetools import TTLCache  # type: ignore[import-untyped]
 
-import library.rate_limiter as rl
+from library import rate_limiter as rl
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg
 

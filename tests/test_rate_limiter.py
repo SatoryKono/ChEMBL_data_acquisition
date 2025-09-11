@@ -1,4 +1,4 @@
-import library.rate_limiter as rl
+from library import rate_limiter as rl
 
 
 class FakeTime:

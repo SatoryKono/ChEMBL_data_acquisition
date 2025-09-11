@@ -8,8 +8,8 @@ from typing import Any, cast
 import pytest
 import requests
 
-import library.rate_limiter as rl
 from library import pubmed_library as pl
+from library import rate_limiter as rl
 from library.config import (
     Config,
     CrossRefCfg,
