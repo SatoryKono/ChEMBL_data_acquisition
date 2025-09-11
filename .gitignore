@@ -3,3 +3,6 @@ data/input/pairs.csv
 data/input/pairs_independent.csv
 data/input/pairs_non_independent.csv
 data/input/pairs_same_document.csv
+data/output/ChEMBL/processed/pairs_independent.csv
+data/output/ChEMBL/processed/pairs_non_independent.csv
+data/output/ChEMBL/processed/pairs_same_document.csv
