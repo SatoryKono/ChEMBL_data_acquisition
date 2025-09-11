@@ -164,3 +164,23 @@ def test_git_sha_timeout_returns_unknown(
 
     assert io._git_sha() == "unknown"
     assert "timed out" in stream.getvalue()
+
+
+def test_git_sha_unexpected_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unexpected errors in ``git`` invocation are logged and re-raised."""
+
+    stream = StringIO()
+    monkeypatch.setattr(
+        io,
+        "logger",
+        configure_logger(LoggerConfig(level="ERROR", stream=stream)),
+    )
+
+    def boom(*args: Any, **kwargs: Any) -> NoReturn:
+        raise ValueError("boom")
+
+    monkeypatch.setattr(io.subprocess, "run", boom)
+
+    with pytest.raises(ValueError, match="boom"):
+        io._git_sha()
+    assert "unexpected error" in stream.getvalue()

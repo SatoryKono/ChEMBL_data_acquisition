@@ -28,7 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 def _git_sha() -> str:
-    """Return the current Git commit hash or ``"unknown"`` if unavailable."""
+    """Return the current Git commit hash.
+
+    If ``git`` exits with a non-zero status or times out, ``"unknown"`` is
+    returned and a warning is logged. Unexpected exceptions are logged and
+    re-raised.
+    """
 
     try:
         result = subprocess.run(
@@ -39,11 +44,15 @@ def _git_sha() -> str:
             timeout=5,
         )
         return result.stdout.strip()
-    except subprocess.TimeoutExpired:
-        logger.warning("git rev-parse timed out")
+    except subprocess.CalledProcessError as exc:
+        logger.warning("git rev-parse failed: %s", exc)
         return "unknown"
-    except Exception:  # pragma: no cover - git may be unavailable
+    except subprocess.TimeoutExpired as exc:
+        logger.warning("git rev-parse timed out: %s", exc)
         return "unknown"
+    except Exception:  # pragma: no cover - unexpected
+        logger.exception("unexpected error while determining git SHA")
+        raise
 
 
 def _write_meta(path: Path, cfg: Config | None) -> Path:

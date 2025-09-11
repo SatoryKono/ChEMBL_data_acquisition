@@ -264,8 +264,9 @@ def _git_sha() -> str:
     """Return the current Git commit hash.
 
     The command is limited to a short timeout to avoid hanging when ``git``
-    is unavailable. If the call times out or fails, ``"unknown"`` is
-    returned and a warning is logged.
+    is unavailable.  If the call fails with :class:`subprocess.CalledProcessError`
+    or :class:`subprocess.TimeoutExpired`, ``"unknown"`` is returned and a
+    warning is logged.  Unexpected exceptions are logged and re-raised.
     """
 
     try:
@@ -277,11 +278,15 @@ def _git_sha() -> str:
             timeout=5,
         )
         return result.stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        logger.warning("git command failed: %s", exc)
+        return "unknown"
     except subprocess.TimeoutExpired as exc:
         logger.warning("git command timed out: %s", exc)
-    except Exception as exc:  # pragma: no cover - git may be unavailable
-        logger.warning("unable to determine git SHA: %s", exc)
-    return "unknown"
+        return "unknown"
+    except Exception:  # pragma: no cover - unexpected
+        logger.exception("unexpected error while determining git SHA")
+        raise
 
 
 def _write_meta(path: Path, cfg: Config) -> None:
