@@ -72,6 +72,7 @@ def test_make_request_rate_limited(monkeypatch) -> None:
 
     fake_time = FakeTime()
     monkeypatch.setattr(rl, "time", fake_time)
+    monkeypatch.setattr(rl, "sleep", fake_time.sleep)
     with rl._limiters_lock:
         rl._limiters.clear()
 

@@ -25,6 +25,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
 import logging
+
+from .log import logger
 import os
 import re
 from pathlib import Path
@@ -36,9 +38,6 @@ import jsonschema
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
-
-logger = logging.getLogger(__name__)
 
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
