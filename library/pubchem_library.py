@@ -11,7 +11,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 import requests
-from cachetools import LRUCache  # type: ignore[import-untyped]
+from cachetools import LRUCache
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
@@ -147,7 +147,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
     if url in _CACHE:
         logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
-        return cast(dict[str, Any], _CACHE[url])
+        return _CACHE[url]
     logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
     for attempt in range(1, cfg.retries + 1):

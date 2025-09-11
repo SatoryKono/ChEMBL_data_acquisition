@@ -39,6 +39,9 @@ dev = [
   "types-openpyxl>=3.1.5",
   "hypothesis==6.138.15",
   "responses>=0.25",
+  "types-cachetools==6.2.0.20250827",
+  "types-urllib3==1.26.25.14",
+  "types-tabulate",
 ]
 
 [tool.black]
@@ -57,6 +60,7 @@ ignore = ["E501"]
 python_version = "3.12"
 strict = true
 warn_unused_configs = true
+exclude = "^(?!library/).*"
 
 [tool.pytest.ini_options]
 addopts = "-ra -q"

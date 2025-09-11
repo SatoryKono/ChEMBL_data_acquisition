@@ -793,7 +793,7 @@ def print_results(records: list[dict[str, str]]) -> None:
     """
     log = logging.getLogger(__name__)
     try:
-        from tabulate import tabulate  # type: ignore
+        from tabulate import tabulate
 
         use_tabulate = True
     except Exception:
