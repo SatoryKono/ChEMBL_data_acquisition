@@ -7,7 +7,7 @@ The implementation is a Python translation of a PowerQuery script.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -15,10 +15,10 @@ from cachetools import LRUCache  # type: ignore[import-untyped]
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
-from .rate_limiter import get_limiter
 from .log import logger
+from .rate_limiter import get_limiter
 
-_CACHE: LRUCache[str, Dict[str, Any]] = LRUCache(maxsize=1024)
+_CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 
@@ -55,12 +55,12 @@ def url_encode(text: str) -> str:
     return quote(text, safe="")
 
 
-def _cids_from_identifier_list(data: Dict[str, Any]) -> List[str]:
+def _cids_from_identifier_list(data: dict[str, Any]) -> list[str]:
     """Extract CIDs from a JSON ``IdentifierList`` structure."""
     return [str(cid) for cid in data.get("IdentifierList", {}).get("CID", [])]
 
 
-def get_cid_from_smiles(smiles: str, cfg: PubChemCfg) -> Optional[str]:
+def get_cid_from_smiles(smiles: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for a SMILES string.
 
     Parameters
@@ -88,7 +88,7 @@ def get_cid_from_smiles(smiles: str, cfg: PubChemCfg) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_cid_from_inchi(inchi: str, cfg: PubChemCfg) -> Optional[str]:
+def get_cid_from_inchi(inchi: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for an InChI string.
 
     Parameters
@@ -116,7 +116,7 @@ def get_cid_from_inchi(inchi: str, cfg: PubChemCfg) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> Optional[str]:
+def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for an InChIKey.
 
     Parameters
@@ -143,7 +143,7 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
+def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
     if url in _CACHE:
         logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
@@ -207,7 +207,7 @@ def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
     return None
 
 
-def validate_cid(cid: str) -> Optional[str]:
+def validate_cid(cid: str) -> str | None:
     """Validate PubChem CID.
 
     Parameters
@@ -227,9 +227,9 @@ def validate_cid(cid: str) -> Optional[str]:
     return cid
 
 
-def _extract_cids(bindings: List[Dict[str, Any]]) -> List[str]:
+def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:
     """Extract CIDs from API bindings."""
-    cids: List[str] = []
+    cids: list[str] = []
     for item in bindings:
         cid_field = item.get("cid")
         if isinstance(cid_field, dict):
@@ -244,7 +244,7 @@ def _extract_cids(bindings: List[Dict[str, Any]]) -> List[str]:
     return cids
 
 
-def get_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
+def get_cid(compound_name: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for *compound_name* (exact match).
 
     Parameters
@@ -272,7 +272,7 @@ def get_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_all_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
+def get_all_cid(compound_name: str, cfg: PubChemCfg) -> str | None:
     """Retrieve PubChem CID(s) for *compound_name* (partial match).
 
     Parameters
@@ -299,7 +299,7 @@ def get_all_cid(compound_name: str, cfg: PubChemCfg) -> Optional[str]:
     return "|".join(unique_cids) if unique_cids else None
 
 
-def get_standard_name(cid: str, cfg: PubChemCfg) -> Optional[str]:
+def get_standard_name(cid: str, cfg: PubChemCfg) -> str | None:
     """Retrieve the standard compound name for a given CID.
 
     Parameters
@@ -386,7 +386,7 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     )
 
 
-def process_compound(compound_name: str, cfg: PubChemCfg) -> Dict[str, str]:
+def process_compound(compound_name: str, cfg: PubChemCfg) -> dict[str, str]:
     """Process *compound_name* into a structured record.
 
     Parameters

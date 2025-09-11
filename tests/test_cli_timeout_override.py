@@ -6,9 +6,10 @@ import pandas as pd
 
 import get_assay_data as gas
 import get_document_data as gdd
-import get_testitem_data as gtdt
 import get_target_data as gtd
-from library import chembl_library as cl, io
+import get_testitem_data as gtdt
+from library import chembl_library as cl
+from library import io
 from library.config import Config
 
 

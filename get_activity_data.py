@@ -4,23 +4,28 @@ from __future__ import annotations
 
 import argparse
 import sys
+
 from collections.abc import Iterable, Sequence
 from itertools import islice
 
 import requests
+
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
 from library import io, write_csv_deterministic
+
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
     configure_logger,
 )
+
 from library.cli import (
     build_parser as base_parser,
 )
+
 from library.config import Config, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
@@ -199,6 +204,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit <= 0:
+        # Reject non-positive limits early to provide clear CLI feedback.
+        parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})

@@ -1,19 +1,19 @@
-import sys
 import io
+import sys
 from pathlib import Path
+
+import pytest
 
 import get_activity_data as gad
 import get_assay_data as gas
 import get_document_data as gdd
+import get_document_type as gdoctype
+import get_input_initialisation as gii
+import get_target_data as gtd
 import get_testitem_data as gtdt
 import mapper_main as mapper
 import table_quality_main as tqm
-import get_input_initialisation as gii
-import get_target_data as gtd
-import get_document_type as gdoctype
-import pytest
 from library.cli import configure_logger
-
 
 CLIS = [
     (gad.main, [], False),
@@ -30,7 +30,7 @@ CLIS = [
 
 @pytest.mark.parametrize("entry, extra, use_sys", CLIS)
 def test_malformed_config_exits(
-    tmp_path: Path, entry, extra, use_sys, monkeypatch
+    tmp_path: Path, entry, extra, use_sys, monkeypatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
@@ -62,4 +62,3 @@ def test_malformed_config_exits(
 
     if caplog.text:
         assert "jobs.chunk_size" in caplog.text
-

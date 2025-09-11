@@ -12,3 +12,4 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 data/output/
 /uniprot
 1
+**/__pycache__/

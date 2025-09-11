@@ -9,12 +9,12 @@ Power Query script used in the original workflow.
 
 from __future__ import annotations
 
-from .log import logger
 from pathlib import Path
 
 import pandas as pd
 
 from .config import IoCfg
+from .log import logger
 from .validation import validate_schema
 
 

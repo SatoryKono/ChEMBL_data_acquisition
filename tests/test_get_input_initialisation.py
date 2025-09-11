@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import io
+import json
 from pathlib import Path
 
 import pandas as pd
-from library.cli import LoggerConfig, configure_logger
+
 import get_input_initialisation as cli
+from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 
 

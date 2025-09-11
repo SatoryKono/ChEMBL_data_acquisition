@@ -6,14 +6,13 @@ are exposed in a separate module to provide a clear separation of concerns.
 
 from __future__ import annotations
 
-from typing import Dict
 from urllib.parse import quote
 
 import requests
 
 from . import pubmed_library as _pl
-from .rate_limiter import RateLimiter
 from .log import logger
+from .rate_limiter import RateLimiter
 
 
 def fetch_openalex(
@@ -21,7 +20,7 @@ def fetch_openalex(
     pmid: str,
     cfg: _pl.OpenAlexCfg,
     limiter: RateLimiter | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
     Parameters
@@ -65,7 +64,7 @@ def fetch_crossref(
     doi: str,
     cfg: _pl.CrossRefCfg,
     limiter: RateLimiter | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
     Parameters

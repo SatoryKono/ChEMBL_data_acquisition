@@ -1,13 +1,14 @@
 import argparse
+import io
 import json
 from pathlib import Path
-import io
 
 import requests
 
-from library.cli import LoggerConfig, configure_logger
 import get_activity_data as gad
-from library import chembl_library as cl, io as lib_io
+from library import chembl_library as cl
+from library import io as lib_io
+from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 
 
