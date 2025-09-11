@@ -2,7 +2,7 @@
 """Verify deterministic CSV output.
 
 This script writes a small test :class:`pandas.DataFrame` twice using
-:func:`chembl_da.library.csv_utils.write_csv_deterministic` and compares the
+:func:`library.csv_utils.write_csv_deterministic` and compares the
 SHA-256 hashes of the resulting files. A non-zero exit code is returned if the
 hashes differ.
 """
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -23,15 +22,7 @@ except ImportError as exc:  # pragma: no cover - import-time check
         " Install it with 'pip install pandas'."
     ) from exc
 
-# Ensure the repository root is on ``sys.path`` when executed as a script.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from chembl_da.library.csv_utils import (  # noqa: E402
-    sha256_file,
-    write_csv_deterministic,
-)
+from library.csv_utils import sha256_file, write_csv_deterministic
 
 
 def run_check(tmp_dir: Path) -> bool:
