@@ -12,7 +12,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import argparse
-import logging
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,6 +29,8 @@ except ImportError as exc:  # pragma: no cover - import-time check
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from library.csv_utils import sha256_file, write_csv_deterministic  # noqa: E402
+from library.log import logger  # noqa: E402
+from library.logging_setup import LoggerConfig, configure_logger  # noqa: E402
 
 
 def run_check(tmp_dir: Path) -> bool:
@@ -58,8 +59,8 @@ def run_check(tmp_dir: Path) -> bool:
     write_csv_deterministic(df, second)
     hash2 = sha256_file(second)
 
-    logging.debug("First hash: %s", hash1)
-    logging.debug("Second hash: %s", hash2)
+    logger.debug("First hash: %s", hash1)
+    logger.debug("Second hash: %s", hash2)
 
     return hash1 == hash2
 
@@ -79,18 +80,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=args.log_level.upper(), format="%(levelname)s: %(message)s"
-    )
+    configure_logger(LoggerConfig(level=args.log_level))
 
     with TemporaryDirectory() as tmp:
         ok = run_check(Path(tmp))
 
     if ok:
-        logging.info("Hashes match; output is deterministic")
+        logger.info("Hashes match; output is deterministic")
         return 0
 
-    logging.error("Hashes differ; output is not deterministic")
+    logger.error("Hashes differ; output is not deterministic")
     return 1
 
 

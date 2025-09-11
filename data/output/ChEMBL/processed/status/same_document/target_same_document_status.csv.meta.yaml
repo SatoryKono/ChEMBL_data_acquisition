@@ -10,6 +10,8 @@ config:
     rps: 5
     burst: 5
     user_agent: chembl-da/0.1 (mailto:info@example.org)
+  chembl:
+    cache_ttl: 3600
   openalex:
     base: https://api.openalex.org
     timeout_connect: 5

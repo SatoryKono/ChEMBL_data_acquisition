@@ -448,7 +448,7 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
         total=retry.max_attempts,
         backoff_factor=retry.backoff_factor,
         status_forcelist=retry.status_forcelist,
-        allowed_methods=["GET"],
+        allowed_methods=["GET", "POST"],  # allow retries for POST requests
     )
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session = Session()
