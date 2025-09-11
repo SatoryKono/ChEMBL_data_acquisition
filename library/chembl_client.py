@@ -7,13 +7,29 @@ from typing import Any, Dict, Iterable, Iterator
 import time
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from requests import Session
 
-from .config import ApiCfg
+from .config import ApiCfg, RetryCfg, session_with_retry
 from .log import logger
 
 _CACHE: Dict[str, dict[str, Any]] = {}
+
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
+
+
+def init_session(api: ApiCfg, retry: RetryCfg) -> None:
+    """Initialise the shared HTTP session.
+
+    Parameters
+    ----------
+    api:
+        Global API settings providing the ``User-Agent`` header.
+    retry:
+        Retry configuration applied to all requests.
+    """
+
+    global _session
+    _session = session_with_retry(api, retry)
 
 
 def request_json(
@@ -50,43 +66,33 @@ def request_json(
         return _CACHE[cache_key]
     logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
-    retry = Retry(
-        total=cfg.retries,
-        backoff_factor=cfg.backoff_factor,
-        status_forcelist=[500, 502, 503, 504],
-        allowed_methods=["GET"],
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    with requests.Session() as session:
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        for attempt in range(1, cfg.retries + 1):
-            event = "request_start" if attempt == 1 else "request_retry"
-            logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
-            try:
-                with session.get(
-                    url, timeout=(cfg.timeout_connect, read_timeout)
-                ) as response:
-                    response.raise_for_status()
-                    data = response.json()
-                    logger.info(
-                        "request_ok",
-                        extra={
-                            "stage": "request_ok",
-                            "url": url,
-                            "status": getattr(response, "status_code", None),
-                        },
-                    )
-                    _CACHE[cache_key] = data
-                    logger.info("cache_set", extra={"stage": "cache_set", "url": url})
-                    return data
-            except (requests.RequestException, ValueError):
-                if attempt >= cfg.retries:
-                    logger.exception(
-                        "request_fail", extra={"stage": "request_fail", "url": url}
-                    )
-                    raise
-                time.sleep(cfg.backoff_factor * attempt)
+    for attempt in range(1, cfg.retries + 1):
+        event = "request_start" if attempt == 1 else "request_retry"
+        logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
+        try:
+            with _session.get(
+                url, timeout=(cfg.timeout_connect, read_timeout)
+            ) as response:
+                response.raise_for_status()
+                data = response.json()
+                logger.info(
+                    "request_ok",
+                    extra={
+                        "stage": "request_ok",
+                        "url": url,
+                        "status": getattr(response, "status_code", None),
+                    },
+                )
+                _CACHE[cache_key] = data
+                logger.info("cache_set", extra={"stage": "cache_set", "url": url})
+                return data
+        except (requests.RequestException, ValueError):
+            if attempt >= cfg.retries:
+                logger.exception(
+                    "request_fail", extra={"stage": "request_fail", "url": url}
+                )
+                raise
+            time.sleep(cfg.backoff_factor * attempt)
     raise requests.RequestException(f"request_json failed for url: {url}")
 
 

@@ -1,12 +1,15 @@
 import pandas as pd
 import pytest
-import requests
+
+import responses
+
 
 from library import iuphar_library as ii
 from library.config import IupharCfg, RetryCfg
 
 
-def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
+
+def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
     """``websearch_gene_to_id`` should honour the supplied configuration."""
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
     called: dict[str, object] = {}
@@ -34,6 +37,7 @@ def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
     monkeypatch.setattr(ii._session, "get", fake_get)
+
     monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
@@ -43,24 +47,37 @@ def test_websearch_gene_to_id_uses_cfg(monkeypatch) -> None:
         rps=5,
         burst=5,
     )
+    url = "https://example.org/services/targets/?geneSymbol=GENE"
+    responses.add(responses.GET, url, json=[{"id": 1}], status=200)
     result = data.websearch_gene_to_id("GENE", cfg)
     assert result == {"id": 1}
-    assert called["url"] == "https://example.org/services/targets/?geneSymbol=GENE"
+    assert responses.calls[0].request.url == url
     assert called["timeout"] == (1, 2)
     assert sleeps and sleeps[0] == pytest.approx(0.2)
 
 
-def test_iuphar_upload_uses_cfg(monkeypatch) -> None:
-    """Uploading auxiliary data should use configured HTTP timeouts."""
+
+@responses.activate
+def test_iuphar_upload_uses_cfg(monkeypatch):
+
     target_df = pd.DataFrame({"target_id": [1], "family_id": ["F1"]})
     family_df = pd.DataFrame(
         {"family_id": ["F1"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
     )
     data = ii.IUPHARData(target_df=target_df, family_df=family_df)
     calls: list[tuple[str, tuple[int, int]]] = []
+    orig_get = ii.requests.get
 
     uni_csv = "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
     hgnc_csv = "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
+
+
+    def capture(url: str, timeout: tuple[int, int]):
+        calls.append((url, timeout))
+        return orig_get(url, timeout=timeout)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(ii.requests, "get", capture)
 
     def fake_get(url: str, timeout: tuple[int, int]) -> object:
         calls.append((url, timeout))
@@ -85,6 +102,7 @@ def test_iuphar_upload_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
     monkeypatch.setattr(ii._session, "get", fake_get)
+
     monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
@@ -93,6 +111,18 @@ def test_iuphar_upload_uses_cfg(monkeypatch) -> None:
         timeout_read=2,
         rps=10,
         burst=5,
+    )
+    responses.add(
+        responses.GET,
+        "https://example.org/DATA/GtP_to_UniProt_mapping.csv",
+        body=uni_csv,
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "https://example.org/DATA/GtP_to_HGNC_mapping.csv",
+        body=hgnc_csv,
+        status=200,
     )
     df = data.iuphar_upload(cfg)
     assert not df.empty

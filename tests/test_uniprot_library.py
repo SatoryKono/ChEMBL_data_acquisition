@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import time
 import requests
 import pytest
+import responses
 
 from library import uniprot_library as ul
 from library.config import UniprotCfg
@@ -23,67 +23,53 @@ def test_extract_names() -> None:
     assert names == {"Protein X", "Alt Name", "GENE1", "G1"}
 
 
-class _DummyResponse:
-    def __init__(self, *, json_exc: Exception | None = None) -> None:
-        self.status_code = 200
-        self._json_exc = json_exc
-        self.text = "{}"
-
-    def raise_for_status(self) -> None:  # pragma: no cover - always ok
-        return None
-
-    def json(self) -> dict[str, str]:
-        if self._json_exc:
-            raise self._json_exc
-        return {}
-
-    def close(self) -> None:
-        return None
-
-    def __enter__(self) -> "_DummyResponse":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no cleanup
-        return None
-
-
-def test_fetch_uniprot_network_error(monkeypatch) -> None:
-    def fake_get(url: str, timeout: float) -> None:
-        raise requests.RequestException("boom")
-
-    monkeypatch.setattr(ul._session, "get", fake_get)
+@responses.activate
+def test_fetch_uniprot_network_error() -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0)
+    responses.add(
+        responses.GET,
+        "https://example.org/uniprotkb/P12345.json",
+        body=requests.RequestException("boom"),
+    )
     with pytest.raises(ul.UniProtFetchError):
-        ul.fetch_uniprot("P12345", cfg=UniprotCfg(delay=0))
+        ul.fetch_uniprot("P12345", cfg=cfg)
 
 
-def test_fetch_uniprot_bad_json(monkeypatch) -> None:
-    resp = _DummyResponse(json_exc=json.JSONDecodeError("msg", "doc", 0))
-
-    def fake_get(url: str, timeout: float) -> _DummyResponse:
-        return resp
-
-    monkeypatch.setattr(ul._session, "get", fake_get)
+@responses.activate
+def test_fetch_uniprot_bad_json() -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0)
+    responses.add(
+        responses.GET,
+        "https://example.org/uniprotkb/P12345.json",
+        body="{",
+        status=200,
+    )
     with pytest.raises(ul.UniProtFetchError):
-        ul.fetch_uniprot("P12345", cfg=UniprotCfg(delay=0))
+        ul.fetch_uniprot("P12345", cfg=cfg)
 
 
+@responses.activate
 def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
     called: dict[str, object] = {}
+    orig_get = ul._session.get
 
-    def fake_get(url: str, timeout: tuple[int, int]) -> _DummyResponse:
+    def capture(url: str, timeout: tuple[int, int]):
         called["url"] = url
         called["timeout"] = timeout
-        return _DummyResponse()
+        return orig_get(url, timeout=timeout)
 
     sleeps: list[float] = []
 
-    monkeypatch.setattr(ul._session, "get", fake_get)
+    monkeypatch.setattr(ul._session, "get", capture)
     monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
     cfg = UniprotCfg(
         base="https://example.org/api",
         timeout_connect=1,
         timeout_read=2,
         delay=0.5,
+    )
+    responses.add(
+        responses.GET, "https://example.org/api/uniprotkb/P12345.json", json={}
     )
     ul.fetch_uniprot("P12345", cfg=cfg)
     assert called["url"] == "https://example.org/api/uniprotkb/P12345.json"

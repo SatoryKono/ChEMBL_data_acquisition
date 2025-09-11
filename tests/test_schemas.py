@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from pandera.errors import SchemaError, SchemaErrors
+from hypothesis import given, strategies as st
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 from schemas import (
     ActivitiesSchema,
@@ -116,6 +118,53 @@ def test_testitems_schema_validation() -> None:
     invalid.loc[0, "molecule_type"] = "Peptide"
     with pytest.raises(SchemaError):
         TestitemsSchema.validate(invalid)
+
+
+@given(
+    data_frames(
+        columns=[
+            column(
+                "activity_id",
+                dtype=int,
+                elements=st.integers(min_value=0, max_value=10),
+            ),
+            column("testitem_id", elements=st.text(min_size=1)),
+            column(
+                "standard_value",
+                elements=st.floats(min_value=0, allow_nan=False),
+            ),
+        ],
+        index=range_indexes(min_size=1, max_size=5),
+    )
+)
+def test_activities_schema_hypothesis_valid(df: pd.DataFrame) -> None:
+    """Random valid frames pass ``ActivitiesSchema``."""
+
+    ActivitiesSchema.validate(df)
+
+
+@given(
+    data_frames(
+        columns=[
+            column(
+                "activity_id",
+                dtype=int,
+                elements=st.integers(min_value=0, max_value=10),
+            ),
+            column("testitem_id", elements=st.text(min_size=1)),
+            column(
+                "standard_value",
+                elements=st.floats(max_value=-1.0, allow_nan=False),
+            ),
+        ],
+        index=range_indexes(min_size=1, max_size=5),
+    )
+)
+def test_activities_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
+    """Negative ``standard_value`` fails validation."""
+
+    with pytest.raises(SchemaError):
+        ActivitiesSchema.validate(df)
 
 
 def test_activities_from_files() -> None:

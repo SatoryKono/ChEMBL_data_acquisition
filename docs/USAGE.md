@@ -16,6 +16,13 @@ python get_activity_data.py \
     --column activity_id
 ```
 
+Limit processing and skip network requests during development::
+
+    python get_activity_data.py \
+        --input data/input-smoke/activity.csv \
+        --column activity_id \
+        --limit 5 --dry-run
+
 ## Assay descriptions
 
 ```bash
