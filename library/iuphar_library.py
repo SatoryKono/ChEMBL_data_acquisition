@@ -20,6 +20,7 @@ from typing import Iterable, List, Optional
 import io
 from .log import logger
 import random
+import threading
 import time
 from urllib.parse import quote
 
@@ -33,13 +34,15 @@ from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
 
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
+_session_lock = threading.Lock()
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session."""
 
     global _session
-    _session = session_with_retry(api, retry)
+    with _session_lock:
+        _session = session_with_retry(api, retry)
 
 
 EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (
@@ -174,10 +177,11 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
         try:
-            with _session.get(url, timeout=timeout) as response:
-                response.raise_for_status()
-                data = response.json()
-                return data[0] if data else {}
+            with _session_lock:
+                with _session.get(url, timeout=timeout) as response:
+                    response.raise_for_status()
+                    data = response.json()
+                    return data[0] if data else {}
         except requests.RequestException as exc:  # pragma: no cover - network errors
             if attempt >= retry.max_attempts:
                 logger.error("IUPHAR web request failed: %s", exc)
@@ -652,9 +656,10 @@ class IUPHARData:
             for attempt in range(1, retry_cfg.max_attempts + 1):
                 limiter.acquire()
                 try:
-                    with _session.get(url, timeout=timeout) as resp:
-                        resp.raise_for_status()
-                        return pd.read_csv(io.StringIO(resp.text))
+                    with _session_lock:
+                        with _session.get(url, timeout=timeout) as resp:
+                            resp.raise_for_status()
+                            return pd.read_csv(io.StringIO(resp.text))
                 except requests.RequestException as exc:  # pragma: no cover - network
                     if attempt >= retry_cfg.max_attempts:
                         logger.error("IUPHAR mapping request failed: %s", exc)
