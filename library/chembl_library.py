@@ -1,11 +1,33 @@
-"""Compatibility layer aggregating ChEMBL helpers."""
+"""Compatibility layer aggregating ChEMBL helpers.
+
+This module re-exports selected public functions from :mod:`chembl_assay` and
+:mod:`chembl_target` as a convenient façade.  The functions are imported
+explicitly rather than via ``import *`` to make the exported API clear and to
+keep linters happy.
+"""
 
 from __future__ import annotations
 
-from . import chembl_assay as _chembl_assay
-from . import chembl_target as _chembl_target
-from .chembl_assay import *  # noqa: F401,F403
+from .chembl_assay import (
+    get_activities,
+    get_assay,
+    get_assays,
+    get_testitem,
+)
 from .chembl_client import _chunked
-from .chembl_target import *  # noqa: F401,F403
+from .chembl_target import (
+    extend_target,
+    get_target,
+    get_targets,
+)
 
-__all__ = [*_chembl_target.__all__, *_chembl_assay.__all__, "_chunked"]
+__all__ = [
+    "get_assay",
+    "get_assays",
+    "get_activities",
+    "get_testitem",
+    "get_target",
+    "get_targets",
+    "extend_target",
+    "_chunked",
+]
