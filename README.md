@@ -44,7 +44,7 @@ tokens should be stored in a local ``.env`` file – see
 3. **Run a sample script**
 
    ```bash
-   python get_activity_data.py --input tests/data/activity_ids_small.csv \
+   python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
        --output out/activities.csv --limit 10 --log-level INFO
    ```
 
@@ -55,9 +55,9 @@ tokens should be stored in a local ``.env`` file – see
    ``--encoding`` for file encoding. Additional examples:
 
    ```bash
-   python mapper_main.py --input tests/data/assays.csv \
+   python scripts/mapper_main.py --input tests/data/assays.csv \
        --output out/mapped.csv --log-level DEBUG
-   python table_quality_main.py --input tests/data/assays.csv \
+   python scripts/table_quality_main.py --input tests/data/assays.csv \
        --output out/report.csv --log-level INFO
    ```
 
@@ -83,7 +83,7 @@ Retrieve document metadata for a list of PubMed IDs using the bundled
 sample file:
 
 ```bash
-python get_document_data.py pubmed \
+python scripts/get_document_data.py pubmed \
     --input tests/data/pmids.csv \
     --output out/documents.csv \
     --limit 5 \
@@ -98,7 +98,7 @@ experimentation.
 Fetch basic target information from ChEMBL:
 
 ```bash
-python get_target_data.py chembl \
+python scripts/get_target_data.py chembl \
     --input path/to/targets.csv \
     --output out/targets.csv \
     --limit 5 \
@@ -140,7 +140,7 @@ CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
 Запустить скрипт с автоматической подгрузкой настроек можно так:
 
 ```bash
-python -m dotenv run -- python get_assay_data.py --input tests/data/assays.csv \\
+python -m dotenv run -- python scripts/get_assay_data.py --input tests/data/assays.csv \\
     --output out/assays.csv
 ```
 
@@ -173,7 +173,7 @@ api:
 Пример включения JSON‑формата через переменную окружения:
 
 ```bash
-LOG_FORMAT=json python get_assay_data.py --input tests/data/assays.csv \
+LOG_FORMAT=json python scripts/get_assay_data.py --input tests/data/assays.csv \
     --output out/assays.csv --log-level INFO
 ```
 
@@ -181,7 +181,7 @@ LOG_FORMAT=json python get_assay_data.py --input tests/data/assays.csv \
 `CHEMBL_DA_LOG_LEVEL`:
 
 ```bash
-CHEMBL_DA_LOG_LEVEL=DEBUG python get_assay_data.py --input tests/data/assays.csv \
+CHEMBL_DA_LOG_LEVEL=DEBUG python scripts/get_assay_data.py --input tests/data/assays.csv \
     --output out/assays.csv
 ```
 
@@ -258,11 +258,8 @@ Continuous integration executes the same checks.
 data/             Example input and output files
 dictionary/       Lookup tables used during processing
 library/          Reusable data-processing modules
+scripts/          CLI entry points and development helpers
 tests/            Pytest suite and sample datasets
-get_*.py          Command-line utilities for specific tasks
-mapper_main.py    Mapping CLI
-table_quality_main.py  CSV profiling CLI
-scripts/          Development helpers
 config.yaml       Global configuration defaults
 ```
 
@@ -281,7 +278,7 @@ For a quick connectivity check without writing any files, limit the number of
 records and enable dry-run mode:
 
 ```bash
-python get_activity_data.py --limit 10 --dry-run
+python scripts/get_activity_data.py --limit 10 --dry-run
 ```
 
 ## Reproducibility
@@ -365,7 +362,7 @@ quality, corr = analyze_table_quality(df, table_name="data")
 Running the CLI saves ``data_quality_report_table.csv`` and
 ``data_data_correlation_report_table.csv`` in the current working directory::
 
-    python table_quality_main.py --input data.csv --table-name data
+    python scripts/table_quality_main.py --input data.csv --table-name data
 
 All scripts share a common set of flags:
 
@@ -455,7 +452,7 @@ Common flags shared by scripts include:
 
 Example fetching assay data::
 
-    python get_assay_data.py --input assays.csv --output assays_out.csv \
+    python scripts/get_assay_data.py --input assays.csv --output assays_out.csv \
         --column assay_chembl_id
 
 Each command validates required columns before querying external APIs and
@@ -617,12 +614,12 @@ available options.
 
 Example merging initialisation tables::
 
-    python get_input_initialisation.py --config config.yaml
+    python scripts/get_input_initialisation.py --config config.yaml
 
 The ``same_doc`` and ``all_doc`` workbook paths default to values from
 ``config.yaml`` but can be overridden on the command line::
 
-    python get_input_initialisation.py \
+    python scripts/get_input_initialisation.py \
       --same-doc path/to/ChEMBL_same_document_20_05.xlsx \
       --all-doc  path/to/ChEMBL_all_10_05_step5.xlsx \
       --out-dir  ./out
@@ -638,15 +635,15 @@ Install the optional developer tools and run the standard quality checks:
 
 * ``black`` – auto-format the code::
 
-      black get_*.py library mapper_main.py table_quality_main.py scripts
+      black library scripts
 
 * ``ruff`` – lint the project::
 
-      ruff check get_*.py library mapper_main.py table_quality_main.py scripts
+      ruff check library scripts
 
 * ``mypy`` – perform static type checks::
 
-      mypy get_*.py library mapper_main.py table_quality_main.py scripts
+      mypy library scripts
 
 * ``python scripts/check_determinism.py`` – verify deterministic CSV output.
 

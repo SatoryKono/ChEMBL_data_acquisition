@@ -6,9 +6,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import mapper_main
 from library import io
 from library.config import Config, IoCfg
+from scripts import mapper_main
 
 
 def test_default_output_path_uses_output_dir(tmp_path: Path) -> None:

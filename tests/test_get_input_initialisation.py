@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pandas as pd
 
-import get_input_initialisation as cli
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
+from scripts import get_input_initialisation as cli
 
 
 def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:

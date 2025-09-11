@@ -4,22 +4,27 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
 
-from library.cli import (
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from library.cli import (  # noqa: E402
     LoggerConfig,
     apply_config_overrides,
     configure_logger,
 )
-from library.cli import (
+from library.cli import (  # noqa: E402
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config
-from library.log import logger
-from library.table_quality import analyze_table_quality
+from library.config import Config, ensure_dirs, print_config  # noqa: E402
+from library.log import logger  # noqa: E402
+from library.table_quality import analyze_table_quality  # noqa: E402
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

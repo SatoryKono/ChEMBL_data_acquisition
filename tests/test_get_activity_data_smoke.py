@@ -5,8 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import get_activity_data
 from library import chembl_library as cl
+from scripts import get_activity_data
 
 
 def test_get_activity_data_smoke(

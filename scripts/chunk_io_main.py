@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from library.chunk_io import process_csv_chunks
-from library.cli import LoggerConfig, add_common_arguments, configure_logger
-from library.config import Config, ensure_dirs
-from library.io import default_output_path
-from library.log import logger
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from library.chunk_io import process_csv_chunks  # noqa: E402
+from library.cli import (  # noqa: E402
+    LoggerConfig,
+    add_common_arguments,
+    configure_logger,
+)
+from library.config import Config, ensure_dirs  # noqa: E402
+from library.io import default_output_path  # noqa: E402
+from library.log import logger  # noqa: E402
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
