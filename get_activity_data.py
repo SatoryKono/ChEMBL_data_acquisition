@@ -10,10 +10,10 @@ from itertools import islice
 
 import requests
 
+from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
-from library import io
-from library import write_csv_deterministic
+from library import io, write_csv_deterministic
 
 from library.chembl_client import ChemblClient
 from library.cli import (
@@ -61,7 +61,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
-        logger.info("dry run selected; would process at most %d identifiers", expected)
+        logger.info(
+            "dry run selected; would process at most %d identifiers",
+            expected,
+            extra={"event": "dry_run"},
+        )
         return 0
 
     # Configure HTTP session with the supplied User-Agent and retry policy
@@ -236,7 +240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code: int = args.func(cfg, args)
     if exit_code == 0:
         logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
     else:

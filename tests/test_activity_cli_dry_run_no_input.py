@@ -25,5 +25,6 @@ def test_dry_run_no_input(tmp_path: Path) -> None:
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
+    assert record.get("event") == "dry_run"
     assert "dry run selected" in record.get("msg", "")
     assert "5 identifiers" in record.get("msg", "")
