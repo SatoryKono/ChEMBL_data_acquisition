@@ -14,8 +14,8 @@ from schemas import (
     DocumentsSchema,
     TargetsSchema,
     TestitemsSchema,
-    normalize_activities,
 )
+from library.normalization import normalize_activities
 
 
 def test_activities_schema_validation() -> None:
