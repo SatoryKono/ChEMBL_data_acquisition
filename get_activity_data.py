@@ -11,7 +11,7 @@ import requests
 from pandera.errors import SchemaErrors
 from schemas.activities import ActivitiesSchema
 from library.normalization import normalize_activities
-from library.sidecar_errors import SidecarErrors
+from library.sidecar import SidecarErrors
 
 from library import chembl_library as cl
 from library import io
@@ -55,16 +55,17 @@ def run_chembl(args: argparse.Namespace) -> int:
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
     df = normalize_activities(df)
-    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    sidecar = SidecarErrors()
     try:
         df = ActivitiesSchema.validate(df, lazy=True)
     except SchemaErrors as err:
         err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
-        sidecar.add(str(err))
+        for row in err.failure_cases.to_dict(orient="records"):
+            sidecar.add_error(row)
         bad_idx = err.failure_cases["index"].dropna().unique()
         logger.warning("schema validation failed for %d rows", len(bad_idx))
         df = df.drop(index=bad_idx)
-    sidecar.write()
+    sidecar.save(output.with_suffix(".errors.csv"))
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
