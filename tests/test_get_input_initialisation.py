@@ -95,3 +95,30 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch, caplog) ->
         result = cli.run(Config(), args)
     assert result == 1
     assert "required table 'activity' missing" in caplog.text
+
+
+def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+
+    cfg = Config()
+    cfg.init.output_dir = tmp_path / "default"
+
+    tables = {"assay": pd.DataFrame({"id": [1]})}
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "load_all_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "build_combined_tables", lambda *_a, **_k: tables)
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=None,
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+
+    assert cli.run(cfg, args) == 0
+    assert (cfg.init.output_dir / "assay.csv").exists()

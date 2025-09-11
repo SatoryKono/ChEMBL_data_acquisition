@@ -49,7 +49,8 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             raise FileNotFoundError(f"{args.same_doc} does not exist")
         if not args.all_doc.exists():
             raise FileNotFoundError(f"{args.all_doc} does not exist")
-        args.out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = Path(args.out_dir or cfg.init.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("Loading source workbooks")
         same = lib.load_same_doc(args.same_doc)
@@ -70,22 +71,20 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             tables[key] = lib.compute_status_statistics(df, entity)
 
         logger.info("Saving output")
-        paths = lib.save_tables(tables, args.out_dir, fmt=args.format)
+        paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
         # Ensure that files were actually written to disk
         missing = [str(p) for p in paths.values() if not p.exists()]
         if missing:
             raise RuntimeError("failed to write output files: " + ", ".join(missing))
 
         logger.info("Generating data quality reports")
-        report_dir = args.out_dir / "data_validity_report"
+        report_dir = out_dir / "data_validity_report"
         report_dir.mkdir(parents=True, exist_ok=True)
         for entity, path in paths.items():
             logger.info("Profiling %s", entity)
             analyze_table_quality(path, table_name=str(report_dir / path.stem))
 
-        logger.info(
-            "Saved %d tables and quality reports to %s", len(paths), args.out_dir
-        )
+        logger.info("Saved %d tables and quality reports to %s", len(paths), out_dir)
         return 0
     except KeyError as exc:
         logger.error("required table '%s' missing", exc.args[0])

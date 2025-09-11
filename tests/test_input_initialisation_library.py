@@ -16,6 +16,7 @@ from library.input_initialisation_library import (
     process_activity_table,
 )
 import library.input_initialisation_library as lib
+from library.config import Config
 
 
 def test_unify_dtypes_basic() -> None:
@@ -247,9 +248,7 @@ def test_build_combined_tables_initializes_pair_segments(
     }
 
     (tmp_path / "status.csv").write_text(
-
         "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
-
     )
 
     monkeypatch.setattr(lib, "process_activity_table", lambda df, _dir: df)
@@ -268,36 +267,30 @@ def test_build_combined_tables_initializes_pair_segments(
         assert {"Filtered1", "Filtered2", "Filtered"}.issubset(combined[key].columns)
 
 
-
 def test_build_combined_tables_aggregates_all_pair_segments(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Status aggregation should run for all pair tables."""
-
 
     same: TableDict = {
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-
         "activity": pd.DataFrame({"activity_id": [1, 2]}),
         "pairs_same_document": pd.DataFrame({"activity_id1": [1], "activity_id2": [2]}),
-
     }
     all_: TableDict = {
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-
         "activity": pd.DataFrame({"activity_id": [3]}),
         "pairs": pd.DataFrame(
             {
                 "INDEPENDENT": [True, False],
                 "activity_id1": [1, 2],
                 "activity_id2": [2, 1],
-
             }
         ),
     }
@@ -313,7 +306,6 @@ def test_build_combined_tables_aggregates_all_pair_segments(
         lambda df, _api: df.assign(**{"Filtered.init": "good"}),
     )
 
-
     def fake_init_pairs(pair_df: pd.DataFrame, *_args, **_kwargs) -> pd.DataFrame:
         return pair_df.assign(Filtered1="good", Filtered2="good", Filtered="good")
 
@@ -325,7 +317,6 @@ def test_build_combined_tables_aggregates_all_pair_segments(
         captured.append(pair_df)
         return {"activity": pd.DataFrame({"id": [1]})}
 
-
     monkeypatch.setattr(lib, "aggregate_activity", fake_aggregate)
 
     combined = build_combined_tables(same, all_, dictionary_dir=tmp_path)
@@ -336,7 +327,6 @@ def test_build_combined_tables_aggregates_all_pair_segments(
     assert "activity_independent_status" in combined
     assert "activity_non_independent_status" in combined
     assert "activity_same_document_status" in combined
-
 
 
 def test_build_combined_tables_normalizes_pair_column_names(
@@ -397,17 +387,18 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "pairs_same_document": pd.DataFrame({"id": [1]}),
         "pairs_independent": pd.DataFrame({"id": [1]}),
         "pairs_non_independent": pd.DataFrame({"id": [2]}),
-
         "activity_independent_status": pd.DataFrame({"id": [1]}),
         "activity_non_independent_status": pd.DataFrame({"id": [1]}),
         "activity_same_document_status": pd.DataFrame({"id": [1]}),
-
     }
-    paths = save_tables(tables, tmp_path)
+    paths = save_tables(tables, tmp_path, Config())
     for entity, path in paths.items():
         assert path.exists(), f"missing {entity} file"
         df = pd.read_csv(path)
         assert not df.empty
+        # Metadata sidecar should be produced alongside each output file.
+        meta = path.with_suffix(path.suffix + ".meta.yaml")
+        assert meta.exists(), f"missing metadata for {entity}"
     assert (
         paths["activity_independent_status"].parent
         == tmp_path / "status" / "independent"
@@ -420,7 +411,6 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         paths["activity_same_document_status"].parent
         == tmp_path / "status" / "same_document"
     )
-
 
 
 def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:

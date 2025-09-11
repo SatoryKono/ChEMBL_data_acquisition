@@ -13,6 +13,9 @@ import logging
 
 import pandas as pd
 
+from .config import Config
+from .io import write_csv
+
 logger = logging.getLogger(__name__)
 
 
@@ -939,6 +942,7 @@ def build_combined_tables(
 def save_tables(
     tables: TableDict,
     out_dir: Path,
+    cfg: Config,
     fmt: str = "csv",
 ) -> Dict[str, Path]:
     """Persist combined tables to ``out_dir``.
@@ -946,9 +950,11 @@ def save_tables(
     Parameters
     ----------
     tables:
-        Mapping of entity names to DataFrames.
+        Mapping of entity names to :class:`pandas.DataFrame` instances.
     out_dir:
         Destination directory. Created if missing.
+    cfg:
+        Global configuration providing I/O settings used when writing files.
     fmt:
         Output format. Only ``"csv"`` is supported.
 
@@ -956,14 +962,13 @@ def save_tables(
     -------
     dict
         Mapping of entity names to written file paths.
-
     """
     if fmt != "csv":
         raise ValueError("only csv output is supported")
-    out_dir.mkdir(parents=True, exist_ok=True)
+
     paths: Dict[str, Path] = {}
     for entity, df in tables.items():
-
+        # Determine subdirectory based on table type.
         if entity.endswith("_non_independent_status"):
             sub_dir = out_dir / "status" / "non-independent"
         elif entity.endswith("_independent_status"):
@@ -975,9 +980,10 @@ def save_tables(
         else:
             sub_dir = out_dir
 
-        sub_dir.mkdir(parents=True, exist_ok=True)
         path = sub_dir / f"{entity}.csv"
-        df.to_csv(path, index=False, encoding="utf-8", na_rep="")
+        # Delegate writing to the shared I/O helper to ensure consistent
+        # encoding and creation of metadata sidecars.
+        write_csv(df, path, cfg=cfg)
         logger.info("Wrote %d rows to %s", len(df), path)
         paths[entity] = path
     return paths
