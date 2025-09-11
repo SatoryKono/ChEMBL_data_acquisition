@@ -6,16 +6,21 @@ from typing import Any
 
 import random
 import requests
-import responses
+import responses  # type: ignore[import-not-found]
 import time
 
-import library.chembl_client as chembl_client
+
+import pytest
 
 from cachetools import LRUCache
+
+
 from library import chembl_client
+
 
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
+import library.rate_limiter as rl
 
 
 class DummyResponse:
@@ -44,6 +49,30 @@ class DummySession:
         if len(self.calls) <= self.failures:
             raise requests.RequestException("boom")
         return DummyResponse()
+
+
+
+def test_init_session_sets_user_agent(monkeypatch) -> None:
+    """Session should include the configured ``User-Agent`` header."""
+    monkeypatch.setattr("library.chembl_client._session", None)
+    cfg = ApiCfg(user_agent="test-agent/1.0 (mailto:test@example.org)")
+    init_session(cfg, RetryCfg())
+    session = chembl_client._session
+    assert session is not None
+    assert session.headers.get("User-Agent") == cfg.user_agent
+
+class FakeTime:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, delay: float) -> None:
+        self.sleeps.append(delay)
+        self.now += delay
+
 
 
 @responses.activate
@@ -125,14 +154,68 @@ def test_request_json_cache(monkeypatch) -> None:
 
 
 @responses.activate
-def test_request_json_cache_eviction(monkeypatch) -> None:
-    monkeypatch.setattr(chembl_client, "_CACHE", LRUCache(maxsize=2))
+def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
+    timer = [0.0]
+    cache = TTLCache(maxsize=2, ttl=1, timer=lambda: timer[0])
+    monkeypatch.setattr(chembl_client, "_CACHE", cache)
+    monkeypatch.setattr("library.chembl_client._session", None)
     clear_cache()
-    urls = [f"http://example.com/{i}" for i in range(3)]
-    for i, url in enumerate(urls, start=1):
-        responses.add(responses.GET, url, json={"ok": i}, status=200)
-        request_json(url, cfg=ApiCfg())
+    url = "http://example.com/ttl"
+    responses.add(responses.GET, url, json={"ok": True}, status=200)
+
+    request_json(url, cfg=ApiCfg())
+
+    # Advance time beyond the TTL to force expiration of the cached entry.
+    timer[0] = 2.0
+    responses.add(responses.GET, url, json={"ok": True}, status=200)
+    request_json(url, cfg=ApiCfg())
+
+    # Two HTTP calls should have occurred because the cache entry expired.
+    assert len(responses.calls) == 2
+
+
+ 
+@responses.activate
+def test_request_json_preserves_original_error_message(monkeypatch) -> None:
+    """Ensure the raised error retains status code and URL."""
+
+    clear_cache()
+    monkeypatch.setattr("library.chembl_client._session", None)
+    url = "http://example.com/notfound"
+    responses.add(responses.GET, url, status=404)
+
+    cfg = ApiCfg(retries=1)
+    with pytest.raises(requests.HTTPError) as exc_info:
+        request_json(url, cfg=cfg)
+
+    message = str(exc_info.value)
+    assert "404" in message
+    assert url in message
+ 
+def test_clear_cache(monkeypatch) -> None:
+    cache = TTLCache(maxsize=2, ttl=100)
+    monkeypatch.setattr(chembl_client, "_CACHE", cache)
+    chembl_client._CACHE["x"] = {"ok": True}
+    clear_cache()
+    assert len(chembl_client._CACHE) == 0
+ 
+
 
     assert urls[0] not in chembl_client._CACHE
     assert len(chembl_client._CACHE) == 2
 
+
+def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
+    fake_time = FakeTime()
+    monkeypatch.setattr(rl, "time", fake_time)
+    with rl._limiters_lock:
+        rl._limiters.clear()
+    session = DummySession()
+    monkeypatch.setattr("library.chembl_client._session", session)
+    clear_cache()
+    cfg = ApiCfg(rps=1, burst=1)
+    request_json("http://example.com/1", cfg=cfg)
+    request_json("http://example.com/2", cfg=cfg)
+    assert fake_time.sleeps == [1.0]
+    with rl._limiters_lock:
+        rl._limiters.clear()
