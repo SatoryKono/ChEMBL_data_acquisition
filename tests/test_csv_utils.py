@@ -37,3 +37,20 @@ def test_default_sorting_and_order(tmp_path: Path) -> None:
     path = tmp_path / "out.csv"
     write_csv_deterministic(df, path)
     assert path.read_text(encoding="utf-8-sig") == "a,b\nx,true\ny,false\n"
+
+
+def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
+    """Ensure deterministic writes produce identical files."""
+
+    data_path = Path(__file__).parent / "data" / "csv_utils_input.csv"
+    df = pd.read_csv(data_path, parse_dates=["d"])
+    df1 = df.sample(frac=1, random_state=1).reset_index(drop=True)
+    df2 = df.sample(frac=1, random_state=2).reset_index(drop=True)
+
+    path1 = tmp_path / "first.csv"
+    path2 = tmp_path / "second.csv"
+
+    write_csv_deterministic(df1, path1, col_order=["a", "b", "d", "f"], key_cols=["a"])
+    write_csv_deterministic(df2, path2, col_order=["a", "b", "d", "f"], key_cols=["a"])
+
+    assert path1.read_bytes() == path2.read_bytes()
