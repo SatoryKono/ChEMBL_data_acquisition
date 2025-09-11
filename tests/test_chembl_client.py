@@ -8,6 +8,8 @@ import random
 import requests
 import responses
 import time
+from cachetools import LRUCache
+from library import chembl_client
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
 
@@ -103,7 +105,8 @@ def test_request_json_reuses_session(monkeypatch) -> None:
 
 @responses.activate
 def test_request_json_cache(monkeypatch) -> None:
-    monkeypatch.setattr("library.chembl_client._CACHE", {})
+    clear_cache()
+    monkeypatch.setattr("library.chembl_client._session", None)
     url = "http://example.com/cache"
     responses.add(responses.GET, url, json={"ok": True}, status=200)
 
@@ -112,3 +115,16 @@ def test_request_json_cache(monkeypatch) -> None:
 
     request_json(url, cfg=ApiCfg())
     assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_request_json_cache_eviction(monkeypatch) -> None:
+    monkeypatch.setattr(chembl_client, "_CACHE", LRUCache(maxsize=2))
+    clear_cache()
+    urls = [f"http://example.com/{i}" for i in range(3)]
+    for i, url in enumerate(urls, start=1):
+        responses.add(responses.GET, url, json={"ok": i}, status=200)
+        request_json(url, cfg=ApiCfg())
+
+    assert urls[0] not in chembl_client._CACHE
+    assert len(chembl_client._CACHE) == 2

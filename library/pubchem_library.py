@@ -11,13 +11,14 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import requests
+from cachetools import LRUCache
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
 from .rate_limiter import get_limiter
 from .log import logger
 
-_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE: LRUCache[str, Dict[str, Any]] = LRUCache(maxsize=1024)
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 

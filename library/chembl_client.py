@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+
 from typing import Any, Dict, Iterable, Iterator, cast
+
 
 import random
 import threading
 import requests
 from requests import Session
 
+from cachetools import LRUCache
+
 from .config import ApiCfg, RetryCfg, session_with_retry
 from .rate_limiter import sleep
 from .log import logger
 
-_CACHE: Dict[str, dict[str, Any]] = {}
+_CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
 
 _session: Session | None = None
 _session_lock = threading.Lock()
