@@ -11,28 +11,19 @@ import csv
 import json
 import logging
 import sys
+from collections.abc import Callable, Iterable, Sequence
 from datetime import date
 from pathlib import Path
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
     TYPE_CHECKING,
+    Any,
 )
-from xml.etree import ElementTree as ET
 from urllib.parse import quote
+from xml.etree import ElementTree as ET
 
 import pandas as pd
 import requests
 
-from .log import logger
-from .rate_limiter import get_limiter, sleep
 from .config import (
     Config,
     CrossRefCfg,
@@ -42,12 +33,14 @@ from .config import (
     session_with_retry,
 )
 from .csv_utils import write_csv_deterministic
+from .log import logger
+from .rate_limiter import get_limiter, sleep
 
 if TYPE_CHECKING:
     from .rate_limiter import RateLimiter
 
 
-def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str]:
+def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> list[str]:
     """Read PMID column from a CSV file.
 
     Parameters
@@ -64,7 +57,7 @@ def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str
 
     """
     path = Path(path)
-    last_exc: Optional[Exception] = None
+    last_exc: Exception | None = None
     encodings = (cfg or PubMedCfg()).encodings
     for enc in encodings:
         try:
@@ -90,7 +83,7 @@ def _do_request(
     method: str = "GET",
     timeout: float | tuple[float, float] = 10,
     **kwargs: Any,
-) -> Tuple[Union[Dict[str, Any], str, None], str]:
+) -> tuple[dict[str, Any] | str | None, str]:
     """Perform an HTTP request with retry and error handling.
 
     Parameters
@@ -200,10 +193,10 @@ def _do_request(
 
 def fetch_pubmed_batch(
     session: requests.Session,
-    pmids: List[str],
+    pmids: list[str],
     sleep: float,
     cfg: PubMedCfg | None = None,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """Fetch metadata for multiple PMIDs using a single API request.
 
     Parameters
@@ -231,7 +224,7 @@ def fetch_pubmed_batch(
     text, error = _do_request(
         session, url, sleep, expect_json=False, retries=cfg.retries, timeout=timeout
     )
-    results: List[Dict[str, str]] = []
+    results: list[dict[str, str]] = []
     if error:
         for pid in pmids:
             res = EMPTY_PUBMED.copy()
@@ -249,7 +242,7 @@ def fetch_pubmed_batch(
             results.append(res)
         return results
     articles = root.findall(".//PubmedArticle")
-    parsed: Dict[str, Dict[str, str]] = {}
+    parsed: dict[str, dict[str, str]] = {}
     for art in articles:
         rec = EMPTY_PUBMED.copy()
         rec.update(parse_pubmed_article(art))
@@ -265,7 +258,7 @@ def fetch_pubmed_batch(
     return results
 
 
-def text_or_none(node: Optional[ET.Element]) -> Optional[str]:
+def text_or_none(node: ET.Element | None) -> str | None:
     """Return stripped text of an XML node if present."""
     if node is not None and node.text is not None:
         return node.text.strip()
@@ -277,17 +270,17 @@ def combine(items: Iterable[str]) -> str:
     return "|".join(x for x in items if x)
 
 
-def find_one(node: Optional[ET.Element], xpath: str) -> Optional[ET.Element]:
+def find_one(node: ET.Element | None, xpath: str) -> ET.Element | None:
     """Safe wrapper around Element.find."""
     return node.find(xpath) if node is not None else None
 
 
-def find_all(node: Optional[ET.Element], xpath: str) -> List[ET.Element]:
+def find_all(node: ET.Element | None, xpath: str) -> list[ET.Element]:
     """Safe wrapper around Element.findall returning a list."""
     return node.findall(xpath) if node is not None else []
 
 
-def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
+def parse_pubmed_article(art: ET.Element) -> dict[str, Any]:
     """Parse PubMedArticle into a dictionary of selected fields."""
     mc = find_one(art, "./MedlineCitation")
     article = find_one(mc, "./Article") if mc is not None else None
@@ -329,7 +322,7 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
     if article is not None:
         segments = find_all(article, "./Abstract/AbstractText")
         if segments:
-            parts: List[str] = []
+            parts: list[str] = []
             for seg in segments:
                 seg_text = text_or_none(seg)
                 if seg_text:
@@ -359,8 +352,8 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
     ]
 
     mh_list = find_one(mc, "./MeshHeadingList")
-    mesh_descriptors: List[str] = []
-    mesh_qualifiers: List[str] = []
+    mesh_descriptors: list[str] = []
+    mesh_qualifiers: list[str] = []
     if mh_list is not None:
         for mh in mh_list.findall("./MeshHeading"):
             d = text_or_none(find_one(mh, "./DescriptorName"))
@@ -371,7 +364,7 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
                 if qt:
                     mesh_qualifiers.append(qt)
 
-    chemical_list: List[str] = []
+    chemical_list: list[str] = []
     chem_list_node = find_one(mc, "./ChemicalList")
     if chem_list_node is not None:
         for chem in chem_list_node.findall("./Chemical"):
@@ -413,7 +406,7 @@ def parse_pubmed_article(art: ET.Element) -> Dict[str, Any]:
     }
 
 
-EMPTY_PUBMED: Dict[str, str] = {
+EMPTY_PUBMED: dict[str, str] = {
     "PubMed.PMID": "",
     "PubMed.DOI": "",
     "PubMed.ArticleTitle": "",
@@ -440,7 +433,7 @@ EMPTY_PUBMED: Dict[str, str] = {
 
 def fetch_pubmed(
     session: requests.Session, pmid: str, sleep: float, cfg: PubMedCfg | None = None
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Fetch metadata for a PMID from the PubMed API.
 
     Parameters
@@ -483,7 +476,7 @@ def fetch_semantic_scholar(
     pmid: str,
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for a single PMID.
 
     Parameters
@@ -544,10 +537,10 @@ def fetch_semantic_scholar(
 
 def fetch_semantic_scholar_batch(
     session: requests.Session,
-    pmids: List[str],
+    pmids: list[str],
     sleep: float,
     cfg: SemanticScholarCfg | None = None,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """Fetch metadata for multiple PMIDs using Semantic Scholar's batch API.
 
     Parameters
@@ -599,9 +592,9 @@ def fetch_semantic_scholar_batch(
             for pmid in pmids
         ]
 
-    results: List[Dict[str, str]] = []
+    results: list[dict[str, str]] = []
     if isinstance(data, list) and len(data) == len(pmids):
-        for pmid, item in zip(pmids, data):
+        for pmid, item in zip(pmids, data, strict=False):
             if item is None:
                 results.append(
                     {
@@ -654,7 +647,7 @@ def fetch_openalex(
     *,
     cfg: OpenAlexCfg,
     limiter: RateLimiter | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``.
 
     Parameters
@@ -698,8 +691,8 @@ def fetch_openalex(
             "OpenAlex.Error": error or "Invalid response",
         }
     mesh_entries = data.get("mesh") or []
-    descriptors: List[str] = []
-    qualifiers: List[str] = []
+    descriptors: list[str] = []
+    qualifiers: list[str] = []
     for entry in mesh_entries:
         d = entry.get("descriptor_name")
         if d:
@@ -726,7 +719,7 @@ def fetch_crossref(
     *,
     cfg: CrossRefCfg,
     limiter: RateLimiter | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Retrieve Crossref metadata for a given DOI.
 
     Parameters
@@ -790,7 +783,7 @@ def fetch_crossref(
     }
 
 
-def print_results(records: List[Dict[str, str]]) -> None:
+def print_results(records: list[dict[str, str]]) -> None:
     """Log result records instead of printing to ``stdout``.
 
     Parameters
@@ -879,7 +872,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
 
-    records: List[Dict[str, str]] = []
+    records: list[dict[str, str]] = []
     batch_size = 100
     with session_with_retry(cfg.api, cfg.retry) as session:
         for i in range(0, len(pmids), batch_size):
@@ -907,7 +900,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     session, doi, cfg=cfg.crossref, limiter=crossref_limiter
                 )
 
-                combined: Dict[str, str] = {}
+                combined: dict[str, str] = {}
                 combined.update(pubmed)
                 combined.update(semsch)
                 combined.update(openalex)

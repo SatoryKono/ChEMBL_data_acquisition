@@ -7,7 +7,6 @@ normalise publication type fields.
 from __future__ import annotations
 
 import re
-from typing import List
 
 # Term dictionaries -----------------------------------------------------------------
 
@@ -108,7 +107,7 @@ def _normalise_token(token: str) -> str:
     return token
 
 
-def parse_terms(value: object) -> List[str]:
+def parse_terms(value: object) -> list[str]:
     """Split and normalise a publication type field.
 
     Parameters

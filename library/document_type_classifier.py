@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 
-from .document_type_terms import REVIEW_TERMS, EXPERIMENTAL_TERMS, UNKNOWN_TERMS
+from .document_type_terms import EXPERIMENTAL_TERMS, REVIEW_TERMS, UNKNOWN_TERMS
 
 # Default source weights used in weighted voting
 SOURCE_WEIGHTS: Mapping[str, int] = {
@@ -20,7 +20,7 @@ def compute_scores(
     openalex_terms: Iterable[str],
     *,
     weights: Mapping[str, int] | None = None,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Calculate scores for each class based on detected terms.
 
     Parameters

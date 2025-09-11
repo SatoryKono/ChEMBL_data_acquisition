@@ -9,16 +9,17 @@ summary statistics.
 from __future__ import annotations
 
 import hashlib
-from .log import logger
 import platform
 import subprocess
-from datetime import datetime, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Mapping, TypedDict
+from typing import Any, TypedDict
 
 import yaml
 
 from .config import _mask_secrets
+from .log import logger
 
 
 class Stats(TypedDict):
@@ -101,8 +102,8 @@ def write_meta_yaml(
     path = Path(csv_path)
     meta_path = path.with_name(path.name + ".meta.yaml")
 
-    metadata: Dict[str, Any] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+    metadata: dict[str, Any] = {
+        "generated_at": datetime.now(UTC).isoformat(),
         "git_sha": _git_sha(),
         "python_version": platform.python_version(),
         "platform": platform.platform(),

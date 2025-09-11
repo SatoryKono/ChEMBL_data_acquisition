@@ -9,11 +9,12 @@ from __future__ import annotations
 import argparse
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-from .config import Config, ConfigError, load_config
 from . import log
-from .logging_setup import Logger, LoggerConfig, configure_logger as _configure_logger
+from .config import Config, ConfigError, load_config
+from .logging_setup import Logger, LoggerConfig
+from .logging_setup import configure_logger as _configure_logger
 
 
 def create_logger_config(level: str) -> LoggerConfig:
@@ -206,7 +207,7 @@ def configure_logger(
 # ---------------------------------------------------------------------------
 
 # Mapping of common CLI argument names to configuration paths.
-_DEFAULT_OVERRIDES: Dict[str, str] = {
+_DEFAULT_OVERRIDES: dict[str, str] = {
     "sep": "io.csv_sep",
     "encoding": "io.csv_encoding",
     "log_level": "log.level",
@@ -236,7 +237,7 @@ def apply_config_overrides(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
     config_path: str | Path,
-    mapping: Dict[str, str] | None = None,
+    mapping: dict[str, str] | None = None,
 ) -> Config:
     """Load configuration applying command line overrides.
 
@@ -270,7 +271,7 @@ def apply_config_overrides(
 
     override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
 
-    cli_overrides: Dict[str, Any] = {}
+    cli_overrides: dict[str, Any] = {}
     for arg, key in override_map.items():
         if not hasattr(args, arg):
             continue

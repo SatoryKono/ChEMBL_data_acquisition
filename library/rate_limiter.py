@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Dict
 
 
 class RateLimiter:
@@ -50,7 +49,7 @@ class RateLimiter:
             self._updated = now
 
 
-_limiters: Dict[str, RateLimiter] = {}
+_limiters: dict[str, RateLimiter] = {}
 _limiters_lock = threading.Lock()
 
 

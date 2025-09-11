@@ -6,12 +6,15 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+
+
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from typing import Any, Dict, Iterable, Literal, Mapping
 from .log import logger
+
 
 
 import pandas as pd
@@ -741,9 +744,11 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
             return pd.NA
         if isinstance(value, str):
             value = value.strip().lower()
+
         if value in (True, 1, "1", "true", "t"):
             return True
         if value in (False, 0, "0", "false", "f"):
+
             return False
         raise ValueError(f"invalid boolean value: {value}")
 
@@ -817,7 +822,7 @@ def generate_pair_entity_tables(
         logger.warning("'activity' table missing column 'activity_chembl_id'")
         return result
 
-    entity_cols: Dict[str, str] = {
+    entity_cols: dict[str, str] = {
         "assay": "assay_chembl_id",
         "document": "document_chembl_id",
         "target": "target_chembl_id",

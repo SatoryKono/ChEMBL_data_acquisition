@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+import mapper_main
 from library import io
 from library.config import Config, IoCfg
-import mapper_main
 
 
 def test_default_output_path_uses_output_dir(tmp_path: Path) -> None:

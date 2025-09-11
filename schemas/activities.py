@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from pandera import Check, Column, DataFrameSchema
 
-
 # Definition of the schema describing the activities table.
 ActivitiesSchema: DataFrameSchema = DataFrameSchema(
     {

@@ -9,16 +9,16 @@ directory.
 
 from . import io, validation
 from .config import Config, load_config
+from .csv_utils import sha256_file, write_csv_deterministic
+from .document_type_classifier import compute_scores, decide_label
 from .document_type_terms import (
     EXPERIMENTAL_TERMS,
     REVIEW_TERMS,
     UNKNOWN_TERMS,
     parse_terms,
 )
-from .document_type_classifier import compute_scores, decide_label
-from .sidecar import SidecarErrors
-from .csv_utils import sha256_file, write_csv_deterministic
 from .logging_setup import Logger, LoggerConfig, configure_logger
+from .sidecar import SidecarErrors
 
 __all__ = [
     "parse_terms",

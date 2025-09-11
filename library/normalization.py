@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import pandas as pd
+
 from schemas.normalize import (
     normalize_activities as _normalize_activities,
+)
+from schemas.normalize import (
     normalize_assays as _normalize_assays,
+)
+from schemas.normalize import (
     normalize_documents as _normalize_documents,
+)
+from schemas.normalize import (
     normalize_targets as _normalize_targets,
+)
+from schemas.normalize import (
     normalize_testitems as _normalize_testitems,
 )
 

@@ -2,9 +2,9 @@ import pandas as pd
 import pytest
 
 from library.input_initialisation_library import (
-    get_percentage,
     add_percentage,
     compute_status_statistics,
+    get_percentage,
 )
 
 
