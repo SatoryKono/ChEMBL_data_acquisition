@@ -9,13 +9,13 @@ import requests
 import responses
 from cachetools import TTLCache  # type: ignore[import-untyped]
 
+import library.rate_limiter as rl
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg, session_with_retry
-import library.rate_limiter as rl
 
 
 class DummyResponse:
-    def __enter__(self) -> "DummyResponse":  # pragma: no cover - trivial
+    def __enter__(self) -> DummyResponse:  # pragma: no cover - trivial
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op

@@ -6,12 +6,15 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+
+
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from typing import Any, Dict, Iterable, Literal, Mapping
 from .log import logger
+
 
 
 import pandas as pd
@@ -741,9 +744,11 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
             return pd.NA
         if isinstance(value, str):
             value = value.strip().lower()
+
         if value in (True, 1, "1", "true", "t"):
             return True
         if value in (False, 0, "0", "false", "f"):
+
             return False
         raise ValueError(f"invalid boolean value: {value}")
 
@@ -817,7 +822,7 @@ def generate_pair_entity_tables(
         logger.warning("'activity' table missing column 'activity_chembl_id'")
         return result
 
-    entity_cols: Dict[str, str] = {
+    entity_cols: dict[str, str] = {
         "assay": "assay_chembl_id",
         "document": "document_chembl_id",
         "target": "target_chembl_id",
@@ -1478,8 +1483,14 @@ def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
         .unique()
         .tolist()
     )
-    order_map = dict(zip(status_df["status"], status_df["order"], strict=False))
-    score_map = dict(zip(status_df["status"], status_df["score"], strict=False))
+    if len(status_df["status"]) != len(status_df["order"]):
+        msg = "status and order columns have different lengths"
+        raise ValueError(msg)
+    order_map = dict(zip(status_df["status"], status_df["order"]))  # noqa: B905
+    if len(status_df["status"]) != len(status_df["score"]):
+        msg = "status and score columns have different lengths"
+        raise ValueError(msg)
+    score_map = dict(zip(status_df["status"], status_df["score"]))  # noqa: B905
     return StatusAPI(status_df, status_list, conditions, order_map, score_map)
 
 
@@ -1508,8 +1519,11 @@ def initialize_activity_status(
 
     # Map condition fields to their corresponding status and order
     cond_rows = status_api.table[status_api.table["condition_value"] != "null"]
+    if len(cond_rows["condition_field"]) != len(cond_rows["status"]):
+        msg = "condition_field and status columns have different lengths"
+        raise ValueError(msg)
     field_to_status = dict(
-        zip(cond_rows["condition_field"], cond_rows["status"], strict=False)
+        zip(cond_rows["condition_field"], cond_rows["status"])  # noqa: B905
     )
     order_to_status = {v: k for k, v in status_api.order_map.items()}
     default_order = status_api.order_map[status_api.status_list[-1]]

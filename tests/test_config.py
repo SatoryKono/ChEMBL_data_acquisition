@@ -1,10 +1,9 @@
-import json
-from pathlib import Path
-import logging
 import io
+import json
+import logging
+from pathlib import Path
 
 import pytest
-
 from jsonschema import ValidationError
 
 from library.cli import LoggerConfig, configure_logger
@@ -274,9 +273,7 @@ def test_user_agent_must_include_contact(tmp_path: Path) -> None:
 
 def test_openalex_mailto_required(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
-    path.write_text(
-        "openalex:\n  mailto: ''\n" "crossref:\n  mailto: info@example.org\n"
-    )
+    path.write_text("openalex:\n  mailto: ''\ncrossref:\n  mailto: info@example.org\n")
     with pytest.raises(ValueError, match="openalex.mailto"):
         load_config(path)
 

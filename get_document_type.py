@@ -7,19 +7,21 @@ scoring logic.
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import pandas as pd
-from library.config import Config, ensure_dirs, print_config
+
+from library import io
 from library.cli import (
     apply_config_overrides,
-    build_parser as base_parser,
     configure_logger,
 )
-from library.log import logger
-from library import io
-
+from library.cli import (
+    build_parser as base_parser,
+)
+from library.config import Config, ensure_dirs, print_config
 from library.document_type_classifier import compute_scores, decide_label
+from library.log import logger
 
 
 def _split_terms(value: object) -> Iterable[str]:

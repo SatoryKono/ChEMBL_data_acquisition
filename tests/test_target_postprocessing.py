@@ -6,10 +6,10 @@ its convenience wrapper :func:`library.target_postprocessing.postprocess_file`.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import pandas as pd
-import warnings
 
 from library import target_postprocessing as tp
 from library.config import Config, IoCfg

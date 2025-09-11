@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 import warnings
 from pathlib import Path
-
 from typing import Any
 
 import numpy as np
