@@ -21,7 +21,7 @@ from library import chembl_client
 
 
 from library.chembl_client import clear_cache, init_session, request_json
-from library.config import ApiCfg, RetryCfg
+from library.config import ApiCfg, ChemblCfg, RetryCfg
 import library.rate_limiter as rl
 
 
@@ -157,9 +157,17 @@ def test_request_json_cache(monkeypatch) -> None:
 @responses.activate
 def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     timer = [0.0]
+
     cache: TTLCache[str, Any] = TTLCache(maxsize=2, ttl=1, timer=lambda: timer[0])
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
+
     monkeypatch.setattr("library.chembl_client._session", None)
+    chembl_cfg = ChemblCfg(cache_ttl=1)
+    init_session(ApiCfg(), RetryCfg(), chembl_cfg)
+    assert chembl_client._CACHE.ttl == chembl_cfg.cache_ttl
+    chembl_client._CACHE = TTLCache(
+        maxsize=1024, ttl=chembl_cfg.cache_ttl, timer=lambda: timer[0]
+    )
     clear_cache()
     url = "http://example.com/ttl"
     responses.add(responses.GET, url, json={"ok": True}, status=200)
@@ -199,7 +207,6 @@ def test_clear_cache(monkeypatch) -> None:
     chembl_client._CACHE["x"] = {"ok": True}
     clear_cache()
     assert len(chembl_client._CACHE) == 0
-
 
 
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:

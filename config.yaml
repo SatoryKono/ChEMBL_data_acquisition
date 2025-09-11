@@ -18,6 +18,9 @@ api:
   burst: 5  # Burst size for token bucket limiter
   user_agent: "chembl-da/0.1 (mailto:info@example.org)"  # Custom User-Agent header; must include contact info in the form "app/version (mailto:email@example.org)"
 
+chembl:
+  cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA__CHEMBL__CACHE_TTL / CHEMBL_DA_CACHE_TTL)
+
 openalex:
   base: "https://api.openalex.org"  # OpenAlex API root URL (env: CHEMBL_DA__OPENALEX__BASE / CHEMBL_DA_OPENALEX_BASE)
   timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)

@@ -89,6 +89,13 @@ class ApiCfg:
 
 
 @dataclass
+class ChemblCfg:
+    """ChEMBL-specific configuration."""
+
+    cache_ttl: int = 3600
+
+
+@dataclass
 class OpenAlexCfg:
     """Settings for the OpenAlex API.
 
@@ -338,6 +345,7 @@ class Config:
     """Aggregate project configuration."""
 
     api: ApiCfg = field(default_factory=ApiCfg)
+    chembl: ChemblCfg = field(default_factory=ChemblCfg)
     openalex: OpenAlexCfg = field(default_factory=OpenAlexCfg)
     crossref: CrossRefCfg = field(default_factory=CrossRefCfg)
     uniprot: UniprotCfg = field(default_factory=UniprotCfg)
@@ -531,6 +539,7 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_PUBCHEM_TIMEOUT_READ": ["pubchem", "timeout_read"],
     "CHEMBL_DA_PUBCHEM_RPS": ["pubchem", "rps"],
     "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
+    "CHEMBL_DA_CACHE_TTL": ["chembl", "cache_ttl"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
     "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
@@ -661,6 +670,14 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "burst",
                 "user_agent",
             ],
+            "additionalProperties": False,
+        },
+        "chembl": {
+            "type": "object",
+            "properties": {
+                "cache_ttl": {"type": "integer", "minimum": 1},
+            },
+            "required": ["cache_ttl"],
             "additionalProperties": False,
         },
         "openalex": {
@@ -990,6 +1007,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
     },
     "required": [
         "api",
+        "chembl",
         "openalex",
         "crossref",
         "uniprot",
@@ -1051,6 +1069,8 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "api.user_agent must include contact information such as an email"
         )
+    if cfg.chembl.cache_ttl <= 0:
+        raise ValueError("chembl.cache_ttl must be positive")
 
     services_full: list[tuple[str, Any]] = [
         ("openalex", cfg.openalex),
@@ -1220,6 +1240,7 @@ def load_config(
 
 __all__ = [
     "ApiCfg",
+    "ChemblCfg",
     "OpenAlexCfg",
     "CrossRefCfg",
     "UniprotCfg",
