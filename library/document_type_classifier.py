@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Dict
 
 from .document_type_terms import REVIEW_TERMS, EXPERIMENTAL_TERMS, UNKNOWN_TERMS
 

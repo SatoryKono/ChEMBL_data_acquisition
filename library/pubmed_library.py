@@ -13,14 +13,13 @@ import logging
 import sys
 from datetime import date
 from pathlib import Path
+from collections.abc import Iterable, Sequence
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     List,
     Optional,
-    Sequence,
     Tuple,
     Union,
     TYPE_CHECKING,

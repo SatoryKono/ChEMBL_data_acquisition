@@ -38,7 +38,8 @@ import csv
 import json
 from .log import logger
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Set
+from collections.abc import Iterable
+from typing import Any, Dict, List, Set
 
 import requests
 from requests import Session

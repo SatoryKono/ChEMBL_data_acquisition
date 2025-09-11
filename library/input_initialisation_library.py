@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Literal, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any, Dict, Literal
 from .log import logger
 
 import pandas as pd

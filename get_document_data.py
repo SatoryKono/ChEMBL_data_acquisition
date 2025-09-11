@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 import pandas as pd
 

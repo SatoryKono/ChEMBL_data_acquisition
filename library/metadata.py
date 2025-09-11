@@ -14,7 +14,8 @@ import platform
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, TypedDict
+from collections.abc import Mapping
+from typing import Any, Dict, TypedDict
 
 import yaml
 

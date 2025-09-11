@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
-from typing import Sequence
+from collections.abc import Sequence
 
 import pandas as pd
 from library.config import Config, ensure_dirs, print_config

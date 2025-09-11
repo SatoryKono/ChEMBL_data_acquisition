@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 import requests
 from library.config import Config, ensure_dirs, print_config, _serialize_paths

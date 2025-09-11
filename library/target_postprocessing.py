@@ -7,7 +7,7 @@ merged target information produced by :mod:`get_target_data`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from collections.abc import Iterable
 
 import pandas as pd
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from itertools import islice
 
 
@@ -70,7 +70,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
-
     # Apply the ``limit`` without materialising the entire iterator first.
     # ``itertools.islice`` allows lazy slicing; converting to ``list`` enables
     # length calculation for logging purposes.
@@ -79,7 +78,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         limited = list(islice(ids_iter, limit))
         ids = limited
         logger.info("processing at most %d identifiers", len(limited))
-
 
     try:
         df = cl.get_activities(

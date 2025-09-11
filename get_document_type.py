@@ -7,7 +7,7 @@ scoring logic.
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import pandas as pd
 from library.config import Config, ensure_dirs, print_config

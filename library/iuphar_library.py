@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
+from typing import List, Optional
 
 import io
 from .log import logger

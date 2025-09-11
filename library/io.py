@@ -11,7 +11,8 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
-from typing import Any, Hashable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Hashable, Iterator
 import subprocess
 import sys
 import yaml
