@@ -211,6 +211,7 @@ class ResourcesCfg:
     dictionary_dir: Path = Path("dictionary")
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+    uniprot_data_dir: Path = Path("uniprot")
 
 
 @dataclass
@@ -346,7 +347,6 @@ class Config:
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
 
     doc_type: DocTypeCfg = field(default_factory=DocTypeCfg)
-
 
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
 
@@ -534,6 +534,7 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
     "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
     "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
+    "CHEMBL_DA_UNIPROT_DATA_DIR": ["resources", "uniprot_data_dir"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -817,7 +818,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
-
         "doc_type": {
             "type": "object",
             "properties": {
@@ -845,19 +845,19 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             "required": ["weights", "thresholds"],
             "additionalProperties": False,
         },
-
-
         "resources": {
             "type": "object",
             "properties": {
                 "dictionary_dir": {"type": "string", "minLength": 1},
                 "iuphar_target_csv": {"type": "string", "minLength": 1},
                 "iuphar_family_csv": {"type": "string", "minLength": 1},
+                "uniprot_data_dir": {"type": "string", "minLength": 1},
             },
             "required": [
                 "dictionary_dir",
                 "iuphar_target_csv",
                 "iuphar_family_csv",
+                "uniprot_data_dir",
             ],
             "additionalProperties": False,
         },
@@ -1218,7 +1218,6 @@ __all__ = [
     "PubMedCfg",
     "SemanticScholarCfg",
     "DocTypeCfg",
-
     "ResourcesCfg",
     "IoCfg",
     "JobsCfg",

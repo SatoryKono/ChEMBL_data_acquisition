@@ -23,13 +23,13 @@ The most commonly used functions are:
     Read a CSV file containing a ``uniprot_id`` column and yield each ID.
 
 ``collect_info(uid, data_dir="uniprot")``
-    Given a UniProt accession and directory containing ``<uid>.json``
-    files, return a dictionary with the accession, all names, and
-    organism taxonomy data.
+    Given a UniProt accession and directory containing ``<uid>.json`` files
+    (default: ``cfg.resources.uniprot_data_dir``), return a dictionary with the
+    accession, all names, and organism taxonomy data.
 
-``process(input_csv, output_csv, data_dir="uniprot")``
-    Batch-process a CSV of UniProt IDs and write an output CSV with
-    names and organism information for each ID.
+``process(input_csv, output_csv, data_dir=cfg.resources.uniprot_data_dir)``
+    Batch-process a CSV of UniProt IDs and write an output CSV with names and
+    organism information for each ID.
 """
 
 from __future__ import annotations
@@ -37,16 +37,22 @@ from __future__ import annotations
 import csv
 import json
 import logging
-import os
 import time
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Set
 
 import requests
 from requests import Session
 
-from .config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
+from .config import ApiCfg, RetryCfg, UniprotCfg, load_config, session_with_retry
 
 logger = logging.getLogger(__name__)
+
+
+try:
+    _DEFAULT_UNIPROT_DATA_DIR = load_config().resources.uniprot_data_dir
+except Exception:
+    _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 
@@ -821,7 +827,7 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
 
 
 def collect_info(
-    uid: str, data_dir: str = "uniprot", *, cfg: UniprotCfg
+    uid: str, data_dir: Path | str | None = None, *, cfg: UniprotCfg
 ) -> Dict[str, Any]:
     """Return names, organism, keyword, PTM, isoform, cross-ref, and activity data for ``uid``.
 
@@ -830,7 +836,8 @@ def collect_info(
     uid:
         UniProt accession identifier.
     data_dir:
-        Directory containing ``<uid>.json`` files with UniProt data.
+        Directory containing ``<uid>.json`` files with UniProt data. If not
+        provided, :data:`_DEFAULT_UNIPROT_DATA_DIR` is used.
     cfg:
         UniProt configuration used for downloading missing records.
 
@@ -844,7 +851,11 @@ def collect_info(
         files leave fields empty.
 
     """
-    json_path = os.path.join(data_dir, f"{uid}.json")
+    if data_dir is None:
+        data_dir = _DEFAULT_UNIPROT_DATA_DIR
+    data_dir = Path(data_dir)
+
+    json_path = data_dir / f"{uid}.json"
     result = {
         "uniprot_id": uid,
         "names": "",
@@ -893,7 +904,7 @@ def collect_info(
         except UniProtFetchError as exc:
             logger.warning("failed to retrieve UniProt JSON for %s: %s", uid, exc)
             return result
-        os.makedirs(data_dir, exist_ok=True)
+        data_dir.mkdir(parents=True, exist_ok=True)
         try:
             with open(json_path, "w", encoding="utf-8") as handle:
                 json.dump(data, handle)
@@ -950,7 +961,7 @@ def collect_info(
 def process(
     input_csv: str,
     output_csv: str,
-    data_dir: str = "uniprot",
+    data_dir: Path | str | None = None,
     *,
     cfg: UniprotCfg,
     sep: str = ",",
@@ -970,7 +981,8 @@ def process(
     output_csv:
         Destination path for the output CSV file.
     data_dir:
-        Directory where JSON files for each ID are stored.
+        Directory where JSON files for each ID are stored. Defaults to
+        :data:`_DEFAULT_UNIPROT_DATA_DIR`.
     cfg:
         UniProt configuration used for network requests when local files are
         missing.
@@ -985,6 +997,10 @@ def process(
         The processed information is written to ``output_csv``.
 
     """
+    if data_dir is None:
+        data_dir = _DEFAULT_UNIPROT_DATA_DIR
+    data_dir = Path(data_dir)
+
     fieldnames = [
         "uniprot_id",
         "names",
