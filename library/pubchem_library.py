@@ -7,7 +7,6 @@ The implementation is a Python translation of a PowerQuery script.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import logging
 import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -16,9 +15,9 @@ import requests
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
+from .log import logger
 
-
-logger = logging.getLogger(__name__)
+_CACHE: Dict[str, Dict[str, Any]] = {}
 
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 
@@ -144,44 +143,67 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> Optional[str]:
 
 
 def make_request(url: str, cfg: PubChemCfg) -> Optional[Dict[str, Any]]:
-    """Make an HTTP GET request and return parsed JSON.
+    """Make an HTTP GET request and return parsed JSON."""
+    if url in _CACHE:
+        logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
+        return _CACHE[url]
+    logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
-    The function sleeps for ``cfg.delay`` seconds before issuing the request in
-    order to respect PubChem rate limits.  A shared session configured with
-    retries is used to automatically retry transient failures.
-
-    Parameters
-    ----------
-    url:
-        Endpoint URL to query.
-    cfg:
-        API configuration providing base URL and timeouts.
-
-    Returns
-    -------
-    dict or None
-        Parsed JSON response or ``None`` when the request fails, the server
-        returns a non-success status code, or the payload cannot be decoded.
-
-    """
-    time.sleep(cfg.delay)
-    try:
-        response = _session.get(url, timeout=(cfg.timeout_connect, cfg.timeout_read))
-        if response.status_code == 404:
-            logger.warning("Request returned 404 for url %s", url)
-            return None
-        if response.status_code == 400:
-            logger.warning("Request returned 400 for url %s", url)
-            return None
-        response.raise_for_status()
+    for attempt in range(1, cfg.retries + 1):
+        event = "request_start" if attempt == 1 else "request_retry"
+        logger.info(event, extra={"stage": event, "url": url, "attempt": attempt})
+        time.sleep(cfg.delay)
         try:
-            return response.json()
+            response = _session.get(
+                url, timeout=(cfg.timeout_connect, cfg.timeout_read)
+            )
+        except requests.RequestException as exc:  # pragma: no cover - network
+            if attempt >= cfg.retries:
+                logger.error("HTTP request failed for url %s: %s", url, exc)
+                logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+                return None
+            continue
+
+        if response.status_code in (404, 400):
+            logger.warning("Request returned %d for url %s", response.status_code, url)
+            logger.info(
+                "request_fail",
+                extra={
+                    "stage": "request_fail",
+                    "url": url,
+                    "status": response.status_code,
+                },
+            )
+            return None
+        try:
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as exc:  # pragma: no cover - network
+            if attempt >= cfg.retries:
+                logger.error("HTTP request failed for url %s: %s", url, exc)
+                logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+                return None
+            continue
         except ValueError:
             logger.warning("Non-JSON response for url %s", url)
+            logger.info(
+                "request_fail",
+                extra={
+                    "stage": "request_fail",
+                    "url": url,
+                    "status": response.status_code,
+                },
+            )
             return None
-    except requests.RequestException as exc:  # pragma: no cover - network
-        logger.error("HTTP request failed for url %s: %s", url, exc)
-        return None
+
+        logger.info(
+            "request_ok",
+            extra={"stage": "request_ok", "url": url, "status": response.status_code},
+        )
+        _CACHE[url] = data
+        logger.info("cache_set", extra={"stage": "cache_set", "url": url})
+        return data
+    return None
 
 
 def validate_cid(cid: str) -> Optional[str]:

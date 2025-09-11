@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from typing import Iterable
 
-import logging
-
 import pandas as pd
 
 from .chembl_client import _chunked, request_json
 from .config import ApiCfg
+from .log import logger
 
-logger = logging.getLogger(__name__)
 ASSAY_COLUMNS = [
     "aidx",
     "assay_category",
@@ -165,7 +163,11 @@ def get_assays(
         base += "&variant_sequence__isnull=false"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&assay_chembl_id__in={','.join(chunk)}"
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&assay_chembl_id__in={chunk_key}"
         data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
@@ -174,6 +176,12 @@ def get_assays(
             )
             if not df_chunk.empty:
                 records.append(df_chunk)
+                logger.info(
+                    "chunk_done",
+                    extra={"stage": "chunk_done", "chunk_key": chunk_key},
+                )
+                continue
+        logger.info("chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key})
     if not records:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
@@ -213,11 +221,22 @@ def get_activities(
     base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&activity_id__in={','.join(chunk)}"
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&activity_id__in={chunk_key}"
         data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
     if not records:
         return pd.DataFrame(columns=ACTIVITY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
@@ -257,11 +276,22 @@ def get_testitem(
     base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&molecule_chembl_id__in={','.join(chunk)}"
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&molecule_chembl_id__in={chunk_key}"
         data = request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
             records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)
