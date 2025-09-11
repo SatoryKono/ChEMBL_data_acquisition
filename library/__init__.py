@@ -16,6 +16,7 @@ from .document_type_terms import (
     parse_terms,
 )
 from .document_type_classifier import compute_scores, decide_label
+from .sidecar_errors import SidecarErrors
 
 __all__ = [
     "parse_terms",
@@ -28,4 +29,5 @@ __all__ = [
     "validation",
     "Config",
     "load_config",
+    "SidecarErrors",
 ]

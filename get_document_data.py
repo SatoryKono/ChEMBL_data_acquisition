@@ -31,6 +31,10 @@ from typing import Sequence
 
 import pandas as pd
 import requests
+from pandera.errors import SchemaErrors
+from schemas.documents import DocumentsSchema
+from library.normalization import normalize_documents
+from library.sidecar_errors import SidecarErrors
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from library import chembl_library as cl
@@ -145,6 +149,17 @@ def run_pubmed(args: argparse.Namespace) -> int:
         )
         df = fetch_pubmed_records(pmids, args.sleep, args.workers, args.batch_size)
         output = args.output_csv or io.default_output_path(args.input_csv)
+        df = normalize_documents(df)
+        sidecar = SidecarErrors(output.with_suffix(".errors"))
+        try:
+            df = DocumentsSchema.validate(df, lazy=True)
+        except SchemaErrors as err:
+            err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
+            sidecar.add(str(err))
+            bad_idx = err.failure_cases["index"].dropna().unique()
+            logger.warning("schema validation failed for %d rows", len(bad_idx))
+            df = df.drop(index=bad_idx)
+        sidecar.write()
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
     except (FileNotFoundError, ValueError, OSError) as exc:
@@ -174,6 +189,17 @@ def run_chembl(args: argparse.Namespace) -> int:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv)
+    df = normalize_documents(df)
+    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    try:
+        df = DocumentsSchema.validate(df, lazy=True)
+    except SchemaErrors as err:
+        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
+        sidecar.add(str(err))
+        bad_idx = err.failure_cases["index"].dropna().unique()
+        logger.warning("schema validation failed for %d rows", len(bad_idx))
+        df = df.drop(index=bad_idx)
+    sidecar.write()
     try:
         io.write_csv(df, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -215,6 +241,17 @@ def run_all(args: argparse.Namespace) -> int:
                 on="document_chembl_id",
                 how="left",
             )
+        processed = normalize_documents(processed)
+        sidecar = SidecarErrors(output.with_suffix(".errors"))
+        try:
+            processed = DocumentsSchema.validate(processed, lazy=True)
+        except SchemaErrors as err:
+            err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
+            sidecar.add(str(err))
+            bad_idx = err.failure_cases["index"].dropna().unique()
+            logger.warning("schema validation failed for %d rows", len(bad_idx))
+            processed = processed.drop(index=bad_idx)
+        sidecar.write()
         try:
             io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
             logger.info("Wrote %d rows to %s", len(processed), output)
@@ -227,7 +264,6 @@ def run_all(args: argparse.Namespace) -> int:
             logger.error("failed to generate quality report: %s", exc)
             return 1
         return 0
-
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
     pmids = pubmed_ids.dropna().astype(str).tolist()
@@ -254,6 +290,17 @@ def run_all(args: argparse.Namespace) -> int:
             on="document_chembl_id",
             how="left",
         )
+    processed = normalize_documents(processed)
+    sidecar = SidecarErrors(output.with_suffix(".errors"))
+    try:
+        processed = DocumentsSchema.validate(processed, lazy=True)
+    except SchemaErrors as err:
+        err.failure_cases.to_csv(output.with_name("failure_cases.csv"), index=False)
+        sidecar.add(str(err))
+        bad_idx = err.failure_cases["index"].dropna().unique()
+        logger.warning("schema validation failed for %d rows", len(bad_idx))
+        processed = processed.drop(index=bad_idx)
+    sidecar.write()
     try:
         io.write_csv(processed, output, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(processed), output)
