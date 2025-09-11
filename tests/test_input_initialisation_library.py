@@ -146,6 +146,29 @@ def test_build_combined_tables_drops_activity_cols() -> None:
     assert "pairs" not in combined
 
 
+def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
+    """Duplicate column names in activity tables should be ignored."""
+    same: TableDict = {
+        "activity": pd.DataFrame([[1, "a", "x"]], columns=["id", "val", "val"]),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame([[2, "b", "y"]], columns=["id", "val", "val"]),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
+    }
+    combined = build_combined_tables(same, all_)
+    assert list(combined["activity"].columns) == ["id", "val"]
+    assert combined["activity"]["val"].tolist() == ["a", "b"]
+
+
 def test_build_combined_tables_pairs_no_merge() -> None:
     """Pairs from different sources should not be combined."""
     same: TableDict = {
