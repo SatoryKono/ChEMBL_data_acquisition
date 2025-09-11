@@ -31,8 +31,12 @@ import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 
-from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
+
+try:
+    from types import UnionType
+except ImportError:  # pragma: no cover - Python <3.10
+    UnionType = None  # type: ignore[assignment]
 
 from urllib.parse import urlparse
 
@@ -532,7 +536,10 @@ def _unwrap_optional(tp: Any) -> tuple[type[Any], bool]:
     """
 
     origin = get_origin(tp)
-    if origin in (Union, UnionType):
+    # ``Optional[T]`` resolves to ``typing.Union[T, None]`` on Python <3.10 and to
+    # ``types.UnionType`` on newer versions; handle both representations.
+    is_union = origin is Union or (UnionType is not None and origin is UnionType)
+    if is_union:
         args = [a for a in get_args(tp) if a is not type(None)]
         if len(args) == 1:
             inner = get_origin(args[0]) or args[0]
