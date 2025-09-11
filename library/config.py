@@ -164,6 +164,39 @@ class PubChemCfg:
 
 
 @dataclass
+ 
+class PubMedCfg:
+    """Settings for the PubMed API and related I/O."""
+
+    base: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    timeout_connect: int = 5
+    timeout_read: int = 10
+    retries: int = 2
+    encodings: List[str] = field(
+        default_factory=lambda: ["utf-8-sig", "cp1251", "latin1"]
+    )
+
+
+@dataclass
+class SemanticScholarCfg:
+    """Settings for the Semantic Scholar API."""
+
+    base: str = "https://api.semanticscholar.org/graph/v1"
+    timeout_connect: int = 5
+    timeout_read: int = 10
+    retries: int = 2
+    encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
+ 
+class ResourcesCfg:
+    """Paths to static resource files used by the application."""
+
+    dictionary_dir: Path = Path("dictionary")
+    iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
+    iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+ 
+
+
+@dataclass
 class IoCfg:
     """Input/output defaults."""
 
@@ -261,6 +294,12 @@ class Config:
     uniprot_mapping: UniprotMappingCfg = field(default_factory=UniprotMappingCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
+ 
+    pubmed: PubMedCfg = field(default_factory=PubMedCfg)
+    semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
+ 
+    resources: ResourcesCfg = field(default_factory=ResourcesCfg)
+ 
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -429,6 +468,9 @@ _ALIAS_MAP: Dict[str, List[str]] = {
     "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
+    "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
+    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
+    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
     "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -666,6 +708,64 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
+ 
+        "pubmed": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "encodings": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "encodings",
+            ],
+            "additionalProperties": False,
+        },
+        "semantic_scholar": {
+            "type": "object",
+            "properties": {
+                "base": {"type": "string", "format": "uri"},
+                "timeout_connect": {"type": "integer", "minimum": 1},
+                "timeout_read": {"type": "integer", "minimum": 1},
+                "retries": {"type": "integer", "minimum": 0},
+                "encodings": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+            },
+            "required": [
+                "base",
+                "timeout_connect",
+                "timeout_read",
+                "retries",
+                "encodings",
+ 
+        "resources": {
+            "type": "object",
+            "properties": {
+                "dictionary_dir": {"type": "string", "minLength": 1},
+                "iuphar_target_csv": {"type": "string", "minLength": 1},
+                "iuphar_family_csv": {"type": "string", "minLength": 1},
+            },
+            "required": [
+                "dictionary_dir",
+                "iuphar_target_csv",
+                "iuphar_family_csv",
+ 
+            ],
+            "additionalProperties": False,
+        },
         "io": {
             "type": "object",
             "properties": {
@@ -790,6 +890,9 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "uniprot_mapping",
         "iuphar",
         "pubchem",
+        "pubmed",
+        "semantic_scholar",
+        "resources",
         "io",
         "jobs",
         "batch",
@@ -814,8 +917,14 @@ def _validate(cfg: Config) -> None:
     validator.validate(_serialize_paths(cfg.to_dict()))
 
     # Validate logging level (case-insensitive)
-    # Use public API introduced in Python 3.11 to map names to levels
-    level_names = logging.getLevelNamesMapping()
+    # ``logging.getLevelNamesMapping`` was added in Python 3.11. Fallback to the
+    # private ``logging._nameToLevel`` mapping for older versions.
+    try:
+        level_names = logging.getLevelNamesMapping()
+    except AttributeError:  # pragma: no cover - python <3.11 only
+        level_names = {
+            name.upper(): level for name, level in logging._nameToLevel.items()
+        }
     if cfg.log.level.upper() not in level_names:
         valid = ", ".join(sorted(level_names))
         raise ValueError(f"log.level must be one of {valid}, got {cfg.log.level!r}")
@@ -836,14 +945,14 @@ def _validate(cfg: Config) -> None:
             "api.user_agent must include contact information such as an email"
         )
 
-    services: list[tuple[str, Any]] = [
+    services_full: list[tuple[str, Any]] = [
         ("openalex", cfg.openalex),
         ("crossref", cfg.crossref),
         ("uniprot", cfg.uniprot),
         ("iuphar", cfg.iuphar),
         ("pubchem", cfg.pubchem),
     ]
-    for name, service in services:
+    for name, service in services_full:
         if not _valid_url(service.base):
             raise ValueError(f"{name}.base must be a valid URL")
         if service.timeout_connect <= 0 or service.timeout_read <= 0:
@@ -853,11 +962,29 @@ def _validate(cfg: Config) -> None:
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
 
+
+ 
+    basic_services: list[tuple[str, Any]] = [
+        ("pubmed", cfg.pubmed),
+        ("semantic_scholar", cfg.semantic_scholar),
+    ]
+    for name, service in basic_services:
+        if not _valid_url(service.base):
+            raise ValueError(f"{name}.base must be a valid URL")
+        if service.timeout_connect <= 0 or service.timeout_read <= 0:
+            raise ValueError(f"{name} timeouts must be positive")
+        if service.retries < 0:
+            raise ValueError(f"{name}.retries must be non-negative")
+        if not service.encodings:
+            raise ValueError(f"{name}.encodings must not be empty")
+ 
+
     mapping = cfg.uniprot_mapping
     if not _valid_url(mapping.base):
         raise ValueError("uniprot_mapping.base must be a valid URL")
     if mapping.poll_interval <= 0 or mapping.timeout <= 0:
         raise ValueError("uniprot_mapping.poll_interval and timeout must be positive")
+
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
@@ -994,6 +1121,12 @@ __all__ = [
     "UniprotMappingCfg",
     "IupharCfg",
     "PubChemCfg",
+
+    "PubMedCfg",
+    "SemanticScholarCfg",
+
+    "ResourcesCfg",
+
     "IoCfg",
     "JobsCfg",
     "BatchCfg",

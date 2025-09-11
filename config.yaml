@@ -47,7 +47,9 @@ uniprot:
 uniprot_mapping:
   base: "https://rest.uniprot.org/idmapping"  # UniProt ID mapping API (env: CHEMBL_DA__UNIPROT_MAPPING__BASE / CHEMBL_DA_UNIPROT_MAPPING_BASE)
   poll_interval: 0.5  # Seconds between polling attempts (env: CHEMBL_DA_UNIPROT_MAPPING_POLL_INTERVAL)
+
   timeout: 300.0  # Maximum time in seconds to wait for a mapping job (env: CHEMBL_DA_UNIPROT_MAPPING_TIMEOUT)
+
 
 iuphar:
   base: "https://www.guidetopharmacology.org/services"  # IUPHAR API base (env: CHEMBL_DA__IUPHAR__BASE / CHEMBL_DA_IUPHAR_BASE)
@@ -64,6 +66,31 @@ pubchem:
   retries: 3
   rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
   burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
+
+
+pubmed:
+  base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__PUBMED__BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
+  timeout_read: 10  # (env: CHEMBL_DA_PUBMED_TIMEOUT_READ)
+  retries: 2  # (env: CHEMBL_DA_PUBMED_RETRIES)
+  encodings:  # Attempt when reading PMID CSV files
+    - "utf-8-sig"
+    - "cp1251"
+    - "latin1"
+
+semantic_scholar:
+  base: "https://api.semanticscholar.org/graph/v1"  # Semantic Scholar API root (env: CHEMBL_DA__SEMANTIC_SCHOLAR__BASE)
+  timeout_connect: 5  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_TIMEOUT_CONNECT)
+  timeout_read: 10  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_TIMEOUT_READ)
+  retries: 2  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_RETRIES)
+  encodings:  # Placeholder for potential text encodings
+    - "utf-8-sig"
+ 
+resources:
+  dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
+  iuphar_target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
+  iuphar_family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
+ 
 
 io:
   output_dir: "data/output"  # Directory for generated datasets
