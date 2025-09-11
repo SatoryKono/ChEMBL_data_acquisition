@@ -4,6 +4,10 @@ Utilities for downloading and processing biological data from public APIs.
 The project demonstrates a typical Python 3.12 data pipeline including
 parsing, validation, aggregation and export of tabular data.
 
+## Requirements
+
+- Python 3.12 or later. Older interpreters abort with an informative message.
+
 ## Установка
 
 ```bash
