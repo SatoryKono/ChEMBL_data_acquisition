@@ -83,5 +83,7 @@ to the same configuration keys as their longer forms:
 | `CHEMBL_DA_LIMITER_CACHE_TTL` | `CHEMBL_DA__RATE__LIMITER_CACHE_TTL` |
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
 
-The loader warns about unknown variables and ignores them. All overrides are
-applied after reading `config.yaml` and before command line options.
+By default the loader errors on unknown keys. Use ``--no-config-strict`` on the
+command line or pass ``strict=False`` to ``load_config`` to merely log a
+warning. All overrides are applied after reading ``config.yaml`` and before
+command line options.

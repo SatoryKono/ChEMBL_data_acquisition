@@ -256,7 +256,7 @@ def test_unknown_key_warning(tmp_path: Path) -> None:
     path.write_text("unknown: 1\napi:\n  rps: 1\n")
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    load_config(path)
+    load_config(path, strict=False)
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
@@ -268,14 +268,14 @@ def test_unknown_key_error(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\n")
     with pytest.raises(ValueError, match="Unknown configuration key"):
-        load_config(path, strict=True)
+        load_config(path)
 
 
 def test_config_type_coercion() -> None:
     """The default configuration should load without type errors in strict mode."""
 
     path = Path(__file__).resolve().parents[1] / "config.yaml"
-    cfg = load_config(path, strict=True)
+    cfg = load_config(path)
     assert isinstance(cfg.pubchem.delay, float)
     assert isinstance(cfg.batch.pause, float)
 

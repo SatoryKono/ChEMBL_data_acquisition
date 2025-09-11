@@ -475,7 +475,9 @@ types and value ranges, producing helpful error messages for nested fields.
 
 Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective
-values after all overrides have been applied. The final precedence is::
+values after all overrides have been applied. Unknown configuration keys cause
+errors by default; pass ``--no-config-strict`` to merely log a warning. The
+final precedence is::
 
     YAML < environment variables < CLI options
 
@@ -500,6 +502,7 @@ Common flags shared by scripts include:
 * ``--log-level`` – logging verbosity (default ``INFO``)
 * ``--sep`` – CSV delimiter (default taken from configuration)
 * ``--encoding`` – file encoding (default taken from configuration)
+* ``--config-strict`` – fail on unknown configuration keys (use ``--no-config-strict`` to allow them)
 * ``--column`` – column containing identifiers (script specific)
 
 Example fetching assay data::

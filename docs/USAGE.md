@@ -65,9 +65,10 @@ The command emits three pair tables:
 written with matching suffixes, for example
 `activity_independent.csv` or `assay_same_document.csv`.
 
-Each command supports the common flags `--sep`, `--encoding` and
-`--log-level`. The default output path mirrors the input location and can be
-manually overridden with `--output` where available.
+Each command supports the common flags `--sep`, `--encoding`, `--log-level` and
+`--config-strict`. The default output path mirrors the input location and can be
+manually overridden with `--output` where available. Use `--no-config-strict`
+to allow unknown keys in `config.yaml`.
 
 ### Configuration overrides
 
