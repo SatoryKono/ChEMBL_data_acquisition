@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from typing import Sequence
 
 import requests
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ensure_dirs, print_config, _serialize_paths
 
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import io
+from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.cli import (
     apply_config_overrides,
     build_parser as base_parser,
@@ -21,6 +23,8 @@ from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from pandera.errors import SchemaErrors
 from schemas import AssaysSchema, normalize_assays
+
+from chembl_da.library import write_csv_deterministic
 
 logger = logging.getLogger(__name__)
 
@@ -63,28 +67,64 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     df = ap.postprocess_assays(df)
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df = normalize_assays(df)
+    rows_total = len(df)
     exit_code = 0
+    required_cols = set(AssaysSchema.columns.keys())
+    if required_cols.issubset(df.columns):
+        try:
+            df = AssaysSchema.validate(df, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            df = getattr(exc, "validated_data", df)
+            exit_code = 1
+    else:
+        missing = required_cols.difference(df.columns)
+        logger.warning("Skipping validation due to missing columns: %s", missing)
+    rows_kept = len(df)
+    rows_dropped = rows_total - rows_kept
     try:
-        df = AssaysSchema.validate(df, lazy=True)
-    except SchemaErrors as exc:
-        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-        errors = SidecarErrors()
-        for row in exc.failure_cases.to_dict("records"):
-            errors.add_error(row)
-        errors.save(failure_path)
-        logger.error(
-            "validation failed; wrote %d failure cases to %s",
-            len(exc.failure_cases),
-            failure_path,
+        key_cols = [c for c in ["assay_chembl_id"] if c in df.columns]
+        csv_path = write_csv_deterministic(
+            df,
+            output,
+            col_order=[
+                "assay_chembl_id",
+                "document_chembl_id",
+                "target_chembl_id",
+                "year",
+                "month",
+            ],
+            key_cols=key_cols or None,
         )
-        df = exc.validated_data  # type: ignore[attr-defined]
-        exit_code = 1
-    try:
-        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), output)
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+
+    stats: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats,
+        schema="AssaysSchema",
+    )
+
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:

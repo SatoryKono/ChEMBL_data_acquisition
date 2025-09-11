@@ -12,18 +12,20 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import sys
 from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
 import requests
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ensure_dirs, print_config, _serialize_paths
 
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
+from library.metadata import Stats, file_sha256, write_meta_yaml
 
 from library.cli import (
     apply_config_overrides,
@@ -34,6 +36,8 @@ from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from pandera.errors import SchemaErrors
 from schemas import TargetsSchema, normalize_targets
+
+from chembl_da.library import write_csv_deterministic
 
 logger = logging.getLogger(__name__)
 
@@ -440,28 +444,63 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df = normalize_targets(df)
+    rows_total = len(df)
     exit_code = 0
+    required_cols = set(TargetsSchema.columns.keys())
+    if required_cols.issubset(df.columns):
+        try:
+            df = TargetsSchema.validate(df, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            df = getattr(exc, "validated_data", df)
+            exit_code = 1
+    else:
+        missing = required_cols.difference(df.columns)
+        logger.warning("Skipping validation due to missing columns: %s", missing)
+    rows_kept = len(df)
+    rows_dropped = rows_total - rows_kept
     try:
-        df = TargetsSchema.validate(df, lazy=True)
-    except SchemaErrors as exc:
-        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-        errors = SidecarErrors()
-        for row in exc.failure_cases.to_dict("records"):
-            errors.add_error(row)
-        errors.save(failure_path)
-        logger.error(
-            "validation failed; wrote %d failure cases to %s",
-            len(exc.failure_cases),
-            failure_path,
+        key_cols = [c for c in ["target_chembl_id"] if c in df.columns]
+        csv_path = write_csv_deterministic(
+            df,
+            output,
+            col_order=[
+                "target_chembl_id",
+                "organism",
+                "target_uniprot_id",
+                "pH_dependence",
+                "isoforms",
+            ],
+            key_cols=key_cols or None,
         )
-        df = exc.validated_data  # type: ignore[attr-defined]
-        exit_code = 1
-    try:
-        io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
-        logger.info("Wrote %d rows to %s", len(df), output)
+        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
+
+    stats: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        stats=stats,
+        schema="TargetsSchema",
+    )
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
@@ -687,7 +726,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 len(exc.failure_cases),
                 failure_path,
             )
-            final_df = exc.validated_data  # type: ignore[attr-defined]
+            final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
         io.write_csv(final_df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
     except (FileNotFoundError, ValueError, OSError) as exc:
