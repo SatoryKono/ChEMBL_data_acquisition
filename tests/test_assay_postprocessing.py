@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from library import assay_postprocessing as ap
+from library.config import IoCfg
 
 
 def test_postprocess_assays_counts() -> None:
@@ -27,7 +28,7 @@ def test_postprocess_assays_counts() -> None:
 
 
 def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
-    """``postprocess_file`` reads, processes and writes data."""
+    """``postprocess_file`` honours ``IoCfg`` defaults for CSV handling."""
 
     df = pd.DataFrame(
         {
@@ -36,11 +37,12 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
             "assay_chembl_id": ["a1", "a2"],
         }
     )
+    cfg = IoCfg(csv_sep=";", csv_encoding="utf8")
     input_path = tmp_path / "in.csv"
-    df.to_csv(input_path, index=False)
+    df.to_csv(input_path, index=False, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
     output_path = tmp_path / "out.csv"
 
-    ap.postprocess_file(input_path, output_path)
+    ap.postprocess_file(input_path, output_path, cfg=cfg)
 
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
     assert list(result["assay_with_same_target"]) == [2, 2]
