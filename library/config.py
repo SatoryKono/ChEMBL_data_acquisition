@@ -679,7 +679,7 @@ def _mask_secrets(data: Any) -> Any:
 def print_config(cfg: Config) -> None:
     """Print ``cfg`` as YAML masking secret values."""
 
-    data = _serialize_paths(cfg.model_dump())
+    data = _serialize_paths(cfg.to_dict())
     masked = _mask_secrets(data)
     print(yaml.safe_dump(masked, sort_keys=False))
 
