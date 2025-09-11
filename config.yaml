@@ -62,7 +62,7 @@ pubchem:
 
 io:
   output_dir: "data/output"  # Directory for generated datasets
-  cache_dir: ".cache"  # Directory for cached HTTP responses
+  cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
   csv_sep: ","  # CSV field separator
   csv_encoding: "utf-8-sig"  # Encoding for CSV files
   csv_index: false  # Include index column when writing CSV
@@ -112,5 +112,5 @@ retry:
 log:
   level: "INFO"  # Default logging level (env: CHEMBL_DA_LOG_LEVEL)
   format: "[%(asctime)s] %(levelname)s %(name)s: %(message)s"  # Logging format (env: CHEMBL_DA_LOG_FORMAT)
-  datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format
+  datefmt: "%Y-%m-%d %H:%M:%S"  # Timestamp format (env: CHEMBL_DA_LOG_DATEFMT)
 

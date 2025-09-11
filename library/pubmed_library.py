@@ -53,9 +53,7 @@ def _do_request(
     expect_json: bool = True,
     retries: int = 2,
     method: str = "GET",
-
     timeout: float | tuple[float, float] = TIMEOUT,
-
     **kwargs: Any,
 ) -> Tuple[Union[Dict[str, Any], str, None], str]:
     """Perform an HTTP request with retry and error handling.
@@ -528,12 +526,10 @@ def fetch_semantic_scholar_batch(
 
 
 def fetch_openalex(
-
     session: requests.Session,
     pmid: str,
     *,
     cfg: OpenAlexCfg,
-
 ) -> Dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``.
 
@@ -560,7 +556,7 @@ def fetch_openalex(
     base = cfg.base.rstrip("/")
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = _do_request(session, url, delay, timeout=timeout)
+    data, error = _do_request(session, url, delay, retries=cfg.retries, timeout=timeout)
 
     if error or not isinstance(data, dict):
         return {
@@ -597,12 +593,10 @@ def fetch_openalex(
 
 
 def fetch_crossref(
-
     session: requests.Session,
     doi: str,
     *,
     cfg: CrossRefCfg,
-
 ) -> Dict[str, str]:
     """Retrieve Crossref metadata for a given DOI.
 
@@ -633,13 +627,12 @@ def fetch_crossref(
             "crossref.Error": "Missing DOI",
         }
 
-
     delay = 1 / cfg.rps if cfg.rps else 0
     time.sleep(delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = _do_request(session, url, delay, timeout=timeout)
+    data, error = _do_request(session, url, delay, retries=cfg.retries, timeout=timeout)
 
     if error or not isinstance(data, dict):
         return {
@@ -729,8 +722,6 @@ def main() -> None:
 
             semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
 
-            oa_cfg = OpenAlexCfg()
-            cr_cfg = CrossRefCfg()
             for pubmed in pubmed_list:
                 pmid = pubmed.get("PubMed.PMID", "")
                 semsch = semsch_map.get(pmid, {})
@@ -740,7 +731,6 @@ def main() -> None:
                 openalex = fetch_openalex(session, pmid, cfg=OpenAlexCfg())
                 doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
                 crossref = fetch_crossref(session, doi, cfg=CrossRefCfg())
-
 
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)
