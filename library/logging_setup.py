@@ -42,7 +42,14 @@ def _level_no(name: str) -> int:
     return _LEVELS.get(name.upper(), logging.INFO)
 
 
-@dataclass(slots=True)
+# ``slots`` is available from Python 3.10 onwards.  Supplying it on older
+# versions raises ``TypeError``, so the argument is added conditionally.
+_DATACLASS_KWARGS: dict[str, bool] = (
+    {"slots": True} if sys.version_info >= (3, 10) else {}
+)
+
+
+@dataclass(**_DATACLASS_KWARGS)
 class LoggerConfig:
     """Configuration for :class:`Logger`.
 
