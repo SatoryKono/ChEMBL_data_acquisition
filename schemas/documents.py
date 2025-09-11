@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from pandera import Check, Column, DataFrameSchema
+import pandera.pandas as pa
 
-DocumentsSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
+DocumentsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "document_chembl_id": Column(str, required=True),
-        "doi": Column(str, required=False),
-        "title": Column(str, required=True),
-        "year": Column(int, Check.in_range(1900, 2100), required=True),
-        "month": Column(int, Check.in_range(1, 12), required=True),
-        "day": Column(int, Check.in_range(1, 31), required=False),
-        "citation": Column(int, Check.ge(0), required=False),
+        "document_chembl_id": pa.Column(str, required=True),
+        "doi": pa.Column(str, required=False),
+        "title": pa.Column(str, required=True),
+        "year": pa.Column(int, pa.Check.in_range(1900, 2100), required=True),
+        "month": pa.Column(int, pa.Check.in_range(1, 12), required=True),
+        "day": pa.Column(int, pa.Check.in_range(1, 31), required=False),
+        "citation": pa.Column(int, pa.Check.ge(0), required=False),
     }
 )
 
-"""pandera.DataFrameSchema: Validation schema for documents."""
+"""pa.DataFrameSchema: Validation schema for documents."""
