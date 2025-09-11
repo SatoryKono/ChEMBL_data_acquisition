@@ -18,8 +18,6 @@ from library.cli import (
 
 from library.table_quality import analyze_table_quality
 
-from library.config import DEFAULT_CONFIG, load_config
-
 
 logger = logging.getLogger(__name__)
 
