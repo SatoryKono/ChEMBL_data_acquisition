@@ -89,23 +89,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 "pairs_same_document": "same_document",
             },
         )
-        logger.info("compute_status_percentages")
+        logger.info("prepare_status_outputs")
         for key, df in list(tables.items()):
             if not key.endswith("_status"):
                 continue
             if "Filtered.new" not in df.columns:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
-            entity = key.split("_")[0]
 
-            base_key = key[: -len("_status")]
-            # Preserve the original table with ``Filtered`` column before
-            # aggregation statistics are computed.  The table is renamed to
-            # drop the ``_status`` suffix.
-            tables[base_key] = df.rename(columns={"Filtered.new": "Filtered"})
-            tables[f"{base_key}_status_statistics"] = lib.compute_status_statistics(
-                df, entity
-            )
+            base_name = key.removesuffix("_status")
+            raw = df.rename(columns={"Filtered.new": "Filtered"})
+            tables[base_name] = raw
+            tables[f"{key}_statistics"] = lib.compute_status_statistics(raw, base_name)
             del tables[key]
 
 

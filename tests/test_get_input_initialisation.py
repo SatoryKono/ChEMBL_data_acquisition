@@ -26,7 +26,9 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
         "pairs_independent": pd.DataFrame({"id": [5]}),
         "pairs_non_independent": pd.DataFrame({"id": [6]}),
-        "activity_independent_status": pd.DataFrame({"id": [7]}),
+        "activity_independent_status": pd.DataFrame(
+            {"Filtered.new": ["good", "bad"], "independent_IC50": [1, 0]}
+        ),
     }
 
     def fake_load_same_doc(
@@ -56,7 +58,9 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     result = cli.run(Config(), args)
     assert result == 0
 
-    assert (out_dir / "independent" / "activity_independent.csv").exists()
+
+    assert (out_dir / "activity_independent.csv").exists()
+
     assert (
         out_dir
         / "status"
@@ -64,15 +68,10 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         / "activity_independent_status_statistics.csv"
     ).exists()
 
-    expected = [
-        "assay",
-        "activity",
-        "pairs_same_document",
-        "pairs_independent",
-        "pairs_non_independent",
-        "activity_independent",
-        "activity_independent_status_statistics",
-    ]
+    expected = set(tables)
+    expected.remove("activity_independent_status")
+    expected.update({"activity_independent", "activity_independent_status_statistics"})
+
     for name in expected:
         quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
         corr = (
