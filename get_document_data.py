@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Sequence
+from typing import Iterable, Sequence
 
 import pandas as pd
 
@@ -34,12 +34,11 @@ from library.config import (
     Config,
     OpenAlexCfg,
     CrossRefCfg,
-    RetryCfg,
     ensure_dirs,
     print_config,
     _serialize_paths,
 )
-from library.chembl_client import init_session
+from library.chembl_client import init_session, _chunked
 
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -68,14 +67,14 @@ from library import write_csv_deterministic
 
 
 def fetch_pubmed_records(
-    pmids: list[str],
+    pmids: Iterable[str],
     sleep: float,
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
     max_workers: int = 1,
     batch_size: int = 100,
 ) -> pd.DataFrame:
-    """Retrieve metadata for a list of PubMed identifiers.
+    """Retrieve metadata for a sequence of PubMed identifiers.
 
     Parameters
     ----------
@@ -152,21 +151,19 @@ def fetch_pubmed_records(
             logger.warning("failed to fetch PMIDs %s: %s", batch, exc)
             return [{} for _ in batch]
 
-    if not pmids:
-        return pd.DataFrame()
-
+    iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
-    batches = [pmids[i : i + batch_size] for i in range(0, len(pmids), batch_size)]
-    total = len(pmids)
-    processed = 0
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(_fetch_batch, batch): len(batch) for batch in batches}
+        futures = {
+            ex.submit(_fetch_batch, batch): len(batch)
+            for batch in _chunked(iterator, batch_size)
+        }
+        processed = 0
         for future in as_completed(futures):
             batch_len = futures[future]
             records.extend(future.result())
             processed += batch_len
-            percent = processed / total * 100
-            logger.info("Processed %d/%d documents (%.1f%%)", processed, total, percent)
+            logger.info("Processed %d documents", processed)
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
@@ -190,19 +187,15 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     """
     try:
         pmids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
+            args.input_csv, column=cfg.document.pubmed.column, cfg=cfg.io
         )
         df = fetch_pubmed_records(
             pmids,
-            args.sleep,
+            cfg.document.pubmed.sleep,
             cfg.openalex,
             cfg.crossref,
-            args.workers,
-            args.batch_size,
+            cfg.document.pubmed.workers,
+            cfg.document.pubmed.batch_size,
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_documents(df)
@@ -284,16 +277,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Configure session for ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
-        ids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
-        )
+        ids = io.read_ids(args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
@@ -302,8 +289,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
             cfg=cfg.api,
-            chunk_size=args.chunk_size,
-            timeout=args.timeout,
+            chunk_size=cfg.document.chembl.chunk_size,
+            timeout=cfg.document.chembl.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
@@ -394,16 +381,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare shared session before performing any API calls
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
-        ids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
-        )
+        ids = io.read_ids(args.input_csv, column=cfg.document.all.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
@@ -412,8 +393,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         doc_df = cl.get_documents(  # type: ignore[attr-defined]
             ids,
             cfg=cfg.api,
-            chunk_size=args.chunk_size,
-            timeout=args.timeout,
+            chunk_size=cfg.document.all.chunk_size,
+            timeout=cfg.document.all.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
@@ -497,11 +478,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        args.sleep,
+        cfg.document.all.sleep,
         cfg.openalex,
         cfg.crossref,
-        args.workers,
-        args.batch_size,
+        cfg.document.all.workers,
+        cfg.document.all.batch_size,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype(str)
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
@@ -714,8 +695,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
+    mapping = {"column": f"document.{args.command}.column"}
+    if args.command == "pubmed":
+        mapping.update(
+            {
+                "sleep": "document.pubmed.sleep",
+                "workers": "document.pubmed.workers",
+                "batch_size": "document.pubmed.batch_size",
+            }
+        )
+    elif args.command == "chembl":
+        mapping.update(
+            {
+                "chunk_size": "document.chembl.chunk_size",
+                "timeout": "document.chembl.timeout",
+            }
+        )
+    elif args.command == "all":
+        mapping.update(
+            {
+                "chunk_size": "document.all.chunk_size",
+                "sleep": "document.all.sleep",
+                "workers": "document.all.workers",
+                "batch_size": "document.all.batch_size",
+                "timeout": "document.all.timeout",
+            }
+        )
     try:
         cfg: Config = apply_config_overrides(
+
             args,
             subparser,
             args.config,
@@ -724,6 +732,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "openalex_rps": "openalex.rps",
                 "crossref_rps": "crossref.rps",
             },
+
         )
         if args.print_config:
             print_config(cfg)

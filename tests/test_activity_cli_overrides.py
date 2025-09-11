@@ -10,7 +10,7 @@ import pandas as pd
 def _create_config(tmp_path: Path) -> Path:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "jobs:\n  chunk_size: 10\n"
+        "activity:\n  chunk_size: 10\n"
         "io:\n  csv_sep: '|'\n  csv_encoding: iso-8859-1\n"
         "log:\n  level: INFO\n"
         "api:\n  timeout_read: 30\n"
@@ -33,11 +33,12 @@ def _run(
     input_csv.write_text("activity_id\n1\n")
     config_path = _create_config(tmp_path)
     called: dict[str, object] = {}
-    monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["1"])
+    monkeypatch.setattr(io, "read_ids", lambda *a, **k: iter(["1"]))
 
     def fake_get(ids, cfg, chunk_size, timeout):
+        data = list(ids)
         called["chunk_size"] = chunk_size
-        return pd.DataFrame({"activity_id": ids})
+        return pd.DataFrame({"activity_id": data})
 
     def fake_write(df, output, cfg, sep, encoding):
         called["sep"] = sep

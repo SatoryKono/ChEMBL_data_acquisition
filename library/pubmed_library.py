@@ -9,10 +9,18 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import sys
+
 from .rate_limiter import RateLimiter, get_limiter, sleep
+
+from datetime import date
+
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+
+import pandas as pd
+from .rate_limiter import get_limiter, sleep
 
 import requests
 from xml.etree import ElementTree as ET
@@ -20,7 +28,18 @@ from urllib.parse import quote
 
 from .log import logger
 
-from .config import Config, CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
+
+
+from .config import (
+    Config,
+    CrossRefCfg,
+    OpenAlexCfg,
+    PubMedCfg,
+    SemanticScholarCfg,
+    session_with_retry,
+)
+from .csv_utils import write_csv_deterministic
+
 
 
 def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str]:
@@ -767,14 +786,14 @@ def fetch_crossref(
 
 
 def print_results(records: List[Dict[str, str]]) -> None:
-    """Pretty-print result records to stdout.
+    """Log result records instead of printing to ``stdout``.
 
     Parameters
     ----------
     records:
         Sequence of result dictionaries produced by ``main``.
-
     """
+    log = logging.getLogger(__name__)
     try:
         from tabulate import tabulate  # type: ignore
 
@@ -800,23 +819,54 @@ def print_results(records: List[Dict[str, str]]) -> None:
         output = json.dumps(display_records, ensure_ascii=False, indent=2)
 
     try:
-        print(output)
+        log.info(output)
     except UnicodeEncodeError:
         encoded = output.encode(sys.stdout.encoding or "utf-8", errors="replace")
         sys.stdout.buffer.write(encoded + b"\n")
 
 
-def main() -> None:
-    """Command-line interface entry point."""
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Fetch publication metadata by PMID")
+    parser.add_argument("--log-level", default="INFO", help="Logging level")
     parser.add_argument(
-        "-i", "--input", required=True, help="Input CSV path with PMID column"
+        "--input",
+        dest="input_csv",
+        default="input.csv",
+        help="Input CSV path with PMID column",
     )
-    parser.add_argument("-o", "--output", required=True, help="Output CSV path")
     parser.add_argument(
-        "--sleep", type=float, default=5.0, help="Sleep between requests"
+        "--output",
+        dest="output_csv",
+        default=None,
+        help="Output CSV path (default: auto-generated)",
     )
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Command-line interface entry point.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Zero on success.
+    """
+    args = parse_args(argv)
+    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
+    log = logging.getLogger(__name__)
+
+    cfg = Config()
+    pubmed_cfg = cfg.pubmed
+    semsch_cfg = cfg.semantic_scholar
+    limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
+    delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
+
 
     cfg = Config()
     pubmed_cfg = cfg.pubmed
@@ -824,25 +874,25 @@ def main() -> None:
     pmids = read_pmids(args.input, cfg=pubmed_cfg)
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
+
     records: List[Dict[str, str]] = []
-    batch_size = 100  # A reasonable batch size
-    with requests.Session() as session:
+    batch_size = 100
+    with session_with_retry(cfg.api, cfg.retry) as session:
         for i in range(0, len(pmids), batch_size):
             batch_pmids = pmids[i : i + batch_size]
-
-            # Batch fetch PubMed and Semantic Scholar
+            limiter.acquire()
             pubmed_list = fetch_pubmed_batch(
-                session, batch_pmids, args.sleep, cfg=pubmed_cfg
+                session, batch_pmids, delay, cfg=pubmed_cfg
             )
+            limiter.acquire()
             semsch_list = fetch_semantic_scholar_batch(
-                session, batch_pmids, args.sleep, cfg=semsch_cfg
+                session, batch_pmids, delay, cfg=semsch_cfg
             )
-
             semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
-
             for pubmed in pubmed_list:
                 pmid = pubmed.get("PubMed.PMID", "")
                 semsch = semsch_map.get(pmid, {})
+
 
                 # Still fetching these individually
 
@@ -854,25 +904,25 @@ def main() -> None:
                     session, doi, cfg=cfg.crossref, limiter=crossref_limiter
                 )
 
+
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)
                 combined.update(semsch)
                 combined.update(openalex)
                 combined.update(crossref)
-
                 print_results([combined])
                 records.append(combined)
 
-    all_keys: set[str] = set()
-    for rec in records:
-        all_keys.update(rec.keys())
-    fieldnames = sorted(all_keys)
+    df = pd.DataFrame.from_records(records)
+    output_path = (
+        Path(args.output_csv)
+        if args.output_csv
+        else Path(f"output_{Path(args.input_csv).stem}_{date.today():%Y%m%d}.csv")
+    )
+    write_csv_deterministic(df, output_path)
+    log.info("written %s", output_path)
+    return 0
 
-    with open(args.output, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(records)
 
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())

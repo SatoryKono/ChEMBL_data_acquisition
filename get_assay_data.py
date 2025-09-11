@@ -7,7 +7,7 @@ import sys
 from typing import Sequence
 
 import requests
-from library.config import Config, RetryCfg, ensure_dirs, print_config, _serialize_paths
+from library.config import Config, ensure_dirs, print_config, _serialize_paths
 from library.chembl_client import init_session
 
 from library import assay_postprocessing as ap
@@ -46,23 +46,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare HTTP session for ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
-        ids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
-        )
+        ids = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
     try:
         df = cl.get_assays(
-            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            chunk_size=cfg.assay.chunk_size,
+            timeout=cfg.assay.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve assays: %s", exc)
@@ -160,7 +157,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     try:
         cfg: Config = apply_config_overrides(
-            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+            args,
+            parser,
+            args.config,
+            mapping={
+                "timeout": "assay.timeout",
+                "column": "assay.column",
+                "chunk_size": "assay.chunk_size",
+            },
         )
         if args.print_config:
             print_config(cfg)

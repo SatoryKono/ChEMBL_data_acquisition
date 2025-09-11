@@ -310,6 +310,124 @@ class RetryCfg:
     )
 
 
+@dataclass
+class ActivityCfg:
+    """Configuration for ``get_activity_data``."""
+
+    column: str = "activity_id"
+    chunk_size: int = 5
+    timeout: float = 30.0
+    limit: int | None = None
+    dry_run: bool = False
+
+
+@dataclass
+class AssayCfg:
+    """Configuration for ``get_assay_data``."""
+
+    column: str = "assay_chembl_id"
+    chunk_size: int = 10
+    timeout: float = 30.0
+
+
+@dataclass
+class TestitemCfg:
+    """Configuration for ``get_testitem_data``."""
+
+    column: str = "molecule_chembl_id"
+    chunk_size: int = 5
+    timeout: float = 30.0
+
+
+@dataclass
+class DocumentPubmedCfg:
+    """Parameters for the ``pubmed`` sub-command of ``get_document_data``."""
+
+    column: str = "PMID"
+    sleep: float = 5.0
+    workers: int = 1
+    batch_size: int = 100
+
+
+@dataclass
+class DocumentChemblCfg:
+    """Parameters for the ``chembl`` sub-command of ``get_document_data``."""
+
+    column: str = "chembl_id"
+    chunk_size: int = 5
+    timeout: float = 30.0
+
+
+@dataclass
+class DocumentAllCfg:
+    """Parameters for the ``all`` sub-command of ``get_document_data``."""
+
+    column: str = "chembl_id"
+    chunk_size: int = 5
+    sleep: float = 5.0
+    workers: int = 1
+    batch_size: int = 50
+    timeout: float = 30.0
+
+
+@dataclass
+class DocumentCfg:
+    """Configuration for ``get_document_data``."""
+
+    pubmed: DocumentPubmedCfg = field(default_factory=DocumentPubmedCfg)
+    chembl: DocumentChemblCfg = field(default_factory=DocumentChemblCfg)
+    all: DocumentAllCfg = field(default_factory=DocumentAllCfg)
+
+
+@dataclass
+class TargetUniprotCfg:
+    """Parameters for the ``uniprot`` sub-command of ``get_target_data``."""
+
+    column: str = "uniprot_id"
+    data_dir: Path = Path("dictionary/uniprot")
+
+
+@dataclass
+class TargetChemblCfg:
+    """Parameters for the ``chembl`` sub-command of ``get_target_data``."""
+
+    column: str = "chembl_id"
+    timeout: float = 30.0
+
+
+@dataclass
+class TargetIupharCfg:
+    """Parameters for the ``iuphar`` sub-command of ``get_target_data``."""
+
+    target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
+    family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+
+
+@dataclass
+class TargetAllCfg:
+    """Parameters for the ``all`` sub-command of ``get_target_data``."""
+
+    data_dir: Path = Path("dictionary/uniprot")
+    target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
+    family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+    timeout: float = 30.0
+    organism_csv: Path = Path("dictionary/_Target/organism.csv")
+    uniprot_column: str = "uniprot_id"
+    chembl_out: Path | None = None
+    uniprot_out: Path | None = None
+    iuphar_out: Path | None = None
+
+
+@dataclass
+class TargetCfg:
+    """Configuration for ``get_target_data``."""
+
+    uniprot: TargetUniprotCfg = field(default_factory=TargetUniprotCfg)
+    chembl: TargetChemblCfg = field(default_factory=TargetChemblCfg)
+    iuphar: TargetIupharCfg = field(default_factory=TargetIupharCfg)
+    all: TargetAllCfg = field(default_factory=TargetAllCfg)
+
+
 def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     """Return an HTTP session configured for retries and user agent.
 
@@ -330,7 +448,7 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
         total=retry.max_attempts,
         backoff_factor=retry.backoff_factor,
         status_forcelist=retry.status_forcelist,
-        allowed_methods=["GET"],
+        allowed_methods=["GET", "POST"],  # allow retries for POST requests
     )
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session = Session()
@@ -357,6 +475,12 @@ class Config:
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
 
     doc_type: DocTypeCfg = field(default_factory=DocTypeCfg)
+
+    activity: ActivityCfg = field(default_factory=ActivityCfg)
+    assay: AssayCfg = field(default_factory=AssayCfg)
+    testitem: TestitemCfg = field(default_factory=TestitemCfg)
+    document: DocumentCfg = field(default_factory=DocumentCfg)
+    target: TargetCfg = field(default_factory=TargetCfg)
 
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
 
@@ -1250,6 +1374,18 @@ __all__ = [
     "PubMedCfg",
     "SemanticScholarCfg",
     "DocTypeCfg",
+    "ActivityCfg",
+    "AssayCfg",
+    "TestitemCfg",
+    "DocumentPubmedCfg",
+    "DocumentChemblCfg",
+    "DocumentAllCfg",
+    "DocumentCfg",
+    "TargetUniprotCfg",
+    "TargetChemblCfg",
+    "TargetIupharCfg",
+    "TargetAllCfg",
+    "TargetCfg",
     "ResourcesCfg",
     "IoCfg",
     "JobsCfg",

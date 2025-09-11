@@ -8,7 +8,7 @@ from typing import Sequence
 
 import pandas as pd
 import requests
-from library.config import Config, RetryCfg, ensure_dirs, print_config, _serialize_paths
+from library.config import Config, ensure_dirs, print_config, _serialize_paths
 from library.chembl_client import init_session
 
 from library import chembl_library as cl
@@ -124,25 +124,24 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Initialise HTTP session for subsequent ChEMBL requests
-    init_session(cfg.api, RetryCfg())
+    init_session(cfg.api, cfg.retry)
 
     try:
-        ids = io.read_ids(
-            args.input_csv,
-            column=args.column,
-            cfg=cfg.io,
-            sep=args.sep,
-            encoding=args.encoding,
-        )
+        ids = io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
+
     logger.info("Retrieved %d identifiers", len(ids))
-    logger.info("Fetching ChEMBL data in chunks of %d", args.chunk_size)
+    logger.info("Fetching ChEMBL data in chunks of %d", cfg.testitem.chunk_size)
+
     try:
         df = cl.get_testitem(
-            ids, cfg=cfg.api, chunk_size=args.chunk_size, timeout=args.timeout
+            ids,
+            cfg=cfg.api,
+            chunk_size=cfg.testitem.chunk_size,
+            timeout=cfg.testitem.timeout,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve compounds: %s", exc)
@@ -246,7 +245,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
     try:
         cfg: Config = apply_config_overrides(
-            args, parser, args.config, mapping={"timeout": "api.timeout_read"}
+            args,
+            parser,
+            args.config,
+            mapping={
+                "timeout": "testitem.timeout",
+                "column": "testitem.column",
+                "chunk_size": "testitem.chunk_size",
+            },
         )
         if args.print_config:
             print_config(cfg)
