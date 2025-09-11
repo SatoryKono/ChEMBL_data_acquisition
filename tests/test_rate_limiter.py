@@ -18,6 +18,7 @@ def test_rate_limiter_enforces_rps(monkeypatch) -> None:
     """Ensure the limiter respects the configured requests per second."""
     fake_time = FakeTime()
     monkeypatch.setattr(rl, "time", fake_time)
+    monkeypatch.setattr(rl, "sleep", fake_time.sleep)
     limiter = rl.RateLimiter(rps=5, burst=1)
     for _ in range(5):
         limiter.acquire()

@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 from pathlib import Path
+import io
+import json
+import argparse
 
+from library.cli import LoggerConfig, configure_logger
 import get_activity_data as gad
+from library.config import Config
 
-
+ 
+def test_dry_run_no_input(tmp_path: Path) -> None:
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    args = argparse.Namespace(
+        input_csv=Path("missing.csv"),
+        output_csv=None,
+        column="activity_id",
+        sep=",",
+        encoding="utf8",
+        chunk_size=5,
+        timeout=30.0,
+        limit=5,
+        dry_run=True,
+ 
 def _create_config(tmp_path: Path) -> Path:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
@@ -20,14 +39,12 @@ def _create_config(tmp_path: Path) -> Path:
         "  organism_csv: dictionary/organism.csv\n"
         "  status_csv: dictionary/status.csv\n"
         "  targets_type_csv: dictionary/targets_type.csv\n"
+ 
     )
-    return cfg
-
-
-def test_dry_run_no_input(tmp_path: Path, capfd) -> None:
-    config_path = _create_config(tmp_path)
-    rc = gad.main(["--config", str(config_path), "--dry-run", "--limit", "5"])
+    rc = gad.run_chembl(Config(), args)
     assert rc == 0
-    stderr = capfd.readouterr().err
-    assert "dry run selected" in stderr
-    assert "5 identifiers" in stderr
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    assert "dry run selected" in record.get("msg", "")
+    assert "5 identifiers" in record.get("msg", "")

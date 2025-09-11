@@ -12,14 +12,18 @@ import time
 
 import pytest
 
-from cachetools import TTLCache
+
+
+from cachetools import TTLCache  # type: ignore[import-untyped]
+
 
 
 from library import chembl_client
 
 
+
 from library.chembl_client import clear_cache, init_session, request_json
-from library.config import ApiCfg, RetryCfg
+from library.config import ApiCfg, ChemblCfg, RetryCfg
 import library.rate_limiter as rl
 
 
@@ -155,11 +159,20 @@ def test_request_json_cache(monkeypatch) -> None:
 @responses.activate
 def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     timer = [0.0]
+
     cache: TTLCache[str, dict[str, Any]] = TTLCache(
         maxsize=2, ttl=1, timer=lambda: timer[0]
     )
+
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
+
     monkeypatch.setattr("library.chembl_client._session", None)
+    chembl_cfg = ChemblCfg(cache_ttl=1)
+    init_session(ApiCfg(), RetryCfg(), chembl_cfg)
+    assert chembl_client._CACHE.ttl == chembl_cfg.cache_ttl
+    chembl_client._CACHE = TTLCache(
+        maxsize=1024, ttl=chembl_cfg.cache_ttl, timer=lambda: timer[0]
+    )
     clear_cache()
     url = "http://example.com/ttl"
     responses.add(responses.GET, url, json={"ok": True}, status=200)
@@ -194,7 +207,9 @@ def test_request_json_preserves_original_error_message(monkeypatch) -> None:
 
 
 def test_clear_cache(monkeypatch) -> None:
+
     cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=2, ttl=100)
+
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
     chembl_client._CACHE["x"] = {"ok": True}
     clear_cache()
@@ -204,6 +219,7 @@ def test_clear_cache(monkeypatch) -> None:
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     fake_time = FakeTime()
     monkeypatch.setattr(rl, "time", fake_time)
+    monkeypatch.setattr(rl, "sleep", fake_time.sleep)
     with rl._limiters_lock:
         rl._limiters.clear()
     session = DummySession()
@@ -215,3 +231,4 @@ def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     assert fake_time.sleeps == [1.0]
     with rl._limiters_lock:
         rl._limiters.clear()
+

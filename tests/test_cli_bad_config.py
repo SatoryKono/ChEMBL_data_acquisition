@@ -1,5 +1,5 @@
-import logging
 import sys
+import io
 from pathlib import Path
 
 import get_activity_data as gad
@@ -12,6 +12,7 @@ import get_input_initialisation as gii
 import get_target_data as gtd
 import get_document_type as gdoctype
 import pytest
+from library.cli import configure_logger
 
 
 CLIS = [
@@ -29,7 +30,7 @@ CLIS = [
 
 @pytest.mark.parametrize("entry, extra, use_sys", CLIS)
 def test_malformed_config_exits(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, entry, extra, use_sys, monkeypatch
+    tmp_path: Path, entry, extra, use_sys, monkeypatch
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
@@ -44,12 +45,21 @@ def test_malformed_config_exits(
         "  targets_type_csv: dictionary/targets_type.csv\n"
     )
     argv = [*extra, "--config", str(cfg)]
-    with caplog.at_level(logging.ERROR):
-        if use_sys:
-            monkeypatch.setattr(sys, "argv", ["prog", *argv])
-            rc = entry()
-        else:
-            rc = entry(argv)
+    buf = io.StringIO()
+    orig = configure_logger
+
+    def _conf(cfg, *a, **k):
+        cfg.stream = buf
+        return orig(cfg, *a, **k)
+
+    monkeypatch.setattr("library.cli.configure_logger", _conf)
+    if use_sys:
+        monkeypatch.setattr(sys, "argv", ["prog", *argv])
+        rc = entry()
+    else:
+        rc = entry(argv)
     assert rc != 0
+
     if caplog.text:
         assert "jobs.chunk_size" in caplog.text
+

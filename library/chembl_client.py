@@ -13,25 +13,28 @@ from requests import Session
 
 from cachetools import TTLCache  # type: ignore[import-untyped]
 
-from .config import ApiCfg, RetryCfg, session_with_retry
+from .config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
 from .rate_limiter import get_limiter, sleep
 from .log import logger
+
 
 # Cache entries expire after one hour to avoid serving stale data. The TTL can
 # be adjusted in the future via configuration if required.
 _CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=1024, ttl=3600)
 _CACHE_LOCK = threading.Lock()
 
+
 _session: Session | None = None
 _session_lock = threading.Lock()
 
 
-def init_session(api: ApiCfg, retry: RetryCfg) -> None:
-    """Initialise the shared HTTP session.
+def init_session(api: ApiCfg, retry: RetryCfg, chembl: ChemblCfg | None = None) -> None:
+    """Initialise the shared HTTP session and cache.
 
     The provided ``api`` and ``retry`` configurations are forwarded to
     :func:`session_with_retry`, ensuring that subsequent requests use the
-    correct ``User-Agent`` and retry policy.
+    correct ``User-Agent`` and retry policy. When ``chembl`` is supplied the
+    cache TTL is taken from ``chembl.cache_ttl``.
 
     Parameters
     ----------
@@ -39,10 +42,14 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
         Global API settings providing the ``User-Agent`` header.
     retry:
         Retry configuration applied to all requests.
+    chembl:
+        Optional ChEMBL-specific settings controlling cache TTL.
     """
 
-    global _session
+    global _session, _CACHE
     _session = session_with_retry(api, retry)
+    ttl = chembl.cache_ttl if chembl is not None else ChemblCfg().cache_ttl
+    _CACHE = TTLCache(maxsize=1024, ttl=ttl)
 
 
 def request_json(
