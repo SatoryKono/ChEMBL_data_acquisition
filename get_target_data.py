@@ -121,8 +121,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     uniprot.add_argument(
         "--data-dir",
-        default="uniprot",
-        help="Directory containing '<uniprot_id>.json' files",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing '<uniprot_id>.json' files "
+            "(default: config resources.uniprot_data_dir)"
+        ),
     )
     uniprot.set_defaults(func=run_uniprot)
 
@@ -257,8 +261,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     all_cmd.add_argument(
         "--data-dir",
-        default="uniprot",
-        help="Directory containing '<uniprot_id>.json' files",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing '<uniprot_id>.json' files "
+            "(default: config resources.uniprot_data_dir)"
+        ),
     )
     all_cmd.add_argument(
         "--target-csv",
@@ -370,7 +378,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             uu.process(
                 input_csv=str(tmp_path),
                 output_csv=str(output),
-                data_dir=str(args.data_dir),
+                data_dir=args.data_dir,
                 cfg=cfg.uniprot,
                 sep=args.sep,
                 encoding=args.encoding,
@@ -673,6 +681,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "timeout": "api.timeout_read",
                 "target_csv": "resources.iuphar_target_csv",
                 "family_csv": "resources.iuphar_family_csv",
+                "data_dir": "resources.uniprot_data_dir",
                 "organism_csv": "resources.organism_csv",
             },
         )
