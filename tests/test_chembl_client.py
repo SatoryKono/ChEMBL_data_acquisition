@@ -9,9 +9,11 @@ import requests
 import responses  # type: ignore[import-not-found]
 import time
 
+
 import library.chembl_client as chembl_client
 
 from cachetools import LRUCache
+
 
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
@@ -138,16 +140,25 @@ def test_request_json_cache(monkeypatch) -> None:
 
 
 @responses.activate
-def test_request_json_cache_eviction(monkeypatch) -> None:
-    monkeypatch.setattr(chembl_client, "_CACHE", LRUCache(maxsize=2))
+def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
+    timer = [0.0]
+    cache = TTLCache(maxsize=2, ttl=1, timer=lambda: timer[0])
+    monkeypatch.setattr(chembl_client, "_CACHE", cache)
+    monkeypatch.setattr("library.chembl_client._session", None)
     clear_cache()
-    urls = [f"http://example.com/{i}" for i in range(3)]
-    for i, url in enumerate(urls, start=1):
-        responses.add(responses.GET, url, json={"ok": i}, status=200)
-        request_json(url, cfg=ApiCfg())
+    url = "http://example.com/ttl"
+    responses.add(responses.GET, url, json={"ok": True}, status=200)
 
-    assert urls[0] not in chembl_client._CACHE
-    assert len(chembl_client._CACHE) == 2
+    request_json(url, cfg=ApiCfg())
+
+    # Advance time beyond the TTL to force expiration of the cached entry.
+    timer[0] = 2.0
+    responses.add(responses.GET, url, json={"ok": True}, status=200)
+    request_json(url, cfg=ApiCfg())
+
+    # Two HTTP calls should have occurred because the cache entry expired.
+    assert len(responses.calls) == 2
+
 
 
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
@@ -164,3 +175,4 @@ def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     assert fake_time.sleeps == [1.0]
     with rl._limiters_lock:
         rl._limiters.clear()
+
