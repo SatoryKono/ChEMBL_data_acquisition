@@ -12,7 +12,6 @@ import time
 import library.chembl_client as chembl_client
 
 from cachetools import LRUCache
-from library import chembl_client
 
 from library.chembl_client import clear_cache, init_session, request_json
 from library.config import ApiCfg, RetryCfg
@@ -44,6 +43,16 @@ class DummySession:
         if len(self.calls) <= self.failures:
             raise requests.RequestException("boom")
         return DummyResponse()
+
+
+def test_init_session_sets_user_agent(monkeypatch) -> None:
+    """Session should include the configured ``User-Agent`` header."""
+    monkeypatch.setattr("library.chembl_client._session", None)
+    cfg = ApiCfg(user_agent="test-agent/1.0 (mailto:test@example.org)")
+    init_session(cfg, RetryCfg())
+    session = chembl_client._session
+    assert session is not None
+    assert session.headers.get("User-Agent") == cfg.user_agent
 
 
 @responses.activate
@@ -135,4 +144,3 @@ def test_request_json_cache_eviction(monkeypatch) -> None:
 
     assert urls[0] not in chembl_client._CACHE
     assert len(chembl_client._CACHE) == 2
-
