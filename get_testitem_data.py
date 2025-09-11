@@ -18,7 +18,10 @@ from library.cli import (
     build_parser as base_parser,
     configure_logging,
 )
+from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
+from pandera.errors import SchemaErrors
+from schemas import TestitemsSchema, normalize_testitems
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +145,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     df = add_pubchem_data(df, cfg.pubchem)
     logger.info("PubChem augmentation completed")
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    df = normalize_testitems(df)
+    exit_code = 0
+    try:
+        df = TestitemsSchema.validate(df, lazy=True)
+    except SchemaErrors as exc:
+        failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+        errors = SidecarErrors()
+        for row in exc.failure_cases.to_dict("records"):
+            errors.add_error(row)
+        errors.save(failure_path)
+        logger.error(
+            "validation failed; wrote %d failure cases to %s",
+            len(exc.failure_cases),
+            failure_path,
+        )
+        df = exc.validated_data  # type: ignore[attr-defined]
+        exit_code = 1
     try:
         io.write_csv(df, output, cfg=cfg, sep=args.sep, encoding=args.encoding)
         logger.info("Wrote %d rows to %s", len(df), output)
@@ -153,7 +173,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     except ValueError as exc:
         logger.error("failed to generate quality report: %s", exc)
         return 1
-    return 0
+    return exit_code
 
 
 def build_parser() -> argparse.ArgumentParser:
