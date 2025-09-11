@@ -42,25 +42,29 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the chunked copy operation."""
-    if args.chunk_size <= 0:
-        raise SystemExit("--chunk-size must be a positive integer")
-    if args.limit is not None and args.limit <= 0:
-        raise SystemExit("--limit must be a positive integer")
+    try:
+        if args.chunk_size <= 0:
+            raise SystemExit("--chunk-size must be a positive integer")
+        if args.limit is not None and args.limit <= 0:
+            raise SystemExit("--limit must be a positive integer")
 
-    output = args.output_csv or default_output_path(args.input_csv, cfg.io)
-    ensure_dirs(cfg)
-    rows = process_csv_chunks(
-        args.input_csv,
-        output,
-        cfg=cfg.io,
-        chunk_size=args.chunk_size,
-        limit=args.limit,
-        checkpoint_path=args.checkpoint,
-        sep=args.sep,
-        encoding=args.encoding,
-    )
-    logger.info("rows_processed", extra={"rows": rows})
-    return 0
+        output = args.output_csv or default_output_path(args.input_csv, cfg.io)
+        ensure_dirs(cfg)
+        rows = process_csv_chunks(
+            args.input_csv,
+            output,
+            cfg=cfg.io,
+            chunk_size=args.chunk_size,
+            limit=args.limit,
+            checkpoint_path=args.checkpoint,
+            sep=args.sep,
+            encoding=args.encoding,
+        )
+        logger.info("rows_processed", extra={"rows": rows})
+        return 0
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("run_fail", exc=exc)
+        return 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
