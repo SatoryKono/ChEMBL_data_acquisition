@@ -20,6 +20,7 @@ import yaml
 
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
+from .log import logger
 
 
 def read_ids(
@@ -192,16 +193,27 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
 
 
 def _git_sha() -> str:
+    """Return the current Git commit hash.
+
+    The command is limited to a short timeout to avoid hanging when ``git``
+    is unavailable. If the call times out or fails, ``"unknown"`` is
+    returned and a warning is logged.
+    """
+
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
+            timeout=5,
         )
         return result.stdout.strip()
-    except Exception:  # pragma: no cover - git may be unavailable
-        return "unknown"
+    except subprocess.TimeoutExpired as exc:
+        logger.warning("git command timed out: %s", exc)
+    except Exception as exc:  # pragma: no cover - git may be unavailable
+        logger.warning("unable to determine git SHA: %s", exc)
+    return "unknown"
 
 
 def _write_meta(path: Path, cfg: Config) -> None:
