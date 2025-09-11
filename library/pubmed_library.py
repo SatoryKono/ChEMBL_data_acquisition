@@ -10,7 +10,7 @@ import argparse
 import csv
 import json
 import sys
-import time
+from .rate_limiter import get_limiter, sleep
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -60,7 +60,7 @@ def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str
 def _do_request(
     session: requests.Session,
     url: str,
-    sleep: float,
+    delay: float,
     expect_json: bool = True,
     retries: int = 2,
     method: str = "GET",
@@ -75,8 +75,8 @@ def _do_request(
         Requests session used to perform the call.
     url:
         Endpoint to query.
-    sleep:
-        Base number of seconds to sleep between attempts.
+    delay:
+        Base number of seconds to wait between attempts.
     expect_json:
         Whether to parse the response as JSON.
     retries:
@@ -102,7 +102,7 @@ def _do_request(
         event = "request_start" if attempt == 0 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt + 1})
         if attempt:
-            time.sleep(sleep * attempt)
+            sleep(delay * attempt)
 
         try:
             if method.upper() == "POST":
@@ -650,8 +650,9 @@ def fetch_openalex(
 
     """
 
+    limiter = get_limiter("openalex", cfg.rps)
+    limiter.acquire()
     delay = 1 / cfg.rps if cfg.rps else 0
-    time.sleep(delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
@@ -726,8 +727,9 @@ def fetch_crossref(
             "crossref.Error": "Missing DOI",
         }
 
+    limiter = get_limiter("crossref", cfg.rps)
+    limiter.acquire()
     delay = 1 / cfg.rps if cfg.rps else 0
-    time.sleep(delay)
     base = cfg.base.rstrip("/")
     url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)

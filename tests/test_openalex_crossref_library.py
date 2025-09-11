@@ -9,15 +9,25 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     """Ensure OpenAlex requests respect configuration parameters."""
     called: dict[str, object] = {}
 
-    def fake_do_request(session, url, sleep, timeout=(), **kwargs):
+    def fake_do_request(session, url, delay, timeout=(), **kwargs):
         called["url"] = url
-        called["sleep"] = sleep
+        called["sleep"] = delay
         called["timeout"] = timeout
         return {}, ""
 
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
-    sleeps: list[float] = []
-    monkeypatch.setattr("library.pubmed_library.time.sleep", lambda s: sleeps.append(s))
+    rps: dict[str, float] = {}
+
+    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
+        rps["value"] = rps_val
+
+        class Dummy:
+            def acquire(self) -> None:
+                pass
+
+        return Dummy()
+
+    monkeypatch.setattr("library.pubmed_library.get_limiter", fake_get_limiter)
 
     cfg = OpenAlexCfg(
         base="https://example.org",
@@ -30,22 +40,32 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     ocl.fetch_openalex(requests.Session(), "123", cfg)
     assert called["url"] == "https://example.org/works/pmid:123?mailto=x%40y.com"
     assert called["timeout"] == (1, 2)
-    assert sleeps and sleeps[0] == pytest.approx(0.5)
+    assert rps["value"] == pytest.approx(2)
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     """Ensure CrossRef requests respect configuration parameters."""
     called: dict[str, object] = {}
 
-    def fake_do_request(session, url, sleep, timeout=(), **kwargs):
+    def fake_do_request(session, url, delay, timeout=(), **kwargs):
         called["url"] = url
-        called["sleep"] = sleep
+        called["sleep"] = delay
         called["timeout"] = timeout
         return {}, ""
 
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
-    sleeps: list[float] = []
-    monkeypatch.setattr("library.pubmed_library.time.sleep", lambda s: sleeps.append(s))
+    rps: dict[str, float] = {}
+
+    def fake_get_limiter(name: str, rps_val: float, burst: int | None = None):
+        rps["value"] = rps_val
+
+        class Dummy:
+            def acquire(self) -> None:
+                pass
+
+        return Dummy()
+
+    monkeypatch.setattr("library.pubmed_library.get_limiter", fake_get_limiter)
 
     cfg = CrossRefCfg(
         base="https://cr.example.org",
@@ -58,4 +78,4 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg)
     assert called["url"] == "https://cr.example.org/works/10.1%2Fabc?mailto=z%40e.com"
     assert called["timeout"] == (1, 2)
-    assert sleeps and sleeps[0] == pytest.approx(0.25)
+    assert rps["value"] == pytest.approx(4)

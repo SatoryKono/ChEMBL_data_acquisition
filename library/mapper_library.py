@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 from urllib.error import HTTPError
 
 from .config import UniprotMappingCfg
+from .rate_limiter import get_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,11 @@ def map_chembl_to_uniprot(
     status_url = f"{base}/status/{job_id}"
     start = time.time()
     result_data = {}  # Initialize result_data
+    limiter = get_limiter(
+        "uniprot_mapping", 1 / cfg.poll_interval if cfg.poll_interval else 0
+    )
     while True:
+        limiter.acquire()
         status_data = _open_json(status_url)
 
         # Check for results in the response, which indicates a redirect has occurred
@@ -106,7 +111,6 @@ def map_chembl_to_uniprot(
             raise ValueError("UniProt ID mapping job failed")
         if time.time() - start > cfg.timeout:
             raise TimeoutError("UniProt ID mapping job timed out")
-        time.sleep(cfg.poll_interval)
 
     # Retrieve the results
     # If the last status check was a redirect, status_data already contains the results
