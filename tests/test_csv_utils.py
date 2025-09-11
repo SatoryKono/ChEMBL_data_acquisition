@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import string
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -86,6 +87,24 @@ def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
     assert path1.read_bytes() == path2.read_bytes()
 
 
+def test_write_csv_deterministic_hash_stable(tmp_path: Path) -> None:
+    """Repeated calls maintain identical data and metadata hashes."""
+
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    path = tmp_path / "out.csv"
+
+    write_csv_deterministic(df.copy(), path)
+    first_hash = sha256_file(path)
+    first_meta_hash = sha256_file(Path(str(path) + ".meta.yaml"))
+
+    write_csv_deterministic(df.copy(), path)
+    second_hash = sha256_file(path)
+    second_meta_hash = sha256_file(Path(str(path) + ".meta.yaml"))
+
+    assert first_hash == second_hash
+    assert first_meta_hash == second_meta_hash
+
+
 @settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(
     df=data_frames(
@@ -116,6 +135,49 @@ def test_write_csv_deterministic_hypothesis(tmp_path: Path, df: pd.DataFrame) ->
     df2 = df.sample(frac=1).reset_index(drop=True)
     write_csv_deterministic(df1, path1, col_order=["a", "b", "d", "f"], key_cols=["a"])
     write_csv_deterministic(df2, path2, col_order=["a", "b", "d", "f"], key_cols=["a"])
+    assert path1.read_bytes() == path2.read_bytes()
+
+
+@settings(deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(data=st.data())
+def test_write_csv_deterministic_random_types(
+    tmp_path: Path, data: st.DataObject
+) -> None:
+    """DataFrames with mixed dtypes yield deterministic CSV output."""
+
+    element_strategies = [
+        st.integers(min_value=-10, max_value=10),
+        st.floats(allow_nan=False, allow_infinity=False, width=32),
+        st.booleans(),
+        st.text(alphabet=string.ascii_letters, min_size=1, max_size=5),
+        st.datetimes(
+            min_value=pd.Timestamp("1970-01-01").to_pydatetime(),
+            max_value=pd.Timestamp("2100-12-31").to_pydatetime(),
+        ),
+    ]
+
+    columns = data.draw(
+        st.lists(
+            st.builds(
+                column,
+                name=st.text(alphabet=string.ascii_letters, min_size=1, max_size=5),
+                elements=st.one_of(*[st.just(es) for es in element_strategies]),
+            ),
+            min_size=1,
+            max_size=5,
+            unique_by=lambda c: c.name,
+        )
+    )
+    df = data.draw(
+        data_frames(columns=columns, index=range_indexes(min_size=1, max_size=5))
+    )
+
+    path1 = tmp_path / "first.csv"
+    path2 = tmp_path / "second.csv"
+    df1 = df.sample(frac=1).reset_index(drop=True)
+    df2 = df.sample(frac=1).reset_index(drop=True)
+    write_csv_deterministic(df1.copy(), path1)
+    write_csv_deterministic(df2.copy(), path2)
     assert path1.read_bytes() == path2.read_bytes()
 
 
