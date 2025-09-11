@@ -12,6 +12,7 @@ import requests
 from library import pubmed_library as pl
 from library import rate_limiter as rl
 from library.config import (
+    ApiCfg,
     Config,
     CrossRefCfg,
     OpenAlexCfg,
@@ -142,6 +143,7 @@ def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     cfg = Config(
+        api=ApiCfg(user_agent="ua (test@example.org)"),
         openalex=OpenAlexCfg(
             base="https://example.org",
             timeout_connect=1,
@@ -149,7 +151,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
             retries=4,
             rps=10,
             mailto="info@example.org",
-        )
+        ),
     )
 
     captured: dict[str, Any] = {}
@@ -176,7 +178,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
             "mesh": [],
         }, ""
 
-    monkeypatch.setattr(pl, "_do_request", fake_do_request)
+    monkeypatch.setattr("library.http_clients._do_request", fake_do_request)
 
     class DummyLimiter(rl.RateLimiter):
         def __init__(self) -> None:
@@ -201,6 +203,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     cfg = Config(
+        api=ApiCfg(user_agent="ua (test@example.org)"),
         crossref=CrossRefCfg(
             base="https://api.example.org",
             timeout_connect=2,
@@ -208,7 +211,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
             retries=5,
             rps=8,
             mailto="info@example.org",
-        )
+        ),
     )
 
     captured: dict[str, Any] = {}
@@ -228,7 +231,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
         )
         return {"message": {}}, ""
 
-    monkeypatch.setattr(pl, "_do_request", fake_do_request)
+    monkeypatch.setattr("library.http_clients._do_request", fake_do_request)
 
     class DummyLimiter(rl.RateLimiter):
         def __init__(self) -> None:
