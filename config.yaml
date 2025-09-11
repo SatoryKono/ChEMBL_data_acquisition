@@ -180,7 +180,7 @@ jobs:
 
 batch:
   size: 1000  # Number of rows per batch (env: CHEMBL_DA__BATCH__SIZE)
-  pause: 0  # Delay between batches in seconds (env: CHEMBL_DA__BATCH__PAUSE)
+  pause: 0.0  # Delay between batches in seconds (env: CHEMBL_DA__BATCH__PAUSE)
   concurrency: 2  # Number of concurrent batch workers (env: CHEMBL_DA__BATCH__CONCURRENCY)
   fail_fast: true  # Abort on first error (env: CHEMBL_DA__BATCH__FAIL_FAST)
   retry_failed: true  # Retry failed batches (env: CHEMBL_DA__BATCH__RETRY_FAILED)
