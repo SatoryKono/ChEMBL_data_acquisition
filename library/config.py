@@ -23,22 +23,22 @@ appropriate built-in exceptions during validation.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass
 import logging
-
-from .log import logger
 import os
 import re
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from types import UnionType
+from typing import Any, Union, get_args, get_origin, get_type_hints
 from urllib.parse import urlparse
 
-import yaml
 import jsonschema
+import yaml
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .log import logger
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
@@ -182,7 +182,7 @@ class PubMedCfg:
     timeout_connect: int = 5
     timeout_read: int = 10
     retries: int = 2
-    encodings: List[str] = field(
+    encodings: list[str] = field(
         default_factory=lambda: ["utf-8-sig", "cp1251", "latin1"]
     )
 
@@ -195,17 +195,17 @@ class SemanticScholarCfg:
     timeout_connect: int = 5
     timeout_read: int = 10
     retries: int = 2
-    encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
+    encodings: list[str] = field(default_factory=lambda: ["utf-8-sig"])
 
 
 @dataclass
 class DocTypeCfg:
     """Settings for document type classification."""
 
-    weights: Dict[str, int] = field(
+    weights: dict[str, int] = field(
         default_factory=lambda: {"pubmed": 4, "openalex": 3, "scholar": 2}
     )
-    thresholds: Dict[str, int] = field(
+    thresholds: dict[str, int] = field(
         default_factory=lambda: {"review": 1, "experimental": 1, "unknown": 2}
     )
 
@@ -305,7 +305,7 @@ class RetryCfg:
 
     max_attempts: int = 3
     backoff_factor: float = 0.5
-    status_forcelist: List[int] = field(
+    status_forcelist: list[int] = field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
 
@@ -494,7 +494,7 @@ class Config:
     retry: RetryCfg = field(default_factory=RetryCfg)
     log: LogCfg = field(default_factory=LogCfg)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Return the configuration as a plain dictionary."""
 
         return asdict(self)
@@ -510,17 +510,41 @@ class Config:
 # ---------------------------------------------------------------------------
 
 
-def _coerce(value: str, current: Any) -> Any:
-    """Coerce ``value`` (from env/CLI) to the type of ``current``.
+def _unwrap_optional(tp: Any) -> tuple[type[Any], bool]:
+    """Return the underlying type for ``Optional`` hints.
 
-    When ``current`` is :class:`bool`, only a restricted set of string
-    representations is accepted. Truthy values are ``{"1", "true", "yes",
-    "on"}`` and falsy values are ``{"0", "false", "no", "off"}``.
-    Any other value raises :class:`ValueError` to avoid silently interpreting
-    unexpected input.
+    Parameters
+    ----------
+    tp:
+        Type annotation potentially containing ``None``.
+
+    Returns
+    -------
+    tuple[type[Any], bool]
+        ``(inner_type, True)`` if ``tp`` is ``Optional[inner_type]``;
+        otherwise ``(tp, False)``.
     """
 
-    if isinstance(current, bool):
+    origin = get_origin(tp)
+    if origin in (Union, UnionType):
+        args = [a for a in get_args(tp) if a is not type(None)]
+        if len(args) == 1:
+            inner = get_origin(args[0]) or args[0]
+            return inner, True
+    return get_origin(tp) or tp, False
+
+
+def _coerce(value: str, target_type: type[Any]) -> Any:
+    """Coerce string ``value`` to ``target_type``.
+
+    The function recognises basic scalar types and ``pathlib.Path``. Boolean
+    conversion accepts a limited set of case-insensitive truthy/falsy values to
+    avoid silently interpreting unexpected input.
+    """
+
+    if target_type is Any:
+        return value
+    if target_type is bool:
         val = value.strip().lower()
         truthy = {"1", "true", "yes", "on"}
         falsy = {"0", "false", "no", "off"}
@@ -529,21 +553,21 @@ def _coerce(value: str, current: Any) -> Any:
         if val in falsy:
             return False
         raise ValueError(f"Invalid boolean value: {value!r}")
-    if isinstance(current, int):
+    if target_type is int:
         return int(value)
-    if isinstance(current, float):
+    if target_type is float:
         return float(value)
-    if isinstance(current, Path):
+    if target_type is Path:
         return Path(value)
     return value
 
 
 def _update_from_dict(
     obj: Any,
-    data: Dict[str, Any],
-    path: List[str] | None = None,
+    data: dict[str, Any],
+    path: list[str] | None = None,
     *,
-    unknown_keys: List[str] | None = None,
+    unknown_keys: list[str] | None = None,
 ) -> None:
     """Recursively update dataclass ``obj`` with ``data`` validating types.
 
@@ -562,6 +586,7 @@ def _update_from_dict(
     path = [] if path is None else path
     if unknown_keys is None:
         unknown_keys = []
+    type_hints = get_type_hints(obj.__class__)
     for key, val in data.items():
         if not hasattr(obj, key):
             unknown_keys.append(".".join(path + [key]))
@@ -573,21 +598,34 @@ def _update_from_dict(
                 raise TypeError(f"{joined} must be a mapping")
             _update_from_dict(current, val, path + [key], unknown_keys=unknown_keys)
             continue
+        expected, optional = _unwrap_optional(type_hints.get(key, Any))
         if isinstance(val, str):
             try:
-                val = _coerce(val, current)
+                val = _coerce(val, expected)
             except Exception as exc:  # pragma: no cover - defensive
                 joined = ".".join(path + [key])
                 raise TypeError(
-                    f"{joined} must be {type(current).__name__}, got {val!r}"
+                    f"{joined} must be {expected.__name__}, got {val!r}"
                 ) from exc
-        if not isinstance(val, type(current)):
+        if val is None:
+            if not optional:
+                joined = ".".join(path + [key])
+                msg = (
+                    f"{joined} must be {getattr(expected, '__name__', expected)}, "
+                    f"got {val!r}"
+                )
+                raise TypeError(msg)
+        elif expected is not Any and not isinstance(val, expected):
             joined = ".".join(path + [key])
-            raise TypeError(f"{joined} must be {type(current).__name__}, got {val!r}")
+            msg = (
+                f"{joined} must be {getattr(expected, '__name__', expected)}, "
+                f"got {val!r}"
+            )
+            raise TypeError(msg)
         setattr(obj, key, val)
 
 
-def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
+def _set_by_path(cfg: Config, path: list[str], value: Any) -> None:
     """Set ``value`` at ``path`` inside ``cfg`` with type coercion."""
 
     obj: Any = cfg
@@ -605,21 +643,29 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
         if field_name not in obj:
             raise KeyError(f"unknown config key: {'.'.join(path)}")
         current = obj[field_name]
+        expected = type(current)
+        optional = False
     else:
         if not hasattr(obj, field_name):
             raise KeyError(f"unknown config key: {'.'.join(path)}")
         current = getattr(obj, field_name)
+        type_hints = get_type_hints(obj.__class__)
+        field_type = type_hints.get(field_name, Any)
+        expected, optional = _unwrap_optional(field_type)
     try:
         if isinstance(value, str):
-            value = _coerce(value, current)
-        elif not isinstance(value, type(current)):
+            value = _coerce(value, expected)
+        if value is None:
+            if not optional:
+                raise TypeError
+        elif expected is not Any and not isinstance(value, expected):
             raise TypeError
     except Exception as exc:  # pragma: no cover - defensive
         joined = ".".join(path)
         if isinstance(exc, ValueError):
             raise ValueError(f"{joined}: {exc}") from exc
         raise TypeError(
-            f"{joined} must be {type(current).__name__}, got {value!r}"
+            f"{joined} must be {getattr(expected, '__name__', expected)}, got {value!r}"
         ) from exc
     if isinstance(obj, dict):
         obj[field_name] = value
@@ -627,7 +673,7 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
         setattr(obj, field_name, value)
 
 
-_ALIAS_MAP: Dict[str, List[str]] = {
+_ALIAS_MAP: dict[str, list[str]] = {
     "CHEMBL_DA_RPS": ["api", "rps"],
     "CHEMBL_DA_BURST": ["api", "burst"],
     "CHEMBL_DA_BASE": ["api", "chembl_base"],
@@ -742,7 +788,7 @@ def _mask_secrets(data: Any) -> Any:
 
     secret_tokens = {"key", "token", "secret", "password"}
     if isinstance(data, dict):
-        masked: Dict[str, Any] = {}
+        masked: dict[str, Any] = {}
         for k, v in data.items():
             if any(tok in k.lower() for tok in secret_tokens):
                 masked[k] = "***"
@@ -769,7 +815,7 @@ def print_config(cfg: Config) -> None:
 
 
 # JSON schema describing the configuration structure.
-CONFIG_SCHEMA: Dict[str, Any] = {
+CONFIG_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "api": {
@@ -1465,7 +1511,7 @@ def ensure_dirs(cfg: Config) -> None:
 
 def load_config(
     path: str | Path = "config.yaml",
-    cli_overrides: Dict[str, Any] | None = None,
+    cli_overrides: dict[str, Any] | None = None,
     *,
     strict: bool = False,
 ) -> Config:
@@ -1498,7 +1544,7 @@ def load_config(
     """
 
     cfg = Config()
-    unknown_keys: List[str] = []
+    unknown_keys: list[str] = []
     try:
         with Path(path).open("r", encoding="utf8") as fh:
             data = yaml.safe_load(fh) or {}
