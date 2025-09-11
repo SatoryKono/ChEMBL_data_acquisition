@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from cachetools import LRUCache
+from cachetools import TTLCache  # type: ignore[import-untyped]
 
 
 from library import chembl_client
@@ -51,7 +51,6 @@ class DummySession:
         return DummyResponse()
 
 
-
 def test_init_session_sets_user_agent(monkeypatch) -> None:
     """Session should include the configured ``User-Agent`` header."""
     monkeypatch.setattr("library.chembl_client._session", None)
@@ -60,6 +59,7 @@ def test_init_session_sets_user_agent(monkeypatch) -> None:
     session = chembl_client._session
     assert session is not None
     assert session.headers.get("User-Agent") == cfg.user_agent
+
 
 class FakeTime:
     def __init__(self) -> None:
@@ -72,7 +72,6 @@ class FakeTime:
     def sleep(self, delay: float) -> None:
         self.sleeps.append(delay)
         self.now += delay
-
 
 
 @responses.activate
@@ -174,7 +173,6 @@ def test_request_json_cache_ttl_expiration(monkeypatch) -> None:
     assert len(responses.calls) == 2
 
 
- 
 @responses.activate
 def test_request_json_preserves_original_error_message(monkeypatch) -> None:
     """Ensure the raised error retains status code and URL."""
@@ -191,23 +189,20 @@ def test_request_json_preserves_original_error_message(monkeypatch) -> None:
     message = str(exc_info.value)
     assert "404" in message
     assert url in message
- 
+
+
 def test_clear_cache(monkeypatch) -> None:
     cache = TTLCache(maxsize=2, ttl=100)
     monkeypatch.setattr(chembl_client, "_CACHE", cache)
     chembl_client._CACHE["x"] = {"ok": True}
     clear_cache()
     assert len(chembl_client._CACHE) == 0
- 
-
-
-    assert urls[0] not in chembl_client._CACHE
-    assert len(chembl_client._CACHE) == 2
 
 
 def test_request_json_rate_limiter_blocks(monkeypatch) -> None:
     fake_time = FakeTime()
     monkeypatch.setattr(rl, "time", fake_time)
+    monkeypatch.setattr(rl, "sleep", fake_time.sleep)
     with rl._limiters_lock:
         rl._limiters.clear()
     session = DummySession()
