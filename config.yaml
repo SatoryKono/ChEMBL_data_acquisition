@@ -67,7 +67,7 @@ pubchem:
   retries: 3
   rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
   burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
-  delay: 3  # Delay between requests in seconds
+  delay: 3.0  # Delay between requests in seconds; must be a float for strict type validation
 
 
 pubmed:

@@ -235,6 +235,14 @@ def test_unknown_key_error(tmp_path: Path) -> None:
         load_config(path, strict=True)
 
 
+def test_config_type_coercion() -> None:
+    """The default configuration should load without type errors in strict mode."""
+
+    path = Path(__file__).resolve().parents[1] / "config.yaml"
+    cfg = load_config(path, strict=True)
+    assert isinstance(cfg.pubchem.delay, float)
+
+
 def test_yaml_error_includes_path(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api: [\n")  # malformed YAML
