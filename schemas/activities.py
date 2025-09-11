@@ -9,7 +9,7 @@ from __future__ import annotations
 from pandera import Check, Column, DataFrameSchema
 
 # Definition of the schema describing the activities table.
-ActivitiesSchema: DataFrameSchema = DataFrameSchema(
+ActivitiesSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
     {
         "activity_id": Column(int, Check.ge(0), required=True),
         "testitem_id": Column(str, required=True),

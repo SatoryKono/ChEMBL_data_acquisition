@@ -7,7 +7,7 @@ The implementation is a Python translation of a PowerQuery script.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import requests
@@ -147,7 +147,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
     if url in _CACHE:
         logger.info("cache_hit", extra={"stage": "cache_hit", "url": url})
-        return _CACHE[url]
+        return cast(dict[str, Any], _CACHE[url])
     logger.info("cache_miss", extra={"stage": "cache_miss", "url": url})
 
     for attempt in range(1, cfg.retries + 1):
@@ -178,7 +178,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             return None
         try:
             response.raise_for_status()
-            data = response.json()
+            data = cast(dict[str, Any], response.json())
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= cfg.retries:
                 logger.error("HTTP request failed for url %s: %s", url, exc)
@@ -325,7 +325,7 @@ def get_standard_name(cid: str, cfg: PubChemCfg) -> str | None:
     info = response.get("InformationList", {}).get("Information", [])
     if not info:
         return None
-    return info[0].get("Title")
+    return cast(str | None, info[0].get("Title"))
 
 
 @dataclass

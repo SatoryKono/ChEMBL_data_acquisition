@@ -20,6 +20,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
 from urllib.parse import quote
 
 import pandas as pd
@@ -148,7 +149,9 @@ def load_families(path: str | Path, *, encoding: str = "utf-8") -> pd.DataFrame:
     return df
 
 
-def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
+def _query_gene_symbol(
+    gene_name: str, cfg: IupharCfg, retry: RetryCfg
+) -> dict[str, Any]:
     """Return the first IUPHAR result for *gene_name*.
 
     Parameters
@@ -177,7 +180,7 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
             with _session_lock:
                 with _session.get(url, timeout=timeout) as response:
                     response.raise_for_status()
-                    data = response.json()
+                    data = cast(list[dict[str, Any]], response.json())
                     return data[0] if data else {}
         except requests.RequestException as exc:  # pragma: no cover - network errors
             if attempt >= retry.max_attempts:
@@ -596,7 +599,7 @@ class IUPHARData:
 
     def websearch_gene_to_id(
         self, gene_name: str, cfg: IupharCfg, retry: RetryCfg | None = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Query the IUPHAR web API for ``gene_name``.
 
         Parameters

@@ -38,7 +38,7 @@ import csv
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import requests
 from requests import Session
@@ -116,7 +116,7 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
         with _session.get(url, timeout=timeout) as resp:
             resp.raise_for_status()
             try:
-                return resp.json()
+                return cast(dict[str, Any], resp.json())
             except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
                 raise UniProtFetchError(
                     f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
