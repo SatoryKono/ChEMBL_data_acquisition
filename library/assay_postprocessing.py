@@ -64,7 +64,7 @@ def postprocess_file(
     Parameters
     ----------
     input_path:
-        Path to the CSV file produced by ``get_assay_data.py``.
+        Path to the CSV file produced by ``scripts/get_assay_data.py``.
     output_path:
         Destination path for the cleaned CSV file.
     cfg:

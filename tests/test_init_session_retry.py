@@ -10,12 +10,12 @@ from library.config import Config
 @pytest.mark.parametrize(
     ("module_name", "func_name"),
     [
-        ("get_activity_data", "run_chembl"),
-        ("get_assay_data", "run_chembl"),
-        ("get_document_data", "run_chembl"),
-        ("get_document_data", "run_all"),
-        ("get_target_data", "run_chembl"),
-        ("get_testitem_data", "run_chembl"),
+        ("scripts.get_activity_data", "run_chembl"),
+        ("scripts.get_assay_data", "run_chembl"),
+        ("scripts.get_document_data", "run_chembl"),
+        ("scripts.get_document_data", "run_all"),
+        ("scripts.get_target_data", "run_chembl"),
+        ("scripts.get_testitem_data", "run_chembl"),
     ],
 )
 def test_init_session_uses_cfg_retry(

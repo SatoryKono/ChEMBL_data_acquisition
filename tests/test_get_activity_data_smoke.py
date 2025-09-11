@@ -5,8 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import get_activity_data
 from library import chembl_library as cl
+from scripts import get_activity_data
 
 
 def test_get_activity_data_smoke(
@@ -14,7 +14,7 @@ def test_get_activity_data_smoke(
 ) -> None:
     input_csv = Path("tests/data/activity_ids_small.csv")
 
-    def fake_get(ids, cfg, chunk_size, timeout):
+    def fake_get(ids, cfg, client, chunk_size, timeout):
         int_ids = [int(i) for i in ids]
         return pd.DataFrame(
             {
