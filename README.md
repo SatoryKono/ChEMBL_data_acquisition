@@ -55,9 +55,9 @@ tokens should be stored in a local ``.env`` file – see
    ``--encoding`` for file encoding. Additional examples:
 
    ```bash
-   python mapper_main.py --input tests/data/assays.csv \
+   python scripts/mapper_main.py --input tests/data/assays.csv \
        --output out/mapped.csv --log-level DEBUG
-   python table_quality_main.py --input tests/data/assays.csv \
+   python scripts/table_quality_main.py --input tests/data/assays.csv \
        --output out/report.csv --log-level INFO
    ```
 
@@ -295,8 +295,8 @@ dictionary/       Lookup tables used during processing
 library/          Reusable data-processing modules
 tests/            Pytest suite and sample datasets
 scripts/          Command-line utilities and development helpers
-mapper_main.py    Mapping CLI
-table_quality_main.py  CSV profiling CLI
+scripts/mapper_main.py    Mapping CLI
+scripts/table_quality_main.py  CSV profiling CLI
 config.yaml       Global configuration defaults
 ```
 
@@ -385,7 +385,7 @@ An overview of the output directory layout and metadata sidecars is available in
 
 ### Table quality analysis
 
-``table_quality_main.py`` profiles arbitrary CSV files and reports column
+``scripts/table_quality_main.py`` profiles arbitrary CSV files and reports column
 statistics along with correlations between numeric fields. Example usage:
 
 ```python
@@ -399,7 +399,7 @@ quality, corr = analyze_table_quality(df, table_name="data")
 Running the CLI saves ``data_quality_report_table.csv`` and
 ``data_data_correlation_report_table.csv`` in the current working directory::
 
-    python table_quality_main.py --input data.csv --table-name data
+    python scripts/table_quality_main.py --input data.csv --table-name data
 
 All scripts share a common set of flags:
 
@@ -672,15 +672,15 @@ Install the optional developer tools and run the standard quality checks:
 
 * ``black`` – auto-format the code::
 
-      black scripts library mapper_main.py table_quality_main.py
+      black scripts library
 
 * ``ruff`` – lint the project::
 
-      ruff check scripts library mapper_main.py table_quality_main.py
+      ruff check scripts library
 
 * ``mypy`` – perform static type checks::
 
-      mypy scripts library mapper_main.py table_quality_main.py
+      mypy scripts library
 
 * ``python scripts/check_determinism.py`` – verify deterministic CSV output.
 

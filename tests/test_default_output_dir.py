@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import mapper_main
+import scripts.mapper_main as mapper_main
 from library import io
 from library.config import Config, IoCfg
 

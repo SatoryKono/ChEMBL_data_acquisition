@@ -16,7 +16,7 @@ def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
     proc = subprocess.run(
         [
             sys.executable,
-            str(root / "csv_utils_main.py"),
+            str(root / "scripts" / "csv_utils_main.py"),
             "--input",
             str(input_csv),
             "--output",

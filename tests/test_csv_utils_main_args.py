@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import csv_utils_main as cli
+import scripts.csv_utils_main as cli
 
 
 def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:
@@ -18,7 +18,6 @@ def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:
         called["encoding"] = encoding
         called["chunksize"] = chunksize
 
-
         def gen():
             yield pd.DataFrame({"a": [1], "b": [2]})
 
@@ -31,7 +30,6 @@ def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:
         key_cols=None,
         chunksize=None,
         drop_unexpected_cols=False,
-
     ):  # type: ignore[override]
         called["output"] = output
         called["write_chunksize"] = chunksize
@@ -66,7 +64,6 @@ def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:
     assert called["write_chunksize"] == 2
 
 
-
 def test_cli_generates_output_path(monkeypatch, tmp_path: Path) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("a,b\n1,2\n", encoding="utf8")
@@ -97,4 +94,3 @@ def test_cli_generates_output_path(monkeypatch, tmp_path: Path) -> None:
     assert rc == 0
     expected = input_csv.with_name("output_input_20240102.csv")
     assert called["output"] == expected
-

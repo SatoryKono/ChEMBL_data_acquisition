@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-import mapper_main
+import scripts.mapper_main as mapper_main
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 
