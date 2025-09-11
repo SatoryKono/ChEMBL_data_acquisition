@@ -102,7 +102,7 @@ resources:
   dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
   iuphar_target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
   iuphar_family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
-  uniprot_data_dir: "uniprot"  # Directory containing cached UniProt JSON files
+  uniprot_data_dir: "dictionary/uniprot"  # Directory containing cached UniProt JSON files
   organism_csv: "dictionary/_Target/target.csv"  # Organism taxonomy mapping file
 
 io:

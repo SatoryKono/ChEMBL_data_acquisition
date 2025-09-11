@@ -20,7 +20,7 @@ from typing import Iterable, List, Optional
 import io
 import logging
 import random
-import time
+from .rate_limiter import get_limiter, sleep
 from urllib.parse import quote
 
 import pandas as pd
@@ -170,11 +170,10 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
     base = cfg.base.rstrip("/")
     url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
-    rate_delay = 1 / cfg.rps if cfg.rps else 0
+    limiter = get_limiter("iuphar", cfg.rps)
 
     for attempt in range(1, retry.max_attempts + 1):
-        if rate_delay:
-            time.sleep(rate_delay)
+        limiter.acquire()
         try:
             with _session.get(url, timeout=timeout) as response:
                 response.raise_for_status()
@@ -186,7 +185,7 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
             jitter = random.uniform(0, backoff)
-            time.sleep(backoff + jitter)
+            sleep(backoff + jitter)
     return {}
 
 
@@ -647,13 +646,12 @@ class IUPHARData:
         if base_root.endswith("services"):
             base_root = base_root.rsplit("/", 1)[0]
         data_base = f"{base_root}/DATA"
-        rate_delay = 1 / cfg.rps if cfg.rps else 0
+        limiter = get_limiter("iuphar", cfg.rps)
         timeout = (cfg.timeout_connect, cfg.timeout_read)
 
         def _download(url: str) -> pd.DataFrame:
             for attempt in range(1, retry_cfg.max_attempts + 1):
-                if rate_delay:
-                    time.sleep(rate_delay)
+                limiter.acquire()
                 try:
                     with _session.get(url, timeout=timeout) as resp:
                         resp.raise_for_status()
@@ -664,7 +662,7 @@ class IUPHARData:
                         raise
                     backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
                     jitter = random.uniform(0, backoff)
-                    time.sleep(backoff + jitter)
+                    sleep(backoff + jitter)
             raise RuntimeError("Failed to download mapping")
 
         uni_df = _download(f"{data_base}/GtP_to_UniProt_mapping.csv")
