@@ -86,7 +86,7 @@ def _normalise_dates(series: pd.Series) -> pd.Series:
 
     if (
         ptypes.is_object_dtype(series)
-        and series.dropna().map(lambda x: isinstance(x, (date, datetime))).all()
+        and series.dropna().map(lambda x: isinstance(x, date | datetime)).all()
     ):
         return pd.to_datetime(series).dt.strftime("%Y-%m-%d")
 
