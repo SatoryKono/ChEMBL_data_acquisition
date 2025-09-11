@@ -1,9 +1,14 @@
+import io
+import json
+import sys
+
 import pytest
 import requests
 
 from library import openalex_crossref_library as ocl
 from library import rate_limiter as rl
-from library.config import Config, CrossRefCfg, OpenAlexCfg
+from library.cli import LoggerConfig, configure_logger
+from library.config import ApiCfg, Config, CrossRefCfg, OpenAlexCfg
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
@@ -19,6 +24,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
 
     cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
         openalex=OpenAlexCfg(
             base="https://example.org",
             timeout_connect=1,
@@ -26,13 +32,19 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
             rps=2,
             burst=5,
             mailto="x@y.com",
-        )
+        ),
     )
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(stream=buffer))
     limiter = rl.RateLimiter(2)
     ocl.fetch_openalex(requests.Session(), "123", cfg.openalex, limiter)
+    records = [json.loads(line) for line in buffer.getvalue().splitlines()]
+    configure_logger(LoggerConfig(stream=sys.stdout))
     assert called["url"] == "https://example.org/works/pmid:123?mailto=x%40y.com"
     assert called["timeout"] == (1, 2)
     assert called["sleep"] == pytest.approx(0.5)
+    assert all(rec["rps"] == cfg.openalex.rps for rec in records)
+    assert all("status" in rec for rec in records)
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
@@ -48,6 +60,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
 
     cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
         crossref=CrossRefCfg(
             base="https://cr.example.org",
             timeout_connect=1,
@@ -55,13 +68,19 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
             rps=4,
             burst=5,
             mailto="z@e.com",
-        )
+        ),
     )
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(stream=buffer))
     limiter = rl.RateLimiter(4)
     ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg.crossref, limiter)
+    records = [json.loads(line) for line in buffer.getvalue().splitlines()]
+    configure_logger(LoggerConfig(stream=sys.stdout))
     assert called["url"] == "https://cr.example.org/works/10.1%2Fabc?mailto=z%40e.com"
     assert called["timeout"] == (1, 2)
     assert called["sleep"] == pytest.approx(0.25)
+    assert all(rec["rps"] == cfg.crossref.rps for rec in records)
+    assert all("status" in rec for rec in records)
 
 
 def test_rate_limiter_shared(monkeypatch) -> None:
@@ -74,7 +93,10 @@ def test_rate_limiter_shared(monkeypatch) -> None:
     monkeypatch.setattr(rl, "sleep", fake_sleep)
     monkeypatch.setattr("library.pubmed_library._do_request", lambda *a, **k: ({}, ""))
 
-    cfg = Config(openalex=OpenAlexCfg(rps=1, mailto="x@y.com"))
+    cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
+        openalex=OpenAlexCfg(rps=1, mailto="x@y.com"),
+    )
     limiter = rl.RateLimiter(1)
     session = requests.Session()
     ocl.fetch_openalex(session, "1", cfg.openalex, limiter)
