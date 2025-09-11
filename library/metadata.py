@@ -12,7 +12,7 @@ import hashlib
 import platform
 import subprocess
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -20,6 +20,10 @@ import yaml
 
 from .config import _mask_secrets
 from .log import logger
+
+# ``datetime.UTC`` is only available in Python 3.11 and later.
+# ``timezone.utc`` provides the same value and works on older versions.
+UTC = timezone.utc  # noqa: UP017
 
 
 class Stats(TypedDict):

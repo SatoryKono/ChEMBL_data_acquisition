@@ -17,8 +17,12 @@ import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import IO, Any
+
+# ``datetime.UTC`` was introduced in Python 3.11.
+# Use ``timezone.utc`` for compatibility with earlier versions.
+UTC = timezone.utc  # noqa: UP017
 
 _SECRET_SUFFIXES: tuple[str, ...] = ("token", "key", "secret", "password")
 _LEVELS = {
