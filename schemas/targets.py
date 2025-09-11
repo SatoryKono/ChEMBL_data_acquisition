@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from pandera import Check, Column, DataFrameSchema
+import pandera.pandas as pa
 
-TargetsSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
+TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "target_chembl_id": Column(str, required=True),
-        "organism": Column(str, required=True),
-        "target_uniprot_id": Column(str, required=False),
-        "pH_dependence": Column(float, Check.in_range(0, 14), required=False),
-        "isoforms": Column(float, Check.ge(0), required=False),
+        "target_chembl_id": pa.Column(str, required=True),
+        "organism": pa.Column(str, required=True),
+        "target_uniprot_id": pa.Column(str, required=False),
+        "pH_dependence": pa.Column(float, pa.Check.in_range(0, 14), required=False),
+        "isoforms": pa.Column(float, pa.Check.ge(0), required=False),
     }
 )
 
-"""pandera.DataFrameSchema: Validation schema for targets."""
+"""pa.DataFrameSchema: Validation schema for targets."""

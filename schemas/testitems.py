@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
-from pandera import Check, Column, DataFrameSchema
+import pandera.pandas as pa
 
-TestitemsSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
+TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "salt_chembl_id": Column(str, required=True),
-        "molecule_chembl_id": Column(str, required=True),
-        "molecule_type": Column(
+        "salt_chembl_id": pa.Column(str, required=True),
+        "molecule_chembl_id": pa.Column(str, required=True),
+        "molecule_type": pa.Column(
             str,
-            Check.isin(["Small molecule", "Biopolymer", "Oligosaccharide", "Unknown"]),
+            pa.Check.isin(
+                ["Small molecule", "Biopolymer", "Oligosaccharide", "Unknown"]
+            ),
             required=True,
         ),
-        "chirality": Column(int, Check.isin([-1, 0, 1, 2]), required=False),
-        "mw_freebase": Column(float, Check.in_range(0, 2000), required=True),
-        "num_ro5_violations": Column(float, Check.in_range(0, 5), required=False),
-        "is_radical": Column(bool, required=False),
+        "chirality": pa.Column(int, pa.Check.isin([-1, 0, 1, 2]), required=False),
+        "mw_freebase": pa.Column(float, pa.Check.in_range(0, 2000), required=True),
+        "num_ro5_violations": pa.Column(float, pa.Check.in_range(0, 5), required=False),
+        "is_radical": pa.Column(bool, required=False),
     }
 )
 
-"""pandera.DataFrameSchema: Validation schema for test items."""
+"""pa.DataFrameSchema: Validation schema for test items."""

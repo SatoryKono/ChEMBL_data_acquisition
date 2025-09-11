@@ -6,22 +6,22 @@ expected structure of activity dataframes.
 
 from __future__ import annotations
 
-from pandera import Check, Column, DataFrameSchema
+import pandera.pandas as pa
 
 # Definition of the schema describing the activities table.
-ActivitiesSchema: DataFrameSchema = DataFrameSchema(  # type: ignore[no-untyped-call]
+ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "activity_id": Column(int, Check.ge(0), required=True),
-        "testitem_id": Column(str, required=True),
-        "target_id": Column(str, required=False),
-        "standard_type": Column(
+        "activity_id": pa.Column(int, pa.Check.ge(0), required=True),
+        "testitem_id": pa.Column(str, required=True),
+        "target_id": pa.Column(str, required=False),
+        "standard_type": pa.Column(
             str,
-            Check.isin(["IC50", "EC50", "Ki", "Kd"]),
+            pa.Check.isin(["IC50", "EC50", "Ki", "Kd"]),
             required=False,
         ),
-        "standard_value": Column(float, Check.ge(0), required=True),
-        "pA_value": Column(float, Check.in_range(0, 14), required=False),
+        "standard_value": pa.Column(float, pa.Check.ge(0), required=True),
+        "pA_value": pa.Column(float, pa.Check.in_range(0, 14), required=False),
     }
 )
 
-"""pandera.DataFrameSchema: Validation schema for activities."""
+"""pa.DataFrameSchema: Validation schema for activities."""
