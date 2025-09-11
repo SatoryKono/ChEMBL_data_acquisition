@@ -10,6 +10,7 @@ from library.input_initialisation_library import (
     _ensure_openpyxl,
     TableDict,
     append_entities,
+    generate_pair_entity_tables,
     build_combined_tables,
     unify_dtypes,
     save_tables,
@@ -43,6 +44,57 @@ def test_append_entities_deduplication() -> None:
     res = append_entities(df_a, df_b)
     assert len(res) == 3
     assert sorted(res["id"].tolist()) == [1, 2, 3]
+
+
+def test_generate_pair_entity_tables_basic() -> None:
+    tables: TableDict = {
+        "activity": pd.DataFrame(
+            {
+                "activity_chembl_id": [1, 2, 3, 4],
+                "assay_chembl_id": ["a1", "a2", "a3", "a4"],
+                "document_chembl_id": ["d1", "d2", "d3", "d4"],
+                "target_chembl_id": ["t1", "t2", "t3", "t4"],
+                "molecule_chembl_id": ["m1", "m2", "m3", "m4"],
+            }
+        ),
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1", "a2", "a3", "a4"]}),
+        "document": pd.DataFrame({"document_chembl_id": ["d1", "d2", "d3", "d4"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1", "t2", "t3", "t4"]}),
+        "testitem": pd.DataFrame({"molecule_chembl_id": ["m1", "m2", "m3", "m4"]}),
+        "pairs_independent": pd.DataFrame(
+            {"activity_chembl_id1": [1, 2], "activity_chembl_id2": [3, None]}
+        ),
+    }
+    res = generate_pair_entity_tables(tables, {"pairs_independent": "ind"})
+    assert set(res["activity_ind"]["activity_chembl_id"]) == {1, 2, 3}
+    assert set(res["assay_ind"]["assay_chembl_id"]) == {"a1", "a2", "a3"}
+    assert set(res["document_ind"]["document_chembl_id"]) == {"d1", "d2", "d3"}
+    assert set(res["target_ind"]["target_chembl_id"]) == {"t1", "t2", "t3"}
+    assert set(res["testitem_ind"]["molecule_chembl_id"]) == {"m1", "m2", "m3"}
+
+
+def test_generate_pair_entity_tables_missing_columns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("WARNING")
+    tables: TableDict = {
+        "activity": pd.DataFrame(
+            {
+                "activity_chembl_id": [1],
+                "assay_chembl_id": ["a1"],
+                "document_chembl_id": ["d1"],
+                "target_chembl_id": ["t1"],
+                "molecule_chembl_id": ["m1"],
+            }
+        ),
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1"]}),
+        "document": pd.DataFrame({"document_chembl_id": ["d1"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1"]}),
+        "testitem": pd.DataFrame({"molecule_chembl_id": ["m1"]}),
+        "pairs_bad": pd.DataFrame({"foo": [1]}),
+    }
+    res = generate_pair_entity_tables(tables, {"pairs_bad": "bad"})
+    assert "activity_bad" not in res
 
 
 def test_build_combined_tables_drops_activity_cols() -> None:
@@ -306,14 +358,18 @@ def test_build_combined_tables_aggregates_all_pair_segments(
         lambda df, _api: df.assign(**{"Filtered.init": "good"}),
     )
 
-    def fake_init_pairs(pair_df: pd.DataFrame, *_args, **_kwargs) -> pd.DataFrame:
+    def fake_init_pairs(
+        pair_df: pd.DataFrame, *_args: object, **_kwargs: object
+    ) -> pd.DataFrame:
         return pair_df.assign(Filtered1="good", Filtered2="good", Filtered="good")
 
     monkeypatch.setattr(lib, "initialize_pairs", fake_init_pairs)
 
     captured: list[pd.DataFrame] = []
 
-    def fake_aggregate(pair_df: pd.DataFrame, *_args, **_kwargs):
+    def fake_aggregate(
+        pair_df: pd.DataFrame, *_args: object, **_kwargs: object
+    ) -> dict[str, pd.DataFrame]:
         captured.append(pair_df)
         return {"activity": pd.DataFrame({"id": [1]})}
 
