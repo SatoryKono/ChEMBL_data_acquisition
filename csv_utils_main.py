@@ -1,7 +1,7 @@
 """CLI wrapper for :func:`write_csv_deterministic`.
 
 This script reads an input CSV file and re-serialises it deterministically using
-:func:`chembl_da.library.csv_utils.write_csv_deterministic`.
+:func:`library.csv_utils.write_csv_deterministic`.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from chembl_da.library.csv_utils import write_csv_deterministic
+from library.csv_utils import write_csv_deterministic
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

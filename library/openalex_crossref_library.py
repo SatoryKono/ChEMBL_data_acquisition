@@ -11,7 +11,6 @@ from urllib.parse import quote
 
 import requests
 
-from .config import CrossRefCfg, OpenAlexCfg
 from . import pubmed_library as _pl
 from .log import logger
 
@@ -19,7 +18,7 @@ from .log import logger
 def fetch_openalex(
     session: requests.Session,
     pmid: str,
-    cfg: OpenAlexCfg,
+    cfg: _pl.OpenAlexCfg,
 ) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -61,7 +60,7 @@ def fetch_openalex(
 def fetch_crossref(
     session: requests.Session,
     doi: str,
-    cfg: CrossRefCfg,
+    cfg: _pl.CrossRefCfg,
 ) -> Dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 

@@ -92,3 +92,15 @@ pytest
 
 Test data resides in `tests/data` and offers realistic examples of the CSV
 structures expected by the command line tools.
+
+## Code style checks
+
+Run the standard formatting, linting and type checking tools before submitting
+changes. Install the developer extras first:
+
+```bash
+pip install -r requirements-dev.txt
+black get_*.py library mapper_main.py table_quality_main.py
+ruff check get_*.py library mapper_main.py table_quality_main.py
+mypy get_*.py library mapper_main.py table_quality_main.py
+```

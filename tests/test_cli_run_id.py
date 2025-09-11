@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import csv_utils_main
-from chembl_da.library.logging_setup import LoggerConfig, configure_logger
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 def test_cli_run_id(capfd: pytest.CaptureFixture[str], tmp_path: Path) -> None:

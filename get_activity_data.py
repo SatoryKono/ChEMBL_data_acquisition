@@ -24,7 +24,7 @@ from library.table_quality import analyze_table_quality
 from pandera.errors import SchemaErrors
 from schemas import ActivitiesSchema, normalize_activities
 
-from chembl_da.library import write_csv_deterministic
+from library import write_csv_deterministic
 
 ORIG_WRITE_CSV = io.write_csv
 
