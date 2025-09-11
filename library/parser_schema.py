@@ -5,14 +5,17 @@ and normalises arguments used by :mod:`csv_utils_main`. Using a data model
 ensures consistent handling of command-line parameters across scripts.
 """
 
+# ruff: noqa: UP007,UP045
+
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class CSVExportArgs(BaseModel):  # type: ignore[misc]
+class CSVExportArgs(BaseModel):
     """Validated parameters for CSV export operations.
 
     Attributes
@@ -38,11 +41,11 @@ class CSVExportArgs(BaseModel):  # type: ignore[misc]
     model_config = ConfigDict(extra="forbid")
 
     input_csv: Path = Field(default=Path("input.csv"))
-    output_csv: Path | None = None
+    output_csv: Optional[Path] = None  # noqa: UP007
     sep: str = ","
     encoding: str = "utf8"
-    col_order: list[str] | None = None
-    key_cols: list[str] | None = None
+    col_order: Optional[list[str]] = None  # noqa: UP007
+    key_cols: Optional[list[str]] = None  # noqa: UP007
     log_level: str = "INFO"
 
 
