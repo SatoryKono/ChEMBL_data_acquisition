@@ -473,18 +473,22 @@ def process_activity_table(
     targets = pd.read_csv(
         targets_path,
         dtype={
-            "chembl_id": "string",
+            "target_chembl_id": "string",
             "IUPHAR_class": "string",
             "IUPHAR_subclass": "string",
-            "type": "string",
+            "taxon_index":"string",
+            "gene_index":"string",
+            "target_sort_order": "string",
+            "multifunctional_enzyme":"string",
+            "organism_type": "string",
         },
     )
 
     df = df.merge(
-        targets[["chembl_id", "IUPHAR_class", "IUPHAR_subclass", "type"]],
+        targets[["target_chembl_id", "IUPHAR_class", "IUPHAR_subclass", "gene_index","taxon_index", "target_sort_order","multifunctional_enzyme", "organism_type"]],
         how="left",
         left_on="target_id",
-        right_on="chembl_id",
+        right_on="target_chembl_id",
     )
     mapping = {
         "Multicellular organism": False,
@@ -492,16 +496,16 @@ def process_activity_table(
         "Unicellular organism": True,
     }
     df["unicellular_organism"] = (
-        df["type"].map(mapping).astype("boolean").fillna(False).astype(bool)
+        df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
     )
 
-    df["multifunctional_enzyme"] = df["IUPHAR_subclass"].eq("Multifunctional")
+    df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
 
-    df.drop(columns=["chembl_id", "type"], inplace=True)
+    df.drop(columns=["target_chembl_id", "organism_type"], inplace=True)
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
-        "activity_id",
+        "activity_chembl_id",
         "saltform_id",
         "testitem_id",
         "target_id",
@@ -529,6 +533,11 @@ def process_activity_table(
         "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
+        "IUPHAR_class", 
+        "IUPHAR_subclass", 
+        "gene_index",
+        "taxon_index", 
+        "target_sort_order",
     ]
 
     missing_final = set(final_cols) - set(df.columns)

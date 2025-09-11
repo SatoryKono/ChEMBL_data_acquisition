@@ -9,7 +9,7 @@ config:
     backoff_factor: 0.5
     rps: 5
     burst: 5
-    user_agent: chembl-da/0.1 (mailto:info@example.org)
+    user_agent: your-app/1.0 (mailto:you@example.org)
   chembl:
     cache_ttl: 3600
     cache_maxsize: 1024
@@ -137,7 +137,7 @@ config:
     - 503
     - 504
   activity:
-    column: activity_id
+    column: activity_chembl_id
     chunk_size: 5
     timeout: 30.0
     limit: null
