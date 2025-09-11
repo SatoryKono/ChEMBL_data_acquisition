@@ -73,6 +73,29 @@ def test_generate_pair_entity_tables_basic() -> None:
     assert set(res["testitem_ind"]["molecule_chembl_id"]) == {"m1", "m2", "m3"}
 
 
+def test_generate_pair_entity_tables_normalizes_columns() -> None:
+    """Pair tables with variant column names should be handled."""
+    tables: TableDict = {
+        "activity": pd.DataFrame(
+            {
+                "activity_chembl_id": [1, 2],
+                "assay_chembl_id": ["a1", "a2"],
+                "document_chembl_id": ["d1", "d2"],
+                "target_chembl_id": ["t1", "t2"],
+                "molecule_chembl_id": ["m1", "m2"],
+            }
+        ),
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1", "a2"]}),
+        "document": pd.DataFrame({"document_chembl_id": ["d1", "d2"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1", "t2"]}),
+        "testitem": pd.DataFrame({"molecule_chembl_id": ["m1", "m2"]}),
+        # Use non-standard column names as found in some Excel sources
+        "pairs_same_document": pd.DataFrame({"Activity_ID1": [1], "Activity_ID2": [2]}),
+    }
+    res = generate_pair_entity_tables(tables, {"pairs_same_document": "same"})
+    assert set(res["activity_same"]["activity_chembl_id"]) == {1, 2}
+
+
 def test_generate_pair_entity_tables_missing_columns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
