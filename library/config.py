@@ -52,6 +52,15 @@ class _BaseModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return model data as a plain ``dict``.
+
+        This is a small compatibility shim around :meth:`model_dump` for code
+        that still expects a ``to_dict`` method as provided by Pydantic v1.
+        """
+
+        return self.model_dump()
+
 
 class _BoolModel(_BaseModel):
     """Model base that parses boolean values from strings."""
