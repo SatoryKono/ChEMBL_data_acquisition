@@ -11,7 +11,11 @@ import csv
 import json
 import logging
 import sys
+
+from .rate_limiter import RateLimiter, get_limiter, sleep
+
 from datetime import date
+
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
@@ -24,6 +28,8 @@ from urllib.parse import quote
 
 from .log import logger
 
+
+
 from .config import (
     Config,
     CrossRefCfg,
@@ -33,6 +39,7 @@ from .config import (
     session_with_retry,
 )
 from .csv_utils import write_csv_deterministic
+
 
 
 def read_pmids(path: Union[str, Path], cfg: PubMedCfg | None = None) -> List[str]:
@@ -641,6 +648,7 @@ def fetch_openalex(
     pmid: str,
     *,
     cfg: OpenAlexCfg,
+    limiter: RateLimiter | None = None,
 ) -> Dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``.
 
@@ -651,8 +659,10 @@ def fetch_openalex(
     pmid:
         PubMed identifier to query.
     cfg:
-
         OpenAlex configuration providing base URL, timeouts and rate limits.
+    limiter:
+        Shared :class:`RateLimiter` instance. If ``None``, a limiter is
+        retrieved via :func:`get_limiter` using the configuration values.
 
 
     Returns
@@ -662,7 +672,8 @@ def fetch_openalex(
 
     """
 
-    limiter = get_limiter("openalex", cfg.rps)
+    if limiter is None:
+        limiter = get_limiter("openalex", cfg.rps, cfg.burst)
     limiter.acquire()
     delay = 1 / cfg.rps if cfg.rps else 0
     base = cfg.base.rstrip("/")
@@ -709,6 +720,7 @@ def fetch_crossref(
     doi: str,
     *,
     cfg: CrossRefCfg,
+    limiter: RateLimiter | None = None,
 ) -> Dict[str, str]:
     """Retrieve Crossref metadata for a given DOI.
 
@@ -719,8 +731,10 @@ def fetch_crossref(
     doi:
         Digital Object Identifier to query.
     cfg:
-
         CrossRef configuration providing base URL, timeouts and rate limits.
+    limiter:
+        Shared :class:`RateLimiter` instance. If ``None``, a limiter is
+        retrieved via :func:`get_limiter` using the configuration values.
 
 
     Returns
@@ -739,7 +753,8 @@ def fetch_crossref(
             "crossref.Error": "Missing DOI",
         }
 
-    limiter = get_limiter("crossref", cfg.rps)
+    if limiter is None:
+        limiter = get_limiter("crossref", cfg.rps, cfg.burst)
     limiter.acquire()
     delay = 1 / cfg.rps if cfg.rps else 0
     base = cfg.base.rstrip("/")
@@ -852,7 +867,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
     delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
 
-    pmids = read_pmids(args.input_csv, cfg=pubmed_cfg)
+
+    cfg = Config()
+    pubmed_cfg = cfg.pubmed
+    semsch_cfg = cfg.semantic_scholar
+    pmids = read_pmids(args.input, cfg=pubmed_cfg)
+    openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
+    crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
+
     records: List[Dict[str, str]] = []
     batch_size = 100
     with session_with_retry(cfg.api, cfg.retry) as session:
@@ -870,9 +892,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             for pubmed in pubmed_list:
                 pmid = pubmed.get("PubMed.PMID", "")
                 semsch = semsch_map.get(pmid, {})
-                openalex = fetch_openalex(session, pmid, cfg=cfg.openalex)
+
+
+                # Still fetching these individually
+
+                openalex = fetch_openalex(
+                    session, pmid, cfg=cfg.openalex, limiter=openalex_limiter
+                )
                 doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                crossref = fetch_crossref(session, doi, cfg=cfg.crossref)
+                crossref = fetch_crossref(
+                    session, doi, cfg=cfg.crossref, limiter=crossref_limiter
+                )
+
+
                 combined: Dict[str, str] = {}
                 combined.update(pubmed)
                 combined.update(semsch)

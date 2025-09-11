@@ -49,6 +49,7 @@ from library import semantic_scholar_library as ssl
 from library import openalex_crossref_library as ocl
 from library import io
 from library import document_postprocessing as dp
+from library.rate_limiter import get_limiter
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
@@ -99,6 +100,9 @@ def fetch_pubmed_records(
 
     """
 
+    openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
+    crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
+
     def _fetch_batch(batch: list[str]) -> list[dict[str, str]]:
         """Fetch metadata for a batch of PMIDs.
 
@@ -128,9 +132,13 @@ def fetch_pubmed_records(
 
                     # Still fetching these individually for now
 
-                    openalex = ocl.fetch_openalex(session, pmid, openalex_cfg)
+                    openalex = ocl.fetch_openalex(
+                        session, pmid, openalex_cfg, openalex_limiter
+                    )
                     doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                    crossref = ocl.fetch_crossref(session, doi, crossref_cfg)
+                    crossref = ocl.fetch_crossref(
+                        session, doi, crossref_cfg, crossref_limiter
+                    )
 
                     combined: dict[str, str] = {}
                     combined.update(pubmed)
@@ -594,6 +602,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=100,
         help="Maximum PMIDs per PubMed request",
     )
+    pubmed.add_argument(
+        "--openalex-rps",
+        type=float,
+        default=None,
+        help="Requests per second limit for OpenAlex",
+    )
+    pubmed.add_argument(
+        "--crossref-rps",
+        type=float,
+        default=None,
+        help="Requests per second limit for CrossRef",
+    )
     pubmed.set_defaults(func=run_pubmed)
 
     chembl = sub.add_parser(
@@ -643,6 +663,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=30.0,
         help="Timeout in seconds for each HTTP request",
     )
+    all_cmd.add_argument(
+        "--openalex-rps",
+        type=float,
+        default=None,
+        help="Requests per second limit for OpenAlex",
+    )
+    all_cmd.add_argument(
+        "--crossref-rps",
+        type=float,
+        default=None,
+        help="Requests per second limit for CrossRef",
+    )
     all_cmd.set_defaults(func=run_all)
 
     setattr(
@@ -691,7 +723,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     try:
         cfg: Config = apply_config_overrides(
-            args, subparser, args.config, mapping=mapping
+
+            args,
+            subparser,
+            args.config,
+            mapping={
+                "timeout": "api.timeout_read",
+                "openalex_rps": "openalex.rps",
+                "crossref_rps": "crossref.rps",
+            },
+
         )
         if args.print_config:
             print_config(cfg)

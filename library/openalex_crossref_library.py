@@ -12,6 +12,7 @@ from urllib.parse import quote
 import requests
 
 from . import pubmed_library as _pl
+from .rate_limiter import RateLimiter
 from .log import logger
 
 
@@ -19,6 +20,7 @@ def fetch_openalex(
     session: requests.Session,
     pmid: str,
     cfg: _pl.OpenAlexCfg,
+    limiter: RateLimiter | None = None,
 ) -> Dict[str, str]:
     """Return OpenAlex metadata for ``pmid``.
 
@@ -29,8 +31,9 @@ def fetch_openalex(
     pmid: str
         PubMed identifier.
     cfg: OpenAlexCfg
-
         Configuration specifying base URL, timeouts and rate limits.
+    limiter: RateLimiter | None
+        Shared rate limiter controlling request throughput.
 
 
     Returns
@@ -49,7 +52,7 @@ def fetch_openalex(
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     logger.info("request_start", extra={"stage": "request_start", "url": url})
     try:
-        data = _pl.fetch_openalex(session, pmid, cfg=cfg)
+        data = _pl.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
     except requests.RequestException:
         logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
         raise
@@ -61,6 +64,7 @@ def fetch_crossref(
     session: requests.Session,
     doi: str,
     cfg: _pl.CrossRefCfg,
+    limiter: RateLimiter | None = None,
 ) -> Dict[str, str]:
     """Return CrossRef metadata for ``doi``.
 
@@ -71,8 +75,9 @@ def fetch_crossref(
     doi: str
         Digital Object Identifier of the article.
     cfg: CrossRefCfg
-
         Configuration specifying base URL, timeouts and rate limits.
+    limiter: RateLimiter | None
+        Shared rate limiter controlling request throughput.
 
 
     Returns
@@ -91,7 +96,7 @@ def fetch_crossref(
     url = f"{base}/works/{quote(doi)}"
     logger.info("request_start", extra={"stage": "request_start", "url": url})
     try:
-        data = _pl.fetch_crossref(session, doi, cfg=cfg)
+        data = _pl.fetch_crossref(session, doi, cfg=cfg, limiter=limiter)
     except requests.RequestException:
         logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
         raise
