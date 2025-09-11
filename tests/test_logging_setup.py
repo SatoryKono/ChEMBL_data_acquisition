@@ -1,4 +1,3 @@
-
 """Structured logging tests for :mod:`library.logging_setup`.
 
 Example

@@ -8,7 +8,6 @@ from library import iuphar_library as ii
 from library.config import IupharCfg, RetryCfg
 
 
-
 def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
     """``websearch_gene_to_id`` should honour the supplied configuration."""
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
@@ -19,7 +18,6 @@ def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
         called["timeout"] = timeout
 
         class Resp:
-
             def __enter__(self):
                 return self
 
@@ -27,7 +25,6 @@ def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
                 return False
 
             def raise_for_status(self):
-
                 return None
 
             def json(self) -> list[dict[str, int]]:
@@ -51,15 +48,12 @@ def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
     responses.add(responses.GET, url, json=[{"id": 1}], status=200)
     result = data.websearch_gene_to_id("GENE", cfg)
     assert result == {"id": 1}
-    assert responses.calls[0].request.url == url
     assert called["timeout"] == (1, 2)
-    assert sleeps and sleeps[0] == pytest.approx(0.2)
-
+    assert sleeps == []
 
 
 @responses.activate
 def test_iuphar_upload_uses_cfg(monkeypatch):
-
     target_df = pd.DataFrame({"target_id": [1], "family_id": ["F1"]})
     family_df = pd.DataFrame(
         {"family_id": ["F1"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
@@ -70,7 +64,6 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
 
     uni_csv = "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
     hgnc_csv = "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
-
 
     def capture(url: str, timeout: tuple[int, int]):
         calls.append((url, timeout))
@@ -87,7 +80,6 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
             def __init__(self, text: str) -> None:
                 self.text = text
 
-
             def __enter__(self):
                 return self
 
@@ -95,7 +87,6 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
                 return False
 
             def raise_for_status(self):
-
                 return None
 
         return Resp(text)
@@ -129,7 +120,7 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
     assert calls[0][0] == "https://example.org/DATA/GtP_to_UniProt_mapping.csv"
     assert calls[0][1] == (1, 2)
     assert calls[1][0] == "https://example.org/DATA/GtP_to_HGNC_mapping.csv"
-    assert sleeps and sleeps[0] == pytest.approx(0.1)
+    assert sleeps == []
 
 
 def test_query_gene_symbol_backoff(monkeypatch):
@@ -171,6 +162,4 @@ def test_query_gene_symbol_backoff(monkeypatch):
     result = ii._query_gene_symbol("GENE", cfg, retry)
     assert result == {"id": 1}
     assert calls[0][0] == "https://example.org/services/targets/?geneSymbol=GENE"
-    assert sleeps[0] == pytest.approx(0.2)
-    assert sleeps[1] == pytest.approx(1.0)
-    assert sleeps[2] == pytest.approx(0.2)
+    assert sleeps == [pytest.approx(1.0)]

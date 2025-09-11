@@ -19,6 +19,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - run: python scripts/check_determinism.py --log-level DEBUG
-      - run: pre-commit run --all-files
+      - name: Run pre-commit
+        uses: pre-commit/action@v3
       - name: Smoke test cache
         run: pytest -q tests/test_chembl_client.py::test_request_json_cache

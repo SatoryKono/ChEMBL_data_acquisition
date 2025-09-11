@@ -20,8 +20,10 @@ from typing import Iterable, List, Optional
 import io
 import logging
 import random
-from .rate_limiter import get_limiter, sleep
+import time
 from urllib.parse import quote
+
+from .rate_limiter import get_limiter
 
 import pandas as pd
 import requests
@@ -185,7 +187,7 @@ def _query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict:
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
             jitter = random.uniform(0, backoff)
-            sleep(backoff + jitter)
+            time.sleep(backoff + jitter)
     return {}
 
 
@@ -662,7 +664,7 @@ class IUPHARData:
                         raise
                     backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
                     jitter = random.uniform(0, backoff)
-                    sleep(backoff + jitter)
+                    time.sleep(backoff + jitter)
             raise RuntimeError("Failed to download mapping")
 
         uni_df = _download(f"{data_base}/GtP_to_UniProt_mapping.csv")
