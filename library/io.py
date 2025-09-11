@@ -2,7 +2,21 @@
 
 This module centralises reading and writing of CSV files to ensure
 consistent handling of delimiters, encodings and error reporting across
-command line utilities.
+command line utilities. Writing functions automatically create parent
+directories and generate YAML sidecar files describing the runtime
+environment and configuration.
+
+Examples
+--------
+>>> from pathlib import Path
+>>> import pandas as pd
+>>> from library.config import Config
+>>> from library.io import write_csv, read_csv
+>>> cfg = Config()  # doctest: +SKIP
+>>> df = pd.DataFrame({"id": [1]})
+>>> out = write_csv(df, Path("same_document/example.csv"), cfg=cfg)  # doctest: +SKIP
+>>> read_csv(out, cfg=cfg).to_dict("list")  # doctest: +SKIP
+{'id': [1]}
 """
 
 from __future__ import annotations
@@ -160,13 +174,15 @@ def write_csv(
 
     This is a thin wrapper around :func:`library.csv_utils.write_csv_deterministic`
     which handles deterministic sorting and metadata sidecar creation.
+    Parent directories of ``path`` are created automatically.
 
     Parameters
     ----------
     df:
         DataFrame to serialise.
     path:
-        Destination file path.
+        Destination file path. Nested paths are allowed and will be
+        created as needed.
     cfg:
         Full configuration used for metadata sidecars.
     sep:
@@ -180,6 +196,14 @@ def write_csv(
         Optional number of rows per chunk to stream when writing the CSV.
         Passed through to :meth:`pandas.DataFrame.to_csv` and
         :func:`library.csv_utils.write_csv_deterministic`.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> df = pd.DataFrame({"id": [1]})
+    >>> cfg = Config()  # doctest: +SKIP
+    >>> write_csv(df, Path("independent/example.csv"), cfg=cfg)  # doctest: +SKIP
+    PosixPath('independent/example.csv')
 
     Returns
     -------

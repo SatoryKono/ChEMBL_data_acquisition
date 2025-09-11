@@ -58,6 +58,13 @@ python get_input_initialisation.py \
     --out-dir data/output-smoke
 ```
 
+The command emits three pair tables:
+`pairs_same_document.csv`, `pairs_independent.csv` and
+`pairs_non_independent.csv`.  For each of these segments filtered
+`activity`, `assay`, `document`, `target` and `testitem` tables are also
+written with matching suffixes, for example
+`activity_independent.csv` or `assay_same_document.csv`.
+
 Each command supports the common flags `--sep`, `--encoding` and
 `--log-level`. The default output path mirrors the input location and can be
 manually overridden with `--output` where available.

@@ -13,7 +13,9 @@ from library.input_initialisation_library import (
     _ensure_openpyxl,
     append_entities,
     build_combined_tables,
+
     generate_pair_entity_tables,
+
     process_activity_table,
     save_tables,
     unify_dtypes,
@@ -467,6 +469,9 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         paths["activity_same_document_status"].parent
         == tmp_path / "status" / "same_document"
     )
+    assert paths["pairs_same_document"].parent == tmp_path / "same_document"
+    assert paths["pairs_independent"].parent == tmp_path / "independent"
+    assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
 
 
 def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -509,7 +514,8 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n2,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
-        "chembl_id,type,IUPHAR_class,IUPHAR_subclass\nT1,Unicellular organism,ClassA,Multifunctional\n"
+        "chembl_id,type,IUPHAR_class,IUPHAR_subclass\n"
+        "T1,Unicellular organism,ClassA,Multifunctional\n"
     )
 
     res = process_activity_table(df, tmp_path)

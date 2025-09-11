@@ -6,10 +6,16 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
+
+
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+
+from typing import Any, Dict, Iterable, Literal, Mapping
+from .log import logger
+
+
 
 import pandas as pd
 
@@ -187,8 +193,9 @@ def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """
 
     if "Filtered" not in df.columns:
+        available = ", ".join(df.columns)
         raise KeyError(
-            f"table '{table_name}' missing column 'Filtered'; available: {', '.join(df.columns)}"
+            f"table '{table_name}' missing column 'Filtered'; available: {available}"
         )
 
     counts = df.groupby("Filtered", dropna=False).size().rename("Count").reset_index()
@@ -267,8 +274,10 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
     """
 
     if "Filtered.new" not in df.columns:
+        available = ", ".join(df.columns)
         raise KeyError(
-            f"table '{table_name}' missing column 'Filtered.new'; available: {', '.join(df.columns)}"
+            f"table '{table_name}' missing column 'Filtered.new'; "
+            f"available: {available}"
         )
 
     df_tmp = df.rename(columns={"Filtered.new": "Filtered"}).copy()
@@ -735,9 +744,11 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
             return pd.NA
         if isinstance(value, str):
             value = value.strip().lower()
-        if value in {True, "1", "true", "t"}:
+
+        if value in (True, 1, "1", "true", "t"):
             return True
-        if value in {False, "0", "false", "f"}:
+        if value in (False, 0, "0", "false", "f"):
+
             return False
         raise ValueError(f"invalid boolean value: {value}")
 
@@ -1064,7 +1075,8 @@ def build_combined_tables(
                 combined[pair_key] = df_pair
 
                 logger.warning(
-                    "skip initialize_pairs: table '%s' missing or has no activity_chembl_id1/activity_chembl_id2",
+                    "skip initialize_pairs: table '%s' missing or has no "
+                    "activity_chembl_id1/activity_chembl_id2",
                     pair_key,
                 )
 
@@ -1085,7 +1097,8 @@ def build_combined_tables(
                 )
             else:
                 logger.warning(
-                    "%s table missing or lacks Filtered columns; skipping status aggregation",
+                    "%s table missing or lacks Filtered columns; "
+                    "skipping status aggregation",
                     pair_key,
                 )
 
@@ -1099,6 +1112,17 @@ def save_tables(
     fmt: str = "csv",
 ) -> dict[str, Path]:
     """Persist combined tables to ``out_dir``.
+
+    Tables with specific name suffixes are written to dedicated
+    subdirectories, e.g. ``pairs_same_document`` is stored in
+    ``same_document/pairs_same_document.csv``. The following suffixes are
+    recognised:
+
+    - ``*_same_document`` → ``same_document/``
+    - ``*_independent`` → ``independent/``
+    - ``*_non_independent`` → ``non_independent/``
+    - ``*_status`` tables are placed under ``status/`` with the above
+      variants nested within it.
 
     Parameters
     ----------
@@ -1130,6 +1154,12 @@ def save_tables(
             sub_dir = out_dir / "status" / "same_document"
         elif entity.endswith("_status"):
             sub_dir = out_dir / "status"
+        elif entity.endswith("_non_independent"):
+            sub_dir = out_dir / "non_independent"
+        elif entity.endswith("_independent"):
+            sub_dir = out_dir / "independent"
+        elif entity.endswith("_same_document"):
+            sub_dir = out_dir / "same_document"
         else:
             sub_dir = out_dir
 
@@ -1512,8 +1542,9 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
     The Excel sources occasionally vary in the casing or use of underscores
-    for ``activity_chembl_id1`` and ``activity_chembl_id2``.  This helper normalises these
-    column names so downstream processing can rely on a consistent schema.
+    for ``activity_chembl_id1`` and ``activity_chembl_id2``. This helper
+    normalises these column names so downstream processing can rely on a
+    consistent schema.
 
     Parameters
     ----------
