@@ -1,12 +1,13 @@
 ﻿Count,Filtered,independent_IC50,independent_Ki,non_independent_IC50,non_independent_Ki,"target.Percentage, %"
+1,high citation rate,0,0,8,0,0.051
 1,shuffled assays,0,0,0,0,0.051
 5,exact data citation,0,0,3,4,0.255
-6,high citation rate,0,0,9,924,0.306
 7,rounded data citation,0,0,18,3,0.357
-39,multiply activity for same test item,0,0,1,3,1.99
-48,review,0,0,3,7,2.45
-84,multifunctional enzyme,0,0,6187,404,4.29
-97,test Item with unknown chirality,0,0,57,16,4.95
-164,highly correlated assays,0,0,57,115,8.37
-1509,no issue,0,0,37436,243020,77
-1960,Total,0,0,43771,244496,1960
+33,multiply activity for same test item,0,0,1,3,1.68
+44,review,0,0,2,7,2.24
+64,multifunctional enzyme,0,0,2824,343,3.27
+86,test Item with unknown chirality,0,0,50,16,4.39
+142,unicellular_organism,0,0,8109,707,7.24
+161,highly correlated assays,0,0,52,105,8.21
+1416,no issue,0,0,32697,243301,72.2
+1960,Total,0,0,43764,244489,1960

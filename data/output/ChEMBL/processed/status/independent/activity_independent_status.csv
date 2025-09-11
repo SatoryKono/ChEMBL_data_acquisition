@@ -1,12 +1,13 @@
 ﻿Count,Filtered,"activity.Percentage, %",independent_IC50,independent_Ki,non_independent_IC50,non_independent_Ki
-389,high citation rate,0.891,3398,858,0,0
-735,shuffled assays,1.68,21804,1624,0,0
-1127,review,2.58,6238,1107,0,0
-1903,rounded data citation,4.36,52572,7115,0,0
-1969,multifunctional enzyme,4.51,26890,382,0,0
-2543,multiply activity for same test item,5.82,11808,6951,0,0
-3883,test Item with unknown chirality,8.89,57285,4382,0,0
-8072,highly correlated assays,18.5,109371,24909,0,0
-10351,exact data citation,23.7,133127,65576,0,0
-12689,no issue,29.1,85233,20654,0,0
+360,high citation rate,0.825,2984,749,0,0
+640,shuffled assays,1.47,18551,1319,0,0
+1101,review,2.52,5952,1064,0,0
+1565,multifunctional enzyme,3.58,25694,242,0,0
+1821,rounded data citation,4.17,49413,7004,0,0
+2313,multiply activity for same test item,5.3,9000,6625,0,0
+2637,unicellular_organism,6.04,26186,2648,0,0
+3737,test Item with unknown chirality,8.56,57105,4342,0,0
+7667,highly correlated assays,17.6,108219,24718,0,0
+9760,exact data citation,22.4,123522,64869,0,0
+12060,no issue,27.6,81100,19978,0,0
 43661,Total,43661,507726,133558,0,0

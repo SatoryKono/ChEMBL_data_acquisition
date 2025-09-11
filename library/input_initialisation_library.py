@@ -510,7 +510,7 @@ def process_activity_table(
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
-        "activity_id",
+        "activity_chembl_id",
         "saltform_id",
         "testitem_id",
         "target_id",
