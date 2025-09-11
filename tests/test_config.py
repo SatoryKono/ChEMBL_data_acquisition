@@ -150,6 +150,22 @@ def test_cli_path_override(tmp_path: Path) -> None:
     assert cfg.io.output_dir == out
 
 
+def test_doc_type_cli_override(tmp_path: Path) -> None:
+    """CLI overrides should update document type settings."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cfg = load_config(
+        path,
+        cli_overrides={
+            "doc_type.weights.pubmed": 8,
+            "doc_type.thresholds.review": 2,
+        },
+    )
+    assert cfg.doc_type.weights["pubmed"] == 8
+    assert cfg.doc_type.thresholds["review"] == 2
+
+
 def test_type_validation(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text("api:\n  rps: fast\n")

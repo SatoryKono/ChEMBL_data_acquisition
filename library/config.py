@@ -164,7 +164,6 @@ class PubChemCfg:
 
 
 @dataclass
- 
 class PubMedCfg:
     """Settings for the PubMed API and related I/O."""
 
@@ -186,14 +185,27 @@ class SemanticScholarCfg:
     timeout_read: int = 10
     retries: int = 2
     encodings: List[str] = field(default_factory=lambda: ["utf-8-sig"])
- 
+
+
+@dataclass
+class DocTypeCfg:
+    """Settings for document type classification."""
+
+    weights: Dict[str, int] = field(
+        default_factory=lambda: {"pubmed": 4, "openalex": 3, "scholar": 2}
+    )
+    thresholds: Dict[str, int] = field(
+        default_factory=lambda: {"review": 1, "experimental": 1, "unknown": 2}
+    )
+
+
+@dataclass
 class ResourcesCfg:
     """Paths to static resource files used by the application."""
 
     dictionary_dir: Path = Path("dictionary")
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
- 
 
 
 @dataclass
@@ -294,12 +306,13 @@ class Config:
     uniprot_mapping: UniprotMappingCfg = field(default_factory=UniprotMappingCfg)
     iuphar: IupharCfg = field(default_factory=IupharCfg)
     pubchem: PubChemCfg = field(default_factory=PubChemCfg)
- 
+
     pubmed: PubMedCfg = field(default_factory=PubMedCfg)
     semantic_scholar: SemanticScholarCfg = field(default_factory=SemanticScholarCfg)
- 
+    doc_type: DocTypeCfg = field(default_factory=DocTypeCfg)
+
     resources: ResourcesCfg = field(default_factory=ResourcesCfg)
- 
+
     io: IoCfg = field(default_factory=IoCfg)
     jobs: JobsCfg = field(default_factory=JobsCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
@@ -408,13 +421,23 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
 
     obj: Any = cfg
     for name in path[:-1]:
+        if isinstance(obj, dict):
+            if name not in obj:
+                raise KeyError(f"unknown config key: {'.'.join(path)}")
+            obj = obj[name]
+            continue
         if not hasattr(obj, name):
             raise KeyError(f"unknown config key: {'.'.join(path)}")
         obj = getattr(obj, name)
     field_name = path[-1]
-    if not hasattr(obj, field_name):
-        raise KeyError(f"unknown config key: {'.'.join(path)}")
-    current = getattr(obj, field_name)
+    if isinstance(obj, dict):
+        if field_name not in obj:
+            raise KeyError(f"unknown config key: {'.'.join(path)}")
+        current = obj[field_name]
+    else:
+        if not hasattr(obj, field_name):
+            raise KeyError(f"unknown config key: {'.'.join(path)}")
+        current = getattr(obj, field_name)
     try:
         if isinstance(value, str):
             value = _coerce(value, current)
@@ -427,7 +450,10 @@ def _set_by_path(cfg: Config, path: List[str], value: Any) -> None:
         raise TypeError(
             f"{joined} must be {type(current).__name__}, got {value!r}"
         ) from exc
-    setattr(obj, field_name, value)
+    if isinstance(obj, dict):
+        obj[field_name] = value
+    else:
+        setattr(obj, field_name, value)
 
 
 _ALIAS_MAP: Dict[str, List[str]] = {
@@ -708,7 +734,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
             ],
             "additionalProperties": False,
         },
- 
         "pubmed": {
             "type": "object",
             "properties": {
@@ -750,7 +775,36 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "timeout_read",
                 "retries",
                 "encodings",
- 
+            ],
+            "additionalProperties": False,
+        },
+        "doc_type": {
+            "type": "object",
+            "properties": {
+                "weights": {
+                    "type": "object",
+                    "properties": {
+                        "pubmed": {"type": "integer", "minimum": 0},
+                        "openalex": {"type": "integer", "minimum": 0},
+                        "scholar": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["pubmed", "openalex", "scholar"],
+                    "additionalProperties": False,
+                },
+                "thresholds": {
+                    "type": "object",
+                    "properties": {
+                        "review": {"type": "integer", "minimum": 0},
+                        "experimental": {"type": "integer", "minimum": 0},
+                        "unknown": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["review", "experimental", "unknown"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["weights", "thresholds"],
+            "additionalProperties": False,
+        },
         "resources": {
             "type": "object",
             "properties": {
@@ -762,7 +816,6 @@ CONFIG_SCHEMA: Dict[str, Any] = {
                 "dictionary_dir",
                 "iuphar_target_csv",
                 "iuphar_family_csv",
- 
             ],
             "additionalProperties": False,
         },
@@ -892,6 +945,7 @@ CONFIG_SCHEMA: Dict[str, Any] = {
         "pubchem",
         "pubmed",
         "semantic_scholar",
+        "doc_type",
         "resources",
         "io",
         "jobs",
@@ -962,7 +1016,6 @@ def _validate(cfg: Config) -> None:
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
 
- 
     basic_services: list[tuple[str, Any]] = [
         ("pubmed", cfg.pubmed),
         ("semantic_scholar", cfg.semantic_scholar),
@@ -976,13 +1029,12 @@ def _validate(cfg: Config) -> None:
             raise ValueError(f"{name}.retries must be non-negative")
         if not service.encodings:
             raise ValueError(f"{name}.encodings must not be empty")
- 
+
     mapping = cfg.uniprot_mapping
     if not _valid_url(mapping.base):
         raise ValueError("uniprot_mapping.base must be a valid URL")
     if mapping.poll_interval <= 0 or mapping.timeout <= 0:
         raise ValueError("uniprot_mapping.poll_interval and timeout must be positive")
- 
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
@@ -1119,12 +1171,10 @@ __all__ = [
     "UniprotMappingCfg",
     "IupharCfg",
     "PubChemCfg",
-
     "PubMedCfg",
     "SemanticScholarCfg",
-
+    "DocTypeCfg",
     "ResourcesCfg",
-
     "IoCfg",
     "JobsCfg",
     "BatchCfg",

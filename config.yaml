@@ -83,6 +83,16 @@ semantic_scholar:
   retries: 2  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_RETRIES)
   encodings:  # Placeholder for potential text encodings
     - "utf-8-sig"
+
+doc_type:
+  weights:
+    pubmed: 4
+    openalex: 3
+    scholar: 2
+  thresholds:
+    review: 1
+    experimental: 1
+    unknown: 2
  
 resources:
   dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
