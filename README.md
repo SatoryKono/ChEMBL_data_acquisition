@@ -62,6 +62,9 @@ Example output:
 {"ts":"2024-05-01T12:00:00Z","level":"INFO","event":"pipeline_done","run_id":"...","elapsed":0.1}
 ```
 
+This command installs all required libraries, including
+[pandera](https://pandera.readthedocs.io) for DataFrame schema validation.
+
 ## Project structure
 
 ```
