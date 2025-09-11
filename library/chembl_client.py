@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from typing import Any, Dict, Iterable, Iterator, cast
+from typing import Any, Iterable, Iterator, cast
 
 
 import random
@@ -11,13 +11,15 @@ import threading
 import requests
 from requests import Session
 
-from cachetools import LRUCache
+from cachetools import TTLCache  # type: ignore[import-untyped]
 
 from .config import ApiCfg, RetryCfg, session_with_retry
 from .rate_limiter import sleep
 from .log import logger
 
-_CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
+# Cache entries expire after one hour to avoid serving stale data. The TTL can
+# be adjusted in the future via configuration if required.
+_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=1024, ttl=3600)
 
 _session: Session | None = None
 _session_lock = threading.Lock()
