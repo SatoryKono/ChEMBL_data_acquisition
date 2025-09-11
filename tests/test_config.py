@@ -125,6 +125,14 @@ def test_base_aliases_override_defaults(
     assert cfg.pubchem.base == "https://example.org/pubchem"
 
 
+@pytest.mark.parametrize("section", ["pubmed", "semantic_scholar"])
+def test_pubmed_semantic_bad_base(section: str, tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(f"{section}:\n  base: https://\n")
+    with pytest.raises(ValueError, match=f"{section}.base"):
+        load_config(path)
+
+
 def test_cli_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\n")
