@@ -59,7 +59,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         sep=args.sep,
         encoding=args.encoding,
     )
-    logger.info("processed %d rows", rows)
+    logger.info("rows_processed", extra={"rows": rows})
     return 0
 
 

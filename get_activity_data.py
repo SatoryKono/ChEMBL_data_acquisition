@@ -54,11 +54,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
-        logger.info(
-            "dry run selected; would process at most %d identifiers",
-            expected,
-            extra={"event": "dry_run"},
-        )
+        logger.info("dry_run", extra={"limit": expected})
         return 0
 
     # Configure HTTP session with the supplied User-Agent and retry policy
@@ -77,7 +73,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if limit is not None:
         limited = list(islice(ids_iter, limit))
         ids = limited
-        logger.info("processing at most %d identifiers", len(limited))
+        logger.info("process_limit", extra={"limit": len(limited)})
 
     try:
         df = cl.get_activities(
@@ -124,7 +120,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("Wrote %d rows to %s", rows_kept, csv_path)
+        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -187,7 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline start run_id=%s", log_cfg.run_id, extra={"event": "start"})
+    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
     try:
         cfg: Config = apply_config_overrides(
             args,
@@ -204,25 +200,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info(
-                "pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"}
-            )
+            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     exit_code: int = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline done run_id=%s", log_cfg.run_id, extra={"event": "done"})
+        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:
-        logger.info("pipeline fail run_id=%s", log_cfg.run_id, extra={"event": "fail"})
+        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
     return exit_code
 
 

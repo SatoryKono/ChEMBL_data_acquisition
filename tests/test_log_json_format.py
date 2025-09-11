@@ -23,3 +23,18 @@ def test_logger_emits_required_fields() -> None:
     assert record["status"] == "ok"
     assert record["rps"] == 1.5
     assert "ts" in record
+
+
+def test_standard_logging_forwards_extra() -> None:
+    """Standard :mod:`logging` calls are forwarded with extras."""
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="INFO", stream=buffer))
+    import logging
+
+    logging.getLogger("std").info("std_event", extra={"foo": 1})
+    record = json.loads(buffer.getvalue().splitlines()[0])
+    configure_logger(LoggerConfig(stream=sys.stdout))
+    assert record["event"] == "std_event"
+    assert record["foo"] == 1
+    assert record["logger"] == "std"

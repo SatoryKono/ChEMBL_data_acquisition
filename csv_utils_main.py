@@ -51,8 +51,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         drop_unexpected_cols=True,
     )
     elapsed = time.perf_counter() - start
-    logger.info("written %s", output)
-    logger.info("completed in %.3f seconds", elapsed)
+    logger.info("write_done", extra={"path": str(output)})
+    logger.info("run_completed", extra={"elapsed": elapsed})
     return 0
 
 
