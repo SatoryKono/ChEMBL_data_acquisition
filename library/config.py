@@ -962,6 +962,7 @@ def _validate(cfg: Config) -> None:
         if service.rps <= 0 or service.burst <= 0:
             raise ValueError(f"{name}.rps and {name}.burst must be positive")
 
+
  
     basic_services: list[tuple[str, Any]] = [
         ("pubmed", cfg.pubmed),
@@ -977,12 +978,13 @@ def _validate(cfg: Config) -> None:
         if not service.encodings:
             raise ValueError(f"{name}.encodings must not be empty")
  
+
     mapping = cfg.uniprot_mapping
     if not _valid_url(mapping.base):
         raise ValueError("uniprot_mapping.base must be a valid URL")
     if mapping.poll_interval <= 0 or mapping.timeout <= 0:
         raise ValueError("uniprot_mapping.poll_interval and timeout must be positive")
- 
+
 
     for name, mail in [
         ("openalex", cfg.openalex.mailto),
