@@ -405,17 +405,19 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 1
 
+    chunk_ids: list[str] = []
     try:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            chunk_ids = list(ids)  # capture IDs for logging on failure
             doc_df = cl.get_documents(
-                ids,
+                chunk_ids,
                 cfg=cfg.api,
                 client=client,
                 chunk_size=cfg.document.all.chunk_size,
                 timeout=cfg.document.all.timeout,
             )
     except (requests.RequestException, ValueError) as exc:
-        logger.error("failed to retrieve documents: %s", exc)
+        logger.error("failed to retrieve documents for %s: %s", chunk_ids, exc)
         return 1
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     if doc_df.empty or "pubmed_id" not in doc_df:
