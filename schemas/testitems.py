@@ -6,7 +6,6 @@ import pandera.pandas as pa
 
 TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "salt_chembl_id": pa.Column(str, required=True),
         "salt_chembl_id": pa.Column(str, required=False),
         "molecule_chembl_id": pa.Column(str, required=True),
         "molecule_type": pa.Column(
