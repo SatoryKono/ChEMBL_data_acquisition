@@ -7,10 +7,8 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-
+import library.metadata as metadata
 from library.metadata import Stats, _git_sha, write_meta_yaml
-
-
 
 
 def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
@@ -59,7 +57,6 @@ def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
     assert required_keys <= data.keys()
 
 
-
 def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """_git_sha uses the ``GIT_SHA`` environment variable when available."""
 
@@ -67,6 +64,7 @@ def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     with patch("library.metadata.subprocess.check_output") as mock:
         assert _git_sha() == "envsha"
         mock.assert_not_called()
+
 
 def test_git_sha_missing_git_executable(monkeypatch: pytest.MonkeyPatch) -> None:
     """_git_sha returns UNKNOWN and warns when git is absent."""
