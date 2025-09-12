@@ -1,10 +1,14 @@
 import io
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
+from pytest import LogCaptureFixture, MonkeyPatch
 
-from library.cli import configure_logger
+from library.cli import LoggerConfig, configure_logger
+from library.logging_setup import Logger
 from scripts import get_activity_data as gad
 from scripts import get_assay_data as gas
 from scripts import get_document_data as gdd
@@ -30,7 +34,12 @@ CLIS = [
 
 @pytest.mark.parametrize("entry, extra, use_sys", CLIS)
 def test_malformed_config_exits(
-    tmp_path: Path, entry, extra, use_sys, monkeypatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    entry: Callable[..., int],
+    extra: list[str],
+    use_sys: bool,
+    monkeypatch: MonkeyPatch,
+    caplog: LogCaptureFixture,
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
@@ -48,7 +57,7 @@ def test_malformed_config_exits(
     buf = io.StringIO()
     orig = configure_logger
 
-    def _conf(cfg, *a, **k):
+    def _conf(cfg: LoggerConfig, *a: Any, **k: Any) -> Logger:
         cfg.stream = buf
         return orig(cfg, *a, **k)
 
