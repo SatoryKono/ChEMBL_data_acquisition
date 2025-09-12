@@ -173,6 +173,31 @@ def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
     assert combined["activity"]["val"].tolist() == ["a", "b"]
 
 
+def test_build_combined_tables_handles_asymmetric_duplicate_activity_columns() -> None:
+    """Concatenation succeeds when only one activity table has duplicates."""
+    same: TableDict = {
+        "activity": pd.DataFrame(
+            [[1, "a", "z"]], columns=["activity_chembl_id", "val", "val"]
+        ),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame([[2, "b"]], columns=["activity_chembl_id", "val"]),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
+    }
+    combined = build_combined_tables(same, all_)
+    assert list(combined["activity"].columns) == ["activity_chembl_id", "val"]
+    assert combined["activity"]["val"].tolist() == ["a", "b"]
+
+
 @pytest.mark.parametrize(
     "entity,id_col",
     [
@@ -645,7 +670,6 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
 
 
-
 @pytest.mark.parametrize(
     ("entity", "df", "col"),
     [
@@ -671,7 +695,6 @@ def test_save_tables_orders_key_column_first(
     assert result.columns[0] == col
 
 
-
 def test_save_tables_drops_duplicate_columns_and_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -681,7 +704,7 @@ def test_save_tables_drops_duplicate_columns_and_warns(
     def fake_warn(msg: str, *args: object, **kwargs: object) -> None:
         messages.append(msg % args)
 
-    monkeypatch.setattr(lib.logger, "warning", fake_warn)
+    monkeypatch.setattr(lib.logger, "warning", fake_warn)  # type: ignore[attr-defined]
 
     # Create a table with duplicated column names
     df = pd.DataFrame([[1, "a", "b"]], columns=["id", "dup", "dup"])
