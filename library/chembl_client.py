@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 import threading
 from collections.abc import Iterable, Iterator
@@ -102,6 +103,11 @@ class ChemblClient:
         timeout:
             Optional override for the read timeout in seconds.
 
+        Notes
+        -----
+        The response body is decoded using the declared encoding or UTF-8,
+        replacing undecodable bytes with ``\ufffd`` before JSON parsing.
+
         Returns
         -------
         dict[str, Any]
@@ -112,7 +118,7 @@ class ChemblClient:
         requests.RequestException
             If the HTTP request fails.
         ValueError
-            If the response body is not valid JSON.
+            If the response body is not valid JSON or cannot be decoded.
         """
 
         limiter = get_limiter("chembl", cfg.rps, cfg.burst)
@@ -140,7 +146,22 @@ class ChemblClient:
                     url, timeout=(cfg.timeout_connect, read_timeout)
                 ) as response:
                     response.raise_for_status()
-                    data: dict[str, Any] = cast(dict[str, Any], response.json())
+                    try:
+                        text = response.content.decode(
+                            response.encoding or "utf-8", errors="replace"
+                        )
+                    except UnicodeDecodeError as exc:  # pragma: no cover - rare
+                        logger.exception("decode_error", extra={"url": url})
+                        raise ValueError(
+                            f"failed to decode response from {url}"
+                        ) from exc
+                    try:
+                        data: dict[str, Any] = cast(dict[str, Any], json.loads(text))
+                    except json.JSONDecodeError as exc:
+                        logger.exception("json_error", extra={"url": url})
+                        raise ValueError(
+                            f"invalid JSON in response from {url}"
+                        ) from exc
                     logger.info(
                         "request_ok",
                         extra={

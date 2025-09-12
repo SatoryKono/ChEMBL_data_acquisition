@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import time
 from typing import Any
@@ -27,6 +28,11 @@ def api_cfg(**kwargs: Any) -> ApiCfg:
 
 
 class DummyResponse:
+    def __init__(self, data: dict[str, Any] | None = None) -> None:
+        self.encoding = "utf-8"
+        self._data = data or {"ok": True}
+        self.content = json.dumps(self._data).encode(self.encoding)
+
     def __enter__(self) -> DummyResponse:  # pragma: no cover - trivial
         return self
 
@@ -36,8 +42,8 @@ class DummyResponse:
     def raise_for_status(self) -> None:  # pragma: no cover - no error
         pass
 
-    def json(self) -> dict[str, Any]:
-        return {"ok": True}
+    def json(self) -> dict[str, Any]:  # pragma: no cover - compatibility
+        return self._data
 
 
 class DummySession:
@@ -206,6 +212,25 @@ def test_request_json_preserves_original_error_message(monkeypatch) -> None:
     message = str(exc_info.value)
     assert "404" in message
     assert url in message
+
+
+@responses.activate
+def test_request_json_replaces_invalid_bytes() -> None:
+    """Misencoded responses should substitute undecodable bytes."""
+
+    client = ChemblClient(api_cfg(), RetryCfg())
+    client.clear_cache()
+    url = "http://example.com/latin1"
+    body = json.dumps({"name": "±"}, ensure_ascii=False).encode("latin-1")
+    responses.add(
+        responses.GET,
+        url,
+        body=body,
+        status=200,
+        content_type="application/json; charset=utf-8",
+    )
+    result = client.request_json(url, cfg=api_cfg())
+    assert result["name"] == "\ufffd"
 
 
 def test_clear_cache() -> None:
