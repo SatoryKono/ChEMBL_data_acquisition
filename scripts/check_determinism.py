@@ -2,9 +2,9 @@
 """Verify deterministic CSV output.
 
 This script writes a small test :class:`pandas.DataFrame` twice using
-:func:`library.csv_utils.write_csv_deterministic` and compares the
-SHA-256 hashes of the resulting files. A non-zero exit code is returned if the
-hashes differ.
+:func:`library.csv_utils.write_csv_deterministic` and compares the SHA-256 hashes
+of the resulting files. Row ordering is stabilised by sorting on column ``a``.
+A non-zero exit code is returned if the hashes differ.
 """
 
 from __future__ import annotations
@@ -55,11 +55,12 @@ def run_check(tmp_dir: Path) -> bool:
     first = tmp_dir / "first.csv"
     second = tmp_dir / "second.csv"
 
-    # Write the DataFrame twice using the deterministic writer
-    write_csv_deterministic(df, first)
+    # Write the DataFrame twice using the deterministic writer.
+    # Sorting on column "a" keeps row ordering consistent across runs.
+    write_csv_deterministic(df, first, key_cols=("a",))
     hash1 = sha256_file(first)
 
-    write_csv_deterministic(df, second)
+    write_csv_deterministic(df, second, key_cols=("a",))
     hash2 = sha256_file(second)
 
     logger.debug("First hash: %s", hash1)
