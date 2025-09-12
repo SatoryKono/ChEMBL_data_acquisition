@@ -424,8 +424,10 @@ All scripts share a common set of flags:
 Default settings live in ``config.yaml`` and are split into sections for each
 API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
 I/O and processing (``io``, ``jobs``, ``batch``, ``quality``, ``mapper``) and
-general infrastructure (``init``, ``rate``, ``retry``, ``log``). A minimal
-configuration looks like::
+general infrastructure (``init``, ``rate``, ``retry``, ``log``). The companion
+``config.schema.json`` file documents these fields and is useful for editor
+validation, but it must **not** be passed to ``--config`` because it lacks
+runtime values such as ``api.user_agent``. A minimal configuration looks like::
 
 
     api:
