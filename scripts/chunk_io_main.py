@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from library.chunk_io import process_csv_chunks
 from library.cli import LoggerConfig, add_common_arguments, configure_logger

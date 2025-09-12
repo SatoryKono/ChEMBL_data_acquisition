@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 import requests
 
-
 responses = pytest.importorskip("responses")
 
 

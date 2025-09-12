@@ -82,6 +82,42 @@ def _first_token(value: str | None) -> str:
     return ""
 
 
+def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
+    """Write ``df`` to a uniquely named snapshot CSV file.
+
+    The file is created alongside ``base`` using the pattern
+    ``<base>_<step>_<n>.csv`` where ``n`` increments to avoid overwriting
+    existing files.
+
+    Parameters
+    ----------
+    df:
+        Data frame to serialise.
+    base:
+        Base path for the output file. Its stem and suffix determine the
+        snapshot file name.
+    step:
+        Descriptive label inserted into the snapshot file name.
+    cfg:
+        Application configuration (currently unused but kept for API
+        compatibility).
+
+    Returns
+    -------
+    Path
+        Path to the written snapshot file.
+    """
+    stem = base.stem
+    suffix = base.suffix or ".csv"
+    index = 1
+    while True:
+        candidate = base.with_name(f"{stem}_{step}_{index}{suffix}")
+        if not candidate.exists():
+            df.to_csv(candidate, index=False)
+            return candidate
+        index += 1
+
+
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create and return the top-level CLI argument parser.
 

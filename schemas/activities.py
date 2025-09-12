@@ -19,7 +19,7 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
             pa.Check.isin(["IC50", "Ki"]),
             required=False,
         ),
-    #    "standard_value": pa.Column(float, pa.Check.ge(-1), required=True),
+        "standard_value": pa.Column(float, pa.Check.ge(0), required=True),
     #    "pA_value": pa.Column(float, pa.Check.in_range(-14, 14), required=False),
     }
 )
