@@ -232,8 +232,10 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
     ):
         messages: list[str] = []
         monkeypatch.setattr(
-            git_utils.logger, "warning", lambda msg, *args: messages.append(msg % args)
+            git_utils.logger,
+            "warning",
+            lambda msg, *args, **kwargs: messages.append(msg % args if args else msg),
         )
         result = git_utils._git_sha()
     assert result == "UNKNOWN"
-    assert any("Unable to determine git SHA" in msg for msg in messages)
+    assert any("git_sha_unavailable" in msg for msg in messages)
