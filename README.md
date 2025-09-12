@@ -522,7 +522,7 @@ layout. Columns must satisfy the following contracts.
 Required columns
 
 * ``activity_id`` (*int*, ``>= 0``)
-* ``testitem_id`` (*str*)
+* ``molecule_chembl_id`` (*str*)
 * ``standard_value`` (*float*, ``>= 0``)
 
 Optional columns
@@ -534,14 +534,14 @@ Optional columns
 Valid row
 
 ```csv
-activity_id,testitem_id,target_id,standard_type,standard_value,pA_value
+activity_id,molecule_chembl_id,target_id,standard_type,standard_value,pA_value
 1,TST1,TGT1,IC50,50,9
 ```
 
 Invalid row (``standard_type`` outside enum, ``pA_value`` > 14)
 
 ```csv
-activity_id,testitem_id,target_id,standard_type,standard_value,pA_value
+activity_id,molecule_chembl_id,target_id,standard_type,standard_value,pA_value
 2,TST2,TGT2,IC90,100,20
 ```
 

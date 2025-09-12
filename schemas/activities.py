@@ -12,7 +12,7 @@ import pandera.pandas as pa
 ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
         "activity_id": pa.Column(int, pa.Check.ge(0), required=True),
-        "testitem_id": pa.Column(str, required=True),
+        "molecule_chembl_id": pa.Column(str, required=True),
         "target_id": pa.Column(str, required=False),
         "standard_type": pa.Column(
             str,

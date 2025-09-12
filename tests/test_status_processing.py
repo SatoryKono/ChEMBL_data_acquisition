@@ -39,7 +39,7 @@ def test_status_pipeline(tmp_path) -> None:
             "activity_chembl_id": [1, 2],
             "assay_chembl_id": ["A1", "A1"],
             "document_chembl_id": ["D1", "D1"],
-            "testitem_id": ["T1", "T2"],
+            "molecule_chembl_id": ["T1", "T2"],
             "target_chembl_id": ["TG1", "TG1"],
             "mesurement_type": ["IC50", "IC50"],
             "high_citation_rate": [False, False],
@@ -61,7 +61,7 @@ def test_status_pipeline(tmp_path) -> None:
         {
             "activity_chembl_id1": [1],
             "activity_chembl_id2": [2],
-            "testitem_id": ["T1"],
+            "molecule_chembl_id": ["T1"],
             "target_chembl_id": ["TG1"],
             "mesurement_type": ["IC50"],
             "independent_IC50": [1],
@@ -103,7 +103,7 @@ def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
             "activity_chembl_id": [1, 2],
             "assay_chembl_id": ["A1", "A1"],
             "document_chembl_id": ["D1", "D1"],
-            "testitem_id": ["T1", "T2"],
+            "molecule_chembl_id": ["T1", "T2"],
             "target_chembl_id": ["TG1", "TG1"],
             "mesurement_type": ["IC50", "IC50"],
             "high_citation_rate": [False, False],
@@ -115,7 +115,7 @@ def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
         {
             "activity_chembl_id1": [1],
             "activity_chembl_id2": [2],
-            "testitem_id": ["T1"],
+            "molecule_chembl_id": ["T1"],
             "target_chembl_id": ["TG1"],
             "mesurement_type": ["IC50"],
         }
@@ -133,14 +133,16 @@ def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
         assert activity_status[col].eq(0).all()
 
 
-def test_aggregate_activity_handles_missing_testitem_id(tmp_path: Path) -> None:
-    """Missing ``testitem_id`` should not break aggregation."""
+def test_aggregate_activity_handles_missing_molecule_chembl_id(
+    tmp_path: Path,
+) -> None:
+    """Missing ``molecule_chembl_id`` should not break aggregation."""
     (tmp_path / "status.csv").write_text(
         "status,condition_field,condition_value,order,score\ngood,null,null,0,0\n"
     )
     status_df = load_status_table(tmp_path)
     api = build_status_helpers(status_df)
-    # activity table deliberately lacks ``testitem_id``
+    # activity table deliberately lacks ``molecule_chembl_id``
     activity = pd.DataFrame(
         {
             "activity_chembl_id": [1, 2],

@@ -19,7 +19,7 @@ def test_get_activity_data_smoke(
         return pd.DataFrame(
             {
                 "activity_id": int_ids,
-                "testitem_id": ["CHEMBL1" for _ in int_ids],
+                "molecule_chembl_id": ["CHEMBL1" for _ in int_ids],
                 "target_id": ["CHEMBL2" for _ in int_ids],
                 "standard_type": ["IC50" for _ in int_ids],
                 "standard_value": [1.0 for _ in int_ids],
