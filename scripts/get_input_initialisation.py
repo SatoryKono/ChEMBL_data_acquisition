@@ -154,7 +154,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("save_done", extra={"tables": len(paths), "path": str(out_dir)})
         return 0
     except KeyError as exc:
-        logger.error("required table '%s' missing", exc.args[0])
+        err_msg = str(exc)
+        if "not in index" in err_msg:
+            # Pandas uses this phrasing when column selection fails.
+            logger.error("required column(s) missing: %s", err_msg)
+        else:
+            logger.error("required table '%s' missing", exc.args[0])
         return 1
 
 

@@ -1,7 +1,0 @@
-﻿index,Count,independent_IC50,independent_Ki,non_independent_IC50,non_independent_Ki,"testitem.Percentage, %"
-Count,1.0,,,0.988631894947369,0.952931887393052,0.8759879209213576
-independent_IC50,,,,,,
-independent_Ki,,,,,,
-non_independent_IC50,0.988631894947369,,,1.0,0.9679756141462329,0.8443304825809149
-non_independent_Ki,0.952931887393052,,,0.9679756141462329,1.0,0.7293046995103699
-"testitem.Percentage, %",0.8759879209213576,,,0.8443304825809149,0.7293046995103699,1.0

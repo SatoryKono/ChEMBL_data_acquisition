@@ -4,7 +4,7 @@
       "additionalProperties": false,
       "properties": {
         "column": {
-          "default": "activity_id",
+          "default": "activity_chembl_id",
           "title": "Column",
           "type": "string"
         },
@@ -762,19 +762,19 @@
           "type": "string"
         },
         "organism_csv": {
-          "default": "dictionary/organism.csv",
+          "default": "dictionary/_Target/targets_type.csv",
           "format": "path",
           "title": "Organism Csv",
           "type": "string"
         },
         "status_csv": {
-          "default": "dictionary/status.csv",
+          "default": "dictionary/_Curation/status.csv",
           "format": "path",
           "title": "Status Csv",
           "type": "string"
         },
         "targets_type_csv": {
-          "default": "dictionary/targets_type.csv",
+          "default": "dictionary/_Target/targets_type.csv",
           "format": "path",
           "title": "Targets Type Csv",
           "type": "string"
@@ -874,7 +874,7 @@
           "type": "number"
         },
         "organism_csv": {
-          "default": "dictionary/_Target/organism.csv",
+          "default": "dictionary/_Target/targets_type.csv",
           "format": "path",
           "title": "Organism Csv",
           "type": "string"
@@ -958,7 +958,7 @@
             "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv",
             "family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
             "timeout": 30.0,
-            "organism_csv": "dictionary/_Target/organism.csv",
+            "organism_csv": "dictionary/_Target/targets_type.csv",
             "uniprot_column": "uniprot_id",
             "chembl_out": null,
             "uniprot_out": null,
@@ -973,7 +973,7 @@
       "additionalProperties": false,
       "properties": {
         "column": {
-          "default": "chembl_id",
+          "default": "target_chembl_id",
           "title": "Column",
           "type": "string"
         },
@@ -1258,8 +1258,8 @@
         "iuphar_family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
         "uniprot_data_dir": "uniprot",
         "organism_csv": "dictionary/organism.csv",
-        "status_csv": "dictionary/status.csv",
-        "targets_type_csv": "dictionary/targets_type.csv"
+        "status_csv": "dictionary/_Curation/status.csv",
+        "targets_type_csv": "dictionary/_Target/targets_type.csv"
       }
     },
     "io": {
@@ -1349,7 +1349,7 @@
     "activity": {
       "$ref": "#/$defs/ActivityCfg",
       "default": {
-        "column": "activity_id",
+        "column": "activity_chembl_id",
         "chunk_size": 5,
         "timeout": 30.0,
         "limit": null,
@@ -1416,7 +1416,7 @@
           "data_dir": "dictionary/uniprot",
           "family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
           "iuphar_out": null,
-          "organism_csv": "dictionary/_Target/organism.csv",
+          "organism_csv": "dictionary/_Target/targets_type.csv", 
           "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv",
           "timeout": 30.0,
           "uniprot_column": "uniprot_id",

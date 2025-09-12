@@ -256,7 +256,7 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
     Parameters
     ----------
     df:
-        Status dataframe containing ``Filtered`` and metric columns.
+        Status dataframe containing ``Filtered.new`` and metric columns.
     table_name:
         Entity name used for percentage column prefix.
 
@@ -266,12 +266,21 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
         Aggregated table grouped by ``Filtered`` with counts and percentage
         information appended.
     """
-    df_tmp = df.copy()
+
+    if "Filtered.new" not in df.columns:
+        available = ", ".join(df.columns)
+        raise KeyError(
+            f"table '{table_name}' missing column 'Filtered.new'; "
+            f"available: {available}"
+        )
+
+    df_tmp = df.rename(columns={"Filtered.new": "Filtered"}).copy()
     metric_cols = [
         c
         for c in df_tmp.columns
         if c != "Filtered" and pd.api.types.is_numeric_dtype(df_tmp[c])
     ]
+
     grouped = df_tmp.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
     totals = {col: grouped[col].sum() for col in metric_cols}
     grouped = pd.concat(
@@ -295,8 +304,10 @@ def process_activity_table(
     df_activity:
         Deduplicated activity dataframe.
     dictionary_dir:
+
         Directory containing ``_Curation/citation_fraction.csv`` and
         ``targets_type.csv`` in a ``_Target`` subdirectory.
+
     targets_csv:
         Optional explicit path to ``targets_type.csv``. When provided, the file
         is loaded from this location instead of searching within
@@ -448,7 +459,7 @@ def process_activity_table(
     if targets_csv is not None:
         targets_path = Path(targets_csv)
     else:
-        targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
+        targets_path = Path(dictionary_dir) / "targets_type.csv"
         if not targets_path.exists():
             targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
         if not targets_path.exists():
@@ -463,25 +474,18 @@ def process_activity_table(
         targets_path,
         dtype={
             "target_chembl_id": "string",
-            "organism_type": "string",
-            "target_sort_order": "string",
             "IUPHAR_class": "string",
             "IUPHAR_subclass": "string",
-            "gene_index": "string",
-            "taxon_index": "string",
-            "multifunctional": "boolean",
+            "taxon_index":"string",
+            "gene_index":"string",
+            "target_sort_order": "string",
+            "multifunctional_enzyme":"string",
+            "organism_type": "string",
         },
     )
 
     df = df.merge(
-        targets[
-            [
-                "target_chembl_id",
-                "target_sort_order",
-                "organism_type",
-                "multifunctional",
-            ]
-        ],
+        targets[["target_chembl_id", "IUPHAR_class", "IUPHAR_subclass", "gene_index","taxon_index", "target_sort_order","multifunctional_enzyme", "organism_type"]],
         how="left",
         left_on="target_id",
         right_on="target_chembl_id",
@@ -495,7 +499,7 @@ def process_activity_table(
         df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
     )
 
-    df["multifunctional_enzyme"] = df["multifunctional"]
+    df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
 
     df.drop(columns=["target_chembl_id", "organism_type"], inplace=True)
 
@@ -525,9 +529,15 @@ def process_activity_table(
         "original_activity_approx",
         "original_activity_exact",
         "is_citation",
-        "target_sort_order",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
+        "IUPHAR_class", 
+        "IUPHAR_subclass", 
+        "gene_index",
+        "taxon_index", 
+        "target_sort_order",
     ]
 
     missing_final = set(final_cols) - set(df.columns)
@@ -756,15 +766,8 @@ def unify_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """Softly cast frequent columns to expected dtypes.
 
     Unrecognised values fall back to ``string`` dtype while emitting a warning.
-    Duplicate column names are removed with the first occurrence kept to avoid
-    issues when concatenating data frames.
     """
-    # ``df`` may originate from external sources that accidentally contain
-    # duplicate column names. Pandas operations such as ``pd.concat`` require
-    # a unique column index and will raise ``InvalidIndexError`` otherwise.
-    # ``loc`` with ``~df.columns.duplicated()`` selects the first occurrence of
-    # each column name and discards subsequent duplicates.
-    result = df.loc[:, ~df.columns.duplicated()].copy()
+    result = df.copy()
     for col in STRING_COLS & set(result.columns):
         result[col] = result[col].astype("string")
     for col in INT_COLS & set(result.columns):
@@ -1130,8 +1133,6 @@ def save_tables(
     - ``*_non_independent`` → ``non_independent/``
     - ``*_status`` tables are placed under ``status/`` with the above
       variants nested within it.
-    - ``*_status_statistics`` tables follow the same directory rules as
-      ``*_status``.
 
     Parameters
     ----------
@@ -1155,15 +1156,7 @@ def save_tables(
     paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
-        if entity.endswith("_non_independent_status_statistics"):
-            sub_dir = out_dir / "status" / "non-independent"
-        elif entity.endswith("_independent_status_statistics"):
-            sub_dir = out_dir / "status" / "independent"
-        elif entity.endswith("_same_document_status_statistics"):
-            sub_dir = out_dir / "status" / "same_document"
-        elif entity.endswith("_status_statistics"):
-            sub_dir = out_dir / "status"
-        elif entity.endswith("_non_independent_status"):
+        if entity.endswith("_non_independent_status"):
             sub_dir = out_dir / "status" / "non-independent"
         elif entity.endswith("_independent_status"):
             sub_dir = out_dir / "status" / "independent"
@@ -1602,18 +1595,12 @@ def initialize_pairs(
     df = pair_df.copy()
     mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
     df = df.merge(
-        mapping,
-        left_on="activity_chembl_id1",
-        right_on="activity_chembl_id",
-        how="left",
+        mapping, left_on="activity_chembl_id1", right_on="activity_chembl_id", how="left"
     )
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
     df.drop(columns=["activity_chembl_id"], inplace=True)
     df = df.merge(
-        mapping,
-        left_on="activity_chembl_id2",
-        right_on="activity_chembl_id",
-        how="left",
+        mapping, left_on="activity_chembl_id2", right_on="activity_chembl_id", how="left"
     )
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
     df.drop(columns=["activity_chembl_id"], inplace=True)
@@ -1679,21 +1666,13 @@ def aggregate_activity(
             df_pairs[col] = 0
 
     left = df_pairs.rename(
-        columns={
-            "activity_chembl_id1": "activity_chembl_id",
-            "Filtered1": "Filtered.new",
-        }
+        columns={"activity_chembl_id1": "activity_chembl_id", "Filtered1": "Filtered.new"}
     )[["activity_chembl_id", "Filtered.new", *metrics]]
     right = df_pairs.rename(
-        columns={
-            "activity_chembl_id2": "activity_chembl_id",
-            "Filtered2": "Filtered.new",
-        }
+        columns={"activity_chembl_id2": "activity_chembl_id", "Filtered2": "Filtered.new"}
     )[["activity_chembl_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
-    activity_status = _aggregate_entity(
-        activity_pairs, "activity_chembl_id", status_api
-    )
+    activity_status = _aggregate_entity(activity_pairs, "activity_chembl_id", status_api)
 
     merged = activity_df.merge(activity_status, on="activity_chembl_id", how="left")
     merged["Filtered.new"] = merged["Filtered.new"].fillna(merged["Filtered.init"])

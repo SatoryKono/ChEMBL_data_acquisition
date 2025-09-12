@@ -103,7 +103,7 @@ doc_type:
     unknown: 2
 
 activity:
-  column: "activity_id"
+  column: "activity_chembl_id"
   chunk_size: 5
   timeout: 30.0
   limit: null
@@ -152,7 +152,7 @@ target:
     target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"
     family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"
     timeout: 30.0
-    organism_csv: "dictionary/_Target/organism.csv"
+    organism_csv: "dictionary/_Target/targets_type.csv"
     uniprot_column: "uniprot_id"
     chembl_out: null
     uniprot_out: null
@@ -163,9 +163,9 @@ resources:
   iuphar_target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
   iuphar_family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
   uniprot_data_dir: "dictionary/uniprot"  # Directory containing cached UniProt JSON files
-  organism_csv: "dictionary/_Target/organism.csv"  # Organism taxonomy mapping file
+  organism_csv: "dictionary/_Target/targets_type.csv"  # Organism taxonomy mapping file
   status_csv: "dictionary/status.csv"  # Activity status configuration table
-  targets_type_csv: "dictionary/targets_type.csv"  # Target type mapping table
+  targets_type_csv: "dictionary/_Target/targets_type.csv"  # Target type mapping table
 
 io:
   output_dir: "data/output"  # Directory for generated datasets
