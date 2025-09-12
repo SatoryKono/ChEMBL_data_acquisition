@@ -61,3 +61,24 @@ def test_get_documents_handles_invalid_ids() -> None:
     df = get_documents(["", "#N/A"], cfg=cfg, client=client)
     assert df.empty
     assert not client.called
+
+
+def test_get_documents_deduplicates_ids(
+    duplicate_document_ids: list[str],
+) -> None:
+    """Duplicate identifiers should trigger at most one HTTP request each."""
+
+    cfg = ApiCfg(
+        chembl_base="https://example.com",
+        user_agent="test/0.1 (mailto:test@example.com)",
+    )
+    client = FakeClient()
+    df = get_documents(
+        duplicate_document_ids,
+        cfg=cfg,
+        client=client,
+        chunk_size=1,
+    )
+
+    assert df["document_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
+    assert len(client.called) == len({"CHEMBL1", "CHEMBL2"})
