@@ -1,36 +1,48 @@
+from collections.abc import Iterable, Iterator
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+import pytest
 
 from scripts import csv_utils_main as cli
 
 
-def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:
+def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     input_csv = tmp_path / "in.csv"
     input_csv.write_text("a|b\n1|2\n", encoding="latin1")
     output_csv = tmp_path / "out.csv"
     called: dict[str, object] = {}
 
-    def fake_read_csv(path, sep, encoding, chunksize):  # type: ignore[override]
+    def fake_read_csv(
+        path: Path | str,
+        sep: str,
+        encoding: str,
+        chunksize: int,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Iterator[pd.DataFrame]:
         called["path"] = path
         called["sep"] = sep
         called["encoding"] = encoding
         called["chunksize"] = chunksize
 
-        def gen():
+        def gen() -> Iterator[pd.DataFrame]:
             yield pd.DataFrame({"a": [1], "b": [2]})
 
         return gen()
 
     def fake_write(
-        chunks,
-        output,
-        col_order=None,
-        key_cols=None,
-        chunksize=None,
-        drop_unexpected_cols=False,
-    ):  # type: ignore[override]
+        chunks: Iterable[pd.DataFrame],
+        output: Path | str,
+        col_order: list[str] | None = None,
+        key_cols: list[str] | None = None,
+        chunksize: int | None = None,
+        drop_unexpected_cols: bool = False,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         called["output"] = output
         called["write_chunksize"] = chunksize
         list(chunks)  # exhaust generator
@@ -66,27 +78,38 @@ def test_cli_arguments_passed(monkeypatch, tmp_path: Path) -> None:
     assert called["write_chunksize"] == 2
 
 
-def test_cli_generates_output_path(monkeypatch, tmp_path: Path) -> None:
+def test_cli_generates_output_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("a,b\n1,2\n", encoding="utf8")
-    called: dict[str, Path] = {}
+    called: dict[str, Path | str] = {}
 
-    def fake_read_csv(path, sep, encoding, chunksize):  # type: ignore[override]
+    def fake_read_csv(
+        path: Path | str,
+        sep: str,
+        encoding: str,
+        chunksize: int,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Iterator[pd.DataFrame]:
         called["path"] = path
 
-        def gen():
+        def gen() -> Iterator[pd.DataFrame]:
             yield pd.DataFrame({"a": [1], "b": [2]})
 
         return gen()
 
     def fake_write(
-        chunks,
-        output,
-        col_order=None,
-        key_cols=None,
-        chunksize=None,
-        drop_unexpected_cols=True,
-    ):  # type: ignore[override]
+        chunks: Iterable[pd.DataFrame],
+        output: Path | str,
+        col_order: list[str] | None = None,
+        key_cols: list[str] | None = None,
+        chunksize: int | None = None,
+        drop_unexpected_cols: bool = True,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         called["output"] = output
         list(chunks)
 
