@@ -108,6 +108,9 @@ def write_csv_deterministic(
 ) -> Path:
     """Serialise ``df`` to ``path`` as a deterministic CSV file.
 
+    Column names must be unique; duplicate labels will raise a
+    :class:`ValueError`.
+
     Parameters
     ----------
     df:
@@ -140,6 +143,12 @@ def write_csv_deterministic(
     -------
     pathlib.Path
         Path to the written CSV file.
+
+    Raises
+    ------
+    ValueError
+        If ``df`` contains duplicate column names or ``chunksize`` is not a
+        positive integer.
     """
 
     out_path = Path(path)
@@ -148,6 +157,16 @@ def write_csv_deterministic(
     # Validate optional chunksize to avoid infinite loops or crashes
     if chunksize is not None and chunksize <= 0:
         msg = f"chunksize must be a positive integer, got {chunksize}"
+        raise ValueError(msg)
+
+    # Ensure column names are unique to avoid ambiguous output
+    duplicated = df.columns[df.columns.duplicated()]
+    if not duplicated.empty:
+        dup_list = list(duplicated)
+        msg = (
+            f"Duplicate column names found: {dup_list}. "
+            "Rename or disambiguate columns before writing."
+        )
         raise ValueError(msg)
 
     # Operations below mutate ``df`` directly to avoid unnecessary copies.
@@ -213,6 +232,9 @@ def write_csv_chunks_deterministic(
 ) -> Path:
     """Write DataFrame chunks to ``path`` deterministically.
 
+    Column names in each chunk must be unique; duplicates result in a
+    :class:`ValueError`.
+
     Each ``df_chunk`` is immediately normalised and written to a temporary
     file using :func:`write_csv_deterministic` with ``chunksize`` to reduce
     peak memory usage. After all chunks are processed the temporary files are
@@ -247,11 +269,26 @@ def write_csv_chunks_deterministic(
     -------
     pathlib.Path
         Path to the written CSV file.
+
+    Raises
+    ------
+    ValueError
+        If any chunk contains duplicate column names.
     """
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_paths: list[Path] = []
         for idx, chunk in enumerate(chunks):
+            # Detect duplicate column names within each chunk
+            duplicated = chunk.columns[chunk.columns.duplicated()]
+            if not duplicated.empty:
+                dup_list = list(duplicated)
+                msg = (
+                    f"Duplicate column names found in chunk {idx}: {dup_list}. "
+                    "Rename or disambiguate columns before writing."
+                )
+                raise ValueError(msg)
+
             tmp_path = Path(tmpdir) / f"chunk_{idx}.csv"
             write_csv_deterministic(
                 chunk,
