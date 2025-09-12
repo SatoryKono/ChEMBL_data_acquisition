@@ -764,7 +764,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             args,
             subparser,
             args.config,
-            mapping={
+            mapping=mapping
+            | {
                 "timeout": "api.timeout_read",
                 "openalex_rps": "openalex.rps",
                 "crossref_rps": "crossref.rps",
