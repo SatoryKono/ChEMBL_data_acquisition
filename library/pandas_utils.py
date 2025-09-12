@@ -7,7 +7,7 @@ newer versions of pandas (>=2.0), such as the ``dtype_backend`` argument.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -44,10 +44,17 @@ def json_normalize_pyarrow(
 
     try:
         # pandas >= 2.0 supports ``dtype_backend``
-        return pd.json_normalize(data, dtype_backend=dtype_backend, **kwargs)
+        return cast(
+            pd.DataFrame,
+            pd.json_normalize(
+                data,
+                dtype_backend=dtype_backend,
+                **kwargs,
+            ),
+        )  # type: ignore[arg-type, unused-ignore]
     except TypeError:
         # For pandas < 2.0, fall back to the default behaviour
-        return pd.json_normalize(data, **kwargs)
+        return cast(pd.DataFrame, pd.json_normalize(data, **kwargs))
 
 
 def read_csv_pyarrow(
@@ -74,9 +81,16 @@ def read_csv_pyarrow(
     """
 
     try:
-        return pd.read_csv(*args, dtype_backend=dtype_backend, **kwargs)
+        return cast(
+            pd.DataFrame,
+            pd.read_csv(
+                *args,
+                dtype_backend=dtype_backend,
+                **kwargs,
+            ),
+        )  # type: ignore[arg-type, unused-ignore]
     except (TypeError, ImportError):
-        return pd.read_csv(*args, **kwargs)
+        return cast(pd.DataFrame, pd.read_csv(*args, **kwargs))
 
 
 __all__ = ["json_normalize_pyarrow", "read_csv_pyarrow"]
