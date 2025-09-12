@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-import mapper_main as mapper
-import table_quality_main as tqm
 from library.cli import configure_logger
 from scripts import get_activity_data as gad
 from scripts import get_assay_data as gas
@@ -14,6 +12,8 @@ from scripts import get_document_type as gdoctype
 from scripts import get_input_initialisation as gii
 from scripts import get_target_data as gtd
 from scripts import get_testitem_data as gtdt
+from scripts import mapper_main as mapper
+from scripts import table_quality_main as tqm
 
 CLIS = [
     (gad.main, [], False),

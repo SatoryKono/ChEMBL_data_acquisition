@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import chunk_io_main as cli
+from scripts import chunk_io_main as cli
 
 
 def test_cli_limit(tmp_path: Path) -> None:
