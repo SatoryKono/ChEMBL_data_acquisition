@@ -16,9 +16,8 @@ from __future__ import annotations
 import logging
 import os
 import re
-from collections.abc import Collection
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlparse
 
 import yaml
@@ -519,7 +518,10 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
         total=retry.max_attempts,
         backoff_factor=retry.backoff_factor,
         status_forcelist=retry.status_forcelist,
-        allowed_methods=cast(Collection[str] | None, False),
+        # ``None`` disables method filtering and retries all HTTP methods.
+        # Using ``None`` directly avoids ``Collection`` union type evaluation
+        # issues under Python 3.12.
+        allowed_methods=None,
         raise_on_status=False,
     )
     adapter = HTTPAdapter(max_retries=retry_cfg)
