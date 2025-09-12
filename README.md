@@ -681,6 +681,10 @@ in ``--out-dir``.
 
 Install the optional developer tools and run the standard quality checks:
 
+* ``pre-commit`` – run formatting, linting, type checking and tests in one go::
+
+      pre-commit run --all-files
+
 * ``black`` – auto-format the code::
 
       black scripts library mapper_main.py table_quality_main.py
