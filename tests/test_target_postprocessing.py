@@ -39,7 +39,7 @@ def test_postprocess_targets_merges_and_normalises() -> None:
             "ec_code": ["2.2.2.2"],
         }
     )
-    out = tp.postprocess_targets(df)
+    out = tp.postprocess_targets(df, chembl_col="chembl_id")
 
     row = out.iloc[0]
     assert row["uniprotkb_Id"] == "P12345"
@@ -81,9 +81,9 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
     df.to_csv(input_path, index=False, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
     output_path = tmp_path / "out.csv"
 
-    tp.postprocess_file(input_path, output_path, cfg=cfg)
+    tp.postprocess_file(input_path, output_path, cfg=cfg, chembl_col="chembl_id")
 
-    expected = tp.postprocess_targets(df).astype(str)
+    expected = tp.postprocess_targets(df, chembl_col="chembl_id").astype(str)
     result = pd.read_csv(
         output_path, dtype=str, sep=cfg.csv_sep, encoding=cfg.csv_encoding
     )
@@ -96,22 +96,29 @@ def test_finalise_targets_filters_duplicates_and_merges() -> None:
     df = pd.DataFrame(
         {
             "chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
-            "uniprotkb_Id": ["P12345", "P12345", "nan"],
-            "genus": ["Homo", "Homo", "Mus"],
+            "uniprot": ["P12345", "P12345", "nan"],
+            "organism": ["Homo", "Homo", "Mus"],
             "isoform_names": ["IsoA", "IsoB", "IsoC"],
             "synonyms": ["SynA", "SynB", "SynC"],
             "SUPFAM": ["s1", "s2", "s3"],
             "transmembrane": ["True", "True", "False"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
 
-    out = tp.finalise_targets(df, organism)
+    out = tp.finalise_targets(
+        df,
+        organism,
+        chembl_col="chembl_id",
+        uniprot_col="uniprot",
+        genus_col="organism",
+    )
 
     assert list(out["chembl_id"]) == ["CHEMBL1"]
     assert "SUPFAM" not in out.columns
     assert out.loc[0, "isoform_names"] == "isoa"
     assert out.loc[0, "type"] == "Mammal"
+    assert out.loc[0, "organism"] == "Homo"
     assert out["transmembrane"].dtype == "boolean"
 
 
@@ -121,13 +128,13 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame(
         {
             "chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
-            "uniprotkb_Id": ["P12345", "P12345", "nan"],
-            "genus": ["Homo", "Homo", "Mus"],
+            "uniprot": ["P12345", "P12345", "nan"],
+            "organism": ["Homo", "Homo", "Mus"],
             "synonyms": ["SynA", "SynB", "SynC"],
             "SUPFAM": ["s1", "s2", "s3"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
 
     input_path = tmp_path / "in.csv"
     df.to_csv(input_path, index=False)
@@ -136,9 +143,22 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
     output_path = tmp_path / "out.csv"
 
     cfg.resources.organism_csv = organism_path
-    tp.finalise_file(input_path, output_path, cfg=cfg)
+    tp.finalise_file(
+        input_path,
+        output_path,
+        cfg=cfg,
+        chembl_col="chembl_id",
+        uniprot_col="uniprot",
+        genus_col="organism",
+    )
 
-    expected = tp.finalise_targets(df, organism).astype(str)
+    expected = tp.finalise_targets(
+        df,
+        organism,
+        chembl_col="chembl_id",
+        uniprot_col="uniprot",
+        genus_col="organism",
+    ).astype(str)
     result = pd.read_csv(output_path, dtype=str)
     pd.testing.assert_frame_equal(result, expected)
 
@@ -149,13 +169,19 @@ def test_finalise_targets_no_downcast_warning() -> None:
     df = pd.DataFrame(
         {
             "chembl_id": ["CHEMBL1"],
-            "uniprotkb_Id": ["P12345"],
-            "genus": ["Homo"],
+            "uniprot": ["P12345"],
+            "organism": ["Homo"],
             "transmembrane": ["True"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", FutureWarning)
-        tp.finalise_targets(df, organism)
+        tp.finalise_targets(
+            df,
+            organism,
+            chembl_col="chembl_id",
+            uniprot_col="uniprot",
+            genus_col="organism",
+        )
