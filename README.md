@@ -39,7 +39,7 @@ tokens should be stored in a local ``.env`` file – see
 3. **Run a sample script**
 
    ```bash
-   python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
+   python -m scripts.get_activities --input tests/data/activity_ids_small.csv \
        --output out/activities.csv --limit 10 --log-level INFO
    ```
 
@@ -47,7 +47,7 @@ tokens should be stored in a local ``.env`` file – see
    to ``out/activities.csv``. Common CLI flags include ``--input`` and
    ``--output`` for file paths, ``--limit`` to cap processed records,
    ``--log-level`` for verbosity, ``--sep`` for CSV delimiter and
-   ``--encoding`` for file encoding. Additional examples:
+   ``--encoding`` for file encoding. Direct execution via ``python scripts/get_activities.py`` requires installing the project or adding the repository root to ``PYTHONPATH``; using ``-m scripts.get_activities`` avoids this extra setup. Additional examples:
 
    ```bash
    python mapper_main.py --input tests/data/assays.csv \
@@ -73,7 +73,8 @@ tokens should be stored in a local ``.env`` file – see
 Скрипты из каталога `scripts/` создают CSV-файлы и сохраняют их в `data/output/`. Пример:
 
 ```bash
-python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
+python -m scripts.get_activities --input tests/data/activity_ids_small.csv \
+    --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 Результирующие файлы располагаются в `data/output/`. Каталог игнорируется Git и автоматически публикуется как артефакт CI.
@@ -131,7 +132,7 @@ validation schemas.
 Generate dummy activity entries without contacting external services:
 
 ```bash
-python scripts/get_activities.py --limit 500 --dry-run
+python -m scripts.get_activities --limit 500 --dry-run
 ```
 
 The command logs that it would generate 500 activity rows and exits without
@@ -344,7 +345,7 @@ config.yaml       Global configuration defaults
 
 Individual scripts provide specialised data retrieval utilities:
 
-* ``scripts/get_activity_data.py`` – fetch ChEMBL activity information.
+* ``scripts/get_activities.py`` – fetch ChEMBL activity information.
 * ``scripts/get_assay_data.py`` – retrieve assay descriptions from ChEMBL.
 * ``scripts/get_document_data.py`` – gather publication metadata.
 * ``scripts/get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.
@@ -355,7 +356,7 @@ For a quick connectivity check without writing any files, limit the number of
 records and enable dry-run mode:
 
 ```bash
-python scripts/get_activity_data.py --limit 10 --dry-run
+python -m scripts.get_activities --limit 10 --dry-run
 ```
 
 ## Reproducibility
