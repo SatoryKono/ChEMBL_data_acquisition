@@ -67,13 +67,21 @@ def _positive_int(value: str) -> int:
     return ivalue
 
 
-def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+def add_common_arguments(
+    parser: argparse.ArgumentParser, *, defaults: bool = True
+) -> argparse.ArgumentParser:
     """Add shared CLI arguments to ``parser``.
 
     Parameters
     ----------
     parser:
         Parser to be extended with common arguments.
+    defaults:
+        Whether to apply default values. When ``False`` the options are added
+        with ``argparse.SUPPRESS`` so that they do not override values provided
+        on a parent parser. This is useful for sub-commands that share global
+        options while still allowing those options to be specified before the
+        sub-command name.
 
     Returns
     -------
@@ -86,23 +94,29 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
     ``output_<input-stem>_<YYYYMMDD>.csv`` is created next to the input file.
     """
 
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    log_level = "INFO" if defaults else argparse.SUPPRESS
+    input_default: Path | object = Path("input.csv") if defaults else argparse.SUPPRESS
+    output_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    sep_default: str | object = "," if defaults else argparse.SUPPRESS
+    enc_default: str | object = "utf8" if defaults else argparse.SUPPRESS
+
+    parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
         "--input",
         dest="input_csv",
         type=Path,
-        default=Path("input.csv"),
+        default=input_default,
         help="Input CSV file",
     )
     parser.add_argument(
         "--output",
         dest="output_csv",
         type=Path,
-        default=None,
+        default=output_default,
         help="Destination CSV file (default: output_<stem>_<YYYYMMDD>.csv)",
     )
-    parser.add_argument("--sep", default=",", help="CSV delimiter")
-    parser.add_argument("--encoding", default="utf8", help="File encoding")
+    parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
+    parser.add_argument("--encoding", default=enc_default, help="File encoding")
     return parser
 
 
@@ -154,31 +168,60 @@ def build_parser(
     return parser, log_cfg
 
 
-def build_root_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Return a parser containing root-level options and logging config.
+def build_root_parser() -> (
+    tuple[argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig]
+):
+    """Return parsers containing root-level options and logging config.
 
-    The parser is created with ``add_help=False`` so it can be used as a parent
-    for both the top-level parser and sub-commands, allowing shared options such
-    as ``--config`` and ``--log-level`` to be supplied before or after the
-    chosen sub-command.
+    Two parsers are produced:
+
+    ``root``
+        Includes default values and is intended as the parent for the top-level
+        parser.
+    ``shared``
+        Contains the same arguments but without defaults so that sub-commands
+        can inherit the options without overriding values supplied before the
+        sub-command name.
+
+    Returns
+    -------
+    tuple[argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig]
+        The parser with defaults, the version without defaults for sub-commands
+        and the associated :class:`LoggerConfig`.
     """
 
-    parser = argparse.ArgumentParser(add_help=False)
-    add_common_arguments(parser)
-    parser.add_argument(
+    root = argparse.ArgumentParser(add_help=False)
+    add_common_arguments(root)
+    root.add_argument(
         "--config",
         dest="config",
         type=Path,
         default=Path("config.yaml"),
         help="YAML configuration file",
     )
-    parser.add_argument(
+    root.add_argument(
         "--print-config",
         action="store_true",
         help="Print effective configuration and exit",
     )
-    log_cfg = create_logger_config(parser.get_default("log_level"))
-    return parser, log_cfg
+
+    shared = argparse.ArgumentParser(add_help=False)
+    add_common_arguments(shared, defaults=False)
+    shared.add_argument(
+        "--config",
+        dest="config",
+        type=Path,
+        default=argparse.SUPPRESS,
+        help="YAML configuration file",
+    )
+    shared.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
+
+    log_cfg = create_logger_config(root.get_default("log_level"))
+    return root, shared, log_cfg
 
 
 def configure_logger(
@@ -249,6 +292,8 @@ def apply_config_overrides(
     parser: argparse.ArgumentParser,
     config_path: str | Path,
     mapping: dict[str, str] | None = None,
+    *,
+    base_parser: argparse.ArgumentParser | None = None,
 ) -> Config:
     """Load configuration applying command line overrides.
 
@@ -262,12 +307,17 @@ def apply_config_overrides(
     args:
         Parsed command line arguments.
     parser:
-        Argument parser used to determine default values.
+        Argument parser used to determine default values for command specific
+        options.
     config_path:
         Location of the YAML configuration file.
     mapping:
         Optional mapping of argument names to ``Config`` attribute paths. The
         mapping is merged with a set of common defaults.
+    base_parser:
+        Optional parser providing fallback defaults for shared arguments. This
+        is useful when ``parser`` is a sub-command parser without default values
+        for global options.
 
     Returns
     -------
@@ -288,6 +338,10 @@ def apply_config_overrides(
             continue
         value = getattr(args, arg)
         default = parser.get_default(arg)
+        if base_parser is not None and (
+            default is None or default is argparse.SUPPRESS
+        ):
+            default = base_parser.get_default(arg)
         if value != default:
             cli_overrides[key] = value
 
@@ -303,6 +357,10 @@ def apply_config_overrides(
         if not hasattr(args, arg):
             continue
         default = parser.get_default(arg)
+        if base_parser is not None and (
+            default is None or default is argparse.SUPPRESS
+        ):
+            default = base_parser.get_default(arg)
         if getattr(args, arg) == default:
             setattr(args, arg, _get_cfg_value(cfg, key))
 
