@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from library import input_initialisation_library as lib
-from library.config import Config
+from library.config import ApiCfg, Config
 from library.input_initialisation_library import (
     TableDict,
     _ensure_openpyxl,
@@ -489,6 +489,9 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "pairs_same_document": pd.DataFrame({"id": [1]}),
         "pairs_independent": pd.DataFrame({"id": [1]}),
         "pairs_non_independent": pd.DataFrame({"id": [2]}),
+        "activity_independent": pd.DataFrame({"id": [1]}),
+        "activity_non_independent": pd.DataFrame({"id": [2]}),
+        "activity_same_document": pd.DataFrame({"id": [3]}),
         "activity_independent_status": pd.DataFrame({"id": [1]}),
         "activity_non_independent_status": pd.DataFrame({"id": [1]}),
         "activity_same_document_status": pd.DataFrame({"id": [1]}),
@@ -502,7 +505,8 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
             {"Filtered": ["good"], "Count": [1]}
         ),
     }
-    paths = save_tables(tables, tmp_path, Config())
+    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    paths = save_tables(tables, tmp_path, cfg)
     for entity, path in paths.items():
         assert path.exists(), f"missing {entity} file"
         df = pd.read_csv(path)
@@ -540,6 +544,29 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_same_document"].parent == tmp_path / "same_document"
     assert paths["pairs_independent"].parent == tmp_path / "independent"
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
+
+
+def test_save_tables_drops_duplicate_columns_and_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Capture warning messages emitted by the logger
+    messages: list[str] = []
+
+    def fake_warn(msg: str, *args: object) -> None:
+        messages.append(msg % args)
+
+    monkeypatch.setattr(lib.logger, "warning", fake_warn)
+
+    # Create a table with duplicated column names
+    df = pd.DataFrame([[1, "a", "b"]], columns=["id", "dup", "dup"])
+    tables: TableDict = {"activity": df}
+    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    paths = save_tables(tables, tmp_path, cfg)
+    # Written table should contain only unique columns
+    result = pd.read_csv(paths["activity"])
+    assert set(result.columns) == {"id", "dup"}
+    # Warning should list removed duplicates
+    assert "Duplicate columns removed from activity: ['dup']" in messages[0]
 
 
 def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:
