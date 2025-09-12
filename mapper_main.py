@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from urllib.error import URLError
 
 import pandas as pd
+import requests
 
 from library import io
 from library.cli import (
@@ -70,7 +70,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                     )
                 else:
                     logger.warning("no UniProt ID for %s", chembl_id)
-            except (ValueError, TimeoutError, URLError) as exc:
+            except (ValueError, TimeoutError, requests.RequestException) as exc:
                 logger.warning("failed to map %s: %s", chembl_id, exc)
                 uniprot_ids.append(None)
         df["mapping_uniprot_id"] = uniprot_ids
