@@ -243,6 +243,11 @@ class PubChemCfg(_BaseModel):
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(3.0, ge=0)
+    cache_ttl: int = Field(
+        3600,
+        ge=0,
+        description="Time-to-live for PubChem request cache in seconds",
+    )
 
     @field_validator("base")
     @classmethod

@@ -74,6 +74,7 @@ pubchem:
   rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
   burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
   delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
+  cache_ttl: 3600  # Request cache time-to-live in seconds
 
 
 pubmed:
