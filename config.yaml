@@ -14,7 +14,7 @@ api:
   timeout_read: 30  # Seconds to wait for a response
   retries: 3  # HTTP retry attempts
   backoff_factor: 0.5  # Exponential backoff multiplier
-  rps: 5  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
+  rps: 50  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
   burst: 50  # Burst size for token bucket limiter
   user_agent: "your-app/1.0 (mailto:you@example.org)"  # Required User-Agent header; replace with your contact info
 
@@ -45,7 +45,7 @@ uniprot:
   timeout_connect: 5  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_READ)
   retries: 3
-  rps: 4  # (env: CHEMBL_DA_UNIPROT_RPS)
+  rps: 40  # (env: CHEMBL_DA_UNIPROT_RPS)
   burst: 5  # (env: CHEMBL_DA_UNIPROT_BURST)
   delay: 0.25  # Delay between requests in seconds
 
@@ -69,7 +69,7 @@ pubchem:
   timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
   timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
   retries: 3
-  rps: 3  # (env: CHEMBL_DA_PUBCHEM_RPS)
+  rps: 30  # (env: CHEMBL_DA_PUBCHEM_RPS)
   burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
   delay: 3.0  # Delay between requests in seconds; must be a float for strict type validation
 
