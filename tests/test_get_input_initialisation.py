@@ -55,11 +55,11 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         format="csv",
         dictionary_dir=tmp_path,
     )
-    result = cli.run(Config(), args)
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    result = cli.run(cfg, args)
     assert result == 0
 
-
-    assert (out_dir / "activity_independent.csv").exists()
+    assert (out_dir / "independent" / "activity_independent.csv").exists()
 
     assert (
         out_dir
@@ -114,7 +114,8 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     )
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    result = cli.run(Config(), args)
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    result = cli.run(cfg, args)
     assert result == 1
     lines = buf.getvalue().splitlines()
     assert lines
@@ -128,7 +129,7 @@ def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
     same_doc.write_text("dummy")
     all_doc.write_text("dummy")
 
-    cfg = Config()
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
     cfg.init.output_dir = tmp_path / "default"
 
     tables = {"assay": pd.DataFrame({"id": [1]})}
@@ -162,6 +163,7 @@ def test_main_missing_dictionary_dir(tmp_path: Path, monkeypatch) -> None:
 
     # Skip heavy processing by stubbing ``run``
     monkeypatch.setattr(cli, "run", lambda _cfg, _args: 0)
+    monkeypatch.setenv("CHEMBL_DA__API__USER_AGENT", "test@example.org")
 
     result = cli.main(
         [
@@ -176,3 +178,50 @@ def test_main_missing_dictionary_dir(tmp_path: Path, monkeypatch) -> None:
         ]
     )
     assert result == 0
+
+
+def test_status_merge_preserves_columns(tmp_path: Path, monkeypatch) -> None:
+    """Status merging should retain original entity columns."""
+
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+    out_dir = tmp_path / "out"
+
+    id_cols = {
+        "activity": "activity_chembl_id",
+        "assay": "assay_chembl_id",
+        "document": "document_chembl_id",
+        "target": "target_chembl_id",
+        "testitem": "molecule_chembl_id",
+    }
+    tables: dict[str, pd.DataFrame] = {}
+    for entity, id_col in id_cols.items():
+        base = pd.DataFrame({id_col: [f"{entity}1"], "orig": [1]})
+        status = pd.DataFrame(
+            {id_col: [f"{entity}1"], "Filtered.new": ["good"], "independent_IC50": [1]}
+        )
+        tables[f"{entity}_independent"] = base
+        tables[f"{entity}_independent_status"] = status
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "load_all_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "build_combined_tables", lambda *_a, **_k: tables)
+    monkeypatch.setattr(cli.lib, "generate_pair_entity_tables", lambda t, _m: t)
+    monkeypatch.setattr(cli, "analyze_table_quality", lambda *_a, **_k: None)
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=out_dir,
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    assert cli.run(cfg, args) == 0
+
+    for entity, id_col in id_cols.items():
+        df = pd.read_csv(out_dir / "independent" / f"{entity}_independent.csv")
+        assert id_col in df.columns
+        assert "orig" in df.columns
