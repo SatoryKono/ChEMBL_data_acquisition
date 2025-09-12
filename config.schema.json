@@ -245,7 +245,6 @@
       "additionalProperties": false,
       "properties": {
         "column": {
-          "default": "chembl_id",
           "default": "document_chembl_id",
           "title": "Column",
           "type": "string"
@@ -323,7 +322,6 @@
       "additionalProperties": false,
       "properties": {
         "column": {
-          "default": "chembl_id",
           "default": "document_chembl_id",
           "title": "Column",
           "type": "string"
