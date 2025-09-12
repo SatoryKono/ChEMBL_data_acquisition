@@ -1,7 +1,0 @@
-﻿index,Count,"assay.Percentage, %",independent_IC50,independent_Ki,non_independent_IC50,non_independent_Ki
-Count,1.0,0.9221547494927755,,,0.9695576032294049,0.9717558476506608
-"assay.Percentage, %",0.9221547494927755,1.0,,,0.891845070861193,0.909200885878177
-independent_IC50,,,,,,
-independent_Ki,,,,,,
-non_independent_IC50,0.9695576032294049,0.891845070861193,,,1.0,0.986904823703638
-non_independent_Ki,0.9717558476506608,0.909200885878177,,,0.986904823703638,1.0

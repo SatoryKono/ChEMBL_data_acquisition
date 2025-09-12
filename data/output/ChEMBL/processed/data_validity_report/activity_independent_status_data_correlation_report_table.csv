@@ -1,7 +1,0 @@
-﻿index,Count,"activity.Percentage, %",independent_IC50,independent_Ki,non_independent_IC50,non_independent_Ki
-Count,1.0,0.9490470700819696,0.9872156582948789,0.95195764470644,,
-"activity.Percentage, %",0.9490470700819696,1.0,0.9578797328838644,0.8857940548251096,,
-independent_IC50,0.9872156582948789,0.9578797328838644,1.0,0.9620999287457035,,
-independent_Ki,0.95195764470644,0.8857940548251096,0.9620999287457035,1.0,,
-non_independent_IC50,,,,,,
-non_independent_Ki,,,,,,

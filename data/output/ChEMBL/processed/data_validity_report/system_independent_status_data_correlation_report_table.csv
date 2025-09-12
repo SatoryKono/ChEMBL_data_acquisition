@@ -1,7 +1,0 @@
-﻿index,Count,independent_IC50,independent_Ki,non_independent_IC50,non_independent_Ki,"system.Percentage, %"
-Count,1.0,0.9660860228932798,0.957540892685692,,,0.8823913562815618
-independent_IC50,0.9660860228932798,1.0,0.9922057193236993,,,0.7696248992474158
-independent_Ki,0.957540892685692,0.9922057193236993,1.0,,,0.7448295206003087
-non_independent_IC50,,,,,,
-non_independent_Ki,,,,,,
-"system.Percentage, %",0.8823913562815618,0.7696248992474158,0.7448295206003087,,,1.0
