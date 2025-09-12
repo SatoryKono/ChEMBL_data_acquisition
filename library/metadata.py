@@ -59,16 +59,26 @@ def file_sha256(path: Path | str) -> str:
 def _git_sha() -> str:
     """Return the current Git commit hash.
 
-    If Git is unavailable, ``"UNKNOWN"`` is returned and a warning is logged.
+    The command runs with a short timeout. If ``git`` exits with a non-zero
+    status or times out, ``"UNKNOWN"`` is returned and a warning is logged.
+    Unexpected exceptions are logged and re-raised.
     """
 
     repo_root = Path(__file__).resolve().parent.parent
     try:
-        result = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root)
+        result = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo_root, timeout=5
+        )
         return result.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+    except subprocess.CalledProcessError as exc:
         logger.warning("Unable to determine git SHA: %s", exc)
         return "UNKNOWN"
+    except subprocess.TimeoutExpired as exc:
+        logger.warning("git command timed out: %s", exc)
+        return "UNKNOWN"
+    except Exception:  # pragma: no cover - unexpected
+        logger.exception("unexpected error while determining git SHA")
+        raise
 
 
 def write_meta_yaml(

@@ -210,3 +210,13 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
             result = _git_sha()
     assert result == "unknown"
     assert "timed out" in caplog.text
+
+
+def test_git_sha_unexpected_error(caplog: pytest.LogCaptureFixture) -> None:
+    """Unexpected errors are logged and propagated."""
+
+    with patch("library.csv_utils.subprocess.run", side_effect=ValueError("boom")):
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ValueError, match="boom"):
+                _git_sha()
+    assert "unexpected error" in caplog.text
