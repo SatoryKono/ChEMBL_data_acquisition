@@ -76,7 +76,6 @@ def test_read_csv_types_and_na_values() -> None:
     assert pd.isna(df.loc[2, "count"])  # custom NA token
 
 
-
 def test_read_csv_with_schema(tmp_path: Path) -> None:
     """``read_csv`` validates against a provided schema."""
 
@@ -93,7 +92,6 @@ def test_read_csv_with_schema(tmp_path: Path) -> None:
     bad_schema = pa.DataFrameSchema({"a": pa.Column(int), "c": pa.Column(str)})
     with pytest.raises(pa.errors.SchemaError):
         io.read_csv(path, cfg=IoCfg(), schema=bad_schema)
-
 
 
 def test_write_csv_creates_metadata_file(tmp_path: Path, cfg: Config) -> None:
@@ -213,4 +211,4 @@ def test_git_sha_timeout_returns_unknown(
     git_utils._git_sha.cache_clear()
 
     assert git_utils._git_sha() == "UNKNOWN"
-    assert "Unable to determine git SHA" in stream.getvalue()
+    assert "git_sha_unavailable" in stream.getvalue()

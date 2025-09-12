@@ -66,7 +66,7 @@ def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure concurrent calls to the shared session are serialised."""
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
     cfg = IupharCfg(
-        base="https://example.org", timeout_connect=1, timeout_read=1, rps=0, burst=1
+        base="https://example.org", timeout_connect=1, timeout_read=1, rps=1, burst=1
     )
 
     class DummyLimiter:

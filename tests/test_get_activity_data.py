@@ -39,12 +39,11 @@ def test_run_chembl_respects_limit(
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
 
-    def fake_write_csv_det(df, path, col_order, key_cols):
-        path.write_text("id\n1\n")
-        return path
-
-    monkeypatch.setattr(gad, "write_csv_deterministic", fake_write_csv_det)
-    monkeypatch.setattr(io, "write_csv", lambda df, output, cfg, sep, encoding: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, output, *, cfg, sep=None, encoding=None, **__: output,
+    )
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")

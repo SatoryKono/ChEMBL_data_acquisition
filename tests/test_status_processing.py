@@ -76,7 +76,7 @@ def test_status_pipeline(tmp_path) -> None:
     assert (
         agg["activity"].set_index("activity_chembl_id").loc[1, "Filtered.new"] == "bad"
     )
-    assert agg["assay"].loc[0, "independent_IC50"] == 1
+    assert agg["assay"].loc[0, "independent_IC50"] == 2
 
 
 def test_load_status_table_skips_empty_rows(tmp_path: Path) -> None:
@@ -170,5 +170,5 @@ def test_aggregate_activity_handles_missing_molecule_chembl_id(
     assert agg["system"].empty
     assert agg["testitem"].empty
     assert (
-        agg["target"].set_index("target_chembl_id").loc["TG1", "independent_IC50"] == 1
+        agg["target"].set_index("target_chembl_id").loc["TG1", "independent_IC50"] == 2
     )

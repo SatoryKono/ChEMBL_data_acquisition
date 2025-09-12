@@ -651,7 +651,7 @@ def test_save_tables_drops_duplicate_columns_and_warns(
     # Capture warning messages emitted by the logger
     messages: list[str] = []
 
-    def fake_warn(msg: str, *args: object) -> None:
+    def fake_warn(msg: str, *args: object, **kwargs: object) -> None:
         messages.append(msg % args)
 
     monkeypatch.setattr(lib.logger, "warning", fake_warn)
@@ -665,7 +665,7 @@ def test_save_tables_drops_duplicate_columns_and_warns(
     result = pd.read_csv(paths["activity"])
     assert set(result.columns) == {"id", "dup"}
     # Warning should list removed duplicates
-    assert "Duplicate columns removed from activity: ['dup']" in messages[0]
+    assert "duplicate_columns_removed" in messages[0]
 
 
 def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:

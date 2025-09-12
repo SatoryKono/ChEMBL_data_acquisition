@@ -21,6 +21,8 @@ def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
             str(input_csv),
             "--output",
             str(output_csv),
+            "--key-cols",
+            "a",
             "--log-level",
             "INFO",
         ],
@@ -29,5 +31,5 @@ def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
         check=True,
     )
     record = json.loads(proc.stdout.splitlines()[-1])
-    assert "completed" in record.get("msg", "")
+    assert record.get("event") == "run_completed"
     assert output_csv.exists()

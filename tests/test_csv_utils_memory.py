@@ -5,9 +5,11 @@ import time
 from pathlib import Path
 
 import pandas as pd
-import psutil
+import pytest
 
 from library.csv_utils import write_csv_deterministic
+
+psutil = pytest.importorskip("psutil")
 
 
 def _worker(path: str, use_copy: bool, n: int) -> None:

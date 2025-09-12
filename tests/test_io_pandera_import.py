@@ -16,12 +16,13 @@ def test_import_without_pandera(monkeypatch: pytest.MonkeyPatch) -> None:
     orig_import = builtins.__import__
 
     def fake_import(name: str, *args: object, **kwargs: object):
-        if name == "pandera.pandas":
+        if name.startswith("pandera"):
             raise ImportError("boom")
         return orig_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     sys.modules.pop(module_name, None)
+    sys.modules.pop("pandera", None)
 
     io_mod = importlib.import_module(module_name)
     assert io_mod.pa is None
