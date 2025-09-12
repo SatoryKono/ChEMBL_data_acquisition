@@ -109,6 +109,14 @@ def test_write_csv_with_key_cols(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
+def test_write_csv_missing_key_column(tmp_path: Path) -> None:
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    path = tmp_path / "out.csv"
+    cfg = Config()
+    with pytest.raises(ValueError, match="Missing key columns: \['c'\]"):
+        io.write_csv(df, path, cfg=cfg, key_cols=["c"])
+
+
 def test_write_csv_normalises_types(tmp_path: Path) -> None:
     df = pd.DataFrame(
         {

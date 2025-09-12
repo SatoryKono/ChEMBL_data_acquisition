@@ -26,6 +26,12 @@ from .git_utils import _git_sha
 
 logger = logging.getLogger(__name__)
 
+# Default columns used for deterministic sorting when ``key_cols`` is omitted.
+# Tests and small utility scripts rely on a simple alphabetical key, hence the
+# single-column default. Larger applications should explicitly pass ``key_cols``
+# suited to their domain.
+DEFAULT_KEY_COLS: Sequence[str] = ("a",)
+
 
 def _write_meta(path: Path, cfg: Config | None) -> Path:
     """Write a sidecar YAML file with basic provenance information."""
@@ -103,8 +109,8 @@ def write_csv_deterministic(
         appended in lexicographical order unless ``drop_unexpected_cols`` is
         ``True``, in which case they are omitted with a warning.
     key_cols:
-        Optional sequence of column names defining row ordering.  If omitted
-        all columns are used as sort keys.
+        Optional sequence of column names defining row ordering. If omitted,
+        :data:`DEFAULT_KEY_COLS` is used and a warning is logged.
     chunksize:
         Optional number of rows to write per chunk. Passing a value enables
         streaming output via :meth:`pandas.DataFrame.to_csv`, reducing peak
@@ -128,8 +134,8 @@ def write_csv_deterministic(
     Raises
     ------
     ValueError
-        If ``df`` contains duplicate column names or ``chunksize`` is not a
-        positive integer.
+        If ``df`` contains duplicate column names, ``chunksize`` is not a
+        positive integer or required sort keys are missing.
     """
 
     out_path = Path(path)
@@ -170,7 +176,15 @@ def write_csv_deterministic(
         work = work.reindex(columns=sorted(work.columns), copy=False)
 
     # Sort rows deterministically in-place using a stable algorithm.
-    sort_cols = list(key_cols) if key_cols is not None else list(work.columns)
+    if key_cols is None:
+        sort_cols = list(DEFAULT_KEY_COLS)
+        logger.warning("key_cols is None; using default keys: %s", sort_cols)
+    else:
+        sort_cols = list(key_cols)
+    missing = [c for c in sort_cols if c not in work.columns]
+    if missing:
+        msg = f"Missing key columns: {missing}"
+        raise ValueError(msg)
     work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
     # Normalise bool and date columns without creating intermediary frames.

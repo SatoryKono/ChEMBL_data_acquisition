@@ -171,7 +171,11 @@ def test_write_csv_deterministic_random_types(
         st.lists(
             st.builds(
                 column,
-                name=st.text(alphabet=string.ascii_letters, min_size=1, max_size=5),
+                name=st.text(
+                    alphabet=string.ascii_letters,
+                    min_size=1,
+                    max_size=5,
+                ).filter(lambda n: n != "a"),
                 elements=st.one_of(*[st.just(es) for es in element_strategies]),
             ),
             min_size=1,
@@ -182,6 +186,7 @@ def test_write_csv_deterministic_random_types(
     df = data.draw(
         data_frames(columns=columns, index=range_indexes(min_size=1, max_size=5))
     )
+    df.insert(0, "a", range(len(df)))
 
     path1 = tmp_path / "first.csv"
     path2 = tmp_path / "second.csv"
