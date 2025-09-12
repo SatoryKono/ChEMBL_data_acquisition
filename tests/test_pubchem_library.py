@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import responses
+import pytest
 
-from library import pubchem_library as pl
-from library import rate_limiter as rl
+responses = pytest.importorskip("responses")
+
+from library import pubchem_library as pl  # noqa: E402
+from library import rate_limiter as rl  # noqa: E402
 
 
 @responses.activate
@@ -48,7 +50,7 @@ def test_make_request_uses_timeout(monkeypatch) -> None:
     monkeypatch.setattr(pl._session, "get", capture)
     pl._CACHE.clear()
 
-    cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1, rps=0)
+    cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1)
     responses.add(responses.GET, "https://example.org", json={}, status=200)
     pl.make_request("https://example.org", cfg)
     assert called["timeout"] == (1, 2)

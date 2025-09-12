@@ -116,10 +116,10 @@ structures expected by the command line tools.
 ## Code style checks
 
 Run the standard formatting, linting and type checking tools before submitting
-changes. Install the developer extras first:
+changes. Install the project with development extras first:
 
 ```bash
-pip install -r requirements-dev.txt
+pip install .[dev]
 black scripts library mapper_main.py table_quality_main.py
 ruff check scripts library mapper_main.py table_quality_main.py
 mypy scripts library mapper_main.py table_quality_main.py
