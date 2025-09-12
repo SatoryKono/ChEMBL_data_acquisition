@@ -9,12 +9,16 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
 import csv
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
+
+if __package__ is None:  # running as a script
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 import requests

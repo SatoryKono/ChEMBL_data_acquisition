@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
+
+# ruff: noqa: E402
+from pathlib import Path
+
+if __package__ is None:  # running as a script
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+import argparse
 from collections.abc import Sequence
 
 import pandas as pd
