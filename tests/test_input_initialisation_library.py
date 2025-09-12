@@ -645,6 +645,31 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
 
 
+@pytest.mark.parametrize(
+    ("entity", "df", "col"),
+    [
+        (
+            "target",
+            pd.DataFrame({"target_chembl_id": ["T1"], "name": ["example"]}),
+            "target_chembl_id",
+        ),
+        (
+            "testitem",
+            pd.DataFrame({"molecule_chembl_id": ["M1"], "name": ["example"]}),
+            "molecule_chembl_id",
+        ),
+    ],
+)
+def test_save_tables_orders_key_column_first(
+    tmp_path: Path, cfg: Config, entity: str, df: pd.DataFrame, col: str
+) -> None:
+    """Ensure the identifier column appears first in saved CSV files."""
+    tables: TableDict = {entity: df}
+    paths = save_tables(tables, tmp_path, cfg)
+    result = pd.read_csv(paths[entity])
+    assert result.columns[0] == col
+
+
 def test_save_tables_drops_duplicate_columns_and_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
