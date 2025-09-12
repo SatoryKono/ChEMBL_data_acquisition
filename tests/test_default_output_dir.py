@@ -37,7 +37,7 @@ def test_mapper_run_defaults_to_io_output_dir(
     )
 
     monkeypatch.setattr(mapper_main, "map_chembl_to_uniprot", lambda _i, _cfg: "P12345")
-    monkeypatch.setattr(io, "_write_meta", lambda *_a, **_k: None)
+    monkeypatch.setattr(io, "write_meta_yaml", lambda *_a, **_k: None)
 
     rc = mapper_main.run(cfg, args)
     assert rc == 0

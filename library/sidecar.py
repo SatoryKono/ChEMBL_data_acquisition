@@ -6,6 +6,9 @@ import csv
 from pathlib import Path
 from typing import Any
 
+from .config import Config
+from .io import write_meta_yaml
+
 
 class SidecarErrors:
     """Collect tabular error records and persist them to CSV.
@@ -29,13 +32,15 @@ class SidecarErrors:
         """
         self._errors.append(row)
 
-    def save(self, path: Path) -> None:
-        """Write collected errors to ``path`` as CSV.
+    def save(self, path: Path, *, cfg: Config | None = None) -> None:
+        """Write collected errors to ``path`` as CSV and emit metadata.
 
         Parameters
         ----------
-        path: pathlib.Path
+        path:
             Destination file. Parent directories are created as needed.
+        cfg:
+            Optional configuration forwarded to :func:`write_meta_yaml`.
 
         Notes
         -----
@@ -49,3 +54,4 @@ class SidecarErrors:
             writer = csv.DictWriter(fh, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self._errors)
+        write_meta_yaml(path, cfg)

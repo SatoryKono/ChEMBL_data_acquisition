@@ -10,33 +10,17 @@ from __future__ import annotations
 
 import hashlib
 import os
-import sys
 import tempfile
 from collections.abc import Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
-import yaml
 from pandas.api import types as ptypes
 
-from .config import Config, _serialize_paths
-from .git_utils import _git_sha
+from .config import Config
+from .io import write_meta_yaml
 from .log import logger
-
-
-def _write_meta(path: Path, cfg: Config | None) -> Path:
-    """Write a sidecar YAML file with basic provenance information."""
-
-    meta = {
-        "git_sha": _git_sha(),
-        "command": " ".join(sys.argv),
-        "config": _serialize_paths(cfg.to_dict()) if cfg is not None else {},
-    }
-    meta_path = Path(f"{path}.meta.yaml")
-    with meta_path.open("w", encoding="utf8") as fh:
-        yaml.safe_dump(meta, fh, sort_keys=False)
-    return meta_path
 
 
 def _normalise_bool(series: pd.Series) -> pd.Series:
@@ -200,7 +184,7 @@ def write_csv_deterministic(
             sep=sep,
         )
     os.replace(tmp_path, out_path)
-    _write_meta(out_path, cfg)
+    write_meta_yaml(out_path, cfg)
     return out_path
 
 

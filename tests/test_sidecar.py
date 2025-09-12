@@ -10,6 +10,8 @@ def test_sidecar_writes_rows(tmp_path: Path) -> None:
     sc.add_error({"col": "second", "msg": "two"})
     sc.save(path)
     assert path.read_text(encoding="utf8") == "col,msg\nfirst,one\nsecond,two\n"
+    meta = Path(str(path) + ".meta.yaml")
+    assert meta.exists()
 
 
 def test_sidecar_skips_empty(tmp_path: Path) -> None:
@@ -17,3 +19,4 @@ def test_sidecar_skips_empty(tmp_path: Path) -> None:
     sc = SidecarErrors()
     sc.save(path)
     assert not path.exists()
+    assert not Path(str(path) + ".meta.yaml").exists()

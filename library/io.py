@@ -34,7 +34,6 @@ import yaml
 
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
-from .csv_utils import write_csv_deterministic
 from .git_utils import _git_sha
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
@@ -229,6 +228,8 @@ def write_csv(
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
     key_cols_list = list(key_cols) if key_cols is not None else sorted(df.columns)
+    from .csv_utils import write_csv_deterministic
+
     return write_csv_deterministic(
         df,
         path,
@@ -261,18 +262,31 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
 
 
-def _write_meta(path: Path, cfg: Config) -> None:
-    """Write YAML metadata alongside the output file.
+def write_meta_yaml(path: Path | str, cfg: Config | None = None) -> Path:
+    """Write minimal metadata for ``path`` to ``<path>.meta.yaml``.
 
-    Paths inside the configuration are converted to plain strings so that the
-    resulting YAML does not contain :class:`~pathlib.Path` objects.
+    Parameters
+    ----------
+    path:
+        Target file for which the sidecar should be created.
+    cfg:
+        Optional configuration instance. When provided all :class:`~pathlib.Path`
+        objects inside the configuration are serialised as plain strings to make
+        the resulting YAML portable. When ``None`` an empty mapping is written
+        under the ``config`` key.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the generated ``.meta.yaml`` file.
     """
 
     meta = {
         "git_sha": _git_sha(),
         "command": " ".join(sys.argv),
-        "config": _serialize_paths(cfg.to_dict()),
+        "config": _serialize_paths(cfg.to_dict()) if cfg is not None else {},
     }
     meta_path = Path(f"{path}.meta.yaml")
     with meta_path.open("w", encoding="utf8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
+    return meta_path
