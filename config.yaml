@@ -104,19 +104,16 @@ doc_type:
 
 activity:
   column: "activity_chembl_id"
-  chunk_size: 5
   timeout: 30.0
   limit: null
   dry_run: false
 
 assay:
   column: "assay_chembl_id"
-  chunk_size: 10
   timeout: 30.0
 
 testitem:
   column: "molecule_chembl_id"
-  chunk_size: 5
   timeout: 30.0
 
 document:
@@ -124,10 +121,8 @@ document:
     column: "PMID"
     sleep: 5.0
     workers: 1
-    batch_size: 100
   chembl:
     column: "document_chembl_id"
-    chunk_size: 5
     timeout: 30.0
   all:
     column: "document_chembl_id"
