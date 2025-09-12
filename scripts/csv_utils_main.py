@@ -60,7 +60,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_csv_chunks_deterministic(
         reader,
         output,
-
         col_order=args.col_order or None,
         key_cols=args.key_cols or None,
         chunksize=args.chunk_size,

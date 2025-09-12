@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-import mapper_main as mapper
-import table_quality_main as tqm
+import scripts.mapper_main as mapper
+import scripts.table_quality_main as tqm
 from library.cli import configure_logger
 from scripts import get_activity_data as gad
 from scripts import get_assay_data as gas
