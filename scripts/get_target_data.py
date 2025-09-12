@@ -539,7 +539,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         chembl_df = pd.read_csv(
             chembl_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-        ).rename(columns={"target_chembl_id": "chembl_id"})
+        ).rename(columns={"target_chembl_id": "target_chembl_id"})
 
         # Extract UniProt IDs and write temporary CSV for downstream steps
         uids = [
@@ -587,7 +587,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # from the ChEMBL frame only when it is *not* used as the merge key.
         # When "uniprot_id" is the join column we keep it for the merge and
         # replace it afterwards with the canonical value from ``uniprot_df``.
-        if cfg.target.all.uniprot_column != "uniprot_id":
+        if cfg.target.all.uniprot_column != "target_uniprot_id":
             chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
         else:
             chembl_for_merge = chembl_df.copy()
