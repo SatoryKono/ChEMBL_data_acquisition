@@ -405,13 +405,13 @@ class DocumentPubmedCfg(_BaseModel):
 
 
 class DocumentChemblCfg(_BaseModel):
-    column: str = "chembl_id"
+    column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
 
 
 class DocumentAllCfg(_BaseModel):
-    column: str = "chembl_id"
+    column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
     sleep: float = Field(5.0, ge=0)
     workers: int = Field(1, ge=1)
@@ -420,9 +420,9 @@ class DocumentAllCfg(_BaseModel):
 
 
 class DocumentCfg(_BaseModel):
-    pubmed: DocumentPubmedCfg = DocumentPubmedCfg()
-    chembl: DocumentChemblCfg = DocumentChemblCfg()
-    all: DocumentAllCfg = DocumentAllCfg()
+    pubmed: DocumentPubmedCfg = Field(default_factory=DocumentPubmedCfg)
+    chembl: DocumentChemblCfg = Field(default_factory=DocumentChemblCfg)
+    all: DocumentAllCfg = Field(default_factory=DocumentAllCfg)
 
 
 class TargetUniprotCfg(_BaseModel):
@@ -453,39 +453,39 @@ class TargetAllCfg(_BaseModel):
 
 
 class TargetCfg(_BaseModel):
-    uniprot: TargetUniprotCfg = TargetUniprotCfg()
-    chembl: TargetChemblCfg = TargetChemblCfg()
-    iuphar: TargetIupharCfg = TargetIupharCfg()
-    all: TargetAllCfg = TargetAllCfg()
+    uniprot: TargetUniprotCfg = Field(default_factory=TargetUniprotCfg)
+    chembl: TargetChemblCfg = Field(default_factory=TargetChemblCfg)
+    iuphar: TargetIupharCfg = Field(default_factory=TargetIupharCfg)
+    all: TargetAllCfg = Field(default_factory=TargetAllCfg)
 
 
 class Config(_BaseModel):
     api: ApiCfg
-    chembl: ChemblCfg = ChemblCfg()
-    openalex: OpenAlexCfg = OpenAlexCfg()
-    crossref: CrossRefCfg = CrossRefCfg()
-    uniprot: UniprotCfg = UniprotCfg()
-    uniprot_mapping: UniprotMappingCfg = UniprotMappingCfg()
-    iuphar: IupharCfg = IupharCfg()
-    pubchem: PubChemCfg = PubChemCfg()
-    pubmed: PubMedCfg = PubMedCfg()
-    semantic_scholar: SemanticScholarCfg = SemanticScholarCfg()
-    doc_type: DocTypeCfg = DocTypeCfg()
-    resources: ResourcesCfg = ResourcesCfg()
-    io: IoCfg = IoCfg()
-    jobs: JobsCfg = JobsCfg()
-    log: LogCfg = LogCfg()
-    init: InitCfg = InitCfg()
-    batch: BatchCfg = BatchCfg()
-    quality: QualityCfg = QualityCfg()
-    mapper: MapperCfg = MapperCfg()
-    rate: RateCfg = RateCfg()
-    retry: RetryCfg = RetryCfg()
-    activity: ActivityCfg = ActivityCfg()
-    assay: AssayCfg = AssayCfg()
-    testitem: TestitemCfg = TestitemCfg()
-    document: DocumentCfg = DocumentCfg()
-    target: TargetCfg = TargetCfg()
+    chembl: ChemblCfg = Field(default_factory=ChemblCfg)
+    openalex: OpenAlexCfg = Field(default_factory=OpenAlexCfg)
+    crossref: CrossRefCfg = Field(default_factory=CrossRefCfg)
+    uniprot: UniprotCfg = Field(default_factory=UniprotCfg)
+    uniprot_mapping: UniprotMappingCfg = Field(default_factory=UniprotMappingCfg)
+    iuphar: IupharCfg = Field(default_factory=IupharCfg)
+    pubchem: PubChemCfg = Field(default_factory=PubChemCfg)
+    pubmed: PubMedCfg = Field(default_factory=PubMedCfg)
+    semantic_scholar: SemanticScholarCfg = Field(default_factory=SemanticScholarCfg)
+    doc_type: DocTypeCfg = Field(default_factory=DocTypeCfg)
+    resources: ResourcesCfg = Field(default_factory=ResourcesCfg)
+    io: IoCfg = Field(default_factory=IoCfg)
+    jobs: JobsCfg = Field(default_factory=JobsCfg)
+    log: LogCfg = Field(default_factory=LogCfg)
+    init: InitCfg = Field(default_factory=InitCfg)
+    batch: BatchCfg = Field(default_factory=BatchCfg)
+    quality: QualityCfg = Field(default_factory=QualityCfg)
+    mapper: MapperCfg = Field(default_factory=MapperCfg)
+    rate: RateCfg = Field(default_factory=RateCfg)
+    retry: RetryCfg = Field(default_factory=RetryCfg)
+    activity: ActivityCfg = Field(default_factory=ActivityCfg)
+    assay: AssayCfg = Field(default_factory=AssayCfg)
+    testitem: TestitemCfg = Field(default_factory=TestitemCfg)
+    document: DocumentCfg = Field(default_factory=DocumentCfg)
+    target: TargetCfg = Field(default_factory=TargetCfg)
 
 
 # ---------------------------------------------------------------------------

@@ -28,9 +28,10 @@ python scripts/get_assay_data.py \
 
 ```bash
 python scripts/get_document_data.py \
-    --input data/input-smoke/documents.csv \
-    --column document_chembl_id
+    --input data/input-smoke/documents.csv
 ```
+
+The input CSV must include a ``document_chembl_id`` column.
 
 
 ## Target data aggregation

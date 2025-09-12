@@ -40,13 +40,13 @@ from .git_utils import _git_sha
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera.pandas as pa_types
 
-pa: ModuleType | None
+_pa_module: ModuleType | None
 try:  # pragma: no cover - exercised in tests via monkeypatch
-    import pandera.pandas as _pa
+    import pandera.pandas as _pa_module
 except (ImportError, TypeError):
-    pa = None
-else:
-    pa = _pa
+    _pa_module = None
+
+pa: ModuleType | None = _pa_module
 
 
 def read_ids(
@@ -92,7 +92,9 @@ def read_ids(
         with Path(path).open("r", encoding=encoding, newline="") as fh:
             reader = csv.DictReader(fh, delimiter=sep)
             if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(f"column '{column}' not found in {path}")
+                raise ValueError(
+                    f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
+                )
             for row in reader:
                 value = (row.get(column) or "").strip()
                 if value and value != "#N/A":
