@@ -27,8 +27,9 @@ def test_write_csv_deterministic(tmp_path: Path) -> None:
         }
     )
     path = tmp_path / "out.csv"
+    cfg = Config(api={"user_agent": "test@example.org"})
     result = write_csv_deterministic(
-        df, path, col_order=["a", "b", "d", "f"], key_cols=["a"], cfg=Config()
+        df, path, col_order=["a", "b", "d", "f"], key_cols=["a"], cfg=cfg
     )
     assert result == path
     text = path.read_text(encoding="utf-8-sig")
@@ -56,6 +57,16 @@ def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
     expected_hash = hashlib.sha256(expected_bytes).hexdigest()
 
     assert sha256_file(path) == expected_hash
+
+
+def test_write_csv_deterministic_duplicate_columns(tmp_path: Path) -> None:
+    """Duplicate column labels raise a ValueError."""
+
+    df = pd.DataFrame([[1, 2]], columns=["a", "a"])
+    path = tmp_path / "dup.csv"
+    msg = r"Duplicate column names found: \['a'\]"
+    with pytest.raises(ValueError, match=msg):
+        write_csv_deterministic(df, path)
 
 
 def test_default_sorting_and_order(tmp_path: Path) -> None:
