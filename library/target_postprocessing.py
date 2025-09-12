@@ -38,6 +38,7 @@ LOWERCASE_COLUMNS: list[str] = [
 
 # Columns treated as text in the final table
 TEXT_COLUMNS: list[str] = [
+    "target_chembl_id",
     "uniprotkb_Id",
     "uniprot_id",
     "secondary_uniprot_id",
@@ -346,6 +347,7 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
         Cleaned table ready for export.
 
     """
+    _validate_columns(df, ["target_chembl_id", "uniprotkb_Id", "genus"])
     _validate_columns(organism, ["genus", "type"])
 
     df = df.copy()
