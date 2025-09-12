@@ -187,9 +187,13 @@ class UniprotCfg(_BaseModel):
 
 
 class UniprotMappingCfg(_BaseModel):
+    """Settings for the UniProt ID mapping service."""
+
     base: str = "https://rest.uniprot.org/idmapping"
     poll_interval: float = Field(0.5, gt=0)
     timeout: float = Field(300.0, ge=1)
+    cache_maxsize: int = Field(128, ge=0)
+    cache_ttl: float | None = Field(None, ge=0)
 
     @field_validator("base")
     @classmethod
@@ -197,6 +201,22 @@ class UniprotMappingCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    def __hash__(self) -> int:  # pragma: no cover - simple tuple hash
+        """Return a hash based on the configuration fields.
+
+        The model is treated as immutable for caching purposes.
+        """
+
+        return hash(
+            (
+                self.base,
+                self.poll_interval,
+                self.timeout,
+                self.cache_maxsize,
+                self.cache_ttl,
+            )
+        )
 
 
 class IupharCfg(_BaseModel):
