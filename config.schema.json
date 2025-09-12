@@ -1491,7 +1491,7 @@
           "data_dir": "dictionary/uniprot",
           "family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
           "iuphar_out": null,
-          "organism_csv": "dictionary/_Target/targets_type.csv",
+          "organism_csv": "dictionary/organism.csv",
           "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv",
           "timeout": 30.0,
           "uniprot_column": "uniprot_id",
