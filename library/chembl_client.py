@@ -6,6 +6,7 @@ import random
 import threading
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from types import TracebackType
 from typing import Any, cast
 
 import requests
@@ -55,6 +56,37 @@ class ChemblClient:
         )
         self.cache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._cache_lock = threading.Lock()
+
+    def close(self) -> None:
+        """Close the underlying HTTP session.
+
+        This method releases network resources held by the internal
+        :class:`requests.Session` instance. It is safe to call multiple times.
+        """
+
+        self.session.close()
+
+    def __enter__(self) -> ChemblClient:
+        """Return ``self`` when entering a context manager."""
+
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the session when leaving a context manager.
+
+        Parameters
+        ----------
+        exc_type, exc, tb:
+            Exception information supplied by the runtime; unused.
+        """
+
+        self.close()
+        return None
 
     def request_json(
         self, url: str, *, cfg: ApiCfg, timeout: float | None = None
