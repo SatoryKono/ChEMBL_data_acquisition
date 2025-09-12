@@ -56,10 +56,11 @@ def run_check(tmp_dir: Path) -> bool:
     second = tmp_dir / "second.csv"
 
     # Write the DataFrame twice using the deterministic writer
-    write_csv_deterministic(df, first)
+    key_cols = list(df.columns)
+    write_csv_deterministic(df, first, key_cols=key_cols)
     hash1 = sha256_file(first)
 
-    write_csv_deterministic(df, second)
+    write_csv_deterministic(df, second, key_cols=key_cols)
     hash2 = sha256_file(second)
 
     logger.debug("First hash: %s", hash1)

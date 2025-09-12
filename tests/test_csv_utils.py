@@ -66,7 +66,7 @@ def test_write_csv_deterministic_duplicate_columns(tmp_path: Path) -> None:
     path = tmp_path / "dup.csv"
     msg = r"Duplicate column names found: \['a'\]"
     with pytest.raises(ValueError, match=msg):
-        write_csv_deterministic(df, path)
+        write_csv_deterministic(df, path, key_cols=["a"])
 
 
 def test_default_sorting_and_order(tmp_path: Path) -> None:
@@ -77,8 +77,15 @@ def test_default_sorting_and_order(tmp_path: Path) -> None:
         }
     )
     path = tmp_path / "out.csv"
-    write_csv_deterministic(df, path)
+    write_csv_deterministic(df, path, key_cols=["a"])
     assert path.read_text(encoding="utf-8-sig") == "a,b\nx,true\ny,false\n"
+
+
+def test_write_csv_deterministic_none_key_cols(tmp_path: Path) -> None:
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    path = tmp_path / "out.csv"
+    with pytest.raises(ValueError, match="key_cols must be provided"):
+        write_csv_deterministic(df, path, key_cols=None)
 
 
 def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
@@ -104,11 +111,11 @@ def test_write_csv_deterministic_hash_stable(tmp_path: Path) -> None:
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     path = tmp_path / "out.csv"
 
-    write_csv_deterministic(df.copy(), path)
+    write_csv_deterministic(df.copy(), path, key_cols=sorted(df.columns))
     first_hash = sha256_file(path)
     first_meta_hash = sha256_file(Path(str(path) + ".meta.yaml"))
 
-    write_csv_deterministic(df.copy(), path)
+    write_csv_deterministic(df.copy(), path, key_cols=sorted(df.columns))
     second_hash = sha256_file(path)
     second_meta_hash = sha256_file(Path(str(path) + ".meta.yaml"))
 
@@ -192,8 +199,8 @@ def test_write_csv_deterministic_random_types(
     path2 = tmp_path / "second.csv"
     df1 = df.sample(frac=1).reset_index(drop=True)
     df2 = df.sample(frac=1).reset_index(drop=True)
-    write_csv_deterministic(df1.copy(), path1)
-    write_csv_deterministic(df2.copy(), path2)
+    write_csv_deterministic(df1.copy(), path1, key_cols=["a"])
+    write_csv_deterministic(df2.copy(), path2, key_cols=["a"])
     assert path1.read_bytes() == path2.read_bytes()
 
 
