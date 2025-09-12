@@ -1821,7 +1821,6 @@ def aggregate_activity(
         target_status,
     ]:
         for m in metrics:
-            df[m] = (df[m] / 2).astype("float64")
 
     return {
         "activity": activity_status,
