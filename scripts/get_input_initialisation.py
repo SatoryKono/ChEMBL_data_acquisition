@@ -108,6 +108,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             base_name = key.removesuffix("_status")
             entity = base_name.split("_")[0]
             id_col = id_cols.get(entity)
+            orig_df = df.copy()
             renamed = df.rename(columns={"Filtered.new": "Filtered"})
 
             if id_col and base_name in tables and id_col in tables[base_name].columns:
@@ -133,7 +134,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 tables[base_name] = renamed
 
             tables[f"{key}_statistics"] = lib.compute_status_statistics(
-                renamed, base_name
+                orig_df, base_name
             )
             del tables[key]
 
