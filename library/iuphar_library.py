@@ -16,7 +16,6 @@ from __future__ import annotations
 import io
 import random
 import threading
-import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,7 +28,7 @@ from requests import Session
 
 from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
 from .log import logger
-from .rate_limiter import get_limiter
+from .rate_limiter import get_limiter, sleep
 
 # Default session with placeholder user agent; callers should override via
 # :func:`init_session` with a configuration that provides their own contact
@@ -193,7 +192,7 @@ def _query_gene_symbol(
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
             jitter = random.uniform(0, backoff)
-            time.sleep(backoff + jitter)
+            sleep(backoff + jitter)
     return {}
 
 
@@ -671,7 +670,7 @@ class IUPHARData:
                         raise
                     backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
                     jitter = random.uniform(0, backoff)
-                    time.sleep(backoff + jitter)
+                    sleep(backoff + jitter)
             raise RuntimeError("Failed to download mapping")
 
         uni_df = _download(f"{data_base}/GtP_to_UniProt_mapping.csv")

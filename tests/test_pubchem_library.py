@@ -142,7 +142,7 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
             raise requests.RequestException("boom")
         return Resp()
 
-    monkeypatch.setattr(pl.time, "sleep", fake_sleep)
+    monkeypatch.setattr(pl, "sleep", fake_sleep)
     monkeypatch.setattr(pl._session, "get", fake_get)
 
     class Limiter:
