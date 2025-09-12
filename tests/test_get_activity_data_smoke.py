@@ -29,8 +29,21 @@ def test_get_activity_data_smoke(
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
     output_csv = tmp_path / "out.csv"
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text("activity:\n  column: activity_id\n")
+    monkeypatch.setattr(get_activity_data, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(get_activity_data, "write_meta_yaml", lambda **__: None)
     exit_code = get_activity_data.main(
-        ["--input", str(input_csv), "--output", str(output_csv), "--log-level", "ERROR"]
+        [
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+            "--log-level",
+            "ERROR",
+            "--config",
+            str(cfg_file),
+        ]
     )
     assert exit_code == 0
     assert output_csv.exists()

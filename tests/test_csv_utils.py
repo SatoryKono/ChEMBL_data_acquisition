@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+
+pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes

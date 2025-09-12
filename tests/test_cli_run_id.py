@@ -17,7 +17,14 @@ def test_cli_run_id(capfd: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     logger = configure_logger(LoggerConfig(run_id="test-run", stream=sys.stdout))
     with logger.stage("run"):
         exit_code = csv_utils_main.main(
-            ["--input", str(input_csv), "--output", str(output_csv)]
+            [
+                "--input",
+                str(input_csv),
+                "--output",
+                str(output_csv),
+                "--key-cols",
+                "a",
+            ]
         )
     assert exit_code == 0
     captured = capfd.readouterr().out.splitlines()

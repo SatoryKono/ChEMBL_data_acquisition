@@ -52,14 +52,22 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> Non
 
     monkeypatch.setattr(cl, "get_assays", fake_get_assays)
     monkeypatch.setattr(gas.ap, "postprocess_assays", lambda df: df)
-    monkeypatch.setattr(io, "write_csv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
+    )
     monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gas, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gas, "write_meta_yaml", lambda **__: None)
     rc = gas.main(
         [
             "--config",
             str(config_path),
             "--input",
             str(input_csv),
+            "--output",
+            str(tmp_path / "out.csv"),
             "--timeout",
             "5",
         ]
@@ -89,8 +97,14 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
         return pd.DataFrame({"document_chembl_id": data})
 
     monkeypatch.setattr(cl, "get_documents", fake_get_documents, raising=False)
-    monkeypatch.setattr(io, "write_csv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
+    )
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     rc = gdd.main(
         [
             "chembl",
@@ -98,6 +112,8 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
             str(config_path),
             "--input",
             str(input_csv),
+            "--output",
+            str(tmp_path / "out.csv"),
             "--timeout",
             "7",
         ]
@@ -127,14 +143,22 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(gtdt, "add_pubchem_data", lambda df, cfg: df)
-    monkeypatch.setattr(io, "write_csv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
+    )
     monkeypatch.setattr(gtdt, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gtdt, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gtdt, "write_meta_yaml", lambda **__: None)
     rc = gtdt.main(
         [
             "--config",
             str(config_path),
             "--input",
             str(input_csv),
+            "--output",
+            str(tmp_path / "out.csv"),
             "--timeout",
             "9",
         ]
@@ -151,7 +175,7 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> No
 
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
 
-    def fake_apply_target(a, p, c, mapping=None):
+    def fake_apply_target(a, p, c, mapping=None, **kwargs):
         cfg.target.chembl.timeout = float(a.timeout)
         return cfg
 
@@ -163,8 +187,14 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> No
         return pd.DataFrame({"target_chembl_id": data})
 
     monkeypatch.setattr(cl, "get_targets", fake_get_targets)
-    monkeypatch.setattr(io, "write_csv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
+    )
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **__: None)
     rc = gtd.main(
         [
             "chembl",
@@ -172,6 +202,8 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> No
             str(config_path),
             "--input",
             str(input_csv),
+            "--output",
+            str(tmp_path / "out.csv"),
             "--timeout",
             "11",
         ]

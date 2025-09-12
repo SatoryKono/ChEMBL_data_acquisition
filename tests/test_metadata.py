@@ -74,11 +74,13 @@ def test_git_sha_missing_git_executable(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     messages: list[str] = []
     monkeypatch.setattr(
-        git_utils.logger, "warning", lambda msg, *args: messages.append(msg % args)
+        git_utils.logger,
+        "warning",
+        lambda msg, *args, **kwargs: messages.append(msg % args),
     )
 
     assert git_utils._git_sha() == "UNKNOWN"
-    assert "Git executable not found" in messages[0]
+    assert "git_executable_missing" in messages[0]
 
 
 def test_git_sha_missing_git_dir(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,8 +98,10 @@ def test_git_sha_missing_git_dir(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(git_utils.Path, "exists", mock_exists)
     messages: list[str] = []
     monkeypatch.setattr(
-        git_utils.logger, "warning", lambda msg, *args: messages.append(msg % args)
+        git_utils.logger,
+        "warning",
+        lambda msg, *args, **kwargs: messages.append(msg % args),
     )
 
     assert git_utils._git_sha() == "UNKNOWN"
-    assert f"No .git directory found at {repo_root}" in messages[0]
+    assert "git_directory_missing" in messages[0]

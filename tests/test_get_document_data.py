@@ -34,7 +34,15 @@ def test_cli_uses_custom_column(
         return orig_read_ids(path, column=column, cfg=cfg, sep=sep, encoding=encoding)
 
     monkeypatch.setattr(io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: object())
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
 
     def fake_get_documents(
         ids: Iterable[str],

@@ -13,7 +13,7 @@ def test_csv_determinism_integration() -> None:
         text=True,
         check=True,
     )
-    match1 = re.search(r"First hash: ([0-9a-f]{64})", proc.stderr)
-    match2 = re.search(r"Second hash: ([0-9a-f]{64})", proc.stderr)
+    match1 = re.search(r"First hash: ([0-9a-f]{64})", proc.stdout)
+    match2 = re.search(r"Second hash: ([0-9a-f]{64})", proc.stdout)
     assert match1 and match2
     assert match1.group(1) == match2.group(1)

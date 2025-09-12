@@ -38,10 +38,23 @@ def test_init_session_uses_cfg_retry(
             captured["api"] = api
             captured["retry"] = retry
 
+        def __enter__(self) -> "FakeClient":  # pragma: no cover - simple stub
+            return self
+
+        def __exit__(
+            self,
+            exc_type: object | None,
+            exc: object | None,
+            tb: object | None,
+        ) -> None:  # pragma: no cover - simple stub
+            return None
+
     monkeypatch.setattr(module, "ChemblClient", FakeClient)
 
+    input_csv = Path("exists.csv")
+    input_csv.write_text("id\n")
     args = argparse.Namespace(
-        input_csv=Path("missing.csv"),
+        input_csv=input_csv,
         output_csv=None,
         column="id",
         sep=",",

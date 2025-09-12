@@ -42,13 +42,28 @@ def _run(
         called["chunk_size"] = chunk_size
         return pd.DataFrame({"activity_id": data})
 
-    def fake_write(df, output, cfg, sep, encoding):
+    def fake_write(
+        df: pd.DataFrame,
+        output: Path,
+        *,
+        cfg: object | None = None,
+        sep: str | None = None,
+        encoding: str | None = None,
+        **_: object,
+    ) -> None:
+        if sep is None and cfg is not None:
+            sep = cfg.io.csv_sep
+        if encoding is None and cfg is not None:
+            encoding = cfg.io.csv_encoding
         called["sep"] = sep
         called["encoding"] = encoding
+        return output
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
     monkeypatch.setattr(io, "write_csv", fake_write)
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gad, "write_meta_yaml", lambda **__: None)
     rc = gad.main(["--config", str(config_path), "--input", str(input_csv), *extra])
     return rc, called
 
