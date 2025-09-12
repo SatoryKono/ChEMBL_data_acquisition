@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from collections.abc import Sequence
 from pathlib import Path
-
-if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 
@@ -80,29 +76,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
         cfg: Config = apply_config_overrides(args, parser, args.config)
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
 
 

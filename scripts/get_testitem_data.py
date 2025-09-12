@@ -5,14 +5,6 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
-from pathlib import Path
-
-# Allow running the script directly via ``python scripts/get_testitem_data.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 import requests
@@ -75,13 +67,13 @@ def add_pubchem_data(df: pd.DataFrame, cfg: pl.PubChemCfg) -> pd.DataFrame:
 
     total = len(unique_smiles)
     if total:
-        logger.info("pubchem_start", extra={"total": total})
+        logger.info("pubchem_start", total=total)
     else:
         logger.info("pubchem_no_smiles")
 
     records: dict[str, dict[str, str]] = {}
     for idx, smi in enumerate(unique_smiles, start=1):
-        logger.info("pubchem_progress", extra={"current": idx, "total": total})
+        logger.info("pubchem_progress", current=idx, total=total)
         cid = pl.get_cid_from_smiles(smi, cfg) or ""
         first_cid = cid.split("|")[0] if cid else ""
         if first_cid:
@@ -149,8 +141,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             logger.error("%s", exc)
             return 1
 
-        logger.info("identifiers_retrieved", extra={"count": len(ids)})
-        logger.info("chembl_fetch_start", extra={"chunk_size": cfg.testitem.chunk_size})
+        logger.info("identifiers_retrieved", count=len(ids))
+        logger.info("chembl_fetch_start", chunk_size=cfg.testitem.chunk_size)
 
         try:
             df = cl.get_testitem(
@@ -163,7 +155,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         except (requests.RequestException, ValueError) as exc:
             logger.error("failed to retrieve compounds: %s", exc)
             return 1
-        logger.info("chembl_fetch_done", extra={"rows": len(df)})
+        logger.info("chembl_fetch_done", rows=len(df))
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
@@ -212,7 +204,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
+        logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -262,7 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
         cfg: Config = apply_config_overrides(
             args,
@@ -277,23 +269,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
 
 
