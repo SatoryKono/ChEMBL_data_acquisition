@@ -6,7 +6,6 @@ The implementation is a Python translation of a PowerQuery script.
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import quote
@@ -17,7 +16,7 @@ from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
 from .log import logger
-from .rate_limiter import get_limiter
+from .rate_limiter import get_limiter, sleep
 
 _CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
 
@@ -191,7 +190,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     extra={"url": url, "status": None, "rps": cfg.rps},
                 )
                 return None
-            time.sleep(cfg.delay)
+            sleep(cfg.delay)
             continue
 
         if response.status_code in (404, 400):
@@ -217,7 +216,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     extra={"url": url, "status": None, "rps": cfg.rps},
                 )
                 return None
-            time.sleep(cfg.delay)
+            sleep(cfg.delay)
             continue
         except ValueError:
             logger.warning("Non-JSON response for url %s", url)

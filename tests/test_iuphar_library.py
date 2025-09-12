@@ -35,7 +35,7 @@ def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
     sleeps: list[float] = []
     monkeypatch.setattr(ii._session, "get", fake_get)
 
-    monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
         base="https://example.org/services",
@@ -94,7 +94,7 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
     sleeps: list[float] = []
     monkeypatch.setattr(ii._session, "get", fake_get)
 
-    monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
         base="https://example.org/services",
@@ -156,10 +156,74 @@ def test_query_gene_symbol_backoff(monkeypatch):
 
     sleeps: list[float] = []
     monkeypatch.setattr(ii._session, "get", fake_get)
-    monkeypatch.setattr(ii.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
     monkeypatch.setattr(ii.random, "uniform", lambda a, b: 0)
 
     result = ii._query_gene_symbol("GENE", cfg, retry)
     assert result == {"id": 1}
     assert calls[0][0] == "https://example.org/services/targets/?geneSymbol=GENE"
     assert sleeps == [pytest.approx(1.0)]
+
+
+def test_iuphar_upload_retries(monkeypatch) -> None:
+    """``iuphar_upload`` retries failed downloads with backoff."""
+
+    target_df = pd.DataFrame({"target_id": [1], "family_id": ["F1"]})
+    family_df = pd.DataFrame(
+        {"family_id": ["F1"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
+    )
+    data = ii.IUPHARData(target_df=target_df, family_df=family_df)
+
+    cfg = IupharCfg(
+        base="https://example.org/services",
+        timeout_connect=1,
+        timeout_read=2,
+        rps=10,
+        burst=5,
+    )
+    retry = RetryCfg(max_attempts=2, backoff_factor=1)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ii.random, "uniform", lambda a, b: 0)
+
+    calls = {"n": 0}
+
+    def fake_get(url: str, timeout: tuple[int, int]):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise requests.RequestException("boom")
+
+        text = (
+            "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
+            if "UniProt" in url
+            else "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
+        )
+
+        class Resp:
+            def __init__(self, text: str) -> None:
+                self.text = text
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def raise_for_status(self) -> None:
+                return None
+
+        return Resp(text)
+
+    monkeypatch.setattr(ii._session, "get", fake_get)
+    monkeypatch.setattr(
+        ii,
+        "get_limiter",
+        lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
+    )
+
+    df = data.iuphar_upload(cfg, retry)
+
+    assert not df.empty
+    assert sleeps == [pytest.approx(1.0)]
+    assert calls["n"] == 3
