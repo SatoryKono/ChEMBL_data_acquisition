@@ -29,6 +29,7 @@ import sys
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import cast
 
 # Allow running the script directly via ``python scripts/get_document_data.py``
 # by ensuring the repository root is on ``sys.path`` when the module is executed
@@ -282,7 +283,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        df = cl.get_documents(  # type: ignore[attr-defined]
+        df = cl.get_documents(
             ids,
             cfg=cfg.api,
             client=client,
@@ -379,7 +380,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(  # type: ignore[attr-defined]
+        doc_df = cl.get_documents(
             ids,
             cfg=cfg.api,
             client=client,
@@ -552,14 +553,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         Parser populated with all sub-commands and logging configuration.
 
     """
-    root, log_cfg = build_root_parser()
+    root, shared, log_cfg = build_root_parser()
     parser = argparse.ArgumentParser(
         description="Document data utilities", parents=[root]
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     pubmed = sub.add_parser(
-        "pubmed", parents=[root], help="Fetch data from PubMed and related APIs"
+        "pubmed", parents=[shared], help="Fetch data from PubMed and related APIs"
     )
     pubmed.add_argument(
         "--column", default="PMID", help="Column name containing identifiers"
@@ -591,7 +592,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     pubmed.set_defaults(func=run_pubmed)
 
     chembl = sub.add_parser(
-        "chembl", parents=[root], help="Fetch document information from ChEMBL"
+        "chembl", parents=[shared], help="Fetch document information from ChEMBL"
     )
     chembl.add_argument(
         "--column", default="chembl_id", help="Column name containing identifiers"
@@ -608,7 +609,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     chembl.set_defaults(func=run_chembl)
 
     all_cmd = sub.add_parser(
-        "all", parents=[root], help="Run both ChEMBL and PubMed pipelines"
+        "all", parents=[shared], help="Run both ChEMBL and PubMed pipelines"
     )
     all_cmd.add_argument(
         "--column", default="chembl_id", help="Column in the input CSV"
@@ -651,7 +652,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.set_defaults(func=run_all)
 
-    parser.subparsers_map = {"pubmed": pubmed, "chembl": chembl, "all": all_cmd}
+    parser.subparsers_map = {  # type: ignore[attr-defined]
+        "pubmed": pubmed,
+        "chembl": chembl,
+        "all": all_cmd,
+    }
 
     return parser, log_cfg
 
@@ -701,6 +706,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "openalex_rps": "openalex.rps",
                 "crossref_rps": "crossref.rps",
             },
+            base_parser=parser,
         )
         if args.print_config:
             print_config(cfg)
@@ -717,7 +723,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code = cast(int, args.func(cfg, args))
     if exit_code == 0:
         logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:
