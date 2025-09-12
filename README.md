@@ -14,14 +14,9 @@ parsing, validation, aggregation and export of tabular data.
 pip install -e .[dev]
 ```
 
-   ```bash
-   pip install -e .
-   # Development extras (black, ruff, mypy, pytest, hypothesis, responses, psutil, pre-commit, ...)
-   pip install -e .[dev]
-   ```
- 
 The command installs the project together with development tools such as
-``black``, ``ruff``, ``mypy`` and ``pytest``. Sensitive configuration like API
+``black``, ``ruff``, ``mypy`` and ``pytest`` as well as testing utilities like
+``hypothesis``, ``responses`` and ``psutil``. Sensitive configuration like API
 tokens should be stored in a local ``.env`` file – see
 [`Конфигурация через .env`](#конфигурация-через-env) for details.
 
