@@ -642,13 +642,13 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
-        "IUPHAR_class",
-        "IUPHAR_subclass",
         "gene_index",
         "taxon_index",
         "target_sort_order",
     ]
     assert list(res.columns) == expected_cols
+    # ensure no duplicate columns
+    assert len(res.columns) == len(set(res.columns))
     assert bool(res.loc[0, "is_citation"])
     assert not bool(res.loc[1, "is_citation"])
     assert res["high_citation_rate"].all()
