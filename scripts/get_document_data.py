@@ -290,95 +290,96 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Configure session for ChEMBL requests
-    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
-
-    try:
-        ids = io.read_ids(args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io)
-    except (FileNotFoundError, ValueError) as exc:
-        logger.error("%s", exc)
-        return 1
-
-    try:
-        df = cl.get_documents(
-            ids,
-            cfg=cfg.api,
-            client=client,
-            chunk_size=cfg.document.chembl.chunk_size,
-            timeout=cfg.document.chembl.timeout,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        logger.error("failed to retrieve documents: %s", exc)
-        return 1
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    df = normalize_documents(df)
-    rows_total = len(df)
-    exit_code = 0
-    required_cols = {
-        name for name, col in DocumentsSchema.columns.items() if col.required
-    }
-    optional_cols = set(DocumentsSchema.columns) - required_cols
-    missing_required = required_cols - set(df.columns)
-    missing_optional = optional_cols - set(df.columns)
-    if not missing_required:
-        if missing_optional:
-            logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
-            )
+    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            df = DocumentsSchema.validate(df, lazy=True)
-        except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+            ids = io.read_ids(
+                args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io
             )
-            df = getattr(exc, "validated_data", df)
-            exit_code = 1
-    else:
-        logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
-        )
-    rows_kept = len(df)
-    rows_dropped = rows_total - rows_kept
-    try:
-        key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-        csv_path = io.write_csv(
-            df,
-            output,
-            cfg=cfg,
-            key_cols=key_cols or None,
-        )
-        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
-    except OSError as exc:
-        logger.error("failed to write output CSV: %s", exc)
-        return 1
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error("%s", exc)
+            return 1
 
-    stats_all: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
-    write_meta_yaml(
-        csv_path=csv_path,
-        command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
-        stats=stats_all,
-        schema="DocumentsSchema",
-    )
-    try:
-        analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
-        return 1
-    return exit_code
+        try:
+            df = cl.get_documents(
+                ids,
+                cfg=cfg.api,
+                client=client,
+                chunk_size=cfg.document.chembl.chunk_size,
+                timeout=cfg.document.chembl.timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error("failed to retrieve documents: %s", exc)
+            return 1
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        df = normalize_documents(df)
+        rows_total = len(df)
+        exit_code = 0
+        required_cols = {
+            name for name, col in DocumentsSchema.columns.items() if col.required
+        }
+        optional_cols = set(DocumentsSchema.columns) - required_cols
+        missing_required = required_cols - set(df.columns)
+        missing_optional = optional_cols - set(df.columns)
+        if not missing_required:
+            if missing_optional:
+                logger.warning(
+                    "DataFrame is missing optional columns: %s", missing_optional
+                )
+            try:
+                df = DocumentsSchema.validate(df, lazy=True)
+            except SchemaErrors as exc:
+                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+                errors = SidecarErrors()
+                for row in exc.failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path)
+                logger.error(
+                    "validation failed; wrote %d failure cases to %s",
+                    len(exc.failure_cases),
+                    failure_path,
+                )
+                df = getattr(exc, "validated_data", df)
+                exit_code = 1
+        else:
+            logger.warning(
+                "Skipping validation due to missing required columns: %s",
+                missing_required,
+            )
+        rows_kept = len(df)
+        rows_dropped = rows_total - rows_kept
+        try:
+            key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+            csv_path = io.write_csv(
+                df,
+                output,
+                cfg=cfg,
+                key_cols=key_cols or None,
+            )
+            logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
+        except OSError as exc:
+            logger.error("failed to write output CSV: %s", exc)
+            return 1
+
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            stats=stats,
+            schema="DocumentsSchema",
+        )
+        try:
+            analyze_table_quality(df, table_name=str(output.with_suffix("")))
+        except ValueError as exc:
+            logger.error("failed to generate quality report: %s", exc)
+            return 1
+        return exit_code
 
 
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
