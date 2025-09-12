@@ -15,6 +15,7 @@ from .chembl_assay import (
     get_testitem,
 )
 from .chembl_client import _chunked
+from .chembl_document import get_documents
 from .chembl_target import (
     extend_target,
     get_target,
@@ -26,6 +27,7 @@ __all__ = [
     "get_assays",
     "get_activities",
     "get_testitem",
+    "get_documents",
     "get_target",
     "get_targets",
     "extend_target",
