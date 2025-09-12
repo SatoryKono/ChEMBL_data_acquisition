@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+from pytest import MonkeyPatch
 
 from library import chembl_library as cl
 from library import io
+from library.config import Config
 from scripts import get_activity_data as gad
 
 
@@ -29,7 +33,7 @@ def _create_config(tmp_path: Path) -> Path:
 
 
 def _run(
-    tmp_path: Path, monkeypatch, extra: list[str]
+    tmp_path: Path, monkeypatch: MonkeyPatch, extra: list[str]
 ) -> tuple[int, dict[str, object]]:
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_id\n1\n")
@@ -37,7 +41,13 @@ def _run(
     called: dict[str, object] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: iter(["1"]))
 
-    def fake_get(ids, cfg, client, chunk_size, timeout):
+    def fake_get(
+        ids: Sequence[str],
+        cfg: Config,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
         data = list(ids)
         called["chunk_size"] = chunk_size
         return pd.DataFrame({"activity_id": data})
@@ -46,11 +56,11 @@ def _run(
         df: pd.DataFrame,
         output: Path,
         *,
-        cfg: object | None = None,
+        cfg: Config | None = None,
         sep: str | None = None,
         encoding: str | None = None,
         **_: object,
-    ) -> None:
+    ) -> Path:
         if sep is None and cfg is not None:
             sep = cfg.io.csv_sep
         if encoding is None and cfg is not None:
@@ -68,7 +78,7 @@ def _run(
     return rc, called
 
 
-def test_default_config_used(tmp_path: Path, monkeypatch) -> None:
+def test_default_config_used(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     rc, called = _run(tmp_path, monkeypatch, [])
     assert rc == 0
     assert called["chunk_size"] == 10
@@ -76,7 +86,7 @@ def test_default_config_used(tmp_path: Path, monkeypatch) -> None:
     assert called["encoding"] == "iso-8859-1"
 
 
-def test_cli_overrides(tmp_path: Path, monkeypatch) -> None:
+def test_cli_overrides(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     rc, called = _run(
         tmp_path,
         monkeypatch,

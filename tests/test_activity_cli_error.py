@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import requests
+from pytest import MonkeyPatch
 
 from library import chembl_library as cl
 from library import io as lib_io
@@ -12,7 +13,9 @@ from library.config import Config
 from scripts import get_activity_data as gad
 
 
-def test_run_chembl_handles_request_error(monkeypatch, cfg: Config) -> None:
+def test_run_chembl_handles_request_error(
+    monkeypatch: MonkeyPatch, cfg: Config
+) -> None:
     args = argparse.Namespace(
         input_csv=Path("dummy.csv"),
         output_csv=None,
@@ -26,7 +29,7 @@ def test_run_chembl_handles_request_error(monkeypatch, cfg: Config) -> None:
     )
     monkeypatch.setattr(lib_io, "read_ids", lambda *a, **k: iter(["1"]))
 
-    def _raise(*_a, **_k):
+    def _raise(*_a: object, **_k: object) -> None:
         raise requests.RequestException("boom")
 
     monkeypatch.setattr(cl, "get_activities", _raise)

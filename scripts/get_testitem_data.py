@@ -24,6 +24,7 @@ from library.cli import (
 )
 from library.config import (
     Config,
+    PubChemCfg,
     _serialize_paths,
     ensure_dirs,
     print_config,
@@ -35,7 +36,7 @@ from library.table_quality import analyze_table_quality
 from schemas import TestitemsSchema, normalize_testitems
 
 
-def add_pubchem_data(df: pd.DataFrame, cfg: pl.PubChemCfg) -> pd.DataFrame:
+def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
     For each canonical SMILES string in ``df``, the function looks up the
@@ -281,7 +282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code: int = args.func(cfg, args)
     if exit_code == 0:
         logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:

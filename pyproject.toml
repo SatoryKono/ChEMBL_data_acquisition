@@ -44,6 +44,9 @@ dev = [
   "types-urllib3==1.26.25.14",
   "types-tabulate",
   "psutil==7.0.0",
+
+  "types-pytest",
+
 ]
 
 [project.scripts]
@@ -97,7 +100,14 @@ ignore = ["E501"]
 python_version = "3.12"
 strict = true
 warn_unused_configs = true
-exclude = "^(?!library/).*"
+files = [
+  "library",
+  "scripts",
+  "tests/test_activity_cli_overrides.py",
+  "tests/test_activity_cli_error.py",
+  "tests/test_cli_timeout_override.py",
+  "tests/test_cli_bad_config.py",
+]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
