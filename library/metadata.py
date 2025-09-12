@@ -8,6 +8,7 @@ summary statistics.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 import platform
@@ -58,13 +59,14 @@ def file_sha256(path: Path | str) -> str:
     return h.hexdigest()
 
 
+@functools.lru_cache(maxsize=1)
 def _git_sha() -> str:
     """Return the current Git commit hash.
 
 
-    The function first checks the ``GIT_SHA`` environment variable. If set, the
-    value is returned and logged. If Git is unavailable, ``"UNKNOWN"`` is
-    returned and a warning is logged.
+    The result is cached to avoid repeated invocations of Git. If Git is
+    unavailable, ``"UNKNOWN"`` is returned and a warning is logged.
+
     """
 
     repo_root = Path(__file__).resolve().parent.parent
