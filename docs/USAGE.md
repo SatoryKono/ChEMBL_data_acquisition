@@ -85,6 +85,14 @@ replaces `io.csv_sep` and `io.csv_encoding` respectively. Likewise
 `--chunk-size` maps to `jobs.chunk_size`, `--timeout` to `api.timeout_read` and
 `--log-level` to `log.level`.
 
+### Robust API decoding
+
+Network requests performed through :class:`library.chembl_client.ChemblClient`
+decode response bodies using the charset declared by the server or UTF-8.
+Undecodable bytes are replaced with the Unicode replacement character
+(``\ufffd``) before JSON parsing. This behaviour is automatic and requires no
+additional configuration.
+
 ## Table quality profiler
 
 ```bash
