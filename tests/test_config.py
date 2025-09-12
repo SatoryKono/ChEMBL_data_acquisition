@@ -4,10 +4,16 @@ import logging
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from library.cli import LoggerConfig, configure_logger
-from library.config import ConfigError, ensure_dirs, load_config
+from library.config import (
+    Config,
+    ConfigError,
+    build_alias_map,
+    ensure_dirs,
+    load_config,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -396,6 +402,19 @@ def test_unknown_env_var_warning(
     record = json.loads(lines[-1])
     msg = record.get("msg", "") or record.get("event", "")
     assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in msg
+
+
+def test_new_field_auto_alias() -> None:
+    """Adding a field to the config should expose an alias automatically."""
+
+    class Extra(BaseModel):
+        foo: int = 1
+
+    class ExtendedConfig(Config):
+        extra: Extra = Field(default_factory=Extra)
+
+    aliases = build_alias_map(ExtendedConfig)
+    assert aliases["CHEMBL_DA_EXTRA_FOO"] == ["extra", "foo"]
 
 
 def test_log_level_valid(tmp_path: Path) -> None:
