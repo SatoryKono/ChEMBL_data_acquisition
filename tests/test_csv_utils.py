@@ -230,10 +230,21 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
         "library.git_utils.subprocess.check_output",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd=["git"]),
     ):
-        messages: list[str] = []
-        monkeypatch.setattr(
-            git_utils.logger, "warning", lambda msg, *args: messages.append(msg % args)
-        )
+        records: list[tuple[str, dict[str, str] | None]] = []
+
+        def fake_warning(
+            event: str,
+            *args: object,
+            extra: dict[str, str] | None = None,
+            **kwargs: object,
+        ) -> None:
+            records.append((event, extra))
+
+        monkeypatch.setattr(git_utils.logger, "warning", fake_warning)
         result = git_utils._git_sha()
+
     assert result == "UNKNOWN"
-    assert any("Unable to determine git SHA" in msg for msg in messages)
+    assert any(
+        event == "git_sha_unavailable" and extra is not None and "error" in extra
+        for event, extra in records
+    )

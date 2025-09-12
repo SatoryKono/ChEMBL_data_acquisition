@@ -53,5 +53,5 @@ def _git_sha() -> str:
         )
         return result.decode().strip()
     except subprocess.CalledProcessError as exc:  # pragma: no cover - rare
-        logger.warning("git_sha_unavailable", error=str(exc))
+        logger.warning("git_sha_unavailable", extra={"error": str(exc)})
         return "UNKNOWN"
