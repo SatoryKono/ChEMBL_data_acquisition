@@ -12,6 +12,7 @@ import requests
 from library import pubmed_library as pl
 from library import rate_limiter as rl
 from library.config import (
+    ApiCfg,
     Config,
     CrossRefCfg,
     OpenAlexCfg,
@@ -98,6 +99,76 @@ def test_do_request_404() -> None:
     assert err == "PMID not found"
 
 
+def test_handle_response_retryable() -> None:
+    """500 response triggers a retry on non-final attempts."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 500, "error", None, "", True, 0, 1
+    )
+    assert data is None
+    assert err == ""
+    assert retry is True
+
+
+def test_handle_response_retryable_last_attempt() -> None:
+    """Retryable error returns a message on the last attempt."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 500, "error", None, "", True, 1, 1
+    )
+    assert data is None
+    assert retry is False
+    assert err.startswith("HTTP 500")
+
+
+def test_handle_response_parse_error() -> None:
+    """Invalid JSON is reported as a failure."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 200, "", None, "boom", True, 0, 0
+    )
+    assert data is None
+    assert retry is False
+    assert err.startswith("Invalid JSON")
+
+
+def test_handle_response_success_text() -> None:
+    """Text responses are returned when JSON is not expected."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 200, "hi", "hi", "", False, 0, 0
+    )
+    assert data == "hi"
+    assert err == ""
+    assert retry is False
+
+
+def test_handle_response_404() -> None:
+    """404 error returns a specific message."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 404, "not found", None, "", True, 0, 0
+    )
+    assert data is None
+    assert err == "PMID not found"
+    assert retry is False
+
+
+def test_handle_response_400() -> None:
+    """400 error is reported as a bad request."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 400, "bad", None, "", True, 0, 0
+    )
+    assert data is None
+    assert retry is False
+    assert err.startswith("Bad request")
+
+
+def test_handle_response_generic_error() -> None:
+    """Unexpected status codes return a generic HTTP error."""
+    data, err, retry = pl._handle_response(
+        "http://example.org", 418, "teapot", None, "", True, 0, 0
+    )
+    assert data is None
+    assert retry is False
+    assert err.startswith("HTTP 418")
+
+
 def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
     cfg = PubMedCfg(
         base="https://example.org/eutils",
@@ -142,6 +213,7 @@ def test_fetch_pubmed_uses_cfg(monkeypatch) -> None:
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
         openalex=OpenAlexCfg(
             base="https://example.org",
             timeout_connect=1,
@@ -149,7 +221,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
             retries=4,
             rps=10,
             mailto="info@example.org",
-        )
+        ),
     )
 
     captured: dict[str, Any] = {}
@@ -201,6 +273,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
 
 def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
         crossref=CrossRefCfg(
             base="https://api.example.org",
             timeout_connect=2,
@@ -208,7 +281,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
             retries=5,
             rps=8,
             mailto="info@example.org",
-        )
+        ),
     )
 
     captured: dict[str, Any] = {}

@@ -3,7 +3,7 @@ import requests
 
 from library import openalex_crossref_library as ocl
 from library import rate_limiter as rl
-from library.config import Config, CrossRefCfg, OpenAlexCfg
+from library.config import ApiCfg, Config, CrossRefCfg, OpenAlexCfg
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
@@ -19,6 +19,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
 
     cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
         openalex=OpenAlexCfg(
             base="https://example.org",
             timeout_connect=1,
@@ -26,7 +27,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
             rps=2,
             burst=5,
             mailto="x@y.com",
-        )
+        ),
     )
     limiter = rl.RateLimiter(2)
     ocl.fetch_openalex(requests.Session(), "123", cfg.openalex, limiter)
@@ -48,6 +49,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
     monkeypatch.setattr("library.pubmed_library._do_request", fake_do_request)
 
     cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
         crossref=CrossRefCfg(
             base="https://cr.example.org",
             timeout_connect=1,
@@ -55,7 +57,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
             rps=4,
             burst=5,
             mailto="z@e.com",
-        )
+        ),
     )
     limiter = rl.RateLimiter(4)
     ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg.crossref, limiter)
@@ -74,7 +76,10 @@ def test_rate_limiter_shared(monkeypatch) -> None:
     monkeypatch.setattr(rl, "sleep", fake_sleep)
     monkeypatch.setattr("library.pubmed_library._do_request", lambda *a, **k: ({}, ""))
 
-    cfg = Config(openalex=OpenAlexCfg(rps=1, mailto="x@y.com"))
+    cfg = Config(
+        api=ApiCfg(user_agent="test@example.com"),
+        openalex=OpenAlexCfg(rps=1, mailto="x@y.com"),
+    )
     limiter = rl.RateLimiter(1)
     session = requests.Session()
     ocl.fetch_openalex(session, "1", cfg.openalex, limiter)
