@@ -15,6 +15,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
+from uuid import uuid4
 
 # Allow running the script directly via ``python scripts/get_target_data.py``
 # by ensuring the repository root is on ``sys.path`` when the module is executed
@@ -80,6 +81,31 @@ def _first_token(value: str | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _save_snapshot(df: pd.DataFrame, base_path: Path, label: str, cfg: Config) -> None:
+    """Write ``df`` to a uniquely named CSV derived from ``base_path``.
+
+    Parameters
+    ----------
+    df:
+        DataFrame to serialise.
+    base_path:
+        Base file path used to derive the output filename.
+    label:
+        Descriptive label inserted into the filename.
+    cfg:
+        Configuration providing CSV formatting options.
+    """
+    unique_name = f"{base_path.stem}_{label}_{uuid4().hex}{base_path.suffix}"
+    unique_path = base_path.with_name(unique_name)
+    io.write_csv(
+        df,
+        unique_path,
+        cfg=cfg,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+    )
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
@@ -540,6 +566,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         chembl_df = pd.read_csv(
             chembl_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         ).rename(columns={"target_chembl_id": "target_chembl_id"})
+        _save_snapshot(chembl_df, output, "chembl", cfg)
 
         # Extract UniProt IDs and write temporary CSV for downstream steps
         uids = [
@@ -582,6 +609,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # and uniprot_df contains the corresponding results in the same order.
         # We add the original IDs to uniprot_df to allow merging with chembl_df.
         uniprot_df["original_id"] = uids
+        _save_snapshot(uniprot_df, output, "uniprot", cfg)
 
         # To avoid column name collisions during the merge, drop "uniprot_id"
         # from the ChEMBL frame only when it is *not* used as the merge key.
@@ -628,6 +656,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         combined_df = combined_df.drop(
             columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
         )
+        _save_snapshot(combined_df, output, "combined", cfg)
 
         with NamedTemporaryFile(
             "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
@@ -670,8 +699,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # Recreate the IUPHAR frame with only the new classification
         # columns before merging.
         iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
+        _save_snapshot(iuphar_df, output, "iuphar", cfg)
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+        _save_snapshot(merged, output, "merged", cfg)
         # Apply domain-specific clean-up and finalise table before exporting
         processed = tp.postprocess_targets(merged)
         organism_df = pd.read_csv(
@@ -719,6 +750,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 "Skipping validation due to missing required columns: %s",
                 missing_required,
             )
+        _save_snapshot(final_df, output, "final", cfg)
         io.write_csv(
             final_df,
             output,
