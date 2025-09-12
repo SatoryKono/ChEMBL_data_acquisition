@@ -6,10 +6,10 @@ newer versions of pandas (>=2.0), such as the ``dtype_backend`` argument.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
 
 def json_normalize_pyarrow(
@@ -42,19 +42,20 @@ def json_normalize_pyarrow(
         Normalized data.
     """
 
+    json_normalize: Callable[..., Any] = pd.json_normalize
     try:
         # pandas >= 2.0 supports ``dtype_backend``
         return cast(
             pd.DataFrame,
-            pd.json_normalize(
+            json_normalize(
                 data,
                 dtype_backend=dtype_backend,
                 **kwargs,
             ),
-        )  # type: ignore[arg-type, unused-ignore]
+        )
     except TypeError:
         # For pandas < 2.0, fall back to the default behaviour
-        return cast(pd.DataFrame, pd.json_normalize(data, **kwargs))
+        return cast(pd.DataFrame, json_normalize(data, **kwargs))
 
 
 def read_csv_pyarrow(
@@ -80,17 +81,18 @@ def read_csv_pyarrow(
         Parsed CSV data.
     """
 
+    read_csv: Callable[..., Any] = pd.read_csv
     try:
         return cast(
             pd.DataFrame,
-            pd.read_csv(
+            read_csv(
                 *args,
                 dtype_backend=dtype_backend,
                 **kwargs,
             ),
-        )  # type: ignore[arg-type, unused-ignore]
+        )
     except (TypeError, ImportError):
-        return cast(pd.DataFrame, pd.read_csv(*args, **kwargs))
+        return cast(pd.DataFrame, read_csv(*args, **kwargs))
 
 
 __all__ = ["json_normalize_pyarrow", "read_csv_pyarrow"]

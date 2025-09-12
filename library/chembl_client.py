@@ -92,7 +92,7 @@ class ChemblClient:
                 logger.info(
                     "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
                 )
-                return cast(dict[str, Any], cached)
+                return cached
             logger.info(
                 "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
             )

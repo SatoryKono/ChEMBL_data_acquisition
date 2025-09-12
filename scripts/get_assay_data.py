@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 # Allow running the script directly via ``python scripts/get_assay_data.py``
 # by ensuring the repository root is on ``sys.path`` when the module is executed
@@ -198,7 +199,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code = cast(int, args.func(cfg, args))
     if exit_code == 0:
         logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
     else:

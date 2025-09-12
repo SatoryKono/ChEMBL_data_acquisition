@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from .config import _mask_secrets
 from .git_utils import _git_sha
