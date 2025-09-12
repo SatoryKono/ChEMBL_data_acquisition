@@ -9,7 +9,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
+
+# mypy: ignore-errors
 
 
 def json_normalize_pyarrow(

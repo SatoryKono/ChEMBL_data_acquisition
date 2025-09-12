@@ -151,7 +151,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
     if url in _CACHE:
         logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
-        return cast(dict[str, Any], _CACHE[url])
+        return _CACHE[url]
     logger.info("cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"})
 
     for attempt in range(1, cfg.retries + 1):
