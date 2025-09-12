@@ -128,7 +128,9 @@ def _validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
         raise ValueError(f"missing required columns: {', '.join(sorted(missing))}")
 
 
-def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
+def postprocess_targets(
+    df: pd.DataFrame, *, chembl_col: str = "target_chembl_id"
+) -> pd.DataFrame:
     """Clean and reshape merged target information.
 
     The function normalises UniProt identifiers, resolves gene names and
@@ -140,6 +142,10 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
     df:
         DataFrame produced by the ``all`` pipeline in
         :mod:`get_target_data`.
+    chembl_col:
+        Name of the column containing ChEMBL target identifiers. The input
+        column will be preserved in the returned DataFrame. Defaults to
+        ``"target_chembl_id"``.
 
     Returns
     -------
@@ -153,6 +159,9 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
 
     """
     df = df.copy()
+    internal_id = "target_chembl_id"
+    if chembl_col in df.columns and chembl_col != internal_id:
+        df = df.rename(columns={chembl_col: internal_id})
 
     # --- normalise identifiers -------------------------------------------------
     df["uniprotkb_Id"] = (
@@ -235,7 +244,7 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- final column ordering --------------------------------------------------
     columns = [
-        "target_chembl_id",
+        internal_id,
         "uniprotkb_Id",
         "uniprot_id",
         "secondary_uniprot_id",
@@ -287,7 +296,7 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
     for col in columns:
         if col not in df.columns:
             df[col] = "-"
-    return df[columns]
+    return df[columns].rename(columns={internal_id: chembl_col})
 
 
 def postprocess_file(
@@ -295,6 +304,7 @@ def postprocess_file(
     output_path: Path | str,
     *,
     cfg: IoCfg,
+    chembl_col: str = "target_chembl_id",
     sep: str | None = None,
     encoding: str | None = None,
 ) -> None:
@@ -308,6 +318,9 @@ def postprocess_file(
         Destination path for the cleaned CSV file.
     cfg:
         I/O configuration providing default CSV parameters.
+    chembl_col:
+        Name of the column containing ChEMBL target identifiers. Passed to
+        :func:`postprocess_targets`.
     sep:
         Field delimiter of the CSV files. Defaults to ``cfg.csv_sep``.
     encoding:
@@ -322,11 +335,18 @@ def postprocess_file(
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
-    processed = postprocess_targets(df)
+    processed = postprocess_targets(df, chembl_col=chembl_col)
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
 
 
-def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
+def finalise_targets(
+    df: pd.DataFrame,
+    organism: pd.DataFrame,
+    *,
+    chembl_col: str = "target_chembl_id",
+    uniprot_col: str = "uniprotkb_Id",
+    genus_col: str = "genus",
+) -> pd.DataFrame:
     """Apply final cleaning steps and organism merge.
 
     This function mirrors a Power Query script that was previously used to
@@ -340,6 +360,13 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
         DataFrame produced by :func:`postprocess_targets`.
     organism:
         Lookup table with at least ``genus`` and ``type`` columns.
+    chembl_col:
+        Column containing ChEMBL target identifiers.
+    uniprot_col:
+        Column containing UniProt identifiers.
+    genus_col:
+        Column containing the organism genus used for merging with
+        ``organism``.
 
     Returns
     -------
@@ -347,10 +374,21 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
         Cleaned table ready for export.
 
     """
+    df = df.copy()
+    organism = organism.copy()
+
+    internal_mapping = {
+        chembl_col: "target_chembl_id",
+        uniprot_col: "uniprotkb_Id",
+        genus_col: "genus",
+    }
+    df = df.rename(columns={k: v for k, v in internal_mapping.items() if k != v})
+    organism = organism.rename(
+        columns={genus_col: "genus"} if genus_col != "genus" else {}
+    )
+
     _validate_columns(df, ["target_chembl_id", "uniprotkb_Id", "genus"])
     _validate_columns(organism, ["genus", "type"])
-
-    df = df.copy()
 
     # Drop rows where uniprotkb_Id is the string "nan"
     mask_nan = df["uniprotkb_Id"].astype(str) == "nan"
@@ -361,7 +399,7 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
     # Remove duplicate chembl_id entries
     before = len(df)
     df = df.drop_duplicates(subset="target_chembl_id", keep="first")
-    logger.debug("Removed %d duplicate target_chembl_id rows", before - len(df))
+    logger.debug("Removed %d duplicate %s rows", before - len(df), chembl_col)
 
     # Enforce column types
     for col in TEXT_COLUMNS:
@@ -392,7 +430,13 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].astype("string").str.lower()
 
-    return df
+    return df.rename(
+        columns={
+            "target_chembl_id": chembl_col,
+            "uniprotkb_Id": uniprot_col,
+            "genus": genus_col,
+        }
+    )
 
 
 def finalise_file(
@@ -400,6 +444,9 @@ def finalise_file(
     output_path: Path | str,
     *,
     cfg: Config,
+    chembl_col: str = "target_chembl_id",
+    uniprot_col: str = "uniprotkb_Id",
+    genus_col: str = "genus",
     organism_path: Path | str | None = None,
     sep: str | None = None,
     encoding: str | None = None,
@@ -414,6 +461,12 @@ def finalise_file(
         Destination path for the cleaned CSV file.
     cfg:
         Application configuration providing CSV defaults and resource paths.
+    chembl_col:
+        Column containing ChEMBL target identifiers.
+    uniprot_col:
+        Column containing UniProt identifiers.
+    genus_col:
+        Column containing the organism genus used for merging.
     organism_path:
         Optional path to a CSV containing organism ``genus`` and ``type`` columns.
         Defaults to ``cfg.resources.organism_csv``.
@@ -428,5 +481,11 @@ def finalise_file(
     organism_path = organism_path or cfg.resources.organism_csv
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
-    processed = finalise_targets(df, organism)
+    processed = finalise_targets(
+        df,
+        organism,
+        chembl_col=chembl_col,
+        uniprot_col=uniprot_col,
+        genus_col=genus_col,
+    )
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
