@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import TracebackType
 from typing import Any, cast
 
 import pandas as pd
@@ -49,7 +50,12 @@ class DummyResponse:
     def __enter__(self) -> DummyResponse:  # pragma: no cover - context manager proto
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:  # pragma: no cover
         return None
 
     @property
@@ -168,15 +174,15 @@ def test_fetch_pubmed_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
     def fake_do_request(
-        session,
-        url,
-        sleep,
-        expect_json=True,
-        retries=2,
-        method="GET",
-        timeout=10,
-        **kwargs,
-    ):
+        session: requests.Session,
+        url: str,
+        sleep: float,
+        expect_json: bool = True,
+        retries: int = 2,
+        method: str = "GET",
+        timeout: float = 10,
+        **kwargs: Any,
+    ) -> tuple[str, str]:
         captured.update(
             {"url": url, "sleep": sleep, "retries": retries, "timeout": timeout}
         )
@@ -215,15 +221,15 @@ def test_fetch_openalex_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
     def fake_do_request(
-        session,
-        url,
-        sleep,
-        expect_json=True,
-        retries=2,
-        method="GET",
-        timeout=10,
-        **kwargs,
-    ):
+        session: requests.Session,
+        url: str,
+        sleep: float,
+        expect_json: bool = True,
+        retries: int = 2,
+        method: str = "GET",
+        timeout: float = 10,
+        **kwargs: Any,
+    ) -> tuple[dict[str, Any], str]:
         captured.update(
             {"url": url, "sleep": sleep, "retries": retries, "timeout": timeout}
         )
@@ -243,7 +249,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
             super().__init__(rps=1)
             self.calls = 0
 
-        def acquire(self) -> None:  # type: ignore[override]
+        def acquire(self) -> None:
             self.calls += 1
 
     limiter = DummyLimiter()
@@ -275,15 +281,15 @@ def test_fetch_crossref_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
     def fake_do_request(
-        session,
-        url,
-        sleep,
-        expect_json=True,
-        retries=2,
-        method="GET",
-        timeout=10,
-        **kwargs,
-    ):
+        session: requests.Session,
+        url: str,
+        sleep: float,
+        expect_json: bool = True,
+        retries: int = 2,
+        method: str = "GET",
+        timeout: float = 10,
+        **kwargs: Any,
+    ) -> tuple[dict[str, Any], str]:
         captured.update(
             {"url": url, "sleep": sleep, "retries": retries, "timeout": timeout}
         )
@@ -296,7 +302,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
             super().__init__(rps=1)
             self.calls = 0
 
-        def acquire(self) -> None:  # type: ignore[override]
+        def acquire(self) -> None:
             self.calls += 1
 
     limiter = DummyLimiter()
@@ -324,15 +330,15 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> Non
     captured: dict[str, Any] = {}
 
     def fake_do_request(
-        session,
-        url,
-        sleep,
-        expect_json=True,
-        retries=2,
-        method="GET",
-        timeout=10,
-        **kwargs,
-    ):
+        session: requests.Session,
+        url: str,
+        sleep: float,
+        expect_json: bool = True,
+        retries: int = 2,
+        method: str = "GET",
+        timeout: float = 10,
+        **kwargs: Any,
+    ) -> tuple[dict[str, Any], str]:
         captured.update(
             {"url": url, "sleep": sleep, "retries": retries, "timeout": timeout}
         )
