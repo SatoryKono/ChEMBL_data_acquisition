@@ -704,6 +704,9 @@ def _safe_to_int(series: pd.Series, col: str) -> pd.Series:
         ``Int64`` typed series or ``string`` on failure.
     """
 
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
+
     try:
         return pd.to_numeric(series, errors="raise").astype("Int64")
     except Exception as exc:  # pragma: no cover - rare
@@ -726,6 +729,9 @@ def _safe_to_float(series: pd.Series, col: str) -> pd.Series:
     pandas.Series
         ``float64`` typed series or ``string`` on failure.
     """
+
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
 
     try:
         return pd.to_numeric(series, errors="raise").astype("float64")
@@ -750,6 +756,9 @@ def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
         ``datetime64`` typed series or ``string`` on failure.
     """
 
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
+
     try:
         return pd.to_datetime(series, errors="raise")
     except Exception as exc:  # pragma: no cover - rare
@@ -772,6 +781,9 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
     pandas.Series
         ``boolean`` typed series or ``string`` on failure.
     """
+
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
 
     def mapper(value: Any) -> object:
         if pd.isna(value):

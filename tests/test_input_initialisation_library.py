@@ -4,6 +4,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -14,6 +15,10 @@ from library.config import ApiCfg, Config
 from library.input_initialisation_library import (
     TableDict,
     _ensure_openpyxl,
+    _safe_to_bool,
+    _safe_to_datetime,
+    _safe_to_float,
+    _safe_to_int,
     append_entities,
     build_combined_tables,
     generate_pair_entity_tables,
@@ -39,6 +44,19 @@ def test_unify_dtypes_basic() -> None:
     assert res["shuffled_cit"].dtype == "boolean"
     assert res["mw_freebase"].dtype == "float64"
     assert str(res["publication_date"].dtype).startswith("datetime64[")
+
+
+@pytest.mark.parametrize(
+    "func",
+    [_safe_to_int, _safe_to_float, _safe_to_datetime, _safe_to_bool],
+)
+def test_safe_to_functions_reject_dataframe(func: Any) -> None:
+    df = pd.DataFrame({"col": [1]})
+    with pytest.raises(
+        TypeError,
+        match="column 'col' has duplicate entries; expected a Series",
+    ):
+        func(df, "col")
 
 
 def test_append_entities_deduplication() -> None:
