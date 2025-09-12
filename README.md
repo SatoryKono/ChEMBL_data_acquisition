@@ -212,6 +212,40 @@ api:
   chembl_base: https://www.ebi.ac.uk/chembl/api/data
 ```
 
+## Ошибки конфигурации
+
+Некорректные значения в `config.yaml` вызывают `ValidationError`. Пример:
+
+```yaml
+api:
+  rps: -1
+```
+
+При загрузке конфигурации:
+
+```python
+from library.config import load_config
+load_config("config.yaml")
+```
+
+Вывод:
+
+```
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Config
+api.rps
+  Input should be greater than or equal to 1 [type=greater_than_equal, input_value=-1, input_type=int]
+    For further information visit https://errors.pydantic.dev/2.11/v/greater_than_equal
+```
+
+Исправьте значение на положительное число:
+
+```yaml
+api:
+  rps: 5  # или любое >= 1
+```
+
+Диапазоны допустимых значений описаны в [`config.schema.json`](./config.schema.json), где для `api.rps` указан минимум `1`.
+
 ## Логирование
 
 Пример включения JSON‑формата через переменную окружения:
@@ -700,3 +734,7 @@ Install the optional developer tools and run the standard quality checks:
 
 Test data live in ``tests/data`` and provide coverage for utility functions in
 the library modules.
+
+## FAQ
+
+- Где искать информацию о типичных ошибках конфигурации? См. [Ошибки конфигурации](#ошибки-конфигурации).
