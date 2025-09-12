@@ -714,7 +714,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # ``chembl_id`` column name, but the validation schema expects the
         # original ``target_chembl_id``. Rename the column back before
         # normalisation and validation to satisfy the schema requirements.
-       # final_df = final_df.rename(columns={"chembl_id": "target_chembl_id"})
+        # final_df = final_df.rename(columns={"chembl_id": "target_chembl_id"})
         final_df = normalize_targets(final_df)
         exit_code = 0
         required_cols = {
