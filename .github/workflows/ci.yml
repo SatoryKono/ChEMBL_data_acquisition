@@ -15,11 +15,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-
-
         run: |
-          pip install .[dev]
 
+          pip install -r requirements-dev.txt
+      - name: Check formatting
+        run: ruff format --check .
       - name: Verify deterministic CSV output
         run: python scripts/check_determinism.py --log-level DEBUG
       - name: Run pre-commit

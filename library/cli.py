@@ -615,6 +615,7 @@ def check_determinism(argv: Sequence[str] | None = None) -> int:
 
     return _run("check_determinism", argv)
 
+
 __all__ = [
     "LoggerConfig",
     "create_logger_config",
