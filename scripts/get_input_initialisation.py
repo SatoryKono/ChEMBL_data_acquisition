@@ -16,9 +16,16 @@ message.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
+
+# Ensure the project root is importable when executing the script directly.
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:  # pragma: no cover - simple environment guard
+    sys.path.insert(0, str(ROOT))
 
 from library import input_initialisation_library as lib
 from library.cli import (
