@@ -484,11 +484,7 @@ def process_activity_table(
     df = df.merge(
         targets[
             [
-                "target_chembl_id",
-                "IUPHAR_class",
-                "IUPHAR_subclass",
-                "gene_index",
-                "taxon_index",
+                "target_chembl_id",              
                 "target_sort_order",
                 "multifunctional_enzyme",
                 "organism_type",
@@ -506,7 +502,7 @@ def process_activity_table(
         df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
     )
 
-    df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
+  #  df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
 
     df.drop(columns=["organism_type"], inplace=True)
 
@@ -539,11 +535,7 @@ def process_activity_table(
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
-        "multifunctional_enzyme",
-        "IUPHAR_class",
-        "IUPHAR_subclass",
-        "gene_index",
-        "taxon_index",
+        "multifunctional_enzyme",      
         "target_sort_order",
     ]
 
