@@ -225,3 +225,52 @@ def test_status_merge_preserves_columns(tmp_path: Path, monkeypatch) -> None:
         df = pd.read_csv(out_dir / "independent" / f"{entity}_independent.csv")
         assert id_col in df.columns
         assert "orig" in df.columns
+
+
+def test_run_handles_system_status_table(tmp_path: Path, monkeypatch) -> None:
+    """System status tables should be merged or emitted with logging."""
+
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+    out_dir = tmp_path / "out"
+
+    tables = {
+        "system_independent_status": pd.DataFrame(
+            {
+                "system_id": ["T1_TG1_IC50"],
+                "Filtered.new": ["good"],
+                "independent_IC50": [1],
+            }
+        )
+    }
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "load_all_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "build_combined_tables", lambda *_a, **_k: tables)
+    monkeypatch.setattr(cli.lib, "generate_pair_entity_tables", lambda t, _m: t)
+    monkeypatch.setattr(cli, "analyze_table_quality", lambda *_a, **_k: None)
+
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=out_dir,
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    assert cli.run(cfg, args) == 0
+
+    out_file = out_dir / "independent" / "system_independent.csv"
+    assert out_file.exists()
+    df = pd.read_csv(out_file)
+    assert "system_id" in df.columns
+    assert "Filtered" in df.columns
+
+    logs = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    assert any(
+        "base table 'system_independent' missing" in rec.get("msg", "") for rec in logs
+    )

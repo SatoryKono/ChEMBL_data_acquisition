@@ -7,9 +7,11 @@ Exports pair tables without merging:
   ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag.
 
 Additionally, for each pair table the corresponding ``activity``, ``assay``,
-``document``, ``target`` and ``testitem`` entries are exported with matching
-suffixes, for example ``activity_independent.csv`` or
-``assay_same_document.csv``.
+``document``, ``target``, ``testitem`` and ``system`` entries are exported with
+matching suffixes, for example ``activity_independent.csv`` or
+``assay_same_document.csv``. Status tables for these entities are merged into
+the outputs; tables for unknown entities are skipped with an informational log
+message.
 """
 
 from __future__ import annotations
@@ -97,6 +99,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             "target": "target_chembl_id",
             "testitem": "molecule_chembl_id",
             "molecule": "molecule_chembl_id",
+            "system": "system_id",
         }
         for key, df in list(tables.items()):
             if not key.endswith("_status"):
@@ -108,6 +111,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             base_name = key.removesuffix("_status")
             entity = base_name.split("_")[0]
             id_col = id_cols.get(entity)
+            if entity == "system" and id_col is None:
+                logger.info("dropping unsupported system status table '%s'", key)
+                del tables[key]
+                continue
+            if entity == "system":
+                logger.info("processing system status table '%s'", key)
+
             renamed = df.rename(columns={"Filtered.new": "Filtered"})
 
             if id_col and base_name in tables and id_col in tables[base_name].columns:

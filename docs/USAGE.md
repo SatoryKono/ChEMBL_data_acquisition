@@ -65,6 +65,11 @@ The command emits three pair tables:
 written with matching suffixes, for example
 `activity_independent.csv` or `assay_same_document.csv`.
 
+Status tables for recognised entities (``activity``, ``assay``, ``document``,
+``target``, ``testitem`` and ``system``) are merged into the corresponding
+outputs. Status tables for unrecognised entities are skipped with an
+informational log message.
+
 Each command supports the common flags `--sep`, `--encoding` and
 `--log-level`. The default output path mirrors the input location and can be
 manually overridden with `--output` where available.
