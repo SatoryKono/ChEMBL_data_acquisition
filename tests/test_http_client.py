@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import responses
+import pytest
 
-from library.config import ApiCfg, RetryCfg, session_with_retry
+responses = pytest.importorskip("responses")
+
+from library.config import ApiCfg, RetryCfg, session_with_retry  # noqa: E402
 
 USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
 

@@ -6,13 +6,16 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-import requests
-import responses
-from cachetools import TTLCache  # type: ignore[import-untyped]
 
 from library import rate_limiter as rl
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg
+
+cachetools = pytest.importorskip("cachetools")
+from cachetools import TTLCache  # type: ignore[import-untyped]  # noqa: E402
+
+requests = pytest.importorskip("requests")
+responses = pytest.importorskip("responses")
 
 USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
 
@@ -111,10 +114,10 @@ def test_request_json_retries_with_mocked_session() -> None:
     response = DummyResponse()
     session = MagicMock(spec=requests.Session)
     session.get.side_effect = [requests.RequestException("boom"), response]
-    client = ChemblClient(ApiCfg(), RetryCfg(), session=session)
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
     client.clear_cache()
 
-    cfg = ApiCfg(retries=2, backoff_factor=0)
+    cfg = api_cfg(retries=2, backoff_factor=0)
     result = client.request_json("http://example.com", cfg=cfg)
 
     assert result == {"ok": True}
