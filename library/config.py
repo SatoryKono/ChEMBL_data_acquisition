@@ -593,9 +593,26 @@ def load_config(
     path: str | Path = "config.yaml",
     cli_overrides: dict[str, Any] | None = None,
     *,
-    strict: bool = False,
+    strict: bool = True,
 ) -> Config:
-    """Load configuration from *path* applying overrides."""
+    """Load configuration from *path* applying overrides.
+
+    Parameters
+    ----------
+    path:
+        Location of the YAML file on disk.
+    cli_overrides:
+        Mapping of dotted configuration paths to values. These are applied
+        after reading ``path`` and environment variables.
+    strict:
+        When ``True`` (default), unknown keys in the configuration result in a
+        ``ValueError``. Set to ``False`` to log a warning instead.
+
+    Returns
+    -------
+    Config
+        Fully validated configuration object.
+    """
 
     try:
         with Path(path).open("r", encoding="utf8") as fh:

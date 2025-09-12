@@ -146,6 +146,12 @@ def build_parser(
         help="YAML configuration file",
     )
     parser.add_argument(
+        "--config-strict",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Fail on unknown configuration keys (use --no-config-strict to allow them)",
+    )
+    parser.add_argument(
         "--print-config",
         action="store_true",
         help="Print effective configuration and exit",
@@ -171,6 +177,12 @@ def build_root_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=Path,
         default=Path("config.yaml"),
         help="YAML configuration file",
+    )
+    parser.add_argument(
+        "--config-strict",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Fail on unknown configuration keys (use --no-config-strict to allow them)",
     )
     parser.add_argument(
         "--print-config",
@@ -292,7 +304,11 @@ def apply_config_overrides(
             cli_overrides[key] = value
 
     try:
-        cfg = load_config(config_path, cli_overrides=cli_overrides)
+        cfg = load_config(
+            config_path,
+            cli_overrides=cli_overrides,
+            strict=getattr(args, "config_strict", True),
+        )
     except ConfigError as exc:
         log.logger.error("%s", exc)
         parser.error(str(exc))
