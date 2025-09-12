@@ -87,7 +87,7 @@ replaces `io.csv_sep` and `io.csv_encoding` respectively. Likewise
 ## Table quality profiler
 
 ```bash
-python table_quality_main.py \
+python scripts/table_quality_main.py \
     --input data/input-smoke/activity.csv \
     --table-name activity
 ```
@@ -120,8 +120,8 @@ changes. Install the developer extras first:
 
 ```bash
 pip install -r requirements-dev.txt
-black scripts library mapper_main.py table_quality_main.py
-ruff check scripts library mapper_main.py table_quality_main.py
-mypy scripts library mapper_main.py table_quality_main.py
+black scripts library
+ruff check scripts library
+mypy scripts library
 python scripts/check_determinism.py
 ```
