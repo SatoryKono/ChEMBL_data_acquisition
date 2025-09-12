@@ -123,6 +123,45 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     assert "required table 'activity' missing" in record.get("msg", "")
 
 
+def test_run_missing_activity_column_logs_error(tmp_path: Path, monkeypatch) -> None:
+    """``run`` should report missing columns without prefixing table message."""
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+
+    def fake_load_same_doc(path: Path):  # pragma: no cover - simple stub
+        return {}
+
+    def fake_load_all_doc(path: Path):  # pragma: no cover - simple stub
+        return {}
+
+    def fake_build_combined_tables(*_args, **_kwargs):
+        raise KeyError("activity table missing expected columns: activity_id")
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", fake_load_same_doc)
+    monkeypatch.setattr(cli.lib, "load_all_doc", fake_load_all_doc)
+    monkeypatch.setattr(cli.lib, "build_combined_tables", fake_build_combined_tables)
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=tmp_path / "out",
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    result = cli.run(Config(), args)
+    assert result == 1
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    assert "activity table missing expected columns: activity_id" in record.get(
+        "msg", ""
+    )
+
+
 def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
     same_doc = tmp_path / "same.xlsx"
     all_doc = tmp_path / "all.xlsx"

@@ -154,7 +154,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("save_done", extra={"tables": len(paths), "path": str(out_dir)})
         return 0
     except KeyError as exc:
-        logger.error("required table '%s' missing", exc.args[0])
+        msg = exc.args[0]
+        if " " in msg:
+            logger.error(msg)
+        else:
+            logger.error("required table '%s' missing", msg)
         return 1
 
 
