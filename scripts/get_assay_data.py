@@ -5,6 +5,14 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
+
+# Allow running the script directly via ``python scripts/get_assay_data.py``
+# by ensuring the repository root is on ``sys.path`` when the module is executed
+# outside of the ``scripts`` package. This mirrors the behaviour of installing
+# the project in editable mode.
+if __package__ in {None, ""}:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import requests
 from pandera.errors import SchemaErrors

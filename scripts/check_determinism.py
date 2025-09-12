@@ -10,8 +10,16 @@ hashes differ.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+# Allow running the script directly via ``python scripts/check_determinism.py``
+# by ensuring the repository root is on ``sys.path`` when the module is executed
+# outside of the ``scripts`` package. This mirrors the behaviour of installing
+# the project in editable mode.
+if __package__ in {None, ""}:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 try:
     import pandas as pd
