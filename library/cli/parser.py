@@ -9,18 +9,16 @@ from __future__ import annotations
 
 import argparse
 import uuid
-from collections.abc import Sequence
-from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from pydantic import ValidationError
 
-from . import log
-from .config import Config, ConfigError, load_config
-from .logging_setup import Logger, LoggerConfig
-from .logging_setup import configure_logger as _configure_logger
-from .version import require_python_version
+from .. import log
+from ..config import Config, ConfigError, load_config
+from ..logging_setup import Logger, LoggerConfig
+from ..logging_setup import configure_logger as _configure_logger
+from ..version import require_python_version
 
 require_python_version()
 
@@ -59,8 +57,8 @@ def _positive_int(value: str) -> int:
     ------
     argparse.ArgumentTypeError
         If ``value`` is not a positive integer.
-
     """
+
     try:
         ivalue = int(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
@@ -142,6 +140,7 @@ def build_parser(
     tuple[argparse.ArgumentParser, LoggerConfig]
         The parser and associated :class:`LoggerConfig`.
     """
+
     parser = argparse.ArgumentParser(description=description)
     add_common_arguments(parser)
     parser.add_argument(
@@ -171,9 +170,9 @@ def build_parser(
     return parser, log_cfg
 
 
-def build_root_parser() -> tuple[
-    argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig
-]:
+def build_root_parser() -> (
+    tuple[argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig]
+):
     """Return parsers containing root-level options and logging config.
 
     Two parsers are produced:
@@ -246,7 +245,7 @@ def configure_logger(
     """
 
     # ``fmt`` and ``datefmt`` are ignored because JSON logs have a fixed
-    # structure.  They are accepted to remain API compatible with the previous
+    # structure. They are accepted to remain API compatible with the previous
     # implementation that configured :mod:`logging`.
     new_logger = _configure_logger(
         LoggerConfig(level=cfg.level, run_id=cfg.run_id, stream=cfg.stream)
@@ -370,271 +369,13 @@ def apply_config_overrides(
     return cfg
 
 
-# ---------------------------------------------------------------------------
-# Script entry points
-# ---------------------------------------------------------------------------
-
-
-def _run(module: str, argv: Sequence[str] | None = None) -> int:
-    """Execute ``module.main`` from the :mod:`scripts` package.
-
-    Parameters
-    ----------
-    module:
-        Name of the module inside :mod:`scripts`.
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code returned by the script's ``main`` function.
-    """
-
-    main_func = import_module(f"scripts.{module}").main
-    return cast(int, main_func(argv))
-
-
-def get_activity_data(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_activity_data`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_activity_data", argv)
-
-
-def get_assay_data(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_assay_data`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_assay_data", argv)
-
-
-def get_target_data(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_target_data`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_target_data", argv)
-
-
-def get_document_data(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_document_data`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_document_data", argv)
-
-
-def get_document_type(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_document_type`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_document_type", argv)
-
-
-def get_input_initialisation(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_input_initialisation`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_input_initialisation", argv)
-
-
-def get_testitem_data(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_testitem_data`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_testitem_data", argv)
-
-
-def csv_utils(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.csv_utils_main`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("csv_utils_main", argv)
-
-
-def mapper(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.mapper_main`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("mapper_main", argv)
-
-
-def table_quality(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.table_quality_main`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("table_quality_main", argv)
-
-
-def chunk_io(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.chunk_io_main`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("chunk_io_main", argv)
-
-
-def get_activities(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.get_activities`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("get_activities", argv)
-
-
-def check_determinism(argv: Sequence[str] | None = None) -> int:
-    """Run :mod:`scripts.check_determinism`.
-
-    Parameters
-    ----------
-    argv:
-        Optional sequence of command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code from the script.
-    """
-
-    return _run("check_determinism", argv)
-
-
 __all__ = [
     "LoggerConfig",
+    "Logger",
     "create_logger_config",
     "add_common_arguments",
     "build_parser",
     "build_root_parser",
     "configure_logger",
     "apply_config_overrides",
-    "check_determinism",
-    "chunk_io",
-    "csv_utils",
-    "get_activities",
-    "get_activity_data",
-    "get_assay_data",
-    "get_document_data",
-    "get_document_type",
-    "get_input_initialisation",
-    "get_target_data",
-    "get_testitem_data",
-    "mapper",
-    "table_quality",
 ]
