@@ -487,6 +487,8 @@ def process_activity_table(
                 "target_chembl_id",              
                 "target_sort_order",
                 "multifunctional_enzyme",
+                "IUPHAR_class",
+                "IUPHAR_subclass",
                 "organism_type",
             ]
         ],
