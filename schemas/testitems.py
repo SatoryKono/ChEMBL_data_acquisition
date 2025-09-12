@@ -16,7 +16,6 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
             required=True,
         ),
         "chirality": pa.Column(int, pa.Check.isin([-1, 0, 1, 2]), required=False),
-        "mw_freebase": pa.Column(float, pa.Check.in_range(0, 2000), required=True),
         "num_ro5_violations": pa.Column(float, pa.Check.in_range(0, 5), required=False),
         "is_radical": pa.Column(bool, required=False),
     }
