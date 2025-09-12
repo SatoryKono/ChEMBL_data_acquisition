@@ -52,13 +52,14 @@ def map_chembl_to_uniprot(
     if opener is None:
         opener = urllib.request.urlopen
 
-    def _open_json(url: str, data: bytes | None = None) -> Any:
+    def _open_json(
+        url: str, data: bytes | None = None, timeout: float | None = None
+    ) -> Any:
         """Open ``url`` and parse the JSON response."""
         try:
-            # Add a 30-second timeout to the underlying urlopen call
-            # to prevent hangs on network requests.
+            # Use the configured timeout for network requests to avoid hangs.
             if opener is urllib.request.urlopen:
-                with opener(url, data=data, timeout=30) as response:
+                with opener(url, data=data, timeout=timeout) as response:
                     return json.load(response)
             else:  # For mock openers used in tests
                 with opener(url, data=data) as response:
@@ -80,7 +81,7 @@ def map_chembl_to_uniprot(
     ).encode()
     logger.debug("Submitting ID mapping job for %s", chembl_target_id)
     base = cfg.base.rstrip("/")
-    run_data = _open_json(f"{base}/run", data=data)
+    run_data = _open_json(f"{base}/run", data=data, timeout=cfg.timeout)
     job_id = run_data.get("jobId")
     if not job_id:
         raise ValueError("UniProt ID Mapping API did not return a job ID")
@@ -94,7 +95,7 @@ def map_chembl_to_uniprot(
     )
     while True:
         limiter.acquire()
-        status_data = _open_json(status_url)
+        status_data = _open_json(status_url, timeout=cfg.timeout)
 
         # Check for results in the response, which indicates a redirect has occurred
         if "results" in status_data:
@@ -115,7 +116,7 @@ def map_chembl_to_uniprot(
     # If the last status check was a redirect, status_data already contains the results
     if not result_data:
         result_url = f"{base}/uniprotkb/results/{job_id}?format=json"
-        result_data = _open_json(result_url)
+        result_data = _open_json(result_url, timeout=cfg.timeout)
 
     results = result_data.get("results", [])
     if not results:
