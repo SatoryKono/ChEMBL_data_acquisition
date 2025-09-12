@@ -11,8 +11,8 @@ from urllib.parse import quote
 import requests
 
 from . import pubmed_library as _pl
+from .config import CrossRefCfg, OpenAlexCfg
 from .log import logger
-from .pubmed_library import CrossRefCfg, OpenAlexCfg  # type: ignore[attr-defined]
 from .rate_limiter import RateLimiter
 
 
