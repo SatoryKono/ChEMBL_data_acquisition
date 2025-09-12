@@ -10,7 +10,9 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         # ``organism`` is not present in all datasets; treat as optional to allow
         # validation of partial records without skipping the entire step.
         "organism": pa.Column(str, required=False),
-        "uniprot_id": pa.Column(str, required=False),        
+        "uniprot_id": pa.Column(str, required=False),
+        "pH_dependence": pa.Column(float, pa.Check.in_range(0, 14), required=False),
+        "isoforms": pa.Column(float, pa.Check.ge(0), required=False),
     }
 )
 

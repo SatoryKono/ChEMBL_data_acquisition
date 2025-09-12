@@ -85,6 +85,11 @@ target-version = ["py312"]
 line-length = 88
 target-version = "py312"
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501"]
