@@ -611,6 +611,8 @@ def _read_sheet(
 ) -> pd.DataFrame:
     """Read ``sheet`` from an Excel file.
 
+    Duplicate column names are dropped with a warning.
+
     Parameters
     ----------
     path:
@@ -636,8 +638,17 @@ def _read_sheet(
             header = raw.iloc[0].astype(str).tolist()
             df = raw.iloc[1:].reset_index(drop=True)
             df.columns = pd.Index(header)
-            return df
-        return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+        else:
+            df = pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+
+        if df.columns.has_duplicates:
+            logger.warning(
+                "duplicate columns dropped",
+                sheet=sheet,
+                duplicates=df.columns[df.columns.duplicated()].tolist(),
+            )
+            df = df.loc[:, ~df.columns.duplicated()]
+        return df
     except ValueError as exc:  # missing sheet
         raise ValueError(f"sheet '{sheet}' not found in {path}") from exc
 

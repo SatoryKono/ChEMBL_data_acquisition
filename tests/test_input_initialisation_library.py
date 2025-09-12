@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import json
 import sys
 from pathlib import Path
 
@@ -7,6 +9,7 @@ import pandas as pd
 import pytest
 
 from library import input_initialisation_library as lib
+from library.cli import LoggerConfig, configure_logger
 from library.config import ApiCfg, Config
 from library.input_initialisation_library import (
     TableDict,
@@ -955,3 +958,23 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
 
     for col in ["IUPHAR_class", "IUPHAR_subclass", "gene_index", "taxon_index"]:
         assert col in res.columns
+
+
+def test_read_sheet_drops_duplicate_columns(tmp_path: Path) -> None:
+    """``_read_sheet`` removes duplicate headers and logs a warning."""
+
+    df = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "b"])
+    xlsx = tmp_path / "dup.xlsx"
+    with pd.ExcelWriter(xlsx, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Sheet1", index=False)
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="WARNING", stream=buffer))
+    result = lib._read_sheet(xlsx, "Sheet1", header_promotion=True)
+    configure_logger(LoggerConfig(stream=sys.stdout))
+
+    assert list(result.columns) == ["a", "b"]
+    records = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+    record = next(r for r in records if r.get("event") == "duplicate columns dropped")
+    assert record["sheet"] == "Sheet1"
+    assert record["duplicates"] == ["b"]
