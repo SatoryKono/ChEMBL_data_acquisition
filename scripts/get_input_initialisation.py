@@ -132,9 +132,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                     )
                 tables[base_name] = renamed
 
-            tables[f"{key}_statistics"] = lib.compute_status_statistics(
-                renamed, base_name
-            )
+            tables[f"{key}_statistics"] = lib.compute_status_statistics(df, base_name)
             del tables[key]
 
         logger.info("save_output")
