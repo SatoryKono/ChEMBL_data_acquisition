@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-import subprocess
 import sys
 import tempfile
 from collections.abc import Iterable, Sequence
@@ -23,27 +22,9 @@ import yaml
 from pandas.api import types as ptypes
 
 from .config import Config, _serialize_paths
+from .git_utils import _git_sha
 
 logger = logging.getLogger(__name__)
-
-
-def _git_sha() -> str:
-    """Return the current Git commit hash or ``"unknown"`` if unavailable."""
-
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip()
-    except subprocess.TimeoutExpired:
-        logger.warning("git rev-parse timed out")
-        return "unknown"
-    except Exception:  # pragma: no cover - git may be unavailable
-        return "unknown"
 
 
 def _write_meta(path: Path, cfg: Config | None) -> Path:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import string
 import subprocess
 from pathlib import Path
@@ -13,8 +12,9 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
+import library.git_utils as git_utils
 from library.config import Config
-from library.csv_utils import _git_sha, sha256_file, write_csv_deterministic
+from library.csv_utils import sha256_file, write_csv_deterministic
 
 
 def test_write_csv_deterministic(tmp_path: Path) -> None:
@@ -207,17 +207,19 @@ def test_sha256_file_missing(tmp_path: Path) -> None:
 
 
 def test_git_sha_timeout_returns_unknown_and_logs_warning(
-    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_git_sha returns 'unknown' and logs a warning on timeout."""
 
+    git_utils._git_sha.cache_clear()
     with patch(
-        "library.csv_utils.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(
-            cmd=["git", "rev-parse", "HEAD"], timeout=5
-        ),
+        "library.git_utils.subprocess.check_output",
+        side_effect=subprocess.CalledProcessError(returncode=1, cmd=["git"]),
     ):
-        with caplog.at_level(logging.WARNING):
-            result = _git_sha()
-    assert result == "unknown"
-    assert "timed out" in caplog.text
+        messages: list[str] = []
+        monkeypatch.setattr(
+            git_utils.logger, "warning", lambda msg, *args: messages.append(msg % args)
+        )
+        result = git_utils._git_sha()
+    assert result == "UNKNOWN"
+    assert any("Unable to determine git SHA" in msg for msg in messages)

@@ -3,16 +3,15 @@ from __future__ import annotations
 import csv
 import hashlib
 import subprocess
-import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, NoReturn
 
 import pandas as pd
 import pandera as pa
 import pytest
 import yaml
 
+import library.git_utils as git_utils
 from library import io
 from library.config import Config, IoCfg
 from library.logging_setup import LoggerConfig, configure_logger
@@ -151,16 +150,16 @@ def test_git_sha_timeout_returns_unknown(
 
     stream = StringIO()
     monkeypatch.setattr(
-        io,
+        git_utils,
         "logger",
         configure_logger(LoggerConfig(level="WARNING", stream=stream)),
     )
 
-    def slow_run(*args: Any, **kwargs: Any) -> NoReturn:
-        time.sleep(0.1)  # Simulate a hanging git command
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=5)
+    def fail(*args: object, **kwargs: object) -> bytes:
+        raise subprocess.CalledProcessError(returncode=1, cmd=["git"])
 
-    monkeypatch.setattr(io.subprocess, "run", slow_run)
+    monkeypatch.setattr(git_utils.subprocess, "check_output", fail)
+    git_utils._git_sha.cache_clear()
 
-    assert io._git_sha() == "unknown"
-    assert "timed out" in stream.getvalue()
+    assert git_utils._git_sha() == "UNKNOWN"
+    assert "Unable to determine git SHA" in stream.getvalue()

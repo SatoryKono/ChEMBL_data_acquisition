@@ -8,12 +8,8 @@ summary statistics.
 
 from __future__ import annotations
 
-import functools
 import hashlib
-import os
 import platform
-import shutil
-import subprocess
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +18,7 @@ from typing import Any, TypedDict
 import yaml
 
 from .config import _mask_secrets
+from .git_utils import _git_sha
 from .log import logger
 
 # ``datetime.UTC`` is only available in Python 3.11 and later.
@@ -57,45 +54,6 @@ def file_sha256(path: Path | str) -> str:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-@functools.lru_cache(maxsize=1)
-def _git_sha() -> str:
-    """Return the current Git commit hash.
-
-
-    The result is cached to avoid repeated invocations of Git. If Git is
-    unavailable, ``"UNKNOWN"`` is returned and a warning is logged.
-
-    """
-
-    repo_root = Path(__file__).resolve().parent.parent
-    env_sha = os.getenv("GIT_SHA")
-    if env_sha:
-        logger.info("Using git SHA from GIT_SHA: %s", env_sha)
-        return env_sha
-    # ``shutil.which`` returns the path to the git executable or ``None`` if it
-    # cannot be located on the current ``PATH``.
-    git_executable = shutil.which("git")
-    if git_executable is None:
-        logger.warning("Git executable not found")
-        return "UNKNOWN"
-
-    # The repository may be installed without its ``.git`` directory (e.g. when
-    # distributed as a source archive). In such cases the commit hash cannot be
-    # determined.
-    if not (repo_root / ".git").exists():
-        logger.warning("No .git directory found at %s", repo_root)
-        return "UNKNOWN"
-
-    try:
-        result = subprocess.check_output(
-            [git_executable, "rev-parse", "HEAD"], cwd=repo_root
-        )
-        return result.decode().strip()
-    except subprocess.CalledProcessError as exc:
-        logger.warning("Unable to determine git SHA: %s", exc)
-        return "UNKNOWN"
 
 
 def write_meta_yaml(
