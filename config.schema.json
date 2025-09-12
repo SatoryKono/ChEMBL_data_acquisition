@@ -957,6 +957,7 @@
         "chembl": {
           "$ref": "#/$defs/TargetChemblCfg",
           "default": {
+            "column": "target_chembl_id",
             "timeout": 30.0
           }
         },
@@ -1399,11 +1400,13 @@
         },
         "chembl": {
           "chunk_size": 5,
+          "column": "document_chembl_id",
           "timeout": 30.0
         },
         "all": {
           "batch_size": 50,
           "chunk_size": 5,
+          "column": "document_chembl_id",
           "sleep": 5.0,
           "timeout": 30.0,
           "workers": 1
@@ -1418,6 +1421,7 @@
           "data_dir": "dictionary/uniprot"
         },
         "chembl": {
+          "column": "target_chembl_id",
           "timeout": 30.0
         },
         "iuphar": {
