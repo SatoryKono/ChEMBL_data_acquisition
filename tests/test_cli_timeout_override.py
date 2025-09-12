@@ -71,7 +71,7 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch) -> None:
 
 def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
     input_csv = tmp_path / "doc.csv"
-    input_csv.write_text("chembl_id\nd1\n")
+    input_csv.write_text("document_chembl_id\nd1\n")
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
 

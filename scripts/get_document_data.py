@@ -654,7 +654,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "chembl", parents=[shared], help="Fetch document information from ChEMBL"
     )
     chembl.add_argument(
-        "--column", default="chembl_id", help="Column name containing identifiers"
+        "--column",
+        default="document_chembl_id",
+        help="Column name containing identifiers",
     )
     chembl.add_argument(
         "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
@@ -671,7 +673,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "all", parents=[shared], help="Run both ChEMBL and PubMed pipelines"
     )
     all_cmd.add_argument(
-        "--column", default="chembl_id", help="Column in the input CSV"
+        "--column",
+        default="document_chembl_id",
+        help="Column in the input CSV",
     )
     all_cmd.add_argument(
         "--chunk-size", type=int, default=5, help="Maximum IDs per request"
