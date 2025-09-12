@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -287,6 +288,7 @@ class IoCfg(_BoolModel):
     cache_dir: Path = Path(".cache")
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
+    na_markers: Sequence[str] | None = ("#N/A",)
     csv_index: bool = False
     exist_ok: bool = True
 
