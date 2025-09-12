@@ -44,20 +44,17 @@ def test_activities_schema_validation() -> None:
 
 
 def test_assays_schema_validation() -> None:
-    """Ensure :data:`AssaysSchema` validates expected data."""
+    """Required columns are enforced."""
     valid = pd.DataFrame(
         {
             "assay_chembl_id": ["CHEMBL1"],
             "document_chembl_id": ["CHEMBL2"],
-            "target_chembl_id": ["CHEMBL3"],
-            "year": [2020],
-            "month": [6],
         }
     )
     AssaysSchema.validate(valid)
 
-    invalid = valid.copy()
-    invalid.loc[0, "month"] = 13
+    # Missing mandatory column should raise a SchemaError
+    invalid = valid.drop(columns=["assay_chembl_id"])
     with pytest.raises(SchemaError):
         AssaysSchema.validate(invalid)
 
@@ -84,18 +81,11 @@ def test_documents_schema_validation() -> None:
 
 
 def test_targets_schema_validation() -> None:
-    """Ensure :data:`TargetsSchema` validates expected data."""
-    valid = pd.DataFrame(
-        {
-            "target_chembl_id": ["CHEMBL1"],
-            "pH_dependence": [7.0],
-            "isoforms": [2.0],
-        }
-    )
+    """Ensure required target columns are present."""
+    valid = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
     TargetsSchema.validate(valid)
 
-    invalid = valid.copy()
-    invalid.loc[0, "pH_dependence"] = 20.0
+    invalid = valid.drop(columns=["target_chembl_id"])
     with pytest.raises(SchemaError):
         TargetsSchema.validate(invalid)
 

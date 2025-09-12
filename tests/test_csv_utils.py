@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import string
 import subprocess
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
@@ -107,11 +109,17 @@ def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
     assert path1.read_bytes() == path2.read_bytes()
 
 
-def test_write_csv_deterministic_hash_stable(tmp_path: Path) -> None:
+def test_write_csv_deterministic_hash_stable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Repeated calls maintain identical data and metadata hashes."""
 
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     path = tmp_path / "out.csv"
+
+    # Freeze timestamp to keep metadata deterministic across runs
+    fixed_now = datetime(2024, 1, 1)
+    monkeypatch.setattr("library.io.datetime", SimpleNamespace(now=lambda: fixed_now))
 
     write_csv_deterministic(df.copy(), path, key_cols=sorted(df.columns))
     first_hash = sha256_file(path)

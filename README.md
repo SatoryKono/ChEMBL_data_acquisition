@@ -272,14 +272,11 @@ Typical log entries look like:
 
 ## Installation
 
-Clone the repository and install the runtime dependencies:
+Clone the repository and install the package together with development tools:
 
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install .
-
-# Development tools (black, ruff, mypy, pytest, hypothesis, responses, pre-commit)
 pip install .[dev]
 ```
 

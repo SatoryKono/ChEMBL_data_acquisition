@@ -18,7 +18,7 @@ jobs:
 
 
         run: |
-          pip install -r requirements-dev.txt
+          pip install .[dev]
 
       - name: Verify deterministic CSV output
         run: python scripts/check_determinism.py --log-level DEBUG
