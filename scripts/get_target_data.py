@@ -719,6 +719,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 "Skipping validation due to missing required columns: %s",
                 missing_required,
             )
+        final_df = final_df.drop_duplicates()
         io.write_csv(
             final_df,
             output,
