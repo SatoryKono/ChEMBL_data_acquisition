@@ -14,8 +14,8 @@ api:
   timeout_read: 30  # Seconds to wait for a response
   retries: 3  # HTTP retry attempts
   backoff_factor: 0.5  # Exponential backoff multiplier
-  rps: 50  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
-  burst: 50  # Burst size for token bucket limiter
+  rps: 20  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
+  burst: 20  # Burst size for token bucket limiter
   user_agent: "chembl-da/0.1 (mailto:info@example.org)"  # User-Agent header; replace with your contact info
 
 chembl:
@@ -27,7 +27,7 @@ openalex:
   timeout_connect: 5  # Connection timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT)
   timeout_read: 30  # Read timeout in seconds (env: CHEMBL_DA_OPENALEX_TIMEOUT_READ)
   retries: 3  # Retry attempts
-  rps: 4  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
+  rps: 5  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
   burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
   mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_OPENALEX_MAILTO)
 
@@ -36,7 +36,7 @@ crossref:
   timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_READ)
   retries: 3
-  rps: 4  # (env: CHEMBL_DA_CROSSREF_RPS)
+  rps: 5  # (env: CHEMBL_DA_CROSSREF_RPS)
   burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
   mailto: "info@example.org"  # Contact email per API guidelines; required valid email address (env: CHEMBL_DA_CROSSREF_MAILTO)
 
@@ -45,8 +45,8 @@ uniprot:
   timeout_connect: 5  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_READ)
   retries: 3
-  rps: 40  # (env: CHEMBL_DA_UNIPROT_RPS)
-  burst: 50  # (env: CHEMBL_DA_UNIPROT_BURST)
+  rps: 25  # (env: CHEMBL_DA_UNIPROT_RPS)
+  burst: 25  # (env: CHEMBL_DA_UNIPROT_BURST)
   delay: 0.25  # Delay between requests in seconds
 
 uniprot_mapping:
@@ -61,7 +61,7 @@ iuphar:
   timeout_connect: 5  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT)
   timeout_read: 30  # (env: CHEMBL_DA_IUPHAR_TIMEOUT_READ)
   retries: 3
-  rps: 4  # (env: CHEMBL_DA_IUPHAR_RPS)
+  rps: 5  # (env: CHEMBL_DA_IUPHAR_RPS)
   burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
 
 pubchem:
@@ -69,9 +69,9 @@ pubchem:
   timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
   timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
   retries: 3
-  rps: 30  # (env: CHEMBL_DA_PUBCHEM_RPS)
+  rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
   burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
-  delay: 3.0  # Delay between requests in seconds; must be a float for strict type validation
+  delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
 
 
 pubmed:
@@ -203,8 +203,8 @@ init:
   output_dir: "data/output/ChEMBL/processed"  # Output directory for processed files
 
 rate:
-  global_rps: 8  # Global requests-per-second limit
-  global_burst: 8  # Global burst size
+  global_rps: 100  # Global requests-per-second limit
+  global_burst: 100  # Global burst size
   limiter_cache_maxsize: 128  # Max cached limiters
   limiter_cache_ttl: 600  # Time-to-live for cached limiters in seconds
 
