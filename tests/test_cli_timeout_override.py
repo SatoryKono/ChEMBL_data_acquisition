@@ -77,9 +77,10 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["d1"])
 
-    def fake_apply_doc(a, p, c, mapping=None):
+    def fake_apply_doc(a, p, c, mapping=None, **kwargs):
         cfg = Config()
         cfg.document.chembl.timeout = float(a.timeout)
+        cfg.api.user_agent = "test/0.1 (mailto:test@example.com)"
         return cfg
 
     monkeypatch.setattr(gdd, "apply_config_overrides", fake_apply_doc)
