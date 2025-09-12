@@ -1233,6 +1233,7 @@ def save_tables(
             sub_dir = out_dir
 
         path = sub_dir / f"{entity}.csv"
+        chembl_id_col = f"{entity}_chembl_id"
         # Drop duplicated columns before writing to avoid ambiguous headers.
         duplicate_cols = df.columns[df.columns.duplicated()].tolist()
         if duplicate_cols:
@@ -1242,7 +1243,7 @@ def save_tables(
             df = df.loc[:, ~df.columns.duplicated()]
         # Delegate writing to the shared I/O helper to ensure consistent
         # encoding and creation of metadata sidecars.
-        write_csv(df, path, cfg=cfg)
+        write_csv(df, path, cfg=cfg, col_order=[chembl_id_col])
         logger.info("file_written", rows=len(df), path=str(path))
         paths[entity] = path
     return paths
