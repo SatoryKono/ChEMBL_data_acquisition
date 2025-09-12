@@ -22,7 +22,6 @@ Examples
 from __future__ import annotations
 
 import csv
-import subprocess
 import sys
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
@@ -36,7 +35,7 @@ import yaml
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
 from .csv_utils import write_csv_deterministic
-from .log import logger
+from .git_utils import _git_sha
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera.pandas as pa
@@ -258,30 +257,6 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     inp = Path(input_path)
     date_str = datetime.now().strftime("%Y%m%d")
     return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
-
-
-def _git_sha() -> str:
-    """Return the current Git commit hash.
-
-    The command is limited to a short timeout to avoid hanging when ``git``
-    is unavailable. If the call times out or fails, ``"unknown"`` is
-    returned and a warning is logged.
-    """
-
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip()
-    except subprocess.TimeoutExpired as exc:
-        logger.warning("git command timed out: %s", exc)
-    except Exception as exc:  # pragma: no cover - git may be unavailable
-        logger.warning("unable to determine git SHA: %s", exc)
-    return "unknown"
 
 
 def _write_meta(path: Path, cfg: Config) -> None:
