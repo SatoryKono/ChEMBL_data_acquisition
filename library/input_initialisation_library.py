@@ -484,15 +484,31 @@ def process_activity_table(
     df = df.merge(
         targets[
             [
-                "target_chembl_id",              
+                "target_chembl_id",
                 "target_sort_order",
                 "multifunctional_enzyme",
                 "organism_type",
+                "IUPHAR_class",
+                "IUPHAR_subclass",
+                "gene_index",
+                "taxon_index",
             ]
         ],
         how="left",
         on="target_chembl_id",
     )
+    # Drop any duplicated columns to avoid unexpected suffixed names when the
+    # input dataframe already contains some of these fields.
+    df = df.loc[:, ~df.columns.duplicated()]
+
+    df["multifunctional_enzyme"] = (
+        df["multifunctional_enzyme"]
+        .astype("string")
+        .str.lower()
+        .map({"true": True, "false": False})
+        .astype("boolean")
+    )
+
     mapping = {
         "Multicellular organism": False,
         "Viruses": True,
@@ -501,8 +517,6 @@ def process_activity_table(
     df["unicellular_organism"] = (
         df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
     )
-
-  #  df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
 
     df.drop(columns=["organism_type"], inplace=True)
 
@@ -535,7 +549,9 @@ def process_activity_table(
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
-        "multifunctional_enzyme",      
+        "multifunctional_enzyme",
+        "gene_index",
+        "taxon_index",
         "target_sort_order",
     ]
 
