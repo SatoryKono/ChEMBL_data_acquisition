@@ -476,16 +476,27 @@ def process_activity_table(
             "target_chembl_id": "string",
             "IUPHAR_class": "string",
             "IUPHAR_subclass": "string",
-            "taxon_index":"string",
-            "gene_index":"string",
+            "taxon_index": "string",
+            "gene_index": "string",
             "target_sort_order": "string",
-            "multifunctional_enzyme":"string",
+            "multifunctional_enzyme": "string",
             "organism_type": "string",
         },
     )
 
     df = df.merge(
-        targets[["target_chembl_id", "IUPHAR_class", "IUPHAR_subclass", "gene_index","taxon_index", "target_sort_order","multifunctional_enzyme", "organism_type"]],
+        targets[
+            [
+                "target_chembl_id",
+                "IUPHAR_class",
+                "IUPHAR_subclass",
+                "gene_index",
+                "taxon_index",
+                "target_sort_order",
+                "multifunctional_enzyme",
+                "organism_type",
+            ]
+        ],
         how="left",
         left_on="target_id",
         right_on="target_chembl_id",
@@ -533,10 +544,10 @@ def process_activity_table(
         "IUPHAR_subclass",
         "unicellular_organism",
         "multifunctional_enzyme",
-        "IUPHAR_class", 
-        "IUPHAR_subclass", 
+        "IUPHAR_class",
+        "IUPHAR_subclass",
         "gene_index",
-        "taxon_index", 
+        "taxon_index",
         "target_sort_order",
     ]
 
@@ -824,11 +835,15 @@ def generate_pair_entity_tables(
         logger.warning("'activity' table missing column 'activity_chembl_id'")
         return result
 
+    # Columns linking activities to related entities have been renamed during
+    # preprocessing (e.g. ``assay_chembl_id`` -> ``assay_id``).  The mapping
+    # below reflects the new schema so that pair table generation can correctly
+    # retrieve the associated entity rows.
     entity_cols: dict[str, str] = {
-        "assay": "assay_chembl_id",
-        "document": "document_chembl_id",
-        "target": "target_chembl_id",
-        "testitem": "molecule_chembl_id",
+        "assay": "assay_id",
+        "document": "document_id",
+        "target": "target_id",
+        "testitem": "testitem_id",
     }
 
     for pair_key, suffix in pair_keys.items():
@@ -1595,12 +1610,18 @@ def initialize_pairs(
     df = pair_df.copy()
     mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
     df = df.merge(
-        mapping, left_on="activity_chembl_id1", right_on="activity_chembl_id", how="left"
+        mapping,
+        left_on="activity_chembl_id1",
+        right_on="activity_chembl_id",
+        how="left",
     )
     df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
     df.drop(columns=["activity_chembl_id"], inplace=True)
     df = df.merge(
-        mapping, left_on="activity_chembl_id2", right_on="activity_chembl_id", how="left"
+        mapping,
+        left_on="activity_chembl_id2",
+        right_on="activity_chembl_id",
+        how="left",
     )
     df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
     df.drop(columns=["activity_chembl_id"], inplace=True)
@@ -1666,13 +1687,21 @@ def aggregate_activity(
             df_pairs[col] = 0
 
     left = df_pairs.rename(
-        columns={"activity_chembl_id1": "activity_chembl_id", "Filtered1": "Filtered.new"}
+        columns={
+            "activity_chembl_id1": "activity_chembl_id",
+            "Filtered1": "Filtered.new",
+        }
     )[["activity_chembl_id", "Filtered.new", *metrics]]
     right = df_pairs.rename(
-        columns={"activity_chembl_id2": "activity_chembl_id", "Filtered2": "Filtered.new"}
+        columns={
+            "activity_chembl_id2": "activity_chembl_id",
+            "Filtered2": "Filtered.new",
+        }
     )[["activity_chembl_id", "Filtered.new", *metrics]]
     activity_pairs = pd.concat([left, right], ignore_index=True)
-    activity_status = _aggregate_entity(activity_pairs, "activity_chembl_id", status_api)
+    activity_status = _aggregate_entity(
+        activity_pairs, "activity_chembl_id", status_api
+    )
 
     merged = activity_df.merge(activity_status, on="activity_chembl_id", how="left")
     merged["Filtered.new"] = merged["Filtered.new"].fillna(merged["Filtered.init"])
