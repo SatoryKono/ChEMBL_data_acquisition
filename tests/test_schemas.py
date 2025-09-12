@@ -174,6 +174,47 @@ def test_activities_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
         ActivitiesSchema.validate(df)
 
 
+@given(
+    data_frames(
+        columns=[
+            column("document_chembl_id", elements=st.text(min_size=1)),
+            column("title", elements=st.text(min_size=1)),
+            column(
+                "year",
+                dtype=int,
+                elements=st.integers(min_value=1900, max_value=2100),
+            ),
+        ],
+        index=range_indexes(min_size=1, max_size=5),
+    )
+)
+def test_documents_schema_hypothesis_valid(df: pd.DataFrame) -> None:
+    """Random valid frames pass ``DocumentsSchema``."""
+
+    DocumentsSchema.validate(df)
+
+
+@given(
+    data_frames(
+        columns=[
+            column("document_chembl_id", elements=st.text(min_size=1)),
+            column("title", elements=st.text(min_size=1)),
+            column(
+                "year",
+                dtype=int,
+                elements=st.integers(min_value=0, max_value=1899),
+            ),
+        ],
+        index=range_indexes(min_size=1, max_size=5),
+    )
+)
+def test_documents_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
+    """Years below 1900 fail ``DocumentsSchema`` validation."""
+
+    with pytest.raises(SchemaError):
+        DocumentsSchema.validate(df)
+
+
 def test_activities_from_files() -> None:
     """Validate activities data from CSV/JSON files and capture failures."""
     data_dir = Path(__file__).parent / "data"

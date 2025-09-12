@@ -20,3 +20,10 @@ def cfg() -> Config:
     """
 
     return Config(api=ApiCfg(user_agent="test@example.org"))
+
+
+@pytest.fixture()
+def duplicate_document_ids() -> list[str]:
+    """Return sample document IDs including duplicates for testing."""
+
+    return ["CHEMBL1", "CHEMBL1", "CHEMBL2"]

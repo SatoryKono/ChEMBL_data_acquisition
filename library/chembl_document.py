@@ -57,15 +57,18 @@ def get_documents(
         Data frame containing the retrieved document metadata. Missing
         identifiers result in an empty frame.
     """
+    # Filter out empty placeholders and deduplicate to avoid redundant HTTP
+    # requests for the same identifier.
     valid = [i for i in ids if i not in {"", "#N/A"}]
-    if not valid:
+    unique_ids = list(dict.fromkeys(valid))
+    if not unique_ids:
         return pd.DataFrame(columns=DOCUMENT_COLUMNS)
 
     base = f"{cfg.chembl_base.rstrip('/')}/document.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     records: list[dict[str, Any]] = []
 
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in _chunked(unique_ids, chunk_size):
         url = f"{base}&document_chembl_id__in={','.join(chunk)}"
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("documents") or data.get("document") or []
