@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 import requests
-import responses
+
+
+responses = pytest.importorskip("responses")
+
 
 from library import pubchem_library as pl  # noqa: E402
 from library import rate_limiter as rl  # noqa: E402

@@ -97,7 +97,7 @@ class ApiCfg(_BaseModel):
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
-    user_agent: str
+    user_agent: str = "chembl-da/0.1 (mailto:info@example.org)"
 
     @field_validator("chembl_base")
     @classmethod
@@ -462,7 +462,7 @@ class TargetCfg(_BaseModel):
 
 
 class Config(_BaseModel):
-    api: ApiCfg
+    api: ApiCfg = Field(default_factory=lambda: ApiCfg())
     chembl: ChemblCfg = Field(default_factory=lambda: ChemblCfg())
     openalex: OpenAlexCfg = Field(default_factory=lambda: OpenAlexCfg())
     crossref: CrossRefCfg = Field(default_factory=lambda: CrossRefCfg())
@@ -639,14 +639,6 @@ def load_config(
         if strict:
             raise ValueError(msg)
         logger.warning(msg)
-
-    if "api" not in data or "user_agent" not in data.get("api", {}):
-        raise ConfigError(
-            "api.user_agent must be provided via environment variable "
-            "CHEMBL_DA__API__USER_AGENT or CLI option --api.user_agent. "
-            "See README.md for details and example: "
-            "'my-app/1.0 (mailto:me@example.org)'."
-        )
 
     cfg = Config.model_validate(data)
 
