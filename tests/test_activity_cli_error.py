@@ -12,7 +12,7 @@ from library.config import Config
 from scripts import get_activity_data as gad
 
 
-def test_run_chembl_handles_request_error(monkeypatch) -> None:
+def test_run_chembl_handles_request_error(monkeypatch, cfg: Config) -> None:
     args = argparse.Namespace(
         input_csv=Path("dummy.csv"),
         output_csv=None,
@@ -32,7 +32,7 @@ def test_run_chembl_handles_request_error(monkeypatch) -> None:
     monkeypatch.setattr(cl, "get_activities", _raise)
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    result = gad.run_chembl(Config(), args)
+    result = gad.run_chembl(cfg, args)
     assert result == 1
     lines = buf.getvalue().splitlines()
     assert lines

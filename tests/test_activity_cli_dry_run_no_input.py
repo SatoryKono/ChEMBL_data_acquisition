@@ -10,14 +10,13 @@ from library.config import Config
 from scripts import get_activity_data as gad
 
 
-def test_dry_run_no_input(tmp_path: Path) -> None:
+def test_dry_run_no_input(tmp_path: Path, cfg: Config) -> None:
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
     args = argparse.Namespace(
         input_csv=Path("missing.csv"),
         output_csv=None,
     )
-    cfg = Config()
     cfg.activity.limit = 5
     cfg.activity.dry_run = True
     rc = gad.run_chembl(cfg, args)
