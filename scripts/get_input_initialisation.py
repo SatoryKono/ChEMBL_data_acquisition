@@ -17,16 +17,8 @@ message.
 from __future__ import annotations
 
 import argparse
-import sys
 from collections.abc import Sequence
 from pathlib import Path
-
-# Allow running the script directly via ``python scripts/get_input_initialisation.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package.  This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from library import input_initialisation_library as lib
 from library.cli import (
@@ -105,18 +97,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             if not key.endswith("_status"):
                 continue
             if "Filtered.new" not in df.columns:
-                logger.warning("table '%s' lacks Filtered.new; skipping", key)
+                logger.warning("missing_filtered_new", table=key)
                 continue
 
             base_name = key.removesuffix("_status")
             entity = base_name.split("_")[0]
             id_col = id_cols.get(entity)
             if entity == "system" and id_col is None:
-                logger.info("dropping unsupported system status table '%s'", key)
+                logger.info("drop_status_table", table=key)
                 del tables[key]
                 continue
             if entity == "system":
-                logger.info("processing system status table '%s'", key)
+                logger.info("process_status_table", table=key)
 
             renamed = df.rename(columns={"Filtered.new": "Filtered"})
 
@@ -156,10 +148,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         report_dir = out_dir / "data_validity_report"
         report_dir.mkdir(parents=True, exist_ok=True)
         for entity, path in paths.items():
-            logger.info("profiling", extra={"entity": entity})
+            logger.info("profiling", entity=entity)
             analyze_table_quality(path, table_name=str(report_dir / path.stem))
 
-        logger.info("save_done", extra={"tables": len(paths), "path": str(out_dir)})
+        logger.info("save_done", tables=len(paths), path=str(out_dir))
         return 0
     except KeyError as exc:
         msg = exc.args[0] if exc.args else str(exc)
@@ -173,9 +165,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         ):
             # Log a column-specific message when the error clearly refers to
             # missing columns rather than an absent table.
-            logger.error("required column(s) missing: %s", msg)
+            logger.error("missing_columns", details=msg)
         else:
-            logger.error("required table '%s' missing", msg)
+            logger.error("missing_table", table=msg)
         return 1
 
 
@@ -220,7 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
         cfg: Config = apply_config_overrides(
             args,
@@ -236,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
 
@@ -262,17 +254,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code = int(args.func(cfg, args))
     if exit_code == 0:
-        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
 
 

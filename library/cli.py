@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import uuid
+from collections.abc import Sequence
+from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
@@ -368,6 +370,251 @@ def apply_config_overrides(
     return cfg
 
 
+# ---------------------------------------------------------------------------
+# Script entry points
+# ---------------------------------------------------------------------------
+
+
+def _run(module: str, argv: Sequence[str] | None = None) -> int:
+    """Execute ``module.main`` from the :mod:`scripts` package.
+
+    Parameters
+    ----------
+    module:
+        Name of the module inside :mod:`scripts`.
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code returned by the script's ``main`` function.
+    """
+
+    main_func = import_module(f"scripts.{module}").main
+    return cast(int, main_func(argv))
+
+
+def get_activity_data(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_activity_data`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_activity_data", argv)
+
+
+def get_assay_data(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_assay_data`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_assay_data", argv)
+
+
+def get_target_data(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_target_data`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_target_data", argv)
+
+
+def get_document_data(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_document_data`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_document_data", argv)
+
+
+def get_document_type(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_document_type`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_document_type", argv)
+
+
+def get_input_initialisation(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_input_initialisation`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_input_initialisation", argv)
+
+
+def get_testitem_data(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_testitem_data`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_testitem_data", argv)
+
+
+def csv_utils(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.csv_utils_main`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("csv_utils_main", argv)
+
+
+def mapper(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.mapper_main`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("mapper_main", argv)
+
+
+def table_quality(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.table_quality_main`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("table_quality_main", argv)
+
+
+def chunk_io(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.chunk_io_main`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("chunk_io_main", argv)
+
+
+def get_activities(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.get_activities`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("get_activities", argv)
+
+
+def check_determinism(argv: Sequence[str] | None = None) -> int:
+    """Run :mod:`scripts.check_determinism`.
+
+    Parameters
+    ----------
+    argv:
+        Optional sequence of command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code from the script.
+    """
+
+    return _run("check_determinism", argv)
+
 __all__ = [
     "LoggerConfig",
     "create_logger_config",
@@ -376,4 +623,17 @@ __all__ = [
     "build_root_parser",
     "configure_logger",
     "apply_config_overrides",
+    "check_determinism",
+    "chunk_io",
+    "csv_utils",
+    "get_activities",
+    "get_activity_data",
+    "get_assay_data",
+    "get_document_data",
+    "get_document_type",
+    "get_input_initialisation",
+    "get_target_data",
+    "get_testitem_data",
+    "mapper",
+    "table_quality",
 ]

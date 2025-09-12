@@ -6,14 +6,6 @@ import argparse
 import sys
 from collections.abc import Iterable, Sequence
 from itertools import islice
-from pathlib import Path
-
-# Allow running the script directly via ``python scripts/get_activity_data.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import requests
 from pandera.errors import SchemaErrors
@@ -67,7 +59,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
-        logger.info("dry_run", extra={"limit": expected})
+        logger.info("dry_run", limit=expected)
         return 0
 
     # Configure HTTP session with the supplied User-Agent and retry policy
@@ -87,7 +79,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if limit is not None:
             limited = list(islice(ids_iter, limit))
             ids = limited
-            logger.info("process_limit", extra={"limit": len(limited)})
+            logger.info("process_limit", limit=len(limited))
 
         try:
             df = cl.get_activities(
@@ -145,7 +137,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 key_cols=key_cols or None,
             )
-            logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
+            logger.info("write_done", rows=rows_kept, path=str(csv_path))
         except OSError as exc:
             logger.error("failed to write output CSV: %s", exc)
             return 1
@@ -208,7 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
         cfg: Config = apply_config_overrides(
             args,
@@ -225,23 +217,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code: int = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
 
 

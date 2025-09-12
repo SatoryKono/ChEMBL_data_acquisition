@@ -8,7 +8,7 @@ from pathlib import Path
 def test_help_executes() -> None:
     """The script should be executable directly via Python."""
     result = subprocess.run(
-        [sys.executable, "scripts/get_input_initialisation.py", "--help"],
+        [sys.executable, "-m", "scripts.get_input_initialisation", "--help"],
         capture_output=True,
         text=True,
         check=False,

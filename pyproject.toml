@@ -47,17 +47,19 @@ dev = [
 ]
 
 [project.scripts]
-get-activity-data = "scripts.get_activity_data:main"
-get-assay-data = "scripts.get_assay_data:main"
-get-target-data = "scripts.get_target_data:main"
-get-document-data = "scripts.get_document_data:main"
-get-document-type = "scripts.get_document_type:main"
-get-input-initialisation = "scripts.get_input_initialisation:main"
-get-testitem-data = "scripts.get_testitem_data:main"
-csv-utils = "scripts.csv_utils_main:main"
-mapper = "scripts.mapper_main:main"
-table-quality = "scripts.table_quality_main:main"
-chunk-io = "scripts.chunk_io_main:main"
+get-activity-data = "library.cli:get_activity_data"
+get-assay-data = "library.cli:get_assay_data"
+get-target-data = "library.cli:get_target_data"
+get-document-data = "library.cli:get_document_data"
+get-document-type = "library.cli:get_document_type"
+get-input-initialisation = "library.cli:get_input_initialisation"
+get-testitem-data = "library.cli:get_testitem_data"
+csv-utils = "library.cli:csv_utils"
+mapper = "library.cli:mapper"
+table-quality = "library.cli:table_quality"
+chunk-io = "library.cli:chunk_io"
+get-activities = "library.cli:get_activities"
+check-determinism = "library.cli:check_determinism"
 
 [tool.setuptools]
 py-modules = [
@@ -72,6 +74,8 @@ py-modules = [
   "scripts.mapper_main",
   "scripts.table_quality_main",
   "scripts.chunk_io_main",
+  "scripts.get_activities",
+  "scripts.check_determinism",
 ]
 
 [tool.setuptools.packages.find]
