@@ -94,6 +94,7 @@ python_version = "3.12"
 strict = true
 warn_unused_configs = true
 exclude = "^(?!library/).*"
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 addopts = "-ra -q"
