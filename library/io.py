@@ -82,7 +82,8 @@ def read_ids(
     FileNotFoundError
         If ``path`` does not exist.
     ValueError
-        If the CSV file is malformed or ``column`` is missing.
+        If the CSV file is malformed, ``column`` is missing or the header
+        appears to be tab-separated while using a different delimiter.
 
     """
     sep = sep or cfg.csv_sep
@@ -91,7 +92,20 @@ def read_ids(
     try:
         with Path(path).open("r", encoding=encoding, newline="") as fh:
             reader = csv.DictReader(fh, delimiter=sep)
-            if reader.fieldnames is None or column not in reader.fieldnames:
+            if reader.fieldnames is None:
+                raise ValueError(
+                    f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
+                )
+            # Detect a single header containing tab characters which suggests
+            # that a tab-separated file is being parsed with the wrong
+            # delimiter (default comma).
+            if len(reader.fieldnames) == 1 and "\t" in reader.fieldnames[0]:
+                raise ValueError(
+                    "header contains tab characters but only a single column was detected; "
+                    "the file may be tab-separated. Specify --sep '\t' (or the correct delimiter) "
+                    "or adjust 'io.csv_sep' in the config."
+                )
+            if column not in reader.fieldnames:
                 raise ValueError(
                     f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
                 )
