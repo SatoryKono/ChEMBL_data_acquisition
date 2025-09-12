@@ -9,6 +9,7 @@ summary statistics.
 from __future__ import annotations
 
 import hashlib
+import os
 import platform
 import shutil
 import subprocess
@@ -60,20 +61,17 @@ def file_sha256(path: Path | str) -> str:
 def _git_sha() -> str:
     """Return the current Git commit hash.
 
-    If Git is unavailable or the repository lacks a ``.git`` directory,
-    ``"UNKNOWN"`` is returned and a warning is logged.
+
+    The function first checks the ``GIT_SHA`` environment variable. If set, the
+    value is returned and logged. If Git is unavailable, ``"UNKNOWN"`` is
+    returned and a warning is logged.
     """
 
     repo_root = Path(__file__).resolve().parent.parent
-    git_executable = shutil.which("git")
-    if git_executable is None:
-        logger.warning("Git executable not found; install Git or add it to PATH")
-        return "UNKNOWN"
-
-    git_dir = repo_root / ".git"
-    if not git_dir.exists():
-        logger.warning("No .git directory found at %s", repo_root)
-        return "UNKNOWN"
+    env_sha = os.getenv("GIT_SHA")
+    if env_sha:
+        logger.info("Using git SHA from GIT_SHA: %s", env_sha)
+        return env_sha
 
     try:
         result = subprocess.check_output(
