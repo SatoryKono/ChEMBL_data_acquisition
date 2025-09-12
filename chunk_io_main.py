@@ -68,6 +68,19 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the chunked copy command-line interface.
+
+    Parameters
+    ----------
+    argv : Sequence[str] | None, optional
+        Command-line arguments. If ``None``, values are read from :data:`sys.argv`.
+
+    Returns
+    -------
+    int
+        ``0`` for success, ``1`` if an error occurred during processing.
+    """
+
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
