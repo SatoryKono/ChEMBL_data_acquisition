@@ -74,6 +74,19 @@ def _git_sha() -> str:
     if env_sha:
         logger.info("Using git SHA from GIT_SHA: %s", env_sha)
         return env_sha
+    # ``shutil.which`` returns the path to the git executable or ``None`` if it
+    # cannot be located on the current ``PATH``.
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        logger.warning("Git executable not found")
+        return "UNKNOWN"
+
+    # The repository may be installed without its ``.git`` directory (e.g. when
+    # distributed as a source archive). In such cases the commit hash cannot be
+    # determined.
+    if not (repo_root / ".git").exists():
+        logger.warning("No .git directory found at %s", repo_root)
+        return "UNKNOWN"
 
     try:
         result = subprocess.check_output(
