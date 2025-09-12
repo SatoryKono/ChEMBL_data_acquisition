@@ -4,6 +4,7 @@ import os
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from library.table_quality import analyze_table_quality
@@ -44,3 +45,20 @@ def test_analyze_table_quality_suppresses_warnings(tmp_path: Path) -> None:
         os.chdir(cwd)
 
     assert (tmp_path / "mixed_quality_report_table.csv").exists()
+
+
+def test_analyze_table_quality_handles_sequences(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "seq": [[1], [], np.array([1]), np.array([])],
+        }
+    )
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        quality, _ = analyze_table_quality(df, table_name="seq")
+    finally:
+        os.chdir(cwd)
+
+    non_empty = int(quality.loc[quality["column"] == "seq", "non_empty"].iloc[0])
+    assert non_empty == 2
