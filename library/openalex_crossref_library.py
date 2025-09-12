@@ -50,13 +50,22 @@ def fetch_openalex(
 
     base = cfg.base.rstrip("/")
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
-    logger.info("request_start", extra={"stage": "request_start", "url": url})
+    logger.info(
+        "request_start",
+        extra={"stage": "request_start", "url": url, "rps": cfg.rps, "status": None},
+    )
     try:
         data = _pl.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
     except requests.RequestException:
-        logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
+        logger.exception(
+            "request_fail",
+            extra={"stage": "request_fail", "url": url, "rps": cfg.rps, "status": None},
+        )
         raise
-    logger.info("request_ok", extra={"stage": "request_ok", "url": url})
+    logger.info(
+        "request_ok",
+        extra={"stage": "request_ok", "url": url, "rps": cfg.rps, "status": None},
+    )
     return data
 
 
@@ -94,11 +103,20 @@ def fetch_crossref(
 
     base = cfg.base.rstrip("/")
     url = f"{base}/works/{quote(doi)}"
-    logger.info("request_start", extra={"stage": "request_start", "url": url})
+    logger.info(
+        "request_start",
+        extra={"stage": "request_start", "url": url, "rps": cfg.rps, "status": None},
+    )
     try:
         data = _pl.fetch_crossref(session, doi, cfg=cfg, limiter=limiter)
     except requests.RequestException:
-        logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
+        logger.exception(
+            "request_fail",
+            extra={"stage": "request_fail", "url": url, "rps": cfg.rps, "status": None},
+        )
         raise
-    logger.info("request_ok", extra={"stage": "request_ok", "url": url})
+    logger.info(
+        "request_ok",
+        extra={"stage": "request_ok", "url": url, "rps": cfg.rps, "status": None},
+    )
     return data
