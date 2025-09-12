@@ -364,7 +364,7 @@ def process_activity_table(
     df["multimol_assay_same"] = df["assay_chembl_id"].isin(assays)
 
     df["multmol_assay"] = (
-        df["multmol_assay"].astype("boolean").fillna(False).astype(bool)
+        _safe_to_bool(df["multmol_assay"], "multmol_assay").fillna(False)
         | df["multimol_assay_same"]
     )
     df.drop(columns=["multimol_assay_same", "Count"], inplace=True)
@@ -420,7 +420,7 @@ def process_activity_table(
     ]
     for col in bool_cols:
         if col in df.columns:
-            df[col] = df[col].astype("boolean").fillna(False).astype(bool)
+            df[col] = _safe_to_bool(df[col], col).fillna(False)
 
     df["is_citation"] = df[bool_cols].any(axis=1)
 
@@ -448,9 +448,9 @@ def process_activity_table(
         on="document_chembl_id",
         how="left",
     )
-    df["high_citation_rate"] = (
-        df["high_citation_rate"].astype("boolean").fillna(False).astype(bool)
-    )
+    df["high_citation_rate"] = _safe_to_bool(
+        df["high_citation_rate"], "high_citation_rate"
+    ).fillna(False)
 
     # --- target types ------------------------------------------------------
     if targets_csv is not None:
@@ -484,7 +484,11 @@ def process_activity_table(
     df = df.merge(
         targets[
             [
-                "target_chembl_id",              
+                "target_chembl_id",
+                "IUPHAR_class",
+                "IUPHAR_subclass",
+                "gene_index",
+                "taxon_index",
                 "target_sort_order",
                 "multifunctional_enzyme",
                 "organism_type",
@@ -493,16 +497,18 @@ def process_activity_table(
         how="left",
         on="target_chembl_id",
     )
+
+    df["multifunctional_enzyme"] = _safe_to_bool(
+        df["multifunctional_enzyme"], "multifunctional_enzyme"
+    )
     mapping = {
         "Multicellular organism": False,
         "Viruses": True,
         "Unicellular organism": True,
     }
-    df["unicellular_organism"] = (
-        df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
-    )
-
-  #  df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
+    df["unicellular_organism"] = _safe_to_bool(
+        df["organism_type"].map(mapping), "unicellular_organism"
+    ).fillna(False)
 
     df.drop(columns=["organism_type"], inplace=True)
 
@@ -535,7 +541,9 @@ def process_activity_table(
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
-        "multifunctional_enzyme",      
+        "multifunctional_enzyme",
+        "gene_index",
+        "taxon_index",
         "target_sort_order",
     ]
 
@@ -567,7 +575,7 @@ def process_activity_table(
         "multifunctional_enzyme",
     ]
     for col in bool_cols_final:
-        df[col] = df[col].astype("boolean")
+        df[col] = _safe_to_bool(df[col], col)
 
     return df
 

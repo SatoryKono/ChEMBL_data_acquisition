@@ -713,7 +713,8 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
     assert "unknown_chirality" in res.columns
     assert res.loc[0, "unknown_chirality"]
 
-    assert pd.isna(res.loc[0, "multifunctional_enzyme"])
+    assert res["multifunctional_enzyme"].dtype == "string"
+    assert res.loc[0, "multifunctional_enzyme"] == " "
 
 
 def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
