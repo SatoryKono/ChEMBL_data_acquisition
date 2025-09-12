@@ -41,6 +41,15 @@ def test_missing_config_raises(tmp_path: Path) -> None:
         load_config(tmp_path / "missing.yaml")
 
 
+def test_schema_file_rejected(tmp_path: Path) -> None:
+    """Passing the JSON schema instead of a config file should fail."""
+
+    path = tmp_path / "schema.json"
+    path.write_text('{"$defs": {}}')
+    with pytest.raises(ConfigError, match="configuration schema"):
+        load_config(path)
+
+
 def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api:\n  rps: 1\nopenalex:\n  rps: 1\n")
