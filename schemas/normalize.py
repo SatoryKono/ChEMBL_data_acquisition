@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 _RELATION_MAP: dict[str, str] = {"<": "<=", ">": ">=", "=": "=", "<=": "<=", ">=": ">="}
 
