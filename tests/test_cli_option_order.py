@@ -13,7 +13,7 @@ from scripts import get_target_data as gtd
 
 
 def test_target_input_before_subcommand(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     """Options provided before the sub-command should be honoured."""
     input_csv = tmp_path / "targets.csv"
@@ -30,7 +30,7 @@ def test_target_input_before_subcommand(
         *,
         base_parser: argparse.ArgumentParser | None = None,
     ) -> Config:
-        return Config()
+        return cfg
 
     def fake_run_all(cfg: Config, args: argparse.Namespace) -> int:
         captured["input_csv"] = Path(args.input_csv)
@@ -45,7 +45,7 @@ def test_target_input_before_subcommand(
 
 
 def test_document_input_before_subcommand(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     """Global options before the sub-command work for document CLI."""
     input_csv = tmp_path / "docs.csv"
@@ -62,7 +62,7 @@ def test_document_input_before_subcommand(
         *,
         base_parser: argparse.ArgumentParser | None = None,
     ) -> Config:
-        return Config()
+        return cfg
 
     def fake_run(cfg: Config, args: argparse.Namespace) -> int:
         captured["input_csv"] = Path(args.input_csv)

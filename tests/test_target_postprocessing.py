@@ -115,7 +115,7 @@ def test_finalise_targets_filters_duplicates_and_merges() -> None:
     assert out["transmembrane"].dtype == "boolean"
 
 
-def test_finalise_file_roundtrip(tmp_path: Path) -> None:
+def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
     """``finalise_file`` reads, processes and writes the expected table."""
 
     df = pd.DataFrame(
@@ -135,7 +135,6 @@ def test_finalise_file_roundtrip(tmp_path: Path) -> None:
     organism.to_csv(organism_path, index=False)
     output_path = tmp_path / "out.csv"
 
-    cfg = Config()
     cfg.resources.organism_csv = organism_path
     tp.finalise_file(input_path, output_path, cfg=cfg)
 

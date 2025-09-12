@@ -76,10 +76,9 @@ def test_read_csv_types_and_na_values() -> None:
     assert pd.isna(df.loc[2, "count"])  # custom NA token
 
 
-def test_write_csv_creates_metadata_file(tmp_path: Path) -> None:
+def test_write_csv_creates_metadata_file(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"a": [1]})
     path = tmp_path / "out.csv"
-    cfg = Config()
     io.write_csv(df, path, cfg=cfg)
     meta_files = list(tmp_path.glob("*.meta.yaml"))
     assert path.exists()
@@ -87,10 +86,9 @@ def test_write_csv_creates_metadata_file(tmp_path: Path) -> None:
     assert meta_files[0].exists()
 
 
-def test_write_meta_serialises_paths(tmp_path: Path) -> None:
+def test_write_meta_serialises_paths(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"a": [1]})
     path = tmp_path / "out.csv"
-    cfg = Config()
     io.write_csv(df, path, cfg=cfg)
 
     meta_path = Path(f"{path}.meta.yaml")
@@ -99,10 +97,9 @@ def test_write_meta_serialises_paths(tmp_path: Path) -> None:
     assert meta["config"]["io"]["output_dir"] == str(cfg.io.output_dir)
 
 
-def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
+def test_write_csv_deterministic_hash(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"b": [3, 1], "a": [4.0, 2.0]})
     path = tmp_path / "out.csv"
-    cfg = Config()
     io.write_csv(df, path, cfg=cfg)
     first_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     shuffled = df.sample(frac=1).reset_index(drop=True)[["b", "a"]]
@@ -111,10 +108,9 @@ def test_write_csv_deterministic_hash(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
-def test_write_csv_with_key_cols(tmp_path: Path) -> None:
+def test_write_csv_with_key_cols(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"a": [2, 1], "b": ["x", "y"]})
     path = tmp_path / "out.csv"
-    cfg = Config()
     io.write_csv(df, path, cfg=cfg, key_cols=["a"])
     first_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     shuffled = df.sample(frac=1).reset_index(drop=True)
@@ -138,15 +134,14 @@ def test_read_ids_custom_na_marker(tmp_path: Path) -> None:
     assert ids == ["1", "2"]
 
 
-def test_write_csv_missing_key_column(tmp_path: Path) -> None:
+def test_write_csv_missing_key_column(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"a": [1], "b": [2]})
     path = tmp_path / "out.csv"
-    cfg = Config()
     with pytest.raises(ValueError, match="Missing key columns: \['c'\]"):
         io.write_csv(df, path, cfg=cfg, key_cols=["c"])
 
 
-def test_write_csv_normalises_types(tmp_path: Path) -> None:
+def test_write_csv_normalises_types(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame(
         {
             "b": [True, False],
@@ -154,13 +149,12 @@ def test_write_csv_normalises_types(tmp_path: Path) -> None:
         }
     )
     path = tmp_path / "out.csv"
-    cfg = Config()
     io.write_csv(df, path, cfg=cfg, key_cols=["d"])
     text = path.read_text(encoding="utf-8-sig")
     assert text == ("b,d\nfalse,2020-01-01\ntrue,2020-01-02\n")
 
 
-def test_write_csv_chunksize(tmp_path: Path) -> None:
+def test_write_csv_chunksize(tmp_path: Path, cfg: Config) -> None:
     """Chunked writes yield the same output as unchunked writes."""
 
     rows = 1500
@@ -172,7 +166,6 @@ def test_write_csv_chunksize(tmp_path: Path) -> None:
             "f": [i / 3 for i in range(rows)],
         }
     )
-    cfg = Config()
     path1 = tmp_path / "plain.csv"
     path2 = tmp_path / "chunked.csv"
     io.write_csv(df, path1, cfg=cfg)

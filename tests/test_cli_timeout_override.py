@@ -32,7 +32,7 @@ def _create_config(tmp_path: Path) -> Path:
     return cfg
 
 
-def test_assay_timeout_override(tmp_path: Path, monkeypatch) -> None:
+def test_assay_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
     input_csv = tmp_path / "assay.csv"
     input_csv.write_text("assay_chembl_id\na1\n")
     config_path = _create_config(tmp_path)
@@ -40,7 +40,6 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["a1"])
 
     def fake_apply(a, p, c, mapping=None):
-        cfg = Config()
         cfg.assay.timeout = float(a.timeout)
         return cfg
 
@@ -69,7 +68,7 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch) -> None:
     assert called["timeout"] == 5
 
 
-def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
+def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
     input_csv = tmp_path / "doc.csv"
     input_csv.write_text("document_chembl_id\nd1\n")
     config_path = _create_config(tmp_path)
@@ -78,7 +77,6 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["d1"])
 
     def fake_apply_doc(a, p, c, mapping=None, **kwargs):
-        cfg = Config()
         cfg.document.chembl.timeout = float(a.timeout)
         cfg.api.user_agent = "test/0.1 (mailto:test@example.com)"
         return cfg
@@ -108,7 +106,7 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch) -> None:
     assert called["timeout"] == 7
 
 
-def test_testitem_timeout_override(tmp_path: Path, monkeypatch) -> None:
+def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
     input_csv = tmp_path / "testitem.csv"
     input_csv.write_text("molecule_chembl_id\nt1\n")
     config_path = _create_config(tmp_path)
@@ -117,7 +115,6 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
 
     def fake_apply_test(a, p, c, mapping=None):
-        cfg = Config()
         cfg.testitem.timeout = float(a.timeout)
         return cfg
 
@@ -146,7 +143,7 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch) -> None:
     assert called["timeout"] == 9
 
 
-def test_target_timeout_override(tmp_path: Path, monkeypatch) -> None:
+def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
     input_csv = tmp_path / "target.csv"
     input_csv.write_text("chembl_id\nt1\n")
     config_path = _create_config(tmp_path)
@@ -155,7 +152,6 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
 
     def fake_apply_target(a, p, c, mapping=None):
-        cfg = Config()
         cfg.target.chembl.timeout = float(a.timeout)
         return cfg
 

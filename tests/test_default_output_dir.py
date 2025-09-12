@@ -19,12 +19,11 @@ def test_default_output_path_uses_output_dir(tmp_path: Path) -> None:
 
 
 def test_mapper_run_defaults_to_io_output_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     input_path = tmp_path / "data.csv"
     input_path.write_text("chembl_id\nCHEMBL1\n")
 
-    cfg = Config()
     cfg.io.output_dir = tmp_path / "results"
 
     args = argparse.Namespace(
