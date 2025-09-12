@@ -9,7 +9,6 @@ runs produce identical files.
 from __future__ import annotations
 
 import hashlib
-import logging
 import os
 import sys
 import tempfile
@@ -23,8 +22,7 @@ from pandas.api import types as ptypes
 
 from .config import Config, _serialize_paths
 from .git_utils import _git_sha
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 def _write_meta(path: Path, cfg: Config | None) -> Path:
@@ -163,7 +161,7 @@ def write_csv_deterministic(
         head = [c for c in col_order if c in work.columns]
         tail = sorted(c for c in work.columns if c not in head)
         if drop_unexpected_cols and tail:
-            logger.warning("Dropping unexpected columns: %s", tail)
+            logger.warning("unexpected_columns_dropped", columns=tail)
             work = work.reindex(columns=head, copy=False)
         else:
             work = work.reindex(columns=head + tail, copy=False)

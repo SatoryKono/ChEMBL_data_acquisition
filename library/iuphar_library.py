@@ -495,7 +495,7 @@ class IUPHARData:
         df["full_name_path"] = df["target_id"].apply(self.all_name)
 
         df.to_csv(output_path, index=False, encoding=encoding, sep=sep)
-        logger.info("Wrote %d rows to %s", len(df), output_path)
+        logger.info("file_written", rows=len(df), path=str(output_path))
         return df
 
     # ------------------------------------------------------------------

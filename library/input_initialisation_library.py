@@ -658,7 +658,7 @@ def load_same_doc(xlsx_path: Path) -> TableDict:
     """
     tables: TableDict = {}
     for sheet, entity in SAME_DOC_SHEETS.items():
-        logger.info("Reading sheet '%s' from %s", sheet, xlsx_path)
+        logger.info("sheet_read", sheet=sheet, path=str(xlsx_path))
         tables[entity] = _read_sheet(xlsx_path, sheet)
     return tables
 
@@ -671,7 +671,7 @@ def load_all_doc(xlsx_path: Path) -> TableDict:
     """
     tables: TableDict = {}
     for sheet, entity in ALL_DOC_SHEETS.items():
-        logger.info("Reading sheet '%s' from %s", sheet, xlsx_path)
+        logger.info("sheet_read", sheet=sheet, path=str(xlsx_path))
         promote = sheet == "activities_step5"
         tables[entity] = _read_sheet(xlsx_path, sheet, header_promotion=promote)
     return tables
@@ -1085,8 +1085,8 @@ def build_combined_tables(
     df_pairs = normalize_pair_columns(
         add_pair_metric_columns(unify_dtypes(all_["pairs"]))
     )
-    logger.info("Entity pairs_same_document: rows=%d", len(df_pairs_same))
-    logger.info("Entity pairs: rows=%d", len(df_pairs))
+    logger.info("pair_rows_count", table="pairs_same_document", rows=len(df_pairs_same))
+    logger.info("pair_rows_count", table="pairs", rows=len(df_pairs))
     combined["pairs_same_document"] = df_pairs_same
 
     if "INDEPENDENT" in df_pairs.columns:
@@ -1237,13 +1237,13 @@ def save_tables(
         duplicate_cols = df.columns[df.columns.duplicated()].tolist()
         if duplicate_cols:
             logger.warning(
-                "Duplicate columns removed from %s: %s", entity, duplicate_cols
+                "duplicate_columns_removed", entity=entity, columns=duplicate_cols
             )
             df = df.loc[:, ~df.columns.duplicated()]
         # Delegate writing to the shared I/O helper to ensure consistent
         # encoding and creation of metadata sidecars.
         write_csv(df, path, cfg=cfg)
-        logger.info("Wrote %d rows to %s", len(df), path)
+        logger.info("file_written", rows=len(df), path=str(path))
         paths[entity] = path
     return paths
 
