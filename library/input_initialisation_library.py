@@ -1233,8 +1233,10 @@ def save_tables(
             sub_dir = out_dir
 
         path = sub_dir / f"{entity}.csv"
+
         chembl_id_map = {"testitem": "molecule_chembl_id"}
         chembl_id_col = chembl_id_map.get(entity, f"{entity}_chembl_id")
+
         # Drop duplicated columns before writing to avoid ambiguous headers.
         duplicate_cols = df.columns[df.columns.duplicated()].tolist()
         if duplicate_cols:

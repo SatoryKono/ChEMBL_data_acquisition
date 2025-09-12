@@ -645,6 +645,7 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
 
 
+
 @pytest.mark.parametrize(
     ("entity", "df", "col"),
     [
@@ -668,6 +669,7 @@ def test_save_tables_orders_key_column_first(
     paths = save_tables(tables, tmp_path, cfg)
     result = pd.read_csv(paths[entity])
     assert result.columns[0] == col
+
 
 
 def test_save_tables_drops_duplicate_columns_and_warns(
