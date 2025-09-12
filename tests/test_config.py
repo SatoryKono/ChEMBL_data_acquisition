@@ -322,18 +322,18 @@ def test_user_agent_must_include_contact(
         load_config(path)
 
 
-def test_user_agent_required_env_or_cli(
+def test_user_agent_default_and_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Loading without a user agent should raise ``ConfigError``."""
+    """Default user agent applies and can be overridden."""
 
     path = tmp_path / "cfg.yaml"
     path.write_text(
         "openalex:\n  mailto: info@example.org\ncrossref:\n  mailto: info@example.org\n"
     )
     monkeypatch.delenv("CHEMBL_DA__API__USER_AGENT", raising=False)
-    with pytest.raises(ConfigError):
-        load_config(path)
+    cfg = load_config(path)
+    assert cfg.api.user_agent == "chembl-da/0.1 (mailto:info@example.org)"
 
     monkeypatch.setenv(
         "CHEMBL_DA__API__USER_AGENT", "cli-agent/1.0 (mailto:test@example.org)"

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-
-import requests
-import responses
-
 import pytest
-
+import requests
 
 responses = pytest.importorskip("responses")
 
@@ -59,7 +55,6 @@ def test_make_request_uses_timeout(monkeypatch) -> None:
         lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
     )
     pl._CACHE.clear()
-
 
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1, rps=1)
 
