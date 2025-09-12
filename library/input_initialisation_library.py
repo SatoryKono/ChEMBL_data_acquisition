@@ -1164,6 +1164,10 @@ def save_tables(
     - ``*_status_statistics`` tables follow the same pattern and are also
       stored beneath ``status/``.
 
+    Duplicate column names are removed prior to writing to avoid ambiguous
+    headers. The dropped columns are listed in a warning message to aid
+    debugging.
+
     Parameters
     ----------
     tables:
@@ -1212,6 +1216,13 @@ def save_tables(
             sub_dir = out_dir
 
         path = sub_dir / f"{entity}.csv"
+        # Drop duplicated columns before writing to avoid ambiguous headers.
+        duplicate_cols = df.columns[df.columns.duplicated()].tolist()
+        if duplicate_cols:
+            logger.warning(
+                "Duplicate columns removed from %s: %s", entity, duplicate_cols
+            )
+            df = df.loc[:, ~df.columns.duplicated()]
         # Delegate writing to the shared I/O helper to ensure consistent
         # encoding and creation of metadata sidecars.
         write_csv(df, path, cfg=cfg)
