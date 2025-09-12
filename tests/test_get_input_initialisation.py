@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
@@ -121,6 +122,53 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     assert lines
     record = json.loads(lines[-1])
     assert "required table 'activity' missing" in record.get("msg", "")
+
+
+@pytest.mark.parametrize(
+    "error_msg",
+    [
+        "activity table missing expected columns: foo, bar",
+        "required column(s) baz missing",
+    ],
+)
+def test_run_missing_columns_logs_specific_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_msg: str
+) -> None:
+    """``run`` should report missing required columns with a specific message."""
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+
+    def fake_load_same_doc(path: Path) -> dict[str, object]:  # pragma: no cover
+        return {}
+
+    def fake_load_all_doc(path: Path) -> dict[str, object]:  # pragma: no cover
+        return {}
+
+    def fake_build_combined_tables(*_args, **_kwargs):
+        raise KeyError(error_msg)
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", fake_load_same_doc)
+    monkeypatch.setattr(cli.lib, "load_all_doc", fake_load_all_doc)
+    monkeypatch.setattr(cli.lib, "build_combined_tables", fake_build_combined_tables)
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=tmp_path / "out",
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    result = cli.run(cfg, args)
+    assert result == 1
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    assert f"required column(s) missing: {error_msg}" in record.get("msg", "")
 
 
 def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:

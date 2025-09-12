@@ -539,6 +539,11 @@ def process_activity_table(
         "target_sort_order",
     ]
 
+    # Remove any accidental duplicates while preserving the declared order. This
+    # guards against repeated column names that would otherwise lead to
+    # duplicated output columns downstream.
+    final_cols = list(dict.fromkeys(final_cols))
+
     missing_final = set(final_cols) - set(df.columns)
     if missing_final:
         raise KeyError(
