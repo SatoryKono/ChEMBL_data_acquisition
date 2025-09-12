@@ -184,6 +184,7 @@ def write_csv(
     sep: str | None = None,
     encoding: str | None = None,
     key_cols: Iterable[str] | None = None,
+    col_order: Iterable[str] | None = None,
     chunksize: int | None = None,
 ) -> Path:
     """Write ``df`` to ``path`` as CSV and store metadata.
@@ -208,6 +209,9 @@ def write_csv(
     key_cols:
         Columns used to determine row order. Defaults to all columns if
         omitted.
+    col_order:
+        Optional preferred column ordering. Columns not listed here are
+        appended in lexicographical order.
     chunksize:
         Optional number of rows per chunk to stream when writing the CSV.
         Passed through to :meth:`pandas.DataFrame.to_csv` and
@@ -229,12 +233,14 @@ def write_csv(
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
     key_cols_list = list(key_cols) if key_cols is not None else sorted(df.columns)
+    col_order_list = list(col_order) if col_order is not None else None
     from .csv_utils import write_csv_deterministic
 
     return write_csv_deterministic(
         df,
         path,
         key_cols=key_cols_list,
+        col_order=col_order_list,
         chunksize=chunksize,
         sep=sep,
         encoding=encoding,

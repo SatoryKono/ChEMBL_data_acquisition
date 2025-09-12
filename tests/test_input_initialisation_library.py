@@ -645,6 +645,21 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
 
 
+def test_save_tables_orders_key_column_first(tmp_path: Path, cfg: Config) -> None:
+    """Ensure the ChEMBL identifier column is the first in saved CSV files."""
+    tables: TableDict = {
+        "target": pd.DataFrame(
+            {
+                "target_chembl_id": ["T1"],
+                "name": ["example"],
+            }
+        )
+    }
+    paths = save_tables(tables, tmp_path, cfg)
+    result = pd.read_csv(paths["target"])
+    assert result.columns[0] == "target_chembl_id"
+
+
 def test_save_tables_drops_duplicate_columns_and_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
