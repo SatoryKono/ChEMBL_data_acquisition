@@ -106,16 +106,19 @@ def read_csv_chunks(
         skiprows=to_skip,
     )
     emitted = 0
-    for chunk in reader:
-        if limit is not None and emitted >= limit:
-            break
-        if limit is not None:
-            remaining = limit - emitted
-            if len(chunk) > remaining:
-                yield chunk.iloc[:remaining]
+    try:
+        for chunk in reader:
+            if limit is not None and emitted >= limit:
                 break
-        emitted += len(chunk)
-        yield chunk
+            if limit is not None:
+                remaining = limit - emitted
+                if len(chunk) > remaining:
+                    yield chunk.iloc[:remaining]
+                    break
+            emitted += len(chunk)
+            yield chunk
+    finally:
+        reader.close()
 
 
 def process_csv_chunks(
