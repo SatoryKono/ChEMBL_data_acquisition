@@ -385,9 +385,7 @@ def process_activity_table(
             "activity_chembl_id": "activity_chembl_id",
             "salt_chembl_id": "saltform_id",
             "molecule_chembl_id": "testitem_id",
-            "target_chembl_id": "target_id",
-            "assay_chembl_id": "assay_id",
-            "document_chembl_id": "document_id",
+            # keep CHEMBL identifiers for related entities
             "standard_type": "standard_type",
             "log_value": "pA_value",
         }
@@ -429,7 +427,7 @@ def process_activity_table(
 
     # --- documents with significant citations ------------------------------
     counts_doc = (
-        df.groupby("document_id")["is_citation"]
+        df.groupby("document_chembl_id")["is_citation"]
         .agg(n_citation="sum", n_non_citation=lambda s: (~s).sum())
         .reset_index()
     )
@@ -447,8 +445,8 @@ def process_activity_table(
     )
 
     df = df.merge(
-        counts_doc[["document_id", "high_citation_rate"]],
-        on="document_id",
+        counts_doc[["document_chembl_id", "high_citation_rate"]],
+        on="document_chembl_id",
         how="left",
     )
     df["high_citation_rate"] = (
@@ -498,8 +496,7 @@ def process_activity_table(
             ]
         ],
         how="left",
-        left_on="target_id",
-        right_on="target_chembl_id",
+        on="target_chembl_id",
     )
     mapping = {
         "Multicellular organism": False,
@@ -512,16 +509,16 @@ def process_activity_table(
 
     df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
 
-    df.drop(columns=["target_chembl_id", "organism_type"], inplace=True)
+    df.drop(columns=["organism_type"], inplace=True)
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
         "activity_chembl_id",
         "saltform_id",
         "testitem_id",
-        "target_id",
-        "assay_id",
-        "document_id",
+        "target_chembl_id",
+        "assay_chembl_id",
+        "document_chembl_id",
         "bao_endpoint",
         "standard_type",
         "standard_value",
@@ -835,14 +832,13 @@ def generate_pair_entity_tables(
         logger.warning("'activity' table missing column 'activity_chembl_id'")
         return result
 
-    # Columns linking activities to related entities have been renamed during
-    # preprocessing (e.g. ``assay_chembl_id`` -> ``assay_id``).  The mapping
-    # below reflects the new schema so that pair table generation can correctly
-    # retrieve the associated entity rows.
+    # Columns linking activities to related entities use CHEMBL identifiers.
+    # This mapping specifies the identifier column for each entity so that pair
+    # table generation can correctly retrieve the associated rows.
     entity_cols: dict[str, str] = {
-        "assay": "assay_id",
-        "document": "document_id",
-        "target": "target_id",
+        "assay": "assay_chembl_id",
+        "document": "document_chembl_id",
+        "target": "target_chembl_id",
         "testitem": "testitem_id",
     }
 
@@ -1708,10 +1704,10 @@ def aggregate_activity(
     for m in metrics:
         merged[m] = merged[m].fillna(0)
 
-    assay_status = _aggregate_entity(merged, "assay_id", status_api)
-    document_status = _aggregate_entity(merged, "document_id", status_api)
+    assay_status = _aggregate_entity(merged, "assay_chembl_id", status_api)
+    document_status = _aggregate_entity(merged, "document_chembl_id", status_api)
 
-    system_cols = ["testitem_id", "target_id", "standard_type"]
+    system_cols = ["testitem_id", "target_chembl_id", "standard_type"]
 
     missing_sys = [c for c in system_cols if c not in merged.columns]
     if missing_sys:
@@ -1726,14 +1722,14 @@ def aggregate_activity(
         system_src["system_id"] = (
             system_src["testitem_id"].astype("string")
             + "_"
-            + system_src["target_id"].astype("string")
+            + system_src["target_chembl_id"].astype("string")
             + "_"
             + system_src["standard_type"].astype("string")
         )
         system_status = _aggregate_entity(system_src, "system_id", status_api)
         split = system_status["system_id"].str.split("_", n=2, expand=True)
         system_status["testitem_id"] = split[0]
-        system_status["target_id"] = split[1]
+        system_status["target_chembl_id"] = split[1]
         system_status["standard_type"] = split[2]
 
     if "testitem_id" in merged.columns:
@@ -1751,13 +1747,15 @@ def aggregate_activity(
             columns=["testitem_id", "Filtered.new", *metrics]
         )
 
-    if "target_id" in merged.columns:
-        target_status = _aggregate_entity(merged, "target_id", status_api)
+    if "target_chembl_id" in merged.columns:
+        target_status = _aggregate_entity(merged, "target_chembl_id", status_api)
     else:
         logger.warning(
-            "activity table missing column target_id; skipping target aggregation"
+            "activity table missing column target_chembl_id; skipping target aggregation"
         )
-        target_status = pd.DataFrame(columns=["target_id", "Filtered.new", *metrics])
+        target_status = pd.DataFrame(
+            columns=["target_chembl_id", "Filtered.new", *metrics]
+        )
 
     # metrics are counted per activity; divide by 2 for higher-level aggregations
     for df in [

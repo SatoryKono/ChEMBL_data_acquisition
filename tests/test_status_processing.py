@@ -36,11 +36,11 @@ def test_status_pipeline(tmp_path) -> None:
 
     activity = pd.DataFrame(
         {
-            "activity_id": [1, 2],
-            "assay_id": ["A1", "A1"],
-            "document_id": ["D1", "D1"],
+            "activity_chembl_id": [1, 2],
+            "assay_chembl_id": ["A1", "A1"],
+            "document_chembl_id": ["D1", "D1"],
             "testitem_id": ["T1", "T2"],
-            "target_id": ["TG1", "TG1"],
+            "target_chembl_id": ["TG1", "TG1"],
             "mesurement_type": ["IC50", "IC50"],
             "high_citation_rate": [False, False],
             "unicellular_organism": [False, False],
@@ -62,7 +62,7 @@ def test_status_pipeline(tmp_path) -> None:
             "activity_chembl_id1": [1],
             "activity_chembl_id2": [2],
             "testitem_id": ["T1"],
-            "target_id": ["TG1"],
+            "target_chembl_id": ["TG1"],
             "mesurement_type": ["IC50"],
             "independent_IC50": [1],
             "non_independent_IC50": [0],
@@ -73,7 +73,9 @@ def test_status_pipeline(tmp_path) -> None:
     pair_df = initialize_pairs(pair_df, activity, api)
     assert pair_df.loc[0, "Filtered"] == "warning"
     agg = aggregate_activity(pair_df, activity, api)
-    assert agg["activity"].set_index("activity_id").loc[1, "Filtered.new"] == "bad"
+    assert (
+        agg["activity"].set_index("activity_chembl_id").loc[1, "Filtered.new"] == "bad"
+    )
     assert agg["assay"].loc[0, "independent_IC50"] == 1
 
 
@@ -98,11 +100,11 @@ def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
     api = build_status_helpers(status_df)
     activity = pd.DataFrame(
         {
-            "activity_id": [1, 2],
-            "assay_id": ["A1", "A1"],
-            "document_id": ["D1", "D1"],
+            "activity_chembl_id": [1, 2],
+            "assay_chembl_id": ["A1", "A1"],
+            "document_chembl_id": ["D1", "D1"],
             "testitem_id": ["T1", "T2"],
-            "target_id": ["TG1", "TG1"],
+            "target_chembl_id": ["TG1", "TG1"],
             "mesurement_type": ["IC50", "IC50"],
             "high_citation_rate": [False, False],
             "unicellular_organism": [False, False],
@@ -114,13 +116,13 @@ def test_aggregate_activity_handles_missing_metrics(tmp_path: Path) -> None:
             "activity_chembl_id1": [1],
             "activity_chembl_id2": [2],
             "testitem_id": ["T1"],
-            "target_id": ["TG1"],
+            "target_chembl_id": ["TG1"],
             "mesurement_type": ["IC50"],
         }
     )
     pair_df = initialize_pairs(pair_df, activity, api)
     agg = aggregate_activity(pair_df, activity, api)
-    activity_status = agg["activity"].set_index("activity_id")
+    activity_status = agg["activity"].set_index("activity_chembl_id")
     for col in [
         "independent_IC50",
         "non_independent_IC50",
@@ -141,10 +143,10 @@ def test_aggregate_activity_handles_missing_testitem_id(tmp_path: Path) -> None:
     # activity table deliberately lacks ``testitem_id``
     activity = pd.DataFrame(
         {
-            "activity_id": [1, 2],
-            "assay_id": ["A1", "A1"],
-            "document_id": ["D1", "D1"],
-            "target_id": ["TG1", "TG1"],
+            "activity_chembl_id": [1, 2],
+            "assay_chembl_id": ["A1", "A1"],
+            "document_chembl_id": ["D1", "D1"],
+            "target_chembl_id": ["TG1", "TG1"],
             "mesurement_type": ["IC50", "IC50"],
             "high_citation_rate": [False, False],
             "unicellular_organism": [False, False],
@@ -165,4 +167,6 @@ def test_aggregate_activity_handles_missing_testitem_id(tmp_path: Path) -> None:
     agg = aggregate_activity(pair_df, activity, api)
     assert agg["system"].empty
     assert agg["testitem"].empty
-    assert agg["target"].set_index("target_id").loc["TG1", "independent_IC50"] == 1
+    assert (
+        agg["target"].set_index("target_chembl_id").loc["TG1", "independent_IC50"] == 1
+    )

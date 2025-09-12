@@ -51,15 +51,15 @@ def test_generate_pair_entity_tables_basic() -> None:
         "activity": pd.DataFrame(
             {
                 "activity_chembl_id": [1, 2, 3, 4],
-                "assay_id": ["a1", "a2", "a3", "a4"],
-                "document_id": ["d1", "d2", "d3", "d4"],
-                "target_id": ["t1", "t2", "t3", "t4"],
+                "assay_chembl_id": ["a1", "a2", "a3", "a4"],
+                "document_chembl_id": ["d1", "d2", "d3", "d4"],
+                "target_chembl_id": ["t1", "t2", "t3", "t4"],
                 "testitem_id": ["m1", "m2", "m3", "m4"],
             }
         ),
-        "assay": pd.DataFrame({"assay_id": ["a1", "a2", "a3", "a4"]}),
-        "document": pd.DataFrame({"document_id": ["d1", "d2", "d3", "d4"]}),
-        "target": pd.DataFrame({"target_id": ["t1", "t2", "t3", "t4"]}),
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1", "a2", "a3", "a4"]}),
+        "document": pd.DataFrame({"document_chembl_id": ["d1", "d2", "d3", "d4"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1", "t2", "t3", "t4"]}),
         "testitem": pd.DataFrame({"testitem_id": ["m1", "m2", "m3", "m4"]}),
         "pairs_independent": pd.DataFrame(
             {"activity_chembl_id1": [1, 2], "activity_chembl_id2": [3, None]}
@@ -67,9 +67,9 @@ def test_generate_pair_entity_tables_basic() -> None:
     }
     res = generate_pair_entity_tables(tables, {"pairs_independent": "ind"})
     assert set(res["activity_ind"]["activity_chembl_id"]) == {1, 2, 3}
-    assert set(res["assay_ind"]["assay_id"]) == {"a1", "a2", "a3"}
-    assert set(res["document_ind"]["document_id"]) == {"d1", "d2", "d3"}
-    assert set(res["target_ind"]["target_id"]) == {"t1", "t2", "t3"}
+    assert set(res["assay_ind"]["assay_chembl_id"]) == {"a1", "a2", "a3"}
+    assert set(res["document_ind"]["document_chembl_id"]) == {"d1", "d2", "d3"}
+    assert set(res["target_ind"]["target_chembl_id"]) == {"t1", "t2", "t3"}
     assert set(res["testitem_ind"]["testitem_id"]) == {"m1", "m2", "m3"}
 
 
@@ -79,15 +79,15 @@ def test_generate_pair_entity_tables_normalizes_columns() -> None:
         "activity": pd.DataFrame(
             {
                 "activity_chembl_id": [1, 2],
-                "assay_id": ["a1", "a2"],
-                "document_id": ["d1", "d2"],
-                "target_id": ["t1", "t2"],
+                "assay_chembl_id": ["a1", "a2"],
+                "document_chembl_id": ["d1", "d2"],
+                "target_chembl_id": ["t1", "t2"],
                 "testitem_id": ["m1", "m2"],
             }
         ),
-        "assay": pd.DataFrame({"assay_id": ["a1", "a2"]}),
-        "document": pd.DataFrame({"document_id": ["d1", "d2"]}),
-        "target": pd.DataFrame({"target_id": ["t1", "t2"]}),
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1", "a2"]}),
+        "document": pd.DataFrame({"document_chembl_id": ["d1", "d2"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1", "t2"]}),
         "testitem": pd.DataFrame({"testitem_id": ["m1", "m2"]}),
         # Use non-standard column names as found in some Excel sources
         "pairs_same_document": pd.DataFrame({"Activity_ID1": [1], "Activity_ID2": [2]}),
@@ -104,15 +104,15 @@ def test_generate_pair_entity_tables_missing_columns(
         "activity": pd.DataFrame(
             {
                 "activity_chembl_id": [1],
-                "assay_id": ["a1"],
-                "document_id": ["d1"],
-                "target_id": ["t1"],
+                "assay_chembl_id": ["a1"],
+                "document_chembl_id": ["d1"],
+                "target_chembl_id": ["t1"],
                 "testitem_id": ["m1"],
             }
         ),
-        "assay": pd.DataFrame({"assay_id": ["a1"]}),
-        "document": pd.DataFrame({"document_id": ["d1"]}),
-        "target": pd.DataFrame({"target_id": ["t1"]}),
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1"]}),
+        "document": pd.DataFrame({"document_chembl_id": ["d1"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1"]}),
         "testitem": pd.DataFrame({"testitem_id": ["m1"]}),
         "pairs_bad": pd.DataFrame({"foo": [1]}),
     }
@@ -617,9 +617,9 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         "activity_chembl_id",
         "saltform_id",
         "testitem_id",
-        "target_id",
-        "assay_id",
-        "document_id",
+        "target_chembl_id",
+        "assay_chembl_id",
+        "document_chembl_id",
         "bao_endpoint",
         "standard_type",
         "standard_value",
