@@ -15,6 +15,7 @@ import pandas as pd
 
 from .config import IoCfg
 from .log import logger
+from .pandas_utils import read_csv_pyarrow
 from .validation import validate_schema
 
 
@@ -78,12 +79,11 @@ def postprocess_file(
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
     try:
-        df = pd.read_csv(
+        df = read_csv_pyarrow(
             input_path,
             sep=sep,
             encoding=encoding,
             dtype=str,
-            dtype_backend="pyarrow",
         )
     except ImportError:  # pragma: no cover - pyarrow optional
         df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
