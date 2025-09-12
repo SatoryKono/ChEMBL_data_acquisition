@@ -87,7 +87,6 @@ def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
         Maximum burst size.  Defaults to ``ceil(rps)``.
     """
     with _limiters_lock:
-
         limiter = cast(RateLimiter | None, _limiters.get(name))  # type: ignore[redundant-cast]
 
         if (
