@@ -920,7 +920,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else Path(f"output_{Path(args.input_csv).stem}_{date.today():%Y%m%d}.csv")
     )
     write_csv_deterministic(df, output_path, key_cols=sorted(df.columns))
-    logger.info("written %s", output_path)
+    logger.info("file_written", path=str(output_path))
     return 0
 
 

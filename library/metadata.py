@@ -105,6 +105,6 @@ def write_meta_yaml(
 
     with meta_path.open("w", encoding="utf-8") as fh:
         yaml.safe_dump(metadata, fh, sort_keys=False)
-        logger.info("Metadata written to %s", meta_path)
+        logger.info("metadata_written", path=str(meta_path))
 
     return meta_path

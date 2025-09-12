@@ -8,7 +8,6 @@ processed rows enabling pipelines to resume from the last successful chunk.
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Literal
@@ -16,8 +15,7 @@ from typing import Literal
 import pandas as pd
 
 from .config import IoCfg
-
-logger = logging.getLogger(__name__)
+from .log import logger
 
 
 def _read_checkpoint(path: Path) -> int:
@@ -44,7 +42,7 @@ def _read_checkpoint(path: Path) -> int:
     except FileNotFoundError:
         return 0
     except (ValueError, json.JSONDecodeError) as exc:
-        logger.warning("ignoring invalid checkpoint %s: %s", path, exc)
+        logger.warning("invalid_checkpoint", path=str(path), error=str(exc))
         return 0
 
 
@@ -168,7 +166,7 @@ def process_csv_chunks(
         processed = _read_checkpoint(checkpoint_path)
         header_written = Path(output_path).exists() and processed > 0
         if processed:
-            logger.info("resuming from row %d", processed)
+            logger.info("resume_from_row", row=processed)
 
     rows_written = processed
     for chunk in read_csv_chunks(

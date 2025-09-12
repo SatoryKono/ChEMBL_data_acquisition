@@ -35,16 +35,16 @@ def _git_sha() -> str:
     repo_root = Path(__file__).resolve().parent.parent
     env_sha = os.getenv("GIT_SHA")
     if env_sha:
-        logger.info("Using git SHA from GIT_SHA: %s", env_sha)
+        logger.info("git_sha_env", sha=env_sha)
         return env_sha
 
     git_executable = shutil.which("git")
     if git_executable is None:
-        logger.warning("Git executable not found")
+        logger.warning("git_executable_missing")
         return "UNKNOWN"
 
     if not (repo_root / ".git").exists():
-        logger.warning("No .git directory found at %s", repo_root)
+        logger.warning("git_directory_missing", path=str(repo_root))
         return "UNKNOWN"
 
     try:
@@ -53,5 +53,5 @@ def _git_sha() -> str:
         )
         return result.decode().strip()
     except subprocess.CalledProcessError as exc:  # pragma: no cover - rare
-        logger.warning("Unable to determine git SHA: %s", exc)
+        logger.warning("git_sha_unavailable", error=str(exc))
         return "UNKNOWN"

@@ -425,7 +425,9 @@ def extract_names_for_secondary_accessions(data: Any, *, cfg: UniprotCfg) -> str
         try:
             entry = fetch_uniprot(acc, cfg=cfg)
         except UniProtFetchError as exc:  # pragma: no cover - network errors
-            logger.warning("failed to fetch secondary accession %s: %s", acc, exc)
+            logger.warning(
+                "secondary_accession_fetch_failed", accession=acc, error=str(exc)
+            )
             continue
         desc = entry.get("proteinDescription")
         if isinstance(desc, dict):
@@ -899,21 +901,21 @@ def collect_info(
         with open(json_path, encoding="utf-8") as handle:
             data = json.load(handle)
     except FileNotFoundError:
-        logger.info("downloading UniProt JSON for %s", uid)
+        logger.info("uniprot_json_download", uid=uid)
         try:
             data = fetch_uniprot(uid, cfg=cfg)
         except UniProtFetchError as exc:
-            logger.warning("failed to retrieve UniProt JSON for %s: %s", uid, exc)
+            logger.warning("uniprot_json_fetch_failed", uid=uid, error=str(exc))
             return result
         data_dir.mkdir(parents=True, exist_ok=True)
         try:
             with open(json_path, "w", encoding="utf-8") as handle:
                 json.dump(data, handle)
         except OSError as exc:  # pragma: no cover - disk I/O failure
-            logger.warning("unable to write UniProt JSON for %s: %s", uid, exc)
+            logger.warning("uniprot_json_write_failed", uid=uid, error=str(exc))
             return result
     except json.JSONDecodeError:
-        logger.warning("malformed UniProt JSON for %s", uid)
+        logger.warning("uniprot_json_malformed", uid=uid)
         return result
 
     names = extract_names(data)
