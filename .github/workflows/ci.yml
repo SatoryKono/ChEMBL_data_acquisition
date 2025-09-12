@@ -16,12 +16,13 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install .[dev]
       - name: Verify deterministic CSV output
         run: python scripts/check_determinism.py --log-level DEBUG
       - name: Run pre-commit
         uses: pre-commit/action@v3
+      - name: Type check
+        run: mypy --strict library
       - name: Smoke test cache
         run: pytest -q tests/test_chembl_client.py::test_request_json_cache
       - name: Upload output data
