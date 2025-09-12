@@ -38,7 +38,6 @@ LOWERCASE_COLUMNS: list[str] = [
 
 # Columns treated as text in the final table
 TEXT_COLUMNS: list[str] = [
-    "chembl_id",
     "uniprotkb_Id",
     "uniprot_id",
     "secondary_uniprot_id",
@@ -235,7 +234,7 @@ def postprocess_targets(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- final column ordering --------------------------------------------------
     columns = [
-        "chembl_id",
+        "target_chembl_id",
         "uniprotkb_Id",
         "uniprot_id",
         "secondary_uniprot_id",
@@ -347,7 +346,6 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
         Cleaned table ready for export.
 
     """
-    _validate_columns(df, ["chembl_id", "uniprotkb_Id", "genus"])
     _validate_columns(organism, ["genus", "type"])
 
     df = df.copy()
@@ -360,8 +358,8 @@ def finalise_targets(df: pd.DataFrame, organism: pd.DataFrame) -> pd.DataFrame:
 
     # Remove duplicate chembl_id entries
     before = len(df)
-    df = df.drop_duplicates(subset="chembl_id", keep="first")
-    logger.debug("Removed %d duplicate chembl_id rows", before - len(df))
+    df = df.drop_duplicates(subset="target_chembl_id", keep="first")
+    logger.debug("Removed %d duplicate target_chembl_id rows", before - len(df))
 
     # Enforce column types
     for col in TEXT_COLUMNS:
