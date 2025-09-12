@@ -103,8 +103,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     df = normalize_activities(df)
     rows_total = len(df)
     exit_code = 0
-    required_cols = set(ActivitiesSchema.columns.keys())
-    if required_cols.issubset(df.columns):
+    required_cols = {
+        name for name, col in ActivitiesSchema.columns.items() if col.required
+    }
+    optional_cols = set(ActivitiesSchema.columns) - required_cols
+    missing_required = required_cols - set(df.columns)
+    missing_optional = optional_cols - set(df.columns)
+    if not missing_required:
+        if missing_optional:
+            logger.warning(
+                "DataFrame is missing optional columns: %s", missing_optional
+            )
         try:
             df = ActivitiesSchema.validate(df, lazy=True)
         except SchemaErrors as exc:
@@ -121,8 +130,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             df = getattr(exc, "validated_data", df)
             exit_code = 1
     else:
-        missing = required_cols.difference(df.columns)
-        logger.warning("Skipping validation due to missing columns: %s", missing)
+        logger.warning(
+            "Skipping validation due to missing required columns: %s",
+            missing_required,
+        )
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
     try:

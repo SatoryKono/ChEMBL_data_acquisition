@@ -386,8 +386,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     required_cols = {
         name for name, col in TargetsSchema.columns.items() if col.required
     }
-    missing_required = required_cols.difference(df.columns)
+    optional_cols = set(TargetsSchema.columns) - required_cols
+    missing_required = required_cols - set(df.columns)
+    missing_optional = optional_cols - set(df.columns)
     if not missing_required:
+        if missing_optional:
+            logger.warning(
+                "DataFrame is missing optional columns: %s", missing_optional
+            )
         try:
             df = TargetsSchema.validate(df, lazy=True)
         except SchemaErrors as exc:
@@ -405,7 +411,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing columns: %s", missing_required
+            "Skipping validation due to missing required columns: %s",
+            missing_required,
         )
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
@@ -673,21 +680,37 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         final_df = final_df.rename(columns={"chembl_id": "target_chembl_id"})
         final_df = normalize_targets(final_df)
         exit_code = 0
-        try:
-            final_df = TargetsSchema.validate(final_df, lazy=True)
-        except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+        required_cols = {
+            name for name, col in TargetsSchema.columns.items() if col.required
+        }
+        optional_cols = set(TargetsSchema.columns) - required_cols
+        missing_required = required_cols - set(final_df.columns)
+        missing_optional = optional_cols - set(final_df.columns)
+        if not missing_required:
+            if missing_optional:
+                logger.warning(
+                    "DataFrame is missing optional columns: %s", missing_optional
+                )
+            try:
+                final_df = TargetsSchema.validate(final_df, lazy=True)
+            except SchemaErrors as exc:
+                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+                errors = SidecarErrors()
+                for row in exc.failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path)
+                logger.error(
+                    "validation failed; wrote %d failure cases to %s",
+                    len(exc.failure_cases),
+                    failure_path,
+                )
+                final_df = getattr(exc, "validated_data", final_df)
+                exit_code = 1
+        else:
+            logger.warning(
+                "Skipping validation due to missing required columns: %s",
+                missing_required,
             )
-            final_df = getattr(exc, "validated_data", final_df)
-            exit_code = 1
         io.write_csv(
             final_df,
             output,
