@@ -85,12 +85,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logger(log_cfg)
 
     cfg = Config(api=ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"))
-    pubmed_cfg = cfg.pubmed
-    semsch_cfg = cfg.semantic_scholar
     limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
     delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
 
-    pmid_df = read_pmids(args.input_csv, cfg=pubmed_cfg)
+    pmid_df = read_pmids(args.input_csv, cfg=cfg.pubmed)
     pmids = pmid_df["PMID"].tolist()
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
@@ -102,11 +100,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             batch_pmids = pmids[i : i + batch_size]
             limiter.acquire()
             pubmed_list = fetch_pubmed_batch(
-                session, batch_pmids, delay, cfg=pubmed_cfg
+                session, batch_pmids, delay, cfg=cfg.pubmed
             )
             limiter.acquire()
             semsch_list = fetch_semantic_scholar_batch(
-                session, batch_pmids, delay, cfg=semsch_cfg
+                session, batch_pmids, delay, cfg=cfg.semantic_scholar
             )
             semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
             for pubmed in pubmed_list:
