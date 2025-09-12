@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
+import shutil
 import subprocess
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -59,14 +60,27 @@ def file_sha256(path: Path | str) -> str:
 def _git_sha() -> str:
     """Return the current Git commit hash.
 
-    If Git is unavailable, ``"UNKNOWN"`` is returned and a warning is logged.
+    If Git is unavailable or the repository lacks a ``.git`` directory,
+    ``"UNKNOWN"`` is returned and a warning is logged.
     """
 
     repo_root = Path(__file__).resolve().parent.parent
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        logger.warning("Git executable not found; install Git or add it to PATH")
+        return "UNKNOWN"
+
+    git_dir = repo_root / ".git"
+    if not git_dir.exists():
+        logger.warning("No .git directory found at %s", repo_root)
+        return "UNKNOWN"
+
     try:
-        result = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root)
+        result = subprocess.check_output(
+            [git_executable, "rev-parse", "HEAD"], cwd=repo_root
+        )
         return result.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+    except subprocess.CalledProcessError as exc:
         logger.warning("Unable to determine git SHA: %s", exc)
         return "UNKNOWN"
 
