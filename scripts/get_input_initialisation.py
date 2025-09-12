@@ -89,15 +89,53 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 "pairs_same_document": "same_document",
             },
         )
-        logger.info("compute_status_percentages")
+        logger.info("prepare_status_outputs")
+        id_cols = {
+            "activity": "activity_chembl_id",
+            "assay": "assay_chembl_id",
+            "document": "document_chembl_id",
+            "target": "target_chembl_id",
+            "testitem": "molecule_chembl_id",
+            "molecule": "molecule_chembl_id",
+        }
         for key, df in list(tables.items()):
             if not key.endswith("_status"):
                 continue
             if "Filtered.new" not in df.columns:
                 logger.warning("table '%s' lacks Filtered.new; skipping", key)
                 continue
-            entity = key.split("_")[0]
-            tables[key] = lib.compute_status_statistics(df, entity)
+
+            base_name = key.removesuffix("_status")
+            entity = base_name.split("_")[0]
+            id_col = id_cols.get(entity)
+            renamed = df.rename(columns={"Filtered.new": "Filtered"})
+
+            if id_col and base_name in tables and id_col in tables[base_name].columns:
+                tables[base_name] = tables[base_name].merge(
+                    renamed, on=id_col, how="left"
+                )
+            else:
+                if id_col is None:
+                    logger.warning(
+                        "unknown entity '%s' for status table '%s'", entity, key
+                    )
+                elif base_name not in tables:
+                    logger.warning(
+                        "base table '%s' missing; using status table directly",
+                        base_name,
+                    )
+                else:
+                    logger.warning(
+                        "id column '%s' missing in table '%s'; using status table directly",
+                        id_col,
+                        base_name,
+                    )
+                tables[base_name] = renamed
+
+            tables[f"{key}_statistics"] = lib.compute_status_statistics(
+                renamed, base_name
+            )
+            del tables[key]
 
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)

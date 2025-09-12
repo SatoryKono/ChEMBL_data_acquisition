@@ -146,6 +146,29 @@ def test_build_combined_tables_drops_activity_cols() -> None:
     assert "pairs" not in combined
 
 
+def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
+    """Duplicate column names in activity tables should be ignored."""
+    same: TableDict = {
+        "activity": pd.DataFrame([[1, "a", "x"]], columns=["id", "val", "val"]),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame([[2, "b", "y"]], columns=["id", "val", "val"]),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
+    }
+    combined = build_combined_tables(same, all_)
+    assert list(combined["activity"].columns) == ["id", "val"]
+    assert combined["activity"]["val"].tolist() == ["a", "b"]
+
+
 def test_build_combined_tables_pairs_no_merge() -> None:
     """Pairs from different sources should not be combined."""
     same: TableDict = {
@@ -466,9 +489,20 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "pairs_same_document": pd.DataFrame({"id": [1]}),
         "pairs_independent": pd.DataFrame({"id": [1]}),
         "pairs_non_independent": pd.DataFrame({"id": [2]}),
+
         "activity_independent_status": pd.DataFrame({"id": [1]}),
         "activity_non_independent_status": pd.DataFrame({"id": [1]}),
         "activity_same_document_status": pd.DataFrame({"id": [1]}),
+        "activity_independent_status_statistics": pd.DataFrame(
+            {"Filtered": ["good"], "Count": [1]}
+        ),
+        "activity_non_independent_status_statistics": pd.DataFrame(
+            {"Filtered": ["good"], "Count": [1]}
+        ),
+        "activity_same_document_status_statistics": pd.DataFrame(
+            {"Filtered": ["good"], "Count": [1]}
+        ),
+
     }
     paths = save_tables(tables, tmp_path, Config())
     for entity, path in paths.items():
@@ -478,16 +512,31 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         # Metadata sidecar should be produced alongside each output file.
         meta = path.with_suffix(path.suffix + ".meta.yaml")
         assert meta.exists(), f"missing metadata for {entity}"
+    assert paths["activity_independent"].parent == tmp_path / "independent"
     assert (
-        paths["activity_independent_status"].parent
+        paths["activity_independent_status_statistics"].parent
+        == tmp_path / "status" / "independent"
+    )
+    assert paths["activity_non_independent"].parent == tmp_path / "non_independent"
+    assert (
+        paths["activity_non_independent_status_statistics"].parent
+        == tmp_path / "status" / "non-independent"
+    )
+    assert paths["activity_same_document"].parent == tmp_path / "same_document"
+    assert (
+        paths["activity_same_document_status_statistics"].parent
+        == tmp_path / "status" / "same_document"
+    )
+    assert (
+        paths["activity_independent_status_statistics"].parent
         == tmp_path / "status" / "independent"
     )
     assert (
-        paths["activity_non_independent_status"].parent
+        paths["activity_non_independent_status_statistics"].parent
         == tmp_path / "status" / "non-independent"
     )
     assert (
-        paths["activity_same_document_status"].parent
+        paths["activity_same_document_status_statistics"].parent
         == tmp_path / "status" / "same_document"
     )
     assert paths["pairs_same_document"].parent == tmp_path / "same_document"
