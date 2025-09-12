@@ -25,6 +25,7 @@ import requests
 from .cli import LoggerConfig, configure_logger
 from .cli import build_parser as base_parser
 from .config import (
+    ApiCfg,
     Config,
     CrossRefCfg,
     OpenAlexCfg,
@@ -862,13 +863,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_cfg.level = args.log_level
     configure_logger(log_cfg)
 
-    cfg = Config()
+    cfg = Config(api=ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"))
     pubmed_cfg = cfg.pubmed
     semsch_cfg = cfg.semantic_scholar
     limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
     delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
 
-    cfg = Config()
+    cfg = Config(api=ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"))
     pubmed_cfg = cfg.pubmed
     semsch_cfg = cfg.semantic_scholar
     pmid_df = read_pmids(args.input_csv, cfg=pubmed_cfg)
