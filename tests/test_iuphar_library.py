@@ -1,10 +1,11 @@
-import pandas as pd
 import pytest
-import requests
-import responses
 
-from library import iuphar_library as ii
-from library.config import IupharCfg, RetryCfg
+pd = pytest.importorskip("pandas")
+requests = pytest.importorskip("requests")
+responses = pytest.importorskip("responses")
+
+from library import iuphar_library as ii  # noqa: E402
+from library.config import IupharCfg, RetryCfg  # noqa: E402
 
 
 def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:

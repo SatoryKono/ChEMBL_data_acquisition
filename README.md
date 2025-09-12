@@ -11,10 +11,10 @@ parsing, validation, aggregation and export of tabular data.
 ## Установка
 
 ```bash
-pip install -e .[dev]
+pip install .[dev]
 ```
 
-The command installs the project together with development tools such as
+Install the project together with development tools such as
 ``black``, ``ruff``, ``mypy`` and ``pytest`` as well as testing utilities like
 ``hypothesis``, ``responses`` and ``psutil``. Sensitive configuration like API
 tokens should be stored in a local ``.env`` file – see
@@ -144,7 +144,7 @@ To keep the environment current, periodically refresh the pinned
 libraries and verify that the project remains compatible:
 
 ```bash
-pip install -e -U .[dev]
+pip install -U .[dev]
 pre-commit run --all-files
 ```
 
@@ -278,10 +278,10 @@ Clone the repository and install the runtime dependencies:
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install -e .
+pip install .
 
 # Development tools (black, ruff, mypy, pytest, hypothesis, responses, pre-commit)
-pip install -e .[dev]
+pip install .[dev]
 ```
 
 ### Pre-commit hooks
@@ -357,7 +357,7 @@ from library.csv_utils import write_csv_deterministic
 import pandas as pd
 
 df = pd.read_csv("large.csv")
-write_csv_deterministic(df, "out.csv", chunksize=1000)
+write_csv_deterministic(df, "out.csv", key_cols=df.columns, chunksize=1000)
 ```
 
 Rows are still sorted deterministically before writing; ``chunksize`` only

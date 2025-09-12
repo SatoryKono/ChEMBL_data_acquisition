@@ -206,8 +206,8 @@ def write_csv(
     encoding:
         Character encoding of the CSV file. Defaults to ``cfg.io.csv_encoding``.
     key_cols:
-        Optional columns to determine row order. When provided, rows are
-        sorted by these columns. Otherwise all columns are used.
+        Columns used to determine row order. Defaults to all columns if
+        omitted.
     chunksize:
         Optional number of rows per chunk to stream when writing the CSV.
         Passed through to :meth:`pandas.DataFrame.to_csv` and
@@ -228,10 +228,11 @@ def write_csv(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
+    key_cols_list = list(key_cols) if key_cols is not None else sorted(df.columns)
     return write_csv_deterministic(
         df,
         path,
-        key_cols=list(key_cols) if key_cols is not None else None,
+        key_cols=key_cols_list,
         chunksize=chunksize,
         sep=sep,
         encoding=encoding,

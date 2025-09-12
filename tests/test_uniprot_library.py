@@ -5,11 +5,12 @@ from __future__ import annotations
 import time
 
 import pytest
-import requests
-import responses
 
-from library import uniprot_library as ul
-from library.config import UniprotCfg
+requests = pytest.importorskip("requests")
+responses = pytest.importorskip("responses")
+
+from library import uniprot_library as ul  # noqa: E402
+from library.config import UniprotCfg  # noqa: E402
 
 
 def test_extract_names() -> None:
