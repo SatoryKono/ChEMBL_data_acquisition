@@ -11,6 +11,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
@@ -179,9 +180,9 @@ def process_csv_chunks(
         sep=sep,
         encoding=encoding,
     ):
-        mode = "a" if header_written else "w"
+        mode: Literal["a", "w"] = "a" if header_written else "w"
         chunk.to_csv(
-            output_path,
+            path_or_buf=output_path,
             mode=mode,
             index=False,
             header=not header_written,
