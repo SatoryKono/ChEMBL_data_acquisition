@@ -489,7 +489,6 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "pairs_same_document": pd.DataFrame({"id": [1]}),
         "pairs_independent": pd.DataFrame({"id": [1]}),
         "pairs_non_independent": pd.DataFrame({"id": [2]}),
-
         "activity_independent_status": pd.DataFrame({"id": [1]}),
         "activity_non_independent_status": pd.DataFrame({"id": [1]}),
         "activity_same_document_status": pd.DataFrame({"id": [1]}),
@@ -502,7 +501,6 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "activity_same_document_status_statistics": pd.DataFrame(
             {"Filtered": ["good"], "Count": [1]}
         ),
-
     }
     paths = save_tables(tables, tmp_path, Config())
     for entity, path in paths.items():
@@ -580,7 +578,9 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
         }
     )
 
-    (tmp_path / "citation_fraction.csv").write_text(
+    cf_dir = tmp_path / "_Curation"
+    cf_dir.mkdir()
+    (cf_dir / "citation_fraction.csv").write_text(
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n2,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
@@ -656,7 +656,9 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
         }
     )
 
-    (tmp_path / "citation_fraction.csv").write_text(
+    cf_dir = tmp_path / "_Curation"
+    cf_dir.mkdir()
+    (cf_dir / "citation_fraction.csv").write_text(
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
     )
     (tmp_path / "targets_type.csv").write_text(
@@ -699,7 +701,9 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
         }
     )
 
-    (tmp_path / "citation_fraction.csv").write_text(
+    cf_dir = tmp_path / "_Curation"
+    cf_dir.mkdir()
+    (cf_dir / "citation_fraction.csv").write_text(
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
     )
 

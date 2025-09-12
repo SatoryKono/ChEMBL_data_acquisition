@@ -295,8 +295,8 @@ def process_activity_table(
     df_activity:
         Deduplicated activity dataframe.
     dictionary_dir:
-        Directory containing ``citation_fraction.csv`` and ``targets_type.csv``
-         in a ``_Target`` subdirectory.
+        Directory containing ``_Curation/citation_fraction.csv`` and
+        ``targets_type.csv`` in a ``_Target`` subdirectory.
     targets_csv:
         Optional explicit path to ``targets_type.csv``. When provided, the file
         is loaded from this location instead of searching within
@@ -427,7 +427,7 @@ def process_activity_table(
         (counts_doc["n_citation"] > 0) & (counts_doc["n_non_citation"] > 0)
     ]
 
-    cf_path = Path(dictionary_dir) / "citation_fraction.csv"
+    cf_path = Path(dictionary_dir) / "_Curation" / "citation_fraction.csv"
     cf = pd.read_csv(cf_path)
 
     counts_doc = counts_doc.merge(cf[["N", "K_min_significant"]], on="N", how="left")
