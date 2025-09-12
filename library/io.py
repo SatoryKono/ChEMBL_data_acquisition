@@ -28,7 +28,7 @@ from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 import yaml
@@ -39,13 +39,15 @@ from .csv_utils import write_csv_deterministic
 from .log import logger
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
-    import pandera.pandas as pa
+    import pandera.pandas as pa_types
 
-pa: ModuleType | None = None
+pa: ModuleType | None
 try:  # pragma: no cover - exercised in tests via monkeypatch
-    import pandera.pandas as pa
+    import pandera.pandas as _pa
 except (ImportError, TypeError):
     pa = None
+else:
+    pa = _pa
 
 
 def read_ids(
@@ -112,7 +114,7 @@ def read_csv(
     dtype: Mapping[Hashable, Any] | type | None = None,
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
-    schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
+    schema: pa_types.DataFrameSchema | type[pa_types.DataFrameModel] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
@@ -139,8 +141,8 @@ def read_csv(
     parse_dates:
         Column names to parse as dates using :func:`pandas.read_csv`.
     schema:
-        Optional :class:`pa.DataFrameSchema` or
-        :class:`pa.DataFrameModel` used for advanced validation and
+        Optional :class:`pa_types.DataFrameSchema` or
+        :class:`pa_types.DataFrameModel` used for advanced validation and
         dtype coercion. Requires :mod:`pandera` when provided.
 
     Returns
@@ -164,7 +166,7 @@ def read_csv(
             raise RuntimeError(
                 "pandera is required for schema validation; install pandera to use the 'schema' argument"
             )
-        if isinstance(schema, pa.DataFrameSchema):
+        if isinstance(schema, pa_types.DataFrameSchema):
             df = schema.validate(df)
         else:
             df = schema.to_schema().validate(df)
@@ -225,17 +227,14 @@ def write_csv(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    return cast(
-        Path,
-        write_csv_deterministic(
-            df,
-            path,
-            key_cols=list(key_cols) if key_cols is not None else None,
-            chunksize=chunksize,
-            sep=sep,
-            encoding=encoding,
-            cfg=cfg,
-        ),
+    return write_csv_deterministic(
+        df,
+        path,
+        key_cols=list(key_cols) if key_cols is not None else None,
+        chunksize=chunksize,
+        sep=sep,
+        encoding=encoding,
+        cfg=cfg,
     )
 
 
