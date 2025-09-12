@@ -1,4 +1,8 @@
-"""Argument parser helpers for lightweight command-line interfaces."""
+"""Helpers for building lightweight CLIs with shared arguments.
+
+The utilities here assemble an ``argparse`` parser using the common options
+from :mod:`library.cli` for scripts that expose deterministic CSV operations.
+"""
 
 from __future__ import annotations
 
