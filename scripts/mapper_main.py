@@ -52,9 +52,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             logger.error("read_fail", error=str(exc))
             return 1
         if args.column not in df.columns:
-            logger.error(
-                "missing_column", column=args.column, path=str(args.input_csv)
-            )
+            logger.error("missing_column", column=args.column, path=str(args.input_csv))
             return 1
 
         uniprot_ids: list[str | None] = []
@@ -74,9 +72,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 else:
                     logger.warning("uniprot_id_missing", chembl_id=str(chembl_id))
             except (ValueError, TimeoutError, URLError) as exc:
-                logger.warning(
-                    "map_failed", chembl_id=str(chembl_id), error=str(exc)
-                )
+                logger.warning("map_failed", chembl_id=str(chembl_id), error=str(exc))
                 uniprot_ids.append(None)
         df["mapping_uniprot_id"] = uniprot_ids
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
@@ -140,7 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("setup_fail", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code: int = args.func(cfg, args)
     if exit_code == 0:
         logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:

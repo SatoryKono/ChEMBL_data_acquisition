@@ -94,7 +94,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code: int = args.func(cfg, args)
     if exit_code == 0:
         logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:

@@ -18,9 +18,7 @@ from library.cli import (
     apply_config_overrides,
     configure_logger,
 )
-from library.cli import (
-    build_parser as base_parser,
-)
+from library.cli import build_parser as base_parser
 from library.config import (
     Config,
     _serialize_paths,
@@ -32,6 +30,8 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import AssaysSchema, normalize_assays
+
+__all__ = ["ap", "main"]
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -191,7 +191,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("failed to set up directories: %s", exc)
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code: int = args.func(cfg, args)
     if exit_code == 0:
         logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:

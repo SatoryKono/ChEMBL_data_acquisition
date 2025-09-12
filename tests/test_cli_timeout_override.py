@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+from pytest import MonkeyPatch
 
 from library import chembl_library as cl
 from library import io
@@ -32,20 +35,30 @@ def _create_config(tmp_path: Path) -> Path:
     return cfg
 
 
-def test_assay_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
+def test_assay_timeout_override(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config
+) -> None:
     input_csv = tmp_path / "assay.csv"
     input_csv.write_text("assay_chembl_id\na1\n")
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["a1"])
 
-    def fake_apply(a, p, c, mapping=None):
+    def fake_apply(
+        a: Any, p: Any, c: Config, mapping: dict[str, str] | None = None
+    ) -> Config:
         cfg.assay.timeout = float(a.timeout)
         return cfg
 
     monkeypatch.setattr(gas, "apply_config_overrides", fake_apply)
 
-    def fake_get_assays(ids, cfg, client, chunk_size, timeout):
+    def fake_get_assays(
+        ids: Sequence[str],
+        cfg: Config,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"assay_chembl_id": data})
@@ -76,7 +89,9 @@ def test_assay_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> Non
     assert called["timeout"] == 5
 
 
-def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
+def test_document_timeout_override(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config
+) -> None:
     input_csv = tmp_path / "doc.csv"
     input_csv.write_text("document_chembl_id\nd1\n")
     config_path = _create_config(tmp_path)
@@ -84,14 +99,26 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
 
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["d1"])
 
-    def fake_apply_doc(a, p, c, mapping=None, **kwargs):
+    def fake_apply_doc(
+        a: Any,
+        p: Any,
+        c: Config,
+        mapping: Any | None = None,
+        **kwargs: Any,
+    ) -> Config:
         cfg.document.chembl.timeout = float(a.timeout)
         cfg.api.user_agent = "test/0.1 (mailto:test@example.com)"
         return cfg
 
     monkeypatch.setattr(gdd, "apply_config_overrides", fake_apply_doc)
 
-    def fake_get_documents(ids, cfg, client, chunk_size, timeout):
+    def fake_get_documents(
+        ids: Sequence[str],
+        cfg: Config,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"document_chembl_id": data})
@@ -124,7 +151,9 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
     assert cfg.api.timeout_read == 7
 
 
-def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
+def test_testitem_timeout_override(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config
+) -> None:
     input_csv = tmp_path / "testitem.csv"
     input_csv.write_text("molecule_chembl_id\nt1\n")
     config_path = _create_config(tmp_path)
@@ -132,13 +161,21 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
 
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
 
-    def fake_apply_test(a, p, c, mapping=None):
+    def fake_apply_test(
+        a: Any, p: Any, c: Config, mapping: Any | None = None
+    ) -> Config:
         cfg.testitem.timeout = float(a.timeout)
         return cfg
 
     monkeypatch.setattr(gtdt, "apply_config_overrides", fake_apply_test)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):
+    def fake_get_testitem(
+        ids: Sequence[str],
+        cfg: Config,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"molecule_chembl_id": data})
@@ -169,7 +206,9 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
     assert called["timeout"] == 9
 
 
-def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
+def test_target_timeout_override(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config
+) -> None:
     input_csv = tmp_path / "target.csv"
     input_csv.write_text("target_chembl_id\nt1\n")
     config_path = _create_config(tmp_path)
@@ -177,13 +216,25 @@ def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> No
 
     monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
 
-    def fake_apply_target(a, p, c, mapping=None, **kwargs):
+    def fake_apply_target(
+        a: Any,
+        p: Any,
+        c: Config,
+        mapping: Any | None = None,
+        **kwargs: Any,
+    ) -> Config:
         cfg.target.chembl.timeout = float(a.timeout)
         return cfg
 
     monkeypatch.setattr(gtd, "apply_config_overrides", fake_apply_target)
 
-    def fake_get_targets(ids, cfg, client, mapping_cfg, timeout):
+    def fake_get_targets(
+        ids: Sequence[str],
+        cfg: Config,
+        client: Any,
+        mapping_cfg: Any,
+        timeout: float,
+    ) -> pd.DataFrame:
         data = list(ids)
         called["timeout"] = timeout
         return pd.DataFrame({"target_chembl_id": data})
