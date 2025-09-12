@@ -140,7 +140,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
 
     try:
-        ids = io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io)
+        # ``read_ids`` returns a generator to minimise memory use.  Convert to a
+        # list so we can log the total number of identifiers and iterate over the
+        # values multiple times if needed.
+        ids = list(io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io))
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
