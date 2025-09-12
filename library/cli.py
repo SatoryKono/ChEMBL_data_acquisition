@@ -1,7 +1,8 @@
-"""Shared command-line helpers.
+"""Utilities for constructing command-line interfaces.
 
-Configuration loading errors are converted to user-facing messages using
-``argparse.ArgumentParser.error``.
+This module centralises shared CLI behaviour such as common argument
+definitions, configuration loading and logging setup. Configuration errors are
+presented to users via :meth:`argparse.ArgumentParser.error`.
 """
 
 from __future__ import annotations
