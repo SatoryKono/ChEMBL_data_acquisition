@@ -4,10 +4,16 @@ import logging
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from library.cli import LoggerConfig, configure_logger
-from library.config import ConfigError, ensure_dirs, load_config
+from library.config import (
+    Config,
+    ConfigError,
+    build_alias_map,
+    ensure_dirs,
+    load_config,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -322,18 +328,18 @@ def test_user_agent_must_include_contact(
         load_config(path)
 
 
-def test_user_agent_required_env_or_cli(
+def test_user_agent_default_and_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Loading without a user agent should raise ``ConfigError``."""
+    """Default user agent applies and can be overridden."""
 
     path = tmp_path / "cfg.yaml"
     path.write_text(
         "openalex:\n  mailto: info@example.org\ncrossref:\n  mailto: info@example.org\n"
     )
     monkeypatch.delenv("CHEMBL_DA__API__USER_AGENT", raising=False)
-    with pytest.raises(ConfigError):
-        load_config(path)
+    cfg = load_config(path)
+    assert cfg.api.user_agent == "chembl-da/0.1 (mailto:info@example.org)"
 
     monkeypatch.setenv(
         "CHEMBL_DA__API__USER_AGENT", "cli-agent/1.0 (mailto:test@example.org)"
@@ -396,6 +402,19 @@ def test_unknown_env_var_warning(
     record = json.loads(lines[-1])
     msg = record.get("msg", "") or record.get("event", "")
     assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in msg
+
+
+def test_new_field_auto_alias() -> None:
+    """Adding a field to the config should expose an alias automatically."""
+
+    class Extra(BaseModel):
+        foo: int = 1
+
+    class ExtendedConfig(Config):
+        extra: Extra = Field(default_factory=Extra)
+
+    aliases = build_alias_map(ExtendedConfig)
+    assert aliases["CHEMBL_DA_EXTRA_FOO"] == ["extra", "foo"]
 
 
 def test_log_level_valid(tmp_path: Path) -> None:

@@ -97,7 +97,7 @@ class ApiCfg(_BaseModel):
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
-    user_agent: str
+    user_agent: str = "chembl-da/0.1 (mailto:info@example.org)"
 
     @field_validator("chembl_base")
     @classmethod
@@ -462,7 +462,7 @@ class TargetCfg(_BaseModel):
 
 
 class Config(_BaseModel):
-    api: ApiCfg
+    api: ApiCfg = Field(default_factory=lambda: ApiCfg())
     chembl: ChemblCfg = Field(default_factory=lambda: ChemblCfg())
     openalex: OpenAlexCfg = Field(default_factory=lambda: OpenAlexCfg())
     crossref: CrossRefCfg = Field(default_factory=lambda: CrossRefCfg())
@@ -640,14 +640,6 @@ def load_config(
             raise ValueError(msg)
         logger.warning(msg)
 
-    if "api" not in data or "user_agent" not in data.get("api", {}):
-        raise ConfigError(
-            "api.user_agent must be provided via environment variable "
-            "CHEMBL_DA__API__USER_AGENT or CLI option --api.user_agent. "
-            "See README.md for details and example: "
-            "'my-app/1.0 (mailto:me@example.org)'."
-        )
-
     cfg = Config.model_validate(data)
 
     if not cfg.io.exist_ok:
@@ -709,64 +701,68 @@ def print_config(cfg: Config) -> None:
     print(yaml.safe_dump(masked, sort_keys=False))
 
 
-_ALIAS_MAP: dict[str, list[str]] = {
-    "CHEMBL_DA_RPS": ["api", "rps"],
-    "CHEMBL_DA_BURST": ["api", "burst"],
+def build_alias_map(
+    model: type[BaseModel], prefix: str = "CHEMBL_DA"
+) -> dict[str, list[str]]:
+    """Generate environment variable aliases for a Pydantic model.
+
+    Parameters
+    ----------
+    model:
+        Root Pydantic model to inspect.
+    prefix:
+        Alias prefix, defaults to ``"CHEMBL_DA"``.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Mapping of alias names to configuration paths.
+    """
+
+    mapping: dict[str, list[str]] = {}
+
+    def _walk(cls: type[BaseModel], path: list[str]) -> None:
+        for name, field in cls.model_fields.items():
+            sub_path = path + [name]
+            annotation = field.annotation
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                _walk(annotation, sub_path)
+            else:
+                alias = prefix + "_" + "_".join(p.upper() for p in sub_path)
+                mapping[alias] = sub_path
+
+    _walk(model, [])
+    return mapping
+
+
+_ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_BASE": ["api", "chembl_base"],
-    "CHEMBL_DA_TIMEOUT_CONNECT": ["api", "timeout_connect"],
-    "CHEMBL_DA_TIMEOUT_READ": ["api", "timeout_read"],
-    "CHEMBL_DA_OPENALEX_BASE": ["openalex", "base"],
-    "CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT": ["openalex", "timeout_connect"],
-    "CHEMBL_DA_OPENALEX_TIMEOUT_READ": ["openalex", "timeout_read"],
-    "CHEMBL_DA_OPENALEX_RPS": ["openalex", "rps"],
-    "CHEMBL_DA_OPENALEX_BURST": ["openalex", "burst"],
-    "CHEMBL_DA_OPENALEX_MAILTO": ["openalex", "mailto"],
-    "CHEMBL_DA_CROSSREF_BASE": ["crossref", "base"],
-    "CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT": ["crossref", "timeout_connect"],
-    "CHEMBL_DA_CROSSREF_TIMEOUT_READ": ["crossref", "timeout_read"],
-    "CHEMBL_DA_CROSSREF_RPS": ["crossref", "rps"],
-    "CHEMBL_DA_CROSSREF_BURST": ["crossref", "burst"],
-    "CHEMBL_DA_CROSSREF_MAILTO": ["crossref", "mailto"],
-    "CHEMBL_DA_UNIPROT_BASE": ["uniprot", "base"],
-    "CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT": ["uniprot", "timeout_connect"],
-    "CHEMBL_DA_UNIPROT_TIMEOUT_READ": ["uniprot", "timeout_read"],
-    "CHEMBL_DA_UNIPROT_RPS": ["uniprot", "rps"],
-    "CHEMBL_DA_UNIPROT_BURST": ["uniprot", "burst"],
-    "CHEMBL_DA_UNIPROT_MAPPING_BASE": ["uniprot_mapping", "base"],
-    "CHEMBL_DA_UNIPROT_MAPPING_POLL_INTERVAL": ["uniprot_mapping", "poll_interval"],
-    "CHEMBL_DA_UNIPROT_MAPPING_TIMEOUT": ["uniprot_mapping", "timeout"],
-    "CHEMBL_DA_IUPHAR_BASE": ["iuphar", "base"],
-    "CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT": ["iuphar", "timeout_connect"],
-    "CHEMBL_DA_IUPHAR_TIMEOUT_READ": ["iuphar", "timeout_read"],
-    "CHEMBL_DA_IUPHAR_RPS": ["iuphar", "rps"],
-    "CHEMBL_DA_IUPHAR_BURST": ["iuphar", "burst"],
-    "CHEMBL_DA_PUBCHEM_BASE": ["pubchem", "base"],
-    "CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT": ["pubchem", "timeout_connect"],
-    "CHEMBL_DA_PUBCHEM_TIMEOUT_READ": ["pubchem", "timeout_read"],
-    "CHEMBL_DA_PUBCHEM_RPS": ["pubchem", "rps"],
-    "CHEMBL_DA_PUBCHEM_BURST": ["pubchem", "burst"],
-    "CHEMBL_DA_CACHE_TTL": ["chembl", "cache_ttl"],
-    "CHEMBL_DA_CACHE_MAXSIZE": ["chembl", "cache_maxsize"],
-    "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
+    "CHEMBL_DA_BURST": ["api", "burst"],
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
-    "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
-    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
-    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
-    "CHEMBL_DA_UNIPROT_DATA_DIR": ["resources", "uniprot_data_dir"],
-    "CHEMBL_DA_ORGANISM_CSV": ["resources", "organism_csv"],
-    "CHEMBL_DA_STATUS_CSV": ["resources", "status_csv"],
-    "CHEMBL_DA_TARGETS_TYPE_CSV": ["resources", "targets_type_csv"],
-    "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
+    "CHEMBL_DA_CACHE_MAXSIZE": ["chembl", "cache_maxsize"],
+    "CHEMBL_DA_CACHE_TTL": ["chembl", "cache_ttl"],
     "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
-    "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
+    "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
+    "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
     "CHEMBL_DA_GLOBAL_BURST": ["rate", "global_burst"],
+    "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
+    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
+    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
     "CHEMBL_DA_LIMITER_CACHE_MAXSIZE": ["rate", "limiter_cache_maxsize"],
     "CHEMBL_DA_LIMITER_CACHE_TTL": ["rate", "limiter_cache_ttl"],
-    "CHEMBL_DA_LOG_LEVEL": ["log", "level"],
-    "CHEMBL_DA_LOG_FORMAT": ["log", "format"],
-    "CHEMBL_DA_LOG_DATEFMT": ["log", "datefmt"],
-    "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["retry", "max_attempts"],
-    "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["retry", "backoff_factor"],
+    "CHEMBL_DA_ORGANISM_CSV": ["resources", "organism_csv"],
+    "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
+    "CHEMBL_DA_RPS": ["api", "rps"],
+    "CHEMBL_DA_STATUS_CSV": ["resources", "status_csv"],
+    "CHEMBL_DA_TARGETS_TYPE_CSV": ["resources", "targets_type_csv"],
+    "CHEMBL_DA_TIMEOUT_CONNECT": ["api", "timeout_connect"],
+    "CHEMBL_DA_TIMEOUT_READ": ["api", "timeout_read"],
+    "CHEMBL_DA_UNIPROT_DATA_DIR": ["resources", "uniprot_data_dir"],
+}
+
+_ALIAS_MAP: dict[str, list[str]] = {
+    **build_alias_map(Config),
+    **_ALIAS_OVERRIDES,
 }
 
 
@@ -810,4 +806,5 @@ __all__ = [
     "ensure_dirs",
     "load_config",
     "print_config",
+    "build_alias_map",
 ]

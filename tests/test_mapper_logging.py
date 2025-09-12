@@ -27,7 +27,9 @@ def test_mapper_library_has_no_logging_side_effect() -> None:
     assert not root.handlers
 
 
-def test_mapper_main_logs_mapping(tmp_path: Path, monkeypatch: Any) -> None:
+def test_mapper_main_logs_mapping(
+    tmp_path: Path, monkeypatch: Any, cfg: Config
+) -> None:
     """Mapper CLI emits structured mapping log records."""
 
     def fake_map(cid: str, cfg: object) -> str | None:
@@ -48,11 +50,12 @@ def test_mapper_main_logs_mapping(tmp_path: Path, monkeypatch: Any) -> None:
     buffer = io.StringIO()
     configure_logger(LoggerConfig(stream=buffer, level="INFO"))
 
-    base_cfg = Config()
-    cfg = SimpleNamespace(
-        io=base_cfg.io, uniprot_mapping=base_cfg.uniprot_mapping, to_dict=lambda: {}
+    cfg_ns = SimpleNamespace(
+        io=cfg.io,
+        uniprot_mapping=cfg.uniprot_mapping,
+        to_dict=lambda: {},
     )
-    exit_code = mapper_main.run(cfg, args)
+    exit_code = mapper_main.run(cfg_ns, args)
     assert exit_code == 0
     records = [json.loads(line) for line in buffer.getvalue().splitlines()]
     mapped = [r for r in records if r["event"] == "mapped"]

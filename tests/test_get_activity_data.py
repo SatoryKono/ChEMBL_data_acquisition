@@ -13,12 +13,11 @@ from scripts import get_activity_data as gad
 
 
 def test_run_chembl_respects_limit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_id\n1\n2\n3\n")
 
-    cfg = Config()
     cfg.activity.limit = 2
     args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
 
@@ -57,12 +56,11 @@ def test_run_chembl_respects_limit(
 
 
 def test_run_chembl_limit_dry_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     input_csv = tmp_path / "activity.csv"
     input_csv.write_text("activity_id\n1\n2\n3\n")
 
-    cfg = Config()
     cfg.activity.limit = 2
     cfg.activity.dry_run = True
     args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
