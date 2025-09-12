@@ -10,7 +10,7 @@
           "type": "string"
         },
         "chunk_size": {
-          "default": 5,
+          "default": 50,
           "minimum": 1,
           "title": "Chunk Size",
           "type": "integer"
