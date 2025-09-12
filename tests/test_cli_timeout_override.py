@@ -120,6 +120,8 @@ def test_document_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
     )
     assert rc == 0
     assert called["timeout"] == 7
+    assert cfg.document.chembl.timeout == 7
+    assert cfg.api.timeout_read == 7
 
 
 def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
