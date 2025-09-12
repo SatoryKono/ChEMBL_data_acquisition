@@ -16,9 +16,10 @@ Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python scripts/get_document_data.py pubmed --config config.yaml --input pmids.csv --output output.csv
+    python -m scripts.get_document_data pubmed --config config.yaml --input pmids.csv --output output.csv
 
-The input file must contain a ``PMID`` column.
+The input file must contain a ``PMID`` column. Alternatively, use the
+``get-document-data`` console script installed with the package.
 
 """
 
@@ -28,15 +29,7 @@ import argparse
 import sys
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from typing import cast
-
-# Allow running the script directly via ``python scripts/get_document_data.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 import requests
