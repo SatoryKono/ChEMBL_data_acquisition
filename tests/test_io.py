@@ -95,7 +95,6 @@ def test_read_csv_with_schema(tmp_path: Path) -> None:
 
 
 def test_write_csv_creates_metadata_file(tmp_path: Path, cfg: Config) -> None:
-
     df = pd.DataFrame({"a": [1]})
     path = tmp_path / "out.csv"
     io.write_csv(df, path, cfg=cfg)
