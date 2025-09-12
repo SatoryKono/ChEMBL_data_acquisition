@@ -666,6 +666,12 @@
           "minimum": 0,
           "title": "Delay",
           "type": "number"
+        },
+        "cache_ttl": {
+          "default": 3600,
+          "minimum": 0,
+          "title": "Cache Ttl",
+          "type": "integer"
         }
       },
       "title": "PubChemCfg",
