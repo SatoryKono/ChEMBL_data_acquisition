@@ -27,7 +27,7 @@ from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pandas as pd
 import yaml
@@ -40,13 +40,12 @@ from .git_utils import _git_sha
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera.pandas as pa_types
 
-pa: ModuleType | None
 try:  # pragma: no cover - exercised in tests via monkeypatch
     import pandera.pandas as _pa
 except (ImportError, TypeError):
-    pa = None
-else:
-    pa = _pa
+    _pa = cast(ModuleType | None, None)
+
+pa: ModuleType | None = _pa
 
 
 def read_ids(
@@ -226,14 +225,17 @@ def write_csv(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    return write_csv_deterministic(
-        df,
-        path,
-        key_cols=list(key_cols) if key_cols is not None else None,
-        chunksize=chunksize,
-        sep=sep,
-        encoding=encoding,
-        cfg=cfg,
+    return cast(
+        Path,
+        write_csv_deterministic(
+            df,
+            path,
+            key_cols=list(key_cols) if key_cols is not None else None,
+            chunksize=chunksize,
+            sep=sep,
+            encoding=encoding,
+            cfg=cfg,
+        ),
     )
 
 
