@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pandas as pd
 import pytest
 
 from library import input_initialisation_library as lib
-from library.config import Config
+from library.config import ApiCfg, Config
 from library.input_initialisation_library import (
     TableDict,
     _ensure_openpyxl,
@@ -18,6 +19,7 @@ from library.input_initialisation_library import (
     save_tables,
     unify_dtypes,
 )
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 def test_unify_dtypes_basic() -> None:
@@ -502,7 +504,8 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
             {"Filtered": ["good"], "Count": [1]}
         ),
     }
-    paths = save_tables(tables, tmp_path, Config())
+    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    paths = save_tables(tables, tmp_path, cfg)
     for entity, path in paths.items():
         assert path.exists(), f"missing {entity} file"
         df = pd.read_csv(path)
@@ -510,21 +513,6 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         # Metadata sidecar should be produced alongside each output file.
         meta = path.with_suffix(path.suffix + ".meta.yaml")
         assert meta.exists(), f"missing metadata for {entity}"
-    assert paths["activity_independent"].parent == tmp_path / "independent"
-    assert (
-        paths["activity_independent_status_statistics"].parent
-        == tmp_path / "status" / "independent"
-    )
-    assert paths["activity_non_independent"].parent == tmp_path / "non_independent"
-    assert (
-        paths["activity_non_independent_status_statistics"].parent
-        == tmp_path / "status" / "non-independent"
-    )
-    assert paths["activity_same_document"].parent == tmp_path / "same_document"
-    assert (
-        paths["activity_same_document_status_statistics"].parent
-        == tmp_path / "status" / "same_document"
-    )
     assert (
         paths["activity_independent_status_statistics"].parent
         == tmp_path / "status" / "independent"
@@ -540,6 +528,24 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_same_document"].parent == tmp_path / "same_document"
     assert paths["pairs_independent"].parent == tmp_path / "independent"
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
+
+
+def test_save_tables_drops_duplicate_columns_and_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tables: TableDict = {"activity": pd.DataFrame([[1, 2]], columns=["a", "a"])}
+    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    buf = io.StringIO()
+    test_logger = configure_logger(LoggerConfig(stream=buf)).bind(status=None, rps=None)
+    monkeypatch.setattr(lib, "logger", test_logger)
+    paths = save_tables(tables, tmp_path, cfg)
+    df = pd.read_csv(paths["activity"])
+    # only one column should remain after deduplication
+    assert list(df.columns) == ["a"]
+    out = buf.getvalue()
+    # warning should mention the dropped column name
+    assert "Dropping duplicated columns" in out
+    assert "a" in out
 
 
 def test_ensure_openpyxl_version(monkeypatch: pytest.MonkeyPatch) -> None:

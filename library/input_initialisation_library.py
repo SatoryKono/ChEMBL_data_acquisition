@@ -484,7 +484,7 @@ def process_activity_table(
     df = df.merge(
         targets[
             [
-                "target_chembl_id",              
+                "target_chembl_id",
                 "target_sort_order",
                 "multifunctional_enzyme",
                 "organism_type",
@@ -502,7 +502,7 @@ def process_activity_table(
         df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
     )
 
-  #  df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
+    #  df["multifunctional_enzyme"] = df["multifunctional_enzyme"].eq(True)
 
     df.drop(columns=["organism_type"], inplace=True)
 
@@ -535,7 +535,7 @@ def process_activity_table(
         "IUPHAR_class",
         "IUPHAR_subclass",
         "unicellular_organism",
-        "multifunctional_enzyme",      
+        "multifunctional_enzyme",
         "target_sort_order",
     ]
 
@@ -1194,6 +1194,15 @@ def save_tables(
             sub_dir = out_dir
 
         path = sub_dir / f"{entity}.csv"
+        # Drop duplicated columns to avoid ambiguous data output
+        duplicates = df.columns[df.columns.duplicated()]
+        if len(duplicates) > 0:
+            logger.warning(
+                "Dropping duplicated columns for %s: %s",
+                entity,
+                ", ".join(map(str, duplicates)),
+            )
+            df = df.loc[:, ~df.columns.duplicated()]
         # Delegate writing to the shared I/O helper to ensure consistent
         # encoding and creation of metadata sidecars.
         write_csv(df, path, cfg=cfg)
