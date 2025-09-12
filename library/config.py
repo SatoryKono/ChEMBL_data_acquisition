@@ -612,6 +612,15 @@ def load_config(
     if not isinstance(data, dict):
         raise TypeError("top-level structure in config file must be a mapping")
 
+    # Guard against accidentally passing the JSON schema instead of a runtime
+    # configuration file. The schema contains the ``$defs`` key at the top
+    # level which is not present in actual application settings.
+    if "$defs" in data:
+        raise ConfigError(
+            f"{path} appears to be a configuration schema; "
+            "provide an application config file such as config.yaml."
+        )
+
     _apply_env_overrides(data)
 
     if cli_overrides:
