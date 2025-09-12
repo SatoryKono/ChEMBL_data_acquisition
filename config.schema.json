@@ -1002,7 +1002,7 @@
             "family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
             "timeout": 30.0,
             "organism_csv": "dictionary/_Target/targets_type.csv",
-            "uniprot_column": "uniprot_id",
+            "uniprot_column": "target_uniprot_id",
             "chembl_out": null,
             "uniprot_out": null,
             "iuphar_out": null
