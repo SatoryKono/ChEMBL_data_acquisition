@@ -11,13 +11,13 @@ parsing, validation, aggregation and export of tabular data.
 ## Установка
 
 ```bash
-pip install .[dev]
+pip install -e .[dev]
 ```
- 
+
    ```bash
-   pip install .
+   pip install -e .
    # Development extras (black, ruff, mypy, pytest, hypothesis, responses, psutil, pre-commit, ...)
-   pip install .[dev]
+   pip install -e .[dev]
    ```
  
 The command installs the project together with development tools such as
@@ -149,7 +149,7 @@ To keep the environment current, periodically refresh the pinned
 libraries and verify that the project remains compatible:
 
 ```bash
-pip install -U .[dev]
+pip install -e -U .[dev]
 pre-commit run --all-files
 ```
 
@@ -283,10 +283,10 @@ Clone the repository and install the runtime dependencies:
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install .
+pip install -e .
 
 # Development tools (black, ruff, mypy, pytest, hypothesis, responses, pre-commit)
-pip install .[dev]
+pip install -e .[dev]
 ```
 
 ### Pre-commit hooks
