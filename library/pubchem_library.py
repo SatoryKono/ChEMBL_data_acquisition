@@ -6,6 +6,7 @@ The implementation is a Python translation of a PowerQuery script.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import quote
@@ -148,7 +149,22 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
 
 
 def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
-    """Make an HTTP GET request and return parsed JSON."""
+    """Make an HTTP GET request and return parsed JSON.
+
+    Parameters
+    ----------
+    url: str
+        Endpoint to query.
+    cfg: PubChemCfg
+        API configuration. ``cfg.delay`` specifies the pause between retry
+        attempts.
+
+    Returns
+    -------
+    dict[str, Any] or None
+        Parsed JSON response on success, otherwise ``None`` when all retries
+        are exhausted or a non-recoverable error occurs.
+    """
     if url in _CACHE:
         logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
         return cast(dict[str, Any], _CACHE[url])
@@ -175,6 +191,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     extra={"url": url, "status": None, "rps": cfg.rps},
                 )
                 return None
+            time.sleep(cfg.delay)
             continue
 
         if response.status_code in (404, 400):
@@ -200,6 +217,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     extra={"url": url, "status": None, "rps": cfg.rps},
                 )
                 return None
+            time.sleep(cfg.delay)
             continue
         except ValueError:
             logger.warning("Non-JSON response for url %s", url)
