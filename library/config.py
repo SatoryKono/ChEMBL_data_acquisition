@@ -405,13 +405,13 @@ class DocumentPubmedCfg(_BaseModel):
 
 
 class DocumentChemblCfg(_BaseModel):
-    column: str = "chembl_id"
+    column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
 
 
 class DocumentAllCfg(_BaseModel):
-    column: str = "chembl_id"
+    column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
     sleep: float = Field(5.0, ge=0)
     workers: int = Field(1, ge=1)
