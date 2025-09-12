@@ -957,7 +957,7 @@
         "chembl": {
           "$ref": "#/$defs/TargetChemblCfg",
           "default": {
-            "column": "chembl_id",
+            "column": "target_chembl_id",
             "timeout": 30.0
           }
         },
@@ -1421,7 +1421,7 @@
           "data_dir": "dictionary/uniprot"
         },
         "chembl": {
-          "column": "chembl_id",
+          "column": "target_chembl_id",
           "timeout": 30.0
         },
         "iuphar": {

@@ -142,7 +142,7 @@ target:
     column: "uniprot_id"
     data_dir: "dictionary/uniprot"
   chembl:
-    column: "chembl_id"
+    column: "target_chembl_id"
     timeout: 30.0
   iuphar:
     target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"

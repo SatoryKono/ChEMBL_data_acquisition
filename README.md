@@ -120,11 +120,11 @@ python scripts/get_target_data.py chembl \
     --log-level INFO
 ```
 
-Replace ``path/to/targets.csv`` with a CSV containing a ``chembl_id``
+Replace ``path/to/targets.csv`` with a CSV containing a ``target_chembl_id``
 column.
- 
-The generated output will expose the same identifiers under the column
-``target_chembl_id`` to align with validation schemas.
+
+The input and output both use ``target_chembl_id`` to align with
+validation schemas.
  
 ### scripts/get_activities.py
 

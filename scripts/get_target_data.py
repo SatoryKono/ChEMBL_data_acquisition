@@ -132,7 +132,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     chembl.add_argument(
         "--column",
-        default="chembl_id",
+        default="target_chembl_id",
         help="Column name in the input CSV containing identifiers",
     )
     chembl.add_argument(
