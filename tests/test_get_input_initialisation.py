@@ -225,3 +225,56 @@ def test_status_merge_preserves_columns(tmp_path: Path, monkeypatch) -> None:
         df = pd.read_csv(out_dir / "independent" / f"{entity}_independent.csv")
         assert id_col in df.columns
         assert "orig" in df.columns
+
+
+def test_run_passes_original_df_to_statistics(tmp_path: Path, monkeypatch) -> None:
+    """``run`` should provide unmodified status data for statistics."""
+
+    same_doc = tmp_path / "same.xlsx"
+    all_doc = tmp_path / "all.xlsx"
+    same_doc.write_text("dummy")
+    all_doc.write_text("dummy")
+    out_dir = tmp_path / "out"
+
+    status_df = pd.DataFrame({"Filtered.new": ["good"], "independent_IC50": [1]})
+    tables = {"activity_independent_status": status_df}
+
+    monkeypatch.setattr(cli.lib, "load_same_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "load_all_doc", lambda _p: {})
+    monkeypatch.setattr(cli.lib, "build_combined_tables", lambda *_a, **_k: tables)
+    monkeypatch.setattr(cli.lib, "generate_pair_entity_tables", lambda t, _m: t)
+    monkeypatch.setattr(cli, "analyze_table_quality", lambda *_a, **_k: None)
+
+    def fake_save_tables(data, out_dir, cfg, fmt):  # pragma: no cover - simple stub
+        paths: dict[str, Path] = {}
+        for name in data:
+            path = out_dir / f"{name}.csv"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("dummy")
+            paths[name] = path
+        return paths
+
+    monkeypatch.setattr(cli.lib, "save_tables", fake_save_tables)
+
+    captured_cols: list[str] = []
+
+    def fake_compute_status_statistics(
+        df: pd.DataFrame, table_name: str
+    ) -> pd.DataFrame:
+        captured_cols[:] = list(df.columns)
+        return pd.DataFrame({"Filtered": [], "Count": []})
+
+    monkeypatch.setattr(
+        cli.lib, "compute_status_statistics", fake_compute_status_statistics
+    )
+
+    args = argparse.Namespace(
+        same_doc=same_doc,
+        all_doc=all_doc,
+        out_dir=out_dir,
+        format="csv",
+        dictionary_dir=tmp_path,
+    )
+    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    assert cli.run(cfg, args) == 0
+    assert "Filtered.new" in captured_cols
