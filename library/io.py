@@ -55,6 +55,7 @@ def read_ids(
     cfg: IoCfg,
     sep: str | None = None,
     encoding: str | None = None,
+    na_markers: Sequence[str] | None = None,
 ) -> Iterator[str]:
     """Yield identifier values from ``column`` in ``path``.
 
@@ -70,12 +71,14 @@ def read_ids(
         Field delimiter used in the CSV file. Defaults to ``cfg.csv_sep``.
     encoding:
         Character encoding of the CSV file. Defaults to ``cfg.csv_encoding``.
+    na_markers:
+        Strings indicating missing values. Defaults to ``cfg.na_markers``.
 
     Yields
     ------
     str
-        Identifier values in the order they appear. Empty strings and
-        ``"#N/A"`` markers are discarded.
+        Identifier values in the order they appear. Empty strings and values
+        present in ``na_markers`` are discarded.
 
     Raises
     ------
@@ -87,6 +90,7 @@ def read_ids(
     """
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
+    marker_set = set(na_markers or cfg.na_markers or ())
     try:
         with Path(path).open("r", encoding=encoding, newline="") as fh:
             reader = csv.DictReader(fh, delimiter=sep)
@@ -96,7 +100,7 @@ def read_ids(
                 )
             for row in reader:
                 value = (row.get(column) or "").strip()
-                if value and value != "#N/A":
+                if value and value not in marker_set:
                     yield value
     except FileNotFoundError:
         raise

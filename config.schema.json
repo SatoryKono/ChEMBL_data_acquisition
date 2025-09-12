@@ -422,6 +422,23 @@
           "title": "Csv Encoding",
           "type": "string"
         },
+        "na_markers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": [
+            "#N/A"
+          ],
+          "title": "Na Markers"
+        },
         "csv_index": {
           "default": false,
           "title": "Csv Index",

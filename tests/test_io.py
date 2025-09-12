@@ -123,6 +123,21 @@ def test_write_csv_with_key_cols(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
+def test_read_ids_custom_na_marker(tmp_path: Path) -> None:
+    """``read_ids`` honours custom NA markers."""
+
+    path = tmp_path / "ids.csv"
+    with path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["id"])
+        writer.writerow(["1"])
+        writer.writerow(["NA"])
+        writer.writerow(["2"])
+
+    ids = list(io.read_ids(path, column="id", cfg=IoCfg(), na_markers=["NA"]))
+    assert ids == ["1", "2"]
+
+
 def test_write_csv_missing_key_column(tmp_path: Path) -> None:
     df = pd.DataFrame({"a": [1], "b": [2]})
     path = tmp_path / "out.csv"
