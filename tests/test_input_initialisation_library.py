@@ -176,11 +176,13 @@ def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
     assert combined["activity"]["val"].tolist() == ["a", "b"]
 
 
-def test_build_combined_tables_handles_mismatched_duplicate_activity_columns() -> None:
-    """Duplicate columns in only one table should not raise an error."""
+
+def test_build_combined_tables_handles_asymmetric_duplicate_activity_columns() -> None:
+    """Concatenation succeeds when only one activity table has duplicates."""
     same: TableDict = {
         "activity": pd.DataFrame(
-            [[1, "a", "x"]], columns=["activity_chembl_id", "val", "val"]
+            [[1, "a", "z"]], columns=["activity_chembl_id", "val", "val"]
+
         ),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),

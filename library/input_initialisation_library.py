@@ -1065,7 +1065,18 @@ def build_combined_tables(
     df_same_act = unify_dtypes(same["activity"])
     df_same_act = df_same_act.loc[:, ~df_same_act.columns.duplicated()]
     df_all_act = unify_dtypes(all_["activity"])
-    df_all_act = df_all_act.loc[:, ~df_all_act.columns.duplicated()]
+
+    # Drop duplicate columns from each DataFrame before concatenation. Pandas
+    # ``concat`` requires unique column names across inputs.
+    same_dups = df_same_act.columns[df_same_act.columns.duplicated()].tolist()
+    if same_dups:
+        logger.info("Removed duplicate activity columns from 'same': %s", same_dups)
+        df_same_act = df_same_act.loc[:, ~df_same_act.columns.duplicated()]
+    all_dups = df_all_act.columns[df_all_act.columns.duplicated()].tolist()
+    if all_dups:
+        logger.info("Removed duplicate activity columns from 'all_': %s", all_dups)
+        df_all_act = df_all_act.loc[:, ~df_all_act.columns.duplicated()]
+
     concat = pd.concat([df_same_act, df_all_act], ignore_index=True, sort=False)
     concat = concat.drop(
         columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"
