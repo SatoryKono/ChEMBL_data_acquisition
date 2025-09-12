@@ -83,6 +83,135 @@ def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> pd.DataFrame:
     )
 
 
+def _make_request(
+    session: requests.Session,
+    url: str,
+    expect_json: bool,
+    method: str,
+    timeout: float | tuple[float, float],
+    **kwargs: Any,
+) -> tuple[int, str, dict[str, Any] | str | None, str]:
+    """Issue a single HTTP request and parse its body.
+
+    Parameters
+    ----------
+    session:
+        Active :class:`requests.Session`.
+    url:
+        Endpoint to query.
+    expect_json:
+        Whether the response should be parsed as JSON.
+    method:
+        HTTP method to use.
+    timeout:
+        Maximum seconds to wait for the request.
+    **kwargs:
+        Extra parameters forwarded to :mod:`requests`.
+
+    Returns
+    -------
+    tuple
+        ``(status_code, text, content, parse_error)``. ``content`` contains the
+        parsed JSON or raw text and ``parse_error`` is non-empty if JSON
+        decoding failed.
+    """
+
+    if method.upper() == "POST":
+        request: Callable[..., requests.Response] = session.post
+    else:
+        request = session.get
+    with request(url, timeout=timeout, **kwargs) as resp:
+        status_code = resp.status_code
+        text = resp.text
+        if expect_json:
+            try:
+                content = resp.json()
+            except ValueError as exc:
+                return status_code, text, None, str(exc)
+            return status_code, text, content, ""
+        return status_code, text, text or "", ""
+
+
+def _handle_response(
+    url: str,
+    status_code: int,
+    text: str,
+    content: dict[str, Any] | str | None,
+    parse_error: str,
+    expect_json: bool,
+    attempt: int,
+    retries: int,
+) -> tuple[dict[str, Any] | str | None, str, bool]:
+    """Process an HTTP response and decide whether to retry.
+
+    Parameters
+    ----------
+    url:
+        URL that was requested.
+    status_code:
+        HTTP status code returned by the server.
+    text:
+        Raw response body.
+    content:
+        Parsed body when no error occurred.
+    parse_error:
+        Error message from JSON decoding.
+    expect_json:
+        Whether a JSON response was expected.
+    attempt:
+        Zero-based attempt index.
+    retries:
+        Maximum number of retries.
+
+    Returns
+    -------
+    tuple
+        ``(data, error, retry)`` where ``retry`` indicates if another attempt
+        should be performed.
+    """
+
+    if status_code in (429, 500, 502, 503, 504):
+        if attempt >= retries:
+            logger.info(
+                "request_fail",
+                extra={"stage": "request_fail", "url": url, "status": status_code},
+            )
+            return None, f"HTTP {status_code}: {text[:100]}", False
+        return None, "", True
+    if status_code == 404:
+        logger.info(
+            "request_fail",
+            extra={"stage": "request_fail", "url": url, "status": status_code},
+        )
+        return None, "PMID not found", False
+    if status_code == 400:
+        logger.info(
+            "request_fail",
+            extra={"stage": "request_fail", "url": url, "status": status_code},
+        )
+        return None, f"Bad request: {text[:100]}", False
+    if status_code != 200:
+        logger.info(
+            "request_fail",
+            extra={"stage": "request_fail", "url": url, "status": status_code},
+        )
+        return None, f"HTTP {status_code}: {text[:100]}", False
+    if expect_json:
+        if parse_error:
+            logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+            return None, f"Invalid JSON: {parse_error}", False
+        logger.info(
+            "request_ok",
+            extra={"stage": "request_ok", "url": url, "status": status_code},
+        )
+        return content, "", False
+    logger.info(
+        "request_ok",
+        extra={"stage": "request_ok", "url": url, "status": status_code},
+    )
+    return content or "", "", False
+
+
 def _do_request(
     session: requests.Session,
     url: str,
@@ -93,37 +222,34 @@ def _do_request(
     timeout: float | tuple[float, float] = 10,
     **kwargs: Any,
 ) -> tuple[dict[str, Any] | str | None, str]:
-    """Perform an HTTP request with retry and error handling.
+    """Perform an HTTP request with retry logic.
 
     Parameters
     ----------
     session:
-        Requests session used to perform the call.
+        Active :class:`requests.Session`.
     url:
         Endpoint to query.
     delay:
-        Base number of seconds to wait between attempts.
+        Base seconds to wait between attempts.
     expect_json:
-        Whether to parse the response as JSON.
+        Whether the response should be parsed as JSON.
     retries:
-        Number of additional attempts after the initial one.
+        Number of additional attempts after the first one.
     method:
-        HTTP method to use, either "GET" or "POST".
+        HTTP method to use.
     timeout:
-
-        Maximum seconds to wait for each HTTP request. May be a single float
-        or a ``(connect, read)`` tuple.
-
+        Maximum seconds to wait for each attempt.
     **kwargs:
-        Additional parameters passed to ``session.get`` or ``session.post``.
+        Extra parameters forwarded to :mod:`requests`.
 
     Returns
     -------
     tuple
-        Pair of parsed data (dict/str/``None``) and an error message. The error
-        string is empty on success.
-
+        Parsed content and an error message. The error string is empty on
+        success.
     """
+
     for attempt in range(retries + 1):
         event = "request_start" if attempt == 0 else "request_retry"
         logger.info(event, extra={"stage": event, "url": url, "attempt": attempt + 1})
@@ -131,20 +257,9 @@ def _do_request(
             sleep(delay * attempt)
 
         try:
-            if method.upper() == "POST":
-                request: Callable[..., requests.Response] = session.post
-            else:
-                request = session.get
-            with request(url, timeout=timeout, **kwargs) as resp:
-                status_code = resp.status_code
-                text = resp.text
-                try:
-                    content = resp.json() if expect_json else text
-                except ValueError as exc:
-                    content = None
-                    parse_error = str(exc)
-                else:
-                    parse_error = ""
+            status_code, text, content, parse_error = _make_request(
+                session, url, expect_json, method, timeout, **kwargs
+            )
         except requests.RequestException as exc:
             if attempt >= retries:  # pragma: no cover - network errors
                 logger.exception(
@@ -152,50 +267,14 @@ def _do_request(
                 )
                 return None, str(exc)
             continue
-        if status_code in (429, 500, 502, 503, 504):
-            if attempt >= retries:
-                logger.info(
-                    "request_fail",
-                    extra={
-                        "stage": "request_fail",
-                        "url": url,
-                        "status": status_code,
-                    },
-                )
-                return None, f"HTTP {status_code}: {text[:100]}"
-            continue
-        if status_code == 404:
-            logger.info(
-                "request_fail",
-                extra={"stage": "request_fail", "url": url, "status": status_code},
-            )
-            return None, "PMID not found"
-        if status_code == 400:
-            logger.info(
-                "request_fail",
-                extra={"stage": "request_fail", "url": url, "status": status_code},
-            )
-            return None, f"Bad request: {text[:100]}"
-        if status_code != 200:
-            logger.info(
-                "request_fail",
-                extra={"stage": "request_fail", "url": url, "status": status_code},
-            )
-            return None, f"HTTP {status_code}: {text[:100]}"
-        if expect_json:
-            if parse_error:
-                logger.info("request_fail", extra={"stage": "request_fail", "url": url})
-                return None, f"Invalid JSON: {parse_error}"
-            logger.info(
-                "request_ok",
-                extra={"stage": "request_ok", "url": url, "status": status_code},
-            )
-            return content, ""
-        logger.info(
-            "request_ok",
-            extra={"stage": "request_ok", "url": url, "status": status_code},
+
+        data, error, retry = _handle_response(
+            url, status_code, text, content, parse_error, expect_json, attempt, retries
         )
-        return content or "", ""
+        if retry:
+            continue
+        return data, error
+
     logger.info("request_fail", extra={"stage": "request_fail", "url": url})
     return None, "Request failed"
 
