@@ -510,12 +510,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg.document.all.workers,
         cfg.document.all.batch_size,
     )
-    doc_df["pubmed_id"] = pubmed_ids.astype(str)
+    doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
         pub_df["PubMed.PMID"] = (
             pd.to_numeric(pub_df["PubMed.PMID"], errors="coerce")
             .astype("Int64")
-            .astype(str)
+            .astype("string")
+            .fillna("")
         )
         merged = doc_df.merge(
             pub_df, how="left", left_on="pubmed_id", right_on="PubMed.PMID"
