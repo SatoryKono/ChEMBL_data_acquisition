@@ -269,8 +269,14 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
     return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
 
 
-def write_meta_yaml(path: Path | str, cfg: Config | None = None) -> Path:
-    """Write minimal metadata for ``path`` to ``<path>.meta.yaml``.
+def write_meta_yaml(
+    path: Path | str,
+    cfg: Config | None = None,
+    *,
+    columns: Sequence[str] | None = None,
+    dtypes: Mapping[str, str] | None = None,
+) -> Path:
+    """Write metadata for ``path`` to ``<path>.meta.yaml``.
 
     Parameters
     ----------
@@ -281,6 +287,12 @@ def write_meta_yaml(path: Path | str, cfg: Config | None = None) -> Path:
         objects inside the configuration are serialised as plain strings to make
         the resulting YAML portable. When ``None`` an empty mapping is written
         under the ``config`` key.
+    columns:
+        Optional sequence of column names present in the exported table.
+    dtypes:
+        Optional mapping from column names to their data types. When omitted
+        and ``columns`` are provided each column is assumed to contain
+        ``"string"`` values.
 
     Returns
     -------
@@ -288,9 +300,15 @@ def write_meta_yaml(path: Path | str, cfg: Config | None = None) -> Path:
         Path to the generated ``.meta.yaml`` file.
     """
 
+    if dtypes is None and columns is not None:
+        dtypes = {col: "string" for col in columns}
+
     meta = {
+        "generated_at": datetime.now().isoformat(),
         "git_sha": _git_sha(),
         "command": " ".join(sys.argv),
+        "columns": list(columns or []),
+        "dtypes": dict(dtypes or {}),
         "config": _serialize_paths(cfg.to_dict()) if cfg is not None else {},
     }
     meta_path = Path(f"{path}.meta.yaml")

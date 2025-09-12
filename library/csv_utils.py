@@ -184,7 +184,12 @@ def write_csv_deterministic(
             sep=sep,
         )
     os.replace(tmp_path, out_path)
-    write_meta_yaml(out_path, cfg)
+    write_meta_yaml(
+        out_path,
+        cfg,
+        columns=list(work.columns),
+        dtypes={col: work.dtypes[col].name for col in work.columns},
+    )
     return out_path
 
 
