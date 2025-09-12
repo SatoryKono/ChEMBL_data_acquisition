@@ -38,9 +38,10 @@ The input CSV must include a ``document_chembl_id`` column.
 
 ```bash
 python scripts/get_target_data.py \
-    --input data/input-smoke/targets.csv \
-    --column target_chembl_id
+    --input data/input-smoke/targets.csv
 ```
+
+The input CSV must include a ``target_chembl_id`` column.
 
 ## Test item data enrichment
 

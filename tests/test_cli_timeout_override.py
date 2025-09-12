@@ -145,7 +145,7 @@ def test_testitem_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> 
 
 def test_target_timeout_override(tmp_path: Path, monkeypatch, cfg: Config) -> None:
     input_csv = tmp_path / "target.csv"
-    input_csv.write_text("chembl_id\nt1\n")
+    input_csv.write_text("target_chembl_id\nt1\n")
     config_path = _create_config(tmp_path)
     called: dict[str, float] = {}
 
