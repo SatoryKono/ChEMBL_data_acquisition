@@ -767,12 +767,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.config,
             mapping=mapping
             | {
-                "timeout": "api.timeout_read",
                 "openalex_rps": "openalex.rps",
                 "crossref_rps": "crossref.rps",
             },
             base_parser=parser,
         )
+        cfg.api.timeout_read = getattr(args, "timeout", cfg.api.timeout_read)
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
