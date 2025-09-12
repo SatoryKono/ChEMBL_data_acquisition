@@ -26,7 +26,7 @@ def test_activities_schema_validation() -> None:
     valid = pd.DataFrame(
         {
             "activity_id": [1],
-            "testitem_id": ["CHEMBL1"],
+            "molecule_chembl_id": ["CHEMBL1"],
             "target_id": ["CHEMBL2"],
             "standard_type": ["IC50"],
             "standard_value": [10.0],
@@ -133,7 +133,7 @@ def test_testitems_schema_validation() -> None:
                 dtype=int,
                 elements=st.integers(min_value=0, max_value=10),
             ),
-            column("testitem_id", elements=st.text(min_size=1)),
+            column("molecule_chembl_id", elements=st.text(min_size=1)),
             column(
                 "standard_value",
                 elements=st.floats(min_value=0, allow_nan=False),
@@ -156,7 +156,7 @@ def test_activities_schema_hypothesis_valid(df: pd.DataFrame) -> None:
                 dtype=int,
                 elements=st.integers(min_value=0, max_value=10),
             ),
-            column("testitem_id", elements=st.text(min_size=1)),
+            column("molecule_chembl_id", elements=st.text(min_size=1)),
             column(
                 "standard_value",
                 elements=st.floats(max_value=-1.0, allow_nan=False),

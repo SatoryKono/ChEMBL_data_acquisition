@@ -384,7 +384,6 @@ def process_activity_table(
         columns={
             "activity_chembl_id": "activity_chembl_id",
             "salt_chembl_id": "saltform_id",
-            "molecule_chembl_id": "testitem_id",
             # keep CHEMBL identifiers for related entities
             "standard_type": "standard_type",
             "log_value": "pA_value",
@@ -515,7 +514,7 @@ def process_activity_table(
     final_cols = [
         "activity_chembl_id",
         "saltform_id",
-        "testitem_id",
+        "molecule_chembl_id",
         "target_chembl_id",
         "assay_chembl_id",
         "document_chembl_id",
@@ -835,11 +834,14 @@ def generate_pair_entity_tables(
     # Columns linking activities to related entities use CHEMBL identifiers.
     # This mapping specifies the identifier column for each entity so that pair
     # table generation can correctly retrieve the associated rows.
+    # Mapping of entity names to their identifier columns. Test items now use
+    # the canonical ``molecule_chembl_id`` to ensure consistent naming across
+    # the codebase.
     entity_cols: dict[str, str] = {
         "assay": "assay_chembl_id",
         "document": "document_chembl_id",
         "target": "target_chembl_id",
-        "testitem": "testitem_id",
+        "testitem": "molecule_chembl_id",
     }
 
     for pair_key, suffix in pair_keys.items():
@@ -1717,7 +1719,7 @@ def aggregate_activity(
     assay_status = _aggregate_entity(merged, "assay_chembl_id", status_api)
     document_status = _aggregate_entity(merged, "document_chembl_id", status_api)
 
-    system_cols = ["testitem_id", "target_chembl_id", "standard_type"]
+    system_cols = ["molecule_chembl_id", "target_chembl_id", "standard_type"]
 
     missing_sys = [c for c in system_cols if c not in merged.columns]
     if missing_sys:
@@ -1730,7 +1732,7 @@ def aggregate_activity(
     else:
         system_src = merged.copy()
         system_src["system_id"] = (
-            system_src["testitem_id"].astype("string")
+            system_src["molecule_chembl_id"].astype("string")
             + "_"
             + system_src["target_chembl_id"].astype("string")
             + "_"
@@ -1738,23 +1740,23 @@ def aggregate_activity(
         )
         system_status = _aggregate_entity(system_src, "system_id", status_api)
         split = system_status["system_id"].str.split("_", n=2, expand=True)
-        system_status["testitem_id"] = split[0]
+        system_status["molecule_chembl_id"] = split[0]
         system_status["target_chembl_id"] = split[1]
         system_status["standard_type"] = split[2]
 
-    if "testitem_id" in merged.columns:
-        testitem_status = _aggregate_entity(merged, "testitem_id", status_api)
-    elif "testitem_id" not in missing_sys:
+    if "molecule_chembl_id" in merged.columns:
+        testitem_status = _aggregate_entity(merged, "molecule_chembl_id", status_api)
+    elif "molecule_chembl_id" not in missing_sys:
         logger.warning(
-            "activity table missing column testitem_id; skipping testitem aggregation"
+            "activity table missing column molecule_chembl_id; skipping testitem aggregation"
         )
         testitem_status = pd.DataFrame(
-            columns=["testitem_id", "Filtered.new", *metrics]
+            columns=["molecule_chembl_id", "Filtered.new", *metrics]
         )
 
     else:
         testitem_status = pd.DataFrame(
-            columns=["testitem_id", "Filtered.new", *metrics]
+            columns=["molecule_chembl_id", "Filtered.new", *metrics]
         )
 
     if "target_chembl_id" in merged.columns:
