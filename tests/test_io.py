@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import subprocess
 from io import StringIO
 from pathlib import Path
@@ -210,4 +211,6 @@ def test_git_sha_timeout_returns_unknown(
     git_utils._git_sha.cache_clear()
 
     assert git_utils._git_sha() == "UNKNOWN"
-    assert "git_sha_unavailable" in stream.getvalue()
+    record = json.loads(stream.getvalue().splitlines()[0])
+    assert record["event"] == "git_sha_unavailable"
+    assert "error" in record
