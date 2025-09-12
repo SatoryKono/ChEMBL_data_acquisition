@@ -41,7 +41,7 @@ from .log import logger
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera.pandas as pa
 
-pa: ModuleType | None = None
+pa: ModuleType | None = None  # type: ignore[no-redef]
 try:  # pragma: no cover - exercised in tests via monkeypatch
     import pandera.pandas as pa
 except (ImportError, TypeError):
@@ -112,8 +112,9 @@ def read_csv(
     dtype: Mapping[Hashable, Any] | type | None = None,
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
+    chunksize: int | None = None,
     schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
-) -> pd.DataFrame:
+) -> pd.DataFrame | Iterator[pd.DataFrame]:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
     Parameters
@@ -138,6 +139,9 @@ def read_csv(
         :func:`pandas.read_csv`.
     parse_dates:
         Column names to parse as dates using :func:`pandas.read_csv`.
+    chunksize:
+        When provided, rows are read in chunks of this size and returned as
+        an iterator of DataFrames instead of a single DataFrame.
     schema:
         Optional :class:`pa.DataFrameSchema` or
         :class:`pa.DataFrameModel` used for advanced validation and
@@ -145,32 +149,55 @@ def read_csv(
 
     Returns
     -------
-    pandas.DataFrame
-        DataFrame containing the CSV contents.
+    pandas.DataFrame or Iterator[pandas.DataFrame]
+        DataFrame containing the CSV contents, or an iterator yielding
+        consecutive chunks when ``chunksize`` is provided.
 
     """
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
-    df = pd.read_csv(
-        path,
-        sep=sep,
-        encoding=encoding,
-        dtype=dtype,
-        na_values=na_values,
-        parse_dates=list(parse_dates) if parse_dates is not None else None,
-    )
-    if schema is not None:
-        if pa is None:
-            raise RuntimeError(
-                "pandera is required for schema validation; install pandera to use the 'schema' argument"
-            )
-        if isinstance(schema, pa.DataFrameSchema):
-            df = schema.validate(df)
-        else:
-            df = schema.to_schema().validate(df)
-    elif required_columns is not None:
-        validation.validate_columns(df, required_columns)
-    return df
+    read_kwargs: dict[str, Any] = {
+        "sep": sep,
+        "encoding": encoding,
+        "dtype": dtype,
+        "na_values": na_values,
+        "parse_dates": list(parse_dates) if parse_dates is not None else None,
+    }
+    if chunksize is not None:
+        read_kwargs["chunksize"] = chunksize
+    reader = pd.read_csv(path, **read_kwargs)
+    if chunksize is None:
+        df = cast(pd.DataFrame, reader)
+        if schema is not None:
+            if pa is None:
+                raise RuntimeError(
+                    "pandera is required for schema validation; install pandera to use the 'schema' argument"
+                )
+            if isinstance(schema, pa.DataFrameSchema):
+                df = schema.validate(df)
+            else:
+                df = schema.to_schema().validate(df)
+        elif required_columns is not None:
+            validation.validate_columns(df, required_columns)
+        return df
+
+    if schema is not None and pa is None:
+        raise RuntimeError(
+            "pandera is required for schema validation; install pandera to use the 'schema' argument"
+        )
+
+    def generate() -> Iterator[pd.DataFrame]:
+        for chunk in cast(Iterator[pd.DataFrame], reader):
+            if schema is not None:
+                if isinstance(schema, pa.DataFrameSchema):
+                    chunk = schema.validate(chunk)
+                else:
+                    chunk = schema.to_schema().validate(chunk)
+            elif required_columns is not None:
+                validation.validate_columns(chunk, required_columns)
+            yield chunk
+
+    return generate()
 
 
 def write_csv(

@@ -63,6 +63,24 @@ def test_read_csv_types_and_na_values() -> None:
     assert pd.isna(df.loc[2, "count"])  # custom NA token
 
 
+def test_read_csv_chunks(tmp_path: Path) -> None:
+    """Chunked reading yields the same data as unchunked reading."""
+
+    rows = 1200
+    df = pd.DataFrame({"a": range(rows), "b": [i % 2 for i in range(rows)]})
+    path = tmp_path / "big.csv"
+    df.to_csv(path, index=False)
+
+    chunks = io.read_csv(
+        path,
+        cfg=IoCfg(),
+        chunksize=500,
+        required_columns=["a", "b"],
+    )
+    result = pd.concat(chunks, ignore_index=True)
+    assert result.equals(df)
+
+
 def test_write_csv_creates_metadata_file(tmp_path: Path) -> None:
     df = pd.DataFrame({"a": [1]})
     path = tmp_path / "out.csv"
