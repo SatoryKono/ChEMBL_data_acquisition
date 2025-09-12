@@ -363,9 +363,11 @@ def process_activity_table(
     assays = set(df.loc[mask, "assay_chembl_id"].dropna().astype(str))
     df["multimol_assay_same"] = df["assay_chembl_id"].isin(assays)
 
-    df["multmol_assay"] = (
-        df["multmol_assay"].astype("boolean").fillna(False).astype(bool)
-        | df["multimol_assay_same"]
+    multmol_assay_series = _safe_to_bool(df["multmol_assay"], "multmol_assay").fillna(
+        False
+    )
+    df["multmol_assay"] = _safe_to_bool(
+        multmol_assay_series | df["multimol_assay_same"], "multmol_assay"
     )
     df.drop(columns=["multimol_assay_same", "Count"], inplace=True)
 
@@ -420,7 +422,7 @@ def process_activity_table(
     ]
     for col in bool_cols:
         if col in df.columns:
-            df[col] = df[col].astype("boolean").fillna(False).astype(bool)
+            df[col] = _safe_to_bool(df[col], col).fillna(False)
 
     df["is_citation"] = df[bool_cols].any(axis=1)
 
@@ -448,9 +450,9 @@ def process_activity_table(
         on="document_chembl_id",
         how="left",
     )
-    df["high_citation_rate"] = (
-        df["high_citation_rate"].astype("boolean").fillna(False).astype(bool)
-    )
+    df["high_citation_rate"] = _safe_to_bool(
+        df["high_citation_rate"], "high_citation_rate"
+    ).fillna(False)
 
     # --- target types ------------------------------------------------------
     if targets_csv is not None:
@@ -503,12 +505,8 @@ def process_activity_table(
     # input dataframe already contains some of these fields.
     df = df.loc[:, ~df.columns.duplicated()]
 
-    df["multifunctional_enzyme"] = (
-        df["multifunctional_enzyme"]
-        .astype("string")
-        .str.lower()
-        .map({"true": True, "false": False})
-        .astype("boolean")
+    df["multifunctional_enzyme"] = _safe_to_bool(
+        df["multifunctional_enzyme"], "multifunctional_enzyme"
     )
 
     mapping = {
@@ -516,9 +514,9 @@ def process_activity_table(
         "Viruses": True,
         "Unicellular organism": True,
     }
-    df["unicellular_organism"] = (
-        df["organism_type"].map(mapping).astype("boolean").fillna(False).astype(bool)
-    )
+    df["unicellular_organism"] = _safe_to_bool(
+        df["organism_type"].map(mapping), "unicellular_organism"
+    ).fillna(False)
 
     df.drop(columns=["organism_type"], inplace=True)
 
@@ -585,7 +583,7 @@ def process_activity_table(
         "multifunctional_enzyme",
     ]
     for col in bool_cols_final:
-        df[col] = df[col].astype("boolean")
+        df[col] = _safe_to_bool(df[col], col)
 
     return df
 

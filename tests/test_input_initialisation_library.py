@@ -740,7 +740,8 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
     assert "unknown_chirality" in res.columns
     assert res.loc[0, "unknown_chirality"]
 
-    assert pd.isna(res.loc[0, "multifunctional_enzyme"])
+    assert res["multifunctional_enzyme"].dtype == "string"
+    assert res.loc[0, "multifunctional_enzyme"] == " "
 
     for col in ["IUPHAR_class", "IUPHAR_subclass", "gene_index", "taxon_index"]:
         assert col in res.columns
