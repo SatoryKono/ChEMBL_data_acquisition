@@ -148,7 +148,6 @@ def test_git_sha_timeout_returns_unknown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """_git_sha returns ``"unknown"`` when the git command exceeds timeout."""
-
     stream = StringIO()
     monkeypatch.setattr(
         io,
@@ -156,11 +155,18 @@ def test_git_sha_timeout_returns_unknown(
         configure_logger(LoggerConfig(level="WARNING", stream=stream)),
     )
 
+    calls = 0
+
     def slow_run(*args: Any, **kwargs: Any) -> NoReturn:
+        nonlocal calls
+        calls += 1
         time.sleep(0.1)  # Simulate a hanging git command
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=5)
 
+    monkeypatch.setattr(io, "_GIT_SHA", None)
     monkeypatch.setattr(io.subprocess, "run", slow_run)
 
     assert io._git_sha() == "unknown"
+    assert io._git_sha() == "unknown"  # cached value
     assert "timed out" in stream.getvalue()
+    assert calls == 1

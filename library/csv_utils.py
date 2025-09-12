@@ -26,24 +26,30 @@ from .config import Config, _serialize_paths
 
 logger = logging.getLogger(__name__)
 
+# Cached Git SHA for the repository, populated on first lookup.
+_GIT_SHA: str | None = None
+
 
 def _git_sha() -> str:
     """Return the current Git commit hash or ``"unknown"`` if unavailable."""
 
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip()
-    except subprocess.TimeoutExpired:
-        logger.warning("git rev-parse timed out")
-        return "unknown"
-    except Exception:  # pragma: no cover - git may be unavailable
-        return "unknown"
+    global _GIT_SHA
+    if _GIT_SHA is None:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            _GIT_SHA = result.stdout.strip()
+        except subprocess.TimeoutExpired:
+            logger.warning("git rev-parse timed out")
+            _GIT_SHA = "unknown"
+        except Exception:  # pragma: no cover - git may be unavailable
+            _GIT_SHA = "unknown"
+    return _GIT_SHA
 
 
 def _write_meta(path: Path, cfg: Config | None) -> Path:

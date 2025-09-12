@@ -199,14 +199,19 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """_git_sha returns 'unknown' and logs a warning on timeout."""
+    from library import csv_utils
+
+    csv_utils._GIT_SHA = None
 
     with patch(
         "library.csv_utils.subprocess.run",
         side_effect=subprocess.TimeoutExpired(
             cmd=["git", "rev-parse", "HEAD"], timeout=5
         ),
-    ):
+    ) as mock_run:
         with caplog.at_level(logging.WARNING):
-            result = _git_sha()
-    assert result == "unknown"
+            first = _git_sha()
+            second = _git_sha()
+    assert first == second == "unknown"
     assert "timed out" in caplog.text
+    assert mock_run.call_count == 1
