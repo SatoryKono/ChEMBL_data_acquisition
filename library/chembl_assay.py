@@ -9,6 +9,7 @@ import pandas as pd
 from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg
 from .log import logger
+from .pandas_utils import json_normalize_pyarrow
 
 ASSAY_COLUMNS = [
     "aidx",
@@ -124,9 +125,7 @@ def get_assay(
     items = data.get("assays") or data.get("assay") or []
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
-    df = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
-        axis="columns", how="all"
-    )
+    df = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
     return df.reindex(columns=ASSAY_COLUMNS)
 
 
@@ -180,9 +179,7 @@ def get_assays(
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("assays") or data.get("assay") or []
         if items:
-            df_chunk = pd.json_normalize(items, dtype_backend="pyarrow").dropna(  # type: ignore[call-arg]
-                axis="columns", how="all"
-            )
+            df_chunk = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
             if not df_chunk.empty:
                 records.append(df_chunk)
                 logger.info(
@@ -241,7 +238,7 @@ def get_activities(
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("activities") or data.get("activity") or []
         if items:
-            records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
+            records.append(json_normalize_pyarrow(items))
             logger.info(
                 "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
             )
@@ -299,7 +296,7 @@ def get_testitem(
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("molecules") or data.get("molecule") or []
         if items:
-            records.append(pd.json_normalize(items, dtype_backend="pyarrow"))  # type: ignore[call-arg]
+            records.append(json_normalize_pyarrow(items))
             logger.info(
                 "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
             )
