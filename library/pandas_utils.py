@@ -11,8 +11,6 @@ from typing import Any, cast
 
 import pandas as pd
 
-# mypy: ignore-errors
-
 
 def json_normalize_pyarrow(
     data: Sequence[Mapping[str, Any]] | Mapping[str, Any],
@@ -44,19 +42,20 @@ def json_normalize_pyarrow(
         Normalized data.
     """
 
+    json_normalize = cast(Any, pd.json_normalize)
     try:
         # pandas >= 2.0 supports ``dtype_backend``
         return cast(
             pd.DataFrame,
-            pd.json_normalize(
+            json_normalize(
                 data,
                 dtype_backend=dtype_backend,
                 **kwargs,
             ),
-        )  # type: ignore[arg-type, unused-ignore]
+        )
     except TypeError:
         # For pandas < 2.0, fall back to the default behaviour
-        return cast(pd.DataFrame, pd.json_normalize(data, **kwargs))
+        return cast(pd.DataFrame, json_normalize(data, **kwargs))
 
 
 def read_csv_pyarrow(
@@ -82,17 +81,18 @@ def read_csv_pyarrow(
         Parsed CSV data.
     """
 
+    read_csv = cast(Any, pd.read_csv)
     try:
         return cast(
             pd.DataFrame,
-            pd.read_csv(
+            read_csv(
                 *args,
                 dtype_backend=dtype_backend,
                 **kwargs,
             ),
-        )  # type: ignore[arg-type, unused-ignore]
+        )
     except (TypeError, ImportError):
-        return cast(pd.DataFrame, pd.read_csv(*args, **kwargs))
+        return cast(pd.DataFrame, read_csv(*args, **kwargs))
 
 
 __all__ = ["json_normalize_pyarrow", "read_csv_pyarrow"]
