@@ -100,14 +100,7 @@ ignore = ["E501"]
 python_version = "3.12"
 strict = true
 warn_unused_configs = true
-files = [
-  "library",
-  "scripts",
-  "tests/test_activity_cli_overrides.py",
-  "tests/test_activity_cli_error.py",
-  "tests/test_cli_timeout_override.py",
-  "tests/test_cli_bad_config.py",
-]
+exclude = ["tests"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
