@@ -44,9 +44,11 @@ tokens should be stored in a local ``.env`` file – see
    ```
 
    The command reads the bundled test identifiers and writes a normalised CSV
-   to ``out/activities.csv``. Common CLI flags include ``--input`` and
-   ``--output`` for file paths, ``--limit`` to cap processed records,
-   ``--log-level`` for verbosity, ``--sep`` for CSV delimiter and
+   to ``out/activities.csv``. Scripts can also be invoked as modules, e.g.
+   ``python -m scripts.get_activity_data``, or after installing the package in
+   editable mode using ``pip install -e .``. Common CLI flags include
+   ``--input`` and ``--output`` for file paths, ``--limit`` to cap processed
+   records, ``--log-level`` for verbosity, ``--sep`` for CSV delimiter and
    ``--encoding`` for file encoding. Additional examples:
 
    ```bash
