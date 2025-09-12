@@ -14,6 +14,7 @@ import csv
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 # Allow running the script directly via ``python scripts/get_target_data.py``
 # by ensuring the repository root is on ``sys.path`` when the module is executed
@@ -90,7 +91,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     outputs.
     """
 
-    root, log_cfg = build_root_parser()
+    root, shared, log_cfg = build_root_parser()
     parser = argparse.ArgumentParser(
         description="Target data utilities", parents=[root]
     )
@@ -101,7 +102,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     # ----------------------------
     uniprot = subparsers.add_parser(
         "uniprot",
-        parents=[root],
+        parents=[shared],
         help="Extract information for UniProt accessions",
     )
     uniprot.add_argument(
@@ -126,7 +127,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     # ----------------------------
     chembl = subparsers.add_parser(
         "chembl",
-        parents=[root],
+        parents=[shared],
         help="Retrieve target information from ChEMBL",
     )
     chembl.add_argument(
@@ -147,7 +148,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     # ----------------------------
     iuphar = subparsers.add_parser(
         "iuphar",
-        parents=[root],
+        parents=[shared],
         help="Map UniProt accessions to IUPHAR classifications",
     )
     iuphar.add_argument(
@@ -175,7 +176,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     # ----------------------------
     all_cmd = subparsers.add_parser(
         "all",
-        parents=[root],
+        parents=[shared],
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
     )
     all_cmd.add_argument(
@@ -246,7 +247,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.set_defaults(func=run_all)
 
-    parser.subparsers_map = {
+    parser.subparsers_map = {  # type: ignore[attr-defined]
         "uniprot": uniprot,
         "chembl": chembl,
         "iuphar": iuphar,
@@ -744,7 +745,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "iuphar_out": "target.all.iuphar_out",
             }
         cfg: Config = apply_config_overrides(
-            args, subparser, args.config, mapping=mapping
+            args, subparser, args.config, mapping=mapping, base_parser=parser
         )
         if args.print_config:
             print_config(cfg)
@@ -762,7 +763,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
         return 1
     if hasattr(args, "func"):
-        exit_code = args.func(cfg, args)
+        exit_code = cast(int, args.func(cfg, args))
         if exit_code == 0:
             logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
         else:
