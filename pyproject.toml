@@ -50,19 +50,19 @@ dev = [
 ]
 
 [project.scripts]
-get-activity-data = "library.cli:get_activity_data"
-get-assay-data = "library.cli:get_assay_data"
-get-target-data = "library.cli:get_target_data"
-get-document-data = "library.cli:get_document_data"
-get-document-type = "library.cli:get_document_type"
-get-input-initialisation = "library.cli:get_input_initialisation"
-get-testitem-data = "library.cli:get_testitem_data"
-csv-utils = "library.cli:csv_utils"
-mapper = "library.cli:mapper"
-table-quality = "library.cli:table_quality"
-chunk-io = "library.cli:chunk_io"
-get-activities = "library.cli:get_activities"
-check-determinism = "library.cli:check_determinism"
+get-activity-data = "library.cli.commands.get_activity_data:main"
+get-assay-data = "library.cli.commands.get_assay_data:main"
+get-target-data = "library.cli.commands.get_target_data:main"
+get-document-data = "library.cli.commands.get_document_data:main"
+get-document-type = "library.cli.commands.get_document_type:main"
+get-input-initialisation = "library.cli.commands.get_input_initialisation:main"
+get-testitem-data = "library.cli.commands.get_testitem_data:main"
+csv-utils = "library.cli.commands.csv_utils:main"
+mapper = "library.cli.commands.mapper:main"
+table-quality = "library.cli.commands.table_quality:main"
+chunk-io = "library.cli.commands.chunk_io:main"
+get-activities = "library.cli.commands.get_activities:main"
+check-determinism = "library.cli.commands.check_determinism:main"
 
 [tool.setuptools]
 py-modules = [
