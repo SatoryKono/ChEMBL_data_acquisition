@@ -399,8 +399,6 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Prepare shared session before performing any API calls
-    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
-
     try:
         ids = io.read_ids(args.input_csv, column=cfg.document.all.column, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
@@ -408,13 +406,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        doc_df = cl.get_documents(
-            ids,
-            cfg=cfg.api,
-            client=client,
-            chunk_size=cfg.document.all.chunk_size,
-            timeout=cfg.document.all.timeout,
-        )
+        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            doc_df = cl.get_documents(
+                ids,
+                cfg=cfg.api,
+                client=client,
+                chunk_size=cfg.document.all.chunk_size,
+                timeout=cfg.document.all.timeout,
+            )
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents: %s", exc)
         return 1
