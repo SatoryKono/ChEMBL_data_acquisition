@@ -122,7 +122,7 @@ def test_generate_pair_entity_tables_missing_columns(
 
 def test_build_combined_tables_drops_activity_cols() -> None:
     same: TableDict = {
-        "activity": pd.DataFrame({"id": [1], "Column1": ["a"]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [1], "Column1": ["a"]}),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -130,7 +130,7 @@ def test_build_combined_tables_drops_activity_cols() -> None:
         "pairs_same_document": pd.DataFrame(),
     }
     all_: TableDict = {
-        "activity": pd.DataFrame({"id": [2], "Column1": ["b"]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [2], "Column1": ["b"]}),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -149,7 +149,9 @@ def test_build_combined_tables_drops_activity_cols() -> None:
 def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
     """Duplicate column names in activity tables should be ignored."""
     same: TableDict = {
-        "activity": pd.DataFrame([[1, "a", "x"]], columns=["id", "val", "val"]),
+        "activity": pd.DataFrame(
+            [[1, "a", "x"]], columns=["activity_chembl_id", "val", "val"]
+        ),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -157,7 +159,9 @@ def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
         "pairs_same_document": pd.DataFrame(),
     }
     all_: TableDict = {
-        "activity": pd.DataFrame([[2, "b", "y"]], columns=["id", "val", "val"]),
+        "activity": pd.DataFrame(
+            [[2, "b", "y"]], columns=["activity_chembl_id", "val", "val"]
+        ),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -165,8 +169,95 @@ def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
         "pairs": pd.DataFrame(),
     }
     combined = build_combined_tables(same, all_)
-    assert list(combined["activity"].columns) == ["id", "val"]
+    assert list(combined["activity"].columns) == ["activity_chembl_id", "val"]
     assert combined["activity"]["val"].tolist() == ["a", "b"]
+
+
+@pytest.mark.parametrize(
+    "entity,id_col",
+    [
+        ("assay", "assay_chembl_id"),
+        ("document", "document_chembl_id"),
+        ("target", "target_chembl_id"),
+    ],
+)
+def test_build_combined_tables_deduplicates_regular_entities(
+    entity: str, id_col: str
+) -> None:
+    same: TableDict = {
+        "activity": pd.DataFrame({"activity_chembl_id": []}),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame({"activity_chembl_id": []}),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
+    }
+    same[entity] = pd.DataFrame({"extra": [1, 2], id_col: ["x1", "x2"]})[
+        ["extra", id_col]
+    ]
+    all_[entity] = pd.DataFrame({"extra": [3, 4], id_col: ["x2", "x3"]})[
+        ["extra", id_col]
+    ]
+    combined = build_combined_tables(same, all_)
+    assert combined[entity][id_col].tolist() == ["x1", "x2", "x3"]
+
+
+def test_build_combined_tables_deduplicates_activity_by_id() -> None:
+    same: TableDict = {
+        "activity": pd.DataFrame({"val": ["a", "b"], "activity_chembl_id": [1, 2]})[
+            ["val", "activity_chembl_id"]
+        ],
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame({"val": ["c", "d"], "activity_chembl_id": [2, 3]})[
+            ["val", "activity_chembl_id"]
+        ],
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
+    }
+    combined = build_combined_tables(same, all_)
+    assert combined["activity"]["activity_chembl_id"].tolist() == [1, 2, 3]
+
+
+def test_build_combined_tables_deduplicates_testitem_saltform_id() -> None:
+    same: TableDict = {
+        "activity": pd.DataFrame({"activity_chembl_id": []}),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame({"extra": [1, 2], "saltform_id": [10, 11]})[
+            ["extra", "saltform_id"]
+        ],
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame({"activity_chembl_id": []}),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame({"extra": [3, 4], "saltform_id": [11, 12]})[
+            ["extra", "saltform_id"]
+        ],
+        "pairs": pd.DataFrame(),
+    }
+    combined = build_combined_tables(same, all_)
+    assert combined["testitem"]["saltform_id"].tolist() == [10, 11, 12]
 
 
 def test_build_combined_tables_pairs_no_merge() -> None:
@@ -230,7 +321,7 @@ def test_build_combined_tables_handles_status(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [1]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [1]}),
         "pairs_same_document": pd.DataFrame(),
     }
     all_: TableDict = {
@@ -238,7 +329,7 @@ def test_build_combined_tables_handles_status(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [2]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [2]}),
         "pairs": pd.DataFrame(),
     }
 
@@ -269,17 +360,23 @@ def test_build_combined_tables_initializes_pair_tables(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [1]}),
-        "pairs_same_document": pd.DataFrame({"activity_id1": [1], "activity_id2": [2]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [1]}),
+        "pairs_same_document": pd.DataFrame(
+            {"activity_chembl_id1": [1], "activity_chembl_id2": [2]}
+        ),
     }
     all_: TableDict = {
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [2]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [2]}),
         "pairs": pd.DataFrame(
-            {"INDEPENDENT": [True], "activity_id1": [2], "activity_id2": [1]}
+            {
+                "INDEPENDENT": [True],
+                "activity_chembl_id1": [2],
+                "activity_chembl_id2": [1],
+            }
         ),
     }
 
@@ -293,7 +390,7 @@ def test_build_combined_tables_initializes_pair_tables(
 
     def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
         mapping = {1: "good", 2: "bad"}
-        return df.assign(**{"Filtered.init": df["activity_id"].map(mapping)})
+        return df.assign(**{"Filtered.init": df["activity_chembl_id"].map(mapping)})
 
     monkeypatch.setattr(lib, "initialize_activity_status", fake_init)
     monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
@@ -327,7 +424,7 @@ def test_build_combined_tables_initializes_pair_segments(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [1]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [1]}),
         "pairs_same_document": pd.DataFrame(),
     }
     all_: TableDict = {
@@ -335,12 +432,12 @@ def test_build_combined_tables_initializes_pair_segments(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [2]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [2]}),
         "pairs": pd.DataFrame(
             {
                 "INDEPENDENT": [True, False],
-                "activity_id1": [1, 2],
-                "activity_id2": [2, 1],
+                "activity_chembl_id1": [1, 2],
+                "activity_chembl_id2": [2, 1],
             }
         ),
     }
@@ -353,7 +450,7 @@ def test_build_combined_tables_initializes_pair_segments(
 
     def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
         mapping = {1: "good", 2: "good"}
-        return df.assign(**{"Filtered.init": df["activity_id"].map(mapping)})
+        return df.assign(**{"Filtered.init": df["activity_chembl_id"].map(mapping)})
 
     monkeypatch.setattr(lib, "initialize_activity_status", fake_init)
     monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
@@ -375,20 +472,22 @@ def test_build_combined_tables_aggregates_all_pair_segments(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [1, 2]}),
-        "pairs_same_document": pd.DataFrame({"activity_id1": [1], "activity_id2": [2]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [1, 2]}),
+        "pairs_same_document": pd.DataFrame(
+            {"activity_chembl_id1": [1], "activity_chembl_id2": [2]}
+        ),
     }
     all_: TableDict = {
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [3]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [3]}),
         "pairs": pd.DataFrame(
             {
                 "INDEPENDENT": [True, False],
-                "activity_id1": [1, 2],
-                "activity_id2": [2, 1],
+                "activity_chembl_id1": [1, 2],
+                "activity_chembl_id2": [2, 1],
             }
         ),
     }
@@ -441,7 +540,7 @@ def test_build_combined_tables_normalizes_pair_column_names(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [1]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [1]}),
         "pairs_same_document": pd.DataFrame({"Activity_ID1": [1], "Activity_ID2": [2]}),
     }
     all_: TableDict = {
@@ -449,7 +548,7 @@ def test_build_combined_tables_normalizes_pair_column_names(
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
         "testitem": pd.DataFrame(),
-        "activity": pd.DataFrame({"activity_id": [2]}),
+        "activity": pd.DataFrame({"activity_chembl_id": [2]}),
         "pairs": pd.DataFrame(
             {"INDEPENDENT": [True], "ACTIVITY_ID_1": [2], "ACTIVITY_ID_2": [1]}
         ),
@@ -463,7 +562,7 @@ def test_build_combined_tables_normalizes_pair_column_names(
 
     def fake_init(df: pd.DataFrame, _api: object) -> pd.DataFrame:
         mapping = {1: "good", 2: "good"}
-        return df.assign(**{"Filtered.init": df["activity_id"].map(mapping)})
+        return df.assign(**{"Filtered.init": df["activity_chembl_id"].map(mapping)})
 
     monkeypatch.setattr(lib, "initialize_activity_status", fake_init)
     monkeypatch.setattr(lib, "aggregate_activity", lambda *_: {})
