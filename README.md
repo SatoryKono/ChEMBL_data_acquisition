@@ -357,7 +357,7 @@ from library.csv_utils import write_csv_deterministic
 import pandas as pd
 
 df = pd.read_csv("large.csv")
-write_csv_deterministic(df, "out.csv", chunksize=1000)
+write_csv_deterministic(df, "out.csv", key_cols=df.columns, chunksize=1000)
 ```
 
 Rows are still sorted deterministically before writing; ``chunksize`` only

@@ -44,6 +44,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"output_{Path(ns.input_csv).stem}_{date.today():%Y%m%d}.csv"
         )
     args = CSVExportArgs.model_validate(vars(ns))
+    if not args.key_cols:
+        parser.error("--key-cols must be provided")
     configure_logger(LoggerConfig(level=args.log_level))
 
     start = time.perf_counter()
@@ -60,9 +62,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_csv_chunks_deterministic(
         reader,
         output,
-
         col_order=args.col_order or None,
-        key_cols=args.key_cols or None,
+        key_cols=args.key_cols,
         chunksize=args.chunk_size,
         drop_unexpected_cols=True,
     )

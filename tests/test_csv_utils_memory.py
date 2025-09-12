@@ -15,7 +15,7 @@ def _worker(path: str, use_copy: bool, n: int) -> None:
     df = pd.DataFrame({"a": range(n), "b": range(n)})
     if use_copy:
         df = df.copy()
-    write_csv_deterministic(df, Path(path))
+    write_csv_deterministic(df, Path(path), key_cols=["a", "b"])
 
 
 def _peak_memory(n: int, use_copy: bool, path: Path) -> int:

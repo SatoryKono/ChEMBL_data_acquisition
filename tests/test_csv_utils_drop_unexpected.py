@@ -18,6 +18,7 @@ def test_drop_unexpected_columns(
             df,
             out,
             col_order=["a", "b"],
+            key_cols=["a"],
             drop_unexpected_cols=True,
         )
     result = pd.read_csv(out)
