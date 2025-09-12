@@ -20,6 +20,19 @@ Install the project together with development tools such as
 tokens should be stored in a local ``.env`` file – see
 [`Конфигурация через .env`](#конфигурация-через-env) for details.
 
+After installing the dependencies, enable the pre-commit hooks so that
+formatting, linting and type checking run automatically before each commit:
+
+```bash
+pre-commit install
+```
+
+To trigger all checks manually across the repository, execute:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Quick Start
  
 

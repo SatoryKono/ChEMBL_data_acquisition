@@ -1,3 +1,9 @@
+# This file configures pre-commit hooks for formatting, linting and type checking.
+# Install the hooks with `pre-commit install` and run them with `pre-commit run --all-files`.
+
+default_language_version:
+  python: python3.12
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.13.0
