@@ -180,7 +180,10 @@ def postprocess_documents(
     """
     if required_columns is not None:
         validation.validate_columns(df, required_columns)
-    result = df.copy()
+    # Create a view to avoid an expensive deep copy. Subsequent operations
+    # either replace columns or return new DataFrames, so the original
+    # ``df`` remains unchanged while minimising memory usage.
+    result = df.copy(deep=False)
     if result.empty:
         return result
 
