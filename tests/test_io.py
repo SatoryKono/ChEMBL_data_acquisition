@@ -37,6 +37,20 @@ def test_read_csv_missing_column(tmp_path: Path) -> None:
         io.read_csv(path, cfg=IoCfg(), required_columns=["a", "b"])
 
 
+def test_read_ids_missing_column_lists_available(tmp_path: Path) -> None:
+    path = tmp_path / "data.csv"
+    with path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["a", "b"])
+        writer.writerow(["1", "2"])
+    with pytest.raises(ValueError) as exc:
+        list(io.read_ids(path, column="c", cfg=IoCfg()))
+    assert (
+        str(exc.value)
+        == f"column 'c' not found in {path}; available columns: ['a', 'b']"
+    )
+
+
 def test_read_csv_types_and_na_values() -> None:
     path = Path("tests/data/io_types.csv")
     schema = pa.DataFrameSchema(

@@ -27,7 +27,7 @@ from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 import yaml
@@ -40,12 +40,13 @@ from .git_utils import _git_sha
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera.pandas as pa_types
 
+_pa_module: ModuleType | None
 try:  # pragma: no cover - exercised in tests via monkeypatch
-    import pandera.pandas as _pa
+    import pandera.pandas as _pa_module
 except (ImportError, TypeError):
-    _pa = cast(ModuleType | None, None)
+    _pa_module = None
 
-pa: ModuleType | None = _pa
+pa: ModuleType | None = _pa_module
 
 
 def read_ids(
@@ -91,7 +92,9 @@ def read_ids(
         with Path(path).open("r", encoding=encoding, newline="") as fh:
             reader = csv.DictReader(fh, delimiter=sep)
             if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(f"column '{column}' not found in {path}")
+                raise ValueError(
+                    f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
+                )
             for row in reader:
                 value = (row.get(column) or "").strip()
                 if value and value != "#N/A":
@@ -225,17 +228,14 @@ def write_csv(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    return cast(
-        Path,
-        write_csv_deterministic(
-            df,
-            path,
-            key_cols=list(key_cols) if key_cols is not None else None,
-            chunksize=chunksize,
-            sep=sep,
-            encoding=encoding,
-            cfg=cfg,
-        ),
+    return write_csv_deterministic(
+        df,
+        path,
+        key_cols=list(key_cols) if key_cols is not None else None,
+        chunksize=chunksize,
+        sep=sep,
+        encoding=encoding,
+        cfg=cfg,
     )
 
 

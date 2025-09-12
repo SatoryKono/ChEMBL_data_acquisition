@@ -298,7 +298,7 @@
         "chembl": {
           "$ref": "#/$defs/DocumentChemblCfg",
           "default": {
-            "column": "chembl_id",
+            "column": "document_chembl_id",
             "chunk_size": 5,
             "timeout": 30.0
           }
@@ -306,7 +306,7 @@
         "all": {
           "$ref": "#/$defs/DocumentAllCfg",
           "default": {
-            "column": "chembl_id",
+            "column": "document_chembl_id",
             "chunk_size": 5,
             "sleep": 5.0,
             "workers": 1,

@@ -126,11 +126,11 @@ document:
     workers: 1
     batch_size: 100
   chembl:
-    column: "chembl_id"
+    column: "document_chembl_id"
     chunk_size: 5
     timeout: 30.0
   all:
-    column: "chembl_id"
+    column: "document_chembl_id"
     chunk_size: 50
     sleep: 5.0
     workers: 1
