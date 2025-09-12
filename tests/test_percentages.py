@@ -24,7 +24,7 @@ def test_add_percentage_and_compute_statistics() -> None:
     df = pd.DataFrame(
         {
             "activity_id": [1, 2, 3],
-            "Filtered": ["good", "bad", "good"],
+            "Filtered.new": ["good", "bad", "good"],
             "independent_IC50": [1, 0, 1],
             "non_independent_IC50": [0, 1, 0],
             "independent_Ki": [0, 0, 0],
