@@ -659,10 +659,17 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         iuphar_df = pd.read_csv(
             iuphar_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
-        existing_cols = set(chembl_df.columns) | set(uniprot_df.columns)
+        # ``combined_df`` already contains the consolidated data from
+        # ChEMBL and UniProt, including helper fields like ``synonyms``,
+        # ``ec_number`` and ``gene_name``. Build the set of existing
+        # columns from this frame to avoid reintroducing those fields
+        # when selecting IUPHAR classification columns.
+        existing_cols = set(combined_df.columns)
         classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
 
-        iuphar_df = iuphar_df[["uniprot_id", *classification_cols]]
+        # Recreate the IUPHAR frame with only the new classification
+        # columns before merging.
+        iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
         # Apply domain-specific clean-up and finalise table before exporting
