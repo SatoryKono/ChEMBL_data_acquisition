@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 import yaml
 
-from library.metadata import Stats, write_meta_yaml
+from library.metadata import Stats, _git_sha, write_meta_yaml
 
 
 def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
@@ -52,3 +54,12 @@ def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
         "schema",
     }
     assert required_keys <= data.keys()
+
+
+def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_git_sha uses the ``GIT_SHA`` environment variable when available."""
+
+    monkeypatch.setenv("GIT_SHA", "envsha")
+    with patch("library.metadata.subprocess.check_output") as mock:
+        assert _git_sha() == "envsha"
+        mock.assert_not_called()
