@@ -46,7 +46,7 @@ uniprot:
   timeout_read: 30  # (env: CHEMBL_DA_UNIPROT_TIMEOUT_READ)
   retries: 3
   rps: 40  # (env: CHEMBL_DA_UNIPROT_RPS)
-  burst: 5  # (env: CHEMBL_DA_UNIPROT_BURST)
+  burst: 50  # (env: CHEMBL_DA_UNIPROT_BURST)
   delay: 0.25  # Delay between requests in seconds
 
 uniprot_mapping:
