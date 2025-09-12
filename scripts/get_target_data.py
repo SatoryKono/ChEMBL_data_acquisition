@@ -358,29 +358,30 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Set up HTTP session with proper headers and retry behaviour
-    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
+    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        try:
+            ids = io.read_ids(
+                args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error("%s", exc)
+            return 1
 
-    try:
-        ids = io.read_ids(args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io)
-    except (FileNotFoundError, ValueError) as exc:
-        logger.error("%s", exc)
-        return 1
-
-    try:
-        df = cl.get_targets(
-            ids,
-            cfg=cfg.api,
-            client=client,
-            mapping_cfg=cfg.uniprot_mapping,
-            timeout=cfg.target.chembl.timeout,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        logger.error("failed to retrieve targets: %s", exc)
-        return 1
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    df = normalize_targets(df)
-    rows_total = len(df)
-    exit_code = 0
+        try:
+            df = cl.get_targets(
+                ids,
+                cfg=cfg.api,
+                client=client,
+                mapping_cfg=cfg.uniprot_mapping,
+                timeout=cfg.target.chembl.timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error("failed to retrieve targets: %s", exc)
+            return 1
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        df = normalize_targets(df)
+        rows_total = len(df)
+        exit_code = 0
     # Only enforce columns marked as ``required`` in the schema. Optional columns
     # may be absent in the input dataset without preventing validation.
     required_cols = {

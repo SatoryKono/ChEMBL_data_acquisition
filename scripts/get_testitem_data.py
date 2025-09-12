@@ -137,39 +137,40 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     # Initialise HTTP session for subsequent ChEMBL requests
-    client = ChemblClient(cfg.api, cfg.retry, cfg.chembl)
+    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        try:
+            # ``read_ids`` returns a generator to minimise memory use. Convert to a
+            # list so we can log the total number of identifiers and iterate over the
+            # values multiple times if needed.
+            ids = list(
+                io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io)
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error("%s", exc)
+            return 1
 
-    try:
-        # ``read_ids`` returns a generator to minimise memory use.  Convert to a
-        # list so we can log the total number of identifiers and iterate over the
-        # values multiple times if needed.
-        ids = list(io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io))
-    except (FileNotFoundError, ValueError) as exc:
-        logger.error("%s", exc)
-        return 1
+        logger.info("identifiers_retrieved", extra={"count": len(ids)})
+        logger.info("chembl_fetch_start", extra={"chunk_size": cfg.testitem.chunk_size})
 
-    logger.info("identifiers_retrieved", extra={"count": len(ids)})
-    logger.info("chembl_fetch_start", extra={"chunk_size": cfg.testitem.chunk_size})
-
-    try:
-        df = cl.get_testitem(
-            ids,
-            cfg=cfg.api,
-            client=client,
-            chunk_size=cfg.testitem.chunk_size,
-            timeout=cfg.testitem.timeout,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        logger.error("failed to retrieve compounds: %s", exc)
-        return 1
-    logger.info("chembl_fetch_done", extra={"rows": len(df)})
-    logger.info("pubchem_augment_start")
-    df = add_pubchem_data(df, cfg.pubchem)
-    logger.info("pubchem_augment_done")
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    df = normalize_testitems(df)
-    rows_total = len(df)
-    exit_code = 0
+        try:
+            df = cl.get_testitem(
+                ids,
+                cfg=cfg.api,
+                client=client,
+                chunk_size=cfg.testitem.chunk_size,
+                timeout=cfg.testitem.timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error("failed to retrieve compounds: %s", exc)
+            return 1
+        logger.info("chembl_fetch_done", extra={"rows": len(df)})
+        logger.info("pubchem_augment_start")
+        df = add_pubchem_data(df, cfg.pubchem)
+        logger.info("pubchem_augment_done")
+        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        df = normalize_testitems(df)
+        rows_total = len(df)
+        exit_code = 0
     required_cols = {
         name for name, col in TestitemsSchema.columns.items() if col.required
     }

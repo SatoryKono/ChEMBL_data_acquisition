@@ -54,6 +54,15 @@ class DummySession:
         return DummyResponse()
 
 
+def test_client_closes_session() -> None:
+    """Using the client as a context manager should close the session."""
+
+    session = MagicMock(spec=requests.Session)
+    with ChemblClient(api_cfg(), RetryCfg(), session=session):
+        pass
+    session.close.assert_called_once()
+
+
 def test_client_sets_user_agent() -> None:
     """Session should include the configured ``User-Agent`` header."""
 
