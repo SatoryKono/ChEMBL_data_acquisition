@@ -27,7 +27,7 @@ def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
         csv_path=csv_path,
         command="unit-test",
         config_subset={"api_key": "secret", "password": "topsecret"},
-        inputs={"source": "dummy"},
+        inputs={"source": "dummy", "api_key": "secret"},
         stats=stats,
         schema="TestSchema",
     )
@@ -40,6 +40,7 @@ def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
     assert data["config"]["api_key"] == "***"
     assert data["config"]["password"] == "***"
     assert data["inputs"]["source"] == "dummy"
+    assert data["inputs"]["api_key"] == "***"
     assert data["stats"] == stats
     assert data["schema"] == "TestSchema"
 

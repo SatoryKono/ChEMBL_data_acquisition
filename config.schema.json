@@ -91,6 +91,18 @@
           "default": "chembl-da/0.1 (mailto:info@example.org)",
           "title": "User Agent",
           "type": "string"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
         }
       },
       "title": "ApiCfg",
@@ -1194,7 +1206,8 @@
         "backoff_factor": 0.5,
         "rps": 5,
         "burst": 5,
-        "user_agent": "chembl-da/0.1 (mailto:info@example.org)"
+        "user_agent": "chembl-da/0.1 (mailto:info@example.org)",
+        "api_key": null
       },
       "description": "Parameters for accessing the ChEMBL API."
     },

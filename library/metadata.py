@@ -76,7 +76,8 @@ def write_meta_yaml(
         Relevant configuration values. Secret keys are masked before
         serialisation.
     inputs:
-        Description of the inputs that produced the output.
+        Description of the inputs that produced the output. Secret values are
+        redacted before serialisation.
     stats:
         Summary statistics about the output table.
     schema:
@@ -98,7 +99,7 @@ def write_meta_yaml(
         "platform": platform.platform(),
         "command": command,
         "config": _mask_secrets(dict(config_subset)),
-        "inputs": dict(inputs),
+        "inputs": _mask_secrets(dict(inputs)),
         "stats": stats,
         "schema": schema,
     }

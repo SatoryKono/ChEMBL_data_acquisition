@@ -158,13 +158,14 @@ to confirm nothing broke during the upgrade.
 Часть параметров утилит можно задавать через переменные окружения.
 Чтобы не экспортировать их вручную при каждом запуске, поместите пары
 ``NAME=value`` в файл `.env` и загрузите их с помощью пакета
-[`python-dotenv`](https://pypi.org/project/python-dotenv/).
+[`python-dotenv`](https://pypi.org/project/python-dotenv/). Пример можно найти в
+файле [.env.example](./.env.example).
 
 Пример файла:
 
 ```dotenv
 CHEMBL_DA_LOG_LEVEL=INFO
-CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
+CHEMBL_DA__API__API_KEY=your_api_key
 ```
 
 Запустить скрипт с автоматической подгрузкой настроек можно так:

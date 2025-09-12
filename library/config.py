@@ -9,6 +9,9 @@ variables or command line options. The order of precedence is::
 Environment variables follow the ``CHEMBL_DA__SECTION__KEY`` naming pattern
 where sections and keys are joined by double underscores. A number of short
 aliases are supported; see ``_ALIAS_MAP`` for the full list.
+
+Additionally, a ``.env`` file located alongside the configuration is loaded
+automatically using :mod:`python-dotenv`.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import yaml
+from dotenv import load_dotenv  # type: ignore[import-not-found]
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 from requests import Session
 from requests.adapters import HTTPAdapter
@@ -98,6 +102,7 @@ class ApiCfg(_BaseModel):
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
     user_agent: str = "chembl-da/0.1 (mailto:info@example.org)"
+    api_key: str | None = Field(default=None, repr=False)
 
     @field_validator("chembl_base")
     @classmethod
@@ -624,6 +629,8 @@ def load_config(
     strict: bool = False,
 ) -> Config:
     """Load configuration from *path* applying overrides."""
+
+    load_dotenv(Path(path).resolve().with_name(".env"))
 
     try:
         with Path(path).open("r", encoding="utf8") as fh:
