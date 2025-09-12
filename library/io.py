@@ -25,8 +25,8 @@ import csv
 import sys
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
+from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -37,15 +37,12 @@ from .config import Config, IoCfg, _serialize_paths
 from .git_utils import _git_sha
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
-    import pandera.pandas as pa_types
-
-_pa_module: ModuleType | None
-try:  # pragma: no cover - exercised in tests via monkeypatch
-    import pandera.pandas as _pa_module
-except (ImportError, TypeError):
-    _pa_module = None
-
-pa: ModuleType | None = _pa_module
+    import pandera as pa
+else:  # pragma: no cover - exercised in tests via monkeypatch
+    try:
+        pa = import_module("pandera")
+    except (ImportError, TypeError):
+        pa = None
 
 
 def read_ids(
@@ -118,7 +115,7 @@ def read_csv(
     dtype: Mapping[Hashable, Any] | type | None = None,
     na_values: Sequence[str] | str | None = None,
     parse_dates: Sequence[str] | None = None,
-    schema: pa_types.DataFrameSchema | type[pa_types.DataFrameModel] | None = None,
+    schema: pa.DataFrameSchema | type[pa.DataFrameModel] | None = None,
 ) -> pd.DataFrame:
     """Load a CSV file into a :class:`pandas.DataFrame` with optional schema validation.
 
@@ -145,8 +142,8 @@ def read_csv(
     parse_dates:
         Column names to parse as dates using :func:`pandas.read_csv`.
     schema:
-        Optional :class:`pa_types.DataFrameSchema` or
-        :class:`pa_types.DataFrameModel` used for advanced validation and
+        Optional :class:`pa.DataFrameSchema` or
+        :class:`pa.DataFrameModel` used for advanced validation and
         dtype coercion. Requires :mod:`pandera` when provided.
 
     Returns
@@ -170,7 +167,7 @@ def read_csv(
             raise RuntimeError(
                 "pandera is required for schema validation; install pandera to use the 'schema' argument"
             )
-        if isinstance(schema, pa_types.DataFrameSchema):
+        if isinstance(schema, pa.DataFrameSchema):
             df = schema.validate(df)
         else:
             df = schema.to_schema().validate(df)

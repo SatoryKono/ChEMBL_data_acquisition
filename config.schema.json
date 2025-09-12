@@ -87,11 +87,11 @@
           "type": "integer"
         },
         "user_agent": {
+          "default": "chembl-da/0.1 (mailto:info@example.org)",
           "title": "User Agent",
           "type": "string"
         }
       },
-      "required": ["user_agent"],
       "title": "ApiCfg",
       "type": "object"
     },
@@ -1149,7 +1149,8 @@
         "retries": 3,
         "backoff_factor": 0.5,
         "rps": 5,
-        "burst": 5
+        "burst": 5,
+        "user_agent": "chembl-da/0.1 (mailto:info@example.org)"
       }
     },
     "chembl": {

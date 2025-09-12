@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-
-import requests
-import responses
-
 import pytest
+import requests
 
 
 responses = pytest.importorskip("responses")
+
 
 from library import pubchem_library as pl  # noqa: E402
 from library import rate_limiter as rl  # noqa: E402
@@ -35,7 +33,7 @@ def test_get_cid_from_smiles_uses_base() -> None:
 
 
 @responses.activate
-def test_make_request_uses_timeout(monkeypatch) -> None:
+def test_make_request_uses_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     """`make_request` passes configured timeouts to the session."""
     called: dict[str, tuple[int, int]] = {}
 
@@ -60,7 +58,6 @@ def test_make_request_uses_timeout(monkeypatch) -> None:
     )
     pl._CACHE.clear()
 
-
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1, rps=1)
 
     responses.add(responses.GET, "https://example.org", json={}, status=200)
@@ -68,7 +65,7 @@ def test_make_request_uses_timeout(monkeypatch) -> None:
     assert called["timeout"] == (1, 2)
 
 
-def test_make_request_rate_limited(monkeypatch) -> None:
+def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
     """``make_request`` should pause when RPS is exceeded."""
 
     class FakeTime:

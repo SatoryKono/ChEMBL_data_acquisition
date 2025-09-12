@@ -19,7 +19,7 @@ from library.config import Config
     ],
 )
 def test_init_session_uses_cfg_retry(
-    module_name: str, func_name: str, monkeypatch: pytest.MonkeyPatch
+    module_name: str, func_name: str, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     """Ensure CLI scripts use retry settings from :class:`Config`.
 
@@ -29,7 +29,6 @@ def test_init_session_uses_cfg_retry(
     """
 
     module = import_module(module_name)
-    cfg = Config()
     captured: dict[str, object] = {}
 
     class FakeClient:
