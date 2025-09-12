@@ -13,6 +13,7 @@ import argparse
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import perf_counter
 
 # Allow running the script directly via ``python scripts/check_determinism.py``
 # by ensuring the repository root is on ``sys.path`` when the module is executed
@@ -32,6 +33,7 @@ except ImportError as exc:  # pragma: no cover - import-time check
 from library.cli import LoggerConfig, configure_logger
 from library.csv_utils import sha256_file, write_csv_deterministic
 from library.log import logger
+from library.timing import log_duration
 
 
 def run_check(tmp_dir: Path) -> bool:
@@ -75,23 +77,31 @@ def main() -> int:
         ``0`` on success, ``1`` when hashes differ.
     """
 
-    parser = argparse.ArgumentParser(description="Check deterministic CSV writing")
-    parser.add_argument(
-        "--log-level", default="INFO", help="Logging level (default: INFO)."
-    )
-    args = parser.parse_args()
+    start = perf_counter()
+    try:
+        parser = argparse.ArgumentParser(
+            description="Check deterministic CSV writing",
+        )
+        parser.add_argument(
+            "--log-level",
+            default="INFO",
+            help="Logging level (default: INFO).",
+        )
+        args = parser.parse_args()
 
-    configure_logger(LoggerConfig(level=args.log_level))
+        configure_logger(LoggerConfig(level=args.log_level))
 
-    with TemporaryDirectory() as tmp:
-        ok = run_check(Path(tmp))
+        with TemporaryDirectory() as tmp:
+            ok = run_check(Path(tmp))
 
-    if ok:
-        logger.info("Hashes match; output is deterministic")
-        return 0
+        if ok:
+            logger.info("Hashes match; output is deterministic")
+            return 0
 
-    logger.error("Hashes differ; output is not deterministic")
-    return 1
+        logger.error("Hashes differ; output is not deterministic")
+        return 1
+    finally:
+        log_duration(start)
 
 
 if __name__ == "__main__":
