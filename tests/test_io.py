@@ -76,7 +76,28 @@ def test_read_csv_types_and_na_values() -> None:
     assert pd.isna(df.loc[2, "count"])  # custom NA token
 
 
+
+def test_read_csv_with_schema(tmp_path: Path) -> None:
+    """``read_csv`` validates against a provided schema."""
+
+    path = tmp_path / "data.csv"
+    with path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["a", "b"])
+        writer.writerow(["1", "x"])
+
+    good_schema = pa.DataFrameSchema({"a": pa.Column(int), "b": pa.Column(str)})
+    df = io.read_csv(path, cfg=IoCfg(), schema=good_schema)
+    assert list(df.columns) == ["a", "b"]
+
+    bad_schema = pa.DataFrameSchema({"a": pa.Column(int), "c": pa.Column(str)})
+    with pytest.raises(pa.errors.SchemaError):
+        io.read_csv(path, cfg=IoCfg(), schema=bad_schema)
+
+
+
 def test_write_csv_creates_metadata_file(tmp_path: Path, cfg: Config) -> None:
+
     df = pd.DataFrame({"a": [1]})
     path = tmp_path / "out.csv"
     io.write_csv(df, path, cfg=cfg)
