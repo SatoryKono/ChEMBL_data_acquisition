@@ -705,6 +705,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         _save_snapshot(merged, output, "merged", cfg)
         # Apply domain-specific clean-up and finalise table before exporting
         processed = tp.postprocess_targets(merged)
+        _save_snapshot(merged, output, "merged2", cfg)
         organism_df = pd.read_csv(
             cfg.target.all.organism_csv,
             sep=cfg.io.csv_sep,
