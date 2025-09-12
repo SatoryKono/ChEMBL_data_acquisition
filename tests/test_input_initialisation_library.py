@@ -715,6 +715,9 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
 
     assert pd.isna(res.loc[0, "multifunctional_enzyme"])
 
+    for col in ["IUPHAR_class", "IUPHAR_subclass", "gene_index", "taxon_index"]:
+        assert col in res.columns
+
 
 def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
     """Load targets from a nested ``_Target`` subdirectory."""
@@ -772,3 +775,6 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
     res = process_activity_table(df, tmp_path)
     assert "unicellular_organism" in res.columns
     assert res.loc[0, "unicellular_organism"]
+
+    for col in ["IUPHAR_class", "IUPHAR_subclass", "gene_index", "taxon_index"]:
+        assert col in res.columns
