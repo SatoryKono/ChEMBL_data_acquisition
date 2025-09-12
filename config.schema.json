@@ -2,6 +2,7 @@
   "$defs": {
     "ActivityCfg": {
       "additionalProperties": false,
+      "description": "Configuration for retrieving ChEMBL activity records.",
       "properties": {
         "column": {
           "default": "activity_chembl_id",
@@ -97,6 +98,7 @@
     },
     "AssayCfg": {
       "additionalProperties": false,
+      "description": "Configuration for fetching assay information.",
       "properties": {
         "column": {
           "default": "assay_chembl_id",
@@ -121,6 +123,7 @@
     },
     "BatchCfg": {
       "additionalProperties": false,
+      "description": "Settings controlling batch processing behaviour.",
       "properties": {
         "size": {
           "default": 1000,
@@ -156,6 +159,7 @@
     },
     "ChemblCfg": {
       "additionalProperties": false,
+      "description": "Caching behaviour for ChEMBL lookups.",
       "properties": {
         "cache_ttl": {
           "default": 3600,
@@ -175,6 +179,7 @@
     },
     "CrossRefCfg": {
       "additionalProperties": false,
+      "description": "Parameters for accessing the CrossRef API.",
       "properties": {
         "base": {
           "default": "https://api.crossref.org",
@@ -222,6 +227,7 @@
     },
     "DocTypeCfg": {
       "additionalProperties": false,
+      "description": "Rules for inferring document type from sources.",
       "properties": {
         "weights": {
           "additionalProperties": {
@@ -243,6 +249,7 @@
     },
     "DocumentAllCfg": {
       "additionalProperties": false,
+      "description": "Parameters for combined document retrieval.",
       "properties": {
         "column": {
           "default": "document_chembl_id",
@@ -285,6 +292,7 @@
     },
     "DocumentCfg": {
       "additionalProperties": false,
+      "description": "High-level document retrieval settings.",
       "properties": {
         "pubmed": {
           "$ref": "#/$defs/DocumentPubmedCfg",
@@ -320,6 +328,7 @@
     },
     "DocumentChemblCfg": {
       "additionalProperties": false,
+      "description": "ChEMBL document lookup parameters.",
       "properties": {
         "column": {
           "default": "document_chembl_id",
@@ -344,6 +353,7 @@
     },
     "DocumentPubmedCfg": {
       "additionalProperties": false,
+      "description": "PubMed document lookup parameters.",
       "properties": {
         "column": {
           "default": "PMID",
@@ -374,6 +384,7 @@
     },
     "InitCfg": {
       "additionalProperties": false,
+      "description": "Locations of initial data and output directory.",
       "properties": {
         "same_doc": {
           "default": "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx",
@@ -399,6 +410,7 @@
     },
     "IoCfg": {
       "additionalProperties": false,
+      "description": "Input/output configuration such as directories and CSV options.",
       "properties": {
         "output_dir": {
           "default": "data/output",
@@ -455,6 +467,7 @@
     },
     "IupharCfg": {
       "additionalProperties": false,
+      "description": "Parameters for the Guide to Pharmacology (IUPHAR) API.",
       "properties": {
         "base": {
           "default": "https://www.guidetopharmacology.org/services",
@@ -497,6 +510,7 @@
     },
     "JobsCfg": {
       "additionalProperties": false,
+      "description": "Concurrency and chunk size for job execution.",
       "properties": {
         "concurrency": {
           "default": 8,
@@ -516,6 +530,7 @@
     },
     "LogCfg": {
       "additionalProperties": false,
+      "description": "Logging level and formatting options.",
       "properties": {
         "level": {
           "default": "INFO",
@@ -538,6 +553,7 @@
     },
     "MapperCfg": {
       "additionalProperties": false,
+      "description": "Options controlling ID mapping behaviour.",
       "properties": {
         "enable_cache": {
           "default": true,
@@ -560,6 +576,7 @@
     },
     "OpenAlexCfg": {
       "additionalProperties": false,
+      "description": "Settings for OpenAlex API access.",
       "properties": {
         "base": {
           "default": "https://api.openalex.org",
@@ -607,6 +624,7 @@
     },
     "PubChemCfg": {
       "additionalProperties": false,
+      "description": "Parameters for PubChem PUG REST API.",
       "properties": {
         "base": {
           "default": "https://pubchem.ncbi.nlm.nih.gov/rest/pug",
@@ -655,6 +673,7 @@
     },
     "PubMedCfg": {
       "additionalProperties": false,
+      "description": "Parameters for PubMed E-utilities.",
       "properties": {
         "base": {
           "default": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils",
@@ -692,6 +711,7 @@
     },
     "QualityCfg": {
       "additionalProperties": false,
+      "description": "Settings for data quality checks.",
       "properties": {
         "sample_rows": {
           "default": 0,
@@ -722,6 +742,7 @@
     },
     "RateCfg": {
       "additionalProperties": false,
+      "description": "Global rate limiting options.",
       "properties": {
         "global_rps": {
           "default": 8,
@@ -753,6 +774,7 @@
     },
     "ResourcesCfg": {
       "additionalProperties": false,
+      "description": "Paths to auxiliary resource files.",
       "properties": {
         "dictionary_dir": {
           "default": "dictionary",
@@ -802,6 +824,7 @@
     },
     "RetryCfg": {
       "additionalProperties": false,
+      "description": "HTTP retry strategy settings.",
       "properties": {
         "max_attempts": {
           "default": 3,
@@ -828,6 +851,7 @@
     },
     "SemanticScholarCfg": {
       "additionalProperties": false,
+      "description": "Parameters for Semantic Scholar API.",
       "properties": {
         "base": {
           "default": "https://api.semanticscholar.org/graph/v1",
@@ -865,6 +889,7 @@
     },
     "TargetAllCfg": {
       "additionalProperties": false,
+      "description": "Combined configuration for retrieving target data from all sources.",
       "properties": {
         "data_dir": {
           "default": "dictionary/uniprot",
@@ -946,6 +971,7 @@
     },
     "TargetCfg": {
       "additionalProperties": false,
+      "description": "Top-level settings for retrieving target information.",
       "properties": {
         "uniprot": {
           "$ref": "#/$defs/TargetUniprotCfg",
@@ -988,6 +1014,7 @@
     },
     "TargetChemblCfg": {
       "additionalProperties": false,
+      "description": "ChEMBL-specific target retrieval options.",
       "properties": {
         "column": {
           "default": "target_chembl_id",
@@ -1006,6 +1033,7 @@
     },
     "TargetIupharCfg": {
       "additionalProperties": false,
+      "description": "IUPHAR-specific target configuration.",
       "properties": {
         "target_csv": {
           "default": "dictionary/_IUPHAR/_IUPHAR_target.csv",
@@ -1025,6 +1053,7 @@
     },
     "TargetUniprotCfg": {
       "additionalProperties": false,
+      "description": "UniProt-specific target configuration.",
       "properties": {
         "column": {
           "default": "uniprot_id",
@@ -1043,6 +1072,7 @@
     },
     "TestitemCfg": {
       "additionalProperties": false,
+      "description": "Configuration for fetching test item data.",
       "properties": {
         "column": {
           "default": "molecule_chembl_id",
@@ -1067,6 +1097,7 @@
     },
     "UniprotCfg": {
       "additionalProperties": false,
+      "description": "Parameters for UniProt REST API access.",
       "properties": {
         "base": {
           "default": "https://rest.uniprot.org",
@@ -1115,6 +1146,7 @@
     },
     "UniprotMappingCfg": {
       "additionalProperties": false,
+      "description": "Settings for UniProt ID mapping service.",
       "properties": {
         "base": {
           "default": "https://rest.uniprot.org/idmapping",
@@ -1151,14 +1183,16 @@
         "rps": 5,
         "burst": 5,
         "user_agent": "chembl-da/0.1 (mailto:info@example.org)"
-      }
+      },
+      "description": "Parameters for accessing the ChEMBL API."
     },
     "chembl": {
       "$ref": "#/$defs/ChemblCfg",
       "default": {
         "cache_ttl": 3600,
         "cache_maxsize": 1024
-      }
+      },
+      "description": "Cache settings for ChEMBL lookups."
     },
     "openalex": {
       "$ref": "#/$defs/OpenAlexCfg",
@@ -1170,7 +1204,8 @@
         "rps": 4,
         "burst": 5,
         "mailto": "info@example.org"
-      }
+      },
+      "description": "Settings for OpenAlex API requests."
     },
     "crossref": {
       "$ref": "#/$defs/CrossRefCfg",
@@ -1182,7 +1217,8 @@
         "rps": 4,
         "burst": 5,
         "mailto": "info@example.org"
-      }
+      },
+      "description": "Settings for CrossRef API requests."
     },
     "uniprot": {
       "$ref": "#/$defs/UniprotCfg",
@@ -1194,7 +1230,8 @@
         "rps": 4,
         "burst": 5,
         "delay": 0.25
-      }
+      },
+      "description": "Parameters for UniProt REST API."
     },
     "uniprot_mapping": {
       "$ref": "#/$defs/UniprotMappingCfg",
@@ -1202,7 +1239,8 @@
         "base": "https://rest.uniprot.org/idmapping",
         "poll_interval": 0.5,
         "timeout": 300.0
-      }
+      },
+      "description": "Settings for UniProt ID mapping API."
     },
     "iuphar": {
       "$ref": "#/$defs/IupharCfg",
@@ -1213,7 +1251,8 @@
         "retries": 3,
         "rps": 4,
         "burst": 5
-      }
+      },
+      "description": "Parameters for Guide to Pharmacology (IUPHAR) API."
     },
     "pubchem": {
       "$ref": "#/$defs/PubChemCfg",
@@ -1225,7 +1264,8 @@
         "rps": 3,
         "burst": 5,
         "delay": 3.0
-      }
+      },
+      "description": "Parameters for PubChem PUG REST API."
     },
     "pubmed": {
       "$ref": "#/$defs/PubMedCfg",
@@ -1239,7 +1279,8 @@
           "cp1251",
           "latin1"
         ]
-      }
+      },
+      "description": "Parameters for PubMed E-utilities."
     },
     "semantic_scholar": {
       "$ref": "#/$defs/SemanticScholarCfg",
@@ -1251,7 +1292,8 @@
         "encodings": [
           "utf-8-sig"
         ]
-      }
+      },
+      "description": "Parameters for Semantic Scholar API."
     },
     "doc_type": {
       "$ref": "#/$defs/DocTypeCfg",
@@ -1266,7 +1308,8 @@
           "review": 1,
           "unknown": 2
         }
-      }
+      },
+      "description": "Weights and thresholds for document type classification."
     },
     "resources": {
       "$ref": "#/$defs/ResourcesCfg",
@@ -1278,7 +1321,8 @@
         "organism_csv": "dictionary/organism.csv",
         "status_csv": "dictionary/_Curation/status.csv",
         "targets_type_csv": "dictionary/_Target/targets_type.csv"
-      }
+      },
+      "description": "Paths to local resource files used in processing."
     },
     "io": {
       "$ref": "#/$defs/IoCfg",
@@ -1289,14 +1333,16 @@
         "csv_encoding": "utf-8-sig",
         "csv_index": false,
         "exist_ok": true
-      }
+      },
+      "description": "Default input and output options for datasets."
     },
     "jobs": {
       "$ref": "#/$defs/JobsCfg",
       "default": {
         "concurrency": 8,
         "chunk_size": 500
-      }
+      },
+      "description": "Job execution concurrency and chunk size."
     },
     "log": {
       "$ref": "#/$defs/LogCfg",
@@ -1304,7 +1350,8 @@
         "level": "INFO",
         "format": "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
         "datefmt": "%Y-%m-%d %H:%M:%S"
-      }
+      },
+      "description": "Logging configuration."
     },
     "init": {
       "$ref": "#/$defs/InitCfg",
@@ -1312,7 +1359,8 @@
         "same_doc": "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx",
         "all_doc": "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx",
         "output_dir": "data/output/ChEMBL/processed"
-      }
+      },
+      "description": "Initial input files and output directory."
     },
     "batch": {
       "$ref": "#/$defs/BatchCfg",
@@ -1322,7 +1370,8 @@
         "concurrency": 2,
         "fail_fast": true,
         "retry_failed": true
-      }
+      },
+      "description": "Batch processing parameters."
     },
     "quality": {
       "$ref": "#/$defs/QualityCfg",
@@ -1331,7 +1380,8 @@
         "corr_method": "pearson",
         "max_unique_preview": 50,
         "bin_count": 20
-      }
+      },
+      "description": "Data quality analysis settings."
     },
     "mapper": {
       "$ref": "#/$defs/MapperCfg",
@@ -1339,7 +1389,8 @@
         "enable_cache": true,
         "strict_schema": true,
         "warn_on_cast": true
-      }
+      },
+      "description": "Data mapping options."
     },
     "rate": {
       "$ref": "#/$defs/RateCfg",
@@ -1348,7 +1399,8 @@
         "global_burst": 8,
         "limiter_cache_maxsize": 128,
         "limiter_cache_ttl": 600
-      }
+      },
+      "description": "Global rate limiting configuration."
     },
     "retry": {
       "$ref": "#/$defs/RetryCfg",
@@ -1362,7 +1414,8 @@
           503,
           504
         ]
-      }
+      },
+      "description": "HTTP request retry policy."
     },
     "activity": {
       "$ref": "#/$defs/ActivityCfg",
@@ -1372,7 +1425,8 @@
         "timeout": 30.0,
         "limit": null,
         "dry_run": false
-      }
+      },
+      "description": "Activity data fetching configuration."
     },
     "assay": {
       "$ref": "#/$defs/AssayCfg",
@@ -1380,7 +1434,8 @@
         "column": "assay_chembl_id",
         "chunk_size": 10,
         "timeout": 30.0
-      }
+      },
+      "description": "Assay data fetching configuration."
     },
     "testitem": {
       "$ref": "#/$defs/TestitemCfg",
@@ -1388,7 +1443,8 @@
         "column": "molecule_chembl_id",
         "chunk_size": 5,
         "timeout": 30.0
-      }
+      },
+      "description": "Test item data fetching configuration."
     },
     "document": {
       "$ref": "#/$defs/DocumentCfg",
@@ -1412,7 +1468,8 @@
           "timeout": 30.0,
           "workers": 1
         }
-      }
+      },
+      "description": "Document data fetching configuration."
     },
     "target": {
       "$ref": "#/$defs/TargetCfg",
@@ -1434,13 +1491,14 @@
           "data_dir": "dictionary/uniprot",
           "family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
           "iuphar_out": null,
-          "organism_csv": "dictionary/_Target/targets_type.csv", 
+          "organism_csv": "dictionary/_Target/targets_type.csv",
           "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv",
           "timeout": 30.0,
           "uniprot_column": "uniprot_id",
           "uniprot_out": null
         }
-      }
+      },
+      "description": "Target data fetching configuration."
     }
   },
   "title": "Config",
