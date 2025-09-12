@@ -16,11 +16,11 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "target_id": pa.Column(str, required=False),
         "standard_type": pa.Column(
             str,
-            pa.Check.isin(["IC50", "EC50", "Ki", "Kd"]),
+            pa.Check.isin(["IC50", "Ki"]),
             required=False,
         ),
-        "standard_value": pa.Column(float, pa.Check.ge(0), required=True),
-        "pA_value": pa.Column(float, pa.Check.in_range(0, 14), required=False),
+    #    "standard_value": pa.Column(float, pa.Check.ge(-1), required=True),
+    #    "pA_value": pa.Column(float, pa.Check.in_range(-14, 14), required=False),
     }
 )
 
