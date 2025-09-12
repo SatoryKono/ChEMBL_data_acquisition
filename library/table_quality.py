@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import warnings
+from collections.abc import Sized
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +87,14 @@ def _non_empty_mask(series: pd.Series) -> pd.Series:
     def is_non_empty(val: Any) -> bool:
         if isinstance(val, str):
             return bool(val.strip())
-        return not pd.isna(val)
+        if isinstance(val, Sized) and not isinstance(val, bytes | bytearray):
+            # For sequences and other sized containers, consider length
+            return len(val) > 0
+        try:
+            return not pd.isna(val)
+        except (TypeError, ValueError):
+            # Objects that cannot be evaluated by pandas are treated as non-empty
+            return True
 
     return series.map(is_non_empty)
 
@@ -218,7 +226,11 @@ def analyze_table_quality(
         mask = _non_empty_mask(series)
         non_empty = int(mask.sum())
         empty_pct = float(1 - non_empty / len(series)) if len(series) else 0.0
-        unique_cnt = int(series.dropna().nunique())
+        try:
+            unique_cnt = int(series.dropna().nunique())
+        except TypeError:
+            # ``nunique`` requires hashable values; fall back to string representation
+            unique_cnt = int(series.dropna().map(str).nunique())
         unique_pct = float(unique_cnt / non_empty) if non_empty else np.nan
 
         strings = _string_values(series, mask)
