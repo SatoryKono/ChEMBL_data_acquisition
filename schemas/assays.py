@@ -9,7 +9,6 @@ AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "assay_chembl_id": pa.Column(str, required=True),
         "document_chembl_id": pa.Column(str, required=True),
         "target_chembl_id": pa.Column(str, required=False),
-      
     }
 )
 
