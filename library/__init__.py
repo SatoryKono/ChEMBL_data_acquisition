@@ -26,6 +26,7 @@ from .document_type_terms import (
 from .logging_setup import Logger, LoggerConfig, configure_logger
 from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors
+from .timing import log_duration
 
 __all__ = [
     "parse_terms",
@@ -46,4 +47,5 @@ __all__ = [
     "LoggerConfig",
     "configure_logger",
     "CSVExportArgs",
+    "log_duration",
 ]
