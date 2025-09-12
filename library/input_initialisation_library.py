@@ -968,6 +968,9 @@ def build_combined_tables(
 ) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources.
 
+    Deduplication uses specific ChEMBL identifier columns for each entity
+    rather than relying on column order.
+
     Parameters
     ----------
     same:
@@ -1008,6 +1011,14 @@ def build_combined_tables(
     ):
         targets_path = dict_dir / targets_path.name
 
+    ID_COLS: dict[str, str | list[str]] = {
+        "assay": "assay_chembl_id",
+        "document": "document_chembl_id",
+        "target": "target_chembl_id",
+        "testitem": ["salt_chembl_id", "saltform_id"],
+        "activity": "activity_chembl_id",
+    }
+
     # --- regular entities -------------------------------------------------
     regular_entities: tuple[EntityName, ...] = (
         "assay",
@@ -1020,7 +1031,14 @@ def build_combined_tables(
         df_all = unify_dtypes(all_[entity])
         df_tmp = append_entities(df_same, df_all)
         if df_tmp.shape[1]:
-            df = df_tmp.drop_duplicates(subset=df_tmp.columns[0], keep="first")
+            id_col: str | list[str] | None = ID_COLS[entity]
+            if isinstance(id_col, list):
+                id_col = next((c for c in id_col if c in df_tmp.columns), None)
+            df = (
+                df_tmp.drop_duplicates(subset=id_col, keep="first")
+                if id_col
+                else df_tmp
+            )
         else:
             df = df_tmp
         logger.info(
@@ -1039,8 +1057,9 @@ def build_combined_tables(
     concat = concat.drop(
         columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"
     )
+    concat = concat.loc[:, ~concat.columns.duplicated()]
     if concat.shape[1]:
-        df_activity = concat.drop_duplicates(subset=concat.columns[0], keep="first")
+        df_activity = concat.drop_duplicates(subset="activity_chembl_id", keep="first")
     else:
         df_activity = concat
     if dict_dir is not None:
