@@ -1164,6 +1164,18 @@
           "minimum": 1,
           "title": "Timeout",
           "type": "number"
+        },
+        "cache_maxsize": {
+          "default": 128,
+          "minimum": 0,
+          "title": "Cache Maxsize",
+          "type": "integer"
+        },
+        "cache_ttl": {
+          "default": null,
+          "minimum": 0,
+          "title": "Cache Ttl",
+          "type": ["number", "null"]
         }
       },
       "title": "UniprotMappingCfg",
@@ -1238,7 +1250,9 @@
       "default": {
         "base": "https://rest.uniprot.org/idmapping",
         "poll_interval": 0.5,
-        "timeout": 300.0
+        "timeout": 300.0,
+        "cache_maxsize": 128,
+        "cache_ttl": null
       },
       "description": "Settings for UniProt ID mapping API."
     },
