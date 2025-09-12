@@ -15,7 +15,7 @@ api:
   retries: 3  # HTTP retry attempts
   backoff_factor: 0.5  # Exponential backoff multiplier
   rps: 5  # Requests per second limit (env: CHEMBL_DA__API__RPS / CHEMBL_DA_RPS)
-  burst: 5  # Burst size for token bucket limiter
+  burst: 50  # Burst size for token bucket limiter
   user_agent: "your-app/1.0 (mailto:you@example.org)"  # Required User-Agent header; replace with your contact info
 
 chembl:
@@ -131,7 +131,7 @@ document:
     timeout: 30.0
   all:
     column: "chembl_id"
-    chunk_size: 5
+    chunk_size: 50
     sleep: 5.0
     workers: 1
     batch_size: 50
