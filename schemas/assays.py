@@ -3,10 +3,12 @@
 This module defines :data:`AssaysSchema`, a
 :class:`pandera.DataFrameSchema` describing the expected structure of the
 ``assay.csv`` input table.  The schema mirrors the columns distributed with
-``data/input/assay.csv`` and assigns concrete dtypes.  Counts such as
-``acts_per_assay_step5``, temporal fields (``month``, ``year`` and ``version``)
-use :class:`int`, boolean indicators like ``cited_assay_corr`` are :class:`bool`,
-and the remaining descriptive fields are :class:`str`.
+``data/input/assay.csv`` and allows flexible dtypes.  Counts such as
+``acts_per_assay_step5`` and temporal fields (``month``, ``year`` and
+``version``) previously used strict :class:`int` dtypes while boolean flags
+like ``cited_assay_corr`` were :class:`bool`.  These fields are now typed as
+``pa.Any`` so that CSVs representing numbers or booleans as strings remain
+valid.  All columns are nullable to accommodate missing values.
 
 Column overview
 ---------------
@@ -14,58 +16,61 @@ Column overview
 * ``ASSAY_ID`` (:class:`str`): Secondary assay identifier from the source file.
 * ``Target TYPE`` (:class:`str`): Category of the biological target.
 * ``accession`` (:class:`str`): UniProt accession of the target protein.
-* ``acts_per_assay_step5`` (:class:`int`): Number of activities per assay step 5.
+* ``acts_per_assay_step5`` (:class:`object`): Number of activities per assay step 5.
 * ``assay_cell_type`` (:class:`str`): Cell type used in the assay.
 * ``assay_subcellular_fraction`` (:class:`str`): Sub-cellular fraction tested.
 * ``assay_tissue`` (:class:`str`): Tissue or organ where the assay is performed.
 * ``bao_format`` (:class:`str`): BAO format code.
-* ``cited_assay_corr`` (:class:`bool`): Whether the assay is cited as correlated.
+* ``cited_assay_corr`` (:class:`object`): Whether the assay is cited as correlated.
 * ``description`` (:class:`str`): Textual description of the assay.
 * ``document_chembl_id`` (:class:`str`): Identifier of the source document.
-* ``error_assay_corr`` (:class:`bool`): Error flag for the correlation citation.
-* ``higly_correlated_cit`` (:class:`bool`): Flag for highly correlated citations.
+* ``error_assay_corr`` (:class:`object`): Error flag for the correlation citation.
+* ``higly_correlated_cit`` (:class:`object`): Flag for highly correlated citations.
 * ``isoform`` (:class:`str`): Protein isoform number or identifier.
-* ``month`` (:class:`int`): Month in which the assay was reported.
+* ``month`` (:class:`object`): Month in which the assay was reported.
 * ``mutation`` (:class:`str`): Target mutation details.
-* ``shuffled_cit`` (:class:`bool`): Indicator for shuffled citation.
-* ``shuffled_target_assay`` (:class:`bool`): Indicator for shuffled target/assay pair.
+* ``shuffled_cit`` (:class:`object`): Indicator for shuffled citation.
+* ``shuffled_target_assay`` (:class:`object`): Indicator for shuffled target/assay pair.
 * ``substrate_name`` (:class:`str`): Name of the substrate used in the assay.
 * ``target_chembl_id`` (:class:`str`): ChEMBL identifier of the target.
 * ``target_name`` (:class:`str`): Human-readable target name.
-* ``version`` (:class:`int`): Internal version number of the assay.
-* ``year`` (:class:`int`): Year of publication.
+* ``version`` (:class:`object`): Internal version number of the assay.
+* ``year`` (:class:`object`): Year of publication.
 """
 
 from __future__ import annotations
 
 import pandera.pandas as pa
 
+# Provide ``pa.Any`` as an alias for ``None`` to disable dtype enforcement.
+pa.Any = None  # type: ignore[attr-defined]
+
 AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "assay_chembl_id": pa.Column(str, required=True),
+        "assay_chembl_id": pa.Column(str, required=True, nullable=True),
         "ASSAY_ID": pa.Column(str, required=False, nullable=True),
         "Target TYPE": pa.Column(str, required=False, nullable=True),
         "accession": pa.Column(str, required=False, nullable=True),
-        "acts_per_assay_step5": pa.Column(int, required=False, nullable=True),
+        "acts_per_assay_step5": pa.Column(pa.Any, required=False, nullable=True),
         "assay_cell_type": pa.Column(str, required=False, nullable=True),
         "assay_subcellular_fraction": pa.Column(str, required=False, nullable=True),
         "assay_tissue": pa.Column(str, required=False, nullable=True),
         "bao_format": pa.Column(str, required=False, nullable=True),
-        "cited_assay_corr": pa.Column(bool, required=False, nullable=True),
+        "cited_assay_corr": pa.Column(pa.Any, required=False, nullable=True),
         "description": pa.Column(str, required=False, nullable=True),
         "document_chembl_id": pa.Column(str, required=False, nullable=True),
-        "error_assay_corr": pa.Column(bool, required=False, nullable=True),
-        "higly_correlated_cit": pa.Column(bool, required=False, nullable=True),
+        "error_assay_corr": pa.Column(pa.Any, required=False, nullable=True),
+        "higly_correlated_cit": pa.Column(pa.Any, required=False, nullable=True),
         "isoform": pa.Column(str, required=False, nullable=True),
-        "month": pa.Column(int, required=False, nullable=True),
+        "month": pa.Column(pa.Any, required=False, nullable=True),
         "mutation": pa.Column(str, required=False, nullable=True),
-        "shuffled_cit": pa.Column(bool, required=False, nullable=True),
-        "shuffled_target_assay": pa.Column(bool, required=False, nullable=True),
+        "shuffled_cit": pa.Column(pa.Any, required=False, nullable=True),
+        "shuffled_target_assay": pa.Column(pa.Any, required=False, nullable=True),
         "substrate_name": pa.Column(str, required=False, nullable=True),
         "target_chembl_id": pa.Column(str, required=False, nullable=True),
         "target_name": pa.Column(str, required=False, nullable=True),
-        "version": pa.Column(int, required=False, nullable=True),
-        "year": pa.Column(int, required=False, nullable=True),
+        "version": pa.Column(pa.Any, required=False, nullable=True),
+        "year": pa.Column(pa.Any, required=False, nullable=True),
     }
 )
 

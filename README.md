@@ -604,6 +604,19 @@ ChEMBL_data_acquisition/
 Рядом создаются файлы `*.meta.yaml` с коммитом Git, параметрами запуска,
 контрольной суммой SHA‑256 и статистикой строк/колонок.
 
+## Dtype Inspector
+
+The ``dtype_inspector`` utility executes each ``get_*_data`` helper on a small
+set of identifiers and logs the resulting pandas dtypes.  Run this periodically
+to spot schema drift when upstream services change their responses.
+
+```bash
+python scripts/dtype_inspector_main.py --log-level INFO
+```
+
+Consider wiring the script into CI to detect dtype changes early.  The tool is
+lightweight and makes only a handful of requests per dataset.
+
 ## Разработка и тестирование
 
 ```bash

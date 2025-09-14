@@ -46,6 +46,25 @@ def test_activities_schema_validation() -> None:
         ActivitiesSchema.validate(invalid)
 
 
+def test_activities_schema_accepts_object_dtypes() -> None:
+    """``standard_value`` validates with object dtype."""
+
+    df = pd.DataFrame(
+        {
+            # numeric IDs are coerced to ``object`` to allow flexible typing
+            "activity_id": pd.Series([1], dtype=object),
+            "molecule_chembl_id": ["CHEMBL1"],
+            "assay_chembl_id": ["CHEMBL0"],
+            "standard_value": pd.Series([1.0], dtype=object),
+            "pchembl_value": pd.Series([5.0], dtype=object),
+            "src_assay_id": pd.Series([2], dtype=object),
+            "src_id": pd.Series([3], dtype=object),
+            "value": pd.Series([7.0], dtype=object),
+        }
+    )
+    ActivitiesSchema.validate(df)
+
+
 def test_assays_schema_validation() -> None:
     """Required columns are enforced."""
     valid = pd.DataFrame(
@@ -63,13 +82,32 @@ def test_assays_schema_validation() -> None:
         AssaysSchema.validate(invalid)
 
 
+def test_assays_schema_allows_varied_dtypes_and_nulls() -> None:
+    """Int and bool fields accept flexible representations."""
+    df = pd.DataFrame(
+        {
+            "assay_chembl_id": [None],
+            "acts_per_assay_step5": ["10"],
+            "cited_assay_corr": [1],
+            "month": ["5"],
+            "shuffled_cit": ["false"],
+            "version": [None],
+            "year": ["2024"],
+        }
+    )
+    AssaysSchema.validate(df)
+
+
 def test_documents_schema_validation() -> None:
     """Ensure :data:`DocumentsSchema` validates expected data."""
     valid = pd.DataFrame(
         {
             "document_chembl_id": ["CHEMBL1"],
-            "doi": [None],  # nullable text field
+
             "title": ["Example"],
+            "PubMed.PMID": [12345],
+            "OpenAlex.Error": [None],
+
         }
     )
     DocumentsSchema.validate(valid)
@@ -165,15 +203,50 @@ def test_targets_schema_defines_expected_columns() -> None:
     assert set(TargetsSchema.columns) == expected
 
 
+def test_targets_schema_nullable_and_any_columns() -> None:
+    """All columns are nullable and bool/int types use ``object`` dtype."""
+
+    # Every column should be nullable
+    for col in TargetsSchema.columns.values():
+        assert col.nullable is True
+
+    # Columns previously typed as ``bool`` or ``int`` now accept any object
+    any_columns = [
+        "taxon_id",
+        "transmembrane",
+        "intramembrane",
+        "glycosylation",
+        "lipidation",
+        "disulfide_bond",
+        "modified_residue",
+        "phosphorylation",
+        "acetylation",
+        "ubiquitination",
+        "signal_peptide",
+        "propeptide",
+    ]
+    for name in any_columns:
+        assert str(TargetsSchema.columns[name].dtype) == "object"
+
+    # Schema validation with null values in these columns should succeed
+    df = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], **{c: [None] for c in any_columns}}
+    )
+    TargetsSchema.validate(df)
+
+
 def test_testitems_schema_validation() -> None:
     """Ensure :data:`TestitemsSchema` validates expected data."""
     valid = pd.DataFrame(
         {
-            "salt_chembl_id": ["CHEMBL1", "CHEMBL2"],
-            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
-            "molecule_type": [None, "Small molecule"],  # nullable field
-            # ``pubchem_cid`` accepts mixed types via ``object`` dtype
-            "pubchem_cid": [123, "456"],
+
+            "molecule_chembl_id": ["CHEMBL1"],
+            "first_approval": [1950],
+            "black_box_warning": [0],
+            "oral": [True],
+            "parenteral": [False],
+            "topical": [False],
+
         }
     )
     TestitemsSchema.validate(valid)
@@ -269,9 +342,9 @@ def test_activities_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
             column("document_chembl_id", elements=st.text(min_size=1)),
             column("title", elements=st.text(min_size=1)),
             column(
-                "year",
+                "PubMed.PMID",
                 dtype=int,
-                elements=st.integers(min_value=1900, max_value=2100),
+                elements=st.integers(min_value=0, max_value=2**63 - 1),
             ),
         ],
         index=range_indexes(min_size=1, max_size=5),
@@ -287,18 +360,17 @@ def test_documents_schema_hypothesis_valid(df: pd.DataFrame) -> None:
     data_frames(
         columns=[
             column("document_chembl_id", elements=st.text(min_size=1)),
-            column("title", elements=st.text(min_size=1)),
             column(
-                "year",
+                "PubMed.PMID",
                 dtype=int,
-                elements=st.integers(min_value=0, max_value=1899),
+                elements=st.integers(min_value=0, max_value=2**63 - 1),
             ),
         ],
         index=range_indexes(min_size=1, max_size=5),
     )
 )
 def test_documents_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
-    """Years below 1900 fail ``DocumentsSchema`` validation."""
+    """Missing required columns fail ``DocumentsSchema`` validation."""
     df = df.drop(columns=["document_chembl_id"])
     with pytest.raises(SchemaError):
         DocumentsSchema.validate(df)

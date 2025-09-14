@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pandera.pandas as pa
+from pandera.dtypes import DataType
+
+PA_ANY = cast(DataType, None)
 
 TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "molecule_chembl_id": pa.Column(str, required=True),
-        "black_box_warning": pa.Column(str, required=False, nullable=True),
-        "first_approval": pa.Column(str, required=False, nullable=True),
+        "molecule_chembl_id": pa.Column(str, required=True, nullable=True),
+        "black_box_warning": pa.Column(PA_ANY, required=False, nullable=True),
+        "first_approval": pa.Column(PA_ANY, required=False, nullable=True),
         "max_phase": pa.Column(str, required=False, nullable=True),
         "molecule_structures.canonical_smiles": pa.Column(
             str, required=False, nullable=True
@@ -20,8 +25,8 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
             str, required=False, nullable=True
         ),
         "molecule_type": pa.Column(str, required=False, nullable=True),
-        "oral": pa.Column(str, required=False, nullable=True),
-        "parenteral": pa.Column(str, required=False, nullable=True),
+        "oral": pa.Column(PA_ANY, required=False, nullable=True),
+        "parenteral": pa.Column(PA_ANY, required=False, nullable=True),
         "pref_name": pa.Column(str, required=False, nullable=True),
         "pubchem_canonical_smiles": pa.Column(str, required=False, nullable=True),
         # ``pubchem_cid`` may appear as either a string or an integer depending on
@@ -33,7 +38,7 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "pubchem_iupac_name": pa.Column(str, required=False, nullable=True),
         "pubchem_molecular_formula": pa.Column(str, required=False, nullable=True),
         "structure_type": pa.Column(str, required=False, nullable=True),
-        "topical": pa.Column(str, required=False, nullable=True),
+        "topical": pa.Column(PA_ANY, required=False, nullable=True),
     }
 )
 
