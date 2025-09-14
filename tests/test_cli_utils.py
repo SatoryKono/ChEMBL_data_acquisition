@@ -17,6 +17,7 @@ def test_cli_utils_flags_and_help() -> None:
         "--col-order",
         "--key-cols",
         "--chunk-size",
+        "--merge-chunk-size",
     }
     assert set(actions) == expected
     assert actions["--log-level"].help == "Logging level"
@@ -30,6 +31,10 @@ def test_cli_utils_flags_and_help() -> None:
     assert actions["--col-order"].help == "Preferred column order"
     assert actions["--key-cols"].help == "Columns used for sorting"
     assert actions["--chunk-size"].help == "Number of rows read per chunk"
+    assert (
+        actions["--merge-chunk-size"].help
+        == "Rows loaded per temporary file during merge"
+    )
     assert parser.description is not None
     assert parser.description.startswith(
         "CLI wrapper for :func:`write_csv_deterministic`"
