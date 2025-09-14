@@ -374,11 +374,188 @@ pre-commit run --all-files
 ## Быстрый старт
 
 ```bash
+ 
 # загрузка активности по идентификаторам из тестового CSV
 python -m scripts.get_activity_data \
     --input tests/data/activity_ids_small.csv \
     --output out/activities.csv \
     --limit 10 --log-level INFO
+ 
+python -m scripts.get_activities --limit 10 --dry-run
+```
+
+## Reproducibility
+
+The function ``library.csv_utils.write_csv_deterministic`` normalises column
+order, row sorting and value serialisation so repeated runs produce identical
+files. Every CSV must be stored alongside a ``<name>.meta.yaml`` file capturing
+the Git commit, command-line arguments and relevant configuration to allow
+others to reproduce the output. Commit both the CSV and its metadata sidecar to
+version control.
+
+Verify deterministic behaviour with the helper script ``scripts/check_determinism.py``:
+
+```bash
+python scripts/check_determinism.py --log-level INFO
+```
+
+The script writes a sample CSV twice using ``write_csv_deterministic`` and
+compares SHA-256 hashes. It requires the ``pandas`` package; install it with
+``pip install pandas`` if it is not already available in your environment.
+This check also runs in the project's CI pipeline and will fail the build
+if the hashes differ.
+
+For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
+argument which streams the CSV in smaller pieces to reduce memory usage:
+
+```python
+from library.csv_utils import write_csv_deterministic
+import pandas as pd
+
+df = pd.read_csv("large.csv")
+write_csv_deterministic(df, "out.csv", key_cols=df.columns, chunksize=1000)
+```
+
+Rows are still sorted deterministically before writing; ``chunksize`` only
+affects how data is flushed to disk.
+
+The higher-level wrapper ``library.io.write_csv`` exposes the same
+``chunksize`` argument and additionally writes a metadata sidecar alongside
+the CSV:
+
+```python
+from library import io, Config
+import pandas as pd
+
+cfg = Config()
+df = pd.read_csv("large.csv")
+io.write_csv(df, "out.csv", cfg=cfg, chunksize=1000)
+```
+
+The YAML sidecar records the Git commit and command-line parameters to aid
+reproducibility.
+
+Each command-line tool emits a ``<output>.meta.yaml`` sidecar file alongside
+every CSV. The YAML document records the SHA-256 checksum, command-line
+arguments and timestamps to make results reproducible. The determinism check is
+executed in both pre-commit and continuous integration to guarantee that
+regressions are detected early.
+
+All commands emit the structured JSON logs described above. Adjust verbosity
+with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
+
+Detailed command line examples using the bundled smoke datasets can be found in
+``docs/USAGE.md``.
+An overview of the output directory layout and metadata sidecars is available in
+``docs/OUTPUT.md``.
+
+### Table quality analysis
+
+``table_quality_main.py`` profiles arbitrary CSV files and reports column
+statistics along with correlations between numeric fields. Example usage:
+
+```python
+import pandas as pd
+from library.table_quality import analyze_table_quality
+
+df = pd.read_csv("data.csv", encoding="utf-8-sig")
+quality, corr = analyze_table_quality(df, table_name="data")
+```
+
+Running the CLI saves ``data_quality_report_table.csv`` and
+``data_data_correlation_report_table.csv`` in the current working directory::
+
+    python table_quality_main.py --input data.csv --table-name data
+
+All scripts share a common set of flags:
+
+## Configuration
+
+
+Default settings live in ``config.yaml`` and are split into sections for each
+API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
+I/O and processing (``io``, ``jobs``, ``batch``, ``quality``, ``mapper``) and
+general infrastructure (``init``, ``rate``, ``retry``, ``log``). The companion
+``config.schema.json`` file documents these fields and is useful for editor
+validation, but it must **not** be passed to ``--config`` because it lacks
+runtime values such as ``api.user_agent``. A minimal configuration looks like::
+
+
+    api:
+      rps: 5
+    io:
+      output_dir: data/output
+    jobs:
+      concurrency: 8
+
+### Переменные окружения
+
+Environment variables override values from the YAML file. Names follow the
+``CHEMBL_DA__SECTION__KEY`` pattern with double underscores separating
+sections and keys. For example, to enable debug logging:
+
+```bash
+export CHEMBL_DA__LOG__LEVEL=DEBUG
+```
+
+Most options also provide short aliases. The table lists the supported mappings:
+
+| Alias | Equivalent key |
+|-------|----------------|
+| `CHEMBL_DA_BASE` | `CHEMBL_DA__API__CHEMBL_BASE` |
+| `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__API__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__API__TIMEOUT_READ` |
+| `CHEMBL_DA_RPS` | `CHEMBL_DA__API__RPS` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `CHEMBL_DA__OPENALEX__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `CHEMBL_DA__OPENALEX__TIMEOUT_READ` |
+| `CHEMBL_DA_OPENALEX_RPS` | `CHEMBL_DA__OPENALEX__RPS` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT` | `CHEMBL_DA__CROSSREF__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_READ` | `CHEMBL_DA__CROSSREF__TIMEOUT_READ` |
+| `CHEMBL_DA_CROSSREF_RPS` | `CHEMBL_DA__CROSSREF__RPS` |
+| `CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT` | `CHEMBL_DA__UNIPROT__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_UNIPROT_TIMEOUT_READ` | `CHEMBL_DA__UNIPROT__TIMEOUT_READ` |
+| `CHEMBL_DA_UNIPROT_RPS` | `CHEMBL_DA__UNIPROT__RPS` |
+| `CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT` | `CHEMBL_DA__IUPHAR__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_IUPHAR_TIMEOUT_READ` | `CHEMBL_DA__IUPHAR__TIMEOUT_READ` |
+| `CHEMBL_DA_IUPHAR_RPS` | `CHEMBL_DA__IUPHAR__RPS` |
+| `CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT` | `CHEMBL_DA__PUBCHEM__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_PUBCHEM_TIMEOUT_READ` | `CHEMBL_DA__PUBCHEM__TIMEOUT_READ` |
+| `CHEMBL_DA_PUBCHEM_RPS` | `CHEMBL_DA__PUBCHEM__RPS` |
+| `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
+| `CHEMBL_DA_CONCURRENCY` | `CHEMBL_DA__JOBS__CONCURRENCY` |
+| `CHEMBL_DA_CHUNK_SIZE` | `CHEMBL_DA__JOBS__CHUNK_SIZE` |
+| `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__RETRY__MAX_ATTEMPTS` |
+| `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__RETRY__BACKOFF_FACTOR` |
+| `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
+| `CHEMBL_DA_LOG_FORMAT` | `CHEMBL_DA__LOG__FORMAT` |
+
+See ``docs/CONFIG.md`` for a complete overview of all configuration options.
+
+### Schema validation
+
+Configuration values are validated against a JSON Schema via the
+``jsonschema`` package. The schema mirrors the dataclass structure and checks
+types and value ranges, producing helpful error messages for nested fields.
+
+Command line flags have the highest priority. All utilities accept ``--config``
+to point at a configuration file and ``--print-config`` to show the effective
+values after all overrides have been applied. The final precedence is::
+
+    YAML < environment variables < CLI options
+
+Only the top-level command line scripts read the configuration file. Modules
+under ``library/`` expect a :class:`Config` (or one of its subsections) to be
+passed explicitly, making dependencies clear and avoiding hidden global state.
+The directories referenced by ``io.output_dir`` and ``io.cache_dir`` are checked
+but not created when loading the configuration. Scripts that need these paths
+can call :func:`library.config.ensure_dirs` after :func:`load_config` to create
+them if they are missing and ``io.exist_ok`` permits it.
+
+Path values such as ``io.output_dir``, ``io.cache_dir`` and the ``init``
+workbook paths are exposed as :class:`pathlib.Path` objects. String values in
+``config.yaml`` or overrides from the environment and command line are
+automatically converted.
+ 
 
 # профилирование качества таблицы
 python table_quality_main.py \
