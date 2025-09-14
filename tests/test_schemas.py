@@ -66,12 +66,9 @@ def test_documents_schema_validation() -> None:
     valid = pd.DataFrame(
         {
             "document_chembl_id": ["CHEMBL1"],
-            "doi": ["10.1000/xyz123"],
             "title": ["Example"],
-            "year": [2020],
-            "month": [1],
-            "day": [15],
-            "citation": [0],
+            "PubMed.PMID": [12345],
+            "OpenAlex.Error": [None],
         }
     )
     DocumentsSchema.validate(valid)
@@ -235,9 +232,9 @@ def test_activities_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
             column("document_chembl_id", elements=st.text(min_size=1)),
             column("title", elements=st.text(min_size=1)),
             column(
-                "year",
+                "PubMed.PMID",
                 dtype=int,
-                elements=st.integers(min_value=1900, max_value=2100),
+                elements=st.integers(min_value=0, max_value=2**63 - 1),
             ),
         ],
         index=range_indexes(min_size=1, max_size=5),
@@ -253,18 +250,17 @@ def test_documents_schema_hypothesis_valid(df: pd.DataFrame) -> None:
     data_frames(
         columns=[
             column("document_chembl_id", elements=st.text(min_size=1)),
-            column("title", elements=st.text(min_size=1)),
             column(
-                "year",
+                "PubMed.PMID",
                 dtype=int,
-                elements=st.integers(min_value=0, max_value=1899),
+                elements=st.integers(min_value=0, max_value=2**63 - 1),
             ),
         ],
         index=range_indexes(min_size=1, max_size=5),
     )
 )
 def test_documents_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
-    """Years below 1900 fail ``DocumentsSchema`` validation."""
+    """Missing required columns fail ``DocumentsSchema`` validation."""
     df = df.drop(columns=["document_chembl_id"])
     with pytest.raises(SchemaError):
         DocumentsSchema.validate(df)
