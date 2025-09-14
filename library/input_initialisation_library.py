@@ -163,6 +163,136 @@ DATE_COLS: set[str] = {
 }
 
 
+
+def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+    """Calculate percentage distribution for a table with a ``Filtered`` column.
+
+    Parameters
+    ----------
+    df:
+        DataFrame containing a ``Filtered`` column.
+    table_name:
+        Logical name of the table for error reporting.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table with columns ``Filtered``, ``Count`` and ``Percentage, %``
+        including a summary ``Total`` row.
+
+    Raises
+    ------
+    KeyError
+        If the ``Filtered`` column is absent.
+    """
+
+    if "Filtered" not in df.columns:
+        available = ", ".join(df.columns)
+        raise KeyError(
+            f"table '{table_name}' missing column 'Filtered'; available: {available}"
+        )
+
+    counts = df.groupby("Filtered", dropna=False).size().rename("Count").reset_index()
+    total = int(counts["Count"].sum())
+
+    if total > 0:
+        counts["fraction"] = counts["Count"] / total * 100
+    else:
+        counts["fraction"] = 0.0
+
+    total_row = pd.DataFrame(
+        {"Filtered": ["Total"], "Count": [total], "fraction": [100.0 if total else 0.0]}
+    )
+    counts = pd.concat([counts, total_row], ignore_index=True)
+
+    def _round(val: float) -> float:
+        if val == 100 or val == total:
+            return float(total if total else 0)
+        if val > 10:
+            return round(val, 1)
+        if val > 1:
+            return round(val, 2)
+        if val > 0.1:
+            return round(val, 3)
+        return round(val, 4)
+
+    counts["Percentage, %"] = counts["fraction"].apply(_round)
+    return counts.drop(columns=["fraction"])
+
+
+def add_percentage(
+    statistics: pd.DataFrame, percent_df: pd.DataFrame, table_name: str
+) -> pd.DataFrame:
+    """Merge percentage information into aggregated statistics.
+
+    Parameters
+    ----------
+    statistics:
+        Aggregated metrics per ``Filtered`` value including a ``Total`` row.
+    percent_df:
+        Output of :func:`get_percentage` for the same table.
+    table_name:
+        Entity name used to prefix the percentage column.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``percent_df`` enriched with metric columns and renamed percentage
+        column ``{table_name}.Percentage, %``.
+    """
+
+    merged = percent_df.merge(statistics, on="Filtered", how="left")
+    col_name = f"{table_name}.Percentage, %"
+    merged.rename(columns={"Percentage, %": col_name}, inplace=True)
+
+    metric_cols = [c for c in statistics.columns if c != "Filtered"]
+    ordered = ["Filtered", "Count", *metric_cols, col_name]
+    return merged[ordered]
+
+
+def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+    """Prepare statistics with percentage distribution.
+
+    Parameters
+    ----------
+    df:
+        DataFrame containing ``Filtered.new`` and metric columns.
+    table_name:
+        Entity name used for percentage column prefix.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Aggregated table grouped by ``Filtered`` with counts and percentage
+        information appended.
+    """
+
+    if "Filtered.new" not in df.columns:
+        available = ", ".join(df.columns)
+        raise KeyError(
+            f"table '{table_name}' missing column 'Filtered.new'; "
+            f"available: {available}"
+        )
+
+    df_tmp = df.rename(columns={"Filtered.new": "Filtered"}).copy()
+    metric_cols = [
+        c
+        for c in df_tmp.columns
+        if c != "Filtered" and pd.api.types.is_numeric_dtype(df_tmp[c])
+    ]
+
+    grouped = df_tmp.groupby("Filtered", dropna=False)[metric_cols].sum().reset_index()
+    totals = {col: grouped[col].sum() for col in metric_cols}
+    grouped = pd.concat(
+        [grouped, pd.DataFrame([{"Filtered": "Total", **totals}])],
+        ignore_index=True,
+    )
+
+    percent_df = get_percentage(df_tmp, table_name)
+    return add_percentage(grouped, percent_df, table_name)
+
+
+
 def process_activity_table(
     df_activity: pd.DataFrame,
     dictionary_dir: Path | str,
@@ -1075,6 +1205,383 @@ def save_tables(
     return paths
 
 
+
+# Status processing -----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StatusAPI:
+    """Container for helpers related to the status configuration.
+
+    Attributes
+    ----------
+    table:
+        Raw dataframe sorted by ``order``.
+    status_list:
+        Labels ordered by ``order``.
+    conditions:
+        List of condition fields where ``condition_value`` is not ``"null"``.
+    order_map:
+        Mapping of labels to their ``order``.
+    score_map:
+        Mapping of labels to ``score``.
+
+    """
+
+    table: pd.DataFrame
+    status_list: list[str]
+    conditions: list[str]
+    order_map: dict[str, int]
+    score_map: dict[str, int]
+
+    def pair(self, s1: str, s2: str) -> str:
+        """Return the lower-ranked value between ``s1`` and ``s2``.
+
+        Parameters
+        ----------
+        s1, s2:
+            Values to compare.
+
+        Returns
+        -------
+        str
+            The label with the smaller ``order`` value.
+
+        """
+        return self.min_status([s1, s2])
+
+    def next(self, status: str) -> str:
+        """Return the label following ``status`` in ``status_list``.
+
+        Parameters
+        ----------
+        status:
+            Current value.
+
+        Returns
+        -------
+        str
+            The next label or the last element if ``status`` is unknown.
+
+        """
+        idx = (
+            self.status_list.index(status)
+            if status in self.status_list
+            else len(self.status_list) - 1
+        )
+        return self.status_list[min(idx + 1, len(self.status_list) - 1)]
+
+    def min_status(self, statuses: Iterable[str]) -> str:
+        """Return the lowest ``order`` value among the provided labels.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of values.
+
+        Returns
+        -------
+        str
+            The label with the minimum ``order`` or the first element of
+            ``status_list`` if none are valid.
+
+        """
+        valid = [s for s in statuses if s in self.order_map]
+        if not valid:
+            return self.status_list[0]
+        return min(valid, key=lambda s: self.order_map[s])
+
+    def max_status(self, statuses: Iterable[str]) -> str:
+        """Return the highest ``order`` value among the provided labels.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of values.
+
+        Returns
+        -------
+        str
+            The label with the maximum ``order`` or the last element of
+            ``status_list`` if none are valid.
+
+        """
+        valid = [s for s in statuses if s in self.order_map]
+        if not valid:
+            return self.status_list[-1]
+        return max(valid, key=lambda s: self.order_map[s])
+
+    def get_order(self, status: str) -> int:
+        """Return the numeric ``order`` for the given label.
+
+        Parameters
+        ----------
+        status:
+            Value to resolve.
+
+        Returns
+        -------
+        int
+            ``order`` associated with the label; uses the last element's value
+            as fallback.
+
+        """
+        return self.order_map.get(status, self.order_map[self.status_list[-1]])
+
+    def get_score(self, status: str) -> int:
+        """Return the ``score`` associated with the given label.
+
+        Parameters
+        ----------
+        status:
+            Value to look up.
+
+        Returns
+        -------
+        int
+            Score for the label; defaults to ``0`` when unknown.
+
+        """
+        return self.score_map.get(status, 0)
+
+    def ascending(self, s1: str, s2: str) -> bool:
+        """Return ``True`` if ``s1`` precedes ``s2`` by ``order`` value.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``s1`` has a lower ``order`` than ``s2``.
+
+        """
+        return self.get_order(s1) < self.get_order(s2)
+
+    def descending(self, s1: str, s2: str) -> bool:
+        """Return ``True`` if ``s1`` follows ``s2`` by ``order`` value.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``s1`` has a higher ``order`` than ``s2``.
+
+        """
+        return self.get_order(s1) > self.get_order(s2)
+
+    def Next(self, status: str) -> str:
+        """Compatibility alias for :meth:`next`.
+
+        Parameters
+        ----------
+        status:
+            Current status value.
+
+        Returns
+        -------
+        str
+            The next status according to :attr:`status_list`.
+
+        """
+        return self.next(status)
+
+    def MinStatus(self, statuses: Iterable[str]) -> str:
+        """Compatibility alias for :meth:`min_status`.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            Result of :meth:`min_status`.
+
+        """
+        return self.min_status(statuses)
+
+    def MaxStatus(self, statuses: Iterable[str]) -> str:
+        """Compatibility alias for :meth:`max_status`.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            Result of :meth:`max_status`.
+
+        """
+        return self.max_status(statuses)
+
+    def Ascending(self, s1: str, s2: str) -> bool:
+        """Compatibility alias for :meth:`ascending`.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            Result of :meth:`ascending`.
+
+        """
+        return self.ascending(s1, s2)
+
+    def Descending(self, s1: str, s2: str) -> bool:
+        """Compatibility alias for :meth:`descending`.
+
+        Parameters
+        ----------
+        s1, s2:
+            Status values to compare.
+
+        Returns
+        -------
+        bool
+            Result of :meth:`descending`.
+
+        """
+        return self.descending(s1, s2)
+
+
+def load_status_table(path: Path | str) -> pd.DataFrame:
+    """Load the configuration table describing filtering labels.
+
+    Parameters
+    ----------
+    path:
+        Path to ``status.csv`` or directory containing the file.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table sorted by ``order`` with proper dtypes.
+
+    """
+    path = Path(path)
+    if path.is_dir():
+        path = path / "status.csv"
+    df = pd.read_csv(
+        path,
+        dtype={
+            "status": "string",
+            "condition_field": "string",
+            "condition_value": "string",
+            "order": "Int64",
+            "score": "Int64",
+        },
+    )
+
+    # Remove rows that are completely empty in the CSV.  The source file may
+    # contain trailing empty lines which ``pandas.read_csv`` represents as rows
+    # filled with ``NA``.  Such rows would later cause ``astype(int)`` to raise
+    # ``ValueError``.
+    df = df.dropna(how="all")
+
+    # Ensure mandatory numeric columns are present and convertible to plain
+    # integers.  ``Int64`` allows ``NA`` values, so we explicitly check for
+    # missing values to provide a clearer error message than the default
+    # ``cannot convert NA to integer``.
+    required = ["order", "score"]
+    if df[required].isna().any().any():
+        missing = df[df[required].isna().any(axis=1)].index.tolist()
+        raise ValueError(
+            "status.csv contains missing numeric values in rows: "
+            + ", ".join(str(i + 2) for i in missing)  # account for header
+        )
+
+    df["order"] = pd.to_numeric(df["order"], errors="raise").astype(int)
+    df["score"] = pd.to_numeric(df["score"], errors="raise").astype(int)
+    return df.sort_values("order").reset_index(drop=True)
+
+
+def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
+    """Construct :class:`StatusAPI` from a configuration DataFrame."""
+    status_list = status_df["status"].tolist()
+    conditions = (
+        status_df.loc[status_df["condition_value"] != "null", "condition_field"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    if len(status_df["status"]) != len(status_df["order"]):
+        msg = "status and order columns have different lengths"
+        raise ValueError(msg)
+    order_map = dict(zip(status_df["status"], status_df["order"]))  # noqa: B905
+    if len(status_df["status"]) != len(status_df["score"]):
+        msg = "status and score columns have different lengths"
+        raise ValueError(msg)
+    score_map = dict(zip(status_df["status"], status_df["score"]))  # noqa: B905
+    return StatusAPI(status_df, status_list, conditions, order_map, score_map)
+
+
+def initialize_activity_status(
+    df_activity: pd.DataFrame, status_api: StatusAPI
+) -> pd.DataFrame:
+    """Add flag columns and initial labels to the activity table."""
+    df = df_activity.copy()
+    issue_cols = [
+        "high_citation_rate",
+        "unicellular_organism",
+        "review",
+        "rounded_data_citation",
+        "shuffled_assay",
+        "higly_correlated_assay",
+        "exact_data_citation",
+        "multmol_assay",
+        "multifunctional_enzyme",
+        "unknown_chirality",
+    ]
+    for issue in issue_cols:
+        if issue not in df.columns:
+            df[issue] = False
+        df[issue] = df[issue].fillna(False).astype("boolean")
+    df["no_issue"] = ~df[issue_cols].any(axis=1)
+
+    # Map condition fields to their corresponding status and order
+    cond_rows = status_api.table[status_api.table["condition_value"] != "null"]
+    if len(cond_rows["condition_field"]) != len(cond_rows["status"]):
+        msg = "condition_field and status columns have different lengths"
+        raise ValueError(msg)
+    field_to_status = dict(
+        zip(cond_rows["condition_field"], cond_rows["status"])  # noqa: B905
+    )
+    order_to_status = {v: k for k, v in status_api.order_map.items()}
+    default_order = status_api.order_map[status_api.status_list[-1]]
+
+    # Build a dataframe of candidate orders per condition field
+    order_df = pd.DataFrame(index=df.index)
+    for field, status in field_to_status.items():
+        if field not in df.columns:
+            df[field] = False
+        mask = df[field].fillna(False)
+        order_series = pd.Series(default_order, index=df.index)
+        order_series[mask] = status_api.order_map[status]
+        order_df[field] = order_series
+
+    min_order = (
+        order_df.min(axis=1)
+        if not order_df.empty
+        else pd.Series(default_order, index=df.index)
+    )
+    df["Filtered.init"] = min_order.map(order_to_status)
+    return df
+
+
+
 def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
@@ -1104,3 +1611,184 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
         elif key == "activityid2":
             rename[col] = "activity_chembl_id2"
     return df.rename(columns=rename)
+
+
+
+def initialize_pairs(
+    pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
+) -> pd.DataFrame:
+    """Merge activity labels into ``pair_df``."""
+    df = pair_df.copy()
+    mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
+    df = df.merge(
+        mapping,
+        left_on="activity_chembl_id1",
+        right_on="activity_chembl_id",
+        how="left",
+    )
+    df.rename(columns={"Filtered.init": "Filtered1"}, inplace=True)
+    df.drop(columns=["activity_chembl_id"], inplace=True)
+    df = df.merge(
+        mapping,
+        left_on="activity_chembl_id2",
+        right_on="activity_chembl_id",
+        how="left",
+    )
+    df.rename(columns={"Filtered.init": "Filtered2"}, inplace=True)
+    df.drop(columns=["activity_chembl_id"], inplace=True)
+
+    order_map = status_api.order_map
+    order_to_status = {v: k for k, v in order_map.items()}
+    last_order = order_map[status_api.status_list[-1]]
+    o1 = df["Filtered1"].map(order_map).fillna(last_order)
+    o2 = df["Filtered2"].map(order_map).fillna(last_order)
+    df["Filtered"] = o1.where(o1 < o2, o2).map(order_to_status)
+    return df
+
+
+def _aggregate_entity(
+    source: pd.DataFrame, group_col: str, status_api: StatusAPI
+) -> pd.DataFrame:
+    metrics = [
+        "independent_IC50",
+        "non_independent_IC50",
+        "independent_Ki",
+        "non_independent_Ki",
+    ]
+    agg: dict[str, Any] = {
+        "Filtered.new": lambda s: status_api.max_status(
+            [x for x in s if isinstance(x, str)]
+        ),
+    }
+    for m in metrics:
+        agg[m] = "sum"
+    keep = [group_col, "Filtered.new", *metrics]
+    return source[keep].groupby(group_col, as_index=False).agg(agg)
+
+
+def aggregate_activity(
+    pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
+) -> dict[str, pd.DataFrame]:
+    """Aggregate metrics across entities.
+
+    The function combines activity pair information with per-activity
+    annotations to produce summaries for several entity levels. Pair
+    tables may not always contain the expected metric columns, and some
+    activity tables can lack identifiers necessary for higher level
+    aggregations. Missing metrics are created and zero filled while missing
+    identifier columns result in skipped aggregations with empty results.
+
+    """
+    metrics = [
+        "independent_IC50",
+        "non_independent_IC50",
+        "independent_Ki",
+        "non_independent_Ki",
+    ]
+
+    df_pairs = pair_df.copy()
+    missing = [m for m in metrics if m not in df_pairs.columns]
+    if missing:
+        logger.warning(
+            "pair table missing %s %s; filling with zeros",
+            "column" if len(missing) == 1 else "columns",
+            ", ".join(missing),
+        )
+        for col in missing:
+            df_pairs[col] = 0
+
+    left = df_pairs.rename(
+        columns={
+            "activity_chembl_id1": "activity_chembl_id",
+            "Filtered1": "Filtered.new",
+        }
+    )[["activity_chembl_id", "Filtered.new", *metrics]]
+    right = df_pairs.rename(
+        columns={
+            "activity_chembl_id2": "activity_chembl_id",
+            "Filtered2": "Filtered.new",
+        }
+    )[["activity_chembl_id", "Filtered.new", *metrics]]
+    activity_pairs = pd.concat([left, right], ignore_index=True)
+    activity_status = _aggregate_entity(
+        activity_pairs, "activity_chembl_id", status_api
+    )
+
+    merged = activity_df.merge(activity_status, on="activity_chembl_id", how="left")
+    merged["Filtered.new"] = merged["Filtered.new"].fillna(merged["Filtered.init"])
+    for m in metrics:
+        merged[m] = merged[m].fillna(0)
+
+    assay_status = _aggregate_entity(merged, "assay_chembl_id", status_api)
+    document_status = _aggregate_entity(merged, "document_chembl_id", status_api)
+
+    system_cols = ["molecule_chembl_id", "target_chembl_id", "standard_type"]
+
+    missing_sys = [c for c in system_cols if c not in merged.columns]
+    if missing_sys:
+        logger.warning(
+            "activity table missing %s %s; skipping system aggregation",
+            "column" if len(missing_sys) == 1 else "columns",
+            ", ".join(missing_sys),
+        )
+        system_status = pd.DataFrame(columns=["system_id", "Filtered.new", *metrics])
+    else:
+        system_src = merged.copy()
+        system_src["system_id"] = (
+            system_src["molecule_chembl_id"].astype("string")
+            + "_"
+            + system_src["target_chembl_id"].astype("string")
+            + "_"
+            + system_src["standard_type"].astype("string")
+        )
+        system_status = _aggregate_entity(system_src, "system_id", status_api)
+        split = system_status["system_id"].str.split("_", n=2, expand=True)
+        system_status["molecule_chembl_id"] = split[0]
+        system_status["target_chembl_id"] = split[1]
+        system_status["standard_type"] = split[2]
+
+    if "molecule_chembl_id" in merged.columns:
+        testitem_status = _aggregate_entity(merged, "molecule_chembl_id", status_api)
+    elif "molecule_chembl_id" not in missing_sys:
+        logger.warning(
+            "activity table missing column molecule_chembl_id; skipping testitem aggregation"
+        )
+        testitem_status = pd.DataFrame(
+            columns=["molecule_chembl_id", "Filtered.new", *metrics]
+        )
+
+    else:
+        testitem_status = pd.DataFrame(
+            columns=["molecule_chembl_id", "Filtered.new", *metrics]
+        )
+
+    if "target_chembl_id" in merged.columns:
+        target_status = _aggregate_entity(merged, "target_chembl_id", status_api)
+    else:
+        logger.warning(
+            "activity table missing column target_chembl_id; skipping target aggregation"
+        )
+        target_status = pd.DataFrame(
+            columns=["target_chembl_id", "Filtered.new", *metrics]
+        )
+
+    # metrics are counted per activity; divide by 2 for higher-level aggregations
+    for df in [
+        assay_status,
+        document_status,
+        system_status,
+        testitem_status,
+        target_status,
+    ]:
+        for m in metrics:
+            df[m] = (df[m]).astype("float64")  # corrected
+
+    return {
+        "activity": activity_status,
+        "assay": assay_status,
+        "document": document_status,
+        "system": system_status,
+        "testitem": testitem_status,
+        "target": target_status,
+    }
+

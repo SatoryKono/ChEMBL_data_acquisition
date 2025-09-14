@@ -8,8 +8,9 @@ Exports pair tables without merging:
 
 Additionally, for each pair table the corresponding ``activity``, ``assay``,
 
-``document``, ``target`` and ``testitem`` entries are exported with matching
-suffixes, for example ``activity_independent.csv`` or ``assay_same_document.csv``.
+``document``, ``target``, ``testitem`` and ``system`` entries are exported with
+matching suffixes, for example ``activity_independent.csv`` or
+``assay_same_document.csv``.
 
 """
 
