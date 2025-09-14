@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from schemas import TargetsSchema
+from schemas.targets import TARGETS_COLUMN_ORDER
 
 from .config import Config, IoCfg
 from .log import logger
@@ -246,7 +246,8 @@ def postprocess_targets(
 
     # --- final column ordering --------------------------------------------------
     schema_cols = [
-        internal_id if col == chembl_col else col for col in TargetsSchema.columns
+        internal_id if col == "target_chembl_id" else col
+        for col in TARGETS_COLUMN_ORDER
     ]
     extra_cols = sorted(c for c in df.columns if c not in schema_cols)
     ordered_cols = schema_cols + extra_cols
@@ -410,23 +411,7 @@ def finalise_targets(
         if col in df.columns:
             df[col] = df[col].astype("string").str.lower()
 
-
     # --- final column ordering --------------------------------------------------
-    schema_cols = list(TargetsSchema.columns)
-    extra_cols = sorted(c for c in df.columns if c not in schema_cols)
-    ordered_cols = [c for c in schema_cols if c in df.columns] + extra_cols
-
-    df = df[ordered_cols]
-
-    return df.rename(
-
-        columns={
-            "target_chembl_id": chembl_col,
-            "uniprotkb_Id": uniprot_col,
-            "genus": genus_col,
-        }
-    )
-
     schema_cols = [
         (
             chembl_col
@@ -435,10 +420,20 @@ def finalise_targets(
                 uniprot_col if c == "uniprotkb_Id" else genus_col if c == "genus" else c
             )
         )
-        for c in TargetsSchema.columns
+        for c in TARGETS_COLUMN_ORDER
     ]
     extra_cols = sorted(c for c in df.columns if c not in schema_cols)
-    return df.reindex(columns=schema_cols + extra_cols)
+    ordered_cols = [c for c in schema_cols if c in df.columns] + extra_cols
+
+    df = df[ordered_cols]
+
+    return df.rename(
+        columns={
+            "target_chembl_id": chembl_col,
+            "uniprotkb_Id": uniprot_col,
+            "genus": genus_col,
+        }
+    )
 
 
 def finalise_file(

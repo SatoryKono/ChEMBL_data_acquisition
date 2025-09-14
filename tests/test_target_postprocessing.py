@@ -13,7 +13,7 @@ import pandas as pd
 
 from library import target_postprocessing as tp
 from library.config import Config, IoCfg
-from schemas import TargetsSchema
+from schemas.targets import TARGETS_COLUMN_ORDER
 
 
 def test_postprocess_targets_merges_and_normalises() -> None:
@@ -66,13 +66,14 @@ def test_postprocess_targets_orders_columns() -> None:
     )
     out = tp.postprocess_targets(df, chembl_col="chembl_id")
 
-    schema_cols = list(TargetsSchema.columns)
-    schema_cols[schema_cols.index("target_chembl_id")] = "chembl_id"
+    schema_cols = [
+        "chembl_id" if c == "target_chembl_id" else c for c in TARGETS_COLUMN_ORDER
+    ]
     extra_cols = sorted(c for c in out.columns if c not in schema_cols)
     assert list(out.columns) == schema_cols + extra_cols
 
 
-def test_finalise_targets_orders_columns() -> None:
+def test_finalise_targets_orders_columns_default() -> None:
     """Columns from the schema appear first and others alphabetically."""
 
     df = pd.DataFrame(
@@ -94,10 +95,14 @@ def test_finalise_targets_orders_columns() -> None:
         genus_col="organism",
     )
 
-    schema_cols = list(TargetsSchema.columns)
-    schema_cols[schema_cols.index("target_chembl_id")] = "chembl_id"
-    schema_cols[schema_cols.index("uniprotkb_Id")] = "uniprot"
-    schema_cols[schema_cols.index("genus")] = "organism"
+    schema_cols = [
+        (
+            "chembl_id"
+            if c == "target_chembl_id"
+            else "uniprot" if c == "uniprotkb_Id" else "organism" if c == "genus" else c
+        )
+        for c in TARGETS_COLUMN_ORDER
+    ]
     expected_schema = [c for c in schema_cols if c in out.columns]
     extra_cols = sorted(c for c in out.columns if c not in schema_cols)
     assert list(out.columns) == expected_schema + extra_cols
@@ -194,7 +199,7 @@ def test_finalise_targets_orders_columns() -> None:
 
     out = tp.finalise_targets(df, organism)
 
-    schema_cols = list(TargetsSchema.columns)
+    schema_cols = [c for c in TARGETS_COLUMN_ORDER if c in out.columns]
     extra_cols = sorted(c for c in out.columns if c not in schema_cols)
     assert list(out.columns) == schema_cols + extra_cols
 
