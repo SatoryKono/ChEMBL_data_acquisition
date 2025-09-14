@@ -9,6 +9,7 @@ import pytest
 from library import chembl_library as cl
 from library import io
 from library.config import Config
+from schemas import ActivitiesSchema
 from scripts import get_activity_data as gad
 
 
@@ -75,3 +76,50 @@ def test_run_chembl_limit_dry_run(
     rc = gad.run_chembl(cfg, args)
     assert rc == 0
     assert called["read"] is False
+
+
+def test_run_chembl_column_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    """Ensure schema columns precede alphabetically sorted extras."""
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["1"]))
+
+    df = pd.DataFrame(
+        [
+            {
+                "standard_value": 1.0,
+                "assay_description": "desc",
+                "activity_id": 1,
+                "molecule_chembl_id": "CHEMBL1",
+                "bao_format": "A",
+                "standard_type": "IC50",
+                "target_id": "T1",
+                "assay_chembl_id": "A1",
+            }
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_activities", lambda *_, **__: df)
+    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_write_csv(df, output, *, cfg, key_cols=None, col_order=None, **__) -> Path:
+        captured["col_order"] = list(col_order or [])
+        return output
+
+    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+
+    rc = gad.run_chembl(cfg, args)
+    assert rc == 0
+
+    expected_head = list(ActivitiesSchema.columns)
+    expected_tail = sorted(c for c in df.columns if c not in expected_head)
+    assert captured["col_order"] == expected_head + expected_tail
