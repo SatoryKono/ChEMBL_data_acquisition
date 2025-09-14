@@ -61,6 +61,22 @@ def test_assays_schema_validation() -> None:
         AssaysSchema.validate(invalid)
 
 
+def test_assays_schema_allows_varied_dtypes_and_nulls() -> None:
+    """Int and bool fields accept flexible representations."""
+    df = pd.DataFrame(
+        {
+            "assay_chembl_id": [None],
+            "acts_per_assay_step5": ["10"],
+            "cited_assay_corr": [1],
+            "month": ["5"],
+            "shuffled_cit": ["false"],
+            "version": [None],
+            "year": ["2024"],
+        }
+    )
+    AssaysSchema.validate(df)
+
+
 def test_documents_schema_validation() -> None:
     """Ensure :data:`DocumentsSchema` validates expected data."""
     valid = pd.DataFrame(
