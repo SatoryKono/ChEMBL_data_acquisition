@@ -44,6 +44,25 @@ def test_activities_schema_validation() -> None:
         ActivitiesSchema.validate(invalid)
 
 
+def test_activities_schema_accepts_object_dtypes() -> None:
+    """``standard_value`` validates with object dtype."""
+
+    df = pd.DataFrame(
+        {
+            # numeric IDs are coerced to ``object`` to allow flexible typing
+            "activity_id": pd.Series([1], dtype=object),
+            "molecule_chembl_id": ["CHEMBL1"],
+            "assay_chembl_id": ["CHEMBL0"],
+            "standard_value": pd.Series([1.0], dtype=object),
+            "pchembl_value": pd.Series([5.0], dtype=object),
+            "src_assay_id": pd.Series([2], dtype=object),
+            "src_id": pd.Series([3], dtype=object),
+            "value": pd.Series([7.0], dtype=object),
+        }
+    )
+    ActivitiesSchema.validate(df)
+
+
 def test_assays_schema_validation() -> None:
     """Required columns are enforced."""
     valid = pd.DataFrame(
