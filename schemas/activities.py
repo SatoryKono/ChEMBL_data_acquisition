@@ -11,9 +11,9 @@ import pandera.pandas as pa
 # Definition of the schema describing the activities table.
 ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "activity_id": pa.Column(str, required=True),
-        "molecule_chembl_id": pa.Column(str, required=True),
-        "assay_chembl_id": pa.Column(str, required=True),
+        "activity_id": pa.Column(str, required=True, nullable=True),
+        "molecule_chembl_id": pa.Column(str, required=True, nullable=True),
+        "assay_chembl_id": pa.Column(str, required=True, nullable=True),
         "activity_comment": pa.Column(str, required=False, nullable=True),
         "assay_description": pa.Column(str, required=False, nullable=True),
         "assay_variant_accession": pa.Column(str, required=False, nullable=True),
@@ -39,8 +39,11 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
             str,
             pa.Check.isin(["IC50", "Ki"]),
             required=False,
+            nullable=True,
         ),
-        "standard_value": pa.Column(float, pa.Check.ge(0), required=True, nullable=True),
+        "standard_value": pa.Column(
+            object, pa.Check.ge(0), required=True, nullable=True, coerce=True
+        ),
         #    "pA_value": pa.Column(float, pa.Check.in_range(-14, 14), required=False),
     }
 )
