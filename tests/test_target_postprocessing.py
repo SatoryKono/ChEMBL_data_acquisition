@@ -210,3 +210,21 @@ def test_finalise_targets_no_downcast_warning() -> None:
             uniprot_col="uniprot",
             genus_col="organism",
         )
+
+
+def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
+    """Default column name ``target_chembl_id`` is preserved after finalisation."""
+
+    df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprotkb_Id": ["P12345"],
+            "genus": ["Homo"],
+        }
+    )
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+
+    out = tp.finalise_targets(df, organism)
+
+    assert "target_chembl_id" in out.columns
+    assert "chembl_id" not in out.columns
