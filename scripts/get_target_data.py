@@ -573,6 +573,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         chembl_df = pd.read_csv(
             chembl_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         ).rename(columns={"target_chembl_id": "target_chembl_id"})
+        _save_snapshot(chembl_df, output, "chembl", cfg)
 
         # Extract UniProt IDs and write temporary CSV for downstream steps
         uids = [
@@ -661,6 +662,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         combined_df = combined_df.drop(
             columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
         )
+        _save_snapshot(combined_df, output, "uniprot", cfg)
 
         with NamedTemporaryFile(
             "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
@@ -705,6 +707,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
 
         merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+        _save_snapshot(merged, output, "iuphar", cfg)
         # Apply domain-specific clean-up and finalise table before exporting
         processed = tp.postprocess_targets(merged)
         organism_df = pd.read_csv(
