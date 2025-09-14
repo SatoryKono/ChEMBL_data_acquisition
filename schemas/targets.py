@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import pandera.pandas as pa
 
+# Definition of the schema describing the targets table used in exports.
 TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
         "target_chembl_id": pa.Column(str, required=True),
         "uniprotkb_Id": pa.Column(str, required=False),
+        "recommended_name": pa.Column(str, required=False),
+        "synonyms": pa.Column(str, required=False),
+        "type": pa.Column(str, required=False),
         "uniprot_id": pa.Column(str, required=False),
         "secondary_uniprot_id": pa.Column(str, required=False),
         "gene_name": pa.Column(str, required=False),
-        "recommended_name": pa.Column(str, required=False),
-        "synonyms": pa.Column(str, required=False),
         "genus": pa.Column(str, required=False),
         "superkingdom": pa.Column(str, required=False),
         "phylum": pa.Column(str, required=False),
@@ -48,13 +50,7 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "full_id_path": pa.Column(str, required=False),
         "full_name_path": pa.Column(str, required=False),
         "GuidetoPHARMACOLOGY": pa.Column(str, required=False),
-        "SUPFAM": pa.Column(str, required=False),
-        "PROSITE": pa.Column(str, required=False),
-        "InterPro": pa.Column(str, required=False),
-        "Pfam": pa.Column(str, required=False),
-        "PRINTS": pa.Column(str, required=False),
-        "TCDB": pa.Column(str, required=False),
-        "type": pa.Column(str, required=False),
+
     }
 )
 

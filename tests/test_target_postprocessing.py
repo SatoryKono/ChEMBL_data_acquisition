@@ -212,6 +212,7 @@ def test_finalise_targets_no_downcast_warning() -> None:
         )
 
 
+
 def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
     """Default column name ``target_chembl_id`` is preserved after finalisation."""
 
@@ -228,3 +229,4 @@ def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
 
     assert "target_chembl_id" in out.columns
     assert "chembl_id" not in out.columns
+
