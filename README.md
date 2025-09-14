@@ -12,6 +12,8 @@ parsing, validation, aggregation and export of tabular data.
 
 ```bash
 pip install .[dev]
+# или установить в editable-режиме
+pip install -e .[dev]
 ```
 
 Install the project together with development tools such as
@@ -69,16 +71,29 @@ pre-commit run --all-files
        --output out/report.csv --log-level INFO
    ```
 
-4. **Run the tests**
-
-   ```bash
-
-   pytest
-   ```
+4. **Run the tests** – see [Тесты](#тесты).
 
 
-   The suite exercises the library modules using fixtures from
-   ``tests/data``.
+## Тесты
+
+Запустите линтеры, форматирование и проверки типов:
+
+```bash
+pre-commit run --all-files
+```
+
+Запустите тесты:
+
+```bash
+pytest
+```
+
+Для smoke-теста CLI выполните:
+
+```bash
+python mapper_batch_main.py --input tests/data/assays.csv \
+    --output out/mapped.csv --log-level INFO
+```
 
 
 ## Генерация данных
