@@ -169,6 +169,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pubchem_augment_done")
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
+        # Determine column order: schema columns first, followed by
+        # additional fields sorted alphabetically.
+        schema_cols = list(TestitemsSchema.columns)
+        head = [c for c in schema_cols if c in df.columns]
+        tail = sorted(c for c in df.columns if c not in schema_cols)
+        col_order = head + tail
         rows_total = len(df)
         exit_code = 0
     required_cols = {
@@ -211,6 +217,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             output,
             cfg=cfg,
             key_cols=key_cols or None,
+            col_order=col_order,
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:

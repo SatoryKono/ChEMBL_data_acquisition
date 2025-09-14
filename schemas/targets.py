@@ -8,10 +8,10 @@ import pandera.pandas as pa
 TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
         "target_chembl_id": pa.Column(str, required=True),
-        "uniprotkb_Id": pa.Column(str, required=True),
-        "recommended_name": pa.Column(str, required=True),
-        "synonyms": pa.Column(str, required=True),
-        "type": pa.Column(str, required=True),
+        "uniprotkb_Id": pa.Column(str, required=False),
+        "recommended_name": pa.Column(str, required=False),
+        "synonyms": pa.Column(str, required=False),
+        "type": pa.Column(str, required=False),
         "uniprot_id": pa.Column(str, required=False),
         "secondary_uniprot_id": pa.Column(str, required=False),
         "gene_name": pa.Column(str, required=False),
@@ -50,6 +50,7 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "full_id_path": pa.Column(str, required=False),
         "full_name_path": pa.Column(str, required=False),
         "GuidetoPHARMACOLOGY": pa.Column(str, required=False),
+
     }
 )
 

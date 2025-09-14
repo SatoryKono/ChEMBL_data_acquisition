@@ -167,7 +167,6 @@ resources:
   iuphar_family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
   uniprot_data_dir: "dictionary/uniprot"  # Directory containing cached UniProt JSON files
   organism_csv: "dictionary/_Target/targets_type.csv"  # Organism taxonomy mapping file
-  status_csv: "dictionary/status.csv"  # Activity status configuration table
   targets_type_csv: "dictionary/_Target/targets_type.csv"  # Target type mapping table
 
 io:

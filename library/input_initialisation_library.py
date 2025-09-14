@@ -6,8 +6,7 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -28,8 +27,8 @@ EntityName = Literal[
 ]
 
 # Mapping of entity names to their corresponding dataframes.  The dictionary
-# may contain additional keys such as ``"activity_status"`` produced during
-# processing, hence the generic ``str`` key type.
+# may contain additional keys produced during processing, hence the generic
+# ``str`` key type.
 TableDict = dict[str, pd.DataFrame]
 
 
@@ -164,13 +163,14 @@ DATE_COLS: set[str] = {
 }
 
 
+
 def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    """Calculate percentage distribution for a status table.
+    """Calculate percentage distribution for a table with a ``Filtered`` column.
 
     Parameters
     ----------
     df:
-        DataFrame containing a ``Filtered`` column with status labels.
+        DataFrame containing a ``Filtered`` column.
     table_name:
         Logical name of the table for error reporting.
 
@@ -251,12 +251,12 @@ def add_percentage(
 
 
 def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    """Prepare status statistics with percentage distribution.
+    """Prepare statistics with percentage distribution.
 
     Parameters
     ----------
     df:
-        Status dataframe containing ``Filtered.new`` and metric columns.
+        DataFrame containing ``Filtered.new`` and metric columns.
     table_name:
         Entity name used for percentage column prefix.
 
@@ -290,6 +290,7 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
 
     percent_df = get_percentage(df_tmp, table_name)
     return add_percentage(grouped, percent_df, table_name)
+
 
 
 def process_activity_table(
@@ -986,7 +987,6 @@ def build_combined_tables(
     all_: TableDict,
     dictionary_dir: Path | str | None = None,
     *,
-    status_csv: Path | str | None = None,
     targets_type_csv: Path | str | None = None,
 ) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources.
@@ -1003,9 +1003,6 @@ def build_combined_tables(
     dictionary_dir:
         Optional directory containing auxiliary CSV dictionaries used during
         processing.
-    status_csv:
-        Optional path to ``status.csv``. If relative, it is resolved against
-        ``dictionary_dir``.
     targets_type_csv:
         Optional path to ``targets_type.csv``. If relative, it is resolved
         against ``dictionary_dir``.
@@ -1018,15 +1015,8 @@ def build_combined_tables(
     """
     combined: TableDict = {}
     dict_dir = Path(dictionary_dir) if dictionary_dir is not None else None
-    status_path = Path(status_csv) if status_csv is not None else None
     targets_path = Path(targets_type_csv) if targets_type_csv is not None else None
 
-    if (
-        status_path is not None
-        and not status_path.is_absolute()
-        and dict_dir is not None
-    ):
-        status_path = dict_dir / status_path.name
     if (
         targets_path is not None
         and not targets_path.is_absolute()
@@ -1139,60 +1129,6 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
-    if dict_dir is not None:
-        status_df = load_status_table(status_path or dict_dir)
-        status_api = build_status_helpers(status_df)
-        combined["activity"] = initialize_activity_status(
-            combined["activity"], status_api
-        )
-
-        pair_keys = (
-            "pairs_same_document",
-            "pairs_independent",
-            "pairs_non_independent",
-        )
-
-        for pair_key in pair_keys:
-            if pair_key not in combined:
-                logger.warning("skip initialize_pairs: table '%s' missing", pair_key)
-                continue
-
-            df_pair = normalize_pair_columns(combined[pair_key])
-            if {"activity_chembl_id1", "activity_chembl_id2"}.issubset(df_pair.columns):
-                combined[pair_key] = initialize_pairs(
-                    df_pair, combined["activity"], status_api
-                )
-            else:
-                combined[pair_key] = df_pair
-
-                logger.warning(
-                    "skip initialize_pairs: table '%s' missing or has no "
-                    "activity_chembl_id1/activity_chembl_id2",
-                    pair_key,
-                )
-
-        for suffix, pair_key in [
-            ("independent", "pairs_independent"),
-            ("non_independent", "pairs_non_independent"),
-            ("same_document", "pairs_same_document"),
-        ]:
-            pair_table = combined.get(pair_key)
-            if pair_table is not None and {"Filtered1", "Filtered2"}.issubset(
-                pair_table.columns
-            ):
-                aggregates = aggregate_activity(
-                    pair_table, combined["activity"], status_api
-                )
-                combined.update(
-                    {f"{k}_{suffix}_status": v for k, v in aggregates.items()}
-                )
-            else:
-                logger.warning(
-                    "%s table missing or lacks Filtered columns; "
-                    "skipping status aggregation",
-                    pair_key,
-                )
-
     return combined
 
 
@@ -1212,10 +1148,6 @@ def save_tables(
     - ``*_same_document`` → ``same_document/``
     - ``*_independent`` → ``independent/``
     - ``*_non_independent`` → ``non_independent/``
-    - ``*_status`` tables are placed under ``status/`` with the above
-      variants nested within it.
-    - ``*_status_statistics`` tables follow the same pattern and are also
-      stored beneath ``status/``.
 
     Duplicate column names are removed prior to writing to avoid ambiguous
     headers. The dropped columns are listed in a warning message to aid
@@ -1243,23 +1175,7 @@ def save_tables(
     paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
-        if entity.endswith("_non_independent_status_statistics"):
-            sub_dir = out_dir / "status" / "non-independent"
-        elif entity.endswith("_independent_status_statistics"):
-            sub_dir = out_dir / "status" / "independent"
-        elif entity.endswith("_same_document_status_statistics"):
-            sub_dir = out_dir / "status" / "same_document"
-        elif entity.endswith("_status_statistics"):
-            sub_dir = out_dir / "status"
-        elif entity.endswith("_non_independent_status"):
-            sub_dir = out_dir / "status" / "non-independent"
-        elif entity.endswith("_independent_status"):
-            sub_dir = out_dir / "status" / "independent"
-        elif entity.endswith("_same_document_status"):
-            sub_dir = out_dir / "status" / "same_document"
-        elif entity.endswith("_status"):
-            sub_dir = out_dir / "status"
-        elif entity.endswith("_non_independent"):
+        if entity.endswith("_non_independent"):
             sub_dir = out_dir / "non_independent"
         elif entity.endswith("_independent"):
             sub_dir = out_dir / "independent"
@@ -1268,6 +1184,7 @@ def save_tables(
         else:
             sub_dir = out_dir
 
+        sub_dir.mkdir(parents=True, exist_ok=True)
         path = sub_dir / f"{entity}.csv"
 
         chembl_id_map = {"testitem": "molecule_chembl_id"}
@@ -1288,25 +1205,26 @@ def save_tables(
     return paths
 
 
+
 # Status processing -----------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class StatusAPI:
-    """Container for status table helpers.
+    """Container for helpers related to the status configuration.
 
     Attributes
     ----------
     table:
-        Raw status dataframe sorted by ``order``.
+        Raw dataframe sorted by ``order``.
     status_list:
-        Status names ordered by ``order``.
+        Labels ordered by ``order``.
     conditions:
         List of condition fields where ``condition_value`` is not ``"null"``.
     order_map:
-        Mapping of status to its ``order``.
+        Mapping of labels to their ``order``.
     score_map:
-        Mapping of status to ``score``.
+        Mapping of labels to ``score``.
 
     """
 
@@ -1317,33 +1235,33 @@ class StatusAPI:
     score_map: dict[str, int]
 
     def pair(self, s1: str, s2: str) -> str:
-        """Return the lower-ranked status between ``s1`` and ``s2``.
+        """Return the lower-ranked value between ``s1`` and ``s2``.
 
         Parameters
         ----------
         s1, s2:
-            Status values to compare.
+            Values to compare.
 
         Returns
         -------
         str
-            The status with the smaller ``order`` value.
+            The label with the smaller ``order`` value.
 
         """
         return self.min_status([s1, s2])
 
     def next(self, status: str) -> str:
-        """Return the status following ``status`` in ``status_list``.
+        """Return the label following ``status`` in ``status_list``.
 
         Parameters
         ----------
         status:
-            Current status value.
+            Current value.
 
         Returns
         -------
         str
-            The next status or the last element if ``status`` is unknown.
+            The next label or the last element if ``status`` is unknown.
 
         """
         idx = (
@@ -1354,17 +1272,17 @@ class StatusAPI:
         return self.status_list[min(idx + 1, len(self.status_list) - 1)]
 
     def min_status(self, statuses: Iterable[str]) -> str:
-        """Return the lowest ``order`` value among ``statuses``.
+        """Return the lowest ``order`` value among the provided labels.
 
         Parameters
         ----------
         statuses:
-            Iterable of status values.
+            Iterable of values.
 
         Returns
         -------
         str
-            The status with the minimum ``order`` or the first element of
+            The label with the minimum ``order`` or the first element of
             ``status_list`` if none are valid.
 
         """
@@ -1374,17 +1292,17 @@ class StatusAPI:
         return min(valid, key=lambda s: self.order_map[s])
 
     def max_status(self, statuses: Iterable[str]) -> str:
-        """Return the highest ``order`` value among ``statuses``.
+        """Return the highest ``order`` value among the provided labels.
 
         Parameters
         ----------
         statuses:
-            Iterable of status values.
+            Iterable of values.
 
         Returns
         -------
         str
-            The status with the maximum ``order`` or the last element of
+            The label with the maximum ``order`` or the last element of
             ``status_list`` if none are valid.
 
         """
@@ -1394,34 +1312,34 @@ class StatusAPI:
         return max(valid, key=lambda s: self.order_map[s])
 
     def get_order(self, status: str) -> int:
-        """Return the numeric ``order`` for ``status``.
+        """Return the numeric ``order`` for the given label.
 
         Parameters
         ----------
         status:
-            Status value to resolve.
+            Value to resolve.
 
         Returns
         -------
         int
-            ``order`` associated with ``status``; uses the last element's value
+            ``order`` associated with the label; uses the last element's value
             as fallback.
 
         """
         return self.order_map.get(status, self.order_map[self.status_list[-1]])
 
     def get_score(self, status: str) -> int:
-        """Return the ``score`` associated with ``status``.
+        """Return the ``score`` associated with the given label.
 
         Parameters
         ----------
         status:
-            Status value to look up.
+            Value to look up.
 
         Returns
         -------
         int
-            Score for ``status``; defaults to ``0`` when unknown.
+            Score for the label; defaults to ``0`` when unknown.
 
         """
         return self.score_map.get(status, 0)
@@ -1540,7 +1458,7 @@ class StatusAPI:
 
 
 def load_status_table(path: Path | str) -> pd.DataFrame:
-    """Load the status configuration table.
+    """Load the configuration table describing filtering labels.
 
     Parameters
     ----------
@@ -1550,7 +1468,7 @@ def load_status_table(path: Path | str) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        Status table sorted by ``order`` with proper dtypes.
+        Table sorted by ``order`` with proper dtypes.
 
     """
     path = Path(path)
@@ -1591,7 +1509,7 @@ def load_status_table(path: Path | str) -> pd.DataFrame:
 
 
 def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
-    """Construct :class:`StatusAPI` from ``status_df``."""
+    """Construct :class:`StatusAPI` from a configuration DataFrame."""
     status_list = status_df["status"].tolist()
     conditions = (
         status_df.loc[status_df["condition_value"] != "null", "condition_field"]
@@ -1613,7 +1531,7 @@ def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
 def initialize_activity_status(
     df_activity: pd.DataFrame, status_api: StatusAPI
 ) -> pd.DataFrame:
-    """Add status flags and initial status to activity table."""
+    """Add flag columns and initial labels to the activity table."""
     df = df_activity.copy()
     issue_cols = [
         "high_citation_rate",
@@ -1663,6 +1581,7 @@ def initialize_activity_status(
     return df
 
 
+
 def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
@@ -1694,10 +1613,11 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=rename)
 
 
+
 def initialize_pairs(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> pd.DataFrame:
-    """Merge activity statuses into ``pair_df``."""
+    """Merge activity labels into ``pair_df``."""
     df = pair_df.copy()
     mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
     df = df.merge(
@@ -1749,13 +1669,13 @@ def _aggregate_entity(
 def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> dict[str, pd.DataFrame]:
-    """Aggregate status metrics across entities.
+    """Aggregate metrics across entities.
 
     The function combines activity pair information with per-activity
-    annotations to produce status summaries for several entity levels.  Pair
+    annotations to produce summaries for several entity levels. Pair
     tables may not always contain the expected metric columns, and some
     activity tables can lack identifiers necessary for higher level
-    aggregations.  Missing metrics are created and zero filled while missing
+    aggregations. Missing metrics are created and zero filled while missing
     identifier columns result in skipped aggregations with empty results.
 
     """
@@ -1871,3 +1791,4 @@ def aggregate_activity(
         "testitem": testitem_status,
         "target": target_status,
     }
+
