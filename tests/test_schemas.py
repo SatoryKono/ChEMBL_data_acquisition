@@ -96,6 +96,62 @@ def test_targets_schema_allows_missing_optional_columns() -> None:
     TargetsSchema.validate(df)
 
 
+def test_targets_schema_defines_expected_columns() -> None:
+    """All expected columns are present in :data:`TargetsSchema`."""
+    expected = {
+        "target_chembl_id",
+        "uniprotkb_Id",
+        "uniprot_id",
+        "secondary_uniprot_id",
+        "gene_name",
+        "recommended_name",
+        "synonyms",
+        "genus",
+        "superkingdom",
+        "phylum",
+        "taxon_id",
+        "ec_number",
+        "hgnc_name",
+        "hgnc_id",
+        "molecular_function",
+        "cellular_component",
+        "subcellular_location",
+        "topology",
+        "transmembrane",
+        "intramembrane",
+        "glycosylation",
+        "lipidation",
+        "disulfide_bond",
+        "modified_residue",
+        "phosphorylation",
+        "acetylation",
+        "ubiquitination",
+        "signal_peptide",
+        "propeptide",
+        "isoform_names",
+        "isoform_ids",
+        "isoform_synonyms",
+        "reactions",
+        "target_id",
+        "IUPHAR_family_id",
+        "IUPHAR_type",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "IUPHAR_chain",
+        "full_id_path",
+        "full_name_path",
+        "GuidetoPHARMACOLOGY",
+        "SUPFAM",
+        "PROSITE",
+        "InterPro",
+        "Pfam",
+        "PRINTS",
+        "TCDB",
+        "type",
+    }
+    assert set(TargetsSchema.columns) == expected
+
+
 def test_testitems_schema_validation() -> None:
     """Ensure :data:`TestitemsSchema` validates expected data."""
     valid = pd.DataFrame(
