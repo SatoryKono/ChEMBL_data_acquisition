@@ -410,13 +410,26 @@ def finalise_targets(
         if col in df.columns:
             df[col] = df[col].astype("string").str.lower()
 
-    return df.rename(
+    df = df.rename(
         columns={
             "target_chembl_id": chembl_col,
             "uniprotkb_Id": uniprot_col,
             "genus": genus_col,
         }
     )
+
+    schema_cols = [
+        (
+            chembl_col
+            if c == "target_chembl_id"
+            else (
+                uniprot_col if c == "uniprotkb_Id" else genus_col if c == "genus" else c
+            )
+        )
+        for c in TargetsSchema.columns
+    ]
+    extra_cols = sorted(c for c in df.columns if c not in schema_cols)
+    return df.reindex(columns=schema_cols + extra_cols)
 
 
 def finalise_file(

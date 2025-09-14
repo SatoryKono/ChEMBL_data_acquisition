@@ -147,6 +147,27 @@ def test_finalise_targets_filters_duplicates_and_merges() -> None:
     assert out["transmembrane"].dtype == "boolean"
 
 
+def test_finalise_targets_orders_columns() -> None:
+    """Columns from the schema appear first and others alphabetically."""
+
+    df = pd.DataFrame(
+        {
+            "uniprotkb_Id": ["P1"],
+            "a": ["1"],
+            "target_chembl_id": ["CHEMBL1"],
+            "b": ["2"],
+            "genus": ["Homo"],
+        }
+    )
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+
+    out = tp.finalise_targets(df, organism)
+
+    schema_cols = list(TargetsSchema.columns)
+    extra_cols = sorted(c for c in out.columns if c not in schema_cols)
+    assert list(out.columns) == schema_cols + extra_cols
+
+
 def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
     """``finalise_file`` reads, processes and writes the expected table."""
 
@@ -177,14 +198,18 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
         genus_col="organism",
     )
 
-    expected = tp.finalise_targets(
-        df,
-        organism,
-        chembl_col="chembl_id",
-        uniprot_col="uniprot",
-        genus_col="organism",
-    ).astype(str)
-    result = pd.read_csv(output_path, dtype=str)
+    expected = (
+        tp.finalise_targets(
+            df,
+            organism,
+            chembl_col="chembl_id",
+            uniprot_col="uniprot",
+            genus_col="organism",
+        )
+        .fillna("")
+        .astype(str)
+    )
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     pd.testing.assert_frame_equal(result, expected)
 
 
@@ -212,7 +237,6 @@ def test_finalise_targets_no_downcast_warning() -> None:
         )
 
 
-
 def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
     """Default column name ``target_chembl_id`` is preserved after finalisation."""
 
@@ -229,4 +253,3 @@ def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
 
     assert "target_chembl_id" in out.columns
     assert "chembl_id" not in out.columns
-
