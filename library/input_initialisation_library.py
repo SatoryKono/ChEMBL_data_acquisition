@@ -1428,6 +1428,46 @@ class StatusAPI:
         """
         return self.max_status(statuses)
 
+    def get_min(self, statuses: Iterable[str]) -> str:
+        """Return the lowest ranked status among ``statuses``.
+
+        This method preserves backwards compatibility with code that
+        previously relied on a ``get_min`` helper. When none of the provided
+        values match a known status label, the first element of
+        :attr:`status_list` is returned, mirroring :meth:`min_status`.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            Result of :meth:`min_status`.
+        """
+        return self.min_status(statuses)
+
+    def get_max(self, statuses: Iterable[str]) -> str:
+        """Return the highest ranked status among ``statuses``.
+
+        The function mirrors the behaviour of :meth:`max_status` but uses a
+        name compatible with legacy code. Unknown values are ignored; if none
+        of the provided statuses are recognised the last element of
+        :attr:`status_list` is returned instead of raising an exception.
+
+        Parameters
+        ----------
+        statuses:
+            Iterable of status values.
+
+        Returns
+        -------
+        str
+            Result of :meth:`max_status`.
+        """
+        return self.max_status(statuses)
+
     def Ascending(self, s1: str, s2: str) -> bool:
         """Compatibility alias for :meth:`ascending`.
 
