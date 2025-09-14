@@ -44,6 +44,10 @@ from schemas import ActivitiesSchema, normalize_activities
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
+    The resulting CSV places columns defined in :data:`ActivitiesSchema`
+    first, preserving their declared order. Any additional fields appear
+    afterwards sorted alphabetically.
+
     Parameters
     ----------
     cfg : Config
@@ -101,6 +105,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_activities(df)
+        # Determine final column order: schema-defined columns first in their
+        # declared sequence, followed by any additional columns sorted
+        # alphabetically to provide deterministic output.
+        schema_cols = list(ActivitiesSchema.columns)
+        head = [c for c in schema_cols if c in df.columns]
+        tail = sorted(c for c in df.columns if c not in schema_cols)
+        col_order = head + tail
         rows_total = len(df)
         exit_code = 0
         required_cols = {
@@ -143,6 +154,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 output,
                 cfg=cfg,
                 key_cols=key_cols or None,
+                col_order=col_order,
             )
             logger.info("write_done", rows=rows_kept, path=str(csv_path))
         except OSError as exc:
