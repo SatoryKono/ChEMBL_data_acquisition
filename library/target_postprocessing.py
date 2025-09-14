@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from schemas import TargetsSchema
+
 from .config import Config, IoCfg
 from .log import logger
 
@@ -243,60 +245,15 @@ def postprocess_targets(
     df["gene"] = df["gene"].apply(lambda v: _pipe_merge([v]))
 
     # --- final column ordering --------------------------------------------------
-    columns = [
-        internal_id,
-        "uniprotkb_Id",
-        "uniprot_id",
-        "secondary_uniprot_id",
-        "gene_name",
-        "recommended_name",
-        "synonyms",
-        "genus",
-        "superkingdom",
-        "phylum",
-        "taxon_id",
-        "ec_number",
-        "hgnc_name",
-        "hgnc_id",
-        "molecular_function",
-        "cellular_component",
-        "subcellular_location",
-        "topology",
-        "transmembrane",
-        "intramembrane",
-        "glycosylation",
-        "lipidation",
-        "disulfide_bond",
-        "modified_residue",
-        "phosphorylation",
-        "acetylation",
-        "ubiquitination",
-        "signal_peptide",
-        "propeptide",
-        "isoform_names",
-        "isoform_ids",
-        "isoform_synonyms",
-        "reactions",
-        "target_id",
-        "IUPHAR_family_id",
-        "IUPHAR_type",
-        "IUPHAR_class",
-        "IUPHAR_subclass",
-        "IUPHAR_chain",
-        "full_id_path",
-        "full_name_path",
-        "GuidetoPHARMACOLOGY",
-        "SUPFAM",
-        "PROSITE",
-        "InterPro",
-        "Pfam",
-        "PRINTS",
-        "TCDB",
+    schema_cols = [
+        internal_id if col == chembl_col else col for col in TargetsSchema.columns
     ]
-    for col in columns:
+    extra_cols = sorted(c for c in df.columns if c not in schema_cols)
+    ordered_cols = schema_cols + extra_cols
+    for col in ordered_cols:
         if col not in df.columns:
             df[col] = "-"
-    return df[columns].rename(columns={internal_id: chembl_col})
+    return df[ordered_cols].rename(columns={internal_id: chembl_col})
 
 
 def postprocess_file(
