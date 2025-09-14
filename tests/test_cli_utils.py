@@ -17,6 +17,7 @@ def test_cli_utils_flags_and_help() -> None:
         "--col-order",
         "--key-cols",
         "--chunk-size",
+        "--merge-chunk-size",
     }
     assert set(actions) == expected
     assert actions["--log-level"].help == "Logging level"

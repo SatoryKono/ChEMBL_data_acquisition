@@ -301,7 +301,7 @@ def write_csv_chunks_deterministic(
     key_cols: Sequence[str] | None = None,
     chunksize: int = 1000,
     merge_chunksize: int = 1000,
-
+    sort_chunksize: int | None = None,
     sep: str = ",",
     encoding: str = "utf-8-sig",
     cfg: Config | None = None,
@@ -396,7 +396,6 @@ def write_csv_chunks_deterministic(
                 meta.unlink()
             tmp_paths.append(tmp_path)
 
-
         out_path = Path(path)
         if not tmp_paths:
             return write_csv_deterministic(
@@ -428,8 +427,6 @@ def write_csv_chunks_deterministic(
         first = next((c for c in current if c is not None), pd.DataFrame())
         columns = list(first.columns)
         dtypes = {col: first.dtypes[col].name for col in columns}
-
-        from typing import Any
 
         def _fmt(value: Any) -> Any:
             if pd.isna(value):
@@ -475,7 +472,6 @@ def write_csv_chunks_deterministic(
 
     write_meta_yaml(out_path, cfg, columns=columns, dtypes=dtypes)
     return out_path
-
 
 
 def sha256_file(path: Path, *, block_size: int = 64 * 1024) -> str:
