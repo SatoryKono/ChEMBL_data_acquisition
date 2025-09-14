@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pandera.pandas as pa
+from pandera.dtypes import DataType
+
+PA_ANY = cast(DataType, None)
 
 # Explicit column order for the targets table.
 #
@@ -70,7 +75,7 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "genus": pa.Column(str, required=False, nullable=True),
         "superkingdom": pa.Column(str, required=False, nullable=True),
         "phylum": pa.Column(str, required=False, nullable=True),
-        "taxon_id": pa.Column(object, required=False, nullable=True),
+        "taxon_id": pa.Column(PA_ANY, required=False, nullable=True),
         "ec_number": pa.Column(str, required=False, nullable=True),
         "hgnc_name": pa.Column(str, required=False, nullable=True),
         "hgnc_id": pa.Column(str, required=False, nullable=True),
@@ -78,17 +83,17 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "cellular_component": pa.Column(str, required=False, nullable=True),
         "subcellular_location": pa.Column(str, required=False, nullable=True),
         "topology": pa.Column(str, required=False, nullable=True),
-        "transmembrane": pa.Column(object, required=False, nullable=True),
-        "intramembrane": pa.Column(object, required=False, nullable=True),
-        "glycosylation": pa.Column(object, required=False, nullable=True),
-        "lipidation": pa.Column(object, required=False, nullable=True),
-        "disulfide_bond": pa.Column(object, required=False, nullable=True),
-        "modified_residue": pa.Column(object, required=False, nullable=True),
-        "phosphorylation": pa.Column(object, required=False, nullable=True),
-        "acetylation": pa.Column(object, required=False, nullable=True),
-        "ubiquitination": pa.Column(object, required=False, nullable=True),
-        "signal_peptide": pa.Column(object, required=False, nullable=True),
-        "propeptide": pa.Column(object, required=False, nullable=True),
+        "transmembrane": pa.Column(PA_ANY, required=False, nullable=True),
+        "intramembrane": pa.Column(PA_ANY, required=False, nullable=True),
+        "glycosylation": pa.Column(PA_ANY, required=False, nullable=True),
+        "lipidation": pa.Column(PA_ANY, required=False, nullable=True),
+        "disulfide_bond": pa.Column(PA_ANY, required=False, nullable=True),
+        "modified_residue": pa.Column(PA_ANY, required=False, nullable=True),
+        "phosphorylation": pa.Column(PA_ANY, required=False, nullable=True),
+        "acetylation": pa.Column(PA_ANY, required=False, nullable=True),
+        "ubiquitination": pa.Column(PA_ANY, required=False, nullable=True),
+        "signal_peptide": pa.Column(PA_ANY, required=False, nullable=True),
+        "propeptide": pa.Column(PA_ANY, required=False, nullable=True),
         "isoform_names": pa.Column(str, required=False, nullable=True),
         "isoform_ids": pa.Column(str, required=False, nullable=True),
         "isoform_synonyms": pa.Column(str, required=False, nullable=True),
