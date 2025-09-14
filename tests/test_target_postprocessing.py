@@ -13,6 +13,7 @@ import pandas as pd
 
 from library import target_postprocessing as tp
 from library.config import Config, IoCfg
+from schemas import TargetsSchema
 
 
 def test_postprocess_targets_merges_and_normalises() -> None:
@@ -51,6 +52,26 @@ def test_postprocess_targets_merges_and_normalises() -> None:
     assert row["synonyms"].startswith("g2|g3|g1|name2|name3")
 
 
+def test_postprocess_targets_orders_columns() -> None:
+    """Columns from the schema appear first and others alphabetically."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1"],
+            "uniprot_id": ["P1"],
+            "gene": ["g1"],
+            "b": ["1"],
+            "a": ["2"],
+        }
+    )
+    out = tp.postprocess_targets(df, chembl_col="chembl_id")
+
+    schema_cols = list(TargetsSchema.columns)
+    schema_cols[schema_cols.index("target_chembl_id")] = "chembl_id"
+    extra_cols = sorted(c for c in out.columns if c not in schema_cols)
+    assert list(out.columns) == schema_cols + extra_cols
+
+
 def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
     """``postprocess_file`` respects ``IoCfg`` defaults for CSV options."""
 
@@ -85,7 +106,11 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
 
     expected = tp.postprocess_targets(df, chembl_col="chembl_id").astype(str)
     result = pd.read_csv(
-        output_path, dtype=str, sep=cfg.csv_sep, encoding=cfg.csv_encoding
+        output_path,
+        dtype=str,
+        sep=cfg.csv_sep,
+        encoding=cfg.csv_encoding,
+        keep_default_na=False,
     )
     pd.testing.assert_frame_equal(result, expected)
 
