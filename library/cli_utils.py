@@ -36,4 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=1000,
         help="Number of rows read per chunk",
     )
+    parser.add_argument(
+        "--merge-chunk-size",
+        type=int,
+        default=1000,
+        help="Rows loaded per temporary file during merge",
+    )
     return parser
