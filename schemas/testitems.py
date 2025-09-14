@@ -29,7 +29,9 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "parenteral": pa.Column(PA_ANY, required=False, nullable=True),
         "pref_name": pa.Column(str, required=False, nullable=True),
         "pubchem_canonical_smiles": pa.Column(str, required=False, nullable=True),
-        "pubchem_cid": pa.Column(str, required=False, nullable=True),
+        # ``pubchem_cid`` may appear as either a string or an integer depending on
+        # the data source; use a generic ``object`` dtype to accept mixed representations.
+        "pubchem_cid": pa.Column(object, required=False, nullable=True),
         "pubchem_inchi": pa.Column(str, required=False, nullable=True),
         "pubchem_inchikey": pa.Column(str, required=False, nullable=True),
         "pubchem_isomeric_smiles": pa.Column(str, required=False, nullable=True),
