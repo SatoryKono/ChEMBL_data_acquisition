@@ -525,32 +525,299 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
-def run_all(cfg: Config, args: argparse.Namespace) -> int:
-    """Run ChEMBL, UniProt and IUPHAR pipelines and merge their outputs.
-
-    The merged table is cleaned and normalised using
-    :func:`library.target_postprocessing.postprocess_targets` followed by
-    :func:`library.target_postprocessing.finalise_targets` before being
-    written to disk.
+def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame:
+    """Fetch target information from ChEMBL.
 
     Parameters
     ----------
-    cfg : Config
+    cfg:
         Application configuration.
-    args:
-        Parsed command-line arguments specific to the ``all`` sub-command.
+    input_csv:
+        Source of ChEMBL identifiers.
+    output_csv:
+        Destination for the retrieved records.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Retrieved ChEMBL data.
+    """
+
+    logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
+    chembl_args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    if run_chembl(cfg, chembl_args) != 0:
+        raise RuntimeError("ChEMBL retrieval failed")
+    df = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    logger.info("fetch_chembl_done", rows=len(df))
+    return df
+
+
+def fetch_uniprot(
+    cfg: Config, chembl_df: pd.DataFrame, output_csv: Path
+) -> pd.DataFrame:
+    """Retrieve UniProt annotations for targets in ``chembl_df``.
+
+    Parameters
+    ----------
+    cfg:
+        Application configuration.
+    chembl_df:
+        DataFrame containing at least one UniProt identifier column.
+    output_csv:
+        Destination for the UniProt data.
+
+    Returns
+    -------
+    pandas.DataFrame
+        UniProt records with an additional ``original_id`` column preserving
+        the queried accessions.
+    """
+
+    logger.info("fetch_uniprot_start", output=str(output_csv))
+    uids = [
+        u
+        for u in chembl_df.get(cfg.target.all.uniprot_column, [])
+        if isinstance(u, str) and u
+    ]
+    from tempfile import NamedTemporaryFile
+
+    with NamedTemporaryFile(
+        "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
+    ) as tmp:
+        writer = csv.DictWriter(
+            tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
+        )
+        writer.writeheader()
+        for uid in uids:
+            writer.writerow({"uniprot_id": uid})
+        tmp_path = Path(tmp.name)
+
+    uniprot_args = argparse.Namespace(input_csv=tmp_path, output_csv=output_csv)
+    orig_dir = cfg.target.uniprot.data_dir
+    cfg.target.uniprot.data_dir = cfg.target.all.data_dir
+    try:
+        if run_uniprot(cfg, uniprot_args) != 0:
+            raise RuntimeError("UniProt retrieval failed")
+    finally:
+        cfg.target.uniprot.data_dir = orig_dir
+        tmp_path.unlink(missing_ok=True)
+
+    df = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    df["original_id"] = uids
+    logger.info("fetch_uniprot_done", rows=len(df))
+    return df
+
+
+def fetch_iuphar(
+    cfg: Config,
+    chembl_df: pd.DataFrame,
+    uniprot_df: pd.DataFrame,
+    output_csv: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Retrieve IUPHAR classifications for combined target data.
+
+    Parameters
+    ----------
+    cfg:
+        Application configuration.
+    chembl_df:
+        ChEMBL target data.
+    uniprot_df:
+        UniProt annotations with ``original_id`` column.
+    output_csv:
+        Destination for the IUPHAR mapping output.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, pandas.DataFrame]
+        Two data frames: the merged ChEMBL/UniProt input and the IUPHAR
+        classification results.
+    """
+
+    logger.info("fetch_iuphar_start", output=str(output_csv))
+    if cfg.target.all.uniprot_column != "uniprot_id":
+        chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
+    else:
+        chembl_for_merge = chembl_df.copy()
+
+    combined_df = pd.merge(
+        chembl_for_merge,
+        uniprot_df,
+        left_on=cfg.target.all.uniprot_column,
+        right_on="original_id",
+        how="left",
+    ).drop(columns=["original_id"])
+    if cfg.target.all.uniprot_column == "uniprot_id":
+        combined_df = combined_df.drop(columns=["uniprot_id_x"], errors="ignore")
+        combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
+
+    combined_df["synonyms"] = combined_df.apply(
+        lambda r: _pipe_merge(
+            [
+                r.get("pref_name"),
+                r.get("component_description"),
+                r.get("gene"),
+                r.get("chembl_alternative_name"),
+                r.get("names"),
+                r.get("secondaryAccessionNames"),
+            ]
+        ),
+        axis=1,
+    )
+    combined_df["ec_number"] = combined_df.apply(
+        lambda r: _pipe_merge([r.get("ec_numbers"), r.get("reaction_ec_numbers")]),
+        axis=1,
+    )
+    combined_df["gene_name"] = combined_df.get("gene", pd.Series(dtype=str)).apply(
+        _first_token
+    )
+    combined_df = combined_df.drop(
+        columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
+    )
+
+    from tempfile import NamedTemporaryFile
+
+    with NamedTemporaryFile(
+        "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
+    ) as tmp:
+        combined_df.to_csv(
+            tmp, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
+        )
+        iuphar_input = Path(tmp.name)
+
+    iuphar_args = argparse.Namespace(input_csv=iuphar_input, output_csv=output_csv)
+    orig_target = cfg.target.iuphar.target_csv
+    orig_family = cfg.target.iuphar.family_csv
+    cfg.target.iuphar.target_csv = cfg.target.all.target_csv
+    cfg.target.iuphar.family_csv = cfg.target.all.family_csv
+    try:
+        if run_iuphar(cfg, iuphar_args) != 0:
+            raise RuntimeError("IUPHAR retrieval failed")
+    finally:
+        cfg.target.iuphar.target_csv = orig_target
+        cfg.target.iuphar.family_csv = orig_family
+        iuphar_input.unlink(missing_ok=True)
+
+    iuphar_df = pd.read_csv(
+        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+    )
+    existing_cols = set(combined_df.columns)
+    classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
+    iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
+    logger.info("fetch_iuphar_done", rows=len(iuphar_df))
+    return combined_df, iuphar_df
+
+
+def merge_results(
+    combined_df: pd.DataFrame, iuphar_df: pd.DataFrame, cfg: Config
+) -> pd.DataFrame:
+    """Merge ChEMBL, UniProt and IUPHAR data into a single table.
+
+    Parameters
+    ----------
+    combined_df:
+        DataFrame containing ChEMBL and UniProt information.
+    iuphar_df:
+        Classification information from IUPHAR.
+    cfg:
+        Application configuration.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Merged and post-processed target data.
+    """
+
+    logger.info("merge_results_start")
+    merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+    processed = tp.postprocess_targets(merged)
+    organism_df = pd.read_csv(
+        cfg.target.all.organism_csv,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        dtype=str,
+    )
+    final_df = tp.finalise_targets(processed, organism_df)
+    logger.info("merge_results_done", rows=len(final_df))
+    return final_df
+
+
+def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
+    """Normalise, validate and export the target table.
+
+    Parameters
+    ----------
+    df:
+        DataFrame produced by :func:`merge_results`.
+    output:
+        Destination CSV path.
+    cfg:
+        Application configuration.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
-    Tests
-    -----
-    The post-processing step is covered by
-    :mod:`tests.test_target_postprocessing`.
-
+        Zero on success, non-zero on validation failure.
     """
+
+    logger.info("validate_write_start", output=str(output))
+    final_df = normalize_targets(df)
+    exit_code = 0
+    required_cols = {
+        name for name, col in TargetsSchema.columns.items() if col.required
+    }
+    optional_cols = set(TargetsSchema.columns) - required_cols
+    missing_required = required_cols - set(final_df.columns)
+    missing_optional = optional_cols - set(final_df.columns)
+    if not missing_required:
+        if missing_optional:
+            logger.warning(
+                "DataFrame is missing optional columns: %s", missing_optional
+            )
+        try:
+            final_df = TargetsSchema.validate(final_df, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            final_df = getattr(exc, "validated_data", final_df)
+            exit_code = 1
+    else:
+        logger.warning(
+            "Skipping validation due to missing required columns: %s",
+            missing_required,
+        )
+    final_df = final_df.drop_duplicates()
+    io.write_csv(
+        final_df,
+        output,
+        cfg=cfg,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+    )
+    try:
+        analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
+    except ValueError as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    logger.info("validate_write_done", rows=len(final_df))
+    return exit_code
+
+
+def run_all(cfg: Config, args: argparse.Namespace) -> int:
+    """Run the full target acquisition pipeline."""
+
     try:
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         chembl_out = cfg.target.all.chembl_out or output.with_name(
@@ -563,212 +830,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             output.stem + "_iuphar.csv"
         )
 
-        # Run ChEMBL retrieval and capture results
-        chembl_args = argparse.Namespace(
-            input_csv=args.input_csv,
-            output_csv=chembl_out,
-        )
-        if run_chembl(cfg, chembl_args) != 0:
-            return 1
-        chembl_df = pd.read_csv(
-            chembl_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-        ).rename(columns={"target_chembl_id": "target_chembl_id"})
-
-        # Extract UniProt IDs and write temporary CSV for downstream steps
-        uids = [
-            u
-            for u in chembl_df.get(cfg.target.all.uniprot_column, [])
-            if isinstance(u, str) and u
-        ]
-        from tempfile import NamedTemporaryFile
-
-        with NamedTemporaryFile(
-            "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
-        ) as tmp:
-            writer = csv.DictWriter(
-                tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
-            )
-            writer.writeheader()
-            for uid in uids:
-                writer.writerow({"uniprot_id": uid})
-            tmp_path = Path(tmp.name)
-
-        # Run UniProt pipeline
-        uniprot_args = argparse.Namespace(
-            input_csv=tmp_path,
-            output_csv=uniprot_out,
-        )
-        orig_dir = cfg.target.uniprot.data_dir
-        cfg.target.uniprot.data_dir = cfg.target.all.data_dir
-        try:
-            if run_uniprot(cfg, uniprot_args) != 0:
-                return 1
-        finally:
-            cfg.target.uniprot.data_dir = orig_dir
-            tmp_path.unlink(missing_ok=True)
-
-        # Load UniProt output
-        uniprot_df = pd.read_csv(
-            uniprot_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-        )
-        # The uids list holds the original identifiers used to query UniProt,
-        # and uniprot_df contains the corresponding results in the same order.
-        # We add the original IDs to uniprot_df to allow merging with chembl_df.
-        uniprot_df["original_id"] = uids
-
-        # To avoid column name collisions during the merge, drop "uniprot_id"
-        # from the ChEMBL frame only when it is *not* used as the merge key.
-        # When "uniprot_id" is the join column we keep it for the merge and
-        # replace it afterwards with the canonical value from ``uniprot_df``.
-        if cfg.target.all.uniprot_column != "uniprot_id":
-            chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
-        else:
-            chembl_for_merge = chembl_df.copy()
-
-        # Prepare combined input for IUPHAR containing ChEMBL and UniProt data.
-        combined_df = pd.merge(
-            chembl_for_merge,
-            uniprot_df,
-            left_on=cfg.target.all.uniprot_column,
-            right_on="original_id",
-            how="left",
-        ).drop(columns=["original_id"])
-        if cfg.target.all.uniprot_column == "uniprot_id":
-            # ``uniprot_df`` contains the authoritative ID, so discard the one
-            # from ChEMBL and rename the UniProt column back to ``uniprot_id``.
-            combined_df = combined_df.drop(columns=["uniprot_id_x"], errors="ignore")
-            combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
-
-        # Consolidate synonym and EC number information for classification
-        combined_df["synonyms"] = combined_df.apply(
-            lambda r: _pipe_merge(
-                [
-                    r.get("pref_name"),
-                    r.get("component_description"),
-                    r.get("gene"),
-                    r.get("chembl_alternative_name"),
-                    r.get("names"),
-                    r.get("secondaryAccessionNames"),
-                ]
-            ),
-            axis=1,
-        )
-        combined_df["ec_number"] = combined_df.apply(
-            lambda r: _pipe_merge([r.get("ec_numbers"), r.get("reaction_ec_numbers")]),
-            axis=1,
-        )
-        combined_df["gene_name"] = combined_df["gene"].apply(_first_token)
-        combined_df = combined_df.drop(
-            columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
-        )
-
-        with NamedTemporaryFile(
-            "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
-        ) as tmp:
-            combined_df.to_csv(
-                tmp, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
-            )
-            iuphar_input = Path(tmp.name)
-
-        # Run IUPHAR mapping using combined data
-        iuphar_args = argparse.Namespace(
-            input_csv=iuphar_input,
-            output_csv=iuphar_out,
-        )
-        orig_target = cfg.target.iuphar.target_csv
-        orig_family = cfg.target.iuphar.family_csv
-        cfg.target.iuphar.target_csv = cfg.target.all.target_csv
-        cfg.target.iuphar.family_csv = cfg.target.all.family_csv
-        try:
-            if run_iuphar(cfg, iuphar_args) != 0:
-                return 1
-        finally:
-            cfg.target.iuphar.target_csv = orig_target
-            cfg.target.iuphar.family_csv = orig_family
-            iuphar_input.unlink(missing_ok=True)
-
-        # Merge results using pandas
-
-        iuphar_df = pd.read_csv(
-            iuphar_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-        )
-        # ``combined_df`` already contains the consolidated data from
-        # ChEMBL and UniProt, including helper fields like ``synonyms``,
-        # ``ec_number`` and ``gene_name``. Build the set of existing
-        # columns from this frame to avoid reintroducing those fields
-        # when selecting IUPHAR classification columns.
-        existing_cols = set(combined_df.columns)
-        classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
-
-        # Recreate the IUPHAR frame with only the new classification
-        # columns before merging.
-        iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
-
-        merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
-        # Apply domain-specific clean-up and finalise table before exporting
-        processed = tp.postprocess_targets(merged)
-        organism_df = pd.read_csv(
-            cfg.target.all.organism_csv,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-            dtype=str,
-        )
-        final_df = tp.finalise_targets(processed, organism_df)
-        # ``postprocess_targets`` and ``finalise_targets`` operate on the
-        # ``chembl_id`` column name, but the validation schema expects the
-        # original ``target_chembl_id``. Rename the column back before
-        # normalisation and validation to satisfy the schema requirements.
-        # final_df = final_df.rename(columns={"chembl_id": "target_chembl_id"})
-        final_df = normalize_targets(final_df)
-        exit_code = 0
-        required_cols = {
-            name for name, col in TargetsSchema.columns.items() if col.required
-        }
-        optional_cols = set(TargetsSchema.columns) - required_cols
-        missing_required = required_cols - set(final_df.columns)
-        missing_optional = optional_cols - set(final_df.columns)
-        if not missing_required:
-            if missing_optional:
-                logger.warning(
-                    "DataFrame is missing optional columns: %s", missing_optional
-                )
-            try:
-                final_df = TargetsSchema.validate(final_df, lazy=True)
-            except SchemaErrors as exc:
-                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-                errors = SidecarErrors()
-                for row in exc.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation failed; wrote %d failure cases to %s",
-                    len(exc.failure_cases),
-                    failure_path,
-                )
-                final_df = getattr(exc, "validated_data", final_df)
-                exit_code = 1
-        else:
-            logger.warning(
-                "Skipping validation due to missing required columns: %s",
-                missing_required,
-            )
-        final_df = final_df.drop_duplicates()
-        io.write_csv(
-            final_df,
-            output,
-            cfg=cfg,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-        )
-    except (FileNotFoundError, ValueError, OSError) as exc:
+        chembl_df = fetch_chembl(cfg, args.input_csv, chembl_out)
+        uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
+        combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
+        merged = merge_results(combined_df, iuphar_df, cfg)
+        exit_code = validate_and_write(merged, output, cfg)
+        return exit_code
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error("%s", exc)
         return 1
-    try:
-        analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
-        return 1
-    return exit_code
 
 
 def main(argv: Sequence[str] | None = None) -> int:
