@@ -6,7 +6,8 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -163,7 +164,6 @@ DATE_COLS: set[str] = {
 }
 
 
-
 def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """Calculate percentage distribution for a table with a ``Filtered`` column.
 
@@ -290,7 +290,6 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
 
     percent_df = get_percentage(df_tmp, table_name)
     return add_percentage(grouped, percent_df, table_name)
-
 
 
 def process_activity_table(
@@ -1205,7 +1204,6 @@ def save_tables(
     return paths
 
 
-
 # Status processing -----------------------------------------------------------
 
 
@@ -1581,7 +1579,6 @@ def initialize_activity_status(
     return df
 
 
-
 def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
@@ -1611,7 +1608,6 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
         elif key == "activityid2":
             rename[col] = "activity_chembl_id2"
     return df.rename(columns=rename)
-
 
 
 def initialize_pairs(
@@ -1791,4 +1787,3 @@ def aggregate_activity(
         "testitem": testitem_status,
         "target": target_status,
     }
-
