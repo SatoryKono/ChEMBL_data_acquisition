@@ -410,7 +410,16 @@ def finalise_targets(
         if col in df.columns:
             df[col] = df[col].astype("string").str.lower()
 
-    df = df.rename(
+
+    # --- final column ordering --------------------------------------------------
+    schema_cols = list(TargetsSchema.columns)
+    extra_cols = sorted(c for c in df.columns if c not in schema_cols)
+    ordered_cols = [c for c in schema_cols if c in df.columns] + extra_cols
+
+    df = df[ordered_cols]
+
+    return df.rename(
+
         columns={
             "target_chembl_id": chembl_col,
             "uniprotkb_Id": uniprot_col,

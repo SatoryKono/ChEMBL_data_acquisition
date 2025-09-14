@@ -72,6 +72,37 @@ def test_postprocess_targets_orders_columns() -> None:
     assert list(out.columns) == schema_cols + extra_cols
 
 
+def test_finalise_targets_orders_columns() -> None:
+    """Columns from the schema appear first and others alphabetically."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1"],
+            "uniprot": ["P1"],
+            "organism": ["Homo"],
+            "b": ["1"],
+            "a": ["2"],
+        }
+    )
+    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+
+    out = tp.finalise_targets(
+        df,
+        organism,
+        chembl_col="chembl_id",
+        uniprot_col="uniprot",
+        genus_col="organism",
+    )
+
+    schema_cols = list(TargetsSchema.columns)
+    schema_cols[schema_cols.index("target_chembl_id")] = "chembl_id"
+    schema_cols[schema_cols.index("uniprotkb_Id")] = "uniprot"
+    schema_cols[schema_cols.index("genus")] = "organism"
+    expected_schema = [c for c in schema_cols if c in out.columns]
+    extra_cols = sorted(c for c in out.columns if c not in schema_cols)
+    assert list(out.columns) == expected_schema + extra_cols
+
+
 def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
     """``postprocess_file`` respects ``IoCfg`` defaults for CSV options."""
 
