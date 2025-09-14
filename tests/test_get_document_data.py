@@ -14,6 +14,7 @@ from library import chembl_library as cl
 from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
+from schemas import DocumentsSchema
 from scripts import get_document_data as gdd
 
 
@@ -70,6 +71,7 @@ def test_cli_uses_custom_column(
         sep: str | None = None,
         encoding: str | None = None,
         key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
         chunksize: int | None = None,
     ) -> Path:
         return path
@@ -134,3 +136,67 @@ def test_run_all_logs_failing_ids(
     log_output = buffer.getvalue()
     configure_logger(LoggerConfig(stream=sys.stdout))
     assert "CHEMBL1" in log_output and "CHEMBL2" in log_output
+
+
+def test_write_csv_column_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Columns follow schema order with extras alphabetically appended."""
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n")
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    df = pd.DataFrame(
+        {
+            "title": ["t"],
+            "B": ["2"],
+            "document_chembl_id": ["CHEMBL1"],
+            "A": ["1"],
+            "doi": ["10.0"],
+        }
+    )
+
+    monkeypatch.setattr(cl, "get_documents", lambda *_, **__: df)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda frame: frame)
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_write_csv(
+        frame: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Any,
+        sep: str | None = None,
+        encoding: str | None = None,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        chunksize: int | None = None,
+    ) -> Path:
+        captured["col_order"] = list(col_order or [])
+        return path
+
+    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+
+    cfg = Config()
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+    )
+    rc = gdd.run_chembl(cfg, args)
+    assert rc == 0
+    schema_cols = list(DocumentsSchema.columns)
+    expected = [c for c in schema_cols if c in df.columns] + sorted(
+        c for c in df.columns if c not in schema_cols
+    )
+    assert captured["col_order"] == expected

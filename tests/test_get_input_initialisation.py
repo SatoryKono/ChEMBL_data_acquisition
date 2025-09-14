@@ -22,13 +22,27 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     out_dir = tmp_path / "out"
 
     tables = {
-        "assay": pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}),
-        "activity": pd.DataFrame({"x": [1, 2, 3], "y": [1, 2, 3]}),
-        "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
-        "pairs_independent": pd.DataFrame({"id": [5]}),
-        "pairs_non_independent": pd.DataFrame({"id": [6]}),
-        "activity_independent_status": pd.DataFrame(
-            {"Filtered.new": ["good", "bad"], "independent_IC50": [1, 0]}
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1", "a2"], "b": [1, 2]}),
+        "activity": pd.DataFrame(
+            {
+                "activity_chembl_id": [1, 2, 3],
+                "assay_chembl_id": ["a1", "a2", "a1"],
+                "document_chembl_id": ["d1", "d2", "d3"],
+                "target_chembl_id": ["t1", "t2", "t3"],
+                "molecule_chembl_id": ["m1", "m2", "m3"],
+            }
+        ),
+        "document": pd.DataFrame({"document_chembl_id": ["d1", "d2", "d3"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1", "t2", "t3"]}),
+        "testitem": pd.DataFrame({"molecule_chembl_id": ["m1", "m2", "m3"]}),
+        "pairs_same_document": pd.DataFrame(
+            {"activity_chembl_id1": [1], "activity_chembl_id2": [2]}
+        ),
+        "pairs_independent": pd.DataFrame(
+            {"activity_chembl_id1": [1], "activity_chembl_id2": [3]}
+        ),
+        "pairs_non_independent": pd.DataFrame(
+            {"activity_chembl_id1": [2], "activity_chembl_id2": [3]}
         ),
     }
 
@@ -62,27 +76,22 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
 
     assert (out_dir / "independent" / "activity_independent.csv").exists()
 
-    assert (
-        out_dir
-        / "status"
-        / "independent"
-        / "activity_independent_status_statistics.csv"
-    ).exists()
+    data_files = [
+        p for p in out_dir.rglob("*.csv") if "data_validity_report" not in p.parts
+    ]
+    for path in data_files:
+        report = (
+            out_dir / "data_validity_report" / f"{path.stem}_quality_report_table.csv"
+        )
 
-    expected = set(tables)
-    expected.remove("activity_independent_status")
-    expected.update({"activity_independent", "activity_independent_status_statistics"})
-
-    for name in expected:
-        quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
         corr = (
             out_dir
             / "data_validity_report"
-            / f"{name}_data_correlation_report_table.csv"
+            / f"{path.stem}_data_correlation_report_table.csv"
         )
-        assert quality.exists(), quality
+        assert report.exists(), report
         assert corr.exists(), corr
-        df = pd.read_csv(quality)
+        df = pd.read_csv(report)
         assert "column" in df.columns
 
 
@@ -228,99 +237,3 @@ def test_main_missing_dictionary_dir(tmp_path: Path, monkeypatch) -> None:
         ]
     )
     assert result == 0
-
-
-def test_status_merge_preserves_columns(tmp_path: Path, monkeypatch) -> None:
-    """Status merging should retain original entity columns."""
-
-    same_doc = tmp_path / "same.xlsx"
-    all_doc = tmp_path / "all.xlsx"
-    same_doc.write_text("dummy")
-    all_doc.write_text("dummy")
-    out_dir = tmp_path / "out"
-
-    id_cols = {
-        "activity": "activity_chembl_id",
-        "assay": "assay_chembl_id",
-        "document": "document_chembl_id",
-        "target": "target_chembl_id",
-        "testitem": "molecule_chembl_id",
-    }
-    tables: dict[str, pd.DataFrame] = {}
-    for entity, id_col in id_cols.items():
-        base = pd.DataFrame({id_col: [f"{entity}1"], "orig": [1]})
-        status = pd.DataFrame(
-            {id_col: [f"{entity}1"], "Filtered.new": ["good"], "independent_IC50": [1]}
-        )
-        tables[f"{entity}_independent"] = base
-        tables[f"{entity}_independent_status"] = status
-
-    monkeypatch.setattr(cli.lib, "load_same_doc", lambda _p: {})
-    monkeypatch.setattr(cli.lib, "load_all_doc", lambda _p: {})
-    monkeypatch.setattr(cli.lib, "build_combined_tables", lambda *_a, **_k: tables)
-    monkeypatch.setattr(cli.lib, "generate_pair_entity_tables", lambda t, _m: t)
-    monkeypatch.setattr(cli, "analyze_table_quality", lambda *_a, **_k: None)
-
-    args = argparse.Namespace(
-        same_doc=same_doc,
-        all_doc=all_doc,
-        out_dir=out_dir,
-        format="csv",
-        dictionary_dir=tmp_path,
-    )
-    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
-    assert cli.run(cfg, args) == 0
-
-    for entity, id_col in id_cols.items():
-        df = pd.read_csv(out_dir / "independent" / f"{entity}_independent.csv")
-        assert id_col in df.columns
-        assert "orig" in df.columns
-
-
-def test_run_handles_system_status_table(tmp_path: Path, monkeypatch) -> None:
-    """System status tables should be merged or emitted with logging."""
-
-    same_doc = tmp_path / "same.xlsx"
-    all_doc = tmp_path / "all.xlsx"
-    same_doc.write_text("dummy")
-    all_doc.write_text("dummy")
-    out_dir = tmp_path / "out"
-
-    tables = {
-        "system_independent_status": pd.DataFrame(
-            {
-                "system_id": ["T1_TG1_IC50"],
-                "Filtered.new": ["good"],
-                "independent_IC50": [1],
-            }
-        )
-    }
-
-    monkeypatch.setattr(cli.lib, "load_same_doc", lambda _p: {})
-    monkeypatch.setattr(cli.lib, "load_all_doc", lambda _p: {})
-    monkeypatch.setattr(cli.lib, "build_combined_tables", lambda *_a, **_k: tables)
-    monkeypatch.setattr(cli.lib, "generate_pair_entity_tables", lambda t, _m: t)
-    monkeypatch.setattr(cli, "analyze_table_quality", lambda *_a, **_k: None)
-
-    buf = io.StringIO()
-    configure_logger(LoggerConfig(stream=buf))
-    args = argparse.Namespace(
-        same_doc=same_doc,
-        all_doc=all_doc,
-        out_dir=out_dir,
-        format="csv",
-        dictionary_dir=tmp_path,
-    )
-    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
-    assert cli.run(cfg, args) == 0
-
-    out_file = out_dir / "independent" / "system_independent.csv"
-    assert out_file.exists()
-    df = pd.read_csv(out_file)
-    assert "system_id" in df.columns
-    assert "Filtered" in df.columns
-
-    logs = [json.loads(line) for line in buf.getvalue().splitlines() if line]
-    assert any(
-        "base table 'system_independent' missing" in rec.get("msg", "") for rec in logs
-    )

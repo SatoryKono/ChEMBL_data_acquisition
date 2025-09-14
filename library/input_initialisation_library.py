@@ -6,8 +6,7 @@ common column types, merge entity tables and persist the final CSV files.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -28,8 +27,8 @@ EntityName = Literal[
 ]
 
 # Mapping of entity names to their corresponding dataframes.  The dictionary
-# may contain additional keys such as ``"activity_status"`` produced during
-# processing, hence the generic ``str`` key type.
+# may contain additional keys produced during processing, hence the generic
+# ``str`` key type.
 TableDict = dict[str, pd.DataFrame]
 
 
@@ -164,6 +163,7 @@ DATE_COLS: set[str] = {
 }
 
 
+
 def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """Calculate percentage distribution for a table with a ``Filtered`` column.
 
@@ -290,6 +290,7 @@ def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame
 
     percent_df = get_percentage(df_tmp, table_name)
     return add_percentage(grouped, percent_df, table_name)
+
 
 
 def process_activity_table(
@@ -986,7 +987,6 @@ def build_combined_tables(
     all_: TableDict,
     dictionary_dir: Path | str | None = None,
     *,
-    status_csv: Path | str | None = None,
     targets_type_csv: Path | str | None = None,
 ) -> TableDict:
     """Combine entity tables from ``same`` and ``all_`` sources.
@@ -1003,9 +1003,6 @@ def build_combined_tables(
     dictionary_dir:
         Optional directory containing auxiliary CSV dictionaries used during
         processing.
-    status_csv:
-        Optional path to ``status.csv``. If relative, it is resolved against
-        ``dictionary_dir``.
     targets_type_csv:
         Optional path to ``targets_type.csv``. If relative, it is resolved
         against ``dictionary_dir``.
@@ -1018,15 +1015,8 @@ def build_combined_tables(
     """
     combined: TableDict = {}
     dict_dir = Path(dictionary_dir) if dictionary_dir is not None else None
-    status_path = Path(status_csv) if status_csv is not None else None
     targets_path = Path(targets_type_csv) if targets_type_csv is not None else None
 
-    if (
-        status_path is not None
-        and not status_path.is_absolute()
-        and dict_dir is not None
-    ):
-        status_path = dict_dir / status_path.name
     if (
         targets_path is not None
         and not targets_path.is_absolute()
@@ -1139,60 +1129,6 @@ def build_combined_tables(
     combined["pairs_independent"] = df_pairs_independent
     combined["pairs_non_independent"] = df_pairs_non_independent
 
-    if dict_dir is not None:
-        status_df = load_status_table(status_path or dict_dir)
-        status_api = build_status_helpers(status_df)
-        combined["activity"] = initialize_activity_status(
-            combined["activity"], status_api
-        )
-
-        pair_keys = (
-            "pairs_same_document",
-            "pairs_independent",
-            "pairs_non_independent",
-        )
-
-        for pair_key in pair_keys:
-            if pair_key not in combined:
-                logger.warning("skip initialize_pairs: table '%s' missing", pair_key)
-                continue
-
-            df_pair = normalize_pair_columns(combined[pair_key])
-            if {"activity_chembl_id1", "activity_chembl_id2"}.issubset(df_pair.columns):
-                combined[pair_key] = initialize_pairs(
-                    df_pair, combined["activity"], status_api
-                )
-            else:
-                combined[pair_key] = df_pair
-
-                logger.warning(
-                    "skip initialize_pairs: table '%s' missing or has no "
-                    "activity_chembl_id1/activity_chembl_id2",
-                    pair_key,
-                )
-
-        for suffix, pair_key in [
-            ("independent", "pairs_independent"),
-            ("non_independent", "pairs_non_independent"),
-            ("same_document", "pairs_same_document"),
-        ]:
-            pair_table = combined.get(pair_key)
-            if pair_table is not None and {"Filtered1", "Filtered2"}.issubset(
-                pair_table.columns
-            ):
-                aggregates = aggregate_activity(
-                    pair_table, combined["activity"], status_api
-                )
-                combined.update(
-                    {f"{k}_{suffix}_status": v for k, v in aggregates.items()}
-                )
-            else:
-                logger.warning(
-                    "%s table missing or lacks Filtered columns; "
-                    "skipping status aggregation",
-                    pair_key,
-                )
-
     return combined
 
 
@@ -1212,10 +1148,6 @@ def save_tables(
     - ``*_same_document`` → ``same_document/``
     - ``*_independent`` → ``independent/``
     - ``*_non_independent`` → ``non_independent/``
-    - ``*_status`` tables are placed under ``status/`` with the above
-      variants nested within it.
-    - ``*_status_statistics`` tables follow the same pattern and are also
-      stored beneath ``status/``.
 
     Duplicate column names are removed prior to writing to avoid ambiguous
     headers. The dropped columns are listed in a warning message to aid
@@ -1243,23 +1175,7 @@ def save_tables(
     paths: dict[str, Path] = {}
     for entity, df in tables.items():
         # Determine subdirectory based on table type.
-        if entity.endswith("_non_independent_status_statistics"):
-            sub_dir = out_dir / "status" / "non-independent"
-        elif entity.endswith("_independent_status_statistics"):
-            sub_dir = out_dir / "status" / "independent"
-        elif entity.endswith("_same_document_status_statistics"):
-            sub_dir = out_dir / "status" / "same_document"
-        elif entity.endswith("_status_statistics"):
-            sub_dir = out_dir / "status"
-        elif entity.endswith("_non_independent_status"):
-            sub_dir = out_dir / "status" / "non-independent"
-        elif entity.endswith("_independent_status"):
-            sub_dir = out_dir / "status" / "independent"
-        elif entity.endswith("_same_document_status"):
-            sub_dir = out_dir / "status" / "same_document"
-        elif entity.endswith("_status"):
-            sub_dir = out_dir / "status"
-        elif entity.endswith("_non_independent"):
+        if entity.endswith("_non_independent"):
             sub_dir = out_dir / "non_independent"
         elif entity.endswith("_independent"):
             sub_dir = out_dir / "independent"
@@ -1268,6 +1184,7 @@ def save_tables(
         else:
             sub_dir = out_dir
 
+        sub_dir.mkdir(parents=True, exist_ok=True)
         path = sub_dir / f"{entity}.csv"
 
         chembl_id_map = {"testitem": "molecule_chembl_id"}
@@ -1286,6 +1203,7 @@ def save_tables(
         logger.info("file_written", rows=len(df), path=str(path))
         paths[entity] = path
     return paths
+
 
 
 # Status processing -----------------------------------------------------------
@@ -1663,6 +1581,7 @@ def initialize_activity_status(
     return df
 
 
+
 def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize activity ID column names in pair tables.
 
@@ -1692,6 +1611,7 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
         elif key == "activityid2":
             rename[col] = "activity_chembl_id2"
     return df.rename(columns=rename)
+
 
 
 def initialize_pairs(
@@ -1871,3 +1791,4 @@ def aggregate_activity(
         "testitem": testitem_status,
         "target": target_status,
     }
+

@@ -7,9 +7,11 @@ Exports pair tables without merging:
   ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag.
 
 Additionally, for each pair table the corresponding ``activity``, ``assay``,
+
 ``document``, ``target``, ``testitem`` and ``system`` entries are exported with
 matching suffixes, for example ``activity_independent.csv`` or
 ``assay_same_document.csv``.
+
 """
 
 from __future__ import annotations
@@ -76,7 +78,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             same,
             all_,
             dictionary_dir=args.dictionary_dir,
-            status_csv=cfg.resources.status_csv,
             targets_type_csv=cfg.resources.targets_type_csv,
         )
         logger.info("generate_pair_tables")
@@ -88,60 +89,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 "pairs_same_document": "same_document",
             },
         )
-        logger.info("prepare_status_outputs")
-        id_cols = {
-            "activity": "activity_chembl_id",
-            "assay": "assay_chembl_id",
-            "document": "document_chembl_id",
-            "target": "target_chembl_id",
-            "testitem": "molecule_chembl_id",
-            "molecule": "molecule_chembl_id",
-            "system": "system_id",
-        }
-        for key, df in list(tables.items()):
-            if not key.endswith("_status"):
-                continue
-            if "Filtered.new" not in df.columns:
-                logger.warning("missing_filtered_new", table=key)
-                continue
-
-            base_name = key.removesuffix("_status")
-            entity = base_name.split("_")[0]
-            id_col = id_cols.get(entity)
-            if entity == "system" and id_col is None:
-                logger.info("drop_status_table", table=key)
-                del tables[key]
-                continue
-            if entity == "system":
-                logger.info("process_status_table", table=key)
-
-            renamed = df.rename(columns={"Filtered.new": "Filtered"})
-
-            if id_col and base_name in tables and id_col in tables[base_name].columns:
-                tables[base_name] = tables[base_name].merge(
-                    renamed, on=id_col, how="left"
-                )
-            else:
-                if id_col is None:
-                    logger.warning(
-                        "unknown entity '%s' for status table '%s'", entity, key
-                    )
-                elif base_name not in tables:
-                    logger.warning(
-                        "base table '%s' missing; using status table directly",
-                        base_name,
-                    )
-                else:
-                    logger.warning(
-                        "id column '%s' missing in table '%s'; using status table directly",
-                        id_col,
-                        base_name,
-                    )
-                tables[base_name] = renamed
-
-            tables[f"{key}_statistics"] = lib.compute_status_statistics(df, base_name)
-            del tables[key]
-
         logger.info("save_output")
         paths = lib.save_tables(tables, out_dir, cfg, fmt=args.format)
         # Ensure that files were actually written to disk
@@ -194,7 +141,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=Path,
         default=None,
         help=(
-            "Directory with _Target/targets_type.csv, _Curation/citation_fraction.csv and status.csv "
+            "Directory with _Target/targets_type.csv and _Curation/citation_fraction.csv "
             "(default: config resources.dictionary_dir)"
         ),
     )
