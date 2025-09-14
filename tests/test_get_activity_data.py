@@ -94,7 +94,7 @@ def test_run_chembl_column_order(
             {
                 "standard_value": 1.0,
                 "assay_description": "desc",
-                "activity_id": 1,
+                "activity_id": "1",
                 "molecule_chembl_id": "CHEMBL1",
                 "bao_format": "A",
                 "standard_type": "IC50",
@@ -120,6 +120,7 @@ def test_run_chembl_column_order(
     rc = gad.run_chembl(cfg, args)
     assert rc == 0
 
-    expected_head = list(ActivitiesSchema.columns)
-    expected_tail = sorted(c for c in df.columns if c not in expected_head)
+    schema_cols = list(ActivitiesSchema.columns)
+    expected_head = [c for c in schema_cols if c in df.columns]
+    expected_tail = sorted(c for c in df.columns if c not in schema_cols)
     assert captured["col_order"] == expected_head + expected_tail

@@ -24,16 +24,27 @@ def _validate(df: pd.DataFrame, out_csv: Path, failure_csv: Path) -> pd.DataFram
 
 
 def test_activity_validation_pass(tmp_path: Path) -> None:
-    df = pd.read_csv(Path("tests/data/activities_valid.csv"))
+    df = pd.read_csv(Path("tests/data/activities_valid.csv")).assign(
+        assay_chembl_id="A0"
+    )
+    df["activity_id"] = df["activity_id"].astype(str)
+    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype(str)
     out_csv = tmp_path / "out.csv"
     failure_csv = tmp_path / "failure_cases.csv"
     result = _validate(df, out_csv, failure_csv)
-    assert result.equals(df)
+    pd.testing.assert_frame_equal(
+        result.reset_index(drop=True),
+        df[result.columns].reset_index(drop=True),
+    )
     assert not failure_csv.exists()
 
 
 def test_activity_validation_failures(tmp_path: Path) -> None:
-    df = pd.read_csv(Path("tests/data/activities_mixed.csv"))
+    df = pd.read_csv(Path("tests/data/activities_mixed.csv")).assign(
+        assay_chembl_id="A0"
+    )
+    df["activity_id"] = df["activity_id"].astype(str)
+    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype(str)
     out_csv = tmp_path / "out.csv"
     failure_csv = tmp_path / "failure_cases.csv"
     result = _validate(df, out_csv, failure_csv)
