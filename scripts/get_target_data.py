@@ -589,6 +589,7 @@ def fetch_uniprot(
         writer = csv.DictWriter(
             tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
         )
+
         writer.writeheader()
         for uid in uids:
             writer.writerow({"uniprot_id": uid})
@@ -687,6 +688,7 @@ def fetch_iuphar(
         combined_df.to_csv(
             tmp, index=False, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding
         )
+
         iuphar_input = Path(tmp.name)
 
     iuphar_args = argparse.Namespace(input_csv=iuphar_input, output_csv=output_csv)
@@ -775,6 +777,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     missing_optional = optional_cols - set(final_df.columns)
     if not missing_required:
         if missing_optional:
+
             logger.warning(
                 "DataFrame is missing optional columns: %s", missing_optional
             )
