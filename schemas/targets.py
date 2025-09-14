@@ -4,6 +4,58 @@ from __future__ import annotations
 
 import pandera.pandas as pa
 
+# Explicit column order for the targets table.
+#
+# Pandera sorts columns alphabetically when exposing ``DataFrameSchema.columns``.
+# To preserve the intended ordering in data exports, the sequence is captured in
+# ``TARGETS_COLUMN_ORDER`` and referenced by post-processing utilities.
+TARGETS_COLUMN_ORDER: list[str] = [
+    "target_chembl_id",
+    "uniprotkb_Id",
+    "recommended_name",
+    "synonyms",
+    "type",
+    "uniprot_id",
+    "secondary_uniprot_id",
+    "gene_name",
+    "genus",
+    "superkingdom",
+    "phylum",
+    "taxon_id",
+    "ec_number",
+    "hgnc_name",
+    "hgnc_id",
+    "molecular_function",
+    "cellular_component",
+    "subcellular_location",
+    "topology",
+    "transmembrane",
+    "intramembrane",
+    "glycosylation",
+    "lipidation",
+    "disulfide_bond",
+    "modified_residue",
+    "phosphorylation",
+    "acetylation",
+    "ubiquitination",
+    "signal_peptide",
+    "propeptide",
+    "isoform_names",
+    "isoform_ids",
+    "isoform_synonyms",
+    "reactions",
+    "target_id",
+    "IUPHAR_family_id",
+    "IUPHAR_type",
+    "IUPHAR_class",
+    "IUPHAR_subclass",
+    "IUPHAR_chain",
+    "full_id_path",
+    "full_name_path",
+    "GuidetoPHARMACOLOGY",
+]
+
+
 # Definition of the schema describing the targets table used in exports.
 TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
@@ -50,8 +102,8 @@ TargetsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "full_id_path": pa.Column(str, required=False),
         "full_name_path": pa.Column(str, required=False),
         "GuidetoPHARMACOLOGY": pa.Column(str, required=False),
-
-    }
+    },
+    ordered=True,
 )
 
 """pa.DataFrameSchema: Validation schema for targets."""
