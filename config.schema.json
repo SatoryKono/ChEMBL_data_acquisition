@@ -812,12 +812,6 @@
           "title": "Organism Csv",
           "type": "string"
         },
-        "status_csv": {
-          "default": "dictionary/_Curation/status.csv",
-          "format": "path",
-          "title": "Status Csv",
-          "type": "string"
-        },
         "targets_type_csv": {
           "default": "dictionary/_Target/targets_type.csv",
           "format": "path",
@@ -1339,7 +1333,6 @@
         "iuphar_family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
         "uniprot_data_dir": "uniprot",
         "organism_csv": "dictionary/organism.csv",
-        "status_csv": "dictionary/_Curation/status.csv",
         "targets_type_csv": "dictionary/_Target/targets_type.csv"
       },
       "description": "Paths to local resource files used in processing."

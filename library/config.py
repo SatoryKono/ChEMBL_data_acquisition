@@ -304,7 +304,6 @@ class ResourcesCfg(_BaseModel):
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
     uniprot_data_dir: Path = Path("uniprot")
     organism_csv: Path = Path("dictionary/organism.csv")
-    status_csv: Path = Path("dictionary/status.csv")
     targets_type_csv: Path = Path("dictionary/targets_type.csv")
 
 
@@ -778,7 +777,6 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_ORGANISM_CSV": ["resources", "organism_csv"],
     "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
     "CHEMBL_DA_RPS": ["api", "rps"],
-    "CHEMBL_DA_STATUS_CSV": ["resources", "status_csv"],
     "CHEMBL_DA_TARGETS_TYPE_CSV": ["resources", "targets_type_csv"],
     "CHEMBL_DA_TIMEOUT_CONNECT": ["api", "timeout_connect"],
     "CHEMBL_DA_TIMEOUT_READ": ["api", "timeout_read"],

@@ -17,7 +17,6 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
         "  dictionary_dir: dictionary\n"
         "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
         "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
-        "  status_csv: dictionary/status.csv\n"
         "  targets_type_csv: dictionary/targets_type.csv\n"
     )
     captured: dict[str, Path] = {}

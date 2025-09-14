@@ -78,7 +78,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             same,
             all_,
             dictionary_dir=args.dictionary_dir,
-            status_csv=cfg.resources.status_csv,
             targets_type_csv=cfg.resources.targets_type_csv,
         )
         logger.info("generate_pair_tables")

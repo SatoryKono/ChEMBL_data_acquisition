@@ -49,6 +49,7 @@ def test_assays_schema_validation() -> None:
         {
             "assay_chembl_id": ["CHEMBL1"],
             "document_chembl_id": ["CHEMBL2"],
+            "target_chembl_id": ["CHEMBL3"],
         }
     )
     AssaysSchema.validate(valid)
