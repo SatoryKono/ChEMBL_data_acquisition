@@ -16,13 +16,14 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: |
+          # Install package along with development extras
           pip install .[dev]
       - name: Check formatting
         run: ruff format --check .
       - name: Verify deterministic CSV output
         run: python scripts/check_determinism.py --log-level DEBUG
       - name: Run pre-commit
-        uses: pre-commit/action@v3
+        run: pre-commit run --all-files
       - name: Type check
         run: mypy --strict library
       - name: Smoke test cache

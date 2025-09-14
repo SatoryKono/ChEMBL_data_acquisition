@@ -1,15 +1,29 @@
 # Output Directory Structure
 
-Generated datasets are stored beneath `data/output`. The directory mirrors the
-configured `io.output_dir` and may contain project-specific subfolders such as
-`ChEMBL/processed`.
+Все результирующие наборы данных сохраняются в каталоге,
+указанном `io.output_dir` (по умолчанию `data/output`).  
+Структура может включать дополнительные подкаталоги
+(например, `ChEMBL/processed`), отражающие источники данных
+или стадии пайплайна.
 
-Each CSV written by the pipeline is accompanied by a sidecar metadata file with
-the same name and the additional suffix `.meta.yaml`. These files capture the
-Git commit, exact command line invocation and the configuration values that
-produced the dataset so results can be audited and reproduced.
+## Нотация файлов
 
-Example layout:
+Для каждого CSV создаётся sidecar‑файл метаданных:
+
+```
+<name>.csv
+<name>.csv.meta.yaml
+```
+
+`*.meta.yaml` содержит:
+
+* хеш коммита Git;
+* точную команду запуска;
+* значения конфигурации;
+* количество строк/колонок;
+* SHA‑256 хеш основного CSV.
+
+Пример:
 
 ```
 data/output/
@@ -19,10 +33,31 @@ data/output/
         ├── activity.csv.meta.yaml
         ├── assay.csv
         ├── assay.csv.meta.yaml
-        └── ...
+        └── …
 ```
 
-The `.meta.yaml` sidecars also record basic table statistics such as the number
-of rows written and the SHA-256 checksum of the CSV file. Downstream consumers
-can read this metadata to verify integrity or to trace the provenance of a
-generated dataset.
+## Лог‑файлы
+
+Если в конфигурации задан `io.logs_dir`, скрипты пишут
+журналы `<script>.log` с указанным уровнем `--log-level`.
+Формат времени — ISO 8601, кодировка UTF‑8.
+
+## Отчёты качества
+
+`table_quality_main.py` и `get_input_initialisation.py`
+дополнительно создают файлы вида:
+
+* `<table>_quality_report_table.csv`
+* `<table>_data_correlation_report_table.csv`
+
+Отчёты располагаются рядом с соответствующими CSV.
+
+## Чистка и архивация
+
+Периодические запуски могут генерировать большой объём файлов.
+Рекомендуется:
+
+* архивировать устаревшие результаты (`tar`/`zip` + удаление оригинала);
+* использовать версионирование каталогов (`YYYYMMDD`) в `--output`;
+* контролировать свободное место на диске перед началом обработки.
+

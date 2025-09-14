@@ -8,13 +8,17 @@ runs produce identical files.
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import heapq
 import os
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any, TextIO, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
@@ -64,6 +68,7 @@ def write_csv_deterministic(
     col_order: Sequence[str] | None = None,
     key_cols: Sequence[str] | None = None,
     chunksize: int | None = None,
+    sort_chunksize: int | None = None,
     sep: str = ",",
     encoding: str = "utf-8-sig",
     cfg: Config | None = None,
@@ -92,6 +97,12 @@ def write_csv_deterministic(
         streaming output via :meth:`pandas.DataFrame.to_csv`, reducing peak
         memory usage for large tables. ``None`` (the default) writes the
         dataframe in a single call.
+    sort_chunksize:
+        Optional number of rows sorted per chunk. When provided, the
+        dataframe is sorted using an external merge-sort algorithm that
+        writes intermediate sorted chunks to disk, reducing peak memory
+        usage during sorting. ``None`` (the default) performs an in-memory
+        sort.
     drop_unexpected_cols:
         When ``True`` and ``col_order`` is provided, columns not present in
         ``col_order`` are dropped from the output with a log warning.
@@ -121,6 +132,9 @@ def write_csv_deterministic(
     # Validate optional chunksize to avoid infinite loops or crashes
     if chunksize is not None and chunksize <= 0:
         msg = f"chunksize must be a positive integer, got {chunksize}"
+        raise ValueError(msg)
+    if sort_chunksize is not None and sort_chunksize <= 0:
+        msg = f"sort_chunksize must be a positive integer, got {sort_chunksize}"
         raise ValueError(msg)
 
     # Ensure column names are unique to avoid ambiguous output
@@ -152,7 +166,7 @@ def write_csv_deterministic(
     else:
         work = work.reindex(columns=sorted(work.columns), copy=False)
 
-    # Sort rows deterministically in-place using a stable algorithm.
+    # Sort rows deterministically using a stable algorithm.
     if key_cols is None:
         raise ValueError("key_cols must be provided")
     sort_cols = list(key_cols)
@@ -160,30 +174,116 @@ def write_csv_deterministic(
     if missing:
         msg = f"Missing key columns: {missing}"
         raise ValueError(msg)
-    work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
-    # Normalise bool and date columns without creating intermediary frames.
-    for col in work.columns:
-        s = work[col]
-        if ptypes.is_bool_dtype(s):
-            work[col] = _normalise_bool(s)
-        else:
-            work[col] = _normalise_dates(s)
+    # In-memory sort when ``sort_chunksize`` is not specified or large enough.
+    if sort_chunksize is None or len(work) <= sort_chunksize:
+        work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
-    # Write via temporary file for atomicity
-    with tempfile.NamedTemporaryFile(
-        "w", encoding=encoding, newline="\n", delete=False, dir=str(out_path.parent)
-    ) as fh:
-        tmp_path = Path(fh.name)
-        work.to_csv(
-            fh,
-            index=False,
-            float_format="%.6g",
-            na_rep="",
-            chunksize=chunksize,
-            sep=sep,
-        )
-    os.replace(tmp_path, out_path)
+        # Normalise bool and date columns without creating intermediary frames.
+        for col in work.columns:
+            s = work[col]
+            if ptypes.is_bool_dtype(s):
+                work[col] = _normalise_bool(s)
+            else:
+                work[col] = _normalise_dates(s)
+
+        # Write via temporary file for atomicity
+        with tempfile.NamedTemporaryFile(
+            "w", encoding=encoding, newline="\n", delete=False, dir=str(out_path.parent)
+        ) as fh:
+            tmp_path = Path(fh.name)
+            work.to_csv(
+                fh,
+                index=False,
+                float_format="%.6g",
+                na_rep="",
+                chunksize=chunksize,
+                sep=sep,
+            )
+        os.replace(tmp_path, out_path)
+    else:
+        # External merge sort writing intermediate chunks to disk.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_paths: list[Path] = []
+            n = len(work)
+            column_names = list(work.columns)
+            for start in range(0, n, sort_chunksize):
+                sub = work.iloc[start : start + sort_chunksize].sort_values(
+                    by=sort_cols, kind="mergesort"
+                )
+                for col in sub.columns:
+                    s = sub[col]
+                    if ptypes.is_bool_dtype(s):
+                        sub[col] = _normalise_bool(s)
+                    else:
+                        sub[col] = _normalise_dates(s)
+                chunk_path = Path(tmpdir) / f"chunk_{start}.csv"
+                sub.to_csv(
+                    chunk_path,
+                    index=False,
+                    float_format="%.6g",
+                    na_rep="",
+                    sep=sep,
+                    encoding=encoding,
+                )
+                tmp_paths.append(chunk_path)
+
+            key_indices = [column_names.index(c) for c in sort_cols]
+            key_funcs: list[Callable[[str], object]] = []
+            for col in sort_cols:
+                dtype = work.dtypes[col]
+                if ptypes.is_integer_dtype(dtype):
+                    key_funcs.append(int)
+                elif ptypes.is_float_dtype(dtype):
+                    key_funcs.append(float)
+                else:
+                    key_funcs.append(lambda x: x)
+
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding=encoding,
+                newline="\n",
+                delete=False,
+                dir=str(out_path.parent),
+            ) as fh:
+                tmp_path = Path(fh.name)
+                writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
+                writer.writerow(column_names)
+
+                readers: list[tuple[Any, TextIO]] = []
+                for p in tmp_paths:
+                    f = p.open("r", encoding=encoding, newline="")
+                    r = csv.reader(f, delimiter=sep)
+                    next(r, None)
+                    readers.append((r, f))
+
+                heap: list[tuple[tuple[object, ...], int, list[str]]] = []
+                for idx, (reader, _) in enumerate(readers):
+                    try:
+                        row: list[str] = next(reader)
+                    except StopIteration:
+                        readers[idx][1].close()
+                        continue
+                    key = tuple(
+                        func(row[key_indices[i]]) for i, func in enumerate(key_funcs)
+                    )
+                    heapq.heappush(heap, (key, idx, row))
+
+                while heap:
+                    _, idx, row = heapq.heappop(heap)
+                    writer.writerow(row)
+                    try:
+                        row = cast(list[str], next(readers[idx][0]))
+                    except StopIteration:
+                        readers[idx][1].close()
+                        continue
+                    key = tuple(
+                        func(row[key_indices[i]]) for i, func in enumerate(key_funcs)
+                    )
+                    heapq.heappush(heap, (key, idx, row))
+
+        os.replace(tmp_path, out_path)
+
     write_meta_yaml(
         out_path,
         cfg,
@@ -200,6 +300,8 @@ def write_csv_chunks_deterministic(
     col_order: Sequence[str] | None = None,
     key_cols: Sequence[str] | None = None,
     chunksize: int = 1000,
+    merge_chunksize: int = 1000,
+
     sep: str = ",",
     encoding: str = "utf-8-sig",
     cfg: Config | None = None,
@@ -231,6 +333,15 @@ def write_csv_chunks_deterministic(
         :class:`ValueError`.
     chunksize:
         Number of rows written per chunk.
+
+    merge_chunksize:
+        Number of rows loaded from each temporary file during the merge.
+        Higher values may improve throughput at the expense of memory.
+
+    sort_chunksize:
+        Optional number of rows sorted per chunk during final write. Passed to
+        :func:`write_csv_deterministic`.
+
     sep:
         Field delimiter.
     encoding:
@@ -256,9 +367,9 @@ def write_csv_chunks_deterministic(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_paths: list[Path] = []
-        for idx, chunk in enumerate(chunks):
+        for idx, df_chunk in enumerate(chunks):
             # Detect duplicate column names within each chunk
-            duplicated = chunk.columns[chunk.columns.duplicated()]
+            duplicated = df_chunk.columns[df_chunk.columns.duplicated()]
             if not duplicated.empty:
                 dup_list = list(duplicated)
                 msg = (
@@ -269,11 +380,12 @@ def write_csv_chunks_deterministic(
 
             tmp_path = Path(tmpdir) / f"chunk_{idx}.csv"
             write_csv_deterministic(
-                chunk,
+                df_chunk,
                 tmp_path,
                 col_order=col_order,
                 key_cols=key_cols,
                 chunksize=chunksize,
+                sort_chunksize=sort_chunksize,
                 sep=sep,
                 encoding=encoding,
                 cfg=None,
@@ -284,23 +396,86 @@ def write_csv_chunks_deterministic(
                 meta.unlink()
             tmp_paths.append(tmp_path)
 
-        if tmp_paths:
-            frames = (pd.read_csv(p, sep=sep, encoding=encoding) for p in tmp_paths)
-            combined = pd.concat(frames, ignore_index=True)
-        else:
-            combined = pd.DataFrame()
 
-    return write_csv_deterministic(
-        combined,
-        path,
-        col_order=col_order,
-        key_cols=key_cols,
-        chunksize=chunksize,
-        sep=sep,
-        encoding=encoding,
-        cfg=cfg,
-        drop_unexpected_cols=drop_unexpected_cols,
-    )
+        out_path = Path(path)
+        if not tmp_paths:
+            return write_csv_deterministic(
+                pd.DataFrame(),
+                out_path,
+                col_order=col_order,
+                key_cols=key_cols,
+                chunksize=chunksize,
+                sep=sep,
+                encoding=encoding,
+                cfg=cfg,
+                drop_unexpected_cols=drop_unexpected_cols,
+            )
+
+        import csv
+        import heapq
+
+        readers = [
+            pd.read_csv(p, sep=sep, encoding=encoding, chunksize=merge_chunksize)
+            for p in tmp_paths
+        ]
+        current: list[pd.DataFrame | None] = []
+        for r in readers:
+            try:
+                current.append(next(r))
+            except StopIteration:
+                current.append(None)
+
+        first = next((c for c in current if c is not None), pd.DataFrame())
+        columns = list(first.columns)
+        dtypes = {col: first.dtypes[col].name for col in columns}
+
+        from typing import Any
+
+        def _fmt(value: Any) -> Any:
+            if pd.isna(value):
+                return ""
+            if isinstance(value, float):
+                return f"{value:.6g}"
+            if isinstance(value, bool | np.bool_):
+                return "true" if bool(value) else "false"
+            return value
+
+        heap: list[tuple[tuple[Any, ...], int, int]] = []
+        for idx, frame in enumerate(current):
+            if frame is not None and not frame.empty:
+                row = frame.iloc[0]
+                key = tuple(row[k] for k in key_cols)
+                heapq.heappush(heap, (key, idx, 0))
+
+        with out_path.open("w", encoding=encoding, newline="") as fh:
+            writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
+            writer.writerow(columns)
+            while heap:
+                _, file_idx, row_idx = heapq.heappop(heap)
+                chunk = current[file_idx]
+                assert chunk is not None
+                row = chunk.iloc[row_idx]
+                writer.writerow([_fmt(row[c]) for c in columns])
+                row_idx += 1
+                if row_idx < len(chunk):
+                    next_row = chunk.iloc[row_idx]
+                    key = tuple(next_row[k] for k in key_cols)
+                    heapq.heappush(heap, (key, file_idx, row_idx))
+                else:
+                    try:
+                        next_chunk = next(readers[file_idx])
+                    except StopIteration:
+                        current[file_idx] = None
+                    else:
+                        current[file_idx] = next_chunk
+                        if not next_chunk.empty:
+                            next_row = next_chunk.iloc[0]
+                            key = tuple(next_row[k] for k in key_cols)
+                            heapq.heappush(heap, (key, file_idx, 0))
+
+    write_meta_yaml(out_path, cfg, columns=columns, dtypes=dtypes)
+    return out_path
+
 
 
 def sha256_file(path: Path, *, block_size: int = 64 * 1024) -> str:

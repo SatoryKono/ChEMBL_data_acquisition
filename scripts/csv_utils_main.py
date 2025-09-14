@@ -71,6 +71,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         col_order=args.col_order or None,
         key_cols=args.key_cols,
         chunksize=args.chunk_size,
+        merge_chunksize=args.merge_chunk_size,
         drop_unexpected_cols=True,
     )
     elapsed = time.perf_counter() - start

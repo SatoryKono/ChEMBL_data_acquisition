@@ -12,6 +12,7 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 data/output/
 uniprot/
 **/__pycache__/
+.hypothesis/
 
 # Local development files
 python

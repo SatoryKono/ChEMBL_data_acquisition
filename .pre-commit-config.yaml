@@ -10,7 +10,6 @@ repos:
     hooks:
       - id: ruff
         args: ["--fix"]
-      - id: ruff-format
   - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:
@@ -26,6 +25,7 @@ repos:
           - types-requests==2.32.4.20250809
           - types-PyYAML==6.0.12.20250822
           - types-jsonschema==4.25.1.20250822
+          - types-python-dateutil
           - types-openpyxl>=3.1.5
           - types-cachetools==6.2.0.20250827
           - types-urllib3==1.26.25.14
