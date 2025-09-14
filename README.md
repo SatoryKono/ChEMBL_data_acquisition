@@ -116,7 +116,7 @@ pytest
 Для smoke-теста CLI выполните:
 
 ```bash
-python mapper_batch_main.py --input tests/data/assays.csv \
+python -m scripts.mapper_batch_main --input tests/data/assays.csv \
     --output out/mapped.csv --log-level INFO
 ```
 
