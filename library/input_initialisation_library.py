@@ -165,12 +165,12 @@ DATE_COLS: set[str] = {
 
 
 def get_percentage(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    """Calculate percentage distribution for a status table.
+    """Calculate percentage distribution for a table with a ``Filtered`` column.
 
     Parameters
     ----------
     df:
-        DataFrame containing a ``Filtered`` column with status labels.
+        DataFrame containing a ``Filtered`` column.
     table_name:
         Logical name of the table for error reporting.
 
@@ -251,12 +251,12 @@ def add_percentage(
 
 
 def compute_status_statistics(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    """Prepare status statistics with percentage distribution.
+    """Prepare statistics with percentage distribution.
 
     Parameters
     ----------
     df:
-        Status dataframe containing ``Filtered.new`` and metric columns.
+        DataFrame containing ``Filtered.new`` and metric columns.
     table_name:
         Entity name used for percentage column prefix.
 
@@ -1293,20 +1293,20 @@ def save_tables(
 
 @dataclass(frozen=True)
 class StatusAPI:
-    """Container for status table helpers.
+    """Container for helpers related to the status configuration.
 
     Attributes
     ----------
     table:
-        Raw status dataframe sorted by ``order``.
+        Raw dataframe sorted by ``order``.
     status_list:
-        Status names ordered by ``order``.
+        Labels ordered by ``order``.
     conditions:
         List of condition fields where ``condition_value`` is not ``"null"``.
     order_map:
-        Mapping of status to its ``order``.
+        Mapping of labels to their ``order``.
     score_map:
-        Mapping of status to ``score``.
+        Mapping of labels to ``score``.
 
     """
 
@@ -1317,33 +1317,33 @@ class StatusAPI:
     score_map: dict[str, int]
 
     def pair(self, s1: str, s2: str) -> str:
-        """Return the lower-ranked status between ``s1`` and ``s2``.
+        """Return the lower-ranked value between ``s1`` and ``s2``.
 
         Parameters
         ----------
         s1, s2:
-            Status values to compare.
+            Values to compare.
 
         Returns
         -------
         str
-            The status with the smaller ``order`` value.
+            The label with the smaller ``order`` value.
 
         """
         return self.min_status([s1, s2])
 
     def next(self, status: str) -> str:
-        """Return the status following ``status`` in ``status_list``.
+        """Return the label following ``status`` in ``status_list``.
 
         Parameters
         ----------
         status:
-            Current status value.
+            Current value.
 
         Returns
         -------
         str
-            The next status or the last element if ``status`` is unknown.
+            The next label or the last element if ``status`` is unknown.
 
         """
         idx = (
@@ -1354,17 +1354,17 @@ class StatusAPI:
         return self.status_list[min(idx + 1, len(self.status_list) - 1)]
 
     def min_status(self, statuses: Iterable[str]) -> str:
-        """Return the lowest ``order`` value among ``statuses``.
+        """Return the lowest ``order`` value among the provided labels.
 
         Parameters
         ----------
         statuses:
-            Iterable of status values.
+            Iterable of values.
 
         Returns
         -------
         str
-            The status with the minimum ``order`` or the first element of
+            The label with the minimum ``order`` or the first element of
             ``status_list`` if none are valid.
 
         """
@@ -1374,17 +1374,17 @@ class StatusAPI:
         return min(valid, key=lambda s: self.order_map[s])
 
     def max_status(self, statuses: Iterable[str]) -> str:
-        """Return the highest ``order`` value among ``statuses``.
+        """Return the highest ``order`` value among the provided labels.
 
         Parameters
         ----------
         statuses:
-            Iterable of status values.
+            Iterable of values.
 
         Returns
         -------
         str
-            The status with the maximum ``order`` or the last element of
+            The label with the maximum ``order`` or the last element of
             ``status_list`` if none are valid.
 
         """
@@ -1394,34 +1394,34 @@ class StatusAPI:
         return max(valid, key=lambda s: self.order_map[s])
 
     def get_order(self, status: str) -> int:
-        """Return the numeric ``order`` for ``status``.
+        """Return the numeric ``order`` for the given label.
 
         Parameters
         ----------
         status:
-            Status value to resolve.
+            Value to resolve.
 
         Returns
         -------
         int
-            ``order`` associated with ``status``; uses the last element's value
+            ``order`` associated with the label; uses the last element's value
             as fallback.
 
         """
         return self.order_map.get(status, self.order_map[self.status_list[-1]])
 
     def get_score(self, status: str) -> int:
-        """Return the ``score`` associated with ``status``.
+        """Return the ``score`` associated with the given label.
 
         Parameters
         ----------
         status:
-            Status value to look up.
+            Value to look up.
 
         Returns
         -------
         int
-            Score for ``status``; defaults to ``0`` when unknown.
+            Score for the label; defaults to ``0`` when unknown.
 
         """
         return self.score_map.get(status, 0)
@@ -1540,7 +1540,7 @@ class StatusAPI:
 
 
 def load_status_table(path: Path | str) -> pd.DataFrame:
-    """Load the status configuration table.
+    """Load the configuration table describing filtering labels.
 
     Parameters
     ----------
@@ -1550,7 +1550,7 @@ def load_status_table(path: Path | str) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        Status table sorted by ``order`` with proper dtypes.
+        Table sorted by ``order`` with proper dtypes.
 
     """
     path = Path(path)
@@ -1591,7 +1591,7 @@ def load_status_table(path: Path | str) -> pd.DataFrame:
 
 
 def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
-    """Construct :class:`StatusAPI` from ``status_df``."""
+    """Construct :class:`StatusAPI` from a configuration DataFrame."""
     status_list = status_df["status"].tolist()
     conditions = (
         status_df.loc[status_df["condition_value"] != "null", "condition_field"]
@@ -1613,7 +1613,7 @@ def build_status_helpers(status_df: pd.DataFrame) -> StatusAPI:
 def initialize_activity_status(
     df_activity: pd.DataFrame, status_api: StatusAPI
 ) -> pd.DataFrame:
-    """Add status flags and initial status to activity table."""
+    """Add flag columns and initial labels to the activity table."""
     df = df_activity.copy()
     issue_cols = [
         "high_citation_rate",
@@ -1697,7 +1697,7 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
 def initialize_pairs(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> pd.DataFrame:
-    """Merge activity statuses into ``pair_df``."""
+    """Merge activity labels into ``pair_df``."""
     df = pair_df.copy()
     mapping = activity_df[["activity_chembl_id", "Filtered.init"]]
     df = df.merge(
@@ -1749,13 +1749,13 @@ def _aggregate_entity(
 def aggregate_activity(
     pair_df: pd.DataFrame, activity_df: pd.DataFrame, status_api: StatusAPI
 ) -> dict[str, pd.DataFrame]:
-    """Aggregate status metrics across entities.
+    """Aggregate metrics across entities.
 
     The function combines activity pair information with per-activity
-    annotations to produce status summaries for several entity levels.  Pair
+    annotations to produce summaries for several entity levels. Pair
     tables may not always contain the expected metric columns, and some
     activity tables can lack identifiers necessary for higher level
-    aggregations.  Missing metrics are created and zero filled while missing
+    aggregations. Missing metrics are created and zero filled while missing
     identifier columns result in skipped aggregations with empty results.
 
     """

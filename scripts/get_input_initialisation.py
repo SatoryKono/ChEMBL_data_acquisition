@@ -9,9 +9,7 @@ Exports pair tables without merging:
 Additionally, for each pair table the corresponding ``activity``, ``assay``,
 ``document``, ``target``, ``testitem`` and ``system`` entries are exported with
 matching suffixes, for example ``activity_independent.csv`` or
-``assay_same_document.csv``. Status tables for these entities are merged into
-the outputs; tables for unknown entities are skipped with an informational log
-message.
+``assay_same_document.csv``.
 """
 
 from __future__ import annotations
