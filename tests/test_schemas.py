@@ -155,15 +155,41 @@ def test_targets_schema_defines_expected_columns() -> None:
         "full_id_path",
         "full_name_path",
         "GuidetoPHARMACOLOGY",
-        "SUPFAM",
-        "PROSITE",
-        "InterPro",
-        "Pfam",
-        "PRINTS",
-        "TCDB",
         "type",
     }
     assert set(TargetsSchema.columns) == expected
+
+
+def test_targets_schema_nullable_and_any_columns() -> None:
+    """All columns are nullable and bool/int types use ``object`` dtype."""
+
+    # Every column should be nullable
+    for col in TargetsSchema.columns.values():
+        assert col.nullable is True
+
+    # Columns previously typed as ``bool`` or ``int`` now accept any object
+    any_columns = [
+        "taxon_id",
+        "transmembrane",
+        "intramembrane",
+        "glycosylation",
+        "lipidation",
+        "disulfide_bond",
+        "modified_residue",
+        "phosphorylation",
+        "acetylation",
+        "ubiquitination",
+        "signal_peptide",
+        "propeptide",
+    ]
+    for name in any_columns:
+        assert str(TargetsSchema.columns[name].dtype) == "object"
+
+    # Schema validation with null values in these columns should succeed
+    df = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], **{c: [None] for c in any_columns}}
+    )
+    TargetsSchema.validate(df)
 
 
 def test_testitems_schema_validation() -> None:
