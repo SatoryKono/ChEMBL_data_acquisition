@@ -210,3 +210,28 @@ def test_finalise_targets_no_downcast_warning() -> None:
             uniprot_col="uniprot",
             genus_col="organism",
         )
+
+
+def test_finalise_targets_handles_existing_type_column() -> None:
+    """Existing ``type`` column should be preserved and renamed."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1"],
+            "uniprot": ["P12345"],
+            "organism": ["Homo"],
+            "type": ["Existing"],
+        }
+    )
+    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+
+    out = tp.finalise_targets(
+        df,
+        organism,
+        chembl_col="chembl_id",
+        uniprot_col="uniprot",
+        genus_col="organism",
+    )
+
+    assert out.loc[0, "type"] == "Mammal"
+    assert out.loc[0, "target_type"] == "Existing"

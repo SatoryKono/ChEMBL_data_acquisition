@@ -330,6 +330,13 @@ def finalise_targets(
     pandas.DataFrame
         Cleaned table ready for export.
 
+    Notes
+    -----
+    If ``df`` already contains a ``type`` column, it will be renamed to
+    ``target_type`` before merging with the organism classification to avoid
+    column name clashes. The final ``type`` column in the result always
+    originates from the organism lookup.
+
     """
     df = df.copy()
     organism = organism.copy()
@@ -376,8 +383,24 @@ def finalise_targets(
             )
 
     # Merge organism classification and add type column
-    df = df.merge(organism[["genus", "type"]], on="genus", how="left")
-    df["type"] = df["type"].astype("string")
+    #
+    # ``df`` may already contain a ``type`` column from upstream sources. To
+    # avoid creating ``type_x``/``type_y`` suffixes during the merge, rename the
+    # existing column beforehand and restore the organism classification as the
+    # canonical ``type`` field afterwards.
+    if "type" in df.columns:
+        logger.debug("Renaming existing 'type' column to 'target_type'")
+        df = df.rename(columns={"type": "target_type"})
+
+    organism_types = organism[["genus", "type"]].rename(
+        columns={"type": "organism_type"}
+    )
+    df = df.merge(organism_types, on="genus", how="left")
+
+    # ``organism_type`` is guaranteed to exist after the merge; cast to string
+    # and rename to the exported ``type`` column. ``pop`` avoids keeping the
+    # intermediate column around.
+    df["type"] = df.pop("organism_type").astype("string")
 
     # Remove unwanted columns
     df = df.drop(columns=[c for c in REMOVE_COLUMNS if c in df.columns])

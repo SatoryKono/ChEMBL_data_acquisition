@@ -572,6 +572,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         chembl_df = pd.read_csv(
             chembl_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+
         ).rename(columns={"target_chembl_id": "target_chembl_id"})
         if cfg.target.all.uniprot_column not in chembl_df.columns:
             logger.error(
@@ -579,6 +580,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 cfg.target.all.uniprot_column,
             )
             return 1
+
 
         # Extract UniProt IDs and write temporary CSV for downstream steps
         uids = [
