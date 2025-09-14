@@ -7,9 +7,10 @@ Exports pair tables without merging:
   ``step5_pairs`` in ``--all-doc`` based on the ``INDEPENDENT`` flag.
 
 Additionally, for each pair table the corresponding ``activity``, ``assay``,
-``document``, ``target``, ``testitem`` and ``system`` entries are exported with
-matching suffixes, for example ``activity_independent.csv`` or
-``assay_same_document.csv``.
+
+``document``, ``target`` and ``testitem`` entries are exported with matching
+suffixes, for example ``activity_independent.csv`` or ``assay_same_document.csv``.
+
 """
 
 from __future__ import annotations

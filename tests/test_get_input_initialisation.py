@@ -22,13 +22,27 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     out_dir = tmp_path / "out"
 
     tables = {
-        "assay": pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}),
-        "activity": pd.DataFrame({"x": [1, 2, 3], "y": [1, 2, 3]}),
-        "pairs_same_document": pd.DataFrame({"id": [3, 4]}),
-        "pairs_independent": pd.DataFrame({"id": [5]}),
-        "pairs_non_independent": pd.DataFrame({"id": [6]}),
-        "activity_independent_status": pd.DataFrame(
-            {"Filtered.new": ["good", "bad"], "independent_IC50": [1, 0]}
+        "assay": pd.DataFrame({"assay_chembl_id": ["a1", "a2"], "b": [1, 2]}),
+        "activity": pd.DataFrame(
+            {
+                "activity_chembl_id": [1, 2, 3],
+                "assay_chembl_id": ["a1", "a2", "a1"],
+                "document_chembl_id": ["d1", "d2", "d3"],
+                "target_chembl_id": ["t1", "t2", "t3"],
+                "molecule_chembl_id": ["m1", "m2", "m3"],
+            }
+        ),
+        "document": pd.DataFrame({"document_chembl_id": ["d1", "d2", "d3"]}),
+        "target": pd.DataFrame({"target_chembl_id": ["t1", "t2", "t3"]}),
+        "testitem": pd.DataFrame({"molecule_chembl_id": ["m1", "m2", "m3"]}),
+        "pairs_same_document": pd.DataFrame(
+            {"activity_chembl_id1": [1], "activity_chembl_id2": [2]}
+        ),
+        "pairs_independent": pd.DataFrame(
+            {"activity_chembl_id1": [1], "activity_chembl_id2": [3]}
+        ),
+        "pairs_non_independent": pd.DataFrame(
+            {"activity_chembl_id1": [2], "activity_chembl_id2": [3]}
         ),
     }
 
@@ -60,22 +74,24 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
     result = cli.run(cfg, args)
     assert result == 0
 
-    assert (
-        out_dir / "status" / "independent" / "activity_independent_status.csv"
-    ).exists()
+    assert (out_dir / "independent" / "activity_independent.csv").exists()
 
-    expected = set(tables)
+    data_files = [
+        p for p in out_dir.rglob("*.csv") if "data_validity_report" not in p.parts
+    ]
+    for path in data_files:
+        report = (
+            out_dir / "data_validity_report" / f"{path.stem}_quality_report_table.csv"
+        )
 
-    for name in expected:
-        quality = out_dir / "data_validity_report" / f"{name}_quality_report_table.csv"
         corr = (
             out_dir
             / "data_validity_report"
-            / f"{name}_data_correlation_report_table.csv"
+            / f"{path.stem}_data_correlation_report_table.csv"
         )
-        assert quality.exists(), quality
+        assert report.exists(), report
         assert corr.exists(), corr
-        df = pd.read_csv(quality)
+        df = pd.read_csv(report)
         assert "column" in df.columns
 
 
