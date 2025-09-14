@@ -23,7 +23,7 @@ jobs:
       - name: Verify deterministic CSV output
         run: python scripts/check_determinism.py --log-level DEBUG
       - name: Run pre-commit
-        uses: pre-commit/action@v3
+        run: pre-commit run --all-files
       - name: Type check
         run: mypy --strict library
       - name: Smoke test cache
