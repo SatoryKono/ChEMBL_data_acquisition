@@ -212,13 +212,12 @@ def test_testitems_schema_validation() -> None:
     """Ensure :data:`TestitemsSchema` validates expected data."""
     valid = pd.DataFrame(
         {
-            "salt_chembl_id": ["CHEMBL1"],
             "molecule_chembl_id": ["CHEMBL1"],
-            "molecule_type": ["Small molecule"],
-            "chirality": [1],
-            "mw_freebase": [100.0],
-            "num_ro5_violations": [0.0],
-            "is_radical": [False],
+            "first_approval": [1950],
+            "black_box_warning": [0],
+            "oral": [True],
+            "parenteral": [False],
+            "topical": [False],
         }
     )
     TestitemsSchema.validate(valid)
