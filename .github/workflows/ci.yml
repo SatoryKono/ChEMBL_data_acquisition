@@ -16,6 +16,7 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: |
+          # Install package along with development extras
           pip install .[dev]
       - name: Check formatting
         run: ruff format --check .
