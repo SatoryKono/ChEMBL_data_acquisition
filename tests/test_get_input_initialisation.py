@@ -83,6 +83,7 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         report = (
             out_dir / "data_validity_report" / f"{path.stem}_quality_report_table.csv"
         )
+
         corr = (
             out_dir
             / "data_validity_report"

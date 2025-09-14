@@ -6,19 +6,27 @@ import pandera.pandas as pa
 
 TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "salt_chembl_id": pa.Column(str, required=False),
         "molecule_chembl_id": pa.Column(str, required=True),
-        "molecule_type": pa.Column(
-            str,
-            pa.Check.isin(
-                ["Small molecule", "Biopolymer", "Oligosaccharide", "Unknown"]
-            ),
-            required=True,
-        ),
-        "chirality": pa.Column(int, pa.Check.isin([-1, 0, 1, 2]), required=False),
-        "mw_freebase": pa.Column(float, pa.Check.in_range(0, 2000), required=False),
-        "num_ro5_violations": pa.Column(float, pa.Check.in_range(0, 5), required=False),
-        "is_radical": pa.Column(bool, required=False),
+        "black_box_warning": pa.Column(str, required=False),
+        "first_approval": pa.Column(str, required=False),
+        "max_phase": pa.Column(str, required=False),
+        "molecule_structures.canonical_smiles": pa.Column(str, required=False),
+        "molecule_structures.standard_inchi": pa.Column(str, required=False),
+        "molecule_structures.standard_inchi_key": pa.Column(str, required=False),
+        "molecule_type": pa.Column(str, required=False),
+        "oral": pa.Column(str, required=False),
+        "parenteral": pa.Column(str, required=False),
+        "pref_name": pa.Column(str, required=False),
+        "pubchem_canonical_smiles": pa.Column(str, required=False),
+        "pubchem_cid": pa.Column(str, required=False),
+        "pubchem_inchi": pa.Column(str, required=False),
+        "pubchem_inchikey": pa.Column(str, required=False),
+        "pubchem_isomeric_smiles": pa.Column(str, required=False),
+        "pubchem_iupac_name": pa.Column(str, required=False),
+        "pubchem_molecular_formula": pa.Column(str, required=False),
+        "structure_type": pa.Column(str, required=False),
+        "topical": pa.Column(str, required=False),
+
     }
 )
 

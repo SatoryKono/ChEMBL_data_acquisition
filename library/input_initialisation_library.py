@@ -1054,6 +1054,7 @@ def save_tables(
         else:
             sub_dir = out_dir
 
+        sub_dir.mkdir(parents=True, exist_ok=True)
         path = sub_dir / f"{entity}.csv"
 
         chembl_id_map = {"testitem": "molecule_chembl_id"}

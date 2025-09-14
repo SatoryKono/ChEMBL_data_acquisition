@@ -239,11 +239,16 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         rows_kept = len(df)
         rows_dropped = rows_total - rows_kept
         key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+        schema_cols = list(DocumentsSchema.columns)
+        head = [c for c in schema_cols if c in df.columns]  # schema-defined order
+        tail = sorted(c for c in df.columns if c not in schema_cols)  # other columns
+        col_order = head + tail
         csv_path = io.write_csv(
             df,
             output,
             cfg=cfg,
             key_cols=key_cols or None,
+            col_order=col_order,
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
@@ -348,11 +353,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         rows_dropped = rows_total - rows_kept
         try:
             key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
+            schema_cols = list(DocumentsSchema.columns)
+            head = [c for c in schema_cols if c in df.columns]  # schema-defined order
+            tail = sorted(
+                c for c in df.columns if c not in schema_cols
+            )  # other columns
+            col_order = head + tail
             csv_path = io.write_csv(
                 df,
                 output,
                 cfg=cfg,
                 key_cols=key_cols or None,
+                col_order=col_order,
             )
             logger.info("write_done", rows=rows_kept, path=str(csv_path))
         except OSError as exc:
@@ -468,11 +480,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         rows_dropped = rows_total - rows_kept
         try:
             key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
+            schema_cols = list(DocumentsSchema.columns)
+            head = [c for c in schema_cols if c in processed.columns]
+            tail = sorted(c for c in processed.columns if c not in schema_cols)
+            col_order = head + tail
             csv_path = io.write_csv(
                 processed,
                 output,
                 cfg=cfg,
                 key_cols=key_cols or None,
+                col_order=col_order,
             )
             logger.info("write_done", rows=rows_kept, path=str(csv_path))
         except OSError as exc:
@@ -572,11 +589,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
+        schema_cols = list(DocumentsSchema.columns)
+        head = [c for c in schema_cols if c in processed.columns]
+        tail = sorted(c for c in processed.columns if c not in schema_cols)
+        col_order = head + tail
         csv_path = io.write_csv(
             processed,
             output,
             cfg=cfg,
             key_cols=key_cols or None,
+            col_order=col_order,
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:

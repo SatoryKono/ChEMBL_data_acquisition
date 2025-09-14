@@ -414,7 +414,9 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         meta = path.with_suffix(path.suffix + ".meta.yaml")
         assert meta.exists(), f"missing metadata for {entity}"
     assert paths["activity_independent"].parent == tmp_path / "independent"
+
     assert paths["activity_independent"].parent == tmp_path / "independent"
+
     assert paths["activity_non_independent"].parent == tmp_path / "non_independent"
     assert paths["activity_same_document"].parent == tmp_path / "same_document"
     assert paths["pairs_same_document"].parent == tmp_path / "same_document"
