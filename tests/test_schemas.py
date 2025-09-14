@@ -49,11 +49,15 @@ def test_activities_schema_accepts_object_dtypes() -> None:
 
     df = pd.DataFrame(
         {
-            "activity_id": ["1"],
+            # numeric IDs are coerced to ``object`` to allow flexible typing
+            "activity_id": pd.Series([1], dtype=object),
             "molecule_chembl_id": ["CHEMBL1"],
             "assay_chembl_id": ["CHEMBL0"],
-            # Use ``object`` dtype to ensure flexible type handling
             "standard_value": pd.Series([1.0], dtype=object),
+            "pchembl_value": pd.Series([5.0], dtype=object),
+            "src_assay_id": pd.Series([2], dtype=object),
+            "src_id": pd.Series([3], dtype=object),
+            "value": pd.Series([7.0], dtype=object),
         }
     )
     ActivitiesSchema.validate(df)
