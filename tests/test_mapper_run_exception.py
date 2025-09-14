@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import mapper_main
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
+from scripts import mapper_main
 
 
 def test_run_logs_exception(monkeypatch, tmp_path: Path, cfg: Config) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -73,8 +74,9 @@ def test_git_sha_missing_git_executable(monkeypatch: pytest.MonkeyPatch) -> None
     git_utils._git_sha.cache_clear()
     monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     messages: list[str] = []
+    logger = cast(Any, getattr(git_utils, "logger"))  # noqa: B009
     monkeypatch.setattr(
-        git_utils.logger,
+        logger,
         "warning",
         lambda msg, *args, **kwargs: messages.append(msg % args),
     )
@@ -88,17 +90,19 @@ def test_git_sha_missing_git_dir(monkeypatch: pytest.MonkeyPatch) -> None:
 
     git_utils._git_sha.cache_clear()
     repo_root = Path(git_utils.__file__).resolve().parent.parent
-    original_exists = git_utils.Path.exists
+    path_cls = cast(type[Path], getattr(git_utils, "Path"))  # noqa: B009
+    original_exists = path_cls.exists
 
-    def mock_exists(self: Path) -> bool:  # type: ignore[override]
+    def mock_exists(self: Path) -> bool:
         if self == repo_root / ".git":
             return False
         return original_exists(self)
 
-    monkeypatch.setattr(git_utils.Path, "exists", mock_exists)
+    monkeypatch.setattr(path_cls, "exists", mock_exists)
     messages: list[str] = []
+    logger = cast(Any, getattr(git_utils, "logger"))  # noqa: B009
     monkeypatch.setattr(
-        git_utils.logger,
+        logger,
         "warning",
         lambda msg, *args, **kwargs: messages.append(msg % args),
     )

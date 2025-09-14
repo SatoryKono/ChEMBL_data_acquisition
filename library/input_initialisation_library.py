@@ -611,6 +611,8 @@ def _read_sheet(
 ) -> pd.DataFrame:
     """Read ``sheet`` from an Excel file.
 
+    Duplicate column names are dropped with a warning.
+
     Parameters
     ----------
     path:
@@ -636,8 +638,17 @@ def _read_sheet(
             header = raw.iloc[0].astype(str).tolist()
             df = raw.iloc[1:].reset_index(drop=True)
             df.columns = pd.Index(header)
-            return df
-        return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+        else:
+            df = pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+
+        if df.columns.has_duplicates:
+            logger.warning(
+                "duplicate columns dropped",
+                sheet=sheet,
+                duplicates=df.columns[df.columns.duplicated()].tolist(),
+            )
+            df = df.loc[:, ~df.columns.duplicated()]
+        return df
     except ValueError as exc:  # missing sheet
         raise ValueError(f"sheet '{sheet}' not found in {path}") from exc
 
@@ -693,6 +704,9 @@ def _safe_to_int(series: pd.Series, col: str) -> pd.Series:
         ``Int64`` typed series or ``string`` on failure.
     """
 
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
+
     try:
         return pd.to_numeric(series, errors="raise").astype("Int64")
     except Exception as exc:  # pragma: no cover - rare
@@ -715,6 +729,9 @@ def _safe_to_float(series: pd.Series, col: str) -> pd.Series:
     pandas.Series
         ``float64`` typed series or ``string`` on failure.
     """
+
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
 
     try:
         return pd.to_numeric(series, errors="raise").astype("float64")
@@ -739,6 +756,9 @@ def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
         ``datetime64`` typed series or ``string`` on failure.
     """
 
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
+
     try:
         return pd.to_datetime(series, errors="raise")
     except Exception as exc:  # pragma: no cover - rare
@@ -761,6 +781,9 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
     pandas.Series
         ``boolean`` typed series or ``string`` on failure.
     """
+
+    if not isinstance(series, pd.Series):
+        raise TypeError(f"column '{col}' has duplicate entries; expected a Series")
 
     def mapper(value: Any) -> object:
         if pd.isna(value):
@@ -1052,7 +1075,20 @@ def build_combined_tables(
 
     # --- activity --------------------------------------------------------
     df_same_act = unify_dtypes(same["activity"])
+    df_same_act = df_same_act.loc[:, ~df_same_act.columns.duplicated()]
     df_all_act = unify_dtypes(all_["activity"])
+
+    # Drop duplicate columns from each DataFrame before concatenation. Pandas
+    # ``concat`` requires unique column names across inputs.
+    same_dups = df_same_act.columns[df_same_act.columns.duplicated()].tolist()
+    if same_dups:
+        logger.info("Removed duplicate activity columns from 'same': %s", same_dups)
+        df_same_act = df_same_act.loc[:, ~df_same_act.columns.duplicated()]
+    all_dups = df_all_act.columns[df_all_act.columns.duplicated()].tolist()
+    if all_dups:
+        logger.info("Removed duplicate activity columns from 'all_': %s", all_dups)
+        df_all_act = df_all_act.loc[:, ~df_all_act.columns.duplicated()]
+
     concat = pd.concat([df_same_act, df_all_act], ignore_index=True, sort=False)
     concat = concat.drop(
         columns=list(ACTIVITY_DROP_COLS & set(concat.columns)), errors="ignore"

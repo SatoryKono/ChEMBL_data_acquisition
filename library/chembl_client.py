@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import random
 import threading
 from collections.abc import Iterable, Iterator
@@ -147,17 +146,8 @@ class ChemblClient:
                 ) as response:
                     response.raise_for_status()
                     try:
-                        text = response.content.decode(
-                            response.encoding or "utf-8", errors="replace"
-                        )
-                    except UnicodeDecodeError as exc:  # pragma: no cover - rare
-                        logger.exception("decode_error", extra={"url": url})
-                        raise ValueError(
-                            f"failed to decode response from {url}"
-                        ) from exc
-                    try:
-                        data: dict[str, Any] = cast(dict[str, Any], json.loads(text))
-                    except json.JSONDecodeError as exc:
+                        data = cast(dict[str, Any], response.json())
+                    except ValueError as exc:
                         logger.exception("json_error", extra={"url": url})
                         raise ValueError(
                             f"invalid JSON in response from {url}"

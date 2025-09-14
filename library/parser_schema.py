@@ -1,7 +1,7 @@
 """Pydantic models for CSV export CLI arguments.
 
 This module defines :class:`CSVExportArgs`, a Pydantic model that validates
-and normalises arguments used by :mod:`csv_utils_main`. Using a data model
+and normalises arguments used by :mod:`scripts.csv_utils_main`. Using a data model
 ensures consistent handling of command-line parameters across scripts.
 """
 

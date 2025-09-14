@@ -9,6 +9,7 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
 import csv
 import sys
@@ -16,11 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
-# Allow running the script directly via ``python scripts/get_target_data.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
+if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
@@ -80,6 +77,42 @@ def _first_token(value: str | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
+    """Write ``df`` to a uniquely named snapshot CSV file.
+
+    The file is created alongside ``base`` using the pattern
+    ``<base>_<step>_<n>.csv`` where ``n`` increments to avoid overwriting
+    existing files.
+
+    Parameters
+    ----------
+    df:
+        Data frame to serialise.
+    base:
+        Base path for the output file. Its stem and suffix determine the
+        snapshot file name.
+    step:
+        Descriptive label inserted into the snapshot file name.
+    cfg:
+        Application configuration (currently unused but kept for API
+        compatibility).
+
+    Returns
+    -------
+    Path
+        Path to the written snapshot file.
+    """
+    stem = base.stem
+    suffix = base.suffix or ".csv"
+    index = 1
+    while True:
+        candidate = base.with_name(f"{stem}_{step}_{index}{suffix}")
+        if not candidate.exists():
+            df.to_csv(candidate, index=False)
+            return candidate
+        index += 1
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
@@ -425,7 +458,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             key_cols=key_cols or None,
         )
-        logger.info("write_done", extra={"rows": rows_kept, "path": str(csv_path)})
+        logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:
         logger.error("failed to write output CSV: %s", exc)
         return 1
@@ -685,7 +718,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         # ``chembl_id`` column name, but the validation schema expects the
         # original ``target_chembl_id``. Rename the column back before
         # normalisation and validation to satisfy the schema requirements.
-       # final_df = final_df.rename(columns={"chembl_id": "target_chembl_id"})
+        # final_df = final_df.rename(columns={"chembl_id": "target_chembl_id"})
         final_df = normalize_targets(final_df)
         exit_code = 0
         required_cols = {
@@ -744,7 +777,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     try:
@@ -782,27 +815,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     if hasattr(args, "func"):
         exit_code = cast(int, args.func(cfg, args))
         if exit_code == 0:
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
         else:
-            logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return exit_code
     parser.print_help()
-    logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return 1
 
 

@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pandera.errors as pa_errors
+import pytest
 
 from library import assay_postprocessing as ap
 from library.config import IoCfg
+from schemas import AssayPostprocessSchema
 
 
 def test_postprocess_assays_counts() -> None:
@@ -25,6 +28,14 @@ def test_postprocess_assays_counts() -> None:
     assert out.loc[0, "assay_with_same_target"] == 2
     assert out.loc[2, "assay_with_same_target"] == 1
     assert out.loc[3, "assay_with_same_target"] == 1
+
+
+def test_postprocess_assays_invalid_schema() -> None:
+    """Missing required columns trigger schema errors."""
+
+    df = pd.DataFrame({"document_chembl_id": ["doc1"], "assay_chembl_id": ["a1"]})
+    with pytest.raises(pa_errors.SchemaError):
+        ap.postprocess_assays(df)
 
 
 def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
@@ -46,3 +57,16 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
 
     result = pd.read_csv(output_path, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
     assert list(result["assay_with_same_target"]) == [2, 2]
+
+
+def test_assay_postprocess_schema() -> None:
+    """Direct validation against the schema works as expected."""
+
+    df_valid = pd.DataFrame(
+        {"document_chembl_id": ["doc1"], "target_chembl_id": ["t1"]}
+    )
+    AssayPostprocessSchema.validate(df_valid)
+
+    df_invalid = pd.DataFrame({"document_chembl_id": ["doc1"]})
+    with pytest.raises(pa_errors.SchemaError):
+        AssayPostprocessSchema.validate(df_invalid)

@@ -9,17 +9,14 @@ hashes differ.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
 
-# Allow running the script directly via ``python scripts/check_determinism.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
+if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 try:
@@ -63,8 +60,8 @@ def run_check(tmp_dir: Path) -> bool:
     write_csv_deterministic(df, second, key_cols=key_cols)
     hash2 = sha256_file(second)
 
-    logger.debug("First hash: %s", hash1)
-    logger.debug("Second hash: %s", hash2)
+    logger.debug("hash", label="first", value=hash1)
+    logger.debug("hash", label="second", value=hash2)
 
     return hash1 == hash2
 
@@ -96,10 +93,10 @@ def main() -> int:
             ok = run_check(Path(tmp))
 
         if ok:
-            logger.info("Hashes match; output is deterministic")
+            logger.info("hashes_match")
             return 0
 
-        logger.error("Hashes differ; output is not deterministic")
+        logger.error("hashes_differ")
         return 1
     finally:
         log_duration(start)

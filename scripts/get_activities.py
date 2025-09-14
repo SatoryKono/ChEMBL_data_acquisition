@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
-from collections.abc import Sequence
+
+# ruff: noqa: E402
 from pathlib import Path
 
-# Allow running the script directly via ``python scripts/get_activities.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
+if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+import argparse
+from collections.abc import Sequence
 
 from library import cli
 from library.activities import get_activities
@@ -65,11 +64,11 @@ def run(limit: int, dry_run: bool) -> int:
         Zero on success, non-zero on failure.
     """
     if dry_run:
-        logger.info("dry run: would generate %d activities", limit)
+        logger.info("dry_run", limit=limit)
         return 0
 
     activities = get_activities(limit)
-    logger.info("generated %d activities", len(activities))
+    logger.info("generated", count=len(activities))
     return 0
 
 

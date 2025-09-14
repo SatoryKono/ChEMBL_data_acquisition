@@ -10,13 +10,13 @@ from pathlib import Path
 
 def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
     """The CLI should log its execution duration."""
-    root = Path(__file__).resolve().parents[1]
     input_csv = Path(__file__).parent / "data" / "csv_utils_input.csv"
     output_csv = tmp_path / "out.csv"
     proc = subprocess.run(
         [
             sys.executable,
-            str(root / "csv_utils_main.py"),
+            "-m",
+            "scripts.csv_utils_main",
             "--input",
             str(input_csv),
             "--output",

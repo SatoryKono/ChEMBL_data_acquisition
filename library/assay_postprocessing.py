@@ -13,10 +13,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from schemas import AssayPostprocessSchema
+
 from .config import IoCfg
 from .log import logger
 from .pandas_utils import read_csv_pyarrow
-from .validation import validate_schema
 
 
 def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
@@ -37,13 +38,7 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
         Copy of the input with the additional ``assay_with_same_target`` column.
 
     """
-    validate_schema(
-        df,
-        {
-            "document_chembl_id": "object",
-            "target_chembl_id": "object",
-        },
-    )
+    AssayPostprocessSchema.validate(df)
     group_cols = ["document_chembl_id", "target_chembl_id"]
     groups = df.groupby(group_cols)
     logger.debug("Calculated counts for %d document/target groups", groups.ngroups)

@@ -13,7 +13,7 @@ def test_determinism_script_returns_zero() -> None:
     """
 
     result = subprocess.run(
-        [sys.executable, "scripts/check_determinism.py", "--log-level", "DEBUG"],
+        [sys.executable, "-m", "scripts.check_determinism", "--log-level", "DEBUG"],
         capture_output=True,
         text=True,
         check=False,

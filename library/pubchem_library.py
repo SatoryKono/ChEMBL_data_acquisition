@@ -6,20 +6,21 @@ The implementation is a Python translation of a PowerQuery script.
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import quote
 
 import requests
-from cachetools import LRUCache
+from cachetools import TTLCache
 from requests import Session
 
 from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
 from .log import logger
-from .rate_limiter import get_limiter
+from .rate_limiter import get_limiter, sleep
 
-_CACHE: LRUCache[str, dict[str, Any]] = LRUCache(maxsize=1024)
+# Cache is initialised lazily to allow configuration of the TTL via
+# :class:`PubChemCfg`. The cache is recreated when the TTL changes.
+_CACHE: TTLCache[str, dict[str, Any]] | None = None
 
 # Shared session with placeholder user agent; production code should call
 # :func:`init_session` to supply real contact details.
@@ -165,6 +166,11 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         Parsed JSON response on success, otherwise ``None`` when all retries
         are exhausted or a non-recoverable error occurs.
     """
+    global _CACHE
+    if _CACHE is None or _CACHE.ttl != cfg.cache_ttl:
+        # Initialise or refresh the cache with the configured TTL.
+        _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
+
     if url in _CACHE:
         logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
         return _CACHE[url]
@@ -191,7 +197,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     extra={"url": url, "status": None, "rps": cfg.rps},
                 )
                 return None
-            time.sleep(cfg.delay)
+            sleep(cfg.delay)
             continue
 
         if response.status_code in (404, 400):
@@ -217,7 +223,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     extra={"url": url, "status": None, "rps": cfg.rps},
                 )
                 return None
-            time.sleep(cfg.delay)
+            sleep(cfg.delay)
             continue
         except ValueError:
             logger.warning("Non-JSON response for url %s", url)
@@ -231,6 +237,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             "request_ok",
             extra={"url": url, "status": response.status_code, "rps": cfg.rps},
         )
+        assert _CACHE is not None  # for type checker; cache initialised above
         _CACHE[url] = data
         logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
         return data

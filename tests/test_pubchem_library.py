@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 import requests
-
 
 responses = pytest.importorskip("responses")
 
@@ -56,7 +57,7 @@ def test_make_request_uses_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         "get_limiter",
         lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
     )
-    pl._CACHE.clear()
+    pl._CACHE = None
 
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1, rps=1)
 
@@ -96,7 +97,7 @@ def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
             return None
 
     monkeypatch.setattr(pl._session, "get", lambda url, timeout: Resp())
-    pl._CACHE.clear()
+    pl._CACHE = None
 
     cfg = pl.PubChemCfg(rps=1, burst=1, retries=1)
     pl.make_request("https://example.org/a", cfg)
@@ -143,7 +144,7 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
             raise requests.RequestException("boom")
         return Resp()
 
-    monkeypatch.setattr(pl.time, "sleep", fake_sleep)
+    monkeypatch.setattr(pl, "sleep", fake_sleep)
     monkeypatch.setattr(pl._session, "get", fake_get)
 
     class Limiter:
@@ -151,9 +152,47 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
             return None
 
     monkeypatch.setattr(pl, "get_limiter", lambda *a, **k: Limiter())
-    pl._CACHE.clear()
+    pl._CACHE = None
 
     cfg = pl.PubChemCfg(retries=2, delay=1)
     pl.make_request("https://example.org", cfg)
 
     assert sleeps == [1]
+
+
+def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cache entries should be evicted after the configured TTL."""
+
+    class Resp:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {}
+
+        def raise_for_status(self) -> None:  # pragma: no cover - no error
+            return None
+
+    calls = {"n": 0}
+
+    def capture(url: str, timeout: tuple[int, int]) -> Resp:
+        calls["n"] += 1
+        return Resp()
+
+    monkeypatch.setattr(pl._session, "get", capture)
+    monkeypatch.setattr(
+        pl,
+        "get_limiter",
+        lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
+    )
+    pl._CACHE = None
+
+    cfg = pl.PubChemCfg(cache_ttl=1, delay=0, retries=1)
+    url = "https://example.org"
+
+    pl.make_request(url, cfg)
+    pl.make_request(url, cfg)
+    assert calls["n"] == 1  # cached
+
+    time.sleep(1.1)
+    pl.make_request(url, cfg)
+    assert calls["n"] == 2  # cache expired

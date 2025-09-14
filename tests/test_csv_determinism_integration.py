@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import re
+import json
 import subprocess
 import sys
 
@@ -13,7 +13,7 @@ def test_csv_determinism_integration() -> None:
         text=True,
         check=True,
     )
-    match1 = re.search(r"First hash: ([0-9a-f]{64})", proc.stdout)
-    match2 = re.search(r"Second hash: ([0-9a-f]{64})", proc.stdout)
-    assert match1 and match2
-    assert match1.group(1) == match2.group(1)
+    records = [json.loads(line) for line in proc.stdout.splitlines()]
+    hashes = [r["value"] for r in records if r.get("event") == "hash"]
+    assert len(hashes) == 2
+    assert hashes[0] == hashes[1]

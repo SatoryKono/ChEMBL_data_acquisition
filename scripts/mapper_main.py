@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+
+# ruff: noqa: E402
+from pathlib import Path
+
+if __package__ is None:  # running as a script
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 import argparse
 from collections.abc import Sequence
 from urllib.error import URLError
@@ -49,10 +57,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 na_values=["#N/A", ""],
             )
         except (FileNotFoundError, OSError) as exc:
-            logger.error("%s", exc)
+            logger.error("read_fail", error=str(exc))
             return 1
         if args.column not in df.columns:
-            logger.error("column '%s' not found in %s", args.column, args.input_csv)
+            logger.error("missing_column", column=args.column, path=str(args.input_csv))
             return 1
 
         uniprot_ids: list[str | None] = []
@@ -66,12 +74,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 if uniprot_id:
                     logger.info(
                         "mapped",
-                        extra={"chembl_id": str(chembl_id), "uniprot_id": uniprot_id},
+                        chembl_id=str(chembl_id),
+                        uniprot_id=uniprot_id,
                     )
                 else:
-                    logger.warning("no UniProt ID for %s", chembl_id)
+                    logger.warning("uniprot_id_missing", chembl_id=str(chembl_id))
             except (ValueError, TimeoutError, URLError) as exc:
-                logger.warning("failed to map %s: %s", chembl_id, exc)
+                logger.warning("map_failed", chembl_id=str(chembl_id), error=str(exc))
                 uniprot_ids.append(None)
         df["mapping_uniprot_id"] = uniprot_ids
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
@@ -84,9 +93,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 encoding=args.encoding,
                 key_cols=args.key_cols,
             )
-            logger.info("write_done", extra={"path": str(output)})
+            logger.info("write_done", path=str(output))
         except OSError as exc:
-            logger.error("failed to write output CSV: %s", exc)
+            logger.error("write_fail", error=str(exc))
             return 1
         return 0
     except Exception as exc:  # pragma: no cover - defensive
@@ -117,29 +126,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
         cfg: Config = apply_config_overrides(args, parser, args.config)
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.error("config_error", error=str(exc))
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.error("setup_fail", error=str(exc))
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
-    exit_code = args.func(cfg, args)
+    exit_code: int = args.func(cfg, args)
     if exit_code == 0:
-        logger.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
     else:
-        logger.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
 
 

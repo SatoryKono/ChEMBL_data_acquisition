@@ -7,6 +7,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Any
 from urllib.error import HTTPError
 
@@ -15,40 +16,12 @@ from .log import logger
 from .rate_limiter import get_limiter
 
 
-def map_chembl_to_uniprot(
+def _map_chembl_to_uniprot(
     chembl_target_id: str,
     cfg: UniprotMappingCfg,
     opener: Callable[..., Any] | None = None,
 ) -> str | None:
-    """Map a ChEMBL target identifier to a UniProt accession.
-
-    Parameters
-    ----------
-    chembl_target_id:
-        ChEMBL target identifier (e.g., ``"CHEMBL204"``).
-    cfg:
-        Configuration for the UniProt ID Mapping API including base URL,
-        poll interval and timeout settings.
-    opener:
-        Optional callable with the same signature as :func:`urllib.request.urlopen`
-        used to perform HTTP requests. Primarily intended for testing.
-
-    Returns
-    -------
-    str or None
-        UniProt accession corresponding to ``chembl_target_id``, or ``None``
-        if no mapping is found.
-
-    Raises
-    ------
-    ValueError
-        If the API reports failure or returns an unexpected response format.
-    TimeoutError
-        If the mapping job does not complete within ``cfg.timeout`` seconds.
-    URLError
-        If a network-related error occurs.
-
-    """
+    """Return the UniProt accession for ``chembl_target_id`` without caching."""
     if opener is None:
         opener = urllib.request.urlopen
 
@@ -129,3 +102,51 @@ def map_chembl_to_uniprot(
         raise ValueError("Unexpected response format from UniProt ID mapping API")
 
     return str(accession)
+
+
+@lru_cache(maxsize=UniprotMappingCfg().cache_maxsize)
+def _map_chembl_to_uniprot_cached(
+    chembl_target_id: str,
+    cfg: UniprotMappingCfg,
+    opener: Callable[..., Any] | None,
+    _ttl_hash: int | None,
+) -> str | None:
+    """Cached wrapper for :func:`_map_chembl_to_uniprot`."""
+
+    return _map_chembl_to_uniprot(chembl_target_id, cfg, opener)
+
+
+def map_chembl_to_uniprot(
+    chembl_target_id: str,
+    cfg: UniprotMappingCfg,
+    opener: Callable[..., Any] | None = None,
+) -> str | None:
+    """Map a ChEMBL target identifier to a UniProt accession.
+
+    Parameters
+    ----------
+    chembl_target_id:
+        ChEMBL target identifier (e.g., ``"CHEMBL204"``).
+    cfg:
+        Configuration for the UniProt ID Mapping API including base URL,
+        polling interval, timeout and cache settings.
+    opener:
+        Optional callable matching :func:`urllib.request.urlopen` used to
+        perform HTTP requests. Primarily intended for testing.
+
+    Returns
+    -------
+    str or None
+        UniProt accession corresponding to ``chembl_target_id`` or ``None`` if
+        no mapping is found.
+
+    Notes
+    -----
+    Results are cached using :func:`functools.lru_cache` with a maximum size
+    defined by :class:`~library.config.UniprotMappingCfg`. If
+    ``cfg.cache_ttl`` is provided, cache entries expire after the given number
+    of seconds.
+    """
+
+    ttl_hash = int(time.time() // cfg.cache_ttl) if cfg.cache_ttl else None
+    return _map_chembl_to_uniprot_cached(chembl_target_id, cfg, opener, ttl_hash)

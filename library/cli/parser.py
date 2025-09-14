@@ -14,11 +14,11 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from . import log
-from .config import Config, ConfigError, load_config
-from .logging_setup import Logger, LoggerConfig
-from .logging_setup import configure_logger as _configure_logger
-from .version import require_python_version
+from .. import log
+from ..config import Config, ConfigError, load_config
+from ..logging_setup import Logger, LoggerConfig
+from ..logging_setup import configure_logger as _configure_logger
+from ..version import require_python_version
 
 require_python_version()
 
@@ -57,8 +57,8 @@ def _positive_int(value: str) -> int:
     ------
     argparse.ArgumentTypeError
         If ``value`` is not a positive integer.
-
     """
+
     try:
         ivalue = int(value)
     except ValueError as exc:  # pragma: no cover - handled by argparse
@@ -140,6 +140,7 @@ def build_parser(
     tuple[argparse.ArgumentParser, LoggerConfig]
         The parser and associated :class:`LoggerConfig`.
     """
+
     parser = argparse.ArgumentParser(description=description)
     add_common_arguments(parser)
     parser.add_argument(
@@ -169,9 +170,9 @@ def build_parser(
     return parser, log_cfg
 
 
-def build_root_parser() -> tuple[
-    argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig
-]:
+def build_root_parser() -> (
+    tuple[argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig]
+):
     """Return parsers containing root-level options and logging config.
 
     Two parsers are produced:
@@ -244,7 +245,7 @@ def configure_logger(
     """
 
     # ``fmt`` and ``datefmt`` are ignored because JSON logs have a fixed
-    # structure.  They are accepted to remain API compatible with the previous
+    # structure. They are accepted to remain API compatible with the previous
     # implementation that configured :mod:`logging`.
     new_logger = _configure_logger(
         LoggerConfig(level=cfg.level, run_id=cfg.run_id, stream=cfg.stream)
@@ -370,6 +371,7 @@ def apply_config_overrides(
 
 __all__ = [
     "LoggerConfig",
+    "Logger",
     "create_logger_config",
     "add_common_arguments",
     "build_parser",

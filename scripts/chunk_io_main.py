@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+
+# ruff: noqa: E402
+from pathlib import Path
+
+if __package__ is None:  # running as a script
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 import argparse
 from collections.abc import Sequence
-from pathlib import Path
 
 from library.chunk_io import process_csv_chunks
 from library.cli import LoggerConfig, add_common_arguments, configure_logger
@@ -60,7 +67,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             sep=args.sep,
             encoding=args.encoding,
         )
-        logger.info("rows_processed", extra={"rows": rows})
+        logger.info("rows_processed", rows=rows)
         return 0
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("run_fail", exc=exc)

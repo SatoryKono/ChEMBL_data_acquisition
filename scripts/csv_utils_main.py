@@ -9,10 +9,16 @@ If ``--output`` is omitted, a file named
 
 from __future__ import annotations
 
+import sys
+
+# ruff: noqa: E402
 import time
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
+
+if __package__ is None:  # running as a script
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 
@@ -68,8 +74,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         drop_unexpected_cols=True,
     )
     elapsed = time.perf_counter() - start
-    logger.info("write_done", extra={"path": str(args.output_csv)})
-    logger.info("run_completed", extra={"elapsed": elapsed})
+    logger.info("write_done", path=str(args.output_csv))
+    logger.info("run_completed", elapsed=elapsed)
     return 0
 
 

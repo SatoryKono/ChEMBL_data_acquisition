@@ -121,7 +121,8 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
-    assert "required table 'activity' missing" in record.get("msg", "")
+    assert record["event"] == "missing_table"
+    assert record["table"] == "activity"
 
 
 @pytest.mark.parametrize(
@@ -168,7 +169,8 @@ def test_run_missing_columns_logs_specific_error(
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
-    assert f"required column(s) missing: {error_msg}" in record.get("msg", "")
+    assert record["event"] == "missing_columns"
+    assert record["details"] == error_msg
 
 
 def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:

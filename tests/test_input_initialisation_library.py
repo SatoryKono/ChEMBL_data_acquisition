@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import io
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
 
 from library import input_initialisation_library as lib
+from library.cli import LoggerConfig, configure_logger
 from library.config import ApiCfg, Config
 from library.input_initialisation_library import (
     TableDict,
     _ensure_openpyxl,
+    _safe_to_bool,
+    _safe_to_datetime,
+    _safe_to_float,
+    _safe_to_int,
     append_entities,
     build_combined_tables,
     generate_pair_entity_tables,
@@ -36,6 +44,19 @@ def test_unify_dtypes_basic() -> None:
     assert res["shuffled_cit"].dtype == "boolean"
     assert res["mw_freebase"].dtype == "float64"
     assert str(res["publication_date"].dtype).startswith("datetime64[")
+
+
+@pytest.mark.parametrize(
+    "func",
+    [_safe_to_int, _safe_to_float, _safe_to_datetime, _safe_to_bool],
+)
+def test_safe_to_functions_reject_dataframe(func: Any) -> None:
+    df = pd.DataFrame({"col": [1]})
+    with pytest.raises(
+        TypeError,
+        match="column 'col' has duplicate entries; expected a Series",
+    ):
+        func(df, "col")
 
 
 def test_append_entities_deduplication() -> None:
@@ -162,6 +183,31 @@ def test_build_combined_tables_handles_duplicate_activity_columns() -> None:
         "activity": pd.DataFrame(
             [[2, "b", "y"]], columns=["activity_chembl_id", "val", "val"]
         ),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs": pd.DataFrame(),
+    }
+    combined = build_combined_tables(same, all_)
+    assert list(combined["activity"].columns) == ["activity_chembl_id", "val"]
+    assert combined["activity"]["val"].tolist() == ["a", "b"]
+
+
+def test_build_combined_tables_handles_asymmetric_duplicate_activity_columns() -> None:
+    """Concatenation succeeds when only one activity table has duplicates."""
+    same: TableDict = {
+        "activity": pd.DataFrame(
+            [[1, "a", "z"]], columns=["activity_chembl_id", "val", "val"]
+        ),
+        "assay": pd.DataFrame(),
+        "document": pd.DataFrame(),
+        "target": pd.DataFrame(),
+        "testitem": pd.DataFrame(),
+        "pairs_same_document": pd.DataFrame(),
+    }
+    all_: TableDict = {
+        "activity": pd.DataFrame([[2, "b"]], columns=["activity_chembl_id", "val"]),
         "assay": pd.DataFrame(),
         "document": pd.DataFrame(),
         "target": pd.DataFrame(),
@@ -645,7 +691,6 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
     assert paths["pairs_non_independent"].parent == tmp_path / "non_independent"
 
 
-
 @pytest.mark.parametrize(
     ("entity", "df", "col"),
     [
@@ -671,7 +716,6 @@ def test_save_tables_orders_key_column_first(
     assert result.columns[0] == col
 
 
-
 def test_save_tables_drops_duplicate_columns_and_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -681,7 +725,7 @@ def test_save_tables_drops_duplicate_columns_and_warns(
     def fake_warn(msg: str, *args: object, **kwargs: object) -> None:
         messages.append(msg % args)
 
-    monkeypatch.setattr(lib.logger, "warning", fake_warn)
+    monkeypatch.setattr(lib.logger, "warning", fake_warn)  # type: ignore[attr-defined]
 
     # Create a table with duplicated column names
     df = pd.DataFrame([[1, "a", "b"]], columns=["id", "dup", "dup"])
@@ -932,3 +976,23 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
 
     for col in ["IUPHAR_class", "IUPHAR_subclass", "gene_index", "taxon_index"]:
         assert col in res.columns
+
+
+def test_read_sheet_drops_duplicate_columns(tmp_path: Path) -> None:
+    """``_read_sheet`` removes duplicate headers and logs a warning."""
+
+    df = pd.DataFrame([[1, 2, 3]], columns=["a", "b", "b"])
+    xlsx = tmp_path / "dup.xlsx"
+    with pd.ExcelWriter(xlsx, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Sheet1", index=False)
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="WARNING", stream=buffer))
+    result = lib._read_sheet(xlsx, "Sheet1", header_promotion=True)
+    configure_logger(LoggerConfig(stream=sys.stdout))
+
+    assert list(result.columns) == ["a", "b"]
+    records = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+    record = next(r for r in records if r.get("event") == "duplicate columns dropped")
+    assert record["sheet"] == "Sheet1"
+    assert record["duplicates"] == ["b"]

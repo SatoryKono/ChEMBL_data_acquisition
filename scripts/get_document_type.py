@@ -8,15 +8,14 @@ scoring logic.
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+
+# ruff: noqa: E402
 from pathlib import Path
 
-# Allow running the script directly via ``python scripts/get_document_type.py``
-# by ensuring the repository root is on ``sys.path`` when the module is executed
-# outside of the ``scripts`` package. This mirrors the behaviour of installing
-# the project in editable mode.
-if __package__ in {None, ""}:
+if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from collections.abc import Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -137,7 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger_inst = configure_logger(log_cfg)
-    logger_inst.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger_inst.info("pipeline_start", run_id=log_cfg.run_id)
 
     try:
         cfg: Config = apply_config_overrides(
@@ -156,7 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
-            logger_inst.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+            logger_inst.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
         logger_inst = configure_logger(
@@ -164,11 +163,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except (ValueError, TypeError) as exc:
         logger.error("%s", exc)
-        logger_inst.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         logger.error("failed to set up directories: %s", exc)
-        logger_inst.info("pipeline_fail", extra={"run_id": log_cfg.run_id})
+        logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
     df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
@@ -179,7 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     df_out.to_csv(output, index=False, sep=args.sep, encoding=args.encoding)
-    logger_inst.info("pipeline_done", extra={"run_id": log_cfg.run_id})
+    logger_inst.info("pipeline_done", run_id=log_cfg.run_id)
     return 0
 
 

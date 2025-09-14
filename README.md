@@ -20,6 +20,19 @@ Install the project together with development tools such as
 tokens should be stored in a local ``.env`` file – see
 [`Конфигурация через .env`](#конфигурация-через-env) for details.
 
+After installing the dependencies, enable the pre-commit hooks so that
+formatting, linting and type checking run automatically before each commit:
+
+```bash
+pre-commit install
+```
+
+To trigger all checks manually across the repository, execute:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Quick Start
  
 
@@ -39,7 +52,7 @@ tokens should be stored in a local ``.env`` file – see
 3. **Run a sample script**
 
    ```bash
-   python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
+   python -m scripts.get_activities --input tests/data/activity_ids_small.csv \
        --output out/activities.csv --limit 10 --log-level INFO
    ```
 
@@ -47,7 +60,7 @@ tokens should be stored in a local ``.env`` file – see
    to ``out/activities.csv``. Common CLI flags include ``--input`` and
    ``--output`` for file paths, ``--limit`` to cap processed records,
    ``--log-level`` for verbosity, ``--sep`` for CSV delimiter and
-   ``--encoding`` for file encoding. Additional examples:
+   ``--encoding`` for file encoding. Direct execution via ``python scripts/get_activities.py`` requires installing the project or adding the repository root to ``PYTHONPATH``; using ``-m scripts.get_activities`` avoids this extra setup. Additional examples:
 
    ```bash
    python mapper_main.py --input tests/data/assays.csv \
@@ -73,7 +86,8 @@ tokens should be stored in a local ``.env`` file – see
 Скрипты из каталога `scripts/` создают CSV-файлы и сохраняют их в `data/output/`. Пример:
 
 ```bash
-python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
+python -m scripts.get_activities --input tests/data/activity_ids_small.csv \
+    --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 Результирующие файлы располагаются в `data/output/`. Каталог игнорируется Git и автоматически публикуется как артефакт CI.
@@ -131,7 +145,7 @@ validation schemas.
 Generate dummy activity entries without contacting external services:
 
 ```bash
-python scripts/get_activities.py --limit 500 --dry-run
+python -m scripts.get_activities --limit 500 --dry-run
 ```
 
 The command logs that it would generate 500 activity rows and exits without
@@ -212,6 +226,40 @@ api:
   chembl_base: https://www.ebi.ac.uk/chembl/api/data
 ```
 
+## Ошибки конфигурации
+
+Некорректные значения в `config.yaml` вызывают `ValidationError`. Пример:
+
+```yaml
+api:
+  rps: -1
+```
+
+При загрузке конфигурации:
+
+```python
+from library.config import load_config
+load_config("config.yaml")
+```
+
+Вывод:
+
+```
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Config
+api.rps
+  Input should be greater than or equal to 1 [type=greater_than_equal, input_value=-1, input_type=int]
+    For further information visit https://errors.pydantic.dev/2.11/v/greater_than_equal
+```
+
+Исправьте значение на положительное число:
+
+```yaml
+api:
+  rps: 5  # или любое >= 1
+```
+
+Диапазоны допустимых значений описаны в [`config.schema.json`](./config.schema.json), где для `api.rps` указан минимум `1`.
+
 ## Логирование
 
 Пример включения JSON‑формата через переменную окружения:
@@ -272,14 +320,11 @@ Typical log entries look like:
 
 ## Installation
 
-Clone the repository and install the runtime dependencies:
+Clone the repository and install the package together with development tools:
 
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install .
-
-# Development tools (black, ruff, mypy, pytest, hypothesis, responses, pre-commit)
 pip install .[dev]
 ```
 
@@ -313,7 +358,7 @@ config.yaml       Global configuration defaults
 
 Individual scripts provide specialised data retrieval utilities:
 
-* ``scripts/get_activity_data.py`` – fetch ChEMBL activity information.
+* ``scripts/get_activities.py`` – fetch ChEMBL activity information.
 * ``scripts/get_assay_data.py`` – retrieve assay descriptions from ChEMBL.
 * ``scripts/get_document_data.py`` – gather publication metadata.
 * ``scripts/get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.
@@ -324,7 +369,7 @@ For a quick connectivity check without writing any files, limit the number of
 records and enable dry-run mode:
 
 ```bash
-python scripts/get_activity_data.py --limit 10 --dry-run
+python -m scripts.get_activities --limit 10 --dry-run
 ```
 
 ## Reproducibility
@@ -681,6 +726,10 @@ in ``--out-dir``.
 
 Install the optional developer tools and run the standard quality checks:
 
+* ``pre-commit`` – run formatting, linting, type checking and tests in one go::
+
+      pre-commit run --all-files
+
 * ``black`` – auto-format the code::
 
       black scripts library mapper_main.py table_quality_main.py
@@ -699,3 +748,7 @@ Install the optional developer tools and run the standard quality checks:
 
 Test data live in ``tests/data`` and provide coverage for utility functions in
 the library modules.
+
+## FAQ
+
+- Где искать информацию о типичных ошибках конфигурации? См. [Ошибки конфигурации](#ошибки-конфигурации).

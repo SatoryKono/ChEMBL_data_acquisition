@@ -54,4 +54,4 @@ class SidecarErrors:
             writer = csv.DictWriter(fh, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self._errors)
-        write_meta_yaml(path, cfg)
+        write_meta_yaml(path, cfg, columns=fieldnames)
