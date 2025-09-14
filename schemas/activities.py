@@ -11,9 +11,8 @@ import pandera.pandas as pa
 # Definition of the schema describing the activities table.
 ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
-        "activity_id": pa.Column(int, pa.Check.ge(0), required=True),
+        "activity_id": pa.Column(str, required=True),
         "molecule_chembl_id": pa.Column(str, required=True),
-        "target_id": pa.Column(str, required=False),
         "assay_chembl_id": pa.Column(str, required=True),
         "activity_comment": pa.Column(str, required=False),
         "assay_description": pa.Column(str, required=False),
