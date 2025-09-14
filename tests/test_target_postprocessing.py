@@ -212,26 +212,21 @@ def test_finalise_targets_no_downcast_warning() -> None:
         )
 
 
-def test_finalise_targets_handles_existing_type_column() -> None:
-    """Existing ``type`` column should be preserved and renamed."""
+
+def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
+    """Default column name ``target_chembl_id`` is preserved after finalisation."""
 
     df = pd.DataFrame(
         {
-            "chembl_id": ["CHEMBL1"],
-            "uniprot": ["P12345"],
-            "organism": ["Homo"],
-            "type": ["Existing"],
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprotkb_Id": ["P12345"],
+            "genus": ["Homo"],
         }
     )
-    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
 
-    out = tp.finalise_targets(
-        df,
-        organism,
-        chembl_col="chembl_id",
-        uniprot_col="uniprot",
-        genus_col="organism",
-    )
+    out = tp.finalise_targets(df, organism)
 
-    assert out.loc[0, "type"] == "Mammal"
-    assert out.loc[0, "target_type"] == "Existing"
+    assert "target_chembl_id" in out.columns
+    assert "chembl_id" not in out.columns
+
