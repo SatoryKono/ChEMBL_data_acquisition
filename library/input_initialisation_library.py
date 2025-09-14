@@ -7,9 +7,15 @@ common column types, merge entity tables and persist the final CSV files.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+
+try:
+    from dataclasses import dataclass
+except ImportError as exc:  # pragma: no cover - Python <3.7
+    raise ImportError(
+        "dataclasses module is required; upgrade to Python 3.7 or newer"
+    ) from exc
 
 import pandas as pd
 
