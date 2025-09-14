@@ -36,6 +36,8 @@ class CSVExportArgs(BaseModel):
         Optional list of columns used to determine row ordering.
     chunk_size:
         Number of rows processed per chunk when streaming CSV input.
+    merge_chunk_size:
+        Rows loaded from each temporary file during the merge step.
     log_level:
         Logging verbosity passed through to the application logger.
     """
@@ -49,6 +51,7 @@ class CSVExportArgs(BaseModel):
     col_order: Optional[list[str]] = None  # noqa: UP007
     key_cols: Optional[list[str]] = None  # noqa: UP007
     chunk_size: int = 1000
+    merge_chunk_size: int = 1000
     log_level: str = "INFO"
 
 

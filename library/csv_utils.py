@@ -15,6 +15,7 @@ from collections.abc import Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
@@ -200,6 +201,7 @@ def write_csv_chunks_deterministic(
     col_order: Sequence[str] | None = None,
     key_cols: Sequence[str] | None = None,
     chunksize: int = 1000,
+    merge_chunksize: int = 1000,
     sep: str = ",",
     encoding: str = "utf-8-sig",
     cfg: Config | None = None,
@@ -231,6 +233,9 @@ def write_csv_chunks_deterministic(
         :class:`ValueError`.
     chunksize:
         Number of rows written per chunk.
+    merge_chunksize:
+        Number of rows loaded from each temporary file during the merge.
+        Higher values may improve throughput at the expense of memory.
     sep:
         Field delimiter.
     encoding:
@@ -256,9 +261,9 @@ def write_csv_chunks_deterministic(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_paths: list[Path] = []
-        for idx, chunk in enumerate(chunks):
+        for idx, df_chunk in enumerate(chunks):
             # Detect duplicate column names within each chunk
-            duplicated = chunk.columns[chunk.columns.duplicated()]
+            duplicated = df_chunk.columns[df_chunk.columns.duplicated()]
             if not duplicated.empty:
                 dup_list = list(duplicated)
                 msg = (
@@ -269,7 +274,7 @@ def write_csv_chunks_deterministic(
 
             tmp_path = Path(tmpdir) / f"chunk_{idx}.csv"
             write_csv_deterministic(
-                chunk,
+                df_chunk,
                 tmp_path,
                 col_order=col_order,
                 key_cols=key_cols,
@@ -284,23 +289,84 @@ def write_csv_chunks_deterministic(
                 meta.unlink()
             tmp_paths.append(tmp_path)
 
-        if tmp_paths:
-            frames = (pd.read_csv(p, sep=sep, encoding=encoding) for p in tmp_paths)
-            combined = pd.concat(frames, ignore_index=True)
-        else:
-            combined = pd.DataFrame()
+        out_path = Path(path)
+        if not tmp_paths:
+            return write_csv_deterministic(
+                pd.DataFrame(),
+                out_path,
+                col_order=col_order,
+                key_cols=key_cols,
+                chunksize=chunksize,
+                sep=sep,
+                encoding=encoding,
+                cfg=cfg,
+                drop_unexpected_cols=drop_unexpected_cols,
+            )
 
-    return write_csv_deterministic(
-        combined,
-        path,
-        col_order=col_order,
-        key_cols=key_cols,
-        chunksize=chunksize,
-        sep=sep,
-        encoding=encoding,
-        cfg=cfg,
-        drop_unexpected_cols=drop_unexpected_cols,
-    )
+        import csv
+        import heapq
+
+        readers = [
+            pd.read_csv(p, sep=sep, encoding=encoding, chunksize=merge_chunksize)
+            for p in tmp_paths
+        ]
+        current: list[pd.DataFrame | None] = []
+        for r in readers:
+            try:
+                current.append(next(r))
+            except StopIteration:
+                current.append(None)
+
+        first = next((c for c in current if c is not None), pd.DataFrame())
+        columns = list(first.columns)
+        dtypes = {col: first.dtypes[col].name for col in columns}
+
+        from typing import Any
+
+        def _fmt(value: Any) -> Any:
+            if pd.isna(value):
+                return ""
+            if isinstance(value, float):
+                return f"{value:.6g}"
+            if isinstance(value, bool | np.bool_):
+                return "true" if bool(value) else "false"
+            return value
+
+        heap: list[tuple[tuple[Any, ...], int, int]] = []
+        for idx, frame in enumerate(current):
+            if frame is not None and not frame.empty:
+                row = frame.iloc[0]
+                key = tuple(row[k] for k in key_cols)
+                heapq.heappush(heap, (key, idx, 0))
+
+        with out_path.open("w", encoding=encoding, newline="") as fh:
+            writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
+            writer.writerow(columns)
+            while heap:
+                _, file_idx, row_idx = heapq.heappop(heap)
+                chunk = current[file_idx]
+                assert chunk is not None
+                row = chunk.iloc[row_idx]
+                writer.writerow([_fmt(row[c]) for c in columns])
+                row_idx += 1
+                if row_idx < len(chunk):
+                    next_row = chunk.iloc[row_idx]
+                    key = tuple(next_row[k] for k in key_cols)
+                    heapq.heappush(heap, (key, file_idx, row_idx))
+                else:
+                    try:
+                        next_chunk = next(readers[file_idx])
+                    except StopIteration:
+                        current[file_idx] = None
+                    else:
+                        current[file_idx] = next_chunk
+                        if not next_chunk.empty:
+                            next_row = next_chunk.iloc[0]
+                            key = tuple(next_row[k] for k in key_cols)
+                            heapq.heappush(heap, (key, file_idx, 0))
+
+    write_meta_yaml(out_path, cfg, columns=columns, dtypes=dtypes)
+    return out_path
 
 
 def sha256_file(path: Path, *, block_size: int = 64 * 1024) -> str:

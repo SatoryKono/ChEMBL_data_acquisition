@@ -39,12 +39,14 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         col_order: list[str] | None = None,
         key_cols: list[str] | None = None,
         chunksize: int | None = None,
+        merge_chunksize: int | None = None,
         drop_unexpected_cols: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         called["output"] = output
         called["write_chunksize"] = chunksize
+        called["merge_chunksize"] = merge_chunksize
         list(chunks)  # exhaust generator
 
     monkeypatch.setattr(pd, "read_csv", fake_read_csv)
@@ -64,6 +66,8 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
             "a",
             "--chunk-size",
             "2",
+            "--merge-chunk-size",
+            "3",
             "--log-level",
             "INFO",
         ]
@@ -76,6 +80,7 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 
     assert called["chunksize"] == 2
     assert called["write_chunksize"] == 2
+    assert called["merge_chunksize"] == 3
 
 
 def test_cli_generates_output_path(
@@ -106,6 +111,7 @@ def test_cli_generates_output_path(
         col_order: list[str] | None = None,
         key_cols: list[str] | None = None,
         chunksize: int | None = None,
+        merge_chunksize: int | None = None,
         drop_unexpected_cols: bool = True,
         *args: Any,
         **kwargs: Any,
