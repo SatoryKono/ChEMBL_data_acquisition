@@ -1,17 +1,44 @@
 # ChEMBL Data Acquisition Utilities
 
-Utilities for downloading and processing biological data from public APIs.
-The project demonstrates a typical Python 3.12 data pipeline including
-parsing, validation, aggregation and export of tabular data.
+Набор утилит и библиотек Python 3.12 для скачивания, валидации,
+агрегации и экспорта биологических данных из открытых API  
+(ChEMBL, PubChem, UniProt, PubMed и др.). Проект демонстрирует
+типичный пайплайн обработки табличных данных: от получения
+идентификаторов до сериализации нормализованных CSV/Parquet
+с сопровождающими метаданными.
 
-## Requirements
+## Особенности
 
-- Python 3.12 or later. Older interpreters abort with an informative message.
+* Командные скрипты с унифицированными флагами `--input`, `--output`,
+  `--log-level`, `--sep`, `--encoding`, `--column`, `--dictionary`.
+* Потоковая обработка больших CSV через чанки, детерминированный вывод.
+* Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
+  типов, диапазонов и справочников.
+* Конфигурация через `config.yaml`, переменные окружения и ключи CLI.
+* Логирование через стандартный модуль `logging` с настраиваемым уровнем.
+* Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование
+  `black`, проверка типов `mypy`, юнит‑тесты `pytest`.
+
+## Требования
+
+| Компонент     | Минимальная версия |
+|---------------|-------------------|
+| Python        | 3.12              |
+| pandas        | 2.1               |
+| requests      | 2.31              |
+| PyYAML        | 6.0               |
+
+Полный список приведён в `requirements-dev.txt` или `pyproject.toml`.
 
 ## Установка
 
 ```bash
+
+git clone https://github.com/<org>/ChEMBL_data_acquisition.git
+
 pip install .[dev]
+# или установить в editable-режиме
+pip install -e .[dev]
 ```
 
 Install the project together with development tools such as
@@ -69,16 +96,29 @@ pre-commit run --all-files
        --output out/report.csv --log-level INFO
    ```
 
-4. **Run the tests**
-
-   ```bash
-
-   pytest
-   ```
+4. **Run the tests** – see [Тесты](#тесты).
 
 
-   The suite exercises the library modules using fixtures from
-   ``tests/data``.
+## Тесты
+
+Запустите линтеры, форматирование и проверки типов:
+
+```bash
+pre-commit run --all-files
+```
+
+Запустите тесты:
+
+```bash
+pytest
+```
+
+Для smoke-теста CLI выполните:
+
+```bash
+python mapper_batch_main.py --input tests/data/assays.csv \
+    --output out/mapped.csv --log-level INFO
+```
 
 
 ## Генерация данных
@@ -324,51 +364,23 @@ Clone the repository and install the package together with development tools:
 
 ```bash
 git clone https://example.com/ChEMBL_data_acquisition.git
+
 cd ChEMBL_data_acquisition
-pip install .[dev]
-```
-
-### Pre-commit hooks
-
-This project uses [pre-commit](https://pre-commit.com/) to run formatting, linting, type checking and tests. Install the hooks and run them across the codebase:
-
-```bash
-pre-commit install
+pip install .[dev]       # с инструментами разработки
+pre-commit install       # git‑хуки: black/ruff/mypy/pytest
 pre-commit run --all-files
 ```
 
-Continuous integration executes the same checks.
-
-
-
-## Project structure
-
-```
-data/             Example input and output files
-dictionary/       Lookup tables used during processing
-library/          Reusable data-processing modules
-tests/            Pytest suite and sample datasets
-scripts/          Command-line utilities and development helpers
-mapper_main.py    Mapping CLI
-table_quality_main.py  CSV profiling CLI
-config.yaml       Global configuration defaults
-```
-
-## Command line interface
-
-Individual scripts provide specialised data retrieval utilities:
-
-* ``scripts/get_activities.py`` – fetch ChEMBL activity information.
-* ``scripts/get_assay_data.py`` – retrieve assay descriptions from ChEMBL.
-* ``scripts/get_document_data.py`` – gather publication metadata.
-* ``scripts/get_target_data.py`` – combine ChEMBL, UniProt and IUPHAR target data.
-* ``scripts/get_testitem_data.py`` – download compound data and enrich with PubChem.
-* ``scripts/get_input_initialisation.py`` – merge ChEMBL initialisation workbooks.
-
-For a quick connectivity check without writing any files, limit the number of
-records and enable dry-run mode:
+## Быстрый старт
 
 ```bash
+ 
+# загрузка активности по идентификаторам из тестового CSV
+python -m scripts.get_activity_data \
+    --input tests/data/activity_ids_small.csv \
+    --output out/activities.csv \
+    --limit 10 --log-level INFO
+ 
 python -m scripts.get_activities --limit 10 --dry-run
 ```
 
@@ -476,37 +488,48 @@ runtime values such as ``api.user_agent``. A minimal configuration looks like::
     jobs:
       concurrency: 8
 
-Environment variables override values from the YAML file. Variables use the
-``CHEMBL_DA__SECTION__KEY`` pattern and also support short aliases:
+### Переменные окружения
 
-* ``CHEMBL_DA__API__CHEMBL_BASE`` / ``CHEMBL_DA_BASE``
-* ``CHEMBL_DA__API__TIMEOUT_CONNECT`` / ``CHEMBL_DA_TIMEOUT_CONNECT``
-* ``CHEMBL_DA__API__TIMEOUT_READ`` / ``CHEMBL_DA_TIMEOUT_READ``
-* ``CHEMBL_DA__API__RPS`` / ``CHEMBL_DA_RPS``
+Environment variables override values from the YAML file. Names follow the
+``CHEMBL_DA__SECTION__KEY`` pattern with double underscores separating
+sections and keys. For example, to enable debug logging:
 
-* ``CHEMBL_DA__OPENALEX__TIMEOUT_CONNECT`` / ``CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT``
-* ``CHEMBL_DA__OPENALEX__TIMEOUT_READ`` / ``CHEMBL_DA_OPENALEX_TIMEOUT_READ``
-* ``CHEMBL_DA__OPENALEX__RPS`` / ``CHEMBL_DA_OPENALEX_RPS``
-* ``CHEMBL_DA__CROSSREF__TIMEOUT_CONNECT`` / ``CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT``
-* ``CHEMBL_DA__CROSSREF__TIMEOUT_READ`` / ``CHEMBL_DA_CROSSREF_TIMEOUT_READ``
-* ``CHEMBL_DA__CROSSREF__RPS`` / ``CHEMBL_DA_CROSSREF_RPS``
-* ``CHEMBL_DA__UNIPROT__TIMEOUT_CONNECT`` / ``CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT``
-* ``CHEMBL_DA__UNIPROT__TIMEOUT_READ`` / ``CHEMBL_DA_UNIPROT_TIMEOUT_READ``
-* ``CHEMBL_DA__UNIPROT__RPS`` / ``CHEMBL_DA_UNIPROT_RPS``
-* ``CHEMBL_DA__IUPHAR__TIMEOUT_CONNECT`` / ``CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT``
-* ``CHEMBL_DA__IUPHAR__TIMEOUT_READ`` / ``CHEMBL_DA_IUPHAR_TIMEOUT_READ``
-* ``CHEMBL_DA__IUPHAR__RPS`` / ``CHEMBL_DA_IUPHAR_RPS``
-* ``CHEMBL_DA__PUBCHEM__TIMEOUT_CONNECT`` / ``CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT``
-* ``CHEMBL_DA__PUBCHEM__TIMEOUT_READ`` / ``CHEMBL_DA_PUBCHEM_TIMEOUT_READ``
-* ``CHEMBL_DA__PUBCHEM__RPS`` / ``CHEMBL_DA_PUBCHEM_RPS``
+```bash
+export CHEMBL_DA__LOG__LEVEL=DEBUG
+```
 
-* ``CHEMBL_DA__IO__OUTPUT_DIR`` / ``CHEMBL_DA_OUTDIR``
-* ``CHEMBL_DA__JOBS__CONCURRENCY`` / ``CHEMBL_DA_CONCURRENCY``
-* ``CHEMBL_DA__JOBS__CHUNK_SIZE`` / ``CHEMBL_DA_CHUNK_SIZE``
-* ``CHEMBL_DA__RETRY__MAX_ATTEMPTS`` / ``CHEMBL_DA_RETRY_MAX_ATTEMPTS``
-* ``CHEMBL_DA__RETRY__BACKOFF_FACTOR`` / ``CHEMBL_DA_RETRY_BACKOFF_FACTOR``
-* ``CHEMBL_DA__LOG__LEVEL`` / ``CHEMBL_DA_LOG_LEVEL``
-* ``CHEMBL_DA__LOG__FORMAT`` / ``CHEMBL_DA_LOG_FORMAT``
+Most options also provide short aliases. The table lists the supported mappings:
+
+| Alias | Equivalent key |
+|-------|----------------|
+| `CHEMBL_DA_BASE` | `CHEMBL_DA__API__CHEMBL_BASE` |
+| `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__API__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__API__TIMEOUT_READ` |
+| `CHEMBL_DA_RPS` | `CHEMBL_DA__API__RPS` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `CHEMBL_DA__OPENALEX__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `CHEMBL_DA__OPENALEX__TIMEOUT_READ` |
+| `CHEMBL_DA_OPENALEX_RPS` | `CHEMBL_DA__OPENALEX__RPS` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT` | `CHEMBL_DA__CROSSREF__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_READ` | `CHEMBL_DA__CROSSREF__TIMEOUT_READ` |
+| `CHEMBL_DA_CROSSREF_RPS` | `CHEMBL_DA__CROSSREF__RPS` |
+| `CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT` | `CHEMBL_DA__UNIPROT__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_UNIPROT_TIMEOUT_READ` | `CHEMBL_DA__UNIPROT__TIMEOUT_READ` |
+| `CHEMBL_DA_UNIPROT_RPS` | `CHEMBL_DA__UNIPROT__RPS` |
+| `CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT` | `CHEMBL_DA__IUPHAR__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_IUPHAR_TIMEOUT_READ` | `CHEMBL_DA__IUPHAR__TIMEOUT_READ` |
+| `CHEMBL_DA_IUPHAR_RPS` | `CHEMBL_DA__IUPHAR__RPS` |
+| `CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT` | `CHEMBL_DA__PUBCHEM__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_PUBCHEM_TIMEOUT_READ` | `CHEMBL_DA__PUBCHEM__TIMEOUT_READ` |
+| `CHEMBL_DA_PUBCHEM_RPS` | `CHEMBL_DA__PUBCHEM__RPS` |
+| `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
+| `CHEMBL_DA_CONCURRENCY` | `CHEMBL_DA__JOBS__CONCURRENCY` |
+| `CHEMBL_DA_CHUNK_SIZE` | `CHEMBL_DA__JOBS__CHUNK_SIZE` |
+| `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__RETRY__MAX_ATTEMPTS` |
+| `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__RETRY__BACKOFF_FACTOR` |
+| `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
+| `CHEMBL_DA_LOG_FORMAT` | `CHEMBL_DA__LOG__FORMAT` |
+
+See ``docs/CONFIG.md`` for a complete overview of all configuration options.
 
 ### Schema validation
 
@@ -532,223 +555,68 @@ Path values such as ``io.output_dir``, ``io.cache_dir`` and the ``init``
 workbook paths are exposed as :class:`pathlib.Path` objects. String values in
 ``config.yaml`` or overrides from the environment and command line are
 automatically converted.
+ 
 
-
-Common flags shared by scripts include:
-
-* ``--input`` – input CSV file (default ``input.csv``)
-* ``--output`` – destination CSV file (default: auto-generated next to the input)
-* ``--log-level`` – logging verbosity (default ``INFO``)
-* ``--sep`` – CSV delimiter (default taken from configuration)
-* ``--encoding`` – file encoding (default taken from configuration)
-* ``--column`` – column containing identifiers (script specific)
-
-Example fetching assay data::
-
-    python scripts/get_assay_data.py --input assays.csv --output assays_out.csv \
-        --column assay_chembl_id
-
-Each command validates required columns before querying external APIs and
-writes the resulting table to the specified output file.
-
-## Data contracts
-
-Each output table is validated with ``pandera`` to guarantee a consistent
-layout. Columns must satisfy the following contracts.
-
-### Activities
-
-Required columns
-
-* ``activity_id`` (*int*, ``>= 0``)
-* ``molecule_chembl_id`` (*str*)
-* ``standard_value`` (*float*, ``>= 0``)
-
-Optional columns
-
-* ``target_id`` (*str*)
-* ``standard_type`` (*str*, one of ``IC50``, ``EC50``, ``Ki``, ``Kd``)
-* ``pA_value`` (*float*, ``0–14``)
-
-Valid row
-
-```csv
-activity_id,molecule_chembl_id,target_id,standard_type,standard_value,pA_value
-1,TST1,TGT1,IC50,50,9
+# профилирование качества таблицы
+python table_quality_main.py \
+    --input tests/data/activity.csv \
+    --table-name activity
 ```
 
-Invalid row (``standard_type`` outside enum, ``pA_value`` > 14)
+`--output` по умолчанию формируется как `output_<имя_входа>_YYYYMMDD.csv`
+в каталоге, заданном `io.output_dir`.  
+Для дополнительных примеров см. [`docs/USAGE.md`](docs/USAGE.md).
 
-```csv
-activity_id,molecule_chembl_id,target_id,standard_type,standard_value,pA_value
-2,TST2,TGT2,IC90,100,20
+## Структура проекта
+
+```
+ChEMBL_data_acquisition/
+├── config.yaml
+├── dictionary/
+├── library/
+│   ├── __init__.py
+│   ├── chembl_client.py
+│   ├── csv_utils.py
+│   ├── config.py
+│   └── ...
+├── scripts/
+│   ├── get_activity_data.py
+│   ├── get_assay_data.py
+│   ├── ...
+├── tests/
+│   └── data/
+└── docs/
+    ├── CONFIG.md
+    ├── OUTPUT.md
+    └── USAGE.md
 ```
 
-### Assays
+## Конфигурация
 
-Required columns
+Параметры читаются из `config.yaml`, переменных окружения
+(`CHEMBL_DA__SECTION__KEY`) и ключей CLI.  
+Подробности в [`docs/CONFIG.md`](docs/CONFIG.md).
 
-* ``assay_chembl_id`` (*str*)
-* ``document_chembl_id`` (*str*)
-* ``year`` (*int*, ``1900–2100``)
-* ``month`` (*int*, ``1–12``)
+## Вывод и метаданные
 
-Optional columns
+Все сгенерированные CSV/Parquet и отчёты сохраняются в `data/output`
+(см. [`docs/OUTPUT.md`](docs/OUTPUT.md)).  
+Рядом создаются файлы `*.meta.yaml` с коммитом Git, параметрами запуска,
+контрольной суммой SHA‑256 и статистикой строк/колонок.
 
-* ``target_chembl_id`` (*str*)
+## Разработка и тестирование
 
-Valid row
-
-```csv
-assay_chembl_id,document_chembl_id,target_chembl_id,year,month
-A1,D1,T1,2023,5
+```bash
+ruff check scripts library mapper_main.py table_quality_main.py
+black scripts library mapper_main.py table_quality_main.py
+mypy scripts library mapper_main.py table_quality_main.py
+pytest
 ```
 
-Invalid row (``month`` > 12)
+Тестовые наборы расположены в `tests/data`.  
+Скрипт `scripts/check_determinism.py` проверяет повторяемость CSV‑вывода.
 
-```csv
-assay_chembl_id,document_chembl_id,target_chembl_id,year,month
-A2,D2,T2,2023,13
-```
+## Лицензия
 
-### Documents
+MIT License. См. файл `LICENSE` (если присутствует).
 
-Required columns
-
-* ``document_chembl_id`` (*str*)
-* ``title`` (*str*)
-* ``year`` (*int*, ``1900–2100``)
-* ``month`` (*int*, ``1–12``)
-
-Optional columns
-
-* ``doi`` (*str*)
-* ``day`` (*int*, ``1–31``)
-* ``citation`` (*int*, ``>= 0``)
-
-Valid row
-
-```csv
-document_chembl_id,doi,title,year,month,day,citation
-D1,10.1000/test,A study,2022,7,15,3
-```
-
-Invalid row (``day`` > 31, ``citation`` < 0)
-
-```csv
-document_chembl_id,doi,title,year,month,day,citation
-D2,10.1000/test2,Another study,2022,7,45,-1
-```
-
-### Targets
-
-Required columns
-
-* ``target_chembl_id`` (*str*)
-* ``organism`` (*str*)
-
-Optional columns
-
-* ``target_uniprot_id`` (*str*)
-* ``pH_dependence`` (*float*, ``0–14``)
-* ``isoforms`` (*float*, ``>= 0``)
-
-Valid row
-
-```csv
-target_chembl_id,organism,target_uniprot_id,pH_dependence,isoforms
-T1,Homo sapiens,P12345,7.4,2
-```
-
-Invalid row (``pH_dependence`` > 14)
-
-```csv
-target_chembl_id,organism,target_uniprot_id,pH_dependence,isoforms
-T2,Mus musculus,P67890,15,1
-```
-
-### Testitems
-
-Required columns
-
-* ``salt_chembl_id`` (*str*)
-* ``molecule_chembl_id`` (*str*)
-* ``molecule_type`` (*str*, ``Small molecule``, ``Biopolymer``,
-  ``Oligosaccharide``, ``Unknown``)
-* ``mw_freebase`` (*float*, ``0–2000``)
-
-Optional columns
-
-* ``chirality`` (*int*, ``-1``, ``0``, ``1``, ``2``)
-* ``num_ro5_violations`` (*float*, ``0–5``)
-* ``is_radical`` (*bool*)
-
-Valid row
-
-```csv
-salt_chembl_id,molecule_chembl_id,molecule_type,chirality,mw_freebase,num_ro5_violations,is_radical
-S1,M1,Small molecule,1,350.5,0,false
-```
-
-Invalid row (``molecule_type`` outside enum, ``mw_freebase`` > 2000)
-
-```csv
-salt_chembl_id,molecule_chembl_id,molecule_type,chirality,mw_freebase,num_ro5_violations,is_radical
-S2,M2,Peptide,0,2500,1,true
-```
-
-## Configuration
-
-Default settings such as API endpoints, network timeouts, rate limits and
-output directories live in `config.yaml` at the repository root. Each field is
-documented inside the file and has a sensible fallback that the utilities use
-if the entry is missing. See `docs/CONFIG.md` for a detailed description of all
-available options.
-
-Example merging initialisation tables::
-
-    python scripts/get_input_initialisation.py --config config.yaml
-
-The ``same_doc`` and ``all_doc`` workbook paths default to values from
-``config.yaml`` but can be overridden on the command line::
-
-    python scripts/get_input_initialisation.py \
-      --same-doc path/to/ChEMBL_same_document_20_05.xlsx \
-      --all-doc  path/to/ChEMBL_all_10_05_step5.xlsx \
-      --out-dir  ./out
-
-The script also profiles each exported table and writes
-``<name>_quality_report_table.csv`` and
-``<name>_data_correlation_report_table.csv`` alongside the original CSVs
-in ``--out-dir``.
-
-## Development
-
-Install the optional developer tools and run the standard quality checks:
-
-* ``pre-commit`` – run formatting, linting, type checking and tests in one go::
-
-      pre-commit run --all-files
-
-* ``black`` – auto-format the code::
-
-      black scripts library mapper_main.py table_quality_main.py
-
-* ``ruff`` – lint the project::
-
-      ruff check scripts library mapper_main.py table_quality_main.py
-
-* ``mypy`` – perform static type checks::
-
-      mypy scripts library mapper_main.py table_quality_main.py
-
-* ``python scripts/check_determinism.py`` – verify deterministic CSV output.
-
-* ``pytest`` – run the unit tests.
-
-Test data live in ``tests/data`` and provide coverage for utility functions in
-the library modules.
-
-## FAQ
-
-- Где искать информацию о типичных ошибках конфигурации? См. [Ошибки конфигурации](#ошибки-конфигурации).

@@ -46,3 +46,12 @@ def test_write_csv_deterministic_memory_usage(tmp_path: Path) -> None:
     # ``peak_with_copy`` should not be smaller as it includes an additional
     # DataFrame allocation.
     assert peak_with_copy >= peak_no_copy
+
+
+def test_write_csv_deterministic_memory_usage_large(tmp_path: Path) -> None:
+    """Handles DataFrames larger than one million rows."""
+    n = 1_200_000
+    peak_no_copy = _peak_memory(n, False, tmp_path / "large_no_copy.csv")
+    peak_with_copy = _peak_memory(n, True, tmp_path / "large_with_copy.csv")
+    # Allow minor fluctuations in memory measurements on different platforms
+    assert peak_with_copy >= 0.9 * peak_no_copy
