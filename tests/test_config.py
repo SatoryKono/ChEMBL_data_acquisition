@@ -295,6 +295,30 @@ def test_config_type_coercion() -> None:
     assert isinstance(cfg.batch.pause, float)
 
 
+def test_default_resource_paths_exist() -> None:
+    """Default resource paths should exist on disk."""
+
+    cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    cfg = load_config(cfg_path)
+    resources = cfg.resources
+    project_root = cfg_path.parent
+    for field in (
+        "dictionary_dir",
+        "iuphar_target_csv",
+        "iuphar_family_csv",
+        "uniprot_data_dir",
+        "organism_csv",
+        "targets_type_csv",
+    ):
+        resource_path = getattr(resources, field)
+        full_path = (
+            resource_path
+            if resource_path.is_absolute()
+            else project_root / resource_path
+        )
+        assert full_path.exists(), f"Missing default resource: {full_path}"
+
+
 def test_batch_pause_negative_value(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("batch:\n  pause: -1.0\n")
