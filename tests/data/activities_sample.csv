@@ -1,0 +1,2 @@
+activity_id,molecule_chembl_id,assay_chembl_id,standard_type,standard_value
+1,CHEMBL1,CHEMBL0,IC50,10.0

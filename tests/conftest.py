@@ -5,6 +5,9 @@ This module provides common pytest fixtures used across the test suite.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
 from library.config import ApiCfg, Config
@@ -27,3 +30,28 @@ def duplicate_document_ids() -> list[str]:
     """Return sample document IDs including duplicates for testing."""
 
     return ["CHEMBL1", "CHEMBL1", "CHEMBL2"]
+
+
+DATA_DIR = Path(__file__).parent / "data"
+
+
+@pytest.fixture()
+def activities_sample_df() -> pd.DataFrame:
+    """Load the minimal activities CSV as a :class:`~pandas.DataFrame`."""
+
+    return pd.read_csv(
+        DATA_DIR / "activities_sample.csv",
+        dtype={
+            "activity_id": str,
+            "molecule_chembl_id": str,
+            "assay_chembl_id": str,
+            "standard_type": str,
+        },
+    )
+
+
+@pytest.fixture()
+def documents_sample_df() -> pd.DataFrame:
+    """Load the minimal documents CSV as a :class:`~pandas.DataFrame`."""
+
+    return pd.read_csv(DATA_DIR / "documents_sample.csv")
