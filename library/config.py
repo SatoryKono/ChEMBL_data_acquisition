@@ -302,9 +302,9 @@ class ResourcesCfg(_BaseModel):
     dictionary_dir: Path = Path("dictionary")
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
-    uniprot_data_dir: Path = Path("uniprot")
-    organism_csv: Path = Path("dictionary/organism.csv")
-    targets_type_csv: Path = Path("dictionary/targets_type.csv")
+    uniprot_data_dir: Path = Path("dictionary/uniprot")
+    organism_csv: Path = Path("dictionary/_Target/targets_type.csv")
+    targets_type_csv: Path = Path("dictionary/_Target/targets_type.csv")
 
 
 class IoCfg(_BoolModel):
