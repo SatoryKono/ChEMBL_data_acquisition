@@ -202,14 +202,37 @@ def postprocess_documents(
             result[col] = result[col].astype(str)
 
     # --- compute date_code ----------------------------------------------------
+    def _normalise_component(value: object, width: int) -> tuple[str, str]:
+        """Return raw and padded string representations of a date component."""
+
+        if pd.isna(value):
+            raw = ""
+        else:
+            raw = str(value).strip()
+        if raw.isdigit():
+            padded = raw.zfill(width)
+        else:
+            padded = raw
+        return raw, padded
+
     def build_date_code(row: pd.Series) -> str:
-        day_completed = row["PubMed.DayCompleted"]
-        if day_completed and day_completed != "0":
-            return f"{row['PubMed.YearCompleted']}-{row['PubMed.MonthCompleted']}-{day_completed}"
-        day_revised = row["PubMed.DayRevised"]
-        if day_revised and day_revised != "0":
-            return f"{row['PubMed.YearRevised']}-{row['PubMed.MonthRevised']}-{day_revised}"
-        return f"{row['PubMed.YearCompleted']}-{row['PubMed.MonthCompleted']}-01"
+        (
+            day_completed_raw,
+            day_completed,
+        ) = _normalise_component(row["PubMed.DayCompleted"], 2)
+        _, month_completed = _normalise_component(row["PubMed.MonthCompleted"], 2)
+        _, year_completed = _normalise_component(row["PubMed.YearCompleted"], 4)
+        day_revised_raw, day_revised = _normalise_component(
+            row["PubMed.DayRevised"], 2
+        )
+        _, month_revised = _normalise_component(row["PubMed.MonthRevised"], 2)
+        _, year_revised = _normalise_component(row["PubMed.YearRevised"], 4)
+
+        if day_completed_raw and day_completed_raw != "0":
+            return f"{year_completed}-{month_completed}-{day_completed}"
+        if day_revised_raw and day_revised_raw != "0":
+            return f"{year_revised}-{month_revised}-{day_revised}"
+        return f"{year_completed}-{month_completed}-01"
 
     result["date_code"] = result.apply(build_date_code, axis=1)
 
