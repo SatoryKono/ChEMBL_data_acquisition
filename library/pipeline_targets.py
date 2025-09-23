@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
+
+from inspect import Parameter, Signature, signature
+
 from typing import Any, Sequence
 
 import pandas as pd
@@ -15,62 +18,75 @@ OptionalFetcher = Callable[..., pd.DataFrame]
 _OPTIONAL_KEYWORDS = frozenset({"batch_size", "chunk_size"})
 
 
+def _supports_kwargs(sig: Signature) -> bool:
+    """Return ``True`` when ``sig`` accepts arbitrary keyword arguments."""
+
+    return any(param.kind is Parameter.VAR_KEYWORD for param in sig.parameters.values())
+
+
+def _filter_optional_kwargs(
+    fetcher: OptionalFetcher,
+    kwargs: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Split ``kwargs`` into supported values and dropped optional names."""
+
+    if not kwargs:
+        return {}, []
+    try:
+        sig = signature(fetcher)
+    except (TypeError, ValueError):
+        return dict(kwargs), []
+    if _supports_kwargs(sig):
+        return dict(kwargs), []
+
+    accepted = set(sig.parameters)
+    filtered: dict[str, Any] = {}
+    dropped: list[str] = []
+    for key, value in kwargs.items():
+        if key in accepted or key not in _OPTIONAL_KEYWORDS:
+            filtered[key] = value
+        else:
+            dropped.append(key)
+    return filtered, dropped
+
+
+
 def _call_fetcher(
     fetcher: OptionalFetcher,
     /,
     *args: Any,
     **kwargs: Any,
 ) -> pd.DataFrame:
-    """Invoke ``fetcher`` handling optional keywords gracefully.
 
-    The helper first attempts to call ``fetcher`` with the supplied positional
-    and keyword arguments.  Some of the pipeline stages wrap the actual network
-    functions with local caching closures that do not expose every keyword used
-    by the underlying implementation (for example ``batch_size``).  Such
-    wrappers raise :class:`TypeError` when an unexpected keyword argument is
-    provided.  To maintain backwards compatibility we retry the invocation after
-    removing optional keywords when this happens.
+    """Invoke ``fetcher`` handling optional keywords gracefully."""
 
-    Parameters
-    ----------
-    fetcher:
-        Callable performing the stage work.
-    *args:
-        Positional arguments forwarded to ``fetcher``.
-    **kwargs:
-        Keyword arguments forwarded to ``fetcher``.  ``batch_size`` and
-        ``chunk_size`` are treated as optional and dropped on retry when
-        unsupported.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Result returned by ``fetcher``.
-
-    Raises
-    ------
-    TypeError
-        Re-raised when ``fetcher`` rejects the call even after removing the
-        optional keywords.
-    """
-
-    if not kwargs:
-        return fetcher(*args)
+    filtered_kwargs, dropped = _filter_optional_kwargs(fetcher, kwargs)
+    if dropped:
+        logger.debug(
+            "filtered_optional_kwargs_before_call",
+            extra={
+                "fetcher": getattr(fetcher, "__name__", repr(fetcher)),
+                "dropped": sorted(dropped),
+            },
+        )
     try:
-        return fetcher(*args, **kwargs)
-    except TypeError as exc:
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in _OPTIONAL_KEYWORDS}
-        if len(filtered_kwargs) == len(kwargs):
+        return fetcher(*args, **filtered_kwargs)
+    except TypeError:
+        retry_kwargs = {k: v for k, v in filtered_kwargs.items() if k not in _OPTIONAL_KEYWORDS}
+        if len(retry_kwargs) == len(filtered_kwargs):
             raise
-        dropped = sorted(set(kwargs) - set(filtered_kwargs))
+        dropped_retry = sorted(set(filtered_kwargs) - set(retry_kwargs))
+
         logger.debug(
             "retrying_fetcher_without_optional_kwargs",
             extra={
                 "fetcher": getattr(fetcher, "__name__", repr(fetcher)),
-                "dropped": dropped,
+
+                "dropped": dropped_retry,
             },
         )
-        return fetcher(*args, **filtered_kwargs)
+        return fetcher(*args, **retry_kwargs)
+
 
 
 @dataclass(frozen=True)
