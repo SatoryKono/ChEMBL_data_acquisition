@@ -105,12 +105,23 @@ def _chunk_iterator(cfg: Config, options: PipelineConfig) -> Iterator[Iterable[s
         yield chunk
 
 
-def _chembl_fetcher(
+
+def _cached_chembl_fetch(
     chunks: Iterator[Iterable[str]],
     cfg: Config,
     *,
+    chunk_size: int = 100,
     batch_size: int | None = None,
 ) -> pd.DataFrame:
+    """Return a deterministic frame for the provided ``chunks``.
+
+    The wrapper mimics the behaviour of the production fetcher which caches
+    results on disk.  In this trimmed-down CLI variant we simply flatten the
+    incoming chunk iterator into a dataframe while keeping the API compatible
+    with :func:`library.pipeline_targets.run_pipeline`.
+    """
+
+
     ids = [item for chunk in chunks for item in chunk]
     df = pd.DataFrame({"target_chembl_id": ids})
     if df.empty:
@@ -135,7 +146,10 @@ def run(cfg: Config, options: PipelineConfig) -> int:
     result = run_pipeline(
         lambda: _chunk_iterator(cfg, options),
         cfg,
-        chembl_fetcher=_chembl_fetcher,
+
+        chembl_fetcher=_cached_chembl_fetch,
+        chembl_kwargs={"chunk_size": options.chunk_size},
+
         batch_size=options.batch_size,
     )
     output = _write_outputs(cfg, options, result)
