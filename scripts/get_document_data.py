@@ -35,6 +35,7 @@ if __package__ is None:  # running as a script
 import argparse
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import islice
 from typing import cast
 
 import pandas as pd
@@ -189,10 +190,24 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.document.pubmed.limit
+    if limit is not None and limit < 0:
+        logger.error("document.pubmed.limit must be non-negative")
+        return 1
     try:
-        pmids = io.read_ids(
+        pmids_iter = io.read_ids(
             args.input_csv, column=cfg.document.pubmed.column, cfg=cfg.io
         )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error("%s", exc)
+        return 1
+    pmids: Iterable[str] = pmids_iter
+    if limit is not None:
+        limited_pmids = list(islice(pmids_iter, limit))
+        pmids = limited_pmids
+        logger.info("process_limit", limit=len(limited_pmids))
+
+    try:
         df = fetch_pubmed_records(
             pmids,
             cfg.document.pubmed.sleep,
@@ -293,15 +308,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.document.chembl.limit
+    if limit is not None and limit < 0:
+        logger.error("document.chembl.limit must be non-negative")
+        return 1
+
     # Configure session for ChEMBL requests
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            ids = io.read_ids(
+            ids_iter = io.read_ids(
                 args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
             logger.error("%s", exc)
             return 1
+
+        ids = ids_iter
+        if limit is not None:
+            limited_ids = list(islice(ids_iter, limit))
+            ids = limited_ids
+            logger.info("process_limit", limit=len(limited_ids))
 
         try:
             df = cl.get_documents(
@@ -409,17 +435,30 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.document.all.limit
+    if limit is not None and limit < 0:
+        logger.error("document.all.limit must be non-negative")
+        return 1
+
     # Prepare shared session before performing any API calls
     try:
-        ids = io.read_ids(args.input_csv, column=cfg.document.all.column, cfg=cfg.io)
+        ids_iter = io.read_ids(
+            args.input_csv, column=cfg.document.all.column, cfg=cfg.io
+        )
     except (FileNotFoundError, ValueError) as exc:
         logger.error("%s", exc)
         return 1
 
+    ids_source: Iterable[str] = ids_iter
+    if limit is not None:
+        limited_ids = list(islice(ids_iter, limit))
+        ids_source = limited_ids
+        logger.info("process_limit", limit=len(limited_ids))
+
     chunk_ids: list[str] = []
     try:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            chunk_ids = list(ids)  # capture IDs for logging on failure
+            chunk_ids = list(ids_source)  # capture IDs for logging on failure
             doc_df = cl.get_documents(
                 chunk_ids,
                 cfg=cfg.api,
@@ -661,6 +700,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Maximum PMIDs per PubMed request",
     )
     pubmed.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
+    pubmed.add_argument(
         "--openalex-rps",
         type=float,
         default=None,
@@ -690,6 +735,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=30.0,
         help="Timeout in seconds for each HTTP request",
+    )
+    chembl.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
     )
     chembl.set_defaults(func=run_chembl)
 
@@ -726,6 +777,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Timeout in seconds for each HTTP request",
     )
     all_cmd.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
+    all_cmd.add_argument(
         "--openalex-rps",
         type=float,
         default=None,
@@ -752,12 +809,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
+    limit_value = getattr(args, "limit", None)
+    if limit_value is not None and limit_value <= 0:
+        subparser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
-    mapping = {"column": f"document.{args.command}.column"}
+    mapping = {
+        "column": f"document.{args.command}.column",
+        "limit": f"document.{args.command}.limit",
+    }
     if args.command == "pubmed":
         mapping.update(
             {

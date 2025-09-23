@@ -133,7 +133,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="Minimum score for unknown label",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of rows to process",
+    )
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger_inst = configure_logger(log_cfg)
     logger_inst.info("pipeline_start", run_id=log_cfg.run_id)
@@ -150,6 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "threshold_review": "doc_type.thresholds.review",
                 "threshold_experimental": "doc_type.thresholds.experimental",
                 "threshold_unknown": "doc_type.thresholds.unknown",
+                "limit": "doc_type.limit",
             },
         )
         if args.print_config:
@@ -170,7 +179,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    df_in = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
+    limit_cfg = cfg.doc_type.limit
+    if limit_cfg is not None and limit_cfg < 0:
+        logger.error("doc_type.limit must be non-negative")
+        logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    df_in = pd.read_csv(
+        args.input_csv,
+        sep=args.sep,
+        encoding=args.encoding,
+        nrows=limit_cfg,
+    )
+    if limit_cfg is not None:
+        logger_inst.info("process_limit", limit=len(df_in))
     df_out = classify_dataframe(
         df_in,
         weights=cfg.doc_type.weights,

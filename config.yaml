@@ -104,6 +104,7 @@ doc_type:
     review: 1
     experimental: 1
     unknown: 2
+  limit: null
 
 activity:
   column: "activity_chembl_id"
@@ -116,11 +117,13 @@ assay:
   column: "assay_chembl_id"
   chunk_size: 50
   timeout: 30.0
+  limit: null
 
 testitem:
   column: "molecule_chembl_id"
   chunk_size: 50
   timeout: 30.0
+  limit: null
 
 document:
   pubmed:
@@ -128,10 +131,12 @@ document:
     sleep: 5.0
     workers: 1
     batch_size: 50
+    limit: null
   chembl:
     column: "document_chembl_id"
     chunk_size: 50
     timeout: 30.0
+    limit: null
   all:
     column: "document_chembl_id"
     chunk_size: 50
@@ -139,17 +144,21 @@ document:
     workers: 1
     batch_size: 50
     timeout: 30.0
+    limit: null
 
 target:
   uniprot:
     column: "uniprot_id"
     data_dir: "dictionary/uniprot"
+    limit: null
   chembl:
     column: "target_chembl_id"
     timeout: 30.0
+    limit: null
   iuphar:
     target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"
     family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"
+    limit: null
   all:
     data_dir: "dictionary/uniprot"
     target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"
@@ -160,6 +169,7 @@ target:
     chembl_out: null
     uniprot_out: null
     iuphar_out: null
+    limit: null
 
 resources:
   dictionary_dir: "dictionary"  # Directory with supplementary lookup tables

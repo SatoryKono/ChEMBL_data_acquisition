@@ -296,6 +296,7 @@ class DocTypeCfg(_BaseModel):
     thresholds: dict[str, int] = Field(
         default_factory=lambda: {"review": 1, "experimental": 1, "unknown": 2}
     )
+    limit: int | None = None
 
 
 class ResourcesCfg(_BaseModel):
@@ -415,12 +416,14 @@ class AssayCfg(_BaseModel):
     column: str = "assay_chembl_id"
     chunk_size: int = Field(10, ge=1)
     timeout: float = Field(30.0, ge=0)
+    limit: int | None = None
 
 
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
+    limit: int | None = None
 
 
 class DocumentPubmedCfg(_BaseModel):
@@ -428,12 +431,14 @@ class DocumentPubmedCfg(_BaseModel):
     sleep: float = Field(5.0, ge=0)
     workers: int = Field(1, ge=1)
     batch_size: int = Field(100, ge=1)
+    limit: int | None = None
 
 
 class DocumentChemblCfg(_BaseModel):
     column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
+    limit: int | None = None
 
 
 class DocumentAllCfg(_BaseModel):
@@ -443,6 +448,7 @@ class DocumentAllCfg(_BaseModel):
     workers: int = Field(1, ge=1)
     batch_size: int = Field(50, ge=1)
     timeout: float = Field(30.0, ge=0)
+    limit: int | None = None
 
 
 class DocumentCfg(_BaseModel):
@@ -454,16 +460,19 @@ class DocumentCfg(_BaseModel):
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
     data_dir: Path = Path("dictionary/uniprot")
+    limit: int | None = None
 
 
 class TargetChemblCfg(_BaseModel):
     column: str = "chembl_id"
     timeout: float = Field(30.0, ge=0)
+    limit: int | None = None
 
 
 class TargetIupharCfg(_BaseModel):
     target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+    limit: int | None = None
 
 
 class TargetAllCfg(_BaseModel):
@@ -476,6 +485,7 @@ class TargetAllCfg(_BaseModel):
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
     iuphar_out: Path | None = None
+    limit: int | None = None
 
 
 class TargetCfg(_BaseModel):

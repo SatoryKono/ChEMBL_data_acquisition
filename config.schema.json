@@ -116,6 +116,18 @@
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "AssayCfg",
@@ -242,6 +254,18 @@
           },
           "title": "Thresholds",
           "type": "object"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "DocTypeCfg",
@@ -285,6 +309,18 @@
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "DocumentAllCfg",
@@ -346,6 +382,18 @@
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "DocumentChemblCfg",
@@ -377,6 +425,18 @@
           "minimum": 1,
           "title": "Batch Size",
           "type": "integer"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "DocumentPubmedCfg",
@@ -964,6 +1024,18 @@
           ],
           "default": null,
           "title": "Iuphar Out"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "TargetAllCfg",
@@ -1026,6 +1098,18 @@
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "TargetChemblCfg",
@@ -1046,6 +1130,18 @@
           "format": "path",
           "title": "Family Csv",
           "type": "string"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "TargetIupharCfg",
@@ -1065,6 +1161,18 @@
           "format": "path",
           "title": "Data Dir",
           "type": "string"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
         }
       },
       "title": "TargetUniprotCfg",
@@ -1321,7 +1429,8 @@
           "experimental": 1,
           "review": 1,
           "unknown": 2
-        }
+        },
+        "limit": null
       },
       "description": "Weights and thresholds for document type classification."
     },
@@ -1446,7 +1555,8 @@
       "default": {
         "column": "assay_chembl_id",
         "chunk_size": 10,
-        "timeout": 30.0
+        "timeout": 30.0,
+        "limit": null
       },
       "description": "Assay data fetching configuration."
     },
@@ -1455,7 +1565,8 @@
       "default": {
         "column": "molecule_chembl_id",
         "chunk_size": 5,
-        "timeout": 30.0
+        "timeout": 30.0,
+        "limit": null
       },
       "description": "Test item data fetching configuration."
     },
@@ -1466,12 +1577,14 @@
           "batch_size": 100,
           "column": "PMID",
           "sleep": 5.0,
-          "workers": 1
+          "workers": 1,
+          "limit": null
         },
         "chembl": {
           "chunk_size": 5,
           "column": "document_chembl_id",
-          "timeout": 30.0
+          "timeout": 30.0,
+          "limit": null
         },
         "all": {
           "batch_size": 50,
@@ -1479,7 +1592,8 @@
           "column": "document_chembl_id",
           "sleep": 5.0,
           "timeout": 30.0,
-          "workers": 1
+          "workers": 1,
+          "limit": null
         }
       },
       "description": "Document data fetching configuration."
@@ -1489,15 +1603,18 @@
       "default": {
         "uniprot": {
           "column": "uniprot_id",
-          "data_dir": "dictionary/uniprot"
+          "data_dir": "dictionary/uniprot",
+          "limit": null
         },
         "chembl": {
           "column": "target_chembl_id",
-          "timeout": 30.0
+          "timeout": 30.0,
+          "limit": null
         },
         "iuphar": {
           "family_csv": "dictionary/_IUPHAR/_IUPHAR_family.csv",
-          "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv"
+          "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv",
+          "limit": null
         },
         "all": {
           "chembl_out": null,
@@ -1508,7 +1625,8 @@
           "target_csv": "dictionary/_IUPHAR/_IUPHAR_target.csv",
           "timeout": 30.0,
           "uniprot_column": "uniprot_id",
-          "uniprot_out": null
+          "uniprot_out": null,
+          "limit": null
         }
       },
       "description": "Target data fetching configuration."

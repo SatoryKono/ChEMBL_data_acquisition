@@ -12,6 +12,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections.abc import Sequence
+from itertools import islice
 
 import requests
 from pandera.errors import SchemaErrors
@@ -61,13 +62,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.assay.limit
+    if limit is not None and limit < 0:
+        logger.error("assay.limit must be non-negative")
+        return 1
+
     # Prepare HTTP session for ChEMBL requests
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            ids = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
+            ids_iter = io.read_ids(
+                args.input_csv, column=cfg.assay.column, cfg=cfg.io
+            )
         except (FileNotFoundError, ValueError) as exc:
             logger.error("%s", exc)
             return 1
+
+        ids = ids_iter
+        if limit is not None:
+            limited_ids = list(islice(ids_iter, limit))
+            ids = limited_ids
+            logger.info("process_limit", limit=len(limited_ids))
 
         try:
             df = cl.get_assays(
@@ -172,6 +186,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=30.0,
         help="Timeout in seconds for each HTTP request",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -180,6 +200,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
@@ -192,6 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "timeout": "assay.timeout",
                 "column": "assay.column",
                 "chunk_size": "assay.chunk_size",
+                "limit": "assay.limit",
             },
         )
         if args.print_config:

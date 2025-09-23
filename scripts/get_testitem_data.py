@@ -12,6 +12,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections.abc import Sequence
+from itertools import islice
 
 import pandas as pd
 import requests
@@ -136,15 +137,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.testitem.limit
+    if limit is not None and limit < 0:
+        logger.error("testitem.limit must be non-negative")
+        return 1
+
     # Initialise HTTP session for subsequent ChEMBL requests
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            # ``read_ids`` returns a generator to minimise memory use. Convert to a
-            # list so we can log the total number of identifiers and iterate over the
-            # values multiple times if needed.
-            ids = list(
-                io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io)
+            ids_iter = io.read_ids(
+                args.input_csv, column=cfg.testitem.column, cfg=cfg.io
             )
+            if limit is not None:
+                ids = list(islice(ids_iter, limit))
+                logger.info("process_limit", limit=len(ids))
+            else:
+                ids = list(ids_iter)
         except (FileNotFoundError, ValueError) as exc:
             logger.error("%s", exc)
             return 1
@@ -259,6 +267,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=30.0,
         help="Timeout in seconds for each HTTP request",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -267,6 +281,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
@@ -279,6 +295,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "timeout": "testitem.timeout",
                 "column": "testitem.column",
                 "chunk_size": "testitem.chunk_size",
+                "limit": "testitem.limit",
             },
         )
         if args.print_config:
