@@ -105,6 +105,7 @@ def _chunk_iterator(cfg: Config, options: PipelineConfig) -> Iterator[Iterable[s
         yield chunk
 
 
+
 def _cached_chembl_fetch(
     chunks: Iterator[Iterable[str]],
     cfg: Config,
@@ -119,6 +120,7 @@ def _cached_chembl_fetch(
     incoming chunk iterator into a dataframe while keeping the API compatible
     with :func:`library.pipeline_targets.run_pipeline`.
     """
+
 
     ids = [item for chunk in chunks for item in chunk]
     df = pd.DataFrame({"target_chembl_id": ids})
@@ -144,8 +146,10 @@ def run(cfg: Config, options: PipelineConfig) -> int:
     result = run_pipeline(
         lambda: _chunk_iterator(cfg, options),
         cfg,
+
         chembl_fetcher=_cached_chembl_fetch,
         chembl_kwargs={"chunk_size": options.chunk_size},
+
         batch_size=options.batch_size,
     )
     output = _write_outputs(cfg, options, result)
