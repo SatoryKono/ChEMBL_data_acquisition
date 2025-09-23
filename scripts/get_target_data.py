@@ -14,6 +14,7 @@ import argparse
 import csv
 import sys
 from collections.abc import Sequence
+from itertools import islice
 from pathlib import Path
 from typing import cast
 
@@ -153,6 +154,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config resources.uniprot_data_dir)"
         ),
     )
+    uniprot.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     uniprot.set_defaults(func=run_uniprot)
 
     # ----------------------------
@@ -173,6 +180,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=30.0,
         help="Timeout in seconds for each HTTP request",
+    )
+    chembl.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
     )
     chembl.set_defaults(func=run_chembl)
 
@@ -201,6 +214,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "Path to the _IUPHAR_family.csv file "
             "(default: config resources.iuphar_family_csv)"
         ),
+    )
+    iuphar.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of rows to process",
     )
     iuphar.set_defaults(func=run_iuphar)
 
@@ -278,6 +297,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         choices=["uniprot_id", "mapping_uniprot_id"],
         help="Column from ChEMBL output to use for UniProt processing",
     )
+    all_cmd.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     all_cmd.set_defaults(func=run_all)
 
     parser.subparsers_map = {  # type: ignore[attr-defined]
@@ -311,6 +336,11 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     :mod:`tests.test_target_postprocessing`.
 
     """
+    limit = cfg.target.uniprot.limit
+    if limit is not None and limit < 0:
+        logger.error("target.uniprot.limit must be non-negative")
+        return 1
+
     try:
         df = pd.read_csv(
             args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -322,6 +352,9 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         df = df[(df[column].str.strip() != "") & (df[column] != "#N/A")].reset_index(
             drop=True
         )
+        if limit is not None:
+            df = df.head(limit)
+            logger.info("process_limit", limit=len(df))
         ids = df[column].tolist()
 
         from tempfile import NamedTemporaryFile
@@ -390,15 +423,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.target.chembl.limit
+    if limit is not None and limit < 0:
+        logger.error("target.chembl.limit must be non-negative")
+        return 1
+
     # Set up HTTP session with proper headers and retry behaviour
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            ids = io.read_ids(
+            ids_iter = io.read_ids(
                 args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
             logger.error("%s", exc)
             return 1
+
+        ids = ids_iter
+        if limit is not None:
+            limited_ids = list(islice(ids_iter, limit))
+            ids = limited_ids
+            logger.info("process_limit", limit=len(limited_ids))
 
         try:
             df = cl.get_targets(
@@ -501,7 +545,36 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.target.iuphar.limit
+    if limit is not None and limit < 0:
+        logger.error("target.iuphar.limit must be non-negative")
+        return 1
+
+    tmp_path: Path | None = None
+    source_csv = args.input_csv
+
     try:
+        if limit is not None:
+            df_limited = pd.read_csv(
+                args.input_csv,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                dtype=str,
+                nrows=limit,
+            )
+            logger.info("process_limit", limit=len(df_limited))
+            from tempfile import NamedTemporaryFile
+
+            with NamedTemporaryFile(delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            df_limited.to_csv(
+                tmp_path,
+                index=False,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+            )
+            source_csv = tmp_path
+
         data = ii.IUPHARData.from_files(
             target_path=cfg.target.iuphar.target_csv,
             family_path=cfg.target.iuphar.family_csv,
@@ -509,7 +582,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
-            input_path=args.input_csv,
+            input_path=source_csv,
             output_path=output,
             encoding=cfg.io.csv_encoding,
             sep=cfg.io.csv_sep,
@@ -517,6 +590,9 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
         return 1
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
     try:
         analyze_table_quality(output, table_name=str(output.with_suffix("")))
     except ValueError as exc:
@@ -525,7 +601,9 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
-def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame:
+def fetch_chembl(
+    cfg: Config, input_csv: Path, output_csv: Path, limit: int | None = None
+) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
     Parameters
@@ -536,6 +614,8 @@ def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame
         Source of ChEMBL identifiers.
     output_csv:
         Destination for the retrieved records.
+    limit:
+        Optional maximum number of identifiers to process.
 
     Returns
     -------
@@ -545,8 +625,15 @@ def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame
 
     logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
     chembl_args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
-    if run_chembl(cfg, chembl_args) != 0:
-        raise RuntimeError("ChEMBL retrieval failed")
+    original_limit = cfg.target.chembl.limit
+    if limit is not None:
+        cfg.target.chembl.limit = limit
+    try:
+        if run_chembl(cfg, chembl_args) != 0:
+            raise RuntimeError("ChEMBL retrieval failed")
+    finally:
+        if limit is not None:
+            cfg.target.chembl.limit = original_limit
     df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
@@ -821,6 +908,11 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """Run the full target acquisition pipeline."""
 
+    limit = cfg.target.all.limit
+    if limit is not None and limit < 0:
+        logger.error("target.all.limit must be non-negative")
+        return 1
+
     try:
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         chembl_out = cfg.target.all.chembl_out or output.with_name(
@@ -833,7 +925,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             output.stem + "_iuphar.csv"
         )
 
-        chembl_df = fetch_chembl(cfg, args.input_csv, chembl_out)
+        chembl_df = fetch_chembl(cfg, args.input_csv, chembl_out, limit=limit)
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
@@ -848,27 +940,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
+    limit_value = getattr(args, "limit", None)
+    if limit_value is not None and limit_value <= 0:
+        subparser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
     try:
         mapping: dict[str, str] = {}
         if args.command == "uniprot":
             mapping = {
                 "column": "target.uniprot.column",
                 "data_dir": "target.uniprot.data_dir",
+                "limit": "target.uniprot.limit",
             }
         elif args.command == "chembl":
             mapping = {
                 "column": "target.chembl.column",
                 "timeout": "target.chembl.timeout",
+                "limit": "target.chembl.limit",
             }
         elif args.command == "iuphar":
             mapping = {
                 "target_csv": "target.iuphar.target_csv",
                 "family_csv": "target.iuphar.family_csv",
+                "limit": "target.iuphar.limit",
             }
         elif args.command == "all":
             mapping = {
@@ -881,6 +979,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "chembl_out": "target.all.chembl_out",
                 "uniprot_out": "target.all.uniprot_out",
                 "iuphar_out": "target.all.iuphar_out",
+                "limit": "target.all.limit",
             }
         cfg: Config = apply_config_overrides(
             args, subparser, args.config, mapping=mapping, base_parser=parser
