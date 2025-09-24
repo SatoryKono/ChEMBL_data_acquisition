@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+from contextlib import contextmanager
 
 import pandas as pd
 import pytest
@@ -200,3 +203,110 @@ def test_write_csv_column_order(
         c for c in df.columns if c not in schema_cols
     )
     assert captured["col_order"] == expected
+
+
+def test_fetch_pubmed_records_order_and_limiters(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    pmids = ["1", "2"]
+
+    acquisitions: list[str] = []
+    limiters: dict[str, FakeLimiter] = {}
+
+    class FakeLimiter:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def acquire(self) -> None:
+            acquisitions.append(self.name)
+
+    def fake_get_limiter(name: str, rps: float, burst: int | None = None) -> FakeLimiter:
+        limiter = limiters.get(name)
+        if limiter is None:
+            limiter = FakeLimiter(name)
+            limiters[name] = limiter
+        return limiter
+
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+
+    def fake_fetch_pubmed_batch(
+        session: object,
+        batch: list[str],
+        sleep: float,
+        cfg: object | None = None,
+    ) -> list[dict[str, str]]:
+        pmid = batch[0]
+        if pmid == "1":
+            time.sleep(0.02)
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"doi-{pmid}",
+                "PubMed.Error": "",
+            }
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_fetch_pubmed_batch)
+
+    def fake_semantic_batch(
+        session: object,
+        batch_pmids: list[str],
+        sleep: float,
+        cfg: object | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"doi-{pmid}",
+                "scholar.Error": "",
+            }
+            for pmid in batch_pmids
+        ]
+
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar_batch",
+        fake_semantic_batch,
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda session, pmid, cfg, limiter: (
+            limiter.acquire(),
+            {"OpenAlex.Id": f"oa-{pmid}"},
+        )[1],
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda session, doi, cfg, limiter: (
+            limiter.acquire(),
+            {"crossref.Type": "journal"},
+        )[1],
+    )
+
+    @contextmanager
+    def fake_session_with_retry(api_cfg: object, retry_cfg: object) -> object:
+        yield object()
+
+    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
+        pubmed_cfg=cfg.pubmed,
+        semantic_cfg=cfg.semantic_scholar,
+        max_workers=2,
+        batch_size=1,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert acquisitions.count("pubmed") == len(pmids)
+    assert acquisitions.count("semantic_scholar") == len(pmids)
+    assert acquisitions.count("openalex") == len(pmids)
+    assert acquisitions.count("crossref") == len(pmids)
+    assert set(limiters) == {"pubmed", "semantic_scholar", "openalex", "crossref"}
