@@ -34,6 +34,7 @@ import yaml
 
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
+from .log import logger
 from .git_utils import _git_sha
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
@@ -233,6 +234,14 @@ def write_csv(
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
     key_cols_list = list(key_cols) if key_cols is not None else sorted(df.columns)
+    missing_keys = [col for col in key_cols_list if col not in df.columns]
+    if missing_keys:
+        logger.error(
+            "missing_key_columns",
+            requested=key_cols_list,
+            missing=missing_keys,
+        )
+        raise ValueError(f"Missing key columns: {missing_keys}")
     col_order_list = list(col_order) if col_order is not None else None
     from .csv_utils import write_csv_deterministic
 

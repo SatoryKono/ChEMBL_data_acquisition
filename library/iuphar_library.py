@@ -188,7 +188,12 @@ def _query_gene_symbol(
                     return data[0] if data else {}
         except requests.RequestException as exc:  # pragma: no cover - network errors
             if attempt >= retry.max_attempts:
-                logger.error("IUPHAR web request failed: %s", exc)
+                logger.error(
+                    "request_error",
+                    url=url,
+                    attempt=attempt,
+                    error=str(exc),
+                )
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
             jitter = random.uniform(0, backoff)
@@ -666,7 +671,12 @@ class IUPHARData:
                             return pd.read_csv(io.StringIO(resp.text))
                 except requests.RequestException as exc:  # pragma: no cover - network
                     if attempt >= retry_cfg.max_attempts:
-                        logger.error("IUPHAR mapping request failed: %s", exc)
+                        logger.error(
+                            "request_error",
+                            url=url,
+                            attempt=attempt,
+                            error=str(exc),
+                        )
                         raise
                     backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
                     jitter = random.uniform(0, backoff)

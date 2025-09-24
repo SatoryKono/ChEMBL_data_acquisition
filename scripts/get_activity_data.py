@@ -66,7 +66,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """
     limit = cfg.activity.limit
     if limit is not None and limit < 0:
-        logger.error("activity.limit must be non-negative")
+        logger.error("invalid_limit", section="activity.limit", limit=limit)
         return 1
 
     if cfg.activity.dry_run:
@@ -81,7 +81,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 args.input_csv, column=cfg.activity.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "read_fail",
+                error=str(exc),
+                path=str(args.input_csv),
+            )
             return 1
 
         # Apply the ``limit`` without materialising the entire iterator first.
@@ -102,7 +106,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 timeout=cfg.activity.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
-            logger.error("failed to retrieve activities: %s", exc)
+            logger.error(
+                "activity_fetch_failed",
+                extra={"msg": str(exc)},
+                error=str(exc),
+                chunk_size=cfg.activity.chunk_size,
+                timeout=cfg.activity.timeout,
+            )
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_activities(df)
@@ -124,7 +134,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if not missing_required:
             if missing_optional:
                 logger.warning(
-                    "DataFrame is missing optional columns: %s", missing_optional
+                    "optional_columns_missing",
+                    columns=sorted(missing_optional),
                 )
             try:
                 validation_result = validate_activities(df, return_result=True)
@@ -135,9 +146,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     errors.add_error(row)
                 errors.save(failure_path)
                 logger.error(
-                    "validation failed; wrote %d failure cases to %s",
-                    len(exc.failure_cases),
-                    failure_path,
+                    "validation_failed",
+                    failures=len(exc.failure_cases),
+                    path=str(failure_path),
                 )
                 df = getattr(exc, "validated_data", df)
                 exit_code = 1
@@ -152,15 +163,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         errors.add_error(row)
                     errors.save(failure_path)
                     logger.error(
-                        "validation failed; wrote %d failure cases to %s",
-                        len(validation_result.failure_cases),
-                        failure_path,
+                        "validation_failed",
+                        failures=len(validation_result.failure_cases),
+                        path=str(failure_path),
                     )
                     exit_code = 1
         else:
             logger.warning(
-                "Skipping validation due to missing required columns: %s",
-                missing_required,
+                "validation_skipped",
+                missing_columns=sorted(missing_required),
             )
         rows_kept = len(df)
         rows_dropped = rows_total - rows_kept
@@ -175,7 +186,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             logger.info("write_done", rows=rows_kept, path=str(csv_path))
         except OSError as exc:
-            logger.error("failed to write output CSV: %s", exc)
+            logger.error(
+                "write_fail",
+                error=str(exc),
+                path=str(output),
+            )
             return 1
 
         stats: Stats = {
@@ -196,7 +211,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         try:
             analyze_table_quality(df, table_name=str(output.with_suffix("")))
         except ValueError as exc:
-            logger.error("failed to generate quality report: %s", exc)
+            logger.error(
+                "quality_report_failed",
+                error=str(exc),
+                path=str(output),
+            )
             return 1
         return exit_code
 
@@ -258,11 +277,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+            output=str(args.output_csv),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code: int = args.func(cfg, args)

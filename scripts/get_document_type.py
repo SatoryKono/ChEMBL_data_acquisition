@@ -171,17 +171,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt
         )
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
         logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+            output=str(args.output_csv),
+        )
         logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
     limit_cfg = cfg.doc_type.limit
     if limit_cfg is not None and limit_cfg < 0:
-        logger.error("doc_type.limit must be non-negative")
+        logger.error(
+            "invalid_limit",
+            section="doc_type.limit",
+            limit=limit_cfg,
+        )
         logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 

@@ -360,7 +360,11 @@ def apply_config_overrides(
             strict=True,
         )
     except ConfigError as exc:
-        log.logger.error("%s", exc)
+        log.logger.error(
+            "config_load_failed",
+            error=str(exc),
+            config=str(config_path),
+        )
         parser.error(str(exc))
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
