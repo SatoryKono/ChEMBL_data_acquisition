@@ -506,7 +506,9 @@ def test_target_chembl_defaults_match_cli(
         client: object,
         mapping_cfg: object,
 
-        chunk_size: object,
+        chunk_size: object | None = None,
+
+
 
         timeout: object,
     ) -> pd.DataFrame:
