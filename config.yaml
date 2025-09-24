@@ -164,6 +164,7 @@ target:
     data_dir: "dictionary/uniprot"
     target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"
     family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"
+    chunk_size: 5
     timeout: 30.0
     organism_csv: "dictionary/_Target/targets_type.csv"
     uniprot_column: "uniprot_id"

@@ -28,6 +28,29 @@ def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     assert df.loc[0, "uniprot_id"] == "P1"
 
 
+def test_fetch_chembl_custom_chunk_size(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    out = tmp_path / "chembl.csv"
+    inp = tmp_path / "in.csv"
+
+    recorded: dict[str, int] = {}
+    original_chunk = cfg.target.chembl.chunk_size
+
+    def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        recorded["chunk_size"] = cfg.target.chembl.chunk_size
+        pd.DataFrame({"target_chembl_id": ["C1"]}).to_csv(args.output_csv, index=False)
+        return 0
+
+    monkeypatch.setattr(gtd, "run_chembl", fake_run_chembl)
+    chunk_size = original_chunk + 3
+    df = gtd.fetch_chembl(cfg, inp, out, chunk_size=chunk_size)
+
+    assert df.loc[0, "target_chembl_id"] == "C1"
+    assert recorded["chunk_size"] == chunk_size
+    assert cfg.target.chembl.chunk_size == original_chunk
+
+
 def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
     chembl_df = pd.DataFrame({"uniprot_id": ["P12345"]})
     out = tmp_path / "uniprot.csv"

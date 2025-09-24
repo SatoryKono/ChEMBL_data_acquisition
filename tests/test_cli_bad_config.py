@@ -142,3 +142,38 @@ def test_negative_limit_in_config_exits(
     rc = gad.main(["--config", str(cfg)])
     assert rc != 0
     assert "activity.limit" in buf.getvalue()
+
+
+def test_doc_type_negative_limit_in_config_exits(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("doc_type:\n  limit: -1\n")
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("chembl_id\nCHEMBL1\n", encoding="utf8")
+    output_csv = tmp_path / "out.csv"
+
+    buf = io.StringIO()
+    orig = configure_logger
+
+    def _conf(cfg: LoggerConfig, *a: Any, **k: Any) -> Logger:
+        cfg.stream = buf
+        return orig(cfg, *a, **k)
+
+    monkeypatch.setattr("library.cli.configure_logger", _conf)
+    monkeypatch.setattr("scripts.get_document_type.configure_logger", _conf)
+
+    rc = gdoctype.main(
+        [
+            "--config",
+            str(cfg),
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert rc != 0
+    assert "doc_type.limit" in buf.getvalue()
