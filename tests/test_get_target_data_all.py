@@ -18,6 +18,7 @@ from pytest import MonkeyPatch
 
 from library import target_postprocessing as tp
 from library.config import Config
+from schemas.targets import TARGETS_COLUMN_ORDER
 from schemas import TargetsSchema
 from scripts import get_target_data as gtd
 
@@ -110,13 +111,13 @@ def test_run_all_uses_local_inputs(
     # Validate final output
     # ------------------------------------------------------------------
     result = pd.read_csv(output_csv, dtype=str)
-    assert result.columns.tolist() == sorted(result.columns)
+    assert result.columns.tolist() == TARGETS_COLUMN_ORDER
     row = result.loc[0]
     assert row["target_chembl_id"] == "CHEMBL1"
-    assert row["uniprotkb_Id"] == "P12345"
-    assert row["gene_name"] == "GENEA"
-    assert row["type"] == "Type1"
+    assert row["uniprot_id_primary"] == "P12345"
+    assert row["gene_symbol"] == "GENEA"
+    assert row["target_type"] == "-"
     assert (
-        row["synonyms"]
+        row["protein_synonym_list"]
         == "gene1|genea|sec1|alpha component|alt|recommended|name1|name2|alpha"
     )
