@@ -90,6 +90,7 @@ def fetch_pubmed_records(
     pmids: Iterable[str],
     *,
     sleep: float,
+    semantic_scholar_cfg: SemanticScholarCfg,
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
     api_cfg: ApiCfg,
@@ -108,6 +109,8 @@ def fetch_pubmed_records(
     sleep:
 
         Seconds to pause between PubMed and Semantic Scholar requests.
+    semantic_scholar_cfg:
+        Configuration for Semantic Scholar API access.
     openalex_cfg:
         Configuration for OpenAlex API access.
     crossref_cfg:
@@ -168,7 +171,9 @@ def fetch_pubmed_records(
                 # Fetch Semantic Scholar data in a single batch
                 semantic_limiter.acquire()
                 semsch_list = ssl.fetch_semantic_scholar_batch(
-                    session, pmids_in_batch, sleep, cfg=semantic_cfg
+                    session, pmids_in_batch, sleep, cfg=semantic_scholar_cfg
+
+
                 )
 
                 # Create a map for easy lookup
@@ -374,19 +379,18 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     try:
         df = fetch_pubmed_records(
             pmids,
-            sleep=cfg.document.pubmed.sleep,
-            openalex_cfg=cfg.openalex,
-            crossref_cfg=cfg.crossref,
-            api_cfg=cfg.api,
-            retry_cfg=cfg.retry,
-            pubmed_cfg=cfg.pubmed,
-            semantic_cfg=cfg.semantic_scholar,
-            max_workers=cfg.document.pubmed.workers,
-            batch_size=cfg.document.pubmed.batch_size,
+
+            cfg.document.pubmed.sleep,
+            cfg.semantic_scholar,
+            cfg.openalex,
+            cfg.crossref,
+            cfg.document.pubmed.workers,
+            cfg.document.pubmed.batch_size,
         )
         output = Path(
             args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         )
+
         df = normalize_documents(df)
         exit_code = _finalise_export(
             df,
@@ -542,15 +546,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        sleep=cfg.document.all.sleep,
-        openalex_cfg=cfg.openalex,
-        crossref_cfg=cfg.crossref,
-        api_cfg=cfg.api,
-        retry_cfg=cfg.retry,
-        pubmed_cfg=cfg.pubmed,
-        semantic_cfg=cfg.semantic_scholar,
-        max_workers=cfg.document.all.workers,
-        batch_size=cfg.document.all.batch_size,
+
+        cfg.document.all.sleep,
+        cfg.semantic_scholar,
+        cfg.openalex,
+        cfg.crossref,
+        cfg.document.all.workers,
+        cfg.document.all.batch_size,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
     merged = merge_with_chembl(doc_df, pub_df)
