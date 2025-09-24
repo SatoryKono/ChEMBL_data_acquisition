@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import pandas as pd
 from pandera.errors import SchemaErrors
@@ -74,10 +74,17 @@ def _combine_failure_cases(cases: list[pd.DataFrame]) -> pd.DataFrame:
     )
 
 
+class _SupportsDataFrameValidate(Protocol):
+    """Protocol describing the subset of pandera schema API we rely on."""
+
+    def validate(self, dataframe: pd.DataFrame, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        """Validate *dataframe* and return the cleansed result."""
+
+
 def _validate_with_schema(
     df: pd.DataFrame,
     *,
-    schema,
+    schema: _SupportsDataFrameValidate,
     schema_name: str,
     return_result: bool,
 ) -> ValidationResult | pd.DataFrame:
