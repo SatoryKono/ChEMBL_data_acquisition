@@ -60,8 +60,10 @@ from library.config import (
     Config,
     CrossRefCfg,
     OpenAlexCfg,
+
     PubMedCfg,
     RetryCfg,
+
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
@@ -88,17 +90,15 @@ from schemas import DocumentsSchema, normalize_documents
 
 def fetch_pubmed_records(
     pmids: Iterable[str],
-    *,
-    sleep: float,
-    semantic_scholar_cfg: SemanticScholarCfg,
-    openalex_cfg: OpenAlexCfg,
-    crossref_cfg: CrossRefCfg,
-    api_cfg: ApiCfg,
-    retry_cfg: RetryCfg,
-    pubmed_cfg: PubMedCfg,
-    semantic_cfg: SemanticScholarCfg,
-    max_workers: int = 1,
-    batch_size: int = 100,
+
+    *args: object,
+    sleep: float | None = None,
+    semantic_scholar_cfg: SemanticScholarCfg | None = None,
+    openalex_cfg: OpenAlexCfg | None = None,
+    crossref_cfg: CrossRefCfg | None = None,
+    max_workers: int | None = None,
+    batch_size: int | None = None,
+
 ) -> pd.DataFrame:
     """Retrieve metadata for a sequence of PubMed identifiers.
 
@@ -133,21 +133,78 @@ def fetch_pubmed_records(
     pandas.DataFrame
         Combined metadata from the different sources.
 
+    Notes
+    -----
+    For backward compatibility the function also accepts a
+    :class:`~library.config.Config` instance as the first positional argument
+    after ``pmids``. When supplied, connection parameters and batching options
+    are derived from ``config.document.pubmed`` unless overridden explicitly
+    via keyword arguments.
+
     """
 
-    def _failure_records(batch: list[str], message: str) -> list[dict[str, str]]:
-        records: list[dict[str, str]] = []
-        for pid in batch:
-            record = pl.EMPTY_PUBMED.copy()
-            record["PubMed.PMID"] = pid
-            record["PubMed.Error"] = message
-            records.append(record)
-        return records
 
-    pubmed_rps = 1 / sleep if sleep > 0 else 0.0
-    semantic_rps = 1 / sleep if sleep > 0 else 0.0
-    pubmed_limiter = get_limiter("pubmed", pubmed_rps)
-    semantic_limiter = get_limiter("semantic_scholar", semantic_rps)
+    cfg: Config | None = None
+    positional = list(args)
+    if positional:
+        candidate = positional[0]
+        if isinstance(candidate, Config):
+            cfg = candidate
+            positional = positional[1:]
+        elif sleep is None:
+            if len(positional) < 4:
+                raise TypeError(
+                    "fetch_pubmed_records() missing required positional arguments: "
+                    "'sleep', 'semantic_scholar_cfg', 'openalex_cfg', 'crossref_cfg'"
+                )
+            sleep = cast(float, positional[0])
+            semantic_scholar_cfg = cast(SemanticScholarCfg, positional[1])
+            openalex_cfg = cast(OpenAlexCfg, positional[2])
+            crossref_cfg = cast(CrossRefCfg, positional[3])
+            if len(positional) > 4:
+                max_workers = cast(int, positional[4])
+            if len(positional) > 5:
+                batch_size = cast(int, positional[5])
+            positional = []
+        else:
+            raise TypeError(
+                "fetch_pubmed_records() received multiple values for 'sleep'"
+            )
+    if positional:
+        raise TypeError("fetch_pubmed_records() got unexpected positional arguments")
+
+    if cfg is not None:
+        if sleep is None:
+            sleep = cfg.document.pubmed.sleep
+        if semantic_scholar_cfg is None:
+            semantic_scholar_cfg = cfg.semantic_scholar
+        if openalex_cfg is None:
+            openalex_cfg = cfg.openalex
+        if crossref_cfg is None:
+            crossref_cfg = cfg.crossref
+        if max_workers is None:
+            max_workers = cfg.document.pubmed.workers
+        if batch_size is None:
+            batch_size = cfg.document.pubmed.batch_size
+
+    if (
+        sleep is None
+        or semantic_scholar_cfg is None
+        or openalex_cfg is None
+        or crossref_cfg is None
+    ):
+        raise TypeError(
+            "fetch_pubmed_records() missing required configuration. "
+            "Provide either a Config instance as the second positional argument "
+            "or explicit keyword arguments."
+        )
+
+    if max_workers is None:
+        max_workers = 1
+    if batch_size is None:
+        batch_size = 100
+
+
     openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
 
@@ -172,7 +229,6 @@ def fetch_pubmed_records(
                 semantic_limiter.acquire()
                 semsch_list = ssl.fetch_semantic_scholar_batch(
                     session, pmids_in_batch, sleep, cfg=semantic_scholar_cfg
-
 
                 )
 

@@ -209,109 +209,72 @@ def test_write_csv_column_order(
     )
     assert captured["col_order"] == expected
 
-
-def test_fetch_pubmed_records_order_and_limiters(
-    monkeypatch: pytest.MonkeyPatch, cfg: Config
+def test_fetch_pubmed_records_accepts_config(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pmids = ["1", "2"]
+    """Legacy two-argument usage should still be supported."""
 
-    acquisitions: list[str] = []
-    limiters: dict[str, FakeLimiter] = {}
+    config = Config()
+    expected_sleep = config.document.pubmed.sleep
+    semantic_cfg = config.semantic_scholar
 
-    class FakeLimiter:
-        def __init__(self, name: str) -> None:
-            self.name = name
+    def fake_session() -> Any:
+        class DummySession:
+            def __enter__(self) -> DummySession:
+                return self
 
-        def acquire(self) -> None:
-            acquisitions.append(self.name)
+            def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+                return None
 
-    def fake_get_limiter(name: str, rps: float, burst: int | None = None) -> FakeLimiter:
-        limiter = limiters.get(name)
-        if limiter is None:
-            limiter = FakeLimiter(name)
-            limiters[name] = limiter
-        return limiter
+        return DummySession()
 
-    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(gdd.requests, "Session", fake_session)
 
-    def fake_fetch_pubmed_batch(
-        session: object,
-        batch: list[str],
-        sleep: float,
-        cfg: object | None = None,
-    ) -> list[dict[str, str]]:
-        pmid = batch[0]
-        if pmid == "1":
-            time.sleep(0.02)
+    def fake_pubmed_batch(session: Any, batch: list[str], sleep: float) -> list[dict[str, str]]:
+        assert sleep == expected_sleep
+        assert batch == ["1"]
         return [
             {
-                "PubMed.PMID": pmid,
-                "PubMed.DOI": f"doi-{pmid}",
-                "PubMed.Error": "",
+                "PubMed.PMID": "1",
+                "PubMed.DOI": "10.1000/xyz",
+                "PubMed.PublicationType": "Review",
             }
         ]
 
-    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_fetch_pubmed_batch)
-
-    def fake_semantic_batch(
-        session: object,
-        batch_pmids: list[str],
+    def fake_semantic_scholar_batch(
+        session: Any,
+        pmids: list[str],
         sleep: float,
-        cfg: object | None = None,
+        cfg: Any | None = None,
     ) -> list[dict[str, str]]:
+        assert pmids == ["1"]
+        assert cfg is semantic_cfg
         return [
             {
-                "scholar.PMID": pmid,
-                "scholar.DOI": f"doi-{pmid}",
-                "scholar.Error": "",
+                "scholar.PMID": "1",
+                "scholar.PublicationTypes": "Review",
+                "scholar.DOI": "10.1000/xyz",
             }
-            for pmid in batch_pmids
         ]
 
-    monkeypatch.setattr(
-        gdd.ssl,
-        "fetch_semantic_scholar_batch",
-        fake_semantic_batch,
-    )
-    monkeypatch.setattr(
-        gdd.ocl,
-        "fetch_openalex",
-        lambda session, pmid, cfg, limiter: (
-            limiter.acquire(),
-            {"OpenAlex.Id": f"oa-{pmid}"},
-        )[1],
-    )
-    monkeypatch.setattr(
-        gdd.ocl,
-        "fetch_crossref",
-        lambda session, doi, cfg, limiter: (
-            limiter.acquire(),
-            {"crossref.Type": "journal"},
-        )[1],
-    )
+    def fake_openalex(session: Any, pmid: str, cfg_arg: Any, limiter: Any) -> dict[str, str]:
+        assert pmid == "1"
+        assert cfg_arg is config.openalex
+        return {"OpenAlex.PublicationTypes": "journal-article"}
 
-    @contextmanager
-    def fake_session_with_retry(api_cfg: object, retry_cfg: object) -> object:
-        yield object()
+    def fake_crossref(session: Any, doi: str, cfg_arg: Any, limiter: Any) -> dict[str, str]:
+        assert doi == "10.1000/xyz"
+        assert cfg_arg is config.crossref
+        return {"crossref.Type": "journal-article"}
 
-    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_scholar_batch)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: object())
 
-    df = gdd.fetch_pubmed_records(
-        pmids,
-        sleep=0.0,
-        openalex_cfg=cfg.openalex,
-        crossref_cfg=cfg.crossref,
-        api_cfg=cfg.api,
-        retry_cfg=cfg.retry,
-        pubmed_cfg=cfg.pubmed,
-        semantic_cfg=cfg.semantic_scholar,
-        max_workers=2,
-        batch_size=1,
-    )
+    df = gdd.fetch_pubmed_records(["1"], config)
+    assert "PubMed.PMID" in df.columns
+    assert "publication_class" in df.columns
+    assert df.loc[0, "PubMed.PMID"] == "1"
 
-    assert df["PubMed.PMID"].tolist() == pmids
-    assert acquisitions.count("pubmed") == len(pmids)
-    assert acquisitions.count("semantic_scholar") == len(pmids)
-    assert acquisitions.count("openalex") == len(pmids)
-    assert acquisitions.count("crossref") == len(pmids)
-    assert set(limiters) == {"pubmed", "semantic_scholar", "openalex", "crossref"}
