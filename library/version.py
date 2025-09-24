@@ -31,5 +31,7 @@ def require_python_version(min_version: tuple[int, int] = (3, 12)) -> None:
     if current < required:
         current_str = f"{current_info.major}.{current_info.minor}"
         needed = f"{min_version[0]}.{min_version[1]}"
-        logger.error("Python %s or later is required (found %s)", needed, current_str)
+        logger.error(
+            "python_version_unsupported", required=needed, current=current_str
+        )
         raise RuntimeError(f"Python {needed} or later is required; found {current_str}")

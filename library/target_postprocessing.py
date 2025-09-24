@@ -540,13 +540,15 @@ def finalise_targets(
     # Drop rows where uniprotkb_Id is the string "nan"
     mask_nan = df["uniprotkb_Id"].astype(str) == "nan"
     if mask_nan.any():
-        logger.debug("Dropping %d rows with missing UniProt IDs", mask_nan.sum())
+        logger.debug("uniprot_rows_dropped", rows=int(mask_nan.sum()))
     df = df[~mask_nan]
 
     # Remove duplicate chembl_id entries
     before = len(df)
     df = df.drop_duplicates(subset="target_chembl_id", keep="first")
-    logger.debug("Removed %d duplicate %s rows", before - len(df), chembl_col)
+    logger.debug(
+        "duplicate_rows_removed", removed=before - len(df), column=chembl_col
+    )
 
     # Enforce column types
     for col in TEXT_COLUMNS:
@@ -572,7 +574,7 @@ def finalise_targets(
     # existing column beforehand and restore the organism classification as the
     # canonical ``type`` field afterwards.
     if "type" in df.columns:
-        logger.debug("Renaming existing 'type' column to 'target_type'")
+        logger.debug("target_type_column_renamed", original="type")
         df = df.rename(columns={"type": "target_type"})
 
     organism_types = organism[["genus", "type"]].rename(

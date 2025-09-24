@@ -427,8 +427,8 @@ def test_unknown_env_var_warning(
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
-    msg = record.get("msg", "") or record.get("event", "")
-    assert "Environment variable CHEMBL_DA__FOO__BAR ignored" in msg
+    assert record["event"] == "env_override_ignored"
+    assert record["variable"] == "CHEMBL_DA__FOO__BAR"
 
 
 def test_new_field_auto_alias() -> None:

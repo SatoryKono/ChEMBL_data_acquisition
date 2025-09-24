@@ -115,3 +115,11 @@ def test_multithreaded_logging_emits_valid_json(
     assert len(lines) == 10
     for line in lines:
         json.loads(line)
+
+
+def test_logger_rejects_positional_arguments() -> None:
+    """Structured helpers require keyword arguments instead of printf patterns."""
+
+    logger = configure_logger(LoggerConfig(stream=sys.stdout))
+    with pytest.raises(TypeError):
+        logger.info("event", "value")

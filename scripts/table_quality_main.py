@@ -49,7 +49,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         try:
             df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
         except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "input_csv_read_failed",
+                error=str(exc),
+                path=str(args.input_csv),
+            )
             return 1
 
         original_cwd = Path.cwd()
@@ -94,11 +98,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error("config_error", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error("directory_setup_failed", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code: int = args.func(cfg, args)

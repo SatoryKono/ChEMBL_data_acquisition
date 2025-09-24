@@ -40,4 +40,5 @@ def test_run_chembl_handles_request_error(
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
-    assert "boom" in record.get("msg", "")
+    assert record["event"] == "activities_fetch_failed"
+    assert record["error"] == "boom"

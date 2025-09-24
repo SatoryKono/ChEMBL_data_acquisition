@@ -427,12 +427,12 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             schema="UniProtExport",
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("%s", exc)
+        logger.error("uniprot_pipeline_failed", error=str(exc))
         return 1
     try:
         analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error("quality_report_generation_failed", error=str(exc))
         return 1
     return 0
 
@@ -465,7 +465,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "input_csv_read_failed",
+                error=str(exc),
+                path=str(args.input_csv),
+            )
             return 1
 
         ids = ids_iter
@@ -484,7 +488,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 timeout=cfg.target.chembl.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
-            logger.error("failed to retrieve targets: %s", exc)
+            logger.error("targets_fetch_failed", error=str(exc))
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_targets(df)
@@ -501,7 +505,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if not missing_required:
         if missing_optional:
             logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+                "optional_columns_missing",
+                columns=sorted(missing_optional),
             )
         try:
             df = TargetsSchema.validate(df, lazy=True)
@@ -512,16 +517,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 errors.add_error(row)
             errors.save(failure_path)
             logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+                "target_validation_failed",
+                failure_cases=len(exc.failure_cases),
+                path=str(failure_path),
             )
             df = getattr(exc, "validated_data", df)
             exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
+            "validation_skipped",
+            reason="missing_required_columns",
+            columns=sorted(missing_required),
         )
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
@@ -535,7 +541,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:
-        logger.error("failed to write output CSV: %s", exc)
+        logger.error(
+            "output_csv_write_failed", error=str(exc), path=str(output)
+        )
         return 1
 
     stats: Stats = {
@@ -555,7 +563,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error("quality_report_generation_failed", error=str(exc))
         return 1
     return exit_code
 
@@ -619,7 +627,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             sep=cfg.io.csv_sep,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("%s", exc)
+        logger.error("iuphar_pipeline_failed", error=str(exc))
         return 1
     finally:
         if tmp_path is not None:
@@ -627,7 +635,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     try:
         analyze_table_quality(output, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error("quality_report_generation_failed", error=str(exc))
         return 1
     return 0
 
@@ -896,7 +904,8 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     if not missing_required:
         if missing_optional:
             logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+                "optional_columns_missing",
+                columns=sorted(missing_optional),
             )
         try:
             final_df = TargetsSchema.validate(final_df, lazy=True)
@@ -907,16 +916,17 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
                 errors.add_error(row)
             errors.save(failure_path)
             logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+                "target_validation_failed",
+                failure_cases=len(exc.failure_cases),
+                path=str(failure_path),
             )
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
+            "validation_skipped",
+            reason="missing_required_columns",
+            columns=sorted(missing_required),
         )
     final_df = final_df.drop_duplicates()
     io.write_csv(
@@ -930,7 +940,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     try:
         analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error("quality_report_generation_failed", error=str(exc))
         return 1
     logger.info("validate_write_done", rows=len(final_df))
     return exit_code
@@ -963,7 +973,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         exit_code = validate_and_write(merged, output, cfg)
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
-        logger.error("%s", exc)
+        logger.error("target_pipeline_error", error=str(exc))
         return 1
 
 
@@ -1024,11 +1034,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error("config_error", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error("directory_setup_failed", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     if hasattr(args, "func"):

@@ -52,7 +52,7 @@ def _map_chembl_to_uniprot(
     data = urllib.parse.urlencode(
         {"from": "ChEMBL", "to": "UniProtKB", "ids": chembl_target_id}
     ).encode()
-    logger.debug("Submitting ID mapping job for %s", chembl_target_id)
+    logger.debug("uniprot_mapping_submit", chembl_target_id=chembl_target_id)
     base = cfg.base.rstrip("/")
     run_data = _open_json(f"{base}/run", data=data, timeout=cfg.timeout)
     job_id = run_data.get("jobId")
@@ -77,7 +77,7 @@ def _map_chembl_to_uniprot(
         else:
             status = status_data.get("jobStatus") or status_data.get("status")
 
-        logger.debug("Job %s status: %s", job_id, status)
+        logger.debug("uniprot_mapping_status", job_id=job_id, status=status)
         if status == "FINISHED":
             break
         if status == "FAILED":

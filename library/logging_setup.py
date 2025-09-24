@@ -187,32 +187,29 @@ class Logger:
     def debug(
         self,
         event: str,
-        *args: Any,
+        *,
         extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
-        msg = event % args if args else None
-        self.log("DEBUG", event, msg=msg, extra=extra, **kv)
+        self.log("DEBUG", event, extra=extra, **kv)
 
     def info(
         self,
         event: str,
-        *args: Any,
+        *,
         extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
-        msg = event % args if args else None
-        self.log("INFO", event, msg=msg, extra=extra, **kv)
+        self.log("INFO", event, extra=extra, **kv)
 
     def warn(
         self,
         event: str,
-        *args: Any,
+        *,
         extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
-        msg = event % args if args else None
-        self.log("WARN", event, msg=msg, extra=extra, **kv)
+        self.log("WARN", event, extra=extra, **kv)
 
     # ``warning`` is an alias for compatibility with :mod:`logging` APIs.
     warning = warn
@@ -220,18 +217,18 @@ class Logger:
     def error(
         self,
         event: str,
-        *args: Any,
+        *,
         extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
-        msg = event % args if args else None
-        self.log("ERROR", event, msg=msg, extra=extra, **kv)
+        self.log("ERROR", event, extra=extra, **kv)
 
     def exception(
         self,
         event: str,
-        *args: Any,
         exc: BaseException | None = None,
+        *,
+        msg: str | None = None,
         extra: dict[str, Any] | None = None,
         **kv: Any,
     ) -> None:
@@ -250,7 +247,8 @@ class Logger:
             exc = sys.exc_info()[1]
         if exc is None:  # pragma: no cover - defensive
             exc = Exception("unknown")
-        msg = event % args if args else str(exc)
+        if msg is None:
+            msg = str(exc)
         tb = "".join(
             traceback.format_exception(exc.__class__, exc, exc.__traceback__, limit=3)
         ).strip()

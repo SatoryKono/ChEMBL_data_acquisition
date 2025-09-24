@@ -69,7 +69,9 @@ def _parse_uniprot_id(
     try:
         mapping_uniprot_id = map_chembl_to_uniprot(chembl_id, mapping_cfg) or ""
     except Exception as exc:  # pragma: no cover - network failure paths
-        logger.warning("UniProt mapping request failed for %s: %s", chembl_id, exc)
+        logger.warning(
+            "uniprot_mapping_failed", chembl_id=chembl_id, error=str(exc)
+        )
         mapping_uniprot_id = ""
     return uniprot_id, mapping_uniprot_id
 
@@ -104,7 +106,11 @@ def _parse_target_record(
     """Transform a raw target record into a flat dictionary."""
     components = _get_items(data.get("target_components"), "target_component")
     if not components:
-        logger.debug("No components found in target record: %s", data)
+        logger.debug(
+            "target_components_missing",
+            target_chembl_id=str(data.get("target_chembl_id", "")),
+            record=data,
+        )
         return dict(EMPTY_TARGET)
 
     comp = components[0]

@@ -58,7 +58,7 @@ def _load_table(table: pd.DataFrame | str | Path) -> pd.DataFrame:
                 warnings.filterwarnings("ignore", category=DtypeWarning)
                 return pd.read_csv(path, encoding=enc, low_memory=False)
         except UnicodeDecodeError:
-            logger.debug("failed to decode %s with %s", path, enc)
+            logger.debug("csv_decode_failed", path=str(path), encoding=enc)
             continue
     raise UnicodeDecodeError("utf-8", b"", 0, 1, "Unable to decode CSV")
 

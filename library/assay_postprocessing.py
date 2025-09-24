@@ -41,7 +41,7 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
     AssayPostprocessSchema.validate(df)
     group_cols = ["document_chembl_id", "target_chembl_id"]
     groups = df.groupby(group_cols)
-    logger.debug("Calculated counts for %d document/target groups", groups.ngroups)
+    logger.debug("assay_group_counts_calculated", group_count=groups.ngroups)
     result = df.copy()
     result["assay_with_same_target"] = groups["document_chembl_id"].transform("size")
     return result

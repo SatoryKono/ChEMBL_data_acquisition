@@ -600,7 +600,7 @@ def _apply_env_overrides(data: dict[str, Any]) -> None:
             continue
         parts = [p.lower() for p in path]
         if not _is_valid_path(parts):
-            logger.warning(f"Environment variable {key} ignored")
+            logger.warning("env_override_ignored", variable=key)
             continue
         _set_by_path(data, parts, env_val)
 
