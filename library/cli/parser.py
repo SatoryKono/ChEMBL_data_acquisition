@@ -354,7 +354,11 @@ def apply_config_overrides(
             cli_overrides[key] = value
 
     try:
-        cfg = load_config(config_path, cli_overrides=cli_overrides)
+        cfg = load_config(
+            config_path,
+            cli_overrides=cli_overrides,
+            strict=True,
+        )
     except ConfigError as exc:
         log.logger.error("%s", exc)
         parser.error(str(exc))
