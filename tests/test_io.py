@@ -204,10 +204,14 @@ def test_git_sha_timeout_returns_unknown(
         configure_logger(LoggerConfig(level="WARNING", stream=stream)),
     )
 
-    def fail(*args: object, **kwargs: object) -> bytes:
-        raise subprocess.CalledProcessError(returncode=1, cmd=["git"])
+    def fail(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["git", "rev-parse", "HEAD"],
+            stderr="fatal: simulated error",
+        )
 
-    monkeypatch.setattr(git_utils.subprocess, "check_output", fail)
+    monkeypatch.setattr(git_utils.subprocess, "run", fail)
     monkeypatch.setattr(git_utils, "_read_head_sha", lambda *_: None)
     git_utils._git_sha.cache_clear()
 
@@ -215,3 +219,7 @@ def test_git_sha_timeout_returns_unknown(
     record = json.loads(stream.getvalue().splitlines()[0])
     assert record["event"] == "git_sha_unavailable"
     assert "error" in record
+    assert record["error_returncode"] == 1
+    assert record["error_returncode_raw"] == 1
+    assert record["error_cmd"] == ["git", "rev-parse", "HEAD"]
+    assert record["error_stderr"] == "fatal: simulated error"

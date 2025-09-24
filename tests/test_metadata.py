@@ -97,7 +97,7 @@ def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
 
     git_utils._git_sha.cache_clear()
     monkeypatch.setenv("GIT_SHA", "envsha")
-    with patch("library.git_utils.subprocess.check_output") as mock:
+    with patch("library.git_utils.subprocess.run") as mock:
         assert git_utils._git_sha() == "envsha"
         mock.assert_not_called()
 
