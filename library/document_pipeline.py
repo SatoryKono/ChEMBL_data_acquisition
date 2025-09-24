@@ -222,9 +222,11 @@ def merge_with_chembl(
     left = chembl_df.copy()
     right = metadata_df.copy()
 
+
     drop_cols = [col for col in CH_EMBL_COLUMNS if col in right.columns]
     if drop_cols:
         right = right.drop(columns=drop_cols)
+
 
     if "pubmed_id" in left.columns:
         left["pubmed_id"] = (

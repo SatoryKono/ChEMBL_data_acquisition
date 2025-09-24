@@ -42,6 +42,56 @@ def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) ->
     assert list(df["original_id"]) == ["P12345"]
 
 
+def test_run_uniprot_initialises_session(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text("uniprot_id\nP12345\n", encoding=cfg.io.csv_encoding)
+    output_csv = tmp_path / "uniprot.csv"
+    cfg.target.uniprot.data_dir = tmp_path
+
+    called: dict[str, object] = {}
+
+    def fake_init_session(api: object, retry: object) -> None:
+        called["init"] = (api, retry)
+
+    def fake_process(
+        input_csv: str,
+        output_csv: str,
+        data_dir: Path | str | None = None,
+        *,
+        cfg: object,
+        sep: str = ",",
+        encoding: str = "utf-8",
+    ) -> None:
+        called["cfg"] = cfg
+        pd.DataFrame({"uniprot_id": ["P12345"], "names": ["Foo"]}).to_csv(
+            output_csv, index=False
+        )
+
+    monkeypatch.setattr(gtd.uu, "init_session", fake_init_session)
+    monkeypatch.setattr(gtd.uu, "process", fake_process)
+    def fake_write_csv(
+        df: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str | None = None,
+        encoding: str | None = None,
+        **__: object,
+    ) -> Path:
+        return path
+
+    monkeypatch.setattr(gtd.io, "write_csv", fake_write_csv)
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    rc = gtd.run_uniprot(cfg, args)
+
+    assert rc == 0
+    assert called["init"] == (cfg.api, cfg.retry)
+    assert called["cfg"] is cfg.uniprot
+
+
 def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
     chembl_df = pd.DataFrame(
         {

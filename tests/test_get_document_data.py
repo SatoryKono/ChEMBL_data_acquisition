@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+from contextlib import contextmanager
 
 import pandas as pd
 import pytest
@@ -205,7 +208,6 @@ def test_write_csv_column_order(
         c for c in df.columns if c not in schema_cols
     )
     assert captured["col_order"] == expected
-
 
 def test_fetch_pubmed_records_accepts_config(
     monkeypatch: pytest.MonkeyPatch,
