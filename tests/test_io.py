@@ -219,3 +219,7 @@ def test_git_sha_timeout_returns_unknown(
     record = json.loads(stream.getvalue().splitlines()[0])
     assert record["event"] == "git_sha_unavailable"
     assert "error" in record
+    assert record["error_returncode"] == 1
+    assert record["error_returncode_raw"] == 1
+    assert record["error_cmd"] == ["git", "rev-parse", "HEAD"]
+    assert record["error_stderr"] == "fatal: simulated error"

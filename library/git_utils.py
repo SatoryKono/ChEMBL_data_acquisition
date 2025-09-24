@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from .log import logger
 
@@ -103,6 +104,58 @@ def _read_head_sha(git_dir: Path) -> str | None:
         return head_content
     return None
 
+def _serialise_cmd(cmd: Any) -> list[str] | str:
+    """Return ``cmd`` in a JSON-serialisable form."""
+
+    if isinstance(cmd, (list, tuple)):
+        return [str(part) for part in cmd]
+    return str(cmd)
+
+
+def _ensure_text(value: bytes | str | None) -> str | None:
+    """Return ``value`` decoded to text and stripped of whitespace."""
+
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        value = value.decode("utf8", errors="replace")
+    text = value.strip()
+    return text or None
+
+
+def _normalise_returncode(returncode: int) -> tuple[int, int]:
+    """Return ``returncode`` as ``(signed, raw)`` integers."""
+
+    raw = int(returncode)
+    if raw >= 2**31:
+        signed = raw - 2**32
+    else:
+        signed = raw
+    return signed, raw
+
+
+def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
+    """Return a descriptive message for ``exc``."""
+
+    cmd = _serialise_cmd(exc.cmd)
+    if isinstance(cmd, list):
+        command = " ".join(cmd)
+    else:
+        command = cmd
+    signed, raw = _normalise_returncode(exc.returncode)
+    if signed != raw:
+        message = f"{command} exited with status {signed} (raw: {raw})"
+    else:
+        message = f"{command} exited with status {signed}"
+    details: list[str] = []
+    stderr = _ensure_text(exc.stderr)
+    stdout = _ensure_text(exc.stdout)
+    if stderr:
+        details.append(stderr)
+    if stdout:
+        details.append(stdout)
+    if details:
+        message = f"{message}: {' | '.join(details)}"
 
 def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     """Return a descriptive message for ``exc``."""
@@ -133,10 +186,33 @@ def _format_error(exc: BaseException) -> str:
 def _log_fallback(sha: str, *, reason: str, error: BaseException | None = None) -> None:
     """Log a successful SHA fallback resolution."""
 
-    payload: dict[str, str] = {"reason": reason}
+    payload: dict[str, Any] = {"reason": reason}
     if error is not None:
-        payload["error"] = _format_error(error)
+
+        payload.update(_error_payload(error))
+        
     logger.info("git_sha_fallback", sha=sha, **payload)
+
+
+def _error_payload(error: BaseException) -> dict[str, Any]:
+    """Return structured payload for ``error`` suitable for logging."""
+
+    if isinstance(error, subprocess.CalledProcessError):
+        signed, raw = _normalise_returncode(error.returncode)
+        payload: dict[str, Any] = {
+            "error": _format_subprocess_error(error),
+            "error_cmd": _serialise_cmd(error.cmd),
+            "error_returncode": signed,
+            "error_returncode_raw": raw,
+        }
+        stderr = _ensure_text(error.stderr)
+        stdout = _ensure_text(error.stdout)
+        if stderr is not None:
+            payload["error_stderr"] = stderr
+        if stdout is not None:
+            payload["error_stdout"] = stdout
+        return payload
+    return {"error": _format_error(error)}
 
 
 @functools.lru_cache(maxsize=1)
@@ -191,5 +267,7 @@ def _git_sha() -> str:
         if fallback is not None:
             _log_fallback(fallback, reason="subprocess_error", error=exc)
             return fallback
-        logger.warning("git_sha_unavailable", extra={"error": _format_error(exc)})
+        logger.warning("git_sha_unavailable", extra=_error_payload(exc))
+
+ 
         return "UNKNOWN"
