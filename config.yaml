@@ -152,7 +152,7 @@ target:
     data_dir: "dictionary/uniprot"
     limit: null
   chembl:
-    column: "target_chembl_id"
+    column: "target_chembl_id"  # Column containing ChEMBL target identifiers
     timeout: 30.0
     limit: null
   iuphar:

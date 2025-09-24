@@ -464,7 +464,13 @@ class TargetUniprotCfg(_BaseModel):
 
 
 class TargetChemblCfg(_BaseModel):
-    column: str = "chembl_id"
+    """Defaults for fetching ChEMBL targets.
+
+    The ``column`` aligns with the exported ``target_chembl_id`` identifier
+    used throughout the pipelines and CLI defaults.
+    """
+
+    column: str = "target_chembl_id"
     timeout: float = Field(30.0, ge=0)
     limit: int | None = None
 
