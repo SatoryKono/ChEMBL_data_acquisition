@@ -357,6 +357,139 @@ _NUMERIC_EXPORT_COLUMNS = {
 }
 
 
+_EXPORT_COLUMNS = [
+    "PubMed.PMID",
+    "PubMed.DOI",
+    "PubMed.ArticleTitle",
+    "PubMed.Abstract",
+    "PubMed.JournalTitle",
+    "PubMed.JournalISOAbbrev",
+    "PubMed.Volume",
+    "PubMed.Issue",
+    "PubMed.StartPage",
+    "PubMed.EndPage",
+    "PubMed.ISSN",
+    "PubMed.PublicationType",
+    "PubMed.MeSH_Descriptors",
+    "PubMed.MeSH_Qualifiers",
+    "PubMed.ChemicalList",
+    "PubMed.YearCompleted",
+    "PubMed.MonthCompleted",
+    "PubMed.DayCompleted",
+    "PubMed.YearRevised",
+    "PubMed.MonthRevised",
+    "PubMed.DayRevised",
+    "PubMed.Error",
+    "scholar.PMID",
+    "scholar.DOI",
+    "scholar.PublicationTypes",
+    "scholar.Venue",
+    "scholar.SemanticScholarId",
+    "scholar.ExternalIds",
+    "scholar.Error",
+    "OpenAlex.PMID",
+    "OpenAlex.DOI",
+    "OpenAlex.PublicationTypes",
+    "OpenAlex.TypeCrossref",
+    "OpenAlex.Genre",
+    "OpenAlex.Venue",
+    "OpenAlex.MeshDescriptors",
+    "OpenAlex.MeshQualifiers",
+    "OpenAlex.Id",
+    "OpenAlex.Error",
+    "crossref.DOI",
+    "crossref.Type",
+    "crossref.Subtype",
+    "crossref.Title",
+    "crossref.Subtitle",
+    "crossref.Subject",
+    "crossref.Error",
+    "publication_types_normalised",
+    "publication_review_score",
+    "publication_experimental_score",
+    "publication_class",
+    "ChEMBL.document_chembl_id",
+    "ChEMBL.title",
+    "ChEMBL.abstract",
+    "ChEMBL.doi",
+    "ChEMBL.year",
+    "ChEMBL.journal",
+    "ChEMBL.journal_abbrev",
+    "ChEMBL.volume",
+    "ChEMBL.issue",
+    "ChEMBL.first_page",
+    "ChEMBL.last_page",
+    "ChEMBL.pubmed_id",
+    "ChEMBL.authors",
+    "ChEMBL.source",
+]
+
+_EXPORT_COLUMN_RENAMES = {
+    "document_chembl_id": "ChEMBL.document_chembl_id",
+    "title": "ChEMBL.title",
+    "abstract": "ChEMBL.abstract",
+    "doi": "ChEMBL.doi",
+    "year": "ChEMBL.year",
+    "journal": "ChEMBL.journal",
+    "journal_abbrev": "ChEMBL.journal_abbrev",
+    "volume": "ChEMBL.volume",
+    "issue": "ChEMBL.issue",
+    "first_page": "ChEMBL.first_page",
+    "last_page": "ChEMBL.last_page",
+    "pubmed_id": "ChEMBL.pubmed_id",
+    "authors": "ChEMBL.authors",
+    "source": "ChEMBL.source",
+    "publication_type_score_review": "publication_review_score",
+    "publication_type_score_experimental": "publication_experimental_score",
+}
+
+_EXPORT_COALESCE_SOURCES = {
+    "OpenAlex.PMID": ["OpenAlex.PMID", "PubMed.PMID", "scholar.PMID"],
+    "OpenAlex.DOI": ["OpenAlex.DOI", "PubMed.DOI", "scholar.DOI", "doi_normalised"],
+    "crossref.DOI": ["crossref.DOI", "doi_normalised", "PubMed.DOI", "scholar.DOI"],
+}
+
+_EXPORT_SORT_FALLBACK = [
+    "ChEMBL.document_chembl_id",
+    "PubMed.PMID",
+    "scholar.PMID",
+    "OpenAlex.PMID",
+    "ChEMBL.pubmed_id",
+]
+
+
+def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
+    """Return the first non-empty value across ``columns`` for each row."""
+
+    result = pd.Series("", index=df.index, dtype=object)
+    for col in columns:
+        if col not in df.columns:
+            continue
+        values = df[col].fillna("").astype(str)
+        mask = result.eq("")
+        if mask.any():
+            result.loc[mask] = values.loc[mask]
+    return result
+
+
+def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename and project columns to match the export schema."""
+
+    frame = df.copy()
+    rename_map = {k: v for k, v in _EXPORT_COLUMN_RENAMES.items() if k in frame.columns}
+    if rename_map:
+        frame = frame.rename(columns=rename_map)
+
+    for target, sources in _EXPORT_COALESCE_SOURCES.items():
+        frame[target] = _coalesce_columns(frame, sources)
+
+    for column in _EXPORT_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = ""
+
+    return frame[_EXPORT_COLUMNS]
+
+
 def _finalise_export(
     df: pd.DataFrame,
     output: Path,
@@ -413,19 +546,29 @@ def _finalise_export(
         validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
     )
     export_df = dataframe_to_strings(export_df, skip=_NUMERIC_EXPORT_COLUMNS)
+    export_df = _prepare_export_frame(export_df)
+
+    key_cols: list[str] = []
     if key_columns:
-        key_cols = [c for c in key_columns if c in export_df.columns]
-    else:
-        key_cols = []
-    col_order = [c for c in DOCUMENT_SCHEMA_COLUMNS if c in export_df.columns] + sorted(
-        c for c in export_df.columns if c not in DOCUMENT_SCHEMA_COLUMNS
-    )
+        for column in key_columns:
+            mapped = _EXPORT_COLUMN_RENAMES.get(column, column)
+            if mapped in export_df.columns and mapped not in key_cols:
+                key_cols.append(mapped)
+    if not key_cols:
+        for candidate in _EXPORT_SORT_FALLBACK:
+            if candidate in export_df.columns:
+                key_cols = [candidate]
+                break
+    if not key_cols:
+        key_cols = [_EXPORT_COLUMNS[0]]
+
+    col_order = list(_EXPORT_COLUMNS)
     try:
         csv_path = io.write_csv(
             export_df,
             output,
             cfg=cfg,
-            key_cols=key_cols or None,
+            key_cols=key_cols,
             col_order=col_order,
         )
     except OSError as exc:

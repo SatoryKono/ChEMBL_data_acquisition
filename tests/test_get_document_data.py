@@ -307,7 +307,7 @@ def test_write_csv_column_order(
     monkeypatch.setattr(cl, "get_documents", lambda *_, **__: df)
     monkeypatch.setattr(gdd, "normalize_documents", lambda frame: frame)
 
-    captured: dict[str, list[str]] = {}
+    captured: dict[str, Any] = {}
 
     def fake_write_csv(
         frame: pd.DataFrame,
@@ -321,6 +321,8 @@ def test_write_csv_column_order(
         chunksize: int | None = None,
     ) -> Path:
         captured["col_order"] = list(col_order or [])
+        captured["columns"] = list(frame.columns)
+        captured["key_cols"] = list(key_cols or [])
         return path
 
     monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
@@ -337,11 +339,9 @@ def test_write_csv_column_order(
     )
     rc = gdd.run_chembl(cfg, args)
     assert rc == 0
-    schema_cols = list(DocumentsSchema.columns)
-    expected = [c for c in DOCUMENT_SCHEMA_COLUMNS if c in df.columns] + sorted(
-        c for c in df.columns if c not in schema_cols
-    )
-    assert captured["col_order"] == expected
+    assert captured["col_order"] == gdd._EXPORT_COLUMNS
+    assert captured["columns"] == gdd._EXPORT_COLUMNS
+    assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
 
 
 def test_fetch_pubmed_records_handles_generic_error(
