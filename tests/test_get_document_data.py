@@ -16,7 +16,7 @@ import pytest
 from library import chembl_library as cl
 from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
-from library.config import Config
+from library.config import Config, CrossRefCfg, OpenAlexCfg, SemanticScholarCfg
 from schemas import DocumentsSchema
 from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
 from scripts import get_document_data as gdd
@@ -208,6 +208,40 @@ def test_write_csv_column_order(
         c for c in df.columns if c not in schema_cols
     )
     assert captured["col_order"] == expected
+
+
+
+def test_fetch_pubmed_records_handles_generic_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure unexpected errors yield failure records rather than crashing."""
+
+    def fail_fetch_pubmed_batch(*args: object, **kwargs: object) -> list[dict[str, str]]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fail_fetch_pubmed_batch)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: object())
+
+    df = gdd.fetch_pubmed_records(
+        ["123"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert len(df) == 1
+    row = df.iloc[0]
+    assert row["PubMed.PMID"] == "123"
+    assert row["PubMed.Error"] == "boom"
+    assert row["scholar.Error"] == "boom"
+    assert row["OpenAlex.Error"] == "boom"
+    assert row["crossref.Error"] == "boom"
+    assert row["publication_class"] == "unknown"
+
+
 
 def test_fetch_pubmed_records_accepts_config(
     monkeypatch: pytest.MonkeyPatch,

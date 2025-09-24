@@ -63,7 +63,6 @@ from library.config import (
 
     PubMedCfg,
     RetryCfg,
-
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
@@ -143,7 +142,6 @@ def fetch_pubmed_records(
 
     """
 
-
     cfg: Config | None = None
     positional = list(args)
     if positional:
@@ -203,12 +201,23 @@ def fetch_pubmed_records(
         max_workers = 1
     if batch_size is None:
         batch_size = 100
-
-
     openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
 
-    def _fetch_batch(offset: int, batch: list[str]) -> list[dict[str, str]]:
+    def _failure_records(batch: Sequence[str], message: str) -> list[dict[str, str]]:
+        """Return placeholder rows describing a failure for ``batch`` PMIDs."""
+
+        records: list[dict[str, str]] = []
+        for pmid in batch:
+            pubmed = {"PubMed.PMID": pmid, "PubMed.Error": message}
+            scholar = {"scholar.PMID": pmid, "scholar.Error": message}
+            openalex = {"OpenAlex.Error": message}
+            crossref = {"crossref.Error": message}
+            records.append(merge_metadata(pubmed, scholar, openalex, crossref))
+        return records
+
+    def _fetch_batch(batch: list[str]) -> list[dict[str, str]]:
+
         """Fetch metadata for a batch of PMIDs.
 
         Each worker opens its own :class:`requests.Session` and retrieves PubMed
@@ -256,7 +265,9 @@ def fetch_pubmed_records(
         except requests.RequestException as exc:  # pragma: no cover - network errors
             logger.warning("failed to fetch PMIDs %s: %s", batch, exc)
             return _failure_records(batch, str(exc))
-        except Exception as exc:  # pragma: no cover - unexpected errors
+
+        except Exception as exc:  # pragma: no cover - defensive safety net
+
             logger.warning("unexpected error for PMIDs %s: %s", batch, exc)
             return _failure_records(batch, str(exc))
 
