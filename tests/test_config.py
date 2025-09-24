@@ -269,7 +269,9 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert out.is_dir() and cache.is_dir()
 
 
+
 def test_unknown_key_warning_non_strict(tmp_path: Path) -> None:
+
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\napi:\n  rps: 1\n")
     buf = io.StringIO()
@@ -506,7 +508,7 @@ def test_target_chembl_defaults_match_cli(
         client: object,
         mapping_cfg: object,
 
-        chunk_size: object,
+        chunk_size: object | None = None,
 
         timeout: object,
     ) -> pd.DataFrame:

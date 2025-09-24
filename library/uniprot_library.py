@@ -85,6 +85,62 @@ __all__ = [
 ]
 
 
+UNIPROT_OUTPUT_COLUMNS: list[str] = [
+    "uniprot_id",
+    "names",
+    "genus",
+    "superkingdom",
+    "phylum",
+    "lineage_class",
+    "taxon_id",
+    "sequence_length",
+    "molecular_function",
+    "cellular_component",
+    "ec_numbers",
+    "subcellular_location",
+    "topology",
+    "transmembrane",
+    "intramembrane",
+    "glycosylation",
+    "lipidation",
+    "disulfide_bond",
+    "modified_residue",
+    "phosphorylation",
+    "acetylation",
+    "ubiquitination",
+    "signal_peptide",
+    "propeptide",
+    "isoform_names",
+    "isoform_ids",
+    "isoform_synonyms",
+    "GuidetoPHARMACOLOGY",
+    "family",
+    "SUPFAM",
+    "PROSITE",
+    "InterPro",
+    "Pfam",
+    "PRINTS",
+    "TCDB",
+    "reactions",
+    "reaction_ec_numbers",
+    "gtop_natural_ligands_n",
+    "gtop_interactions_n",
+    "gtop_function_text_short",
+    "xref_pdb",
+    "xref_alphafold",
+    "xref_ensembl",
+    "uniprot_last_update",
+    "uniprot_version",
+    "pipeline_version",
+    "timestamp_utc",
+    "uniProtkbId",
+    "secondaryAccessions",
+    "recommendedName",
+    "geneName",
+    "secondaryAccessionNames",
+]
+
+
 class UniProtFetchError(RuntimeError):
     """Raised when a UniProt record cannot be retrieved or decoded."""
 
@@ -1051,48 +1107,8 @@ def process(
         data_dir = _DEFAULT_UNIPROT_DATA_DIR
     data_dir = Path(data_dir)
 
-    fieldnames = [
-        "uniprot_id",
-        "names",
-        "genus",
-        "superkingdom",
-        "phylum",
-        "taxon_id",
-        "molecular_function",
-        "cellular_component",
-        "ec_numbers",
-        "subcellular_location",
-        "topology",
-        "transmembrane",
-        "intramembrane",
-        "glycosylation",
-        "lipidation",
-        "disulfide_bond",
-        "modified_residue",
-        "phosphorylation",
-        "acetylation",
-        "ubiquitination",
-        "signal_peptide",
-        "propeptide",
-        "isoform_names",
-        "isoform_ids",
-        "isoform_synonyms",
-        "GuidetoPHARMACOLOGY",
-        "family",
-        "SUPFAM",
-        "PROSITE",
-        "InterPro",
-        "Pfam",
-        "PRINTS",
-        "TCDB",
-        "reactions",
-        "reaction_ec_numbers",
-        "uniProtkbId",
-        "secondaryAccessions",
-        "recommendedName",
-        "geneName",
-        "secondaryAccessionNames",
-    ]
+    fieldnames = UNIPROT_OUTPUT_COLUMNS
+    expected_columns = set(fieldnames)
 
     try:
         with open(output_csv, "w", newline="", encoding=encoding) as handle:
@@ -1100,7 +1116,18 @@ def process(
             writer.writeheader()
             for uid in iter_ids(input_csv, sep=sep, encoding=encoding):
                 info = collect_info(uid, data_dir, cfg=cfg)
-                info["secondaryAccessions"] = "|".join(info["secondaryAccessions"])
-                writer.writerow(info)
+                unexpected = sorted(set(info) - expected_columns)
+                if unexpected:
+                    logger.debug(
+                        "uniprot_extra_fields", uid=uid, columns=unexpected
+                    )
+                row = {
+                    column: ("" if info.get(column) is None else info.get(column))
+                    for column in fieldnames
+                }
+                secondary = row.get("secondaryAccessions")
+                if isinstance(secondary, list):
+                    row["secondaryAccessions"] = "|".join(secondary)
+                writer.writerow(row)
     except OSError as exc:
         raise OSError(f"failed to write output CSV: {output_csv}: {exc}") from exc
