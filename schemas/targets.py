@@ -7,7 +7,7 @@ from typing import cast
 import pandera.pandas as pa
 from pandera.dtypes import DataType
 
-PA_ANY = cast(DataType, None)
+PA_ANY = cast(DataType, object)
 
 # Explicit column order for the targets table.
 #
