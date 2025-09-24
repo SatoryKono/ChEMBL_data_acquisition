@@ -2,7 +2,9 @@ import io
 import json
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
@@ -14,6 +16,7 @@ from library.config import (
     ensure_dirs,
     load_config,
 )
+from scripts import get_target_data as target_cli
 
 
 @pytest.fixture(autouse=True)
@@ -467,6 +470,56 @@ def test_log_level_valid_no_mapping(
     monkeypatch.delattr(logging, "getLevelNamesMapping", raising=False)
     cfg = load_config(path)
     assert cfg.log.level == "warn"
+
+
+def test_target_chembl_defaults_match_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default target configuration should work with the CLI helpers."""
+
+    cfg = load_config(Path("config.yaml"))
+    assert cfg.target.chembl.column == "target_chembl_id"
+
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n")
+    output_csv = tmp_path / "out.csv"
+
+    class DummyClient:
+        def __init__(self, *_: object, **__: object) -> None:
+            pass
+
+        def __enter__(self) -> "DummyClient":
+            return self
+
+        def __exit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> bool:
+            return False
+
+    def fake_get_targets(
+        ids: object,
+        *,
+        cfg: object,
+        client: object,
+        mapping_cfg: object,
+        timeout: object,
+    ) -> pd.DataFrame:
+        return pd.DataFrame({"target_chembl_id": list(ids)})
+
+    monkeypatch.setattr(target_cli, "ChemblClient", DummyClient)
+    monkeypatch.setattr(target_cli.cl, "get_targets", fake_get_targets)
+
+    args = SimpleNamespace(input_csv=input_csv, output_csv=output_csv, limit=None)
+
+    exit_code = target_cli.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    header = output_csv.read_text(encoding=cfg.io.csv_encoding).splitlines()[0]
+    assert header == "target_chembl_id"
 
 
 def test_log_level_invalid_no_mapping(
