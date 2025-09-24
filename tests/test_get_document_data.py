@@ -242,7 +242,6 @@ def test_fetch_pubmed_records_handles_generic_error(
     assert row["publication_class"] == "unknown"
 
 
-
 def test_fetch_pubmed_records_accepts_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -311,4 +310,95 @@ def test_fetch_pubmed_records_accepts_config(
     assert "PubMed.PMID" in df.columns
     assert "publication_class" in df.columns
     assert df.loc[0, "PubMed.PMID"] == "1"
+
+
+
+def test_fetch_pubmed_records_accepts_executor_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Executor passing an internal context argument should be ignored."""
+
+    pmids = ["1", "2"]
+
+    class DummyLimiter:
+        def acquire(self) -> None:  # pragma: no cover - trivial
+            return None
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    class DummyFuture:
+        def __init__(self, value: list[dict[str, str]]) -> None:
+            self._value = value
+
+        def result(self) -> list[dict[str, str]]:  # pragma: no cover - trivial
+            return self._value
+
+        def __hash__(self) -> int:  # pragma: no cover - deterministic identity
+            return id(self)
+
+    class DummyExecutor:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self._submitted: list[DummyFuture] = []
+
+        def __enter__(self) -> DummyExecutor:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+        def submit(self, fn, batch):  # type: ignore[no-untyped-def]
+            future = DummyFuture(fn(batch, object()))
+            self._submitted.append(future)
+            return future
+
+    def fake_build_dataframe(records, **_):  # type: ignore[no-untyped-def]
+        return pd.DataFrame.from_records(records)
+
+    def fake_merge_metadata(pubmed, semsch, openalex, crossref):  # type: ignore[no-untyped-def]
+        combined: dict[str, str] = {}
+        combined.update(pubmed)
+        combined.update(semsch)
+        combined.update(openalex)
+        combined.update(crossref)
+        return combined
+
+    def fake_pubmed_batch(session, batch, sleep):  # type: ignore[no-untyped-def]
+        return [{"PubMed.PMID": pmid, "PubMed.DOI": pmid} for pmid in batch]
+
+    def fake_sem_batch(session, batch, sleep, cfg=None):  # type: ignore[no-untyped-def]
+        return [{"scholar.PMID": pmid} for pmid in batch]
+
+    def fake_openalex(session, pmid, cfg, limiter):  # type: ignore[no-untyped-def]
+        return {"OpenAlex.ID": pmid}
+
+    def fake_crossref(session, doi, cfg, limiter):  # type: ignore[no-untyped-def]
+        return {"crossref.DOI": doi}
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(gdd, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(gdd, "build_dataframe", fake_build_dataframe)
+    monkeypatch.setattr(gdd, "merge_metadata", fake_merge_metadata)
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_sem_batch)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+    monkeypatch.setattr(gdd.requests, "Session", DummySession)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert sorted(df["PubMed.PMID"].tolist()) == pmids
 

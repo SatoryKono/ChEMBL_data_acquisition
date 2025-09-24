@@ -60,9 +60,9 @@ from library.config import (
     Config,
     CrossRefCfg,
     OpenAlexCfg,
+ 
 
-    PubMedCfg,
-    RetryCfg,
+ 
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
@@ -201,6 +201,7 @@ def fetch_pubmed_records(
         max_workers = 1
     if batch_size is None:
         batch_size = 100
+
     openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
 
@@ -216,7 +217,10 @@ def fetch_pubmed_records(
             records.append(merge_metadata(pubmed, scholar, openalex, crossref))
         return records
 
-    def _fetch_batch(batch: list[str]) -> list[dict[str, str]]:
+
+    def _fetch_batch(
+        batch: Sequence[str], *_: object, **__: object
+    ) -> list[dict[str, str]]:
 
         """Fetch metadata for a batch of PMIDs.
 
@@ -226,12 +230,12 @@ def fetch_pubmed_records(
         for each PMID. Exceptions are logged so a failure in one batch does not
         abort the whole process.
         """
+        batch_list = list(batch)
         try:
-            with session_with_retry(api_cfg, retry_cfg) as session:
-                pubmed_limiter.acquire()
-                pubmed_list = pl.fetch_pubmed_batch(
-                    session, batch, sleep, cfg=pubmed_cfg
-                )
+
+            with requests.Session() as session:
+                pubmed_list = pl.fetch_pubmed_batch(session, batch_list, sleep)
+
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
 
                 # Fetch Semantic Scholar data in a single batch
@@ -263,13 +267,13 @@ def fetch_pubmed_records(
                     combined_records.append(combined)
                 return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
-            logger.warning("failed to fetch PMIDs %s: %s", batch, exc)
-            return _failure_records(batch, str(exc))
 
+            logger.warning("failed to fetch PMIDs %s: %s", batch_list, exc)
+            return _failure_records(batch_list, str(exc))
         except Exception as exc:  # pragma: no cover - defensive safety net
+            logger.warning("unexpected error for PMIDs %s: %s", batch_list, exc)
+            return _failure_records(batch_list, str(exc))
 
-            logger.warning("unexpected error for PMIDs %s: %s", batch, exc)
-            return _failure_records(batch, str(exc))
 
     iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
