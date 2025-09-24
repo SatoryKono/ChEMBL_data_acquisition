@@ -15,6 +15,7 @@ from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 from schemas import DocumentsSchema
+from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
 from scripts import get_document_data as gdd
 
 
@@ -80,6 +81,8 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
     monkeypatch.setattr(gdd, "ensure_dirs", lambda cfg: None)
 
     rc = gdd.main(
@@ -187,6 +190,8 @@ def test_write_csv_column_order(
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
 
     cfg = Config()
     args = argparse.Namespace(
@@ -196,7 +201,7 @@ def test_write_csv_column_order(
     rc = gdd.run_chembl(cfg, args)
     assert rc == 0
     schema_cols = list(DocumentsSchema.columns)
-    expected = [c for c in schema_cols if c in df.columns] + sorted(
+    expected = [c for c in DOCUMENT_SCHEMA_COLUMNS if c in df.columns] + sorted(
         c for c in df.columns if c not in schema_cols
     )
     assert captured["col_order"] == expected

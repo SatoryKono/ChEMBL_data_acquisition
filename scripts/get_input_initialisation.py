@@ -21,8 +21,9 @@ import sys
 # ruff: noqa: E402
 from pathlib import Path
 
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import argparse
 from collections.abc import Sequence
