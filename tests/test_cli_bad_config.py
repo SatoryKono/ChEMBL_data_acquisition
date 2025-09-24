@@ -70,3 +70,110 @@ def test_malformed_config_exits(
 
     if caplog.text:
         assert "jobs.chunk_size" in caplog.text
+
+
+@pytest.mark.parametrize("entry, extra, use_sys", CLIS)
+def test_unknown_key_config_exits(
+    tmp_path: Path,
+    entry: Callable[..., int],
+    extra: list[str],
+    use_sys: bool,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        "jobs:\n  chunk_size: 5\n"
+        "resources:\n"
+        "  dictionary_dir: dictionary\n"
+        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "  uniprot_data_dir: uniprot\n"
+        "  organism_csv: dictionary/organism.csv\n"
+        "  targets_type_csv: dictionary/targets_type.csv\n"
+        "unknown: 1\n"
+    )
+    argv = [*extra, "--config", str(cfg)]
+    buf = io.StringIO()
+    orig = configure_logger
+
+    def _conf(cfg: LoggerConfig, *a: Any, **k: Any) -> Logger:
+        cfg.stream = buf
+        return orig(cfg, *a, **k)
+
+    monkeypatch.setattr("library.cli.configure_logger", _conf)
+    module = sys.modules.get(entry.__module__)
+    if module and hasattr(module, "configure_logger"):
+        monkeypatch.setattr(f"{entry.__module__}.configure_logger", _conf)
+
+    if use_sys:
+        monkeypatch.setattr(sys, "argv", ["prog", *argv])
+        rc = entry()
+    else:
+        rc = entry(argv)
+    assert rc != 0
+    assert "Unknown configuration key" in buf.getvalue()
+
+
+def test_negative_limit_in_config_exits(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        "jobs:\n  chunk_size: 5\n"
+        "resources:\n"
+        "  dictionary_dir: dictionary\n"
+        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "  uniprot_data_dir: uniprot\n"
+        "  organism_csv: dictionary/organism.csv\n"
+        "  targets_type_csv: dictionary/targets_type.csv\n"
+        "activity:\n  limit: -1\n"
+    )
+    buf = io.StringIO()
+    orig = configure_logger
+
+    def _conf(cfg: LoggerConfig, *a: Any, **k: Any) -> Logger:
+        cfg.stream = buf
+        return orig(cfg, *a, **k)
+
+    monkeypatch.setattr("library.cli.configure_logger", _conf)
+    monkeypatch.setattr("scripts.get_activity_data.configure_logger", _conf)
+    rc = gad.main(["--config", str(cfg)])
+    assert rc != 0
+    assert "activity.limit" in buf.getvalue()
+
+
+def test_doc_type_negative_limit_in_config_exits(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("doc_type:\n  limit: -1\n")
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("chembl_id\nCHEMBL1\n", encoding="utf8")
+    output_csv = tmp_path / "out.csv"
+
+    buf = io.StringIO()
+    orig = configure_logger
+
+    def _conf(cfg: LoggerConfig, *a: Any, **k: Any) -> Logger:
+        cfg.stream = buf
+        return orig(cfg, *a, **k)
+
+    monkeypatch.setattr("library.cli.configure_logger", _conf)
+    monkeypatch.setattr("scripts.get_document_type.configure_logger", _conf)
+
+    rc = gdoctype.main(
+        [
+            "--config",
+            str(cfg),
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+        ]
+    )
+
+    assert rc != 0
+    assert "doc_type.limit" in buf.getvalue()

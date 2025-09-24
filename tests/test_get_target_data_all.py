@@ -61,6 +61,8 @@ def test_run_all_uses_local_inputs(
     iuphar_data = Path("tests/data/iuphar_targets_min.csv")
     organism_csv = Path("tests/data/organism_min.csv")
 
+    original_chunk = cfg.target.chembl.chunk_size
+    cfg.target.all.chunk_size = original_chunk + 2
     cfg.target.all.organism_csv = organism_csv
     cfg.target.all.chembl_out = tmp_path / "chembl_out.csv"
     cfg.target.all.uniprot_out = tmp_path / "uniprot_out.csv"
@@ -69,7 +71,10 @@ def test_run_all_uses_local_inputs(
     # ------------------------------------------------------------------
     # Patch network-dependent functions to use local files
     # ------------------------------------------------------------------
+    recorded: dict[str, int] = {}
+
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        recorded["chunk_size"] = cfg.target.chembl.chunk_size
         shutil.copy(chembl_data, args.output_csv)
         return 0
 
@@ -114,6 +119,8 @@ def test_run_all_uses_local_inputs(
     args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
     exit_code = gtd.run_all(cfg, args)
     assert exit_code == 0
+    assert recorded["chunk_size"] == cfg.target.all.chunk_size
+    assert cfg.target.chembl.chunk_size == original_chunk
 
     # ------------------------------------------------------------------
     # Intermediate files are persisted and match expectations

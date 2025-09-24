@@ -52,6 +52,7 @@ from schemas import TargetsSchema, normalize_targets
 from schemas.targets import TARGETS_COLUMN_ORDER
 
 
+
 TARGETS_REQUIRED_COLUMNS: set[str] = {
     name for name, column in TargetsSchema.columns.items() if column.required
 }
@@ -63,6 +64,7 @@ TARGETS_OPTIONAL_COLUMNS: list[str] = [
 TARGETS_OBJECT_COLUMNS: set[str] = {
     name for name, column in TargetsSchema.columns.items() if str(column.dtype) == "object"
 }
+
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -418,6 +420,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             df = df.head(limit)
             logger.info("process_limit", limit=len(df))
         ids = df[column].tolist()
+        rows_total = len(ids)
 
         from tempfile import NamedTemporaryFile
 
@@ -450,14 +453,34 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         out_df = pd.read_csv(
             output, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
+        rows_kept = len(out_df)
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
-        io.write_csv(
+        csv_path = io.write_csv(
             out_df,
             output,
             cfg=cfg,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
+            key_cols=["uniprot_id"],
+        )
+        rows_dropped = max(rows_total - rows_kept, 0)
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        inputs = {"input_csv": str(args.input_csv)}
+        if cfg.target.uniprot.data_dir:
+            inputs["data_dir"] = str(cfg.target.uniprot.data_dir)
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs=inputs,
+            stats=stats,
+            schema="UniProtExport",
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
@@ -662,7 +685,12 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def fetch_chembl(
-    cfg: Config, input_csv: Path, output_csv: Path, limit: int | None = None
+    cfg: Config,
+    input_csv: Path,
+    output_csv: Path,
+    limit: int | None = None,
+    *,
+    chunk_size: int | None = None,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -686,14 +714,19 @@ def fetch_chembl(
     logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
     chembl_args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
     original_limit = cfg.target.chembl.limit
+    original_chunk_size = cfg.target.chembl.chunk_size
     if limit is not None:
         cfg.target.chembl.limit = limit
+    if chunk_size is not None:
+        cfg.target.chembl.chunk_size = chunk_size
     try:
         if run_chembl(cfg, chembl_args) != 0:
             raise RuntimeError("ChEMBL retrieval failed")
     finally:
         if limit is not None:
             cfg.target.chembl.limit = original_limit
+        if chunk_size is not None:
+            cfg.target.chembl.chunk_size = original_chunk_size
     df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
@@ -984,7 +1017,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             output.stem + "_iuphar.csv"
         )
 
-        chembl_df = fetch_chembl(cfg, args.input_csv, chembl_out, limit=limit)
+        chembl_df = fetch_chembl(
+            cfg,
+            args.input_csv,
+            chembl_out,
+            limit=limit,
+            chunk_size=cfg.target.all.chunk_size,
+        )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
