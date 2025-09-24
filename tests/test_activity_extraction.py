@@ -48,7 +48,9 @@ def stub_quality(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_quality(*args, **kwargs):  # type: ignore[no-untyped-def]
         return pd.DataFrame(), pd.DataFrame()
 
-    monkeypatch.setattr("library.activity_extraction.analyze_table_quality", fake_quality)
+    monkeypatch.setattr(
+        "library.activity_extraction.analyze_table_quality", fake_quality
+    )
 
 
 def _write_input(path: Path, identifiers: list[str]) -> None:
@@ -56,7 +58,9 @@ def _write_input(path: Path, identifiers: list[str]) -> None:
     path.write_text(rows, encoding="utf-8")
 
 
-def test_extract_activities_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: Config) -> None:
+def test_extract_activities_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: Config
+) -> None:
     """Successful run writes CSV and returns exit code ``0``."""
 
     input_csv = tmp_path / "activities.csv"

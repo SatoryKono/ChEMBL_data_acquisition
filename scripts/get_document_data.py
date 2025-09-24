@@ -56,7 +56,6 @@ from library.cli import (
     configure_logger,
 )
 from library.config import (
-    ApiCfg,
     Config,
     CrossRefCfg,
     OpenAlexCfg,
@@ -64,13 +63,7 @@ from library.config import (
     _serialize_paths,
     ensure_dirs,
     print_config,
-    session_with_retry,
 )
-from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.rate_limiter import get_limiter
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
@@ -81,6 +74,11 @@ from library.document_pipeline import (
     normalise_doi,
     save_quality_report,
 )
+from library.log import logger
+from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.rate_limiter import get_limiter
+from library.sidecar import SidecarErrors
+from library.table_quality import analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
 
 
@@ -201,11 +199,7 @@ def fetch_pubmed_records(
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
 
     settings = cfg or Config()
-    api_cfg = settings.api
-    retry_cfg = settings.retry
-    pubmed_cfg = settings.pubmed
     rate_cfg = settings.rate
-    pubmed_limiter = get_limiter("pubmed", rate_cfg.global_rps, rate_cfg.global_burst)
     semantic_limiter = get_limiter(
         "semantic_scholar", rate_cfg.global_rps, rate_cfg.global_burst
     )
@@ -222,13 +216,12 @@ def fetch_pubmed_records(
             records.append(merge_metadata(pubmed, scholar, openalex, crossref))
         return records
 
-
     def _coerce_batch_argument(*candidates: object) -> list[str]:
         """Return the first iterable batch argument from ``candidates``."""
 
         for candidate in candidates:
             if isinstance(candidate, Sequence) and not isinstance(
-                candidate, (str, bytes, bytearray)
+                candidate, str | bytes | bytearray
             ):
                 return [str(item) for item in candidate]
         raise TypeError(
@@ -239,7 +232,6 @@ def fetch_pubmed_records(
     def _fetch_batch(
         first: object, *rest: object, **__: object
     ) -> list[dict[str, str]]:
-
         """Fetch metadata for a batch of PMIDs.
 
         Each worker opens its own :class:`requests.Session` and retrieves PubMed
@@ -252,7 +244,6 @@ def fetch_pubmed_records(
         batch_list = _coerce_batch_argument(first, *rest)
 
         try:
-
             with requests.Session() as session:
                 pubmed_list = pl.fetch_pubmed_batch(session, batch_list, sleep)
 
@@ -262,7 +253,6 @@ def fetch_pubmed_records(
                 semantic_limiter.acquire()
                 semsch_list = ssl.fetch_semantic_scholar_batch(
                     session, pmids_in_batch, sleep, cfg=semantic_scholar_cfg
-
                 )
 
                 # Create a map for easy lookup
@@ -287,13 +277,11 @@ def fetch_pubmed_records(
                     combined_records.append(combined)
                 return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
-
             logger.warning("failed to fetch PMIDs %s: %s", batch_list, exc)
             return _failure_records(batch_list, str(exc))
         except Exception as exc:  # pragma: no cover - defensive safety net
             logger.warning("unexpected error for PMIDs %s: %s", batch_list, exc)
             return _failure_records(batch_list, str(exc))
-
 
     iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
@@ -388,9 +376,9 @@ def _finalise_export(
         key_cols = [c for c in key_columns if c in export_df.columns]
     else:
         key_cols = []
-    col_order = [
-        c for c in DOCUMENT_SCHEMA_COLUMNS if c in export_df.columns
-    ] + sorted(c for c in export_df.columns if c not in DOCUMENT_SCHEMA_COLUMNS)
+    col_order = [c for c in DOCUMENT_SCHEMA_COLUMNS if c in export_df.columns] + sorted(
+        c for c in export_df.columns if c not in DOCUMENT_SCHEMA_COLUMNS
+    )
     try:
         csv_path = io.write_csv(
             export_df,
@@ -478,9 +466,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             max_workers=cfg.document.pubmed.workers,
             batch_size=cfg.document.pubmed.batch_size,
         )
-        output = Path(
-            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        )
+        output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
         df = normalize_documents(df)
         exit_code = _finalise_export(
             df,
@@ -545,9 +531,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         if "doi" in df.columns:
             df["doi"] = df["doi"].map(normalise_doi)
-        output = Path(
-            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        )
+        output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
         df = normalize_documents(df)
         exit_code = _finalise_export(
             df,
@@ -636,7 +620,6 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-
         cfg.document.all.sleep,
         cfg.semantic_scholar,
         cfg.openalex,

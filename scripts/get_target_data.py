@@ -865,7 +865,6 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     missing_optional = optional_cols - set(final_df.columns)
     if not missing_required:
         if missing_optional:
-
             logger.warning(
                 "DataFrame is missing optional columns: %s", missing_optional
             )

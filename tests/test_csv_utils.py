@@ -93,10 +93,7 @@ def test_write_csv_deterministic_empty_dataframe_golden(tmp_path: Path) -> None:
     write_csv_deterministic(df, path, key_cols=sorted(df.columns))
 
     expected = (
-        Path(__file__).parent
-        / "data"
-        / "golden"
-        / "empty_with_header.csv"
+        Path(__file__).parent / "data" / "golden" / "empty_with_header.csv"
     ).read_text(encoding="utf-8-sig")
     assert path.read_text(encoding="utf-8-sig") == expected
 
@@ -109,10 +106,7 @@ def test_write_csv_deterministic_empty_no_columns(tmp_path: Path) -> None:
     write_csv_deterministic(df, path, key_cols=[])
 
     expected = (
-        Path(__file__).parent
-        / "data"
-        / "golden"
-        / "empty_no_columns.csv"
+        Path(__file__).parent / "data" / "golden" / "empty_no_columns.csv"
     ).read_text(encoding="utf-8-sig")
     assert path.read_text(encoding="utf-8-sig") == expected
 

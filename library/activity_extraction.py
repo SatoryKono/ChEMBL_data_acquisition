@@ -163,7 +163,9 @@ def extract_activities(
     missing_required = required - set(df.columns)
     exit_code = 0
     if missing_required:
-        LOG.warning("Skipping validation; missing columns: %s", sorted(missing_required))
+        LOG.warning(
+            "Skipping validation; missing columns: %s", sorted(missing_required)
+        )
     else:
         try:
             df = ActivitiesSchema.validate(df, lazy=True)
@@ -171,7 +173,9 @@ def extract_activities(
             sidecar = SidecarErrors()
             for row in exc.failure_cases.to_dict("records"):
                 sidecar.add_error(row)
-            failure = Path(output_path).with_name(f"{Path(output_path).stem}_failure_cases.csv")
+            failure = Path(output_path).with_name(
+                f"{Path(output_path).stem}_failure_cases.csv"
+            )
             sidecar.save(failure, cfg=cfg)
             LOG.error("validation failed; see %s", failure)
             df = getattr(exc, "validated_data", df)

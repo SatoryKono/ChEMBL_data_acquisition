@@ -70,9 +70,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     # Prepare HTTP session for ChEMBL requests
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            ids_iter = io.read_ids(
-                args.input_csv, column=cfg.assay.column, cfg=cfg.io
-            )
+            ids_iter = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
         except (FileNotFoundError, ValueError) as exc:
             logger.error("%s", exc)
             return 1

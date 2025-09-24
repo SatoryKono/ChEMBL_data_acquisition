@@ -360,7 +360,7 @@ def fetch_semantic_scholar_batch(
                     candidate = value.strip()
                     if candidate:
                         return candidate
-                elif isinstance(value, (list, tuple, set)):
+                elif isinstance(value, list | tuple | set):
                     for entry in value:
                         if isinstance(entry, str):
                             candidate = entry.strip()

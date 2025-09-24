@@ -10,11 +10,10 @@ sub-commands.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
-
-import json
 
 import pandas as pd
 
@@ -101,12 +100,19 @@ DOCUMENT_SCHEMA_COLUMNS: list[str] = (
     + SEMANTIC_SCHOLAR_COLUMNS
     + OPENALEX_COLUMNS
     + CROSSREF_COLUMNS
-    + ["date_code", "Index", "PubMed.is_review", "scholar.is_review", "OpenAlex.is_review"]
+    + [
+        "date_code",
+        "Index",
+        "PubMed.is_review",
+        "scholar.is_review",
+        "OpenAlex.is_review",
+    ]
 )
 
 
 # ---------------------------------------------------------------------------
 # Normalisation helpers
+
 
 def normalise_doi(value: Any) -> str:
     """Return a canonical DOI string or ``""`` if ``value`` is falsy."""
@@ -138,9 +144,13 @@ def _collect_terms(record: Mapping[str, Any]) -> list[str]:
     ):
         value = record.get(key)
         terms.extend(parse_terms(value))
-    seen = set()
-    unique = [t for t in terms if not (t in seen or seen.add(t))]
-    return sorted(unique)
+    seen: set[str] = set()
+    unique_terms: list[str] = []
+    for term in terms:
+        if term not in seen:
+            seen.add(term)
+            unique_terms.append(term)
+    return sorted(unique_terms)
 
 
 def merge_metadata(*records: Mapping[str, Any]) -> dict[str, Any]:
@@ -184,6 +194,7 @@ def merge_metadata(*records: Mapping[str, Any]) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # DataFrame utilities
+
 
 def build_dataframe(
     data: Sequence[Mapping[str, Any]] | pd.DataFrame,
@@ -270,6 +281,7 @@ def dataframe_to_strings(
 # ---------------------------------------------------------------------------
 # Quality reporting
 
+
 def build_quality_report(df: pd.DataFrame) -> dict[str, Any]:
     """Return a JSON serialisable quality summary for ``df``."""
 
@@ -281,7 +293,11 @@ def build_quality_report(df: pd.DataFrame) -> dict[str, Any]:
         mask = series.astype(str).str.strip().astype(bool)
         return float(mask.mean())
 
-    doi_series = df["doi"] if "doi" in df.columns else df.get("doi_normalised", pd.Series(dtype=str))
+    doi_series = (
+        df["doi"]
+        if "doi" in df.columns
+        else df.get("doi_normalised", pd.Series(dtype=str))
+    )
     class_counts = (
         df.get("publication_class", pd.Series(dtype=str))
         .fillna("unknown")
@@ -353,4 +369,3 @@ __all__ = [
     "build_quality_report",
     "save_quality_report",
 ]
-

@@ -78,7 +78,9 @@ def test_optional_stages_receive_dataframe() -> None:
         ids = [item for chunk in chunks for item in chunk]
         return pd.DataFrame({"target_chembl_id": ids})
 
-    def uniprot_fetcher(df: pd.DataFrame, cfg: object | None = None, **_: Any) -> pd.DataFrame:
+    def uniprot_fetcher(
+        df: pd.DataFrame, cfg: object | None = None, **_: Any
+    ) -> pd.DataFrame:
         assert list(df["target_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
         return pd.DataFrame({"uniprot_id": ["P1", "P2"]})
 

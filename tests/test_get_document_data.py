@@ -3,12 +3,9 @@ from __future__ import annotations
 import argparse
 import io
 import sys
-import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
-
-from contextlib import contextmanager
 
 import pandas as pd
 import pytest
@@ -17,8 +14,8 @@ from library import chembl_library as cl
 from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config, CrossRefCfg, OpenAlexCfg, SemanticScholarCfg
-from schemas import DocumentsSchema
 from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
+from schemas import DocumentsSchema
 from scripts import get_document_data as gdd
 
 
@@ -292,7 +289,9 @@ def test_fetch_pubmed_records_handles_generic_error(
 ) -> None:
     """Ensure unexpected errors yield failure records rather than crashing."""
 
-    def fail_fetch_pubmed_batch(*args: object, **kwargs: object) -> list[dict[str, str]]:
+    def fail_fetch_pubmed_batch(
+        *args: object, **kwargs: object
+    ) -> list[dict[str, str]]:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fail_fetch_pubmed_batch)
@@ -339,7 +338,9 @@ def test_fetch_pubmed_records_accepts_config(
 
     monkeypatch.setattr(gdd.requests, "Session", fake_session)
 
-    def fake_pubmed_batch(session: Any, batch: list[str], sleep: float) -> list[dict[str, str]]:
+    def fake_pubmed_batch(
+        session: Any, batch: list[str], sleep: float
+    ) -> list[dict[str, str]]:
         assert sleep == expected_sleep
         assert batch == ["1"]
         return [
@@ -366,18 +367,24 @@ def test_fetch_pubmed_records_accepts_config(
             }
         ]
 
-    def fake_openalex(session: Any, pmid: str, cfg_arg: Any, limiter: Any) -> dict[str, str]:
+    def fake_openalex(
+        session: Any, pmid: str, cfg_arg: Any, limiter: Any
+    ) -> dict[str, str]:
         assert pmid == "1"
         assert cfg_arg is config.openalex
         return {"OpenAlex.PublicationTypes": "journal-article"}
 
-    def fake_crossref(session: Any, doi: str, cfg_arg: Any, limiter: Any) -> dict[str, str]:
+    def fake_crossref(
+        session: Any, doi: str, cfg_arg: Any, limiter: Any
+    ) -> dict[str, str]:
         assert doi == "10.1000/xyz"
         assert cfg_arg is config.crossref
         return {"crossref.Type": "journal-article"}
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
-    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_scholar_batch)
+    monkeypatch.setattr(
+        gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_scholar_batch
+    )
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
     monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: DummyLimiter())
@@ -388,12 +395,10 @@ def test_fetch_pubmed_records_accepts_config(
     assert df.loc[0, "PubMed.PMID"] == "1"
 
 
-
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
 def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch: pytest.MonkeyPatch,
     context_position: str,
-
 ) -> None:
     """Executor passing an internal context argument should be ignored."""
 
@@ -431,7 +436,6 @@ def test_fetch_pubmed_records_accepts_executor_context(
             return None
 
         def submit(self, fn, batch):  # type: ignore[no-untyped-def]
-
             context = object()
             if context_position == "prefix":
                 value = fn(context, batch)
@@ -487,4 +491,3 @@ def test_fetch_pubmed_records_accepts_executor_context(
     )
 
     assert sorted(df["PubMed.PMID"].tolist()) == pmids
-
