@@ -9,23 +9,9 @@ import pandas as pd
 
 from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg
+from .document_schema import CH_EMBL_COLUMNS
 
-DOCUMENT_COLUMNS = [
-    "document_chembl_id",
-    "title",
-    "abstract",
-    "doi",
-    "year",
-    "journal",
-    "journal_abbrev",
-    "volume",
-    "issue",
-    "first_page",
-    "last_page",
-    "pubmed_id",
-    "authors",
-    "source",
-]
+DOCUMENT_COLUMNS = list(CH_EMBL_COLUMNS)
 
 
 def get_documents(

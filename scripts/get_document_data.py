@@ -49,6 +49,7 @@ from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
 from library.chembl_client import ChemblClient, _chunked
+from library.document_schema import DOCUMENT_SCHEMA_COLUMNS
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
@@ -69,6 +70,20 @@ from library.rate_limiter import get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
+
+
+def _apply_schema_column_order(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Ensure ``df`` contains all schema columns and return ordered names."""
+
+    schema_cols = list(DOCUMENT_SCHEMA_COLUMNS)
+    missing = [col for col in schema_cols if col not in df.columns]
+    if missing:
+        df = df.copy()
+        for col in missing:
+            df[col] = pd.NA
+    head = [col for col in schema_cols if col in df.columns]
+    tail = sorted(col for col in df.columns if col not in schema_cols)
+    return df, head + tail
 
 
 def fetch_pubmed_records(
@@ -254,10 +269,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         rows_kept = len(df)
         rows_dropped = rows_total - rows_kept
         key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-        schema_cols = list(DocumentsSchema.columns)
-        head = [c for c in schema_cols if c in df.columns]  # schema-defined order
-        tail = sorted(c for c in df.columns if c not in schema_cols)  # other columns
-        col_order = head + tail
+        df, col_order = _apply_schema_column_order(df)
         csv_path = io.write_csv(
             df,
             output,
@@ -379,12 +391,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         rows_dropped = rows_total - rows_kept
         try:
             key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-            schema_cols = list(DocumentsSchema.columns)
-            head = [c for c in schema_cols if c in df.columns]  # schema-defined order
-            tail = sorted(
-                c for c in df.columns if c not in schema_cols
-            )  # other columns
-            col_order = head + tail
+            df, col_order = _apply_schema_column_order(df)
             csv_path = io.write_csv(
                 df,
                 output,
@@ -519,10 +526,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         rows_dropped = rows_total - rows_kept
         try:
             key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
-            schema_cols = list(DocumentsSchema.columns)
-            head = [c for c in schema_cols if c in processed.columns]
-            tail = sorted(c for c in processed.columns if c not in schema_cols)
-            col_order = head + tail
+            processed, col_order = _apply_schema_column_order(processed)
             csv_path = io.write_csv(
                 processed,
                 output,
@@ -628,10 +632,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     rows_dropped = rows_total - rows_kept
     try:
         key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
-        schema_cols = list(DocumentsSchema.columns)
-        head = [c for c in schema_cols if c in processed.columns]
-        tail = sorted(c for c in processed.columns if c not in schema_cols)
-        col_order = head + tail
+        processed, col_order = _apply_schema_column_order(processed)
         csv_path = io.write_csv(
             processed,
             output,

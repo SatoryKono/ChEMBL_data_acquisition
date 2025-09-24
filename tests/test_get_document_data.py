@@ -196,7 +196,5 @@ def test_write_csv_column_order(
     rc = gdd.run_chembl(cfg, args)
     assert rc == 0
     schema_cols = list(DocumentsSchema.columns)
-    expected = [c for c in schema_cols if c in df.columns] + sorted(
-        c for c in df.columns if c not in schema_cols
-    )
+    expected = schema_cols + sorted(c for c in df.columns if c not in schema_cols)
     assert captured["col_order"] == expected
