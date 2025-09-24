@@ -104,7 +104,6 @@ def _read_head_sha(git_dir: Path) -> str | None:
         return head_content
     return None
 
-
 def _serialise_cmd(cmd: Any) -> list[str] | str:
     """Return ``cmd`` in a JSON-serialisable form."""
 
@@ -157,6 +156,22 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
         details.append(stdout)
     if details:
         message = f"{message}: {' | '.join(details)}"
+
+def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
+    """Return a descriptive message for ``exc``."""
+
+    if isinstance(exc.cmd, (list, tuple)):
+        command = " ".join(str(part) for part in exc.cmd)
+    else:
+        command = str(exc.cmd)
+    message = f"{command} exited with status {exc.returncode}"
+    details: list[str] = []
+    if exc.stderr:
+        details.append(exc.stderr.strip())
+    if exc.stdout:
+        details.append(exc.stdout.strip())
+    if details:
+        message = f"{message}: {' | '.join(part for part in details if part)}"
     return message
 
 
@@ -173,7 +188,9 @@ def _log_fallback(sha: str, *, reason: str, error: BaseException | None = None) 
 
     payload: dict[str, Any] = {"reason": reason}
     if error is not None:
+
         payload.update(_error_payload(error))
+        
     logger.info("git_sha_fallback", sha=sha, **payload)
 
 
@@ -251,4 +268,6 @@ def _git_sha() -> str:
             _log_fallback(fallback, reason="subprocess_error", error=exc)
             return fallback
         logger.warning("git_sha_unavailable", extra=_error_payload(exc))
+
+ 
         return "UNKNOWN"
