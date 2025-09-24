@@ -173,13 +173,13 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
 
     cached = _CACHE.get(url)
     if cached is not None:
-        logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
+        logger.info("cache_hit", url=url, rps=cfg.rps, status="hit")
         return cast(dict[str, Any], cached)
-    logger.info("cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"})
+    logger.info("cache_miss", url=url, rps=cfg.rps, status="miss")
 
     for attempt in range(1, cfg.retries + 1):
         event = "request_start" if attempt == 1 else "request_retry"
-        logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
+        logger.info(event, url=url, attempt=attempt, rps=cfg.rps)
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             response = _session.get(
@@ -188,24 +188,34 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= cfg.retries:
                 logger.error(
-                    "HTTP request failed for url %s: %s",
-                    url,
-                    exc,
-                    extra={"url": url, "rps": cfg.rps},
+                    "request_error",
+                    url=url,
+                    error=str(exc),
+                    attempt=attempt,
+                    rps=cfg.rps,
                 )
                 logger.info(
                     "request_fail",
-                    extra={"url": url, "status": None, "rps": cfg.rps},
+                    url=url,
+                    status=None,
+                    rps=cfg.rps,
                 )
                 return None
             sleep(cfg.delay)
             continue
 
         if response.status_code in (404, 400):
-            logger.warning("Request returned %d for url %s", response.status_code, url)
+            logger.warning(
+                "request_unexpected_status",
+                url=url,
+                status=response.status_code,
+                rps=cfg.rps,
+            )
             logger.info(
                 "request_fail",
-                extra={"url": url, "status": response.status_code, "rps": cfg.rps},
+                url=url,
+                status=response.status_code,
+                rps=cfg.rps,
             )
             return None
         try:
@@ -214,33 +224,45 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= cfg.retries:
                 logger.error(
-                    "HTTP request failed for url %s: %s",
-                    url,
-                    exc,
-                    extra={"url": url, "rps": cfg.rps},
+                    "request_error",
+                    url=url,
+                    error=str(exc),
+                    attempt=attempt,
+                    rps=cfg.rps,
                 )
                 logger.info(
                     "request_fail",
-                    extra={"url": url, "status": None, "rps": cfg.rps},
+                    url=url,
+                    status=response.status_code,
+                    rps=cfg.rps,
                 )
                 return None
             sleep(cfg.delay)
             continue
         except ValueError:
-            logger.warning("Non-JSON response for url %s", url)
+            logger.warning(
+                "response_not_json",
+                url=url,
+                status=response.status_code,
+                rps=cfg.rps,
+            )
             logger.info(
                 "request_fail",
-                extra={"url": url, "status": response.status_code, "rps": cfg.rps},
+                url=url,
+                status=response.status_code,
+                rps=cfg.rps,
             )
             return None
 
         logger.info(
             "request_ok",
-            extra={"url": url, "status": response.status_code, "rps": cfg.rps},
+            url=url,
+            status=response.status_code,
+            rps=cfg.rps,
         )
         assert _CACHE is not None  # for type checker; cache initialised above
         _CACHE[url] = data
-        logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
+        logger.info("cache_set", url=url, rps=cfg.rps)
         return data
     return None
 

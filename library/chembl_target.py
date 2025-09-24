@@ -69,7 +69,11 @@ def _parse_uniprot_id(
     try:
         mapping_uniprot_id = map_chembl_to_uniprot(chembl_id, mapping_cfg) or ""
     except Exception as exc:  # pragma: no cover - network failure paths
-        logger.warning("UniProt mapping request failed for %s: %s", chembl_id, exc)
+        logger.warning(
+            "uniprot_mapping_error",
+            chembl_id=str(chembl_id),
+            error=str(exc),
+        )
         mapping_uniprot_id = ""
     return uniprot_id, mapping_uniprot_id
 
