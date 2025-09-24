@@ -59,19 +59,23 @@ def test_merge_with_chembl_aligns_pubmed_ids() -> None:
         }
     )
     meta_df = pd.DataFrame(
+
         {
             "document_chembl_id": ["IGNORED"],
             "title": ["Other"],
             "PubMed.PMID": ["123"],
             "PubMed.DOI": ["10.1/abc"],
         }
+
     )
 
     merged = merge_with_chembl(chembl_df, meta_df)
     assert merged["PubMed.DOI"].iloc[0] == "10.1/abc"
+
     assert "document_chembl_id_x" not in merged.columns
     assert "document_chembl_id_y" not in merged.columns
     assert merged["document_chembl_id"].iloc[0] == "CHEMBL1"
+
 
 
 def test_build_quality_report_counts() -> None:
