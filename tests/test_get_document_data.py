@@ -344,6 +344,7 @@ def test_write_csv_column_order(
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
 
 
+
 def test_fetch_pubmed_records_handles_generic_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

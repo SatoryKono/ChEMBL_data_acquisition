@@ -358,6 +358,7 @@ _NUMERIC_EXPORT_COLUMNS = {
 
 
 _EXPORT_COLUMNS = [
+
     "PubMed.PMID",
     "PubMed.DOI",
     "PubMed.ArticleTitle",
