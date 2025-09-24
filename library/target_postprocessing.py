@@ -370,18 +370,18 @@ def finalise_targets(
     for col in TEXT_COLUMNS:
         if col in df.columns:
             df[col] = df[col].astype("string")
-    for col in INT_COLUMNS:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-    for col in BOOL_COLUMNS:
-        if col in df.columns:
-            df[col] = (
-                df[col]
-                .astype("string")  # normalise mixed inputs
-                .str.lower()
-                .map({"true": True, "false": False})
-                .astype("boolean")
-            )
+  #  for col in INT_COLUMNS:
+  #      if col in df.columns:
+  #          df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+  #  for col in BOOL_COLUMNS:
+  #      if col in df.columns:
+  #          df[col] = (
+  #              df[col]
+  #              .astype("string")  # normalise mixed inputs
+  #              .str.lower()
+  #              .map({"true": True, "false": False})
+  #              .astype("boolean")
+  #          )
 
     # Merge organism classification and add type column
     #
