@@ -11,10 +11,14 @@ from __future__ import annotations
 import requests
 
 from . import pubmed_library as _pl
+from .config import SemanticScholarCfg
 
 
 def fetch_semantic_scholar(
-    session: requests.Session, pmid: str, sleep: float
+    session: requests.Session,
+    pmid: str,
+    sleep: float,
+    cfg: SemanticScholarCfg | None = None,
 ) -> dict[str, str]:
     """Return Semantic Scholar metadata for ``pmid``.
 
@@ -36,11 +40,14 @@ def fetch_semantic_scholar(
         returned dictionary and never raise exceptions.
 
     """
-    return _pl.fetch_semantic_scholar(session, pmid, sleep)
+    return _pl.fetch_semantic_scholar(session, pmid, sleep, cfg=cfg)
 
 
 def fetch_semantic_scholar_batch(
-    session: requests.Session, pmids: list[str], sleep: float
+    session: requests.Session,
+    pmids: list[str],
+    sleep: float,
+    cfg: SemanticScholarCfg | None = None,
 ) -> list[dict[str, str]]:
     """Return Semantic Scholar metadata for a batch of ``pmids``.
 
@@ -60,4 +67,4 @@ def fetch_semantic_scholar_batch(
         dictionary and never raise exceptions.
 
     """
-    return _pl.fetch_semantic_scholar_batch(session, pmids, sleep)
+    return _pl.fetch_semantic_scholar_batch(session, pmids, sleep, cfg=cfg)
