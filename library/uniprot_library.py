@@ -222,11 +222,18 @@ def extract_organism(data: Any) -> dict[str, str]:
             containing UniProt entries.
 
     Returns:
-        A dictionary with keys ``genus``, ``superkingdom``, ``phylum`` and
-        ``taxon_id``. Empty strings are returned when a field is missing.
+        A dictionary with keys ``genus``, ``superkingdom``, ``phylum``,
+        ``lineage_class`` and ``taxon_id``. Empty strings are returned when a
+        field is missing.
 
     """
-    result = {"genus": "", "superkingdom": "", "phylum": "", "taxon_id": ""}
+    result = {
+        "genus": "",
+        "superkingdom": "",
+        "phylum": "",
+        "lineage_class": "",
+        "taxon_id": "",
+    }
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -245,6 +252,7 @@ def extract_organism(data: Any) -> dict[str, str]:
         lineage = org.get("lineage") or []
         if isinstance(lineage, list) and lineage:
             result["superkingdom"] = lineage[0]
+            phylum_idx = 1
             if len(lineage) >= 2:
                 candidate = lineage[1]
                 if (
@@ -253,8 +261,14 @@ def extract_organism(data: Any) -> dict[str, str]:
                     and len(lineage) >= 3
                 ):
                     result["phylum"] = lineage[2]
+                    phylum_idx = 2
                 else:
-                    result["phylum"] = candidate
+                    result["phylum"] = candidate if isinstance(candidate, str) else ""
+            class_idx = phylum_idx + 1
+            if class_idx < len(lineage):
+                candidate_class = lineage[class_idx]
+                if isinstance(candidate_class, str):
+                    result["lineage_class"] = candidate_class
             result["genus"] = lineage[-1]
         sci_name = org.get("scientificName")
         if sci_name and not result["genus"]:
@@ -866,7 +880,9 @@ def collect_info(
         "genus": "",
         "superkingdom": "",
         "phylum": "",
+        "lineage_class": "",
         "taxon_id": "",
+        "sequence_length": "",
         "molecular_function": "",
         "cellular_component": "",
         "ec_numbers": "",
@@ -897,6 +913,16 @@ def collect_info(
         "reactions": "",
         "reaction_ec_numbers": "",
         "secondaryAccessionNames": "",
+        "gtop_natural_ligands_n": "",
+        "gtop_interactions_n": "",
+        "gtop_function_text_short": "",
+        "xref_pdb": "",
+        "xref_alphafold": "",
+        "xref_ensembl": "",
+        "uniprot_last_update": "",
+        "uniprot_version": "",
+        "pipeline_version": "",
+        "timestamp_utc": "",
     }
     try:
         with open(json_path, encoding="utf-8") as handle:
@@ -926,6 +952,26 @@ def collect_info(
     iso = extract_isoform(data)
     cross = extract_crossrefs(data)
     activity = extract_activity(data)
+    entry = data
+    if isinstance(entry, dict) and "results" in entry:
+        results = entry.get("results")
+        entry = results[0] if isinstance(results, list) and results else entry
+    elif isinstance(entry, list) and entry:
+        entry = entry[0]
+    if isinstance(entry, dict):
+        sequence = entry.get("sequence")
+        if isinstance(sequence, dict):
+            length = sequence.get("length")
+            if length is not None:
+                result["sequence_length"] = str(length)
+        audit = entry.get("entryAudit")
+        if isinstance(audit, dict):
+            last_update = audit.get("lastUpdateDate")
+            if isinstance(last_update, str):
+                result["uniprot_last_update"] = last_update
+            version = audit.get("entryVersion")
+            if version is not None:
+                result["uniprot_version"] = str(version)
     result["names"] = "|".join(sorted(names))
     result.update(org)
     result["molecular_function"] = "|".join(sorted(keywords["molecular_function"]))

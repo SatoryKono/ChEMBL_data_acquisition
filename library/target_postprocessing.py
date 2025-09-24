@@ -17,14 +17,7 @@ from .config import Config, IoCfg
 from .log import logger
 
 # Columns removed in the final export
-REMOVE_COLUMNS: list[str] = [
-    "SUPFAM",
-    "PROSITE",
-    "InterPro",
-    "Pfam",
-    "PRINTS",
-    "TCDB",
-]
+REMOVE_COLUMNS: list[str] = []
 
 # Columns that should be transformed to lowercase
 LOWERCASE_COLUMNS: list[str] = [
@@ -36,6 +29,11 @@ LOWERCASE_COLUMNS: list[str] = [
     "molecular_function",
     "recommended_name",
     "synonyms",
+    "protein_name_alt",
+    "gtop_synonyms",
+    "gene_symbol",
+    "protein_synonym_list",
+    "gene_symbol_list",
 ]
 
 # Columns treated as text in the final table
@@ -70,6 +68,27 @@ TEXT_COLUMNS: list[str] = [
     "full_id_path",
     "full_name_path",
     "GuidetoPHARMACOLOGY",
+    "protein_name_canonical",
+    "protein_name_alt",
+    "organism",
+    "lineage_superkingdom",
+    "lineage_phylum",
+    "lineage_class",
+    "features_topology",
+    "gtop_synonyms",
+    "pfam",
+    "interpro",
+    "xref_pdb",
+    "xref_alphafold",
+    "pref_name",
+    "target_type",
+    "tax_id",
+    "species_group_flag",
+    "target_components",
+    "protein_classifications",
+    "cross_references",
+    "gene_symbol_list",
+    "protein_synonym_list",
 ]
 
 # Integer and boolean columns
@@ -130,6 +149,168 @@ def _validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
         raise ValueError(f"missing required columns: {', '.join(sorted(missing))}")
 
 
+def _default_series(df: pd.DataFrame, value: str = "-") -> pd.Series:
+    """Return a series of length ``len(df)`` filled with ``value``."""
+
+    if df.empty:
+        return pd.Series(dtype="string")
+    return pd.Series([value] * len(df), index=df.index)
+
+
+def _series_or_default(df: pd.DataFrame, column: str, default: str = "-") -> pd.Series:
+    """Return ``df[column]`` with missing values replaced by ``default``."""
+
+    if column in df.columns:
+        series = df[column].copy()
+        return series.fillna(default)
+    return _default_series(df, default)
+
+
+def _pipe_merge_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.Series:
+    """Create a pipe-merged series from the specified ``columns``."""
+
+    available = [col for col in columns if col in df.columns]
+    if not available:
+        return _default_series(df)
+
+    merged = df.apply(lambda row: _pipe_merge([row.get(col) for col in available]), axis=1)
+    merged = merged.replace("", "-")
+    return merged.fillna("-")
+
+
+def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Project *df* onto ``TARGETS_COLUMN_ORDER`` with derived columns."""
+
+    aligned = pd.DataFrame(index=df.index)
+
+    aligned["target_chembl_id"] = _series_or_default(df, "target_chembl_id")
+    aligned["uniprot_id_primary"] = _series_or_default(df, "uniprotkb_Id")
+    aligned["uniprot_ids_all"] = _pipe_merge_columns(
+        df, ["uniprotkb_Id", "uniprot_id", "secondary_uniprot_id", "secondaryAccessions", "mapping_uniprot_id"]
+    )
+    aligned["isoform_ids"] = _series_or_default(df, "isoform_ids")
+    aligned["isoform_names"] = _series_or_default(df, "isoform_names")
+    aligned["isoform_synonyms"] = _series_or_default(df, "isoform_synonyms")
+    aligned["hgnc_id"] = _series_or_default(df, "hgnc_id")
+    aligned["gene_symbol"] = _series_or_default(df, "gene_name")
+    aligned["protein_name_canonical"] = _series_or_default(df, "recommended_name")
+    aligned["protein_name_alt"] = _pipe_merge_columns(
+        df, ["chembl_alternative_name", "names", "synonyms", "secondaryAccessionNames"]
+    )
+    aligned["organism"] = _series_or_default(df, "genus")
+    aligned["taxon_id"] = _series_or_default(df, "taxon_id")
+    aligned["lineage_superkingdom"] = _series_or_default(df, "superkingdom")
+    aligned["lineage_phylum"] = _series_or_default(df, "phylum")
+    aligned["lineage_class"] = _series_or_default(df, "lineage_class")
+    aligned["sequence_length"] = _series_or_default(df, "sequence_length")
+    aligned["features_signal_peptide"] = _series_or_default(df, "signal_peptide")
+    aligned["features_transmembrane"] = _series_or_default(df, "transmembrane")
+    aligned["features_topology"] = _series_or_default(df, "topology")
+    aligned["ptm_glycosylation"] = _series_or_default(df, "glycosylation")
+    aligned["ptm_lipidation"] = _series_or_default(df, "lipidation")
+    aligned["ptm_disulfide_bond"] = _series_or_default(df, "disulfide_bond")
+    aligned["ptm_modified_residue"] = _series_or_default(df, "modified_residue")
+    aligned["xref_chembl"] = aligned["target_chembl_id"]
+    aligned["xref_uniprot"] = aligned["uniprot_id_primary"]
+    aligned["xref_ensembl"] = _series_or_default(df, "xref_ensembl")
+    aligned["xref_iuphar"] = _series_or_default(df, "target_id")
+    aligned["gtop_target_id"] = _series_or_default(df, "GuidetoPHARMACOLOGY")
+    aligned["gtop_synonyms"] = _series_or_default(df, "synonyms")
+    aligned["gtop_natural_ligands_n"] = _series_or_default(df, "gtop_natural_ligands_n")
+    aligned["gtop_interactions_n"] = _series_or_default(df, "gtop_interactions_n")
+    aligned["gtop_function_text_short"] = _series_or_default(df, "gtop_function_text_short")
+    aligned["uniprot_last_update"] = _series_or_default(df, "uniprot_last_update")
+    aligned["uniprot_version"] = _series_or_default(df, "uniprot_version")
+    aligned["pipeline_version"] = _series_or_default(df, "pipeline_version")
+    aligned["timestamp_utc"] = _series_or_default(df, "timestamp_utc")
+    aligned["pfam"] = _series_or_default(df, "Pfam")
+    aligned["interpro"] = _series_or_default(df, "InterPro")
+    aligned["xref_pdb"] = _series_or_default(df, "xref_pdb")
+    aligned["xref_alphafold"] = _series_or_default(df, "xref_alphafold")
+    aligned["hgnc_name"] = _series_or_default(df, "hgnc_name")
+    aligned["uniProtkbId"] = _series_or_default(df, "uniProtkbId")
+    aligned["secondaryAccessions"] = _series_or_default(df, "secondaryAccessions")
+    aligned["recommendedName"] = _series_or_default(df, "recommendedName")
+    aligned["geneName"] = _series_or_default(df, "geneName")
+    aligned["secondaryAccessionNames"] = _series_or_default(df, "secondaryAccessionNames")
+    aligned["molecular_function"] = _series_or_default(df, "molecular_function")
+    aligned["cellular_component"] = _series_or_default(df, "cellular_component")
+    aligned["subcellular_location"] = _series_or_default(df, "subcellular_location")
+    aligned["topology"] = _series_or_default(df, "topology")
+    aligned["transmembrane"] = _series_or_default(df, "transmembrane")
+    aligned["intramembrane"] = _series_or_default(df, "intramembrane")
+    aligned["glycosylation"] = _series_or_default(df, "glycosylation")
+    aligned["lipidation"] = _series_or_default(df, "lipidation")
+    aligned["disulfide_bond"] = _series_or_default(df, "disulfide_bond")
+    aligned["modified_residue"] = _series_or_default(df, "modified_residue")
+    aligned["phosphorylation"] = _series_or_default(df, "phosphorylation")
+    aligned["acetylation"] = _series_or_default(df, "acetylation")
+    aligned["ubiquitination"] = _series_or_default(df, "ubiquitination")
+    aligned["signal_peptide"] = _series_or_default(df, "signal_peptide")
+    aligned["propeptide"] = _series_or_default(df, "propeptide")
+    aligned["GuidetoPHARMACOLOGY"] = _series_or_default(df, "GuidetoPHARMACOLOGY")
+    aligned["family"] = _series_or_default(df, "family")
+    aligned["SUPFAM"] = _series_or_default(df, "SUPFAM")
+    aligned["PROSITE"] = _series_or_default(df, "PROSITE")
+    aligned["InterPro"] = _series_or_default(df, "InterPro")
+    aligned["Pfam"] = _series_or_default(df, "Pfam")
+    aligned["PRINTS"] = _series_or_default(df, "PRINTS")
+    aligned["TCDB"] = _series_or_default(df, "TCDB")
+    aligned["pref_name"] = _series_or_default(df, "pref_name")
+    aligned["target_type"] = _series_or_default(df, "target_type")
+    aligned["tax_id"] = _series_or_default(df, "tax_id")
+    aligned["species_group_flag"] = _series_or_default(df, "species_group_flag")
+    aligned["target_components"] = _series_or_default(df, "target_components")
+    aligned["protein_classifications"] = _series_or_default(df, "protein_classifications")
+    aligned["cross_references"] = _series_or_default(df, "cross_references")
+    aligned["gene_symbol_list"] = _series_or_default(df, "gene")
+    aligned["protein_synonym_list"] = _series_or_default(df, "synonyms")
+    aligned["reactions"] = _series_or_default(df, "reactions")
+    aligned["reaction_ec_numbers"] = _series_or_default(df, "reaction_ec_numbers")
+    aligned["protein_class_pred_L1"] = _series_or_default(df, "protein_class_pred_L1")
+    aligned["protein_class_pred_L2"] = _series_or_default(df, "protein_class_pred_L2")
+    aligned["protein_class_pred_L3"] = _series_or_default(df, "protein_class_pred_L3")
+    aligned["protein_class_pred_rule_id"] = _series_or_default(df, "protein_class_pred_rule_id")
+    aligned["protein_class_pred_evidence"] = _series_or_default(df, "protein_class_pred_evidence")
+    aligned["protein_class_pred_confidence"] = _series_or_default(df, "protein_class_pred_confidence")
+    aligned["iuphar_target_id"] = _series_or_default(df, "target_id")
+    aligned["iuphar_family_id"] = _series_or_default(df, "IUPHAR_family_id")
+    aligned["iuphar_type"] = _series_or_default(df, "IUPHAR_type")
+    aligned["iuphar_class"] = _series_or_default(df, "IUPHAR_class")
+    aligned["iuphar_subclass"] = _series_or_default(df, "IUPHAR_subclass")
+    aligned["iuphar_chain"] = _series_or_default(df, "IUPHAR_chain")
+    aligned["iuphar_name"] = _series_or_default(df, "iuphar_name")
+    aligned["iuphar_full_id_path"] = _series_or_default(df, "full_id_path")
+    aligned["iuphar_full_name_path"] = _series_or_default(df, "full_name_path")
+
+    aligned = aligned.reindex(columns=TARGETS_COLUMN_ORDER, fill_value="-")
+    aligned = aligned.fillna("-").astype("string")
+    lowercase_after_align = [
+        "features_signal_peptide",
+        "features_transmembrane",
+        "ptm_glycosylation",
+        "ptm_lipidation",
+        "ptm_disulfide_bond",
+        "ptm_modified_residue",
+        "transmembrane",
+        "intramembrane",
+        "glycosylation",
+        "lipidation",
+        "disulfide_bond",
+        "modified_residue",
+        "phosphorylation",
+        "acetylation",
+        "ubiquitination",
+        "signal_peptide",
+        "propeptide",
+    ]
+    for col in lowercase_after_align:
+        if col in aligned.columns:
+            aligned[col] = aligned[col].str.lower()
+    aligned = aligned.mask(aligned == "", "-")
+    return aligned
+
+
 def postprocess_targets(
     df: pd.DataFrame, *, chembl_col: str = "target_chembl_id"
 ) -> pd.DataFrame:
@@ -178,9 +359,10 @@ def postprocess_targets(
         "secondaryAccessions", pd.Series(dtype=str)
     ).fillna(df.get("uniprot_id"))
 
-    # Rename "pref_name" to the exported "recommended_name" column
-    if "pref_name" in df.columns:
-        df = df.rename(columns={"pref_name": "recommended_name"})
+    # Copy "pref_name" into the normalised "recommended_name" column but keep the
+    # original field for downstream exports
+    if "pref_name" in df.columns and "recommended_name" not in df.columns:
+        df["recommended_name"] = df["pref_name"]
 
     # --- gene name handling -----------------------------------------------------
     df["gene_name_x"] = df.get("gene_name_x", pd.Series(dtype=str)).replace(
@@ -411,20 +593,9 @@ def finalise_targets(
         if col in df.columns:
             df[col] = df[col].astype("string").str.lower()
 
-    # --- final column ordering --------------------------------------------------
-    schema_cols = list(TARGETS_COLUMN_ORDER)
-    extra_cols = sorted(c for c in df.columns if c not in schema_cols)
-    ordered_cols = [c for c in schema_cols if c in df.columns] + extra_cols
+    df = align_target_columns(df)
 
-    df = df[ordered_cols]
-
-    return df.rename(
-        columns={
-            "target_chembl_id": chembl_col,
-            "uniprotkb_Id": uniprot_col,
-            "genus": genus_col,
-        }
-    )
+    return df
 
 
 def finalise_file(

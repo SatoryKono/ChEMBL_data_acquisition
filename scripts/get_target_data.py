@@ -49,6 +49,7 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import TargetsSchema, normalize_targets
+from schemas.targets import TARGETS_COLUMN_ORDER
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -924,6 +925,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         cfg=cfg,
         sep=cfg.io.csv_sep,
         encoding=cfg.io.csv_encoding,
+        col_order=TARGETS_COLUMN_ORDER,
     )
     try:
         analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
