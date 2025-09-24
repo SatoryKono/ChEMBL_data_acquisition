@@ -15,6 +15,7 @@ from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
 from schemas import DocumentsSchema
+from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
 from scripts import get_document_data as gdd
 
 
@@ -80,6 +81,8 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
     monkeypatch.setattr(gdd, "ensure_dirs", lambda cfg: None)
 
     rc = gdd.main(
@@ -187,6 +190,8 @@ def test_write_csv_column_order(
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
 
     cfg = Config()
     args = argparse.Namespace(
@@ -196,7 +201,78 @@ def test_write_csv_column_order(
     rc = gdd.run_chembl(cfg, args)
     assert rc == 0
     schema_cols = list(DocumentsSchema.columns)
-    expected = [c for c in schema_cols if c in df.columns] + sorted(
+    expected = [c for c in DOCUMENT_SCHEMA_COLUMNS if c in df.columns] + sorted(
         c for c in df.columns if c not in schema_cols
     )
     assert captured["col_order"] == expected
+
+
+def test_fetch_pubmed_records_accepts_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy two-argument usage should still be supported."""
+
+    config = Config()
+    expected_sleep = config.document.pubmed.sleep
+    semantic_cfg = config.semantic_scholar
+
+    def fake_session() -> Any:
+        class DummySession:
+            def __enter__(self) -> DummySession:
+                return self
+
+            def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+                return None
+
+        return DummySession()
+
+    monkeypatch.setattr(gdd.requests, "Session", fake_session)
+
+    def fake_pubmed_batch(session: Any, batch: list[str], sleep: float) -> list[dict[str, str]]:
+        assert sleep == expected_sleep
+        assert batch == ["1"]
+        return [
+            {
+                "PubMed.PMID": "1",
+                "PubMed.DOI": "10.1000/xyz",
+                "PubMed.PublicationType": "Review",
+            }
+        ]
+
+    def fake_semantic_scholar_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        assert pmids == ["1"]
+        assert cfg is semantic_cfg
+        return [
+            {
+                "scholar.PMID": "1",
+                "scholar.PublicationTypes": "Review",
+                "scholar.DOI": "10.1000/xyz",
+            }
+        ]
+
+    def fake_openalex(session: Any, pmid: str, cfg_arg: Any, limiter: Any) -> dict[str, str]:
+        assert pmid == "1"
+        assert cfg_arg is config.openalex
+        return {"OpenAlex.PublicationTypes": "journal-article"}
+
+    def fake_crossref(session: Any, doi: str, cfg_arg: Any, limiter: Any) -> dict[str, str]:
+        assert doi == "10.1000/xyz"
+        assert cfg_arg is config.crossref
+        return {"crossref.Type": "journal-article"}
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_scholar_batch)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: object())
+
+    df = gdd.fetch_pubmed_records(["1"], config)
+    assert "PubMed.PMID" in df.columns
+    assert "publication_class" in df.columns
+    assert df.loc[0, "PubMed.PMID"] == "1"
+

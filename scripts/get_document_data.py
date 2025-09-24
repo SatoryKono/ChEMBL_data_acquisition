@@ -59,6 +59,7 @@ from library.config import (
     Config,
     CrossRefCfg,
     OpenAlexCfg,
+    SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
     print_config,
@@ -68,16 +69,28 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.rate_limiter import get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
+from library.document_pipeline import (
+    DOCUMENT_SCHEMA_COLUMNS,
+    build_dataframe,
+    build_quality_report,
+    dataframe_to_strings,
+    merge_metadata,
+    merge_with_chembl,
+    normalise_doi,
+    save_quality_report,
+)
 from schemas import DocumentsSchema, normalize_documents
 
 
 def fetch_pubmed_records(
     pmids: Iterable[str],
-    sleep: float,
-    openalex_cfg: OpenAlexCfg,
-    crossref_cfg: CrossRefCfg,
-    max_workers: int = 1,
-    batch_size: int = 100,
+    *args: object,
+    sleep: float | None = None,
+    semantic_scholar_cfg: SemanticScholarCfg | None = None,
+    openalex_cfg: OpenAlexCfg | None = None,
+    crossref_cfg: CrossRefCfg | None = None,
+    max_workers: int | None = None,
+    batch_size: int | None = None,
 ) -> pd.DataFrame:
     """Retrieve metadata for a sequence of PubMed identifiers.
 
@@ -88,6 +101,8 @@ def fetch_pubmed_records(
     sleep:
 
         Seconds to pause between PubMed and Semantic Scholar requests.
+    semantic_scholar_cfg:
+        Configuration for Semantic Scholar API access.
     openalex_cfg:
         Configuration for OpenAlex API access.
     crossref_cfg:
@@ -103,7 +118,75 @@ def fetch_pubmed_records(
     pandas.DataFrame
         Combined metadata from the different sources.
 
+    Notes
+    -----
+    For backward compatibility the function also accepts a
+    :class:`~library.config.Config` instance as the first positional argument
+    after ``pmids``. When supplied, connection parameters and batching options
+    are derived from ``config.document.pubmed`` unless overridden explicitly
+    via keyword arguments.
+
     """
+
+    cfg: Config | None = None
+    positional = list(args)
+    if positional:
+        candidate = positional[0]
+        if isinstance(candidate, Config):
+            cfg = candidate
+            positional = positional[1:]
+        elif sleep is None:
+            if len(positional) < 4:
+                raise TypeError(
+                    "fetch_pubmed_records() missing required positional arguments: "
+                    "'sleep', 'semantic_scholar_cfg', 'openalex_cfg', 'crossref_cfg'"
+                )
+            sleep = cast(float, positional[0])
+            semantic_scholar_cfg = cast(SemanticScholarCfg, positional[1])
+            openalex_cfg = cast(OpenAlexCfg, positional[2])
+            crossref_cfg = cast(CrossRefCfg, positional[3])
+            if len(positional) > 4:
+                max_workers = cast(int, positional[4])
+            if len(positional) > 5:
+                batch_size = cast(int, positional[5])
+            positional = []
+        else:
+            raise TypeError(
+                "fetch_pubmed_records() received multiple values for 'sleep'"
+            )
+    if positional:
+        raise TypeError("fetch_pubmed_records() got unexpected positional arguments")
+
+    if cfg is not None:
+        if sleep is None:
+            sleep = cfg.document.pubmed.sleep
+        if semantic_scholar_cfg is None:
+            semantic_scholar_cfg = cfg.semantic_scholar
+        if openalex_cfg is None:
+            openalex_cfg = cfg.openalex
+        if crossref_cfg is None:
+            crossref_cfg = cfg.crossref
+        if max_workers is None:
+            max_workers = cfg.document.pubmed.workers
+        if batch_size is None:
+            batch_size = cfg.document.pubmed.batch_size
+
+    if (
+        sleep is None
+        or semantic_scholar_cfg is None
+        or openalex_cfg is None
+        or crossref_cfg is None
+    ):
+        raise TypeError(
+            "fetch_pubmed_records() missing required configuration. "
+            "Provide either a Config instance as the second positional argument "
+            "or explicit keyword arguments."
+        )
+
+    if max_workers is None:
+        max_workers = 1
+    if batch_size is None:
+        batch_size = 100
 
     openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
@@ -124,7 +207,7 @@ def fetch_pubmed_records(
 
                 # Fetch Semantic Scholar data in a single batch
                 semsch_list = ssl.fetch_semantic_scholar_batch(
-                    session, pmids_in_batch, sleep
+                    session, pmids_in_batch, sleep, cfg=semantic_scholar_cfg
                 )
 
                 # Create a map for easy lookup
@@ -145,11 +228,7 @@ def fetch_pubmed_records(
                         session, doi, crossref_cfg, crossref_limiter
                     )
 
-                    combined: dict[str, str] = {}
-                    combined.update(pubmed)
-                    combined.update(semsch)
-                    combined.update(openalex)
-                    combined.update(crossref)
+                    combined = merge_metadata(pubmed, semsch, openalex, crossref)
                     combined_records.append(combined)
                 return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
@@ -170,8 +249,119 @@ def fetch_pubmed_records(
             processed += batch_len
             logger.info("documents_processed", count=processed)
     if not records:
-        return pd.DataFrame()
-    return pd.DataFrame(records)
+        return build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
+    return build_dataframe(records, columns=DOCUMENT_SCHEMA_COLUMNS)
+
+
+_NUMERIC_EXPORT_COLUMNS = {
+    "publication_type_score_review",
+    "publication_type_score_experimental",
+    "publication_type_score_unknown",
+}
+
+
+def _finalise_export(
+    df: pd.DataFrame,
+    output: Path,
+    cfg: Config,
+    *,
+    input_csv: Path,
+    key_columns: Sequence[str] | None = None,
+) -> int:
+    """Validate ``df`` and write CSV/metadata artefacts."""
+
+    ordered = build_dataframe(df, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False)
+    rows_total = len(ordered)
+    exit_code = 0
+    required_cols = {
+        name for name, col in DocumentsSchema.columns.items() if col.required
+    }
+    optional_cols = set(DocumentsSchema.columns) - required_cols
+    missing_required = required_cols - set(ordered.columns)
+    missing_optional = optional_cols - set(ordered.columns)
+
+    validated = ordered
+    if not missing_required:
+        if missing_optional:
+            logger.warning(
+                "DataFrame is missing optional columns: %s", missing_optional
+            )
+        try:
+            validated = DocumentsSchema.validate(ordered, lazy=True)
+        except SchemaErrors as exc:
+            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            errors = SidecarErrors()
+            for row in exc.failure_cases.to_dict("records"):
+                errors.add_error(row)
+            errors.save(failure_path)
+            logger.error(
+                "validation failed; wrote %d failure cases to %s",
+                len(exc.failure_cases),
+                failure_path,
+            )
+            validated = getattr(exc, "validated_data", ordered)
+            exit_code = 1
+    else:
+        logger.warning(
+            "Skipping validation due to missing required columns: %s",
+            missing_required,
+        )
+
+    rows_kept = len(validated)
+    rows_dropped = rows_total - rows_kept
+
+    export_df = build_dataframe(
+        validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+    )
+    export_df = dataframe_to_strings(export_df, skip=_NUMERIC_EXPORT_COLUMNS)
+    if key_columns:
+        key_cols = [c for c in key_columns if c in export_df.columns]
+    else:
+        key_cols = []
+    col_order = [
+        c for c in DOCUMENT_SCHEMA_COLUMNS if c in export_df.columns
+    ] + sorted(c for c in export_df.columns if c not in DOCUMENT_SCHEMA_COLUMNS)
+    try:
+        csv_path = io.write_csv(
+            export_df,
+            output,
+            cfg=cfg,
+            key_cols=key_cols or None,
+            col_order=col_order,
+        )
+    except OSError as exc:
+        logger.error("failed to write output CSV: %s", exc)
+        return 1
+    logger.info("write_done", rows=rows_kept, path=str(csv_path))
+
+    stats: Stats = {
+        "rows_total": rows_total,
+        "rows_kept": rows_kept,
+        "rows_dropped": rows_dropped,
+        "output_sha256": file_sha256(csv_path),
+    }
+    write_meta_yaml(
+        csv_path=csv_path,
+        command=" ".join(sys.argv),
+        config_subset=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(input_csv)},
+        stats=stats,
+        schema="DocumentsSchema",
+    )
+
+    try:
+        report = build_quality_report(validated)
+        save_quality_report(report, csv_path.with_suffix(".quality.json"))
+    except (OSError, TypeError, ValueError) as exc:
+        logger.error("failed to write quality report: %s", exc)
+        return 1
+
+    try:
+        analyze_table_quality(validated, table_name=str(csv_path.with_suffix("")))
+    except ValueError as exc:
+        logger.error("failed to generate quality report: %s", exc)
+        return 1
+    return exit_code
 
 
 def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
@@ -211,83 +401,25 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         df = fetch_pubmed_records(
             pmids,
             cfg.document.pubmed.sleep,
+            cfg.semantic_scholar,
             cfg.openalex,
             cfg.crossref,
             cfg.document.pubmed.workers,
             cfg.document.pubmed.batch_size,
         )
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        output = Path(
+            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        )
         df = normalize_documents(df)
-        rows_total = len(df)
-        exit_code = 0
-        required_cols = {
-            name for name, col in DocumentsSchema.columns.items() if col.required
-        }
-        optional_cols = set(DocumentsSchema.columns) - required_cols
-        missing_required = required_cols - set(df.columns)
-        missing_optional = optional_cols - set(df.columns)
-        if not missing_required:
-            if missing_optional:
-                logger.warning(
-                    "DataFrame is missing optional columns: %s", missing_optional
-                )
-            try:
-                df = DocumentsSchema.validate(df, lazy=True)
-            except SchemaErrors as exc:
-                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-                errors = SidecarErrors()
-                for row in exc.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation failed; wrote %d failure cases to %s",
-                    len(exc.failure_cases),
-                    failure_path,
-                )
-                df = getattr(exc, "validated_data", df)
-                exit_code = 1
-        else:
-            logger.warning(
-                "Skipping validation due to missing required columns: %s",
-                missing_required,
-            )
-        rows_kept = len(df)
-        rows_dropped = rows_total - rows_kept
-        key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-        schema_cols = list(DocumentsSchema.columns)
-        head = [c for c in schema_cols if c in df.columns]  # schema-defined order
-        tail = sorted(c for c in df.columns if c not in schema_cols)  # other columns
-        col_order = head + tail
-        csv_path = io.write_csv(
+        exit_code = _finalise_export(
             df,
             output,
-            cfg=cfg,
-            key_cols=key_cols or None,
-            col_order=col_order,
-        )
-        logger.info("write_done", rows=rows_kept, path=str(csv_path))
-
-        stats: Stats = {
-            "rows_total": rows_total,
-            "rows_kept": rows_kept,
-            "rows_dropped": rows_dropped,
-            "output_sha256": file_sha256(csv_path),
-        }
-        write_meta_yaml(
-            csv_path=csv_path,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            stats=stats,
-            schema="DocumentsSchema",
+            cfg,
+            input_csv=Path(args.input_csv),
+            key_columns=["document_chembl_id"],
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("%s", exc)
-        return 1
-    try:
-        analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
         return 1
     return exit_code
 
@@ -340,82 +472,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         except (requests.RequestException, ValueError) as exc:
             logger.error("failed to retrieve documents: %s", exc)
             return 1
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        df = normalize_documents(df)
-        rows_total = len(df)
-        exit_code = 0
-        required_cols = {
-            name for name, col in DocumentsSchema.columns.items() if col.required
-        }
-        optional_cols = set(DocumentsSchema.columns) - required_cols
-        missing_required = required_cols - set(df.columns)
-        missing_optional = optional_cols - set(df.columns)
-        if not missing_required:
-            if missing_optional:
-                logger.warning(
-                    "DataFrame is missing optional columns: %s", missing_optional
-                )
-            try:
-                df = DocumentsSchema.validate(df, lazy=True)
-            except SchemaErrors as exc:
-                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-                errors = SidecarErrors()
-                for row in exc.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation failed; wrote %d failure cases to %s",
-                    len(exc.failure_cases),
-                    failure_path,
-                )
-                df = getattr(exc, "validated_data", df)
-                exit_code = 1
-        else:
-            logger.warning(
-                "Skipping validation due to missing required columns: %s",
-                missing_required,
-            )
-        rows_kept = len(df)
-        rows_dropped = rows_total - rows_kept
-        try:
-            key_cols = [c for c in ["document_chembl_id"] if c in df.columns]
-            schema_cols = list(DocumentsSchema.columns)
-            head = [c for c in schema_cols if c in df.columns]  # schema-defined order
-            tail = sorted(
-                c for c in df.columns if c not in schema_cols
-            )  # other columns
-            col_order = head + tail
-            csv_path = io.write_csv(
-                df,
-                output,
-                cfg=cfg,
-                key_cols=key_cols or None,
-                col_order=col_order,
-            )
-            logger.info("write_done", rows=rows_kept, path=str(csv_path))
-        except OSError as exc:
-            logger.error("failed to write output CSV: %s", exc)
-            return 1
-
-        stats: Stats = {
-            "rows_total": rows_total,
-            "rows_kept": rows_kept,
-            "rows_dropped": rows_dropped,
-            "output_sha256": file_sha256(csv_path),
-        }
-        write_meta_yaml(
-            csv_path=csv_path,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            stats=stats,
-            schema="DocumentsSchema",
+        if "doi" in df.columns:
+            df["doi"] = df["doi"].map(normalise_doi)
+        output = Path(
+            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         )
-        try:
-            analyze_table_quality(df, table_name=str(output.with_suffix("")))
-        except ValueError as exc:
-            logger.error("failed to generate quality report: %s", exc)
-            return 1
+        df = normalize_documents(df)
+        exit_code = _finalise_export(
+            df,
+            output,
+            cfg,
+            input_csv=Path(args.input_csv),
+            key_columns=["document_chembl_id"],
+        )
         return exit_code
 
 
@@ -469,11 +538,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except (requests.RequestException, ValueError) as exc:
         logger.error("failed to retrieve documents for %s: %s", chunk_ids, exc)
         return 1
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
+    if "doi" in doc_df.columns:
+        doc_df["doi"] = doc_df["doi"].map(normalise_doi)
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
-        # Merge any columns not covered by ``postprocess_documents`` back
-        # into the result so the output retains all original fields.
         extra_cols = [c for c in doc_df.columns if c not in processed.columns]
         if extra_cols:
             processed = processed.merge(
@@ -482,78 +551,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 how="left",
             )
         processed = normalize_documents(processed)
-        rows_total = len(processed)
-        exit_code = 0
-        required_cols = {
-            name for name, col in DocumentsSchema.columns.items() if col.required
-        }
-        optional_cols = set(DocumentsSchema.columns) - required_cols
-        missing_required = required_cols - set(processed.columns)
-        missing_optional = optional_cols - set(processed.columns)
-        if not missing_required:
-            if missing_optional:
-                logger.warning(
-                    "DataFrame is missing optional columns: %s", missing_optional
-                )
-            try:
-                processed = DocumentsSchema.validate(processed, lazy=True)
-            except SchemaErrors as exc:
-                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-                errors = SidecarErrors()
-                for row in exc.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation failed; wrote %d failure cases to %s",
-                    len(exc.failure_cases),
-                    failure_path,
-                )
-                processed = getattr(exc, "validated_data", processed)
-                exit_code = 1
-        else:
-            logger.warning(
-                "Skipping validation due to missing required columns: %s",
-                missing_required,
-            )
-        rows_kept = len(processed)
-        rows_dropped = rows_total - rows_kept
-        try:
-            key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
-            schema_cols = list(DocumentsSchema.columns)
-            head = [c for c in schema_cols if c in processed.columns]
-            tail = sorted(c for c in processed.columns if c not in schema_cols)
-            col_order = head + tail
-            csv_path = io.write_csv(
-                processed,
-                output,
-                cfg=cfg,
-                key_cols=key_cols or None,
-                col_order=col_order,
-            )
-            logger.info("write_done", rows=rows_kept, path=str(csv_path))
-        except OSError as exc:
-            logger.error("failed to write output CSV: %s", exc)
-            return 1
-
-        stats: Stats = {
-            "rows_total": rows_total,
-            "rows_kept": rows_kept,
-            "rows_dropped": rows_dropped,
-            "output_sha256": file_sha256(csv_path),
-        }
-        write_meta_yaml(
-            csv_path=csv_path,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            stats=stats,
-            schema="DocumentsSchema",
+        exit_code = _finalise_export(
+            processed,
+            output,
+            cfg,
+            input_csv=Path(args.input_csv),
+            key_columns=["document_chembl_id"],
         )
-        try:
-            analyze_table_quality(processed, table_name=str(output.with_suffix("")))
-        except ValueError as exc:
-            logger.error("failed to generate quality report: %s", exc)
-            return 1
         return exit_code
 
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
@@ -562,27 +566,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pub_df = fetch_pubmed_records(
         pmids,
         cfg.document.all.sleep,
+        cfg.semantic_scholar,
         cfg.openalex,
         cfg.crossref,
         cfg.document.all.workers,
         cfg.document.all.batch_size,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
-    if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
-        pub_df["PubMed.PMID"] = (
-            pd.to_numeric(pub_df["PubMed.PMID"], errors="coerce")
-            .astype("Int64")
-            .astype("string")
-            .fillna("")
-        )
-        merged = doc_df.merge(
-            pub_df, how="left", left_on="pubmed_id", right_on="PubMed.PMID"
-        )
-    else:
-        merged = doc_df
+    merged = merge_with_chembl(doc_df, pub_df)
     processed = dp.postprocess_documents(merged)
-    # Append any additional columns from the merged table that were not
-    # included in the post-processing result.
     extra_cols = [c for c in merged.columns if c not in processed.columns]
     if extra_cols:
         processed = processed.merge(
@@ -591,78 +583,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             how="left",
         )
     processed = normalize_documents(processed)
-    rows_total = len(processed)
-    exit_code = 0
-    required_cols = {
-        name for name, col in DocumentsSchema.columns.items() if col.required
-    }
-    optional_cols = set(DocumentsSchema.columns) - required_cols
-    missing_required = required_cols - set(processed.columns)
-    missing_optional = optional_cols - set(processed.columns)
-    if not missing_required:
-        if missing_optional:
-            logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
-            )
-        try:
-            processed = DocumentsSchema.validate(processed, lazy=True)
-        except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
-            )
-            processed = getattr(exc, "validated_data", processed)
-            exit_code = 1
-    else:
-        logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
-        )
-    rows_kept = len(processed)
-    rows_dropped = rows_total - rows_kept
-    try:
-        key_cols = [c for c in ["document_chembl_id"] if c in processed.columns]
-        schema_cols = list(DocumentsSchema.columns)
-        head = [c for c in schema_cols if c in processed.columns]
-        tail = sorted(c for c in processed.columns if c not in schema_cols)
-        col_order = head + tail
-        csv_path = io.write_csv(
-            processed,
-            output,
-            cfg=cfg,
-            key_cols=key_cols or None,
-            col_order=col_order,
-        )
-        logger.info("write_done", rows=rows_kept, path=str(csv_path))
-    except OSError as exc:
-        logger.error("failed to write output CSV: %s", exc)
-        return 1
-
-    stats_all: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
-    write_meta_yaml(
-        csv_path=csv_path,
-        command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
-        stats=stats_all,
-        schema="DocumentsSchema",
+    exit_code = _finalise_export(
+        processed,
+        output,
+        cfg,
+        input_csv=Path(args.input_csv),
+        key_columns=["document_chembl_id"],
     )
-    try:
-        analyze_table_quality(processed, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
-        return 1
     return exit_code
 
 

@@ -42,7 +42,8 @@ class RateLimiter:
             elapsed = now - self._updated
             self._tokens = min(float(self.burst), self._tokens + elapsed * self.rps)
             if self._tokens < 1:
-                wait = (1 - self._tokens) / self.rps
+                min_interval = 1.0 / self.rps
+                wait = max(min_interval, (1 - self._tokens) / self.rps)
                 sleep(wait)
                 now = time.monotonic()
                 elapsed = now - self._updated
