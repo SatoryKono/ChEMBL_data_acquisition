@@ -210,7 +210,6 @@ def test_write_csv_column_order(
     assert captured["col_order"] == expected
 
 
-
 def test_fetch_pubmed_records_handles_generic_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -313,8 +312,11 @@ def test_fetch_pubmed_records_accepts_config(
 
 
 
+@pytest.mark.parametrize("context_position", ["suffix", "prefix"])
 def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch: pytest.MonkeyPatch,
+    context_position: str,
+
 ) -> None:
     """Executor passing an internal context argument should be ignored."""
 
@@ -352,7 +354,14 @@ def test_fetch_pubmed_records_accepts_executor_context(
             return None
 
         def submit(self, fn, batch):  # type: ignore[no-untyped-def]
-            future = DummyFuture(fn(batch, object()))
+
+            context = object()
+            if context_position == "prefix":
+                value = fn(context, batch)
+            else:
+                value = fn(batch, context)
+            future = DummyFuture(value)
+
             self._submitted.append(future)
             return future
 

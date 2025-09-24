@@ -60,9 +60,6 @@ from library.config import (
     Config,
     CrossRefCfg,
     OpenAlexCfg,
- 
-
- 
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
@@ -89,7 +86,6 @@ from schemas import DocumentsSchema, normalize_documents
 
 def fetch_pubmed_records(
     pmids: Iterable[str],
-
     *args: object,
     sleep: float | None = None,
     semantic_scholar_cfg: SemanticScholarCfg | None = None,
@@ -97,7 +93,6 @@ def fetch_pubmed_records(
     crossref_cfg: CrossRefCfg | None = None,
     max_workers: int | None = None,
     batch_size: int | None = None,
-
 ) -> pd.DataFrame:
     """Retrieve metadata for a sequence of PubMed identifiers.
 
@@ -218,8 +213,21 @@ def fetch_pubmed_records(
         return records
 
 
+    def _coerce_batch_argument(*candidates: object) -> list[str]:
+        """Return the first iterable batch argument from ``candidates``."""
+
+        for candidate in candidates:
+            if isinstance(candidate, Sequence) and not isinstance(
+                candidate, (str, bytes, bytearray)
+            ):
+                return [str(item) for item in candidate]
+        raise TypeError(
+            "fetch_pubmed_records() expected a sequence of PMIDs but received"
+            f" {tuple(type(c).__name__ for c in candidates)}"
+        )
+
     def _fetch_batch(
-        batch: Sequence[str], *_: object, **__: object
+        first: object, *rest: object, **__: object
     ) -> list[dict[str, str]]:
 
         """Fetch metadata for a batch of PMIDs.
@@ -230,7 +238,9 @@ def fetch_pubmed_records(
         for each PMID. Exceptions are logged so a failure in one batch does not
         abort the whole process.
         """
-        batch_list = list(batch)
+
+        batch_list = _coerce_batch_argument(first, *rest)
+
         try:
 
             with requests.Session() as session:
@@ -461,7 +471,6 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         output = Path(
             args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         )
-
         df = normalize_documents(df)
         exit_code = _finalise_export(
             df,
