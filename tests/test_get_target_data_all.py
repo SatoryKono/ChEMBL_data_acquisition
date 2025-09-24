@@ -18,8 +18,24 @@ from pytest import MonkeyPatch
 
 from library import target_postprocessing as tp
 from library.config import Config
+from schemas.targets import TARGETS_COLUMN_ORDER
 from schemas import TargetsSchema
 from scripts import get_target_data as gtd
+
+
+def test_prepare_targets_for_schema_adds_missing_columns() -> None:
+    """Helper fills optional columns and preserves schema order."""
+
+    df = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    prepared, missing_required, missing_optional = gtd._prepare_targets_for_schema(df)
+
+    assert missing_required == set()
+    assert "uniprot_id_primary" in prepared.columns
+    assert prepared.columns.tolist() == TARGETS_COLUMN_ORDER
+    assert prepared.loc[0, "uniprot_id_primary"] == "-"
+    assert "uniprot_id_primary" in missing_optional
+    assert list(df.columns) == ["target_chembl_id"]
 
 
 def test_run_all_uses_local_inputs(
@@ -110,13 +126,13 @@ def test_run_all_uses_local_inputs(
     # Validate final output
     # ------------------------------------------------------------------
     result = pd.read_csv(output_csv, dtype=str)
-    assert result.columns.tolist() == sorted(result.columns)
+    assert result.columns.tolist() == TARGETS_COLUMN_ORDER
     row = result.loc[0]
     assert row["target_chembl_id"] == "CHEMBL1"
-    assert row["uniprotkb_Id"] == "P12345"
-    assert row["gene_name"] == "GENEA"
-    assert row["type"] == "Type1"
+    assert row["uniprot_id_primary"] == "P12345"
+    assert row["gene_symbol"] == "GENEA"
+    assert row["target_type"] == "-"
     assert (
-        row["synonyms"]
+        row["protein_synonym_list"]
         == "gene1|genea|sec1|alpha component|alt|recommended|name1|name2|alpha"
     )
