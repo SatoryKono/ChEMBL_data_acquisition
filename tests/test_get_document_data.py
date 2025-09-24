@@ -22,6 +22,11 @@ from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
 from scripts import get_document_data as gdd
 
 
+class DummyLimiter:
+    def acquire(self) -> None:
+        return None
+
+
 def test_cli_uses_custom_column(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -144,6 +149,78 @@ def test_run_all_logs_failing_ids(
     assert "CHEMBL1" in log_output and "CHEMBL2" in log_output
 
 
+def test_run_pubmed_uses_keyword_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PubMed sub-command forwards configuration via keyword arguments."""
+
+    input_csv = tmp_path / "pmids.csv"
+    input_csv.write_text("PMID\n1\n2\n")
+
+    def fake_read_ids(
+        path: str | Path,
+        *,
+        column: str,
+        cfg: Any,
+        sep: str | None = None,
+        encoding: str | None = None,
+        na_markers: list[str] | None = None,
+    ) -> Iterable[str]:
+        assert Path(path) == input_csv
+        assert column == "PMID"
+        return iter(["1", "2"])
+
+    monkeypatch.setattr(lib_io, "read_ids", fake_read_ids)
+
+    captured: dict[str, Any] = {}
+
+    def fake_fetch_pubmed_records(
+        pmids: Iterable[str],
+        cfg_param: Config,
+        *,
+        sleep: float,
+        semantic_scholar_cfg: SemanticScholarCfg,
+        openalex_cfg: OpenAlexCfg,
+        crossref_cfg: CrossRefCfg,
+        max_workers: int,
+        batch_size: int,
+    ) -> pd.DataFrame:
+        captured["pmids"] = list(pmids)
+        captured["cfg"] = cfg_param
+        captured["sleep"] = sleep
+        captured["semantic_scholar_cfg"] = semantic_scholar_cfg
+        captured["openalex_cfg"] = openalex_cfg
+        captured["crossref_cfg"] = crossref_cfg
+        captured["max_workers"] = max_workers
+        captured["batch_size"] = batch_size
+        return pd.DataFrame({"PMID": ["1", "2"]})
+
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+    monkeypatch.setattr(
+        gdd,
+        "_finalise_export",
+        lambda df, output, cfg, input_csv, key_columns: 0,
+    )
+
+    cfg = Config()
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+    )
+
+    exit_code = gdd.run_pubmed(cfg, args)
+    assert exit_code == 0
+    assert captured["pmids"] == ["1", "2"]
+    assert captured["cfg"] is cfg
+    assert captured["sleep"] == cfg.document.pubmed.sleep
+    assert captured["semantic_scholar_cfg"] is cfg.semantic_scholar
+    assert captured["openalex_cfg"] is cfg.openalex
+    assert captured["crossref_cfg"] is cfg.crossref
+    assert captured["max_workers"] == cfg.document.pubmed.workers
+    assert captured["batch_size"] == cfg.document.pubmed.batch_size
+
+
 def test_write_csv_column_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -220,7 +297,7 @@ def test_fetch_pubmed_records_handles_generic_error(
         raise RuntimeError("boom")
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fail_fetch_pubmed_batch)
-    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: object())
+    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
     df = gdd.fetch_pubmed_records(
         ["123"],
@@ -305,7 +382,7 @@ def test_fetch_pubmed_records_accepts_config(
     monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_scholar_batch)
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
-    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: object())
+    monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
     df = gdd.fetch_pubmed_records(["1"], config)
     assert "PubMed.PMID" in df.columns

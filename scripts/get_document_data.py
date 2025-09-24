@@ -204,6 +204,16 @@ def fetch_pubmed_records(
     openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
 
+    settings = cfg or Config()
+    api_cfg = settings.api
+    retry_cfg = settings.retry
+    pubmed_cfg = settings.pubmed
+    rate_cfg = settings.rate
+    pubmed_limiter = get_limiter("pubmed", rate_cfg.global_rps, rate_cfg.global_burst)
+    semantic_limiter = get_limiter(
+        "semantic_scholar", rate_cfg.global_rps, rate_cfg.global_burst
+    )
+
     def _failure_records(batch: Sequence[str], message: str) -> list[dict[str, str]]:
         """Return placeholder rows describing a failure for ``batch`` PMIDs."""
 
@@ -279,7 +289,7 @@ def fetch_pubmed_records(
         for batch in _chunked(iterator, batch_size):
             if not batch:
                 continue
-            future = ex.submit(_fetch_batch, offset, batch)
+            future = ex.submit(_fetch_batch, batch)
             tasks[future] = (offset, batch)
             offset += len(batch)
 
@@ -446,13 +456,13 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     try:
         df = fetch_pubmed_records(
             pmids,
-
-            cfg.document.pubmed.sleep,
-            cfg.semantic_scholar,
-            cfg.openalex,
-            cfg.crossref,
-            cfg.document.pubmed.workers,
-            cfg.document.pubmed.batch_size,
+            cfg,
+            sleep=cfg.document.pubmed.sleep,
+            semantic_scholar_cfg=cfg.semantic_scholar,
+            openalex_cfg=cfg.openalex,
+            crossref_cfg=cfg.crossref,
+            max_workers=cfg.document.pubmed.workers,
+            batch_size=cfg.document.pubmed.batch_size,
         )
         output = Path(
             args.output_csv or io.default_output_path(args.input_csv, cfg.io)
