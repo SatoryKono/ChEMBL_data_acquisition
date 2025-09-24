@@ -24,6 +24,7 @@ from library.config import Config, IoCfg, _serialize_paths
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
+from library.validation import validate_activities
 from schemas import ActivitiesSchema, normalize_activities
 
 LOG: Final = logging.getLogger(__name__)
@@ -166,16 +167,30 @@ def extract_activities(
         LOG.warning("Skipping validation; missing columns: %s", sorted(missing_required))
     else:
         try:
-            df = ActivitiesSchema.validate(df, lazy=True)
+            validation_result = validate_activities(df, return_result=True)
         except SchemaErrors as exc:
             sidecar = SidecarErrors()
             for row in exc.failure_cases.to_dict("records"):
                 sidecar.add_error(row)
-            failure = Path(output_path).with_name(f"{Path(output_path).stem}_failure_cases.csv")
+            failure = Path(output_path).with_name(
+                f"{Path(output_path).stem}_failure_cases.csv"
+            )
             sidecar.save(failure, cfg=cfg)
             LOG.error("validation failed; see %s", failure)
             df = getattr(exc, "validated_data", df)
             exit_code = 1
+        else:
+            df = validation_result.data
+            if not validation_result.failure_cases.empty:
+                sidecar = SidecarErrors()
+                for row in validation_result.failure_cases.to_dict("records"):
+                    sidecar.add_error(row)
+                failure = Path(output_path).with_name(
+                    f"{Path(output_path).stem}_failure_cases.csv"
+                )
+                sidecar.save(failure, cfg=cfg)
+                LOG.error("validation failed; see %s", failure)
+                exit_code = 1
 
     schema_cols = list(ActivitiesSchema.columns)
     head = [c for c in schema_cols if c in df.columns]

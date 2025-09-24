@@ -33,7 +33,7 @@ if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from itertools import islice
 from typing import cast
@@ -93,6 +93,7 @@ def fetch_pubmed_records(
     crossref_cfg: CrossRefCfg | None = None,
     max_workers: int | None = None,
     batch_size: int | None = None,
+    fallback_doi_map: Mapping[str, str] | None = None,
 ) -> pd.DataFrame:
     """Retrieve metadata for a sequence of PubMed identifiers.
 
@@ -278,7 +279,15 @@ def fetch_pubmed_records(
                     openalex = ocl.fetch_openalex(
                         session, pmid, openalex_cfg, openalex_limiter
                     )
-                    doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
+                    fallback_doi = ""
+                    if fallback_doi_map:
+                        fallback_doi = fallback_doi_map.get(pmid, "")
+                    doi = (
+                        pubmed.get("PubMed.DOI")
+                        or semsch.get("scholar.DOI")
+                        or fallback_doi
+                        or ""
+                    )
                     crossref = ocl.fetch_crossref(
                         session, doi, crossref_cfg, crossref_limiter
                     )
@@ -633,6 +642,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
     pubmed_ids = pd.to_numeric(doc_df["pubmed_id"], errors="coerce").astype("Int64")
+    doi_fallback_map: dict[str, str] = {}
+    if "doi" in doc_df.columns:
+        doi_series = doc_df["doi"].astype("string")
+        mask = pubmed_ids.notna() & doi_series.notna() & (doi_series != "")
+        if mask.any():
+            doi_fallback_map = {
+                str(pmid): str(doi)
+                for pmid, doi in zip(pubmed_ids[mask], doi_series[mask])
+            }
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
@@ -643,6 +661,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg.crossref,
         cfg.document.all.workers,
         cfg.document.all.batch_size,
+        fallback_doi_map=doi_fallback_map or None,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
     merged = merge_with_chembl(doc_df, pub_df)

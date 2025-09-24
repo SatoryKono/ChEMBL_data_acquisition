@@ -38,6 +38,7 @@ from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
+from library.validation import validate_activities
 from schemas import ActivitiesSchema, normalize_activities
 
 
@@ -126,9 +127,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     "DataFrame is missing optional columns: %s", missing_optional
                 )
             try:
-                df = ActivitiesSchema.validate(df, lazy=True)
+                validation_result = validate_activities(df, return_result=True)
             except SchemaErrors as exc:
-                failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+                failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
                 errors = SidecarErrors()
                 for row in exc.failure_cases.to_dict("records"):
                     errors.add_error(row)
@@ -140,6 +141,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 df = getattr(exc, "validated_data", df)
                 exit_code = 1
+            else:
+                df = validation_result.data
+                if not validation_result.failure_cases.empty:
+                    failure_path = Path(output).with_name(
+                        f"{Path(output).stem}_failure_cases.csv"
+                    )
+                    errors = SidecarErrors()
+                    for row in validation_result.failure_cases.to_dict("records"):
+                        errors.add_error(row)
+                    errors.save(failure_path)
+                    logger.error(
+                        "validation failed; wrote %d failure cases to %s",
+                        len(validation_result.failure_cases),
+                        failure_path,
+                    )
+                    exit_code = 1
         else:
             logger.warning(
                 "Skipping validation due to missing required columns: %s",
