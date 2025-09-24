@@ -91,7 +91,8 @@ def write_csv_deterministic(
         ``True``, in which case they are omitted with a warning.
     key_cols:
         Sequence of column names defining row ordering. ``None`` is invalid
-        and results in a :class:`ValueError`.
+        and results in a :class:`ValueError`. An empty sequence is only
+        permitted when ``df`` is empty.
     chunksize:
         Optional number of rows to write per chunk. Passing a value enables
         streaming output via :meth:`pandas.DataFrame.to_csv`, reducing peak
@@ -169,15 +170,24 @@ def write_csv_deterministic(
     # Sort rows deterministically using a stable algorithm.
     if key_cols is None:
         raise ValueError("key_cols must be provided")
-    sort_cols = list(key_cols)
-    missing = [c for c in sort_cols if c not in work.columns]
-    if missing:
-        msg = f"Missing key columns: {missing}"
-        raise ValueError(msg)
+
+    requested_sort_cols = list(key_cols)
+    if not requested_sort_cols:
+        if work.empty:
+            sort_cols: list[str] = []
+        else:
+            raise ValueError("key_cols must contain at least one column")
+    else:
+        missing = [c for c in requested_sort_cols if c not in work.columns]
+        if missing:
+            msg = f"Missing key columns: {missing}"
+            raise ValueError(msg)
+        sort_cols = requested_sort_cols
 
     # In-memory sort when ``sort_chunksize`` is not specified or large enough.
-    if sort_chunksize is None or len(work) <= sort_chunksize:
-        work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
+    if not sort_cols or sort_chunksize is None or len(work) <= sort_chunksize:
+        if sort_cols:
+            work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
         # Normalise bool and date columns without creating intermediary frames.
         for col in work.columns:

@@ -85,6 +85,46 @@ def test_default_sorting_and_order(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8-sig") == "a,b\nx,true\ny,false\n"
 
 
+def test_write_csv_deterministic_empty_dataframe_golden(tmp_path: Path) -> None:
+    """Empty frames retain deterministic header order."""
+
+    df = pd.DataFrame(columns=["b", "a"])
+    path = tmp_path / "empty.csv"
+    write_csv_deterministic(df, path, key_cols=sorted(df.columns))
+
+    expected = (
+        Path(__file__).parent
+        / "data"
+        / "golden"
+        / "empty_with_header.csv"
+    ).read_text(encoding="utf-8-sig")
+    assert path.read_text(encoding="utf-8-sig") == expected
+
+
+def test_write_csv_deterministic_empty_no_columns(tmp_path: Path) -> None:
+    """DataFrames without columns can still be written deterministically."""
+
+    df = pd.DataFrame()
+    path = tmp_path / "empty.csv"
+    write_csv_deterministic(df, path, key_cols=[])
+
+    expected = (
+        Path(__file__).parent
+        / "data"
+        / "golden"
+        / "empty_no_columns.csv"
+    ).read_text(encoding="utf-8-sig")
+    assert path.read_text(encoding="utf-8-sig") == expected
+
+
+def test_write_csv_deterministic_requires_key_columns(tmp_path: Path) -> None:
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    path = tmp_path / "out.csv"
+    msg = "key_cols must contain at least one column"
+    with pytest.raises(ValueError, match=msg):
+        write_csv_deterministic(df, path, key_cols=[])
+
+
 def test_write_csv_deterministic_none_key_cols(tmp_path: Path) -> None:
     df = pd.DataFrame({"a": [1], "b": [2]})
     path = tmp_path / "out.csv"
