@@ -465,6 +465,7 @@ class TargetUniprotCfg(_BaseModel):
 
 class TargetChemblCfg(_BaseModel):
     column: str = "chembl_id"
+    chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = None
 
