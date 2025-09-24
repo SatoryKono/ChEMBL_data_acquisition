@@ -72,6 +72,7 @@ def test_git_sha_missing_git_executable(monkeypatch: pytest.MonkeyPatch) -> None
     """_git_sha returns UNKNOWN and warns when git is absent."""
 
     git_utils._git_sha.cache_clear()
+    monkeypatch.setattr(git_utils, "_read_head_sha", lambda *_: None)
     monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     messages: list[str] = []
     logger = cast(Any, getattr(git_utils, "logger"))  # noqa: B009
@@ -89,16 +90,7 @@ def test_git_sha_missing_git_dir(monkeypatch: pytest.MonkeyPatch) -> None:
     """_git_sha returns UNKNOWN and warns when .git directory is missing."""
 
     git_utils._git_sha.cache_clear()
-    repo_root = Path(git_utils.__file__).resolve().parent.parent
-    path_cls = cast(type[Path], getattr(git_utils, "Path"))  # noqa: B009
-    original_exists = path_cls.exists
-
-    def mock_exists(self: Path) -> bool:
-        if self == repo_root / ".git":
-            return False
-        return original_exists(self)
-
-    monkeypatch.setattr(path_cls, "exists", mock_exists)
+    monkeypatch.setattr(git_utils, "_resolve_git_dir", lambda *_: None)
     messages: list[str] = []
     logger = cast(Any, getattr(git_utils, "logger"))  # noqa: B009
     monkeypatch.setattr(
