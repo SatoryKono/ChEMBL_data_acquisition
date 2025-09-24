@@ -38,6 +38,55 @@ def find_all(node: ET.Element | None, xpath: str) -> list[ET.Element]:
     return node.findall(xpath) if node is not None else []
 
 
+def _clean_doi(raw: str | None) -> str | None:
+    """Normalise DOI strings by stripping known prefixes."""
+
+    if not raw:
+        return None
+
+    doi = raw.strip()
+    lower = doi.lower()
+    if lower.startswith("doi:"):
+        doi = doi[4:].strip()
+        lower = doi.lower()
+
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi.org/"):
+        if lower.startswith(prefix):
+            doi = doi[len(prefix) :].strip()
+            break
+        lower = doi.lower()
+
+    return doi or None
+
+
+def _extract_doi(
+    article: ET.Element | None, pubmed_data: ET.Element | None
+) -> str | None:
+    """Extract DOI from ``Article`` or ``PubmedData`` blocks."""
+
+    candidates: list[str] = []
+
+    if article is not None:
+        for node in find_all(article, "./ArticleIdList/ArticleId"):
+            if node.get("IdType") == "doi" and node.text:
+                candidates.append(node.text)
+        for node in find_all(article, "./ELocationID"):
+            if node.get("EIdType") == "doi" and node.text:
+                candidates.append(node.text)
+
+    if pubmed_data is not None:
+        for node in find_all(pubmed_data, "./ArticleIdList/ArticleId"):
+            if node.get("IdType") == "doi" and node.text:
+                candidates.append(node.text)
+
+    for candidate in candidates:
+        doi = _clean_doi(candidate)
+        if doi:
+            return doi
+
+    return None
+
+
 def parse_pubmed_article(art: ET.Element) -> dict[str, Any]:
     """Parse ``PubMedArticle`` into a dictionary of selected fields."""
     mc = find_one(art, "./MedlineCitation")
@@ -45,29 +94,12 @@ def parse_pubmed_article(art: ET.Element) -> dict[str, Any]:
     journal = find_one(article, "./Journal") if article is not None else None
     journal_issue = find_one(journal, "./JournalIssue") if journal is not None else None
     pagination = find_one(article, "./Pagination") if article is not None else None
+    pubmed_data = find_one(art, "./PubmedData")
 
     pmid = text_or_none(find_one(mc, "./PMID")) if mc is not None else None
 
-    # DOI: prefer ArticleIdList[@IdType='doi'], fallback to ELocationID[@EIdType='doi']
-    doi = None
-    if article is not None:
-        for a in find_all(article, "./ArticleIdList/ArticleId"):
-            if a.get("IdType") == "doi" and a.text:
-                doi = a.text.strip()
-                break
-        if not doi:
-            for el in find_all(article, "./ELocationID"):
-                if el.get("EIdType") == "doi" and el.text:
-                    doi = el.text.strip()
-                    break
-        if doi:
-            lower = doi.lower()
-            if lower.startswith("doi:"):
-                doi = doi[4:].strip()
-            for pref in ("https://doi.org/", "http://doi.org/", "doi.org/"):
-                if doi.lower().startswith(pref):
-                    doi = doi[len(pref) :].strip()
-                    break
+    # DOI: prefer Article block, fallback to PubmedData block
+    doi = _extract_doi(article, pubmed_data)
 
     article_title = (
         text_or_none(find_one(article, "./ArticleTitle"))
