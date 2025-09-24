@@ -34,7 +34,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from itertools import islice
 from typing import cast
 
@@ -56,6 +56,7 @@ from library.cli import (
     configure_logger,
 )
 from library.config import (
+    ApiCfg,
     Config,
     CrossRefCfg,
     OpenAlexCfg,
@@ -63,6 +64,7 @@ from library.config import (
     _serialize_paths,
     ensure_dirs,
     print_config,
+    session_with_retry,
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
@@ -107,7 +109,14 @@ def fetch_pubmed_records(
         Configuration for OpenAlex API access.
     crossref_cfg:
         Configuration for CrossRef API access.
-
+    api_cfg:
+        Shared API configuration providing retry defaults and headers.
+    retry_cfg:
+        Retry behaviour applied to outbound HTTP sessions.
+    pubmed_cfg:
+        Settings for the PubMed API, including timeouts and retry counts.
+    semantic_cfg:
+        Semantic Scholar configuration used for batch enrichment.
     max_workers:
         Maximum number of concurrent threads.
     batch_size:
@@ -203,6 +212,7 @@ def fetch_pubmed_records(
             records.append(merge_metadata(pubmed, scholar, openalex, crossref))
         return records
 
+
     def _coerce_batch_argument(*candidates: object) -> list[str]:
         """Return the first iterable batch argument from ``candidates``."""
 
@@ -219,6 +229,7 @@ def fetch_pubmed_records(
     def _fetch_batch(
         first: object, *rest: object, **__: object
     ) -> list[dict[str, str]]:
+
         """Fetch metadata for a batch of PMIDs.
 
         Each worker opens its own :class:`requests.Session` and retrieves PubMed
@@ -227,15 +238,21 @@ def fetch_pubmed_records(
         for each PMID. Exceptions are logged so a failure in one batch does not
         abort the whole process.
         """
+
         batch_list = _coerce_batch_argument(first, *rest)
+
         try:
+
             with requests.Session() as session:
                 pubmed_list = pl.fetch_pubmed_batch(session, batch_list, sleep)
+
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
 
                 # Fetch Semantic Scholar data in a single batch
+                semantic_limiter.acquire()
                 semsch_list = ssl.fetch_semantic_scholar_batch(
                     session, pmids_in_batch, sleep, cfg=semantic_scholar_cfg
+
                 )
 
                 # Create a map for easy lookup
@@ -260,25 +277,37 @@ def fetch_pubmed_records(
                     combined_records.append(combined)
                 return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
+
             logger.warning("failed to fetch PMIDs %s: %s", batch_list, exc)
             return _failure_records(batch_list, str(exc))
         except Exception as exc:  # pragma: no cover - defensive safety net
             logger.warning("unexpected error for PMIDs %s: %s", batch_list, exc)
             return _failure_records(batch_list, str(exc))
 
+
     iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
+    tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {
-            ex.submit(_fetch_batch, batch): len(batch)
-            for batch in _chunked(iterator, batch_size)
-        }
+        offset = 0
+        for batch in _chunked(iterator, batch_size):
+            if not batch:
+                continue
+            future = ex.submit(_fetch_batch, offset, batch)
+            tasks[future] = (offset, batch)
+            offset += len(batch)
+
         processed = 0
-        for future in as_completed(futures):
-            batch_len = futures[future]
-            records.extend(future.result())
-            processed += batch_len
+        ordered: dict[int, list[dict[str, str]]] = {}
+        for future in as_completed(tasks):
+            offset, batch = tasks[future]
+            result = future.result()
+            ordered[offset] = result
+            processed += len(batch)
             logger.info("documents_processed", count=processed)
+
+    for offset in sorted(ordered):
+        records.extend(ordered[offset])
     if not records:
         return build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
     return build_dataframe(records, columns=DOCUMENT_SCHEMA_COLUMNS)
@@ -431,6 +460,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     try:
         df = fetch_pubmed_records(
             pmids,
+
             cfg.document.pubmed.sleep,
             cfg.semantic_scholar,
             cfg.openalex,
@@ -596,6 +626,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
+
         cfg.document.all.sleep,
         cfg.semantic_scholar,
         cfg.openalex,

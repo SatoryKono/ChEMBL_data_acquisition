@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from urllib.parse import urljoin
 
 import pandas as pd
 
@@ -175,18 +176,28 @@ def get_assays(
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
         )
-        url = f"{base}&assay_chembl_id__in={chunk_key}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("assays") or data.get("assay") or []
-        if items:
-            df_chunk = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
-            if not df_chunk.empty:
-                records.append(df_chunk)
-                logger.info(
-                    "chunk_done",
-                    extra={"stage": "chunk_done", "chunk_key": chunk_key},
+        url = f"{base}&assay_chembl_id__in={chunk_key}&limit={len(chunk)}"
+        chunk_frames: list[pd.DataFrame] = []
+        next_url: str | None = url
+        while next_url:
+            data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
+            items = data.get("assays") or data.get("assay") or []
+            if items:
+                df_chunk = json_normalize_pyarrow(items).dropna(
+                    axis="columns", how="all"
                 )
-                continue
+                if not df_chunk.empty:
+                    chunk_frames.append(df_chunk)
+            page_meta = data.get("page_meta") or {}
+            next_token = page_meta.get("next")
+            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        if chunk_frames:
+            records.append(pd.concat(chunk_frames, ignore_index=True))
+            logger.info(
+                "chunk_done",
+                extra={"stage": "chunk_done", "chunk_key": chunk_key},
+            )
+            continue
         logger.info("chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key})
     if not records:
         return pd.DataFrame(columns=ASSAY_COLUMNS)

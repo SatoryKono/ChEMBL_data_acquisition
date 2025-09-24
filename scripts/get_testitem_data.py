@@ -142,6 +142,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("testitem.limit must be non-negative")
         return 1
 
+    # Initialise HTTP sessions for downstream HTTP calls
+    pl.init_session(cfg.api, cfg.retry)
     # Initialise HTTP session for subsequent ChEMBL requests
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:

@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+from contextlib import contextmanager
 
 import pandas as pd
 import pytest
@@ -308,10 +311,12 @@ def test_fetch_pubmed_records_accepts_config(
     assert df.loc[0, "PubMed.PMID"] == "1"
 
 
+
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
 def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch: pytest.MonkeyPatch,
     context_position: str,
+
 ) -> None:
     """Executor passing an internal context argument should be ignored."""
 
@@ -349,12 +354,14 @@ def test_fetch_pubmed_records_accepts_executor_context(
             return None
 
         def submit(self, fn, batch):  # type: ignore[no-untyped-def]
+
             context = object()
             if context_position == "prefix":
                 value = fn(context, batch)
             else:
                 value = fn(batch, context)
             future = DummyFuture(value)
+
             self._submitted.append(future)
             return future
 
