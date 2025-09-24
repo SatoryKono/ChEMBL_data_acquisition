@@ -18,11 +18,15 @@ def _prepare_head(git_dir: Path, commit: str, ref: str = "refs/heads/main") -> N
 
 
 def _configure_failing_git(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
-    def fail(*args: object, **kwargs: object) -> bytes:
-        raise subprocess.CalledProcessError(returncode=1, cmd=["git"])
+    def fail(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["git", "rev-parse", "HEAD"],
+            stderr="fatal: simulated error",
+        )
 
     monkeypatch.setattr(git_utils, "_repo_root", lambda: repo_root)
-    monkeypatch.setattr(git_utils.subprocess, "check_output", fail)
+    monkeypatch.setattr(git_utils.subprocess, "run", fail)
     monkeypatch.setattr(git_utils.shutil, "which", lambda _: "git")
 
 

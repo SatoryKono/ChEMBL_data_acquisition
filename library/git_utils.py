@@ -104,12 +104,38 @@ def _read_head_sha(git_dir: Path) -> str | None:
     return None
 
 
+def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
+    """Return a descriptive message for ``exc``."""
+
+    if isinstance(exc.cmd, (list, tuple)):
+        command = " ".join(str(part) for part in exc.cmd)
+    else:
+        command = str(exc.cmd)
+    message = f"{command} exited with status {exc.returncode}"
+    details: list[str] = []
+    if exc.stderr:
+        details.append(exc.stderr.strip())
+    if exc.stdout:
+        details.append(exc.stdout.strip())
+    if details:
+        message = f"{message}: {' | '.join(part for part in details if part)}"
+    return message
+
+
+def _format_error(exc: BaseException) -> str:
+    """Return a normalised textual representation of ``exc``."""
+
+    if isinstance(exc, subprocess.CalledProcessError):
+        return _format_subprocess_error(exc)
+    return str(exc)
+
+
 def _log_fallback(sha: str, *, reason: str, error: BaseException | None = None) -> None:
     """Log a successful SHA fallback resolution."""
 
     payload: dict[str, str] = {"reason": reason}
     if error is not None:
-        payload["error"] = str(error)
+        payload["error"] = _format_error(error)
     logger.info("git_sha_fallback", sha=sha, **payload)
 
 
@@ -151,14 +177,19 @@ def _git_sha() -> str:
         return "UNKNOWN"
 
     try:
-        result = subprocess.check_output(
-            [git_executable, "rev-parse", "HEAD"], cwd=repo_root
+        result = subprocess.run(
+            [git_executable, "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        return result.decode().strip()
+        return result.stdout.strip()
     except (subprocess.CalledProcessError, UnicodeDecodeError, OSError) as exc:
         fallback = _read_head_sha(git_dir)
         if fallback is not None:
             _log_fallback(fallback, reason="subprocess_error", error=exc)
             return fallback
-        logger.warning("git_sha_unavailable", extra={"error": str(exc)})
+        logger.warning("git_sha_unavailable", extra={"error": _format_error(exc)})
         return "UNKNOWN"
