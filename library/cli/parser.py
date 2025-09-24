@@ -68,6 +68,12 @@ def _positive_int(value: str) -> int:
     return ivalue
 
 
+def positive_int(value: str) -> int:
+    """Public wrapper around :func:`_positive_int` for CLI validators."""
+
+    return _positive_int(value)
+
+
 def add_common_arguments(
     parser: argparse.ArgumentParser, *, defaults: bool = True
 ) -> argparse.ArgumentParser:

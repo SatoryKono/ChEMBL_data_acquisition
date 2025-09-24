@@ -135,8 +135,9 @@ class ChemblClient:
             )
 
         last_exc: requests.RequestException | ValueError | None = None
+        attempts = max(1, cfg.retries)
 
-        for attempt in range(1, cfg.retries + 1):
+        for attempt in range(1, attempts + 1):
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
             logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
@@ -169,7 +170,7 @@ class ChemblClient:
                         return data
             except (requests.RequestException, ValueError) as exc:
                 last_exc = exc
-                if attempt >= cfg.retries:
+                if attempt >= attempts:
                     logger.exception(
                         "request_fail",
                         extra={"url": url, "status": None, "rps": cfg.rps},
@@ -179,8 +180,9 @@ class ChemblClient:
                 delay += random.uniform(0, cfg.backoff_factor)
                 sleep(delay)
 
-        assert last_exc is not None
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"Request loop exited unexpectedly for {url}")
 
     def clear_cache(self) -> None:
         """Remove all entries from the in-memory cache."""

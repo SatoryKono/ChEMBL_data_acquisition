@@ -54,11 +54,13 @@ from library.cli import (
     apply_config_overrides,
     build_root_parser,
     configure_logger,
+    positive_int,
 )
 from library.config import (
     Config,
     CrossRefCfg,
     OpenAlexCfg,
+    PubMedCfg,
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
@@ -86,6 +88,7 @@ def fetch_pubmed_records(
     pmids: Iterable[str],
     *args: object,
     sleep: float | None = None,
+    pubmed_cfg: PubMedCfg | None = None,
     semantic_scholar_cfg: SemanticScholarCfg | None = None,
     openalex_cfg: OpenAlexCfg | None = None,
     crossref_cfg: CrossRefCfg | None = None,
@@ -102,6 +105,8 @@ def fetch_pubmed_records(
     sleep:
 
         Seconds to pause between PubMed and Semantic Scholar requests.
+    pubmed_cfg:
+        Configuration for the PubMed API including base URL and timeouts.
     semantic_scholar_cfg:
         Configuration for Semantic Scholar API access.
     openalex_cfg:
@@ -168,6 +173,8 @@ def fetch_pubmed_records(
     if cfg is not None:
         if sleep is None:
             sleep = cfg.document.pubmed.sleep
+        if pubmed_cfg is None:
+            pubmed_cfg = cfg.pubmed
         if semantic_scholar_cfg is None:
             semantic_scholar_cfg = cfg.semantic_scholar
         if openalex_cfg is None:
@@ -201,6 +208,8 @@ def fetch_pubmed_records(
 
     settings = cfg or Config()
     rate_cfg = settings.rate
+    if pubmed_cfg is None:
+        pubmed_cfg = settings.pubmed
     semantic_limiter = get_limiter(
         "semantic_scholar", rate_cfg.global_rps, rate_cfg.global_burst
     )
@@ -246,7 +255,9 @@ def fetch_pubmed_records(
 
         try:
             with requests.Session() as session:
-                pubmed_list = pl.fetch_pubmed_batch(session, batch_list, sleep)
+                pubmed_list = pl.fetch_pubmed_batch(
+                    session, batch_list, sleep, cfg=pubmed_cfg
+                )
 
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
 
@@ -286,31 +297,50 @@ def fetch_pubmed_records(
                     combined_records.append(combined)
                 return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
-            logger.warning("failed to fetch PMIDs %s: %s", batch_list, exc)
+            logger.warning(
+                "pubmed_batch_request_failed",
+                pmids=batch_list,
+                error=str(exc),
+            )
             return _failure_records(batch_list, str(exc))
         except Exception as exc:  # pragma: no cover - defensive safety net
-            logger.warning("unexpected error for PMIDs %s: %s", batch_list, exc)
+            logger.warning(
+                "pubmed_batch_unexpected_error",
+                pmids=batch_list,
+                error=str(exc),
+            )
             return _failure_records(batch_list, str(exc))
 
     iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
     tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
+    ordered: dict[int, list[dict[str, str]]] = {}
+    processed = 0
+    max_in_flight = max(1, max_workers * 2)
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         offset = 0
+        pending: set[Future[list[dict[str, str]]]] = set()
         for batch in _chunked(iterator, batch_size):
             if not batch:
                 continue
             future = ex.submit(_fetch_batch, batch)
             tasks[future] = (offset, batch)
+            pending.add(future)
             offset += len(batch)
+            if len(pending) >= max_in_flight:
+                done_future = next(as_completed(list(pending)))
+                pending.remove(done_future)
+                batch_offset, submitted_batch = tasks.pop(done_future)
+                ordered[batch_offset] = done_future.result()
+                processed += len(submitted_batch)
+                logger.info("documents_processed", count=processed)
 
-        processed = 0
-        ordered: dict[int, list[dict[str, str]]] = {}
-        for future in as_completed(tasks):
-            offset, batch = tasks[future]
-            result = future.result()
-            ordered[offset] = result
-            processed += len(batch)
+        while pending:
+            done_future = next(as_completed(list(pending)))
+            pending.remove(done_future)
+            batch_offset, submitted_batch = tasks.pop(done_future)
+            ordered[batch_offset] = done_future.result()
+            processed += len(submitted_batch)
             logger.info("documents_processed", count=processed)
 
     for offset in sorted(ordered):
@@ -351,7 +381,8 @@ def _finalise_export(
     if not missing_required:
         if missing_optional:
             logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+                "missing_optional_columns",
+                columns=sorted(missing_optional),
             )
         try:
             validated = DocumentsSchema.validate(ordered, lazy=True)
@@ -362,16 +393,17 @@ def _finalise_export(
                 errors.add_error(row)
             errors.save(failure_path)
             logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+                "document_validation_failed",
+                failure_count=len(exc.failure_cases),
+                failure_path=str(failure_path),
+                error=str(exc),
             )
             validated = getattr(exc, "validated_data", ordered)
             exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
+            "validation_skipped_missing_required",
+            columns=sorted(missing_required),
         )
 
     rows_kept = len(validated)
@@ -397,7 +429,7 @@ def _finalise_export(
             col_order=col_order,
         )
     except OSError as exc:
-        logger.error("failed to write output CSV: %s", exc)
+        logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
     logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
@@ -416,17 +448,22 @@ def _finalise_export(
         schema="DocumentsSchema",
     )
 
+    quality_path = csv_path.with_suffix(".quality.json")
     try:
         report = build_quality_report(validated)
-        save_quality_report(report, csv_path.with_suffix(".quality.json"))
+        save_quality_report(report, quality_path)
     except (OSError, TypeError, ValueError) as exc:
-        logger.error("failed to write quality report: %s", exc)
+        logger.error(
+            "quality_report_write_failed",
+            error=str(exc),
+            path=str(quality_path),
+        )
         return 1
 
     try:
         analyze_table_quality(validated, table_name=str(csv_path.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error("quality_report_generation_failed", error=str(exc))
         return 1
     return exit_code
 
@@ -449,14 +486,22 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     """
     limit = cfg.document.pubmed.limit
     if limit is not None and limit < 0:
-        logger.error("document.pubmed.limit must be non-negative")
+        logger.error(
+            "invalid_limit",
+            section="document.pubmed",
+            limit=limit,
+        )
         return 1
     try:
         pmids_iter = io.read_ids(
             args.input_csv, column=cfg.document.pubmed.column, cfg=cfg.io
         )
     except (FileNotFoundError, ValueError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "input_read_failed",
+            error=str(exc),
+            path=str(args.input_csv),
+        )
         return 1
     pmids: Iterable[str] = pmids_iter
     if limit is not None:
@@ -469,6 +514,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             pmids,
             cfg,
             sleep=cfg.document.pubmed.sleep,
+            pubmed_cfg=cfg.pubmed,
             semantic_scholar_cfg=cfg.semantic_scholar,
             openalex_cfg=cfg.openalex,
             crossref_cfg=cfg.crossref,
@@ -485,7 +531,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             key_columns=["document_chembl_id"],
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("%s", exc)
+        logger.error("pubmed_pipeline_failed", error=str(exc))
         return 1
     return exit_code
 
@@ -508,7 +554,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """
     limit = cfg.document.chembl.limit
     if limit is not None and limit < 0:
-        logger.error("document.chembl.limit must be non-negative")
+        logger.error("invalid_limit", section="document.chembl", limit=limit)
         return 1
 
     # Configure session for ChEMBL requests
@@ -518,10 +564,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "input_read_failed",
+                error=str(exc),
+                path=str(args.input_csv),
+            )
             return 1
 
-        ids = ids_iter
+        ids: Iterable[str] = ids_iter
         if limit is not None:
             limited_ids = list(islice(ids_iter, limit))
             ids = limited_ids
@@ -536,7 +586,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 timeout=cfg.document.chembl.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
-            logger.error("failed to retrieve documents: %s", exc)
+            logger.error(
+                "chembl_documents_fetch_failed",
+                error=str(exc),
+                chunk_size=cfg.document.chembl.chunk_size,
+            )
             return 1
         if "doi" in df.columns:
             df["doi"] = df["doi"].map(normalise_doi)
@@ -570,7 +624,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """
     limit = cfg.document.all.limit
     if limit is not None and limit < 0:
-        logger.error("document.all.limit must be non-negative")
+        logger.error("invalid_limit", section="document.all", limit=limit)
         return 1
 
     # Prepare shared session before performing any API calls
@@ -579,7 +633,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             args.input_csv, column=cfg.document.all.column, cfg=cfg.io
         )
     except (FileNotFoundError, ValueError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "input_read_failed",
+            error=str(exc),
+            path=str(args.input_csv),
+        )
         return 1
 
     ids_source: Iterable[str] = ids_iter
@@ -600,7 +658,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 timeout=cfg.document.all.timeout,
             )
     except (requests.RequestException, ValueError) as exc:
-        logger.error("failed to retrieve documents for %s: %s", chunk_ids, exc)
+        logger.error(
+            "chembl_documents_fetch_failed",
+            ids=chunk_ids,
+            error=str(exc),
+            chunk_size=cfg.document.all.chunk_size,
+        )
         return 1
     output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
     if "doi" in doc_df.columns:
@@ -631,9 +694,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         doi_series = doc_df["doi"].astype("string")
         mask = pubmed_ids.notna() & doi_series.notna() & (doi_series != "")
         if mask.any():
+            masked_pmids = pubmed_ids[mask].tolist()
+            masked_dois = doi_series[mask].tolist()
+            if len(masked_pmids) != len(masked_dois):
+                raise ValueError("mismatched DOI fallback map lengths")
             doi_fallback_map = {
                 str(pmid): str(doi)
-                for pmid, doi in zip(pubmed_ids[mask], doi_series[mask])
+                for pmid, doi in zip(masked_pmids, masked_dois, strict=True)
             }
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
@@ -644,6 +711,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg.crossref,
         cfg.document.all.workers,
         cfg.document.all.batch_size,
+        pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
@@ -696,7 +764,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     pubmed.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=100,
         help="Maximum PMIDs per PubMed request",
     )
@@ -729,7 +797,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Column name containing identifiers",
     )
     chembl.add_argument(
-        "--chunk-size", type=int, default=5, help="Maximum number of IDs per request"
+        "--chunk-size",
+        type=positive_int,
+        default=5,
+        help="Maximum number of IDs per request",
     )
     chembl.add_argument(
         "--timeout",
@@ -754,7 +825,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Column in the input CSV",
     )
     all_cmd.add_argument(
-        "--chunk-size", type=int, default=5, help="Maximum IDs per request"
+        "--chunk-size",
+        type=positive_int,
+        default=5,
+        help="Maximum IDs per request",
     )
     all_cmd.add_argument(
         "--sleep",
@@ -767,7 +841,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=50,
         help="Maximum PMIDs per PubMed request",
     )
@@ -868,11 +942,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error("config_override_error", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error("directory_setup_failed", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code = cast(int, args.func(cfg, args))

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import sys
 from collections.abc import Iterable
 from pathlib import Path
@@ -13,7 +14,13 @@ import pytest
 from library import chembl_library as cl
 from library import io as lib_io
 from library.cli import LoggerConfig, configure_logger
-from library.config import Config, CrossRefCfg, OpenAlexCfg, SemanticScholarCfg
+from library.config import (
+    Config,
+    CrossRefCfg,
+    OpenAlexCfg,
+    PubMedCfg,
+    SemanticScholarCfg,
+)
 from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
 from schemas import DocumentsSchema
 from scripts import get_document_data as gdd
@@ -143,7 +150,54 @@ def test_run_all_logs_failing_ids(
     assert rc == 1
     log_output = buffer.getvalue()
     configure_logger(LoggerConfig(stream=sys.stdout))
-    assert "CHEMBL1" in log_output and "CHEMBL2" in log_output
+    records = [json.loads(line) for line in log_output.splitlines() if line.strip()]
+    assert any(
+        record.get("event") == "chembl_documents_fetch_failed"
+        and record.get("ids") == ["CHEMBL1", "CHEMBL2"]
+        for record in records
+    )
+
+
+def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:
+    """PubMed CLI should reject zero or negative batch sizes."""
+
+    input_csv = tmp_path / "pmids.csv"
+    input_csv.write_text("PMID\n1\n")
+
+    with pytest.raises(SystemExit) as exc_info:
+        gdd.main(
+            [
+                "pubmed",
+                "--input",
+                str(input_csv),
+                "--output",
+                str(tmp_path / "out.csv"),
+                "--batch-size",
+                "0",
+            ]
+        )
+    assert exc_info.value.code == 2
+
+
+def test_chembl_cli_rejects_non_positive_chunk_size(tmp_path: Path) -> None:
+    """ChEMBL CLI should reject zero or negative chunk sizes."""
+
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n")
+
+    with pytest.raises(SystemExit) as exc_info:
+        gdd.main(
+            [
+                "chembl",
+                "--input",
+                str(input_csv),
+                "--output",
+                str(tmp_path / "out.csv"),
+                "--chunk-size",
+                "0",
+            ]
+        )
+    assert exc_info.value.code == 2
 
 
 def test_run_pubmed_uses_keyword_arguments(
@@ -176,6 +230,7 @@ def test_run_pubmed_uses_keyword_arguments(
         cfg_param: Config,
         *,
         sleep: float,
+        pubmed_cfg: Any | None = None,
         semantic_scholar_cfg: SemanticScholarCfg,
         openalex_cfg: OpenAlexCfg,
         crossref_cfg: CrossRefCfg,
@@ -186,6 +241,7 @@ def test_run_pubmed_uses_keyword_arguments(
         captured["pmids"] = list(pmids)
         captured["cfg"] = cfg_param
         captured["sleep"] = sleep
+        captured["pubmed_cfg"] = pubmed_cfg
         captured["semantic_scholar_cfg"] = semantic_scholar_cfg
         captured["openalex_cfg"] = openalex_cfg
         captured["crossref_cfg"] = crossref_cfg
@@ -213,6 +269,7 @@ def test_run_pubmed_uses_keyword_arguments(
     assert captured["pmids"] == ["1", "2"]
     assert captured["cfg"] is cfg
     assert captured["sleep"] == cfg.document.pubmed.sleep
+    assert captured["pubmed_cfg"] is cfg.pubmed
     assert captured["semantic_scholar_cfg"] is cfg.semantic_scholar
     assert captured["openalex_cfg"] is cfg.openalex
     assert captured["crossref_cfg"] is cfg.crossref
@@ -342,10 +399,11 @@ def test_fetch_pubmed_records_accepts_config(
     monkeypatch.setattr(gdd.requests, "Session", fake_session)
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float
+        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
     ) -> list[dict[str, str]]:
         assert sleep == expected_sleep
         assert batch == ["1"]
+        assert cfg is config.pubmed
         return [
             {
                 "PubMed.PMID": "1",
@@ -398,6 +456,50 @@ def test_fetch_pubmed_records_accepts_config(
     assert df.loc[0, "PubMed.PMID"] == "1"
 
 
+def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit PubMed configuration should be passed to the batch fetcher."""
+
+    sentinel_cfg = PubMedCfg(base="https://example.org/api")
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+
+    seen_cfg: dict[str, PubMedCfg | None] = {"value": None}
+
+    def fake_pubmed_batch(
+        session: Any, batch: list[str], sleep: float, cfg: PubMedCfg | None = None
+    ) -> list[dict[str, str]]:
+        seen_cfg["value"] = cfg
+        return [{"PubMed.PMID": pmid} for pmid in batch]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", lambda *_, **__: [])
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    df = gdd.fetch_pubmed_records(
+        ["1"],
+        sleep=0.0,
+        pubmed_cfg=sentinel_cfg,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert seen_cfg["value"] is sentinel_cfg
+    assert df.loc[0, "PubMed.PMID"] == "1"
+
 
 def test_fetch_pubmed_records_uses_fallback_doi(
     monkeypatch: pytest.MonkeyPatch,
@@ -407,7 +509,7 @@ def test_fetch_pubmed_records_uses_fallback_doi(
     fallback = {"123": "10.9999/fallback"}
 
     class DummySession:
-        def __enter__(self) -> "DummySession":  # pragma: no cover - trivial
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
             return self
 
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
@@ -416,7 +518,7 @@ def test_fetch_pubmed_records_uses_fallback_doi(
     monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float
+        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
     ) -> list[dict[str, str]]:
         assert batch == ["123"]
         return [{"PubMed.PMID": "123"}]
@@ -463,7 +565,6 @@ def test_fetch_pubmed_records_uses_fallback_doi(
 
     assert captured["doi"] == fallback["123"]
     assert df.loc[0, "crossref.DOI"] == fallback["123"]
-
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
@@ -528,7 +629,9 @@ def test_fetch_pubmed_records_accepts_executor_context(
         combined.update(crossref)
         return combined
 
-    def fake_pubmed_batch(session, batch, sleep):  # type: ignore[no-untyped-def]
+    def fake_pubmed_batch(  # type: ignore[no-untyped-def]
+        session, batch, sleep, cfg=None
+    ):
         return [{"PubMed.PMID": pmid, "PubMed.DOI": pmid} for pmid in batch]
 
     def fake_sem_batch(session, batch, sleep, cfg=None):  # type: ignore[no-untyped-def]
@@ -541,7 +644,7 @@ def test_fetch_pubmed_records_accepts_executor_context(
         return {"crossref.DOI": doi}
 
     monkeypatch.setattr(gdd, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(gdd, "as_completed", lambda futures: list(futures.keys()))
+    monkeypatch.setattr(gdd, "as_completed", lambda futures: iter(futures))
     monkeypatch.setattr(gdd, "build_dataframe", fake_build_dataframe)
     monkeypatch.setattr(gdd, "merge_metadata", fake_merge_metadata)
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)

@@ -123,6 +123,20 @@ def test_request_json_backoff_grows(monkeypatch) -> None:
     assert sleep_times == [1.0, 2.0]
 
 
+def test_request_json_respects_zero_retries() -> None:
+    """Retry count of zero should perform exactly one HTTP attempt."""
+
+    session = DummySession(failures=1)
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+    client.clear_cache()
+
+    cfg = api_cfg(retries=0, backoff_factor=0)
+    with pytest.raises(requests.RequestException):
+        client.request_json("http://example.com", cfg=cfg)
+
+    assert len(session.calls) == 1
+
+
 def test_request_json_retries_with_mocked_session() -> None:
     """Failing requests should be retried using the provided session."""
 

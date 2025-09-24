@@ -15,7 +15,7 @@ import pandas as pd
 
 from .cli import LoggerConfig, apply_config_overrides, configure_logger
 from .cli import build_parser as base_parser
-from .config import ensure_dirs, print_config, session_with_retry
+from .config import Config, ensure_dirs, print_config, session_with_retry
 from .csv_utils import write_csv_deterministic
 from .pubmed import (
     EMPTY_PUBMED,
@@ -40,6 +40,7 @@ from .pubmed import (
 from .rate_limiter import get_limiter
 
 __all__ = [
+    "Config",
     "read_pmids",
     "_make_request",
     "_handle_response",
@@ -95,6 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "chunk_size": "document.pubmed.batch_size",
             },
         )
+        cfg = Config.model_validate(cfg.model_dump())
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
