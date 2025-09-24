@@ -410,18 +410,21 @@ def postprocess_targets(
     df["ec_number"] = df["ec_number"].replace("", "-")
 
     # --- fill optional columns --------------------------------------------------
-    for col in [
+    optional_columns = [
         "isoform_names",
         "isoform_ids",
         "isoform_synonyms",
         "reactions",
         "full_id_path",
         "full_name_path",
-    ]:
-        if col in df.columns:
-            df[col] = df[col].fillna("-")
-        else:
-            df[col] = "-"
+    ]
+    existing_optional = [col for col in optional_columns if col in df.columns]
+    if existing_optional:
+        df[existing_optional] = df[existing_optional].fillna("-")
+
+    missing_optional = [col for col in optional_columns if col not in df.columns]
+    if missing_optional:
+        df[missing_optional] = "-"
 
     # --- deduplicate gene field -------------------------------------------------
     df["gene"] = df["gene"].apply(lambda v: _pipe_merge([v]))
