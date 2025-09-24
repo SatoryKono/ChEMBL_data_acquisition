@@ -115,3 +115,21 @@ def test_multithreaded_logging_emits_valid_json(
     assert len(lines) == 10
     for line in lines:
         json.loads(line)
+
+
+def test_logger_bind_preserves_parent_context(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Binding context should not mutate the original logger."""
+
+    base = configure_logger(LoggerConfig(level="INFO", run_id="rid", stream=sys.stdout))
+    child = base.bind(stage="extract")
+
+    child.info("child_event")
+    base.info("parent_event")
+
+    records = _parse(capfd.readouterr().out)
+    assert records[0]["event"] == "child_event"
+    assert records[0]["stage"] == "extract"
+    parent = next(rec for rec in records if rec["event"] == "parent_event")
+    assert "stage" not in parent

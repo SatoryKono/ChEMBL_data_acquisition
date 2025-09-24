@@ -18,6 +18,7 @@ from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 import library.git_utils as git_utils
 from library.config import Config
+import library.csv_utils as csv_utils
 from library.csv_utils import sha256_file, write_csv_deterministic
 
 
@@ -124,6 +125,33 @@ def test_write_csv_deterministic_none_key_cols(tmp_path: Path) -> None:
     path = tmp_path / "out.csv"
     with pytest.raises(ValueError, match="key_cols must be provided"):
         write_csv_deterministic(df, path, key_cols=None)
+
+
+def test_write_csv_deterministic_missing_sort_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    df = pd.DataFrame({"name": ["beta", "alpha"], "value": [2, 1]})
+    path = tmp_path / "fallback.csv"
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def record(event: str, **payload: object) -> None:
+        events.append((event, payload))
+
+    monkeypatch.setattr(csv_utils.logger, "warning", record)
+
+    write_csv_deterministic(
+        df,
+        path,
+        col_order=["value", "name"],
+        key_cols=["chembl_id"],
+    )
+
+    content = path.read_text(encoding="utf-8-sig")
+    assert content == "value,name\n1,alpha\n2,beta\n"
+
+    fallback_event = [payload for event, payload in events if event == "missing_key_columns"]
+    assert fallback_event
+    assert fallback_event[0]["fallback"] == ["value", "name"]
 
 
 def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:

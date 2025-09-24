@@ -52,6 +52,21 @@ from schemas import TargetsSchema, normalize_targets
 from schemas.targets import TARGETS_COLUMN_ORDER
 
 
+
+TARGETS_REQUIRED_COLUMNS: set[str] = {
+    name for name, column in TargetsSchema.columns.items() if column.required
+}
+
+TARGETS_OPTIONAL_COLUMNS: list[str] = [
+    column for column in TARGETS_COLUMN_ORDER if column not in TARGETS_REQUIRED_COLUMNS
+]
+
+TARGETS_OBJECT_COLUMNS: set[str] = {
+    name for name, column in TargetsSchema.columns.items() if str(column.dtype) == "object"
+}
+
+
+
 def _pipe_merge(values: Sequence[str | None]) -> str:
     """Return a ``"|"``-joined string of unique, non-empty tokens.
 
@@ -80,6 +95,47 @@ def _first_token(value: str | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _prepare_targets_for_schema(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, set[str], set[str]]:
+    """Return a copy of ``df`` aligned to :data:`TargetsSchema`.
+
+    The returned frame contains only columns defined in
+    :data:`TARGETS_COLUMN_ORDER`. Missing optional columns are created with
+    ``"-"`` placeholders and schema fields expecting a generic ``object`` dtype
+    are coerced accordingly.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, set[str], set[str]]
+        The prepared dataframe, names of missing required columns and optional
+        columns that were injected.
+    """
+
+    missing_required = TARGETS_REQUIRED_COLUMNS - set(df.columns)
+    missing_optional = {
+        column for column in TARGETS_OPTIONAL_COLUMNS if column not in df.columns
+    }
+
+    if missing_optional:
+        fill_values = {
+            column: (
+                pd.Series(["-"] * len(df), index=df.index, dtype=object)
+                if len(df)
+                else pd.Series(dtype=object)
+            )
+            for column in missing_optional
+        }
+        prepared = df.assign(**fill_values)
+    else:
+        prepared = df.copy()
+
+    prepared = prepared.reindex(columns=TARGETS_COLUMN_ORDER)
+    for column in TARGETS_OBJECT_COLUMNS & set(prepared.columns):
+        prepared[column] = prepared[column].astype(object)
+    return prepared, missing_required, missing_optional
 
 
 def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
@@ -490,21 +546,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = normalize_targets(df)
         rows_total = len(df)
         exit_code = 0
-    # Only enforce columns marked as ``required`` in the schema. Optional columns
-    # may be absent in the input dataset without preventing validation.
-    required_cols = {
-        name for name, col in TargetsSchema.columns.items() if col.required
-    }
-    optional_cols = set(TargetsSchema.columns) - required_cols
-    missing_required = required_cols - set(df.columns)
-    missing_optional = optional_cols - set(df.columns)
+    validation_df, missing_required, missing_optional = _prepare_targets_for_schema(df)
     if not missing_required:
         if missing_optional:
-            logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+            logger.debug(
+                "schema_optional_columns_missing",
+                columns=sorted(missing_optional),
             )
         try:
-            df = TargetsSchema.validate(df, lazy=True)
+            TargetsSchema.validate(validation_df, lazy=True)
         except SchemaErrors as exc:
             failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
             errors = SidecarErrors()
@@ -516,7 +566,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 len(exc.failure_cases),
                 failure_path,
             )
-            df = getattr(exc, "validated_data", df)
+            validated_subset = getattr(exc, "validated_data", None)
+            if validated_subset is not None:
+                df = df.loc[validated_subset.index]
             exit_code = 1
     else:
         logger.warning(
@@ -895,18 +947,16 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     """
 
     logger.info("validate_write_start", output=str(output))
-    final_df = normalize_targets(df)
+    normalized = normalize_targets(df)
+    final_df, missing_required, missing_optional = _prepare_targets_for_schema(
+        normalized
+    )
     exit_code = 0
-    required_cols = {
-        name for name, col in TargetsSchema.columns.items() if col.required
-    }
-    optional_cols = set(TargetsSchema.columns) - required_cols
-    missing_required = required_cols - set(final_df.columns)
-    missing_optional = optional_cols - set(final_df.columns)
     if not missing_required:
         if missing_optional:
             logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+                "DataFrame is missing optional columns: %s",
+                sorted(missing_optional),
             )
         try:
             final_df = TargetsSchema.validate(final_df, lazy=True)
@@ -928,6 +978,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
             "Skipping validation due to missing required columns: %s",
             missing_required,
         )
+    final_df = final_df.fillna("-")
     final_df = final_df.drop_duplicates()
     io.write_csv(
         final_df,

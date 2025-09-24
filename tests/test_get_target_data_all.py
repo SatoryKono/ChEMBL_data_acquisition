@@ -23,6 +23,21 @@ from schemas import TargetsSchema
 from scripts import get_target_data as gtd
 
 
+def test_prepare_targets_for_schema_adds_missing_columns() -> None:
+    """Helper fills optional columns and preserves schema order."""
+
+    df = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    prepared, missing_required, missing_optional = gtd._prepare_targets_for_schema(df)
+
+    assert missing_required == set()
+    assert "uniprot_id_primary" in prepared.columns
+    assert prepared.columns.tolist() == TARGETS_COLUMN_ORDER
+    assert prepared.loc[0, "uniprot_id_primary"] == "-"
+    assert "uniprot_id_primary" in missing_optional
+    assert list(df.columns) == ["target_chembl_id"]
+
+
 def test_run_all_uses_local_inputs(
     tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config
 ) -> None:
