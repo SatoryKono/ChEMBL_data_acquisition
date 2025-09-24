@@ -232,6 +232,7 @@ def test_target_timeout_override(
         cfg: Config,
         client: Any,
         mapping_cfg: Any,
+        chunk_size: int,
         timeout: float,
     ) -> pd.DataFrame:
         data = list(ids)
@@ -262,3 +263,63 @@ def test_target_timeout_override(
     )
     assert rc == 0
     assert called["timeout"] == 11
+
+
+def test_target_chunk_size_override(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "target.csv"
+    input_csv.write_text("target_chembl_id\nt1\n")
+    config_path = _create_config(tmp_path)
+    called: dict[str, int] = {}
+
+    monkeypatch.setattr(io, "read_ids", lambda *a, **k: ["t1"])
+
+    def fake_apply_chunk(
+        a: Any,
+        p: Any,
+        c: Config,
+        mapping: Any | None = None,
+        **kwargs: Any,
+    ) -> Config:
+        cfg.target.chembl.chunk_size = int(a.chunk_size)
+        return cfg
+
+    monkeypatch.setattr(gtd, "apply_config_overrides", fake_apply_chunk)
+
+    def fake_get_targets(
+        ids: Sequence[str],
+        cfg: Config,
+        client: Any,
+        mapping_cfg: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        data = list(ids)
+        called["chunk_size"] = chunk_size
+        return pd.DataFrame({"target_chembl_id": data})
+
+    monkeypatch.setattr(cl, "get_targets", fake_get_targets)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
+    )
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **__: None)
+    rc = gtd.main(
+        [
+            "chembl",
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_csv),
+            "--output",
+            str(tmp_path / "out.csv"),
+            "--chunk-size",
+            "7",
+        ]
+    )
+    assert rc == 0
+    assert called["chunk_size"] == 7

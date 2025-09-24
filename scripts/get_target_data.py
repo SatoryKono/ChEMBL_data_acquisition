@@ -36,6 +36,7 @@ from library.cli import (
     apply_config_overrides,
     build_root_parser,
     configure_logger,
+    positive_int,
 )
 from library.config import (
     Config,
@@ -174,6 +175,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--column",
         default="target_chembl_id",
         help="Column name in the input CSV containing identifiers",
+    )
+    chembl.add_argument(
+        "--chunk-size",
+        type=positive_int,
+        default=5,
+        help="Maximum number of identifiers to request per call",
     )
     chembl.add_argument(
         "--timeout",
@@ -451,6 +458,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg.api,
                 client=client,
                 mapping_cfg=cfg.uniprot_mapping,
+                chunk_size=cfg.target.chembl.chunk_size,
                 timeout=cfg.target.chembl.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
@@ -959,6 +967,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "chembl":
             mapping = {
                 "column": "target.chembl.column",
+                "chunk_size": "target.chembl.chunk_size",
                 "timeout": "target.chembl.timeout",
                 "limit": "target.chembl.limit",
             }
