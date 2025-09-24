@@ -356,3 +356,42 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> Non
     assert captured["retries"] == 4
     assert captured["sleep"] == pytest.approx(1.0)
     assert sleeps == []
+
+
+def test_fetch_semantic_scholar_batch_partial_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Batch lookup keeps valid entries when some PMIDs are missing."""
+
+    payload = [
+        {
+            "externalIds": {"PubMed": "1", "DOI": "10.1000/example"},
+            "paperId": "paper-1",
+            "publicationTypes": ["Journal"],
+            "venue": "Venue",
+        },
+        None,
+        {
+            "externalIds": {"PubMed": ["3"]},
+            "paperId": "paper-3",
+            "publicationTypes": [],
+            "venue": "",
+        },
+    ]
+
+    monkeypatch.setattr(pq, "_do_request", lambda *_, **__: (payload, ""))
+
+    session = requests.Session()
+    results = pq.fetch_semantic_scholar_batch(session, ["1", "2", "3"], 0.0)
+
+    assert results[0]["scholar.Error"] == ""
+    assert results[0]["scholar.PMID"] == "1"
+    assert results[0]["scholar.SemanticScholarId"] == "paper-1"
+    assert results[0]["scholar.DOI"] == "10.1000/example"
+
+    assert results[1]["scholar.Error"] == "Not found"
+    assert results[1]["scholar.PMID"] == "2"
+
+    assert results[2]["scholar.Error"] == ""
+    assert results[2]["scholar.PMID"] == "3"
+    assert results[2]["scholar.SemanticScholarId"] == "paper-3"

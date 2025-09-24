@@ -58,6 +58,40 @@ def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
     assert required_keys <= data.keys()
 
 
+def test_write_meta_yaml_preserves_existing_columns(tmp_path: Path) -> None:
+    csv_path = tmp_path / "output.csv"
+    csv_path.write_text("id\n1\n", encoding="utf-8")
+    meta_path = csv_path.with_name(csv_path.name + ".meta.yaml")
+    original_meta = {
+        "columns": ["id"],
+        "dtypes": {"id": "string"},
+        "schema": "Initial",
+    }
+    meta_path.write_text(yaml.safe_dump(original_meta), encoding="utf-8")
+
+    stats: Stats = {
+        "rows_total": 1,
+        "rows_kept": 1,
+        "rows_dropped": 0,
+        "output_sha256": "feedface",
+    }
+
+    write_meta_yaml(
+        csv_path=csv_path,
+        command="unit-test",
+        config_subset={},
+        inputs={},
+        stats=stats,
+        schema="Updated",
+    )
+
+    data = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert data["columns"] == ["id"]
+    assert data["dtypes"] == {"id": "string"}
+    assert data["schema"] == "Updated"
+    assert data["stats"] == stats
+
+
 def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """_git_sha uses the ``GIT_SHA`` environment variable when available."""
 
