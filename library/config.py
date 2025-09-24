@@ -471,6 +471,7 @@ class TargetChemblCfg(_BaseModel):
     """
 
     column: str = "target_chembl_id"
+
     timeout: float = Field(30.0, ge=0)
     limit: int | None = None
 

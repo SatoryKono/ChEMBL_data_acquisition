@@ -153,6 +153,7 @@ target:
     limit: null
   chembl:
     column: "target_chembl_id"  # Column containing ChEMBL target identifiers
+    chunk_size: 5
     timeout: 30.0
     limit: null
   iuphar:
