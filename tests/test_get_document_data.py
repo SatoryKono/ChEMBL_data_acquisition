@@ -341,7 +341,8 @@ def test_write_csv_column_order(
     assert rc == 0
     assert captured["col_order"] == gdd._EXPORT_COLUMNS
     assert captured["columns"] == gdd._EXPORT_COLUMNS
-    assert captured["key_cols"] == ["ChEMBL.pubmed_id"]
+    assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
+
 
 
 def test_fetch_pubmed_records_handles_generic_error(

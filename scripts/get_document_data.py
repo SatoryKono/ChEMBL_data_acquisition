@@ -358,7 +358,29 @@ _NUMERIC_EXPORT_COLUMNS = {
 
 
 _EXPORT_COLUMNS = [
+
+    "PubMed.PMID",
+    "PubMed.DOI",
+    "PubMed.ArticleTitle",
+    "PubMed.Abstract",
     "PubMed.JournalTitle",
+    "PubMed.JournalISOAbbrev",
+    "PubMed.Volume",
+    "PubMed.Issue",
+    "PubMed.StartPage",
+    "PubMed.EndPage",
+    "PubMed.ISSN",
+    "PubMed.PublicationType",
+    "PubMed.MeSH_Descriptors",
+    "PubMed.MeSH_Qualifiers",
+    "PubMed.ChemicalList",
+    "PubMed.YearCompleted",
+    "PubMed.MonthCompleted",
+    "PubMed.DayCompleted",
+    "PubMed.YearRevised",
+    "PubMed.MonthRevised",
+    "PubMed.DayRevised",
+    "PubMed.Error",
     "scholar.PMID",
     "scholar.DOI",
     "scholar.PublicationTypes",
@@ -387,6 +409,7 @@ _EXPORT_COLUMNS = [
     "publication_review_score",
     "publication_experimental_score",
     "publication_class",
+    "ChEMBL.document_chembl_id",
     "ChEMBL.title",
     "ChEMBL.abstract",
     "ChEMBL.doi",
@@ -403,6 +426,7 @@ _EXPORT_COLUMNS = [
 ]
 
 _EXPORT_COLUMN_RENAMES = {
+    "document_chembl_id": "ChEMBL.document_chembl_id",
     "title": "ChEMBL.title",
     "abstract": "ChEMBL.abstract",
     "doi": "ChEMBL.doi",
@@ -427,10 +451,11 @@ _EXPORT_COALESCE_SOURCES = {
 }
 
 _EXPORT_SORT_FALLBACK = [
-    "ChEMBL.pubmed_id",
+    "ChEMBL.document_chembl_id",
+    "PubMed.PMID",
     "scholar.PMID",
     "OpenAlex.PMID",
-    "PubMed.JournalTitle",
+    "ChEMBL.pubmed_id",
 ]
 
 
