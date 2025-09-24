@@ -505,7 +505,11 @@ def test_target_chembl_defaults_match_cli(
         cfg: object,
         client: object,
         mapping_cfg: object,
+
         chunk_size: object | None = None,
+
+
+
         timeout: object,
     ) -> pd.DataFrame:
         return pd.DataFrame({"target_chembl_id": list(ids)})

@@ -403,7 +403,7 @@ class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
     dry_run: bool = False
 
     @field_validator("dry_run", mode="before")
@@ -416,14 +416,14 @@ class AssayCfg(_BaseModel):
     column: str = "assay_chembl_id"
     chunk_size: int = Field(10, ge=1)
     timeout: float = Field(30.0, ge=0)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class DocumentPubmedCfg(_BaseModel):
@@ -431,14 +431,14 @@ class DocumentPubmedCfg(_BaseModel):
     sleep: float = Field(5.0, ge=0)
     workers: int = Field(1, ge=1)
     batch_size: int = Field(100, ge=1)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class DocumentChemblCfg(_BaseModel):
     column: str = "document_chembl_id"
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class DocumentAllCfg(_BaseModel):
@@ -448,7 +448,7 @@ class DocumentAllCfg(_BaseModel):
     workers: int = Field(1, ge=1)
     batch_size: int = Field(50, ge=1)
     timeout: float = Field(30.0, ge=0)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class DocumentCfg(_BaseModel):
@@ -460,7 +460,7 @@ class DocumentCfg(_BaseModel):
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
     data_dir: Path = Path("dictionary/uniprot")
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetChemblCfg(_BaseModel):
@@ -474,13 +474,13 @@ class TargetChemblCfg(_BaseModel):
 
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetIupharCfg(_BaseModel):
     target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetAllCfg(_BaseModel):
@@ -493,7 +493,7 @@ class TargetAllCfg(_BaseModel):
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
     iuphar_out: Path | None = None
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetCfg(_BaseModel):
