@@ -40,6 +40,10 @@ __all__ = [
 ]
 
 
+_SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
+_SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
+
+
 def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> pd.DataFrame:
     """Read the ``PMID`` column from ``path`` as a DataFrame.
 
@@ -268,8 +272,6 @@ def fetch_semantic_scholar(
     cfg: SemanticScholarCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
-    fields = "publicationTypes,externalIds,paperId,venue"
-    headers = {"Accept": "application/json"}
     cfg = cfg or SemanticScholarCfg()
     base = cfg.base.rstrip("/")
     url = f"{base}/paper/PMID:{pmid}"
@@ -278,8 +280,8 @@ def fetch_semantic_scholar(
         session,
         url,
         sleep * 5,
-        headers=headers,
-        params={"fields": fields},
+        headers=_SEMANTIC_SCHOLAR_HEADERS,
+        params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
         retries=cfg.retries,
         timeout=timeout,
     )
@@ -315,13 +317,23 @@ def fetch_semantic_scholar_batch(
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
 
+    if not pmids:
+        return []
+
     cfg = cfg or SemanticScholarCfg()
     base = cfg.base.rstrip("/")
-    ids = ",".join(pmids)
-    url = f"{base}/paper/batch?ids={ids}"
+    url = f"{base}/paper/batch"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
     data, error = _do_request(
-        session, url, sleep, method="POST", retries=cfg.retries, timeout=timeout
+        session,
+        url,
+        sleep,
+        headers=_SEMANTIC_SCHOLAR_HEADERS,
+        json={"ids": [f"PMID:{pmid}" for pmid in pmids]},
+        method="POST",
+        params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
+        retries=cfg.retries,
+        timeout=timeout,
     )
     if error:
         return [

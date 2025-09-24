@@ -181,6 +181,7 @@ def test_run_pubmed_uses_keyword_arguments(
         crossref_cfg: CrossRefCfg,
         max_workers: int,
         batch_size: int,
+        fallback_doi_map: dict[str, str] | None = None,
     ) -> pd.DataFrame:
         captured["pmids"] = list(pmids)
         captured["cfg"] = cfg_param
@@ -190,6 +191,7 @@ def test_run_pubmed_uses_keyword_arguments(
         captured["crossref_cfg"] = crossref_cfg
         captured["max_workers"] = max_workers
         captured["batch_size"] = batch_size
+        captured["fallback_doi_map"] = fallback_doi_map
         return pd.DataFrame({"PMID": ["1", "2"]})
 
     monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
@@ -216,6 +218,7 @@ def test_run_pubmed_uses_keyword_arguments(
     assert captured["crossref_cfg"] is cfg.crossref
     assert captured["max_workers"] == cfg.document.pubmed.workers
     assert captured["batch_size"] == cfg.document.pubmed.batch_size
+    assert captured["fallback_doi_map"] is None
 
 
 def test_write_csv_column_order(
@@ -393,6 +396,74 @@ def test_fetch_pubmed_records_accepts_config(
     assert "PubMed.PMID" in df.columns
     assert "publication_class" in df.columns
     assert df.loc[0, "PubMed.PMID"] == "1"
+
+
+
+def test_fetch_pubmed_records_uses_fallback_doi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CrossRef queries should fall back to supplied DOI mapping when needed."""
+
+    fallback = {"123": "10.9999/fallback"}
+
+    class DummySession:
+        def __enter__(self) -> "DummySession":  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any, batch: list[str], sleep: float
+    ) -> list[dict[str, str]]:
+        assert batch == ["123"]
+        return [{"PubMed.PMID": "123"}]
+
+    def fake_semantic_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        assert pmids == ["123"]
+        return [{"scholar.PMID": "123"}]
+
+    def fake_openalex(
+        session: Any, pmid: str, cfg_arg: Any, limiter: Any
+    ) -> dict[str, str]:
+        assert pmid == "123"
+        return {}
+
+    captured: dict[str, str] = {}
+
+    def fake_crossref(
+        session: Any, doi: str, cfg_arg: Any, limiter: Any
+    ) -> dict[str, str]:
+        captured["doi"] = doi
+        return {"crossref.DOI": doi}
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    df = gdd.fetch_pubmed_records(
+        ["123"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+        fallback_doi_map=fallback,
+    )
+
+    assert captured["doi"] == fallback["123"]
+    assert df.loc[0, "crossref.DOI"] == fallback["123"]
+
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
