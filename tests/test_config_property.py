@@ -6,6 +6,8 @@ import string
 from typing import Any, cast
 
 import pytest
+
+pytest.importorskip("hypothesis")
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
