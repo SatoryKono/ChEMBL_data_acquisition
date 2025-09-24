@@ -110,9 +110,10 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
         If the request fails or the payload cannot be decoded as JSON.
 
     """
+    limiter = get_limiter("uniprot", cfg.rps, cfg.burst)
     if cfg.delay:
         sleep(cfg.delay)
-    get_limiter("uniprot", 1 / cfg.delay if cfg.delay else 0).acquire()
+    limiter.acquire()
     base = cfg.base.rstrip("/")
     url = f"{base}/uniprotkb/{uniprot_id}.json"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
