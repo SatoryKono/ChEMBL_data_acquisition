@@ -568,6 +568,50 @@ def test_fetch_pubmed_records_uses_fallback_doi(
     assert df.loc[0, "crossref.DOI"] == fallback["123"]
 
 
+def test_finalise_export_falls_back_to_default_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CSV export should default to known key columns when none are provided."""
+
+    cfg = Config()
+    df = pd.DataFrame({"document_chembl_id": ["CHEMBL1"], "PubMed.PMID": ["123"]})
+    output = tmp_path / "documents.csv"
+    captured: dict[str, Any] = {}
+
+    def fake_write_csv(
+        frame: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Any,
+        sep: str | None = None,
+        encoding: str | None = None,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        chunksize: int | None = None,
+    ) -> Path:
+        captured["key_cols"] = list(key_cols) if key_cols is not None else None
+        return path
+
+    monkeypatch.setattr(gdd.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "file_sha256", lambda p: "hash")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
+
+    exit_code = gdd._finalise_export(
+        df,
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=None,
+    )
+
+    assert exit_code == 0
+    assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
+
+
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
 def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch: pytest.MonkeyPatch,

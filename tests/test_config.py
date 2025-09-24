@@ -269,6 +269,25 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert out.is_dir() and cache.is_dir()
 
 
+def test_load_config_requires_existing_dirs(tmp_path: Path) -> None:
+    """``exist_ok`` disabled should require pre-existing directories."""
+
+    output_dir = tmp_path / "missing_out"
+    cache_dir = tmp_path / "missing_cache"
+    cfg_path = tmp_path / "cfg.yaml"
+    cfg_path.write_text(
+        "io:\n"
+        "  exist_ok: false\n"
+        f"  output_dir: {output_dir}\n"
+        f"  cache_dir: {cache_dir}\n"
+    )
+
+    with pytest.raises(FileNotFoundError) as exc:
+        load_config(cfg_path)
+
+    assert str(output_dir) in str(exc.value)
+
+
 def test_unknown_key_warning(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\napi:\n  rps: 1\n")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import random
 import time
+from types import TracebackType
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -66,6 +67,19 @@ def test_client_closes_session() -> None:
     session = MagicMock(spec=requests.Session)
     with ChemblClient(api_cfg(), RetryCfg(), session=session):
         pass
+    session.close.assert_called_once()
+
+
+def test_client_closes_session_on_error() -> None:
+    """Context manager must close sessions even when exceptions occur."""
+
+    session = MagicMock(spec=requests.Session)
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+
+    with pytest.raises(RuntimeError):
+        with client:
+            raise RuntimeError("boom")
+
     session.close.assert_called_once()
 
 
@@ -185,6 +199,50 @@ def test_request_json_cache(monkeypatch) -> None:
 
     assert url in client.cache
     assert len(responses.calls) == 1
+
+
+def test_request_json_uses_cache_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cache mutations should be synchronised with the internal lock."""
+
+    session = DummySession()
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+
+    class RecordingLock:
+        def __init__(self) -> None:
+            self.history: list[str] = []
+
+        def __enter__(self) -> RecordingLock:
+            self.history.append("enter")
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> bool:
+            self.history.append("exit")
+            return False
+
+    lock = RecordingLock()
+    client._cache_lock = lock  # type: ignore[assignment]
+
+    class DummyLimiter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def acquire(self) -> None:
+            self.calls += 1
+
+    limiter = DummyLimiter()
+    monkeypatch.setattr("library.chembl_client.get_limiter", lambda *a, **k: limiter)
+    monkeypatch.setattr("library.chembl_client.sleep", lambda delay: None)
+
+    result = client.request_json("http://example.com", cfg=api_cfg(retries=1))
+
+    assert result == {"ok": True}
+    assert lock.history == ["enter", "exit", "enter", "exit"]
+    assert limiter.calls == 1
 
 
 @responses.activate
