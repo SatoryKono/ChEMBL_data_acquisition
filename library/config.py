@@ -296,7 +296,7 @@ class DocTypeCfg(_BaseModel):
     thresholds: dict[str, int] = Field(
         default_factory=lambda: {"review": 1, "experimental": 1, "unknown": 2}
     )
-    limit: int | None = None
+    limit: int | None = Field(default=None, ge=0)
 
 
 class ResourcesCfg(_BaseModel):
@@ -487,6 +487,7 @@ class TargetAllCfg(_BaseModel):
     data_dir: Path = Path("dictionary/uniprot")
     target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
+    chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     organism_csv: Path = Path("dictionary/_Target/organism.csv")
     uniprot_column: str = "uniprot_id"
@@ -643,7 +644,7 @@ def load_config(
     path: str | Path = "config.yaml",
     cli_overrides: dict[str, Any] | None = None,
     *,
-    strict: bool = False,
+    strict: bool = True,
 ) -> Config:
     """Load configuration from *path* applying overrides."""
 
