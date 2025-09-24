@@ -412,16 +412,7 @@ def finalise_targets(
             df[col] = df[col].astype("string").str.lower()
 
     # --- final column ordering --------------------------------------------------
-    schema_cols = [
-        (
-            chembl_col
-            if c == "target_chembl_id"
-            else (
-                uniprot_col if c == "uniprotkb_Id" else genus_col if c == "genus" else c
-            )
-        )
-        for c in TARGETS_COLUMN_ORDER
-    ]
+    schema_cols = list(TARGETS_COLUMN_ORDER)
     extra_cols = sorted(c for c in df.columns if c not in schema_cols)
     ordered_cols = [c for c in schema_cols if c in df.columns] + extra_cols
 
