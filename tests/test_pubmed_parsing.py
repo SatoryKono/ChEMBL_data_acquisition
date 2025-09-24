@@ -60,3 +60,24 @@ def test_parse_pubmed_article() -> None:
     assert rec["PubMed.Issue"] == "2"
     assert rec["PubMed.StartPage"] == "10"
     assert rec["PubMed.EndPage"] == "12"
+
+
+def test_parse_pubmed_article_uses_pubmed_data_doi() -> None:
+    xml = """
+    <PubmedArticle>
+      <MedlineCitation>
+        <PMID>999</PMID>
+        <Article>
+          <ArticleTitle>Another</ArticleTitle>
+        </Article>
+      </MedlineCitation>
+      <PubmedData>
+        <ArticleIdList>
+          <ArticleId IdType="doi">https://doi.org/10.1000/example</ArticleId>
+        </ArticleIdList>
+      </PubmedData>
+    </PubmedArticle>
+    """
+    art = ET.fromstring(xml)
+    rec = pp.parse_pubmed_article(art)
+    assert rec["PubMed.DOI"] == "10.1000/example"
