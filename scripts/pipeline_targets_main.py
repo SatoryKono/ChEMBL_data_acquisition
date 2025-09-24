@@ -163,7 +163,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_cfg.level = args.log_level
     log_cfg = LoggerConfig(level=log_cfg.level, run_id=log_cfg.run_id)
     logger_inst = configure_logger(log_cfg)
-    logger_inst.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    pipeline_logger = logger_inst.bind(stage="pipeline")
+    pipeline_logger.info("pipeline_start")
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     print_config(cfg)
@@ -185,7 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValidationError as exc:
         parser.error(str(exc))
     exit_code = run(cfg, options)
-    logger_inst.info("pipeline_done", extra={"exit_code": exit_code})
+    pipeline_logger.info("pipeline_done", exit_code=exit_code)
     return exit_code
 
 

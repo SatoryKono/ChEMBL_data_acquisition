@@ -14,8 +14,27 @@ from scripts import pipeline_targets_main as cli
 
 
 class _DummyLogger:
-    def info(self, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - trivial
-        pass
+    def __init__(
+        self,
+        context: dict[str, Any] | None = None,
+        storage: list[tuple[str, dict[str, Any]]] | None = None,
+    ) -> None:
+        self._context: dict[str, Any] = context or {}
+        self._records: list[tuple[str, dict[str, Any]]] = (
+            storage if storage is not None else []
+        )
+
+    def bind(self, **ctx: Any) -> "_DummyLogger":  # pragma: no cover - trivial
+        merged = {**self._context, **ctx}
+        return _DummyLogger(merged, self._records)
+
+    def info(self, event: str, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - trivial
+        record = {**self._context, **kwargs}
+        self._records.append((event, record))
+
+    @property
+    def records(self) -> list[tuple[str, dict[str, Any]]]:  # pragma: no cover - trivial
+        return list(self._records)
 
 
 def test_cli_forwards_batch_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,7 +68,8 @@ def test_cli_forwards_batch_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         captured["written_df"] = df.copy()
         return Path(path)
 
-    monkeypatch.setattr(cli, "configure_logger", lambda cfg: _DummyLogger())
+    dummy_logger = _DummyLogger()
+    monkeypatch.setattr(cli, "configure_logger", lambda cfg: dummy_logger)
     monkeypatch.setattr(cli, "apply_config_overrides", lambda *a: Config())
     monkeypatch.setattr(cli, "ensure_dirs", lambda cfg: None)
     monkeypatch.setattr(cli, "print_config", lambda cfg: None)
@@ -70,3 +90,8 @@ def test_cli_forwards_batch_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert captured["chunks"] == [["CHEMBL1"]]
     assert captured["written_path"] == output_csv
     assert list(captured["written_df"]["target_chembl_id"]) == ["CHEMBL1"]
+    assert any(event == "pipeline_start" and rec.get("stage") == "pipeline" for event, rec in dummy_logger.records)
+    assert any(
+        event == "pipeline_done" and rec.get("stage") == "pipeline" and rec.get("exit_code") == 0
+        for event, rec in dummy_logger.records
+    )
