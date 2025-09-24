@@ -71,6 +71,7 @@ def test_run_uniprot_initialises_session(
 
     monkeypatch.setattr(gtd.uu, "init_session", fake_init_session)
     monkeypatch.setattr(gtd.uu, "process", fake_process)
+
     def fake_write_csv(
         df: pd.DataFrame,
         path: Path,

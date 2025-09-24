@@ -171,9 +171,10 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         # Initialise or refresh the cache with the configured TTL.
         _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
 
-    if url in _CACHE:
+    cached = _CACHE.get(url)
+    if cached is not None:
         logger.info("cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"})
-        return _CACHE[url]
+        return cast(dict[str, Any], cached)
     logger.info("cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"})
 
     for attempt in range(1, cfg.retries + 1):

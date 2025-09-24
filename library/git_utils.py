@@ -104,10 +104,11 @@ def _read_head_sha(git_dir: Path) -> str | None:
         return head_content
     return None
 
+
 def _serialise_cmd(cmd: Any) -> list[str] | str:
     """Return ``cmd`` in a JSON-serialisable form."""
 
-    if isinstance(cmd, (list, tuple)):
+    if isinstance(cmd, list | tuple):
         return [str(part) for part in cmd]
     return str(cmd)
 
@@ -138,40 +139,19 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     """Return a descriptive message for ``exc``."""
 
     cmd = _serialise_cmd(exc.cmd)
-    if isinstance(cmd, list):
-        command = " ".join(cmd)
-    else:
-        command = cmd
+    command = " ".join(cmd) if isinstance(cmd, list) else cmd
     signed, raw = _normalise_returncode(exc.returncode)
-    if signed != raw:
-        message = f"{command} exited with status {signed} (raw: {raw})"
-    else:
-        message = f"{command} exited with status {signed}"
+    status = f"{signed} (raw: {raw})" if signed != raw else str(signed)
+    message = f"{command} exited with status {status}"
     details: list[str] = []
     stderr = _ensure_text(exc.stderr)
-    stdout = _ensure_text(exc.stdout)
     if stderr:
         details.append(stderr)
+    stdout = _ensure_text(exc.stdout)
     if stdout:
         details.append(stdout)
     if details:
         message = f"{message}: {' | '.join(details)}"
-
-def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
-    """Return a descriptive message for ``exc``."""
-
-    if isinstance(exc.cmd, (list, tuple)):
-        command = " ".join(str(part) for part in exc.cmd)
-    else:
-        command = str(exc.cmd)
-    message = f"{command} exited with status {exc.returncode}"
-    details: list[str] = []
-    if exc.stderr:
-        details.append(exc.stderr.strip())
-    if exc.stdout:
-        details.append(exc.stdout.strip())
-    if details:
-        message = f"{message}: {' | '.join(part for part in details if part)}"
     return message
 
 
@@ -188,9 +168,8 @@ def _log_fallback(sha: str, *, reason: str, error: BaseException | None = None) 
 
     payload: dict[str, Any] = {"reason": reason}
     if error is not None:
-
         payload.update(_error_payload(error))
-        
+
     logger.info("git_sha_fallback", sha=sha, **payload)
 
 
@@ -257,8 +236,7 @@ def _git_sha() -> str:
             [git_executable, "rev-parse", "HEAD"],
             cwd=repo_root,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
         return result.stdout.strip()
@@ -269,5 +247,4 @@ def _git_sha() -> str:
             return fallback
         logger.warning("git_sha_unavailable", extra=_error_payload(exc))
 
- 
         return "UNKNOWN"

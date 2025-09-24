@@ -129,7 +129,7 @@ class ChemblClient:
                 logger.info(
                     "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
                 )
-                return cached
+                return cast(dict[str, Any], cached)
             logger.info(
                 "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
             )
@@ -163,7 +163,7 @@ class ChemblClient:
                     with self._cache_lock:
                         cached = self.cache.get(cache_key)
                         if cached is not None:
-                            return cached
+                            return cast(dict[str, Any], cached)
                         self.cache[cache_key] = data
                         logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
                         return data

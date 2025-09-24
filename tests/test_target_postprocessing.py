@@ -99,7 +99,11 @@ def test_finalise_targets_orders_columns_default() -> None:
         (
             "chembl_id"
             if c == "target_chembl_id"
-            else "uniprot" if c == "uniprotkb_Id" else "organism" if c == "genus" else c
+            else "uniprot"
+            if c == "uniprotkb_Id"
+            else "organism"
+            if c == "genus"
+            else c
         )
         for c in TARGETS_COLUMN_ORDER
     ]

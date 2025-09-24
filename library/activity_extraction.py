@@ -164,7 +164,9 @@ def extract_activities(
     missing_required = required - set(df.columns)
     exit_code = 0
     if missing_required:
-        LOG.warning("Skipping validation; missing columns: %s", sorted(missing_required))
+        LOG.warning(
+            "Skipping validation; missing columns: %s", sorted(missing_required)
+        )
     else:
         try:
             validation_result = validate_activities(df, return_result=True)

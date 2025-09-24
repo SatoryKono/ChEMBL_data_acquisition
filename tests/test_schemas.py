@@ -103,11 +103,9 @@ def test_documents_schema_validation() -> None:
     valid = pd.DataFrame(
         {
             "document_chembl_id": ["CHEMBL1"],
-
             "title": ["Example"],
             "PubMed.PMID": [12345],
             "OpenAlex.Error": [None],
-
         }
     )
     DocumentsSchema.validate(valid)
@@ -239,14 +237,12 @@ def test_testitems_schema_validation() -> None:
     """Ensure :data:`TestitemsSchema` validates expected data."""
     valid = pd.DataFrame(
         {
-
             "molecule_chembl_id": ["CHEMBL1"],
             "first_approval": [1950],
             "black_box_warning": [0],
             "oral": [True],
             "parenteral": [False],
             "topical": [False],
-
         }
     )
     TestitemsSchema.validate(valid)

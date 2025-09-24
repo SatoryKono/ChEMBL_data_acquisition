@@ -39,7 +39,9 @@ def _configure_failing_git(
     monkeypatch.setattr(git_utils.shutil, "which", lambda _: "git")
 
 
-def _capture_logs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, object]]]:
+def _capture_logs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, dict[str, object]]]:
     records: list[tuple[str, dict[str, object]]] = []
 
     def info(event: str, *args: object, **kwargs: object) -> None:
@@ -61,7 +63,11 @@ def _assert_subprocess_payload(
         rec for event, rec in records if event == "git_sha_fallback"
     ]
     assert payloads
-    raw = expected_returncode if expected_returncode_raw is None else expected_returncode_raw
+    raw = (
+        expected_returncode
+        if expected_returncode_raw is None
+        else expected_returncode_raw
+    )
     for payload in payloads:
         assert payload.get("error")
         assert payload.get("error_returncode") == expected_returncode
@@ -73,7 +79,9 @@ def _assert_subprocess_payload(
             assert payload.get("error_stderr") == expected_stderr
 
 
-def test_git_sha_fallback_reads_head(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_git_sha_fallback_reads_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     commit = "1" * 40
     git_dir = tmp_path / ".git"
     git_dir.mkdir()
@@ -94,7 +102,9 @@ def test_git_sha_fallback_reads_head(tmp_path: Path, monkeypatch: pytest.MonkeyP
     _assert_subprocess_payload(records, expected_returncode=1)
 
 
-def test_git_sha_fallback_supports_gitdir_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_git_sha_fallback_supports_gitdir_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     commit = "2" * 40
     storage = tmp_path / "git_storage"
     git_dir = storage / "worktree"
@@ -118,7 +128,9 @@ def test_git_sha_fallback_supports_gitdir_file(tmp_path: Path, monkeypatch: pyte
     _assert_subprocess_payload(records, expected_returncode=1)
 
 
-def test_git_sha_fallback_reads_packed_refs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_git_sha_fallback_reads_packed_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     commit = "3" * 40
     git_dir = tmp_path / ".git"
     git_dir.mkdir()
@@ -167,7 +179,9 @@ def test_git_sha_fallback_normalises_large_returncode(
     )
 
 
-def test_git_sha_fallback_when_git_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_git_sha_fallback_when_git_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     commit = "4" * 40
     git_dir = tmp_path / ".git"
     git_dir.mkdir()

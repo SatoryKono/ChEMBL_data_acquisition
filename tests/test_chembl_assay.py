@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 import pandas as pd
 
@@ -10,7 +10,9 @@ from library.chembl_assay import get_assays
 from library.config import ApiCfg
 
 
-def _response_page(items: list[dict[str, str]], next_path: str | None) -> dict[str, object]:
+def _response_page(
+    items: list[dict[str, str]], next_path: str | None
+) -> dict[str, object]:
     """Return a fake paginated response payload."""
 
     page_meta: dict[str, object] = {"next": next_path}
@@ -24,7 +26,9 @@ class DummyClient:
         self._responses = responses
         self.calls: list[str] = []
 
-    def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None = None) -> dict[str, object]:
+    def request_json(
+        self, url: str, *, cfg: ApiCfg, timeout: float | None = None
+    ) -> dict[str, object]:
         self.calls.append(url)
         try:
             return next(self._responses)

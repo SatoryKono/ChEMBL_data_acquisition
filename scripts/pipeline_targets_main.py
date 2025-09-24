@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-
 # ruff: noqa: E402
 import argparse
+import sys
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 
@@ -15,6 +14,7 @@ if __package__ is None:  # running as a script
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from library.chembl_client import _chunked
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
@@ -22,7 +22,6 @@ from library.cli import (
     configure_logger,
 )
 from library.config import Config, ensure_dirs, print_config
-from library.chembl_client import _chunked
 from library.io import default_output_path, read_ids, write_csv
 from library.log import logger
 from library.pipeline_targets import PipelineResult, run_pipeline
@@ -101,9 +100,7 @@ def _chunk_iterator(cfg: Config, options: PipelineConfig) -> Iterator[Iterable[s
         encoding=options.encoding,
         na_markers=options.na_markers,
     )
-    for chunk in _chunked(ids, options.chunk_size):
-        yield chunk
-
+    yield from _chunked(ids, options.chunk_size)
 
 
 def _cached_chembl_fetch(
@@ -121,7 +118,6 @@ def _cached_chembl_fetch(
     with :func:`library.pipeline_targets.run_pipeline`.
     """
 
-
     ids = [item for chunk in chunks for item in chunk]
     df = pd.DataFrame({"target_chembl_id": ids})
     if df.empty:
@@ -130,7 +126,9 @@ def _cached_chembl_fetch(
     return df
 
 
-def _write_outputs(cfg: Config, options: PipelineConfig, result: PipelineResult) -> Path:
+def _write_outputs(
+    cfg: Config, options: PipelineConfig, result: PipelineResult
+) -> Path:
     output = options.output_csv or default_output_path(options.input_csv, cfg.io)
     write_csv(
         result.chembl,
@@ -146,10 +144,8 @@ def run(cfg: Config, options: PipelineConfig) -> int:
     result = run_pipeline(
         lambda: _chunk_iterator(cfg, options),
         cfg,
-
         chembl_fetcher=_cached_chembl_fetch,
         chembl_kwargs={"chunk_size": options.chunk_size},
-
         batch_size=options.batch_size,
     )
     output = _write_outputs(cfg, options, result)

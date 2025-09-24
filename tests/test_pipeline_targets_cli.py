@@ -24,11 +24,13 @@ class _DummyLogger:
             storage if storage is not None else []
         )
 
-    def bind(self, **ctx: Any) -> "_DummyLogger":  # pragma: no cover - trivial
+    def bind(self, **ctx: Any) -> _DummyLogger:  # pragma: no cover - trivial
         merged = {**self._context, **ctx}
         return _DummyLogger(merged, self._records)
 
-    def info(self, event: str, *args: Any, **kwargs: Any) -> None:  # pragma: no cover - trivial
+    def info(
+        self, event: str, *args: Any, **kwargs: Any
+    ) -> None:  # pragma: no cover - trivial
         record = {**self._context, **kwargs}
         self._records.append((event, record))
 
@@ -37,7 +39,9 @@ class _DummyLogger:
         return list(self._records)
 
 
-def test_cli_forwards_batch_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_forwards_batch_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     input_csv = tmp_path / "targets.csv"
     input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf8")
     output_csv = tmp_path / "out.csv"
@@ -90,8 +94,13 @@ def test_cli_forwards_batch_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert captured["chunks"] == [["CHEMBL1"]]
     assert captured["written_path"] == output_csv
     assert list(captured["written_df"]["target_chembl_id"]) == ["CHEMBL1"]
-    assert any(event == "pipeline_start" and rec.get("stage") == "pipeline" for event, rec in dummy_logger.records)
     assert any(
-        event == "pipeline_done" and rec.get("stage") == "pipeline" and rec.get("exit_code") == 0
+        event == "pipeline_start" and rec.get("stage") == "pipeline"
+        for event, rec in dummy_logger.records
+    )
+    assert any(
+        event == "pipeline_done"
+        and rec.get("stage") == "pipeline"
+        and rec.get("exit_code") == 0
         for event, rec in dummy_logger.records
     )

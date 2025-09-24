@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-
 from inspect import Parameter, Signature, signature
-
-from typing import Any, Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -50,14 +48,12 @@ def _filter_optional_kwargs(
     return filtered, dropped
 
 
-
 def _call_fetcher(
     fetcher: OptionalFetcher,
     /,
     *args: Any,
     **kwargs: Any,
 ) -> pd.DataFrame:
-
     """Invoke ``fetcher`` handling optional keywords gracefully."""
 
     filtered_kwargs, dropped = _filter_optional_kwargs(fetcher, kwargs)
@@ -72,7 +68,9 @@ def _call_fetcher(
     try:
         return fetcher(*args, **filtered_kwargs)
     except TypeError:
-        retry_kwargs = {k: v for k, v in filtered_kwargs.items() if k not in _OPTIONAL_KEYWORDS}
+        retry_kwargs = {
+            k: v for k, v in filtered_kwargs.items() if k not in _OPTIONAL_KEYWORDS
+        }
         if len(retry_kwargs) == len(filtered_kwargs):
             raise
         dropped_retry = sorted(set(filtered_kwargs) - set(retry_kwargs))
@@ -81,12 +79,10 @@ def _call_fetcher(
             "retrying_fetcher_without_optional_kwargs",
             extra={
                 "fetcher": getattr(fetcher, "__name__", repr(fetcher)),
-
                 "dropped": dropped_retry,
             },
         )
         return fetcher(*args, **retry_kwargs)
-
 
 
 @dataclass(frozen=True)
