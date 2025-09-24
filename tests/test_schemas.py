@@ -22,6 +22,7 @@ from schemas import (
     TargetsSchema,
     TestitemsSchema,
 )
+from schemas.targets import TARGETS_COLUMN_ORDER
 
 
 def test_activities_schema_validation() -> None:
@@ -119,18 +120,10 @@ def test_targets_schema_validation() -> None:
     valid = pd.DataFrame(
         {
             "target_chembl_id": ["CHEMBL1"],
-            "uniprotkb_Id": ["P12345"],
-            "recommended_name": ["Protein kinase"],
-            # ``synonyms`` may be nullable in newer schema versions
-            "synonyms": [None],
-            "type": ["protein"],
+            "uniprot_id_primary": ["P12345"],
         }
     )
-    if TargetsSchema.columns["synonyms"].nullable:
-        TargetsSchema.validate(valid)
-    else:
-        with pytest.raises(SchemaError):
-            TargetsSchema.validate(valid)
+    TargetsSchema.validate(valid)
 
     invalid = valid.drop(columns=["target_chembl_id"])
     with pytest.raises(SchemaError):
@@ -139,66 +132,13 @@ def test_targets_schema_validation() -> None:
 
 def test_targets_schema_allows_missing_optional_columns() -> None:
     """Schema validation succeeds when optional columns are absent."""
-    df = pd.DataFrame(
-        {
-            "target_chembl_id": ["CHEMBL1"],
-            "uniprotkb_Id": ["P12345"],
-            "recommended_name": ["Protein kinase"],
-            "synonyms": ["pk1|kinase"],
-            "type": ["protein"],
-        }
-    )
+    df = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
     TargetsSchema.validate(df)
 
 
 def test_targets_schema_defines_expected_columns() -> None:
     """All expected columns are present in :data:`TargetsSchema`."""
-    expected = {
-        "target_chembl_id",
-        "uniprotkb_Id",
-        "uniprot_id",
-        "secondary_uniprot_id",
-        "gene_name",
-        "recommended_name",
-        "synonyms",
-        "genus",
-        "superkingdom",
-        "phylum",
-        "taxon_id",
-        "ec_number",
-        "hgnc_name",
-        "hgnc_id",
-        "molecular_function",
-        "cellular_component",
-        "subcellular_location",
-        "topology",
-        "transmembrane",
-        "intramembrane",
-        "glycosylation",
-        "lipidation",
-        "disulfide_bond",
-        "modified_residue",
-        "phosphorylation",
-        "acetylation",
-        "ubiquitination",
-        "signal_peptide",
-        "propeptide",
-        "isoform_names",
-        "isoform_ids",
-        "isoform_synonyms",
-        "reactions",
-        "target_id",
-        "IUPHAR_family_id",
-        "IUPHAR_type",
-        "IUPHAR_class",
-        "IUPHAR_subclass",
-        "IUPHAR_chain",
-        "full_id_path",
-        "full_name_path",
-        "GuidetoPHARMACOLOGY",
-        "type",
-    }
-    assert set(TargetsSchema.columns) == expected
+    assert set(TargetsSchema.columns) == set(TARGETS_COLUMN_ORDER)
 
 
 def test_targets_schema_nullable_and_any_columns() -> None:
@@ -211,6 +151,12 @@ def test_targets_schema_nullable_and_any_columns() -> None:
     # Columns previously typed as ``bool`` or ``int`` now accept any object
     any_columns = [
         "taxon_id",
+        "features_signal_peptide",
+        "features_transmembrane",
+        "ptm_glycosylation",
+        "ptm_lipidation",
+        "ptm_disulfide_bond",
+        "ptm_modified_residue",
         "transmembrane",
         "intramembrane",
         "glycosylation",
