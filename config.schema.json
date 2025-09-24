@@ -254,6 +254,7 @@
         "limit": {
           "anyOf": [
             {
+              "minimum": 0,
               "type": "integer"
             },
             {
@@ -930,6 +931,12 @@
           "format": "path",
           "title": "Family Csv",
           "type": "string"
+        },
+        "chunk_size": {
+          "default": 5,
+          "minimum": 1,
+          "title": "Chunk Size",
+          "type": "integer"
         },
         "timeout": {
           "default": 30.0,

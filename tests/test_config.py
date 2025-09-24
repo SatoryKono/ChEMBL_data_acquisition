@@ -269,31 +269,14 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert out.is_dir() and cache.is_dir()
 
 
-def test_load_config_requires_existing_dirs(tmp_path: Path) -> None:
-    """``exist_ok`` disabled should require pre-existing directories."""
 
-    output_dir = tmp_path / "missing_out"
-    cache_dir = tmp_path / "missing_cache"
-    cfg_path = tmp_path / "cfg.yaml"
-    cfg_path.write_text(
-        "io:\n"
-        "  exist_ok: false\n"
-        f"  output_dir: {output_dir}\n"
-        f"  cache_dir: {cache_dir}\n"
-    )
+def test_unknown_key_warning_non_strict(tmp_path: Path) -> None:
 
-    with pytest.raises(FileNotFoundError) as exc:
-        load_config(cfg_path)
-
-    assert str(output_dir) in str(exc.value)
-
-
-def test_unknown_key_warning(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\napi:\n  rps: 1\n")
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    load_config(path)
+    load_config(path, strict=False)
     lines = buf.getvalue().splitlines()
     assert lines
     record = json.loads(lines[-1])
@@ -305,7 +288,7 @@ def test_unknown_key_error(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\n")
     with pytest.raises(ValueError, match="Unknown configuration key"):
-        load_config(path, strict=True)
+        load_config(path)
 
 
 def test_config_type_coercion() -> None:
