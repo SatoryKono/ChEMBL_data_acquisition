@@ -30,6 +30,25 @@
 
 Полный список приведён в `requirements-dev.txt` или `pyproject.toml`.
 
+### Среда выполнения
+
+* ОС Linux или macOS с доступом к bash/PowerShell. На Windows рекомендуется
+  устанавливать через WSL2.
+* `pip` версии 23+ и `setuptools`/`wheel` последних релизов:
+
+  ```bash
+  python -m pip install --upgrade pip setuptools wheel
+  ```
+
+* Изолированное окружение:
+
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+  ```
+
+* Разрешение на сетевые запросы к API ChEMBL/PubChem/UniProt (порт 443).
+
 ## Установка
 
 ```bash
@@ -112,6 +131,16 @@ pre-commit run --all-files
 ```bash
 pytest
 ```
+
+Проверка детерминизма итоговых CSV выполняется отдельным скриптом; он сравнивает
+контрольные срезы с актуальным выводом и сигнализирует о дрейфе данных:
+
+```bash
+python scripts/check_determinism.py --log-level DEBUG
+```
+
+Перед запуском убедитесь, что зависимости установлены командой `pip install .[dev]`
+и все файлы в `data/output/` доступны для чтения/записи.
 
 Для smoke-теста CLI выполните:
 

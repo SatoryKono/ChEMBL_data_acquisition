@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+from contextlib import contextmanager
 
 import pandas as pd
 import pytest
@@ -207,6 +210,7 @@ def test_write_csv_column_order(
     assert captured["col_order"] == expected
 
 
+
 def test_fetch_pubmed_records_handles_generic_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -236,6 +240,7 @@ def test_fetch_pubmed_records_handles_generic_error(
     assert row["OpenAlex.Error"] == "boom"
     assert row["crossref.Error"] == "boom"
     assert row["publication_class"] == "unknown"
+
 
 
 def test_fetch_pubmed_records_accepts_config(
