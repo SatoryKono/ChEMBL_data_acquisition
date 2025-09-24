@@ -34,7 +34,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from itertools import islice
 from typing import cast
 
@@ -56,12 +56,17 @@ from library.cli import (
     configure_logger,
 )
 from library.config import (
+    ApiCfg,
     Config,
     CrossRefCfg,
     OpenAlexCfg,
+    PubMedCfg,
+    RetryCfg,
+    SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
     print_config,
+    session_with_retry,
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
@@ -73,9 +78,14 @@ from schemas import DocumentsSchema, normalize_documents
 
 def fetch_pubmed_records(
     pmids: Iterable[str],
+    *,
     sleep: float,
     openalex_cfg: OpenAlexCfg,
     crossref_cfg: CrossRefCfg,
+    api_cfg: ApiCfg,
+    retry_cfg: RetryCfg,
+    pubmed_cfg: PubMedCfg,
+    semantic_cfg: SemanticScholarCfg,
     max_workers: int = 1,
     batch_size: int = 100,
 ) -> pd.DataFrame:
@@ -92,7 +102,14 @@ def fetch_pubmed_records(
         Configuration for OpenAlex API access.
     crossref_cfg:
         Configuration for CrossRef API access.
-
+    api_cfg:
+        Shared API configuration providing retry defaults and headers.
+    retry_cfg:
+        Retry behaviour applied to outbound HTTP sessions.
+    pubmed_cfg:
+        Settings for the PubMed API, including timeouts and retry counts.
+    semantic_cfg:
+        Semantic Scholar configuration used for batch enrichment.
     max_workers:
         Maximum number of concurrent threads.
     batch_size:
@@ -105,10 +122,23 @@ def fetch_pubmed_records(
 
     """
 
+    def _failure_records(batch: list[str], message: str) -> list[dict[str, str]]:
+        records: list[dict[str, str]] = []
+        for pid in batch:
+            record = pl.EMPTY_PUBMED.copy()
+            record["PubMed.PMID"] = pid
+            record["PubMed.Error"] = message
+            records.append(record)
+        return records
+
+    pubmed_rps = 1 / sleep if sleep > 0 else 0.0
+    semantic_rps = 1 / sleep if sleep > 0 else 0.0
+    pubmed_limiter = get_limiter("pubmed", pubmed_rps)
+    semantic_limiter = get_limiter("semantic_scholar", semantic_rps)
     openalex_limiter = get_limiter("openalex", openalex_cfg.rps, openalex_cfg.burst)
     crossref_limiter = get_limiter("crossref", crossref_cfg.rps, crossref_cfg.burst)
 
-    def _fetch_batch(batch: list[str]) -> list[dict[str, str]]:
+    def _fetch_batch(offset: int, batch: list[str]) -> list[dict[str, str]]:
         """Fetch metadata for a batch of PMIDs.
 
         Each worker opens its own :class:`requests.Session` and retrieves PubMed
@@ -118,13 +148,17 @@ def fetch_pubmed_records(
         abort the whole process.
         """
         try:
-            with requests.Session() as session:
-                pubmed_list = pl.fetch_pubmed_batch(session, batch, sleep)
+            with session_with_retry(api_cfg, retry_cfg) as session:
+                pubmed_limiter.acquire()
+                pubmed_list = pl.fetch_pubmed_batch(
+                    session, batch, sleep, cfg=pubmed_cfg
+                )
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
 
                 # Fetch Semantic Scholar data in a single batch
+                semantic_limiter.acquire()
                 semsch_list = ssl.fetch_semantic_scholar_batch(
-                    session, pmids_in_batch, sleep
+                    session, pmids_in_batch, sleep, cfg=semantic_cfg
                 )
 
                 # Create a map for easy lookup
@@ -154,21 +188,34 @@ def fetch_pubmed_records(
                 return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
             logger.warning("failed to fetch PMIDs %s: %s", batch, exc)
-            return [{} for _ in batch]
+            return _failure_records(batch, str(exc))
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            logger.warning("unexpected error for PMIDs %s: %s", batch, exc)
+            return _failure_records(batch, str(exc))
 
     iterator = (p for p in pmids if p)
     records: list[dict[str, str]] = []
+    tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {
-            ex.submit(_fetch_batch, batch): len(batch)
-            for batch in _chunked(iterator, batch_size)
-        }
+        offset = 0
+        for batch in _chunked(iterator, batch_size):
+            if not batch:
+                continue
+            future = ex.submit(_fetch_batch, offset, batch)
+            tasks[future] = (offset, batch)
+            offset += len(batch)
+
         processed = 0
-        for future in as_completed(futures):
-            batch_len = futures[future]
-            records.extend(future.result())
-            processed += batch_len
+        ordered: dict[int, list[dict[str, str]]] = {}
+        for future in as_completed(tasks):
+            offset, batch = tasks[future]
+            result = future.result()
+            ordered[offset] = result
+            processed += len(batch)
             logger.info("documents_processed", count=processed)
+
+    for offset in sorted(ordered):
+        records.extend(ordered[offset])
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
@@ -210,11 +257,15 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     try:
         df = fetch_pubmed_records(
             pmids,
-            cfg.document.pubmed.sleep,
-            cfg.openalex,
-            cfg.crossref,
-            cfg.document.pubmed.workers,
-            cfg.document.pubmed.batch_size,
+            sleep=cfg.document.pubmed.sleep,
+            openalex_cfg=cfg.openalex,
+            crossref_cfg=cfg.crossref,
+            api_cfg=cfg.api,
+            retry_cfg=cfg.retry,
+            pubmed_cfg=cfg.pubmed,
+            semantic_cfg=cfg.semantic_scholar,
+            max_workers=cfg.document.pubmed.workers,
+            batch_size=cfg.document.pubmed.batch_size,
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_documents(df)
@@ -561,11 +612,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        cfg.document.all.sleep,
-        cfg.openalex,
-        cfg.crossref,
-        cfg.document.all.workers,
-        cfg.document.all.batch_size,
+        sleep=cfg.document.all.sleep,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
+        pubmed_cfg=cfg.pubmed,
+        semantic_cfg=cfg.semantic_scholar,
+        max_workers=cfg.document.all.workers,
+        batch_size=cfg.document.all.batch_size,
     )
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
     if not pub_df.empty and "PubMed.PMID" in pub_df.columns:
