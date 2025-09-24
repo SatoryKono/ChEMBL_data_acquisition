@@ -208,6 +208,7 @@ def test_git_sha_timeout_returns_unknown(
         raise subprocess.CalledProcessError(returncode=1, cmd=["git"])
 
     monkeypatch.setattr(git_utils.subprocess, "check_output", fail)
+    monkeypatch.setattr(git_utils, "_read_head_sha", lambda *_: None)
     git_utils._git_sha.cache_clear()
 
     assert git_utils._git_sha() == "UNKNOWN"

@@ -274,6 +274,7 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
     """_git_sha returns 'unknown' and logs a warning on timeout."""
 
     git_utils._git_sha.cache_clear()
+    monkeypatch.setattr(git_utils, "_read_head_sha", lambda *_: None)
     with patch(
         "library.git_utils.subprocess.check_output",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd=["git"]),
