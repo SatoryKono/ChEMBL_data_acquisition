@@ -45,7 +45,7 @@
 * `delay`, `poll_interval` (`float`) — паузы между запросами (UniProt, PubChem).
 * `mailto` (`str`, обязателен где требуется) — контактная почта согласно
   требованиям API (CrossRef, OpenAlex).
-* `cache_ttl`, `cache_maxsize` (`int` | `null`) — параметры кэша для ID mapping.
+* `cache_ttl` (`int` | `null`) — параметр кэша для ID mapping.
 * `encodings` (`list[str]`) — fallback-кодировки при чтении публикаций.
 
 > **Совет:** значения по умолчанию подходят для публичных лимитов. При работе с

@@ -191,7 +191,6 @@ class UniprotMappingCfg(_BaseModel):
     base: str = "https://rest.uniprot.org/idmapping"
     poll_interval: float = Field(0.5, gt=0)
     timeout: float = Field(300.0, ge=1)
-    cache_maxsize: int = Field(128, ge=0)
     cache_ttl: float | None = Field(None, ge=0)
 
     @field_validator("base")
@@ -212,7 +211,6 @@ class UniprotMappingCfg(_BaseModel):
                 self.base,
                 self.poll_interval,
                 self.timeout,
-                self.cache_maxsize,
                 self.cache_ttl,
             )
         )
