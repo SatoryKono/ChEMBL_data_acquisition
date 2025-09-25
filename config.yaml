@@ -130,7 +130,7 @@ document:
     column: "PMID"
     sleep: 5.0
     workers: 1
-    batch_size: 50
+    batch_size: 5
     limit: null
   chembl:
     column: "document_chembl_id"
@@ -139,10 +139,10 @@ document:
     limit: null
   all:
     column: "document_chembl_id"
-    chunk_size: 50
+    chunk_size: 5
     sleep: 5.0
     workers: 1
-    batch_size: 50
+    batch_size: 5
     timeout: 30.0
     limit: null
 
