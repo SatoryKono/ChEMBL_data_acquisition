@@ -1,0 +1,252 @@
+# Configuration Reference
+
+## Overview
+
+* All command-line tools load their defaults from [`config.yaml`](../config.yaml) in the project root.
+* Values are validated against [`config.schema.json`](../config.schema.json); unknown keys raise an error during start-up.
+* Settings can be overridden via environment variables and CLI flags. Precedence is: `config.yaml` < environment variables < CLI arguments.
+
+## Layout of `config.yaml`
+
+| Section | Purpose |
+| --- | --- |
+| `sources` | Connectivity details for external services such as ChEMBL, UniProt, CrossRef, PubChem and PubMed. |
+| `local` | Paths to local resources, CSV defaults and initialisation workbooks. |
+| `system` | Logging, retry policy, global rate limiting and document classification weights. |
+
+Sensitive values (API tokens, personal e-mails) should be injected via environment variables rather than committed to the repository.
+
+## `sources.chembl`
+
+### API client (`sources.chembl.api`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `chembl_base` | `https://www.ebi.ac.uk/chembl/api/data` | Base URL for the ChEMBL REST API. |
+| `timeout_connect` | `5` | Connection timeout in seconds. |
+| `timeout_read` | `30` | Read timeout in seconds. |
+| `retries` | `3` | HTTP retry attempts handled by `requests`. |
+| `backoff_factor` | `0.5` | Multiplier for exponential backoff between retries. |
+| `rps` | `20` | Allowed requests per second for the rate limiter. |
+| `burst` | `20` | Bucket size used by the token bucket limiter. |
+| `user_agent` | `chembl-da/0.1 (mailto:contact@example.org)` | User-Agent header; replace the contact e-mail in production. |
+
+### Response cache (`sources.chembl.cache`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `cache_ttl` | `3600` | Time-to-live for cached API responses in seconds. |
+| `cache_maxsize` | `1024` | Maximum number of cached responses. |
+
+### Pipelines (`sources.chembl.pipelines`)
+
+Each sub-section below defines defaults for the respective CLI utility. CLI arguments are merged back into the configuration before execution.
+
+#### Activity pipeline (`activity`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `column` | `activity_chembl_id` | Input column containing activity identifiers. |
+| `chunk_size` | `50` | Batch size for API requests. |
+| `timeout` | `30.0` | Request timeout in seconds. |
+| `limit` | `null` | Optional cap on identifiers processed. |
+| `dry_run` | `false` | Skip network calls and file generation when `true`. |
+
+#### Assay pipeline (`assay`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `column` | `assay_chembl_id` | Input column with assay identifiers. |
+| `chunk_size` | `50` | Batch size for API requests. |
+| `timeout` | `30.0` | Request timeout in seconds. |
+| `limit` | `null` | Optional cap on identifiers processed. |
+
+#### Test item pipeline (`testitem`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `column` | `molecule_chembl_id` | Input column with compound identifiers. |
+| `chunk_size` | `50` | Batch size for API requests. |
+| `timeout` | `30.0` | Request timeout in seconds. |
+| `limit` | `null` | Optional cap on identifiers processed. |
+
+#### Document pipeline (`document`)
+
+| Sub-section | Key | Default | Description |
+| --- | --- | --- | --- |
+| `pubmed` | `column` | `PMID` | Column with PubMed identifiers. |
+|  | `sleep` | `5.0` | Delay between polling cycles in seconds. |
+|  | `workers` | `1` | Number of worker threads. |
+|  | `batch_size` | `5` | Number of IDs requested per batch. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+| `chembl` | `column` | `document_chembl_id` | Column with document identifiers exported by ChEMBL. |
+|  | `chunk_size` | `50` | Batch size for API requests. |
+|  | `timeout` | `30.0` | Request timeout in seconds. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+| `all` | `column` | `document_chembl_id` | Column with identifiers processed by the combined pipeline. |
+|  | `chunk_size` | `5` | Combined batch size when merging sources. |
+|  | `sleep` | `5.0` | Delay between polling cycles in seconds. |
+|  | `workers` | `1` | Worker threads for combined processing. |
+|  | `batch_size` | `5` | Number of IDs requested per batch. |
+|  | `timeout` | `30.0` | Request timeout in seconds. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+
+#### Target pipeline (`target`)
+
+| Sub-section | Key | Default | Description |
+| --- | --- | --- | --- |
+| `uniprot` | `column` | `uniprot_id` | Column with UniProt identifiers. |
+|  | `data_dir` | `dictionary/uniprot` | Directory holding cached UniProt JSON files. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+| `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
+|  | `chunk_size` | `5` | Batch size for API requests. |
+|  | `timeout` | `30.0` | Request timeout in seconds. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+| `iuphar` | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+| `all` | `data_dir` | `dictionary/uniprot` | Directory containing cached UniProt data. |
+|  | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+|  | `chunk_size` | `5` | Batch size when combining all sources. |
+|  | `timeout` | `30.0` | Request timeout in seconds. |
+|  | `organism_csv` | `dictionary/_Target/targets_type.csv` | Taxonomy and target type mapping. |
+|  | `uniprot_column` | `uniprot_id` | Column used to join UniProt data. |
+|  | `chembl_out` | `null` | Optional override for the combined ChEMBL output path. |
+|  | `uniprot_out` | `null` | Optional override for the combined UniProt output path. |
+|  | `iuphar_out` | `null` | Optional override for the combined IUPHAR output path. |
+|  | `limit` | `null` | Optional cap on identifiers processed. |
+
+## Other external sources (`sources.*`)
+
+| Section | Default base URL | Key settings |
+| --- | --- | --- |
+| `openalex` | `https://api.openalex.org` | `timeout_connect=5`, `timeout_read=30`, `retries=3`, `rps=5`, `burst=5`, `mailto="contact@example.org"`. |
+| `crossref` | `https://api.crossref.org` | Same structure as `openalex`; provide a personal `mailto`. |
+| `uniprot.api` | `https://rest.uniprot.org` | `timeout_connect=5`, `timeout_read=30`, `rps=25`, `burst=25`, `delay=0.25` seconds. |
+| `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5` seconds, `timeout=300.0` seconds, `cache_ttl=null`. |
+| `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
+| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | `timeout_connect=5`, `timeout_read=60`, `retries=3`, `rps=5`, `burst=5`, `delay=0.2`, `cache_ttl=3600`. |
+| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
+| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
+
+All URLs must comply with the respective service usage policies, including rate limits and contact information requirements.
+
+## Local resources (`local`)
+
+### Reference data (`local.resources`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
+| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `dictionary/uniprot` | Cached UniProt JSON responses. |
+| `organism_csv` | `dictionary/_Target/targets_type.csv` | Organism and taxonomy mapping. |
+| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
+
+### I/O defaults (`local.io`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `output_dir` | `data/output` | Base directory for generated datasets. |
+| `cache_dir` | `.cache` | Location of the HTTP cache. |
+| `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
+| `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
+| `na_markers` | `["#N/A"]` | Extra values treated as missing identifiers when reading CSV files. |
+| `exist_ok` | `true` | Create directories automatically when `true`. |
+
+### Initialisation workbooks (`local.init`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `same_doc` | `data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Workbook with same-document pairs for initialisation. |
+| `all_doc` | `data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Workbook with cross-document pairs for initialisation. |
+| `output_dir` | `data/output/ChEMBL/processed` | Destination for pre-processed initialisation files. |
+
+## System settings (`system`)
+
+| Sub-section | Key | Default | Description |
+| --- | --- | --- | --- |
+| `log` | `level` | `INFO` | Default logging level. |
+|  | `format` | `[%(asctime)s] %(levelname)s %(name)s: %(message)s` | Log message format. |
+|  | `datefmt` | `%Y-%m-%d %H:%M:%S` | Timestamp format. |
+| `rate` | `global_rps` | `100` | Global requests-per-second budget shared across clients. |
+|  | `global_burst` | `100` | Global token bucket burst capacity. |
+|  | `limiter_cache_maxsize` | `128` | Maximum cached limiter instances. |
+|  | `limiter_cache_ttl` | `600` | TTL for cached limiters in seconds. |
+| `retry` | `max_attempts` | `3` | Number of retry attempts for recoverable errors. |
+|  | `backoff_factor` | `0.5` | Base multiplier for exponential backoff. |
+|  | `status_forcelist` | `[429, 500, 502, 503, 504]` | HTTP status codes that trigger retries. |
+| `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Weighting applied to document sources. |
+|  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Minimum counts for document type classification. |
+|  | `limit` | `null` | Optional limit on classified records. |
+
+## Environment variable overrides
+
+Environment variables follow the pattern `CHEMBL_DA__SECTION__SUBSECTION__KEY`. For example:
+
+```bash
+export CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT="project/1.0 (mailto:me@example.com)"
+export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
+```
+
+Common short aliases:
+
+| Variable | Maps to |
+| --- | --- |
+| `CHEMBL_DA_BASE` | `sources.chembl.api.chembl_base` |
+| `CHEMBL_DA_RPS` | `sources.chembl.api.rps` |
+| `CHEMBL_DA_BURST` | `sources.chembl.api.burst` |
+| `CHEMBL_DA_TIMEOUT_CONNECT` | `sources.chembl.api.timeout_connect` |
+| `CHEMBL_DA_TIMEOUT_READ` | `sources.chembl.api.timeout_read` |
+| `CHEMBL_DA_CACHE_TTL` | `sources.chembl.cache.cache_ttl` |
+| `CHEMBL_DA_CACHE_MAXSIZE` | `sources.chembl.cache.cache_maxsize` |
+| `CHEMBL_DA_OUTDIR` | `local.io.output_dir` |
+| `CHEMBL_DA_CACHE_DIR` | `local.io.cache_dir` |
+| `CHEMBL_DA_GLOBAL_RPS` | `system.rate.global_rps` |
+| `CHEMBL_DA_GLOBAL_BURST` | `system.rate.global_burst` |
+| `CHEMBL_DA_LIMITER_CACHE_MAXSIZE` | `system.rate.limiter_cache_maxsize` |
+| `CHEMBL_DA_LIMITER_CACHE_TTL` | `system.rate.limiter_cache_ttl` |
+| `CHEMBL_DA_LOG_LEVEL` | `system.log.level` |
+| `CHEMBL_DA_LOG_FORMAT` | `system.log.format` |
+| `CHEMBL_DA_LOG_DATEFMT` | `system.log.datefmt` |
+| `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `system.retry.max_attempts` |
+| `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `system.retry.backoff_factor` |
+| `CHEMBL_DA_DICT_DIR` | `local.resources.dictionary_dir` |
+| `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
+| `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |
+| `CHEMBL_DA_IUPHAR_FAMILY_CSV` | `local.resources.iuphar_family_csv` |
+| `CHEMBL_DA_ORGANISM_CSV` | `local.resources.organism_csv` |
+| `CHEMBL_DA_TARGETS_TYPE_CSV` | `local.resources.targets_type_csv` |
+| `CHEMBL_DA_OPENALEX_BASE` | `sources.openalex.base` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `sources.openalex.timeout_connect` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `sources.openalex.timeout_read` |
+| `CHEMBL_DA_OPENALEX_MAILTO` | `sources.openalex.mailto` |
+| `CHEMBL_DA_CROSSREF_BASE` | `sources.crossref.base` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT` | `sources.crossref.timeout_connect` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_READ` | `sources.crossref.timeout_read` |
+| `CHEMBL_DA_CROSSREF_MAILTO` | `sources.crossref.mailto` |
+| `CHEMBL_DA_UNIPROT_BASE` | `sources.uniprot.api.base` |
+| `CHEMBL_DA_IUPHAR_BASE` | `sources.iuphar.base` |
+| `CHEMBL_DA_PUBCHEM_BASE` | `sources.pubchem.base` |
+
+Any other key can be targeted using the long `CHEMBL_DA__...` form.
+
+## CLI overrides
+
+* Supply `--config` to point at an alternative YAML file; defaults to `config.yaml`.
+* Pass `--print-config` to print the effective configuration (after environment and CLI overrides) and exit.
+* Any CLI argument mapped via `apply_config_overrides` updates the configuration. For example `--chunk-size 25` sets `sources.chembl.pipelines.activity.chunk_size` for the current run.
+* Use dotted overrides for rare keys: `python scripts/get_activity_data.py --sources.chembl.api.rps 10`.
+
+## Validation workflow
+
+At start-up the configuration loader:
+
+1. Reads `config.yaml`.
+2. Applies environment overrides and CLI-derived overrides.
+3. Rejects unknown keys according to the JSON schema.
+4. Ensures `output_dir` and `cache_dir` exist (creating them when `local.io.exist_ok` is `true`).
+
+Keep the schema and documentation in sync when adding new configuration options.

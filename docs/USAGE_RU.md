@@ -1,0 +1,136 @@
+# Руководство по использованию
+
+## Общие параметры CLI
+
+Все команды `scripts/get_*_data.py` поддерживают единый набор аргументов:
+
+| Опция | Назначение |
+| --- | --- |
+| `--config` | Путь к YAML-файлу конфигурации (по умолчанию `config.yaml`). |
+| `--print-config` | Вывести итоговую конфигурацию после переопределений и завершить работу. |
+| `--log-level` | Уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+| `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
+| `--output` | Выходной CSV. Если не указан, создаётся `output_<stem>_<YYYYMMDD>.csv` в `local.io.output_dir`. |
+| `--sep` | Разделитель CSV; записывается в `cfg.io.csv_sep`. |
+| `--encoding` | Кодировка файла; записывается в `cfg.io.csv_encoding`. |
+| `--column` | Название колонки с идентификаторами. Значение подтягивается из конфигурации на этапе запуска. |
+| `--chunk-size` | Максимальное число идентификаторов в одном запросе. |
+
+Конкретные скрипты добавляют дополнительные ключи (`--timeout`, `--limit`, `--dry-run` и т.п.). После разбора аргументов
+`apply_config_overrides` загружает `config.yaml`, применяет переменные окружения, переносит CLI-переопределения в конфигурацию и
+возвращает актуальные значения аргументов.
+
+Перед сетевыми вызовами выполняется `library.config.ensure_dirs`, чтобы `local.io.output_dir` и `local.io.cache_dir` существовали
+(если `local.io.exist_ok=true`, каталоги создаются автоматически).
+
+## Данные активностей (`get_activity_data.py`)
+
+```bash
+python scripts/get_activity_data.py \
+  --input data/input-smoke/activity.csv \
+  --column activity_chembl_id \
+  --chunk-size 25 \
+  --timeout 45
+```
+
+* Использует колонку `sources.chembl.pipelines.activity.column` (по умолчанию `activity_chembl_id`).
+* Создаёт основной CSV, sidecar `*.meta.yaml`, при необходимости `*_failure_cases.csv` и отчёты качества.
+* Поддерживает `--limit` (ограничение по количеству ID) и `--dry-run` (проверка входных данных без запросов к API).
+
+## Описания ассайев (`get_assay_data.py`)
+
+```bash
+python scripts/get_assay_data.py \
+  --input data/input-smoke/assay.csv \
+  --column assay_chembl_id \
+  --chunk-size 25
+```
+
+Загружает метаданные ассайев ChEMBL для указанных идентификаторов.
+
+## Метаданные документов (`get_document_data.py`)
+
+```bash
+python scripts/get_document_data.py \
+  --input data/input-smoke/documents.csv \
+  --column document_chembl_id \
+  --sources.chembl.pipelines.document.pubmed.batch_size 20
+```
+
+Команда объединяет данные ChEMBL и PubMed. Для точечных настроек используйте точечную нотацию аргументов, например для увеличения
+`batch_size` при работе с PubMed.
+
+## Агрегация таргетов (`get_target_data.py`)
+
+```bash
+python scripts/get_target_data.py \
+  --input data/input-smoke/targets.csv \
+  --column target_chembl_id
+```
+
+Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`.
+
+## Обогащение тест-объектов (`get_testitem_data.py`)
+
+```bash
+python scripts/get_testitem_data.py \
+  --input data/input-smoke/testitem.csv \
+  --column molecule_chembl_id
+```
+
+Выгружает дополнительную информацию о соединениях.
+
+## Инициализация входных данных (`get_input_initialisation.py`)
+
+```bash
+python scripts/get_input_initialisation.py \
+  --same-doc data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx \
+  --all-doc data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx \
+  --out-dir data/output/ChEMBL/processed
+```
+
+* Формирует таблицы пар (`pairs_same_document.csv`, `pairs_independent.csv`, `pairs_non_independent.csv`).
+* Создаёт срезы по сущностям (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
+* Добавляет папку `data_validity_report/` с отчётами качества для каждого файла.
+
+## Профайлер качества таблиц (`table_quality_main.py`)
+
+```bash
+python table_quality_main.py \
+  --input data/input-smoke/activity.csv \
+  --table-name activity
+```
+
+Генерирует `<table-name>_quality_report_table.csv` и `<table-name>_data_correlation_report_table.csv`, используя настройки `local.io`.
+
+## Переопределения через CLI
+
+Любой параметр можно задать точечной записью:
+
+```bash
+# Временно поднять лимит ChEMBL по RPS
+python scripts/get_activity_data.py --sources.chembl.api.rps 10
+
+# Изменить разделитель CSV без правки config.yaml
+python scripts/get_assay_data.py --sep ';'
+```
+
+## Переменные окружения
+
+Формат `CHEMBL_DA__РАЗДЕЛ__...__КЛЮЧ`. Для популярных путей доступны короткие алиасы (например, `CHEMBL_DA_OUTDIR` →
+`local.io.output_dir`). Полный список приведён в `docs/CONFIG_RU.md`.
+
+## Запуск тестов
+
+```bash
+pytest
+pytest tests/smoke
+```
+
+Для проверки качества кода можно выполнить:
+
+```bash
+ruff check
+black --check .
+mypy
+```

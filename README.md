@@ -472,9 +472,9 @@ All commands emit the structured JSON logs described above. Adjust verbosity
 with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
 
 Detailed command line examples using the bundled smoke datasets can be found in
-``docs/USAGE.md``.
+``docs/USAGE_EN.md`` (русская версия — ``docs/USAGE_RU.md``).
 An overview of the output directory layout and metadata sidecars is available in
-``docs/OUTPUT.md``.
+``docs/OUTPUT_EN.md`` (русская версия — ``docs/OUTPUT_RU.md``).
 
 ### Table quality analysis
 
@@ -552,7 +552,8 @@ Most options also provide short aliases. The table lists the supported mappings:
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
 | `CHEMBL_DA_LOG_FORMAT` | `CHEMBL_DA__LOG__FORMAT` |
 
-See ``docs/CONFIG.md`` for a complete overview of all configuration options.
+See ``docs/CONFIG_EN.md`` for a complete overview of all configuration options
+(русская версия — ``docs/CONFIG_RU.md``).
 
 ### Schema validation
 
@@ -588,7 +589,7 @@ python table_quality_main.py \
 
 `--output` по умолчанию формируется как `output_<имя_входа>_YYYYMMDD.csv`
 в каталоге, заданном `io.output_dir`.  
-Для дополнительных примеров см. [`docs/USAGE.md`](docs/USAGE.md).
+Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md) и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
 
 ## Структура проекта
 
@@ -609,21 +610,21 @@ ChEMBL_data_acquisition/
 ├── tests/
 │   └── data/
 └── docs/
-    ├── CONFIG.md
-    ├── OUTPUT.md
-    └── USAGE.md
+    ├── CONFIG_EN.md / CONFIG_RU.md
+    ├── OUTPUT_EN.md / OUTPUT_RU.md
+    └── USAGE_EN.md / USAGE_RU.md
 ```
 
 ## Конфигурация
 
 Параметры читаются из `config.yaml`, переменных окружения
-(`CHEMBL_DA__SECTION__KEY`) и ключей CLI.  
-Подробности в [`docs/CONFIG.md`](docs/CONFIG.md).
+(`CHEMBL_DA__SECTION__KEY`) и ключей CLI.
+Подробности в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md).
 
 ## Вывод и метаданные
 
 Все сгенерированные CSV/Parquet и отчёты сохраняются в `data/output`
-(см. [`docs/OUTPUT.md`](docs/OUTPUT.md)).  
+(см. [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) или английскую версию [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
 Рядом создаются файлы `*.meta.yaml` с коммитом Git, параметрами запуска,
 контрольной суммой SHA‑256 и статистикой строк/колонок.
 

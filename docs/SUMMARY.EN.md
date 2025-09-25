@@ -8,7 +8,7 @@
 - Documentation covers installation, pre-commit usage, smoke commands, and tests to guarantee a reproducible pipeline for new data team members.
 
 
-- Configuration is managed via a YAML file with overrides through environment variables and CLI flags; the layout is documented in CONFIG.md.
+- Configuration is managed via a YAML file with overrides through environment variables and CLI flags; the layout is documented in CONFIG_EN.md (Russian translation: CONFIG_RU.md).
 
 
 - Output tables are accompanied by sidecar files with hashes, configuration, and statistics, simplifying data quality audit and monitoring.
