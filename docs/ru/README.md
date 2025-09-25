@@ -23,7 +23,7 @@ CrossRef, IUPHAR и др.). Скрипты ориентированы на во�
 | Директория | Назначение |
 |------------|------------|
 | `scripts/` | CLI-команды `get_*_data.py`, утилиты проверки качества, конвертации, буферизации чанков. Каждый скрипт использует единый каркас `library/cli` и конфигурацию `config.yaml`. |
-| `library/` | Повторно используемые модули: клиенты API (`chembl_client.py`, `pubmed_library.py`, `uniprot_library.py`), обёртки для ввода-вывода (`io.py`, `chunk_io.py`), нормализация и постобработка (`activity_extraction.py`, `document_postprocessing.py`, `target_postprocessing.py`), вспомогательные структуры и схемы. |
+| `library/` | Повторно используемые модули: клиенты API (`chembl_client.py`, `pubmed_library.py`, `uniprot_library.py`), обёртки для ввода-вывода (`io.py`, `chunk_io.py`), нормализация и постобработка (`document_postprocessing.py`, `target_postprocessing.py`), вспомогательные структуры и схемы. |
 | `dictionary/` | Локальные справочники и заготовки (IUPHAR, классификаторы таргетов, словари документов, кэш UniProt). Служат источником обогащения и валидации данных. |
 | `schemas/` | Pandera-схемы для основных таблиц (`activities.py`, `assays.py`, `documents.py`, `targets.py`, `testitems.py`) и модели метаданных (`meta.py`). |
 | `tests/data/` | Минимальные тестовые наборы идентификаторов, CSV и конфигураций для локальных прогонов и unit-тестов. |
