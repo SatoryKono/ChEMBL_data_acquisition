@@ -112,6 +112,12 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 pytest
 ```
 
+Только smoke‑сценарии для CLI `get_*_data.py`:
+
+```bash
+pytest tests/smoke
+```
+
 ## Стиль кода
 
 ```bash
