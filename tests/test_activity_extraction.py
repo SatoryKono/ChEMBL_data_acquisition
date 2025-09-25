@@ -92,7 +92,8 @@ def test_extract_activities_success(
     assert exit_code == 0
     assert output_csv.exists()
     result = pd.read_csv(output_csv)
-    assert sorted(result.columns) == sorted(df.columns)
+    expected_columns = set(df.columns) | {"pipeline_version", "timestamp_utc"}
+    assert set(result.columns) == expected_columns
     assert result["activity_id"].tolist() == ["A1", "A2"]
 
 

@@ -39,6 +39,7 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
@@ -193,6 +194,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pubchem_augment_done")
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
+        df = add_pipeline_metadata(df)
         # Determine column order: schema columns first, followed by
         # additional fields sorted alphabetically.
         schema_cols = list(TestitemsSchema.columns)

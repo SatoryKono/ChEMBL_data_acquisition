@@ -108,6 +108,8 @@ _COLUMN_DEFINITIONS: dict[str, pa.Column] = {
     "PubMed.is_review": pa.Column(object, required=False, nullable=True, coerce=True),
     "scholar.is_review": pa.Column(object, required=False, nullable=True, coerce=True),
     "OpenAlex.is_review": pa.Column(object, required=False, nullable=True, coerce=True),
+    "pipeline_version": pa.Column(str, required=False, nullable=True),
+    "timestamp_utc": pa.Column(str, required=False, nullable=True),
 }
 
 

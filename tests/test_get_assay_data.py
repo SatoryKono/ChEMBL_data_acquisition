@@ -44,6 +44,8 @@ def test_run_chembl_orders_columns(
         "assay_chembl_id",
         "document_chembl_id",
         "target_chembl_id",
+        "pipeline_version",
+        "timestamp_utc",
         "aaa",
         "zzz",
     ]

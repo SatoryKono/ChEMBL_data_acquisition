@@ -78,6 +78,7 @@ from library.document_pipeline import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
@@ -523,6 +524,7 @@ def _finalise_export(
 ) -> int:
     """Validate ``df`` and write CSV/metadata artefacts."""
 
+    df = add_pipeline_metadata(df)
     ordered = build_dataframe(df, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False)
     rows_total = len(ordered)
     exit_code = 0

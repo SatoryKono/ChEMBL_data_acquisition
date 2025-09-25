@@ -33,6 +33,8 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "pubchem_molecular_formula": pa.Column(str, required=False, nullable=True),
         "structure_type": pa.Column(str, required=False, nullable=True),
         "topical": pa.Column(PA_ANY, required=False, nullable=True),
+        "pipeline_version": pa.Column(str, required=False, nullable=True),
+        "timestamp_utc": pa.Column(str, required=False, nullable=True),
     }
 )
 

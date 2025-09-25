@@ -85,10 +85,12 @@ def test_run_uniprot_initialises_session(
         data_dir: Path | str | None = None,
         *,
         cfg: object,
+        gtop_cfg: object | None = None,
         sep: str = ",",
         encoding: str = "utf-8",
     ) -> None:
         called["cfg"] = cfg
+        called["gtop_cfg"] = gtop_cfg
         pd.DataFrame({"uniprot_id": ["P12345"], "names": ["Foo"]}).to_csv(
             output_csv, index=False
         )
@@ -115,6 +117,7 @@ def test_run_uniprot_initialises_session(
     assert rc == 0
     assert called["init"] == (cfg.api, cfg.retry)
     assert called["cfg"] is cfg.uniprot
+    assert called["gtop_cfg"] is cfg.iuphar
 
 
 def test_run_uniprot_writes_sidecar(
@@ -136,6 +139,7 @@ def test_run_uniprot_writes_sidecar(
         data_dir: Path | str | None = None,
         *,
         cfg: object,
+        gtop_cfg: object | None = None,
         sep: str = ",",
         encoding: str = "utf-8",
     ) -> None:

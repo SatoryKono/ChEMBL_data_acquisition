@@ -35,6 +35,7 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
@@ -106,6 +107,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = ap.postprocess_assays(df)
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_assays(df)
+        df = add_pipeline_metadata(df)
         rows_total = len(df)
         exit_code = 0
         required_cols = {

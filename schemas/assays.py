@@ -79,6 +79,8 @@ AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "target_name": pa.Column(str, required=False, nullable=True),
         "version": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "year": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "pipeline_version": pa.Column(str, required=False, nullable=True),
+        "timestamp_utc": pa.Column(str, required=False, nullable=True),
     }
 )
 

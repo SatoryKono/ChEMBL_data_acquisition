@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from .log import logger
+from .pipeline_metadata import add_pipeline_metadata
 
 OptionalFetcher = Callable[..., pd.DataFrame]
 
@@ -153,6 +154,7 @@ def run_pipeline(
         chembl_cfg,
         **chembl_kwargs,
     )
+    chembl_df = add_pipeline_metadata(chembl_df)
 
     uniprot_df: pd.DataFrame | None = None
     if uniprot_fetcher is not None:
@@ -169,6 +171,7 @@ def run_pipeline(
             *uniprot_positional,
             **uniprot_kwargs,
         )
+        uniprot_df = add_pipeline_metadata(uniprot_df)
 
     isoform_df: pd.DataFrame | None = None
     if isoform_fetcher is not None:
@@ -185,6 +188,7 @@ def run_pipeline(
             *isoform_positional,
             **isoform_kwargs,
         )
+        isoform_df = add_pipeline_metadata(isoform_df)
 
     ortholog_df: pd.DataFrame | None = None
     if ortholog_fetcher is not None:
@@ -201,6 +205,7 @@ def run_pipeline(
             *ortholog_positional,
             **ortholog_kwargs,
         )
+        ortholog_df = add_pipeline_metadata(ortholog_df)
 
     iuphar_df: pd.DataFrame | None = None
     if iuphar_fetcher is not None:
@@ -217,6 +222,7 @@ def run_pipeline(
             *iuphar_positional,
             **iuphar_kwargs,
         )
+        iuphar_df = add_pipeline_metadata(iuphar_df)
 
     return PipelineResult(
         chembl=chembl_df,

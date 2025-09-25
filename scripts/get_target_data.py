@@ -47,6 +47,7 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import TargetsSchema, normalize_targets
@@ -572,6 +573,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_targets(df)
+        df = add_pipeline_metadata(df)
         rows_total = len(df)
         exit_code = 0
     validation_df, missing_required, missing_optional = _prepare_targets_for_schema(df)
@@ -1005,6 +1007,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
 
     logger.info("validate_write_start", output=str(output))
     normalized = normalize_targets(df)
+    normalized = add_pipeline_metadata(normalized)
     final_df, missing_required, missing_optional = _prepare_targets_for_schema(
         normalized
     )

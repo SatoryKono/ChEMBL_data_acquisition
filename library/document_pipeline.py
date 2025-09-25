@@ -106,6 +106,8 @@ DOCUMENT_SCHEMA_COLUMNS: list[str] = (
         "PubMed.is_review",
         "scholar.is_review",
         "OpenAlex.is_review",
+        "pipeline_version",
+        "timestamp_utc",
     ]
 )
 
