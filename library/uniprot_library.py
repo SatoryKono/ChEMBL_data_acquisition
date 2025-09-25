@@ -43,7 +43,7 @@ from typing import Any, cast
 import requests
 from requests import Session
 
-from .config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
+from .config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg, session_with_retry
 from .log import logger
 from .rate_limiter import get_limiter, sleep
 
@@ -867,6 +867,86 @@ def extract_activity(data: Any) -> dict[str, str]:
     }
 
 
+def _fetch_gtop_endpoint(
+    gtop_id: str,
+    endpoint: str,
+    *,
+    cfg: IupharCfg,
+) -> Any:
+    """Return JSON payload for ``endpoint`` of a Guide-to-Pharmacology target."""
+
+    limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
+    base = cfg.base.rstrip("/")
+    path = f"/{endpoint.lstrip('/')}" if endpoint else ""
+    url = f"{base}/targets/{gtop_id}{path}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+    limiter.acquire()
+    try:
+        with _session.get(url, timeout=timeout) as response:
+            response.raise_for_status()
+            return response.json()
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "gtop_json_decode_failed", gtop_id=gtop_id, endpoint=endpoint, error=str(exc)
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failures
+        logger.warning(
+            "gtop_request_failed", gtop_id=gtop_id, endpoint=endpoint, error=str(exc)
+        )
+    return None
+
+
+def _summarise_gtop_function(entries: Any) -> str:
+    """Return a concise textual summary from a function payload."""
+
+    if not isinstance(entries, list):
+        return ""
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        description = entry.get("description")
+        property_text = entry.get("property")
+        if isinstance(property_text, str) and property_text.strip():
+            if isinstance(description, str) and description.strip():
+                return f"{description.strip()}: {property_text.strip()}"
+            return property_text.strip()
+        if isinstance(description, str) and description.strip():
+            return description.strip()
+        tissue = entry.get("tissue")
+        if isinstance(tissue, str) and tissue.strip():
+            return tissue.strip()
+    return ""
+
+
+def _update_gtop_metadata(
+    result: dict[str, Any],
+    *,
+    cfg: IupharCfg | None = None,
+) -> None:
+    """Populate Guide-to-Pharmacology statistics in ``result`` when available."""
+
+    gtop_value = result.get("GuidetoPHARMACOLOGY")
+    if not isinstance(gtop_value, str) or not gtop_value:
+        return
+    gtop_id = gtop_value.split("|", 1)[0].strip()
+    if not gtop_id:
+        return
+    config = cfg or IupharCfg()
+
+    natural = _fetch_gtop_endpoint(gtop_id, "naturalLigands", cfg=config)
+    if isinstance(natural, list):
+        result["gtop_natural_ligands_n"] = str(len(natural))
+
+    interactions = _fetch_gtop_endpoint(gtop_id, "interactions", cfg=config)
+    if isinstance(interactions, list):
+        result["gtop_interactions_n"] = str(len(interactions))
+
+    function_entries = _fetch_gtop_endpoint(gtop_id, "function", cfg=config)
+    summary = _summarise_gtop_function(function_entries)
+    if summary:
+        result["gtop_function_text_short"] = summary
+
+
 def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable[str]:
     """Yield UniProt IDs from a CSV file with a ``uniprot_id`` column.
 
@@ -901,7 +981,11 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
 
 
 def collect_info(
-    uid: str, data_dir: Path | str | None = None, *, cfg: UniprotCfg
+    uid: str,
+    data_dir: Path | str | None = None,
+    *,
+    cfg: UniprotCfg,
+    gtop_cfg: IupharCfg | None = None,
 ) -> dict[str, Any]:
     """Return names, organism, keyword, PTM, isoform, cross-ref, and activity data for ``uid``.
 
@@ -914,6 +998,8 @@ def collect_info(
         provided, :data:`_DEFAULT_UNIPROT_DATA_DIR` is used.
     cfg:
         UniProt configuration used for downloading missing records.
+    gtop_cfg:
+        Guide-to-Pharmacology configuration for enriching cross references.
 
     Returns
     -------
@@ -921,8 +1007,8 @@ def collect_info(
         A dictionary with keys ``uniprot_id``, ``names``, organism taxonomy
         fields, keyword categories, EC numbers, subcellular location data,
         membrane features, post-translational modification flags, isoform
-        metadata, and selected database cross references. Missing or invalid
-        files leave fields empty.
+        metadata, selected database cross references, and Guide-to-
+        Pharmacology statistics. Missing or invalid files leave fields empty.
 
     """
     if data_dir is None:
@@ -1053,6 +1139,7 @@ def collect_info(
         result[key] = ptm[key]
     result.update(iso)
     result.update(cross)
+    _update_gtop_metadata(result, cfg=gtop_cfg)
     result.update(activity)
     result["uniProtkbId"] = extract_uniprotkb_id(data)
     result["secondaryAccessions"] = extract_secondary_accessions(data)
@@ -1070,6 +1157,7 @@ def process(
     data_dir: Path | str | None = None,
     *,
     cfg: UniprotCfg,
+    gtop_cfg: IupharCfg | None = None,
     sep: str = ",",
     encoding: str = "utf-8",
 ) -> None:
@@ -1092,6 +1180,9 @@ def process(
     cfg:
         UniProt configuration used for network requests when local files are
         missing.
+    gtop_cfg:
+        Guide-to-Pharmacology configuration applied when enriching
+        cross-reference data.
     sep:
         Field delimiter used for both input and output CSV files. Defaults to a comma.
     encoding:
@@ -1115,7 +1206,7 @@ def process(
             writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter=sep)
             writer.writeheader()
             for uid in iter_ids(input_csv, sep=sep, encoding=encoding):
-                info = collect_info(uid, data_dir, cfg=cfg)
+                info = collect_info(uid, data_dir, cfg=cfg, gtop_cfg=gtop_cfg)
                 unexpected = sorted(set(info) - expected_columns)
                 if unexpected:
                     logger.debug(

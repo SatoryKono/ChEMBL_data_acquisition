@@ -448,6 +448,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
                 output_csv=str(output),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
+                gtop_cfg=cfg.iuphar,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
             )
