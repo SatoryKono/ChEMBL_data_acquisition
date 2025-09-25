@@ -29,6 +29,7 @@ from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
+from library import protein_classification as pc
 from library import uniprot_library as uu
 from library.chembl_client import ChemblClient
 from library.cli import (
@@ -943,7 +944,11 @@ def fetch_iuphar(
 
 
 def merge_results(
-    combined_df: pd.DataFrame, iuphar_df: pd.DataFrame, cfg: Config
+    combined_df: pd.DataFrame,
+    iuphar_df: pd.DataFrame,
+    cfg: Config,
+    *,
+    classifier: ii.IUPHARClassifier | None = None,
 ) -> pd.DataFrame:
     """Merge ChEMBL, UniProt and IUPHAR data into a single table.
 
@@ -964,6 +969,9 @@ def merge_results(
 
     logger.info("merge_results_start")
     merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+    if classifier is None:
+        classifier = pc.classifier_from_config(cfg)
+    merged = pc.append_protein_class_predictions(merged, classifier)
     processed = tp.postprocess_targets(merged)
     organism_df = pd.read_csv(
         cfg.target.all.organism_csv,

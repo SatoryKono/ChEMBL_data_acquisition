@@ -8,6 +8,7 @@ import pandas as pd
 from pytest import MonkeyPatch
 
 import library.target_postprocessing as tp
+from library import protein_classification as pc
 from library.config import Config
 from scripts import get_target_data as gtd
 
@@ -29,6 +30,8 @@ def test_iuphar_merge_preserves_ec_number(
 
     monkeypatch.setattr(tp, "postprocess_targets", lambda df: df)
     monkeypatch.setattr(tp, "finalise_targets", lambda df, org: df)
+    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
+    monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
     cfg.target.all.organism_csv = tmp_path / "organism.csv"
     pd.DataFrame({"genus": [], "type": []}).to_csv(
         cfg.target.all.organism_csv, index=False
