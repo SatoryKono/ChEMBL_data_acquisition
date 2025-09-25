@@ -1211,12 +1211,6 @@
           "title": "Timeout",
           "type": "number"
         },
-        "cache_maxsize": {
-          "default": 128,
-          "minimum": 0,
-          "title": "Cache Maxsize",
-          "type": "integer"
-        },
         "cache_ttl": {
           "anyOf": [
             {

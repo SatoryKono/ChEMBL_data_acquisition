@@ -44,7 +44,6 @@
 | `mapping.base`           | `https://rest.uniprot.org/idmapping` | Сервис ID‑маппинга. |
 | `mapping.poll_interval`  | `0.5`                 | Интервал повторного опроса задачи. |
 | `mapping.timeout`        | `300`                 | Максимальное время ожидания результата. |
-| `mapping.cache_maxsize`  | `128`                 | Размер кэша ответов. |
 
 ### `sources.iuphar`, `sources.pubchem`, `sources.pubmed`, `sources.semantic_scholar`
 
