@@ -480,6 +480,7 @@ class IUPHARData:
                                 "IUPHAR_class": "",
                                 "IUPHAR_subclass": "",
                                 "IUPHAR_chain": "",
+                                "IUPHAR_name": "",
                             }
                         )
             return pd.Series(
@@ -489,6 +490,7 @@ class IUPHARData:
                     "IUPHAR_class": record.IUPHAR_class,
                     "IUPHAR_subclass": record.IUPHAR_subclass,
                     "IUPHAR_chain": ">".join(record.IUPHAR_tree),
+                    "IUPHAR_name": record.IUPHAR_name,
                 }
             )
 
