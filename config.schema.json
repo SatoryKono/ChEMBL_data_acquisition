@@ -699,13 +699,6 @@
           "minimum": 0,
           "title": "Retries",
           "type": "integer"
-        },
-        "encodings": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Encodings",
-          "type": "array"
         }
       },
       "title": "PubMedCfg",
