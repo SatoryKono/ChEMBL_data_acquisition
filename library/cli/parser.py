@@ -269,11 +269,52 @@ def configure_logger(
 # ---------------------------------------------------------------------------
 
 # Mapping of common CLI argument names to configuration paths.
+_PATH_PREFIXES: dict[str, list[str]] = {
+    "api": ["sources", "chembl", "api"],
+    "chembl": ["sources", "chembl", "cache"],
+    "openalex": ["sources", "openalex"],
+    "crossref": ["sources", "crossref"],
+    "iuphar": ["sources", "iuphar"],
+    "pubchem": ["sources", "pubchem"],
+    "pubmed": ["sources", "pubmed"],
+    "semantic_scholar": ["sources", "semantic_scholar"],
+    "uniprot": ["sources", "uniprot", "api"],
+    "uniprot_mapping": ["sources", "uniprot", "mapping"],
+    "activity": ["sources", "chembl", "pipelines", "activity"],
+    "assay": ["sources", "chembl", "pipelines", "assay"],
+    "testitem": ["sources", "chembl", "pipelines", "testitem"],
+    "document": ["sources", "chembl", "pipelines", "document"],
+    "target": ["sources", "chembl", "pipelines", "target"],
+    "io": ["local", "io"],
+    "resources": ["local", "resources"],
+    "init": ["local", "init"],
+    "log": ["system", "log"],
+    "rate": ["system", "rate"],
+    "retry": ["system", "retry"],
+    "doc_type": ["system", "doc_type"],
+}
+
+
+def _normalize_path(path: str) -> str:
+    parts = path.split(".") if path else []
+    if not parts:
+        return path
+    head, tail = parts[0], parts[1:]
+    prefix = _PATH_PREFIXES.get(head)
+    if not prefix:
+        return path
+    new_parts = prefix + tail
+    return ".".join(new_parts)
+
+
 _DEFAULT_OVERRIDES: dict[str, str] = {
-    "sep": "io.csv_sep",
-    "encoding": "io.csv_encoding",
-    "log_level": "log.level",
-    "timeout": "api.timeout_read",
+    key: _normalize_path(value)
+    for key, value in {
+        "sep": "io.csv_sep",
+        "encoding": "io.csv_encoding",
+        "log_level": "log.level",
+        "timeout": "api.timeout_read",
+    }.items()
 }
 
 
@@ -337,7 +378,10 @@ def apply_config_overrides(
         If the configuration file cannot be loaded.
     """
 
-    override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
+    override_map = {
+        arg: _normalize_path(path)
+        for arg, path in {**_DEFAULT_OVERRIDES, **(mapping or {})}.items()
+    }
 
     cli_overrides: dict[str, Any] = {}
     for arg, key in override_map.items():

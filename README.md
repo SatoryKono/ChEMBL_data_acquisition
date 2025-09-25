@@ -250,6 +250,8 @@ CHEMBL_DA_LOG_LEVEL=INFO
 CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
 ```
 
+См. также файл `.env.example` с типовыми переменными для контактных e-mail.
+
 Запустить скрипт с автоматической подгрузкой настроек можно так:
 
 ```bash
@@ -268,11 +270,12 @@ python -m dotenv run -- python scripts/get_assay_data.py --input tests/data/assa
 
 ```yaml
 api:
-  user_agent: "chembl-da/0.1 (mailto:info@example.org)"
+  user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
 ```
 
 Параметр можно переопределить в `config.yaml`, через переменную окружения
-`CHEMBL_DA__API__USER_AGENT` или флаг CLI `--api.user_agent`.
+`CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` или флаг CLI
+`--sources.chembl.api.user_agent`.
 
 ## Валидация конфигурации
 

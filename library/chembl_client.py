@@ -13,7 +13,7 @@ import requests
 from cachetools import TTLCache
 from requests import Session
 
-from .config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
+from .config import ApiCfg, ChemblCacheCfg, RetryCfg, session_with_retry
 from .log import logger
 from .rate_limiter import get_limiter, sleep
 
@@ -43,16 +43,22 @@ class ChemblClient:
         self,
         api: ApiCfg | None = None,
         retry: RetryCfg | None = None,
-        chembl: ChemblCfg | None = None,
+        chembl: ChemblCacheCfg | None = None,
         *,
         session: Session | None = None,
     ) -> None:
-        api = api or ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)")
+        api = api or ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)")
         retry = retry or RetryCfg()
         self.session = session or session_with_retry(api, retry)
-        ttl = chembl.cache_ttl if chembl is not None else ChemblCfg().cache_ttl
+        ttl = (
+            chembl.cache_ttl
+            if chembl is not None
+            else ChemblCacheCfg().cache_ttl
+        )
         maxsize = (
-            chembl.cache_maxsize if chembl is not None else ChemblCfg().cache_maxsize
+            chembl.cache_maxsize
+            if chembl is not None
+            else ChemblCacheCfg().cache_maxsize
         )
         self.cache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._cache_lock = threading.Lock()

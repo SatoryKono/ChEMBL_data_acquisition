@@ -88,7 +88,7 @@
           "type": "integer"
         },
         "user_agent": {
-          "default": "chembl-da/0.1 (mailto:info@example.org)",
+          "default": "chembl-da/0.1 (mailto:contact@example.org)",
           "title": "User Agent",
           "type": "string"
         }
@@ -133,7 +133,7 @@
       "title": "AssayCfg",
       "type": "object"
     },
-    "ChemblCfg": {
+    "ChemblCacheCfg": {
       "additionalProperties": false,
       "properties": {
         "cache_ttl": {
@@ -149,7 +149,45 @@
           "type": "integer"
         }
       },
-      "title": "ChemblCfg",
+      "title": "ChemblCacheCfg",
+      "type": "object"
+    },
+    "ChemblPipelinesCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "activity": {
+          "$ref": "#/$defs/ActivityCfg"
+        },
+        "assay": {
+          "$ref": "#/$defs/AssayCfg"
+        },
+        "testitem": {
+          "$ref": "#/$defs/TestitemCfg"
+        },
+        "document": {
+          "$ref": "#/$defs/DocumentCfg"
+        },
+        "target": {
+          "$ref": "#/$defs/TargetCfg"
+        }
+      },
+      "title": "ChemblPipelinesCfg",
+      "type": "object"
+    },
+    "ChemblSourceCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "$ref": "#/$defs/ApiCfg"
+        },
+        "cache": {
+          "$ref": "#/$defs/ChemblCacheCfg"
+        },
+        "pipelines": {
+          "$ref": "#/$defs/ChemblPipelinesCfg"
+        }
+      },
+      "title": "ChemblSourceCfg",
       "type": "object"
     },
     "CrossRefCfg": {
@@ -191,7 +229,7 @@
           "type": "integer"
         },
         "mailto": {
-          "default": "info@example.org",
+          "default": "contact@example.org",
           "title": "Mailto",
           "type": "string"
         }
@@ -480,12 +518,6 @@
           "title": "Timeout Read",
           "type": "integer"
         },
-        "retries": {
-          "default": 3,
-          "minimum": 0,
-          "title": "Retries",
-          "type": "integer"
-        },
         "rps": {
           "default": 4,
           "minimum": 1,
@@ -500,6 +532,22 @@
         }
       },
       "title": "IupharCfg",
+      "type": "object"
+    },
+    "LocalCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "resources": {
+          "$ref": "#/$defs/ResourcesCfg"
+        },
+        "io": {
+          "$ref": "#/$defs/IoCfg"
+        },
+        "init": {
+          "$ref": "#/$defs/InitCfg"
+        }
+      },
+      "title": "LocalCfg",
       "type": "object"
     },
     "LogCfg": {
@@ -563,7 +611,7 @@
           "type": "integer"
         },
         "mailto": {
-          "default": "info@example.org",
+          "default": "contact@example.org",
           "title": "Mailto",
           "type": "string"
         }
@@ -788,16 +836,59 @@
           "minimum": 0,
           "title": "Retries",
           "type": "integer"
-        },
-        "encodings": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Encodings",
-          "type": "array"
         }
       },
       "title": "SemanticScholarCfg",
+      "type": "object"
+    },
+    "SourcesCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "chembl": {
+          "$ref": "#/$defs/ChemblSourceCfg"
+        },
+        "openalex": {
+          "$ref": "#/$defs/OpenAlexCfg"
+        },
+        "crossref": {
+          "$ref": "#/$defs/CrossRefCfg"
+        },
+        "uniprot": {
+          "$ref": "#/$defs/UniprotSourceCfg"
+        },
+        "iuphar": {
+          "$ref": "#/$defs/IupharCfg"
+        },
+        "pubchem": {
+          "$ref": "#/$defs/PubChemCfg"
+        },
+        "pubmed": {
+          "$ref": "#/$defs/PubMedCfg"
+        },
+        "semantic_scholar": {
+          "$ref": "#/$defs/SemanticScholarCfg"
+        }
+      },
+      "title": "SourcesCfg",
+      "type": "object"
+    },
+    "SystemCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "log": {
+          "$ref": "#/$defs/LogCfg"
+        },
+        "rate": {
+          "$ref": "#/$defs/RateCfg"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetryCfg"
+        },
+        "doc_type": {
+          "$ref": "#/$defs/DocTypeCfg"
+        }
+      },
+      "title": "SystemCfg",
       "type": "object"
     },
     "TargetAllCfg": {
@@ -1077,12 +1168,6 @@
           "title": "Timeout Read",
           "type": "integer"
         },
-        "retries": {
-          "default": 3,
-          "minimum": 0,
-          "title": "Retries",
-          "type": "integer"
-        },
         "rps": {
           "default": 4,
           "minimum": 1,
@@ -1148,75 +1233,31 @@
       },
       "title": "UniprotMappingCfg",
       "type": "object"
+    },
+    "UniprotSourceCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "$ref": "#/$defs/UniprotCfg"
+        },
+        "mapping": {
+          "$ref": "#/$defs/UniprotMappingCfg"
+        }
+      },
+      "title": "UniprotSourceCfg",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
-    "api": {
-      "$ref": "#/$defs/ApiCfg"
+    "sources": {
+      "$ref": "#/$defs/SourcesCfg"
     },
-    "chembl": {
-      "$ref": "#/$defs/ChemblCfg"
+    "local": {
+      "$ref": "#/$defs/LocalCfg"
     },
-    "openalex": {
-      "$ref": "#/$defs/OpenAlexCfg"
-    },
-    "crossref": {
-      "$ref": "#/$defs/CrossRefCfg"
-    },
-    "uniprot": {
-      "$ref": "#/$defs/UniprotCfg"
-    },
-    "uniprot_mapping": {
-      "$ref": "#/$defs/UniprotMappingCfg"
-    },
-    "iuphar": {
-      "$ref": "#/$defs/IupharCfg"
-    },
-    "pubchem": {
-      "$ref": "#/$defs/PubChemCfg"
-    },
-    "pubmed": {
-      "$ref": "#/$defs/PubMedCfg"
-    },
-    "semantic_scholar": {
-      "$ref": "#/$defs/SemanticScholarCfg"
-    },
-    "doc_type": {
-      "$ref": "#/$defs/DocTypeCfg"
-    },
-    "resources": {
-      "$ref": "#/$defs/ResourcesCfg"
-    },
-    "io": {
-      "$ref": "#/$defs/IoCfg"
-    },
-    "log": {
-      "$ref": "#/$defs/LogCfg"
-    },
-    "init": {
-      "$ref": "#/$defs/InitCfg"
-    },
-    "rate": {
-      "$ref": "#/$defs/RateCfg"
-    },
-    "retry": {
-      "$ref": "#/$defs/RetryCfg"
-    },
-    "activity": {
-      "$ref": "#/$defs/ActivityCfg"
-    },
-    "assay": {
-      "$ref": "#/$defs/AssayCfg"
-    },
-    "testitem": {
-      "$ref": "#/$defs/TestitemCfg"
-    },
-    "document": {
-      "$ref": "#/$defs/DocumentCfg"
-    },
-    "target": {
-      "$ref": "#/$defs/TargetCfg"
+    "system": {
+      "$ref": "#/$defs/SystemCfg"
     }
   },
   "title": "Config",

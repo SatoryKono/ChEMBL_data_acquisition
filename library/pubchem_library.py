@@ -25,7 +25,7 @@ _CACHE: TTLCache[str, dict[str, Any]] | None = None
 # Shared session with placeholder user agent; production code should call
 # :func:`init_session` to supply real contact details.
 _session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"), RetryCfg()
+    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
 )
 
 

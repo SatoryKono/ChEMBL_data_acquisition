@@ -52,7 +52,7 @@ _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 # Default session using placeholder contact details. Call :func:`init_session`
 # with a proper configuration to set your own user agent.
 _session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"), RetryCfg()
+    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
 )
 
 

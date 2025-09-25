@@ -24,8 +24,13 @@ def _get_by_path(data: dict[str, Any], path: list[str]) -> Any:
 
 
 _VALID_ENV_PATHS: dict[str, list[str]] = {
-    "CHEMBL_DA__API__RPS": ["api", "rps"],
-    "CHEMBL_DA__OPENALEX__RPS": ["openalex", "rps"],
+    "CHEMBL_DA__SOURCES__CHEMBL__API__RPS": [
+        "sources",
+        "chembl",
+        "api",
+        "rps",
+    ],
+    "CHEMBL_DA__SOURCES__OPENALEX__RPS": ["sources", "openalex", "rps"],
 }
 
 
