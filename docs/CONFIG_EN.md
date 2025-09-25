@@ -84,12 +84,12 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 | `all` | `column` | `document_chembl_id` | Column with identifiers processed by the combined pipeline. |
-|  | `chunk_size` | `5` | Combined batch size when merging sources. |
-|  | `sleep` | `5.0` | Delay between polling cycles in seconds. |
-|  | `workers` | `1` | Worker threads for combined processing. |
-|  | `batch_size` | `5` | Number of IDs requested per batch. |
-|  | `timeout` | `30.0` | Request timeout in seconds. |
-|  | `limit` | `null` | Optional cap on identifiers processed. |
+|  | `chunk_size` | `5` | ChEMBL request size used when `run_all` calls `cl.get_documents`. |
+|  | `sleep` | `5.0` | Delay between PubMed polling cycles during enrichment. |
+|  | `workers` | `1` | Worker threads orchestrating ChEMBL fetch + PubMed enrichment. |
+|  | `batch_size` | `5` | PubMed request size passed to `fetch_pubmed_records`. |
+|  | `timeout` | `30.0` | Request timeout applied to both ChEMBL and PubMed calls. |
+|  | `limit` | `null` | Optional cap on identifiers handled by the combined run. |
 
 #### Target pipeline (`target`)
 
