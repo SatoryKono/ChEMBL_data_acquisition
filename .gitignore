@@ -10,6 +10,7 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 *.env
 .cache/
 data/output/
+data/output-smoke/
 uniprot/
 **/__pycache__/
 .hypothesis/
