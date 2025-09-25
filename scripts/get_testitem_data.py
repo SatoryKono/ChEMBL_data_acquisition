@@ -66,10 +66,10 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         ``df`` with additional PubChem columns.
 
     """
-    if df.empty or "molecule_structures.canonical_smiles" not in df.columns:
+    if df.empty or "canonical_smiles" not in df.columns:
         return df
 
-    smiles_list = df["molecule_structures.canonical_smiles"].fillna("").tolist()
+    smiles_list = df["canonical_smiles"].fillna("").tolist()
     # ``dict.fromkeys`` preserves the order of first occurrence while
     # removing duplicates. This allows progress output to reflect the
     # deterministic iteration order of SMILES strings.

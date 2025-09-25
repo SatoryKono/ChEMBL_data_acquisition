@@ -88,6 +88,12 @@ ACTIVITY_COLUMNS = [
     "assay_variant_mutation",
 ]
 
+TESTITEM_STRUCTURE_COLUMNS = {
+    "molecule_structures.canonical_smiles": "canonical_smiles",
+    "molecule_structures.standard_inchi": "standard_inchi",
+    "molecule_structures.standard_inchi_key": "standard_inchi_key",
+}
+
 TESTITEM_COLUMNS = [
     "molecule_chembl_id",
     "pref_name",
@@ -99,9 +105,9 @@ TESTITEM_COLUMNS = [
     "topical",
     "black_box_warning",
     "structure_type",
-    "molecule_structures.canonical_smiles",
-    "molecule_structures.standard_inchi",
-    "molecule_structures.standard_inchi_key",
+    "canonical_smiles",
+    "standard_inchi",
+    "standard_inchi_key",
 ]
 
 
@@ -334,6 +340,7 @@ def get_testitem(
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)
+    df = df.rename(columns=TESTITEM_STRUCTURE_COLUMNS)
     return df.reindex(columns=TESTITEM_COLUMNS)
 
 
