@@ -12,6 +12,13 @@ from .config import ApiCfg
 from .log import logger
 from .pandas_utils import json_normalize_pyarrow
 
+ASSAY_VARIANT_COLUMN_ALIASES = {
+    "variant_sequence.isoform": "isoform",
+    "variant_sequence.mutation": "mutation",
+    "variant_sequence.sequence": "sequence",
+}
+
+
 ASSAY_COLUMNS = [
     "aidx",
     "assay_category",
@@ -39,10 +46,17 @@ ASSAY_COLUMNS = [
     "relationship_type",
     "target_chembl_id",
     "tissue_chembl_id",
-    "variant_sequence.isoform",
-    "variant_sequence.mutation",
-    "variant_sequence.sequence",
+    "isoform",
+    "mutation",
+    "sequence",
 ]
+
+
+def _apply_assay_column_aliases(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename nested variant sequence columns to flattened aliases."""
+    if df.empty:
+        return df
+    return df.rename(columns=ASSAY_VARIANT_COLUMN_ALIASES)
 
 
 ACTIVITY_COLUMNS = [
@@ -127,6 +141,7 @@ def get_assay(
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     df = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
+    df = _apply_assay_column_aliases(df)
     return df.reindex(columns=ASSAY_COLUMNS)
 
 
@@ -187,7 +202,7 @@ def get_assays(
                     axis="columns", how="all"
                 )
                 if not df_chunk.empty:
-                    chunk_frames.append(df_chunk)
+                    chunk_frames.append(_apply_assay_column_aliases(df_chunk))
             page_meta = data.get("page_meta") or {}
             next_token = page_meta.get("next")
             next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
@@ -202,6 +217,7 @@ def get_assays(
     if not records:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
+    df = _apply_assay_column_aliases(df)
     return df.reindex(columns=ASSAY_COLUMNS)
 
 
