@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from urllib.parse import urljoin
 
 import pandas as pd
 
@@ -10,6 +11,13 @@ from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg
 from .log import logger
 from .pandas_utils import json_normalize_pyarrow
+
+ASSAY_VARIANT_COLUMN_ALIASES = {
+    "variant_sequence.isoform": "isoform",
+    "variant_sequence.mutation": "mutation",
+    "variant_sequence.sequence": "sequence",
+}
+
 
 ASSAY_COLUMNS = [
     "aidx",
@@ -38,10 +46,17 @@ ASSAY_COLUMNS = [
     "relationship_type",
     "target_chembl_id",
     "tissue_chembl_id",
-    "variant_sequence.isoform",
-    "variant_sequence.mutation",
-    "variant_sequence.sequence",
+    "isoform",
+    "mutation",
+    "sequence",
 ]
+
+
+def _apply_assay_column_aliases(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename nested variant sequence columns to flattened aliases."""
+    if df.empty:
+        return df
+    return df.rename(columns=ASSAY_VARIANT_COLUMN_ALIASES)
 
 
 ACTIVITY_COLUMNS = [
@@ -73,6 +88,12 @@ ACTIVITY_COLUMNS = [
     "assay_variant_mutation",
 ]
 
+TESTITEM_STRUCTURE_COLUMNS = {
+    "molecule_structures.canonical_smiles": "canonical_smiles",
+    "molecule_structures.standard_inchi": "standard_inchi",
+    "molecule_structures.standard_inchi_key": "standard_inchi_key",
+}
+
 TESTITEM_COLUMNS = [
     "molecule_chembl_id",
     "pref_name",
@@ -84,9 +105,9 @@ TESTITEM_COLUMNS = [
     "topical",
     "black_box_warning",
     "structure_type",
-    "molecule_structures.canonical_smiles",
-    "molecule_structures.standard_inchi",
-    "molecule_structures.standard_inchi_key",
+    "canonical_smiles",
+    "standard_inchi",
+    "standard_inchi_key",
 ]
 
 
@@ -126,6 +147,7 @@ def get_assay(
     if not items:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     df = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
+    df = _apply_assay_column_aliases(df)
     return df.reindex(columns=ASSAY_COLUMNS)
 
 
@@ -175,22 +197,33 @@ def get_assays(
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
         )
-        url = f"{base}&assay_chembl_id__in={chunk_key}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("assays") or data.get("assay") or []
-        if items:
-            df_chunk = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
-            if not df_chunk.empty:
-                records.append(df_chunk)
-                logger.info(
-                    "chunk_done",
-                    extra={"stage": "chunk_done", "chunk_key": chunk_key},
+        url = f"{base}&assay_chembl_id__in={chunk_key}&limit={len(chunk)}"
+        chunk_frames: list[pd.DataFrame] = []
+        next_url: str | None = url
+        while next_url:
+            data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
+            items = data.get("assays") or data.get("assay") or []
+            if items:
+                df_chunk = json_normalize_pyarrow(items).dropna(
+                    axis="columns", how="all"
                 )
-                continue
+                if not df_chunk.empty:
+                    chunk_frames.append(_apply_assay_column_aliases(df_chunk))
+            page_meta = data.get("page_meta") or {}
+            next_token = page_meta.get("next")
+            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        if chunk_frames:
+            records.append(pd.concat(chunk_frames, ignore_index=True))
+            logger.info(
+                "chunk_done",
+                extra={"stage": "chunk_done", "chunk_key": chunk_key},
+            )
+            continue
         logger.info("chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key})
     if not records:
         return pd.DataFrame(columns=ASSAY_COLUMNS)
     df = pd.concat(records, ignore_index=True)
+    df = _apply_assay_column_aliases(df)
     return df.reindex(columns=ASSAY_COLUMNS)
 
 
@@ -307,6 +340,7 @@ def get_testitem(
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)
+    df = df.rename(columns=TESTITEM_STRUCTURE_COLUMNS)
     return df.reindex(columns=TESTITEM_COLUMNS)
 
 

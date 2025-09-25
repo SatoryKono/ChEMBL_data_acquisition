@@ -6,9 +6,9 @@ This module defines :data:`AssaysSchema`, a
 ``data/input/assay.csv`` and allows flexible dtypes.  Counts such as
 ``acts_per_assay_step5`` and temporal fields (``month``, ``year`` and
 ``version``) previously used strict :class:`int` dtypes while boolean flags
-like ``cited_assay_corr`` were :class:`bool`.  These fields are now typed as
-``pa.Any`` so that CSVs representing numbers or booleans as strings remain
-valid.  All columns are nullable to accommodate missing values.
+like ``cited_assay_corr`` were :class:`bool`.  These fields now omit explicit
+dtype enforcement so that CSVs representing numbers or booleans as strings
+remain valid.  All columns are nullable to accommodate missing values.
 
 Column overview
 ---------------
@@ -40,10 +40,12 @@ Column overview
 
 from __future__ import annotations
 
+from typing import Any, Final, cast
+
 import pandera.pandas as pa
 
-# Provide ``pa.Any`` as an alias for ``None`` to disable dtype enforcement.
-pa.Any = None  # type: ignore[attr-defined]
+# ``None`` disables dtype enforcement while still allowing schema validation.
+FLEXIBLE_DTYPE: Final[Any] = cast(Any, None)
 
 AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
@@ -51,26 +53,34 @@ AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "ASSAY_ID": pa.Column(str, required=False, nullable=True),
         "Target TYPE": pa.Column(str, required=False, nullable=True),
         "accession": pa.Column(str, required=False, nullable=True),
-        "acts_per_assay_step5": pa.Column(pa.Any, required=False, nullable=True),
+        "acts_per_assay_step5": pa.Column(
+            FLEXIBLE_DTYPE, required=False, nullable=True
+        ),
         "assay_cell_type": pa.Column(str, required=False, nullable=True),
         "assay_subcellular_fraction": pa.Column(str, required=False, nullable=True),
         "assay_tissue": pa.Column(str, required=False, nullable=True),
         "bao_format": pa.Column(str, required=False, nullable=True),
-        "cited_assay_corr": pa.Column(pa.Any, required=False, nullable=True),
+        "cited_assay_corr": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "description": pa.Column(str, required=False, nullable=True),
         "document_chembl_id": pa.Column(str, required=False, nullable=True),
-        "error_assay_corr": pa.Column(pa.Any, required=False, nullable=True),
-        "higly_correlated_cit": pa.Column(pa.Any, required=False, nullable=True),
+        "error_assay_corr": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "higly_correlated_cit": pa.Column(
+            FLEXIBLE_DTYPE, required=False, nullable=True
+        ),
         "isoform": pa.Column(str, required=False, nullable=True),
-        "month": pa.Column(pa.Any, required=False, nullable=True),
+        "month": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "mutation": pa.Column(str, required=False, nullable=True),
-        "shuffled_cit": pa.Column(pa.Any, required=False, nullable=True),
-        "shuffled_target_assay": pa.Column(pa.Any, required=False, nullable=True),
+        "shuffled_cit": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "shuffled_target_assay": pa.Column(
+            FLEXIBLE_DTYPE, required=False, nullable=True
+        ),
         "substrate_name": pa.Column(str, required=False, nullable=True),
         "target_chembl_id": pa.Column(str, required=False, nullable=True),
         "target_name": pa.Column(str, required=False, nullable=True),
-        "version": pa.Column(pa.Any, required=False, nullable=True),
-        "year": pa.Column(pa.Any, required=False, nullable=True),
+        "version": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "year": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
+        "pipeline_version": pa.Column(str, required=False, nullable=True),
+        "timestamp_utc": pa.Column(str, required=False, nullable=True),
     }
 )
 

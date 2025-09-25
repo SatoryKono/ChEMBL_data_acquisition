@@ -9,6 +9,7 @@ routed through :func:`sleep` so tests can monkeypatch it easily.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 
@@ -37,18 +38,28 @@ class RateLimiter:
         """Block until a token is available."""
         if self.rps <= 0:
             return
-        with self._lock:
-            now = time.monotonic()
-            elapsed = now - self._updated
-            self._tokens = min(float(self.burst), self._tokens + elapsed * self.rps)
-            if self._tokens < 1:
-                wait = (1 - self._tokens) / self.rps
+
+        wait = 0.0
+        while True:
+            if wait > 0:
                 sleep(wait)
+                wait = 0.0
+
+            with self._lock:
                 now = time.monotonic()
                 elapsed = now - self._updated
-                self._tokens = min(float(self.burst), self._tokens + elapsed * self.rps)
-            self._tokens -= 1
-            self._updated = now
+                self._tokens = min(
+                    float(self.burst), self._tokens + elapsed * self.rps
+                )
+                if self._tokens >= 1 or math.isclose(
+                    self._tokens, 1.0, rel_tol=0.0, abs_tol=1e-9
+                ):
+                    self._tokens = max(0.0, self._tokens - 1)
+                    self._updated = now
+                    return
+
+                min_interval = 1.0 / self.rps
+                wait = max(min_interval, (1 - self._tokens) / self.rps)
 
 
 _limiters: TTLCache[str, RateLimiter] = TTLCache(maxsize=128, ttl=600)

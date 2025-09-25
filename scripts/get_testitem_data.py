@@ -12,6 +12,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections.abc import Sequence
+from itertools import islice
 
 import pandas as pd
 import requests
@@ -38,8 +39,10 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
+from library.validation import validate_testitems
 from schemas import TestitemsSchema, normalize_testitems
 
 
@@ -64,10 +67,10 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         ``df`` with additional PubChem columns.
 
     """
-    if df.empty or "molecule_structures.canonical_smiles" not in df.columns:
+    if df.empty or "canonical_smiles" not in df.columns:
         return df
 
-    smiles_list = df["molecule_structures.canonical_smiles"].fillna("").tolist()
+    smiles_list = df["canonical_smiles"].fillna("").tolist()
     # ``dict.fromkeys`` preserves the order of first occurrence while
     # removing duplicates. This allows progress output to reflect the
     # deterministic iteration order of SMILES strings.
@@ -136,17 +139,34 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.testitem.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "invalid_limit",
+            section="testitem.limit",
+            limit=limit,
+        )
+        return 1
+
+    # Initialise HTTP sessions for downstream HTTP calls
+    pl.init_session(cfg.api, cfg.retry)
     # Initialise HTTP session for subsequent ChEMBL requests
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            # ``read_ids`` returns a generator to minimise memory use. Convert to a
-            # list so we can log the total number of identifiers and iterate over the
-            # values multiple times if needed.
-            ids = list(
-                io.read_ids(args.input_csv, column=cfg.testitem.column, cfg=cfg.io)
+            ids_iter = io.read_ids(
+                args.input_csv, column=cfg.testitem.column, cfg=cfg.io
             )
+            if limit is not None:
+                ids = list(islice(ids_iter, limit))
+                logger.info("process_limit", limit=len(ids))
+            else:
+                ids = list(ids_iter)
         except (FileNotFoundError, ValueError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "read_fail",
+                error=str(exc),
+                path=str(args.input_csv),
+            )
             return 1
 
         logger.info("identifiers_retrieved", count=len(ids))
@@ -161,7 +181,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 timeout=cfg.testitem.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
-            logger.error("failed to retrieve compounds: %s", exc)
+            logger.error(
+                "testitem_fetch_failed",
+                error=str(exc),
+                chunk_size=cfg.testitem.chunk_size,
+                timeout=cfg.testitem.timeout,
+            )
             return 1
         logger.info("chembl_fetch_done", rows=len(df))
         logger.info("pubchem_augment_start")
@@ -169,6 +194,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pubchem_augment_done")
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
+        df = add_pipeline_metadata(df)
         # Determine column order: schema columns first, followed by
         # additional fields sorted alphabetically.
         schema_cols = list(TestitemsSchema.columns)
@@ -186,27 +212,46 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if not missing_required:
         if missing_optional:
             logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+                "optional_columns_missing",
+                columns=sorted(missing_optional),
             )
         try:
-            df = TestitemsSchema.validate(df, lazy=True)
+            validation_result = validate_testitems(df, return_result=True)
         except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+            failure_path = Path(output).with_name(
+                f"{Path(output).stem}_failure_cases.csv"
+            )
             errors = SidecarErrors()
             for row in exc.failure_cases.to_dict("records"):
                 errors.add_error(row)
             errors.save(failure_path)
             logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+                "validation_failed",
+                failures=len(exc.failure_cases),
+                path=str(failure_path),
             )
             df = getattr(exc, "validated_data", df)
             exit_code = 1
+        else:
+            df = validation_result.data
+            if not validation_result.failure_cases.empty:
+                failure_path = Path(output).with_name(
+                    f"{Path(output).stem}_failure_cases.csv"
+                )
+                errors = SidecarErrors()
+                for row in validation_result.failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                errors.save(failure_path)
+                logger.error(
+                    "validation_failed",
+                    failures=len(validation_result.failure_cases),
+                    path=str(failure_path),
+                )
+                exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
+            "validation_skipped",
+            missing_columns=sorted(missing_required),
         )
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
@@ -221,7 +266,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:
-        logger.error("failed to write output CSV: %s", exc)
+        logger.error(
+            "write_fail",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
 
     stats: Stats = {
@@ -241,7 +290,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
     return exit_code
 
@@ -259,6 +312,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=30.0,
         help="Timeout in seconds for each HTTP request",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -267,6 +326,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit <= 0:
+        parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
@@ -279,6 +340,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "timeout": "testitem.timeout",
                 "column": "testitem.column",
                 "chunk_size": "testitem.chunk_size",
+                "limit": "testitem.limit",
             },
         )
         if args.print_config:
@@ -289,11 +351,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code: int = args.func(cfg, args)

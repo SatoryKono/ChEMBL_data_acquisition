@@ -85,9 +85,9 @@ python table_quality_main.py \
 
 ## Конфигурационные переопределения
 
-Параметры CLI заменяют значения `config.yaml`.  
+Параметры CLI заменяют значения `config.yaml`.
 Например, `--sep` → `io.csv_sep`, `--encoding` → `io.csv_encoding`,
-`--chunk-size` → `jobs.chunk_size`, `--timeout` → `api.timeout_read`,
+`--chunk-size` → профильный раздел (например, `activity.chunk_size`), `--timeout` → `api.timeout_read`,
 `--log-level` → `log.level`.
 
 ## Переменные окружения
@@ -110,6 +110,12 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 
 ```bash
 pytest
+```
+
+Только smoke‑сценарии для CLI `get_*_data.py`:
+
+```bash
+pytest tests/smoke
 ```
 
 ## Стиль кода

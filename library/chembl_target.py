@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from typing import Any
 
@@ -25,9 +26,18 @@ TARGET_FIELDS = [
     "ec_code",
     "hgnc_name",
     "hgnc_id",
+    "target_type",
+    "tax_id",
+    "species_group_flag",
+    "target_components",
+    "protein_classifications",
+    "cross_references",
+    "reaction_ec_numbers",
 ]
 
 EMPTY_TARGET: dict[str, str] = {field: "" for field in TARGET_FIELDS}
+
+TARGET_INCLUDE_PARAMS = "protein_classifications,cross_references"
 
 
 def _parse_gene_synonyms(synonyms: list[dict[str, str]]) -> str:
@@ -69,7 +79,11 @@ def _parse_uniprot_id(
     try:
         mapping_uniprot_id = map_chembl_to_uniprot(chembl_id, mapping_cfg) or ""
     except Exception as exc:  # pragma: no cover - network failure paths
-        logger.warning("UniProt mapping request failed for %s: %s", chembl_id, exc)
+        logger.warning(
+            "uniprot_mapping_error",
+            chembl_id=str(chembl_id),
+            error=str(exc),
+        )
         mapping_uniprot_id = ""
     return uniprot_id, mapping_uniprot_id
 
@@ -85,6 +99,54 @@ def _parse_hgnc(xrefs: list[dict[str, str]]) -> tuple[str, str]:
     return "", ""
 
 
+def _stringify(value: Any) -> str:
+    """Return a string representation of ``value`` avoiding ``None``."""
+
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _serialize_structure(value: Any) -> str:
+    """Return a JSON string for ``value`` or ``""`` when empty."""
+
+    if value in (None, "", [], {}):
+        return ""
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return _stringify(value)
+
+
+def _collect_reaction_ec_numbers(components: list[dict[str, Any]]) -> str:
+    """Return pipe-delimited reaction EC numbers discovered in ``components``."""
+
+    numbers: list[str] = []
+    seen: set[str] = set()
+    for component in components:
+        synonyms = _get_items(
+            component.get("target_component_synonyms"), "target_component_synonym"
+        )
+        for synonym in synonyms:
+            syn_type = (synonym.get("syn_type") or "").upper()
+            if syn_type in {"REACTION", "REACTION_NUMBER", "EC_REACTION_NUMBER"}:
+                value = synonym.get("component_synonym", "")
+                if isinstance(value, str) and value and value not in seen:
+                    seen.add(value)
+                    numbers.append(value)
+        xrefs = _get_items(component.get("target_component_xrefs"), "target")
+        for xref in xrefs:
+            src = (xref.get("xref_src_db") or "").upper()
+            if src in {"REACTOME", "RHEA", "METACYC", "EC_REACTION"}:
+                value = xref.get("xref_id")
+                if isinstance(value, str) and value and value not in seen:
+                    seen.add(value)
+                    numbers.append(value)
+    return "|".join(numbers)
+
+
 def _get_items(container: Any, key: str) -> list[Any]:
     """Return a list of items from a container that may be a dict or list."""
     if isinstance(container, dict):
@@ -98,6 +160,28 @@ def _get_items(container: Any, key: str) -> list[Any]:
     return []
 
 
+def _extract_target_payload(data: Any) -> dict[str, Any]:
+    """Return a target record from ``data`` regardless of envelope shape."""
+
+    if isinstance(data, dict):
+        if "target" in data:
+            items = data["target"]
+            if isinstance(items, list):
+                return items[0] if items else {}
+            if isinstance(items, dict):
+                return items
+        if "targets" in data:
+            items = data["targets"]
+            if isinstance(items, list):
+                return items[0] if items else {}
+            if isinstance(items, dict):
+                return items
+        return data
+    if isinstance(data, list):
+        return data[0] if data else {}
+    return {}
+
+
 def _parse_target_record(
     data: dict[str, Any], mapping_cfg: UniprotMappingCfg
 ) -> dict[str, Any]:
@@ -105,9 +189,8 @@ def _parse_target_record(
     components = _get_items(data.get("target_components"), "target_component")
     if not components:
         logger.debug("No components found in target record: %s", data)
-        return dict(EMPTY_TARGET)
-
-    comp = components[0]
+        components = []
+    comp = components[0] if components else {}
     synonyms = _get_items(
         comp.get("target_component_synonyms"), "target_component_synonym"
     )
@@ -136,6 +219,15 @@ def _parse_target_record(
             "ec_code": ec_code,
             "hgnc_name": hgnc_name,
             "hgnc_id": hgnc_id,
+            "target_type": _stringify(data.get("target_type")),
+            "tax_id": _stringify(data.get("tax_id")),
+            "species_group_flag": _stringify(data.get("species_group_flag")),
+            "target_components": _serialize_structure(components),
+            "protein_classifications": _serialize_structure(
+                data.get("protein_classifications")
+            ),
+            "cross_references": _serialize_structure(data.get("cross_references")),
+            "reaction_ec_numbers": _collect_reaction_ec_numbers(components),
         }
     )
     return res
@@ -167,13 +259,13 @@ def get_target(
     if chembl_target_id in {"", "#N/A"}:
         return dict(EMPTY_TARGET)
     base = cfg.chembl_base.rstrip("/")
-    url = f"{base}/target/{chembl_target_id}.json"
+    url = f"{base}/target/{chembl_target_id}.json?include={TARGET_INCLUDE_PARAMS}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-    target_list = _get_items(data, "target")
-    if not target_list:
+    payload = _extract_target_payload(data)
+    if not payload:
         return dict(EMPTY_TARGET)
-    return _parse_target_record(target_list[0], mapping_cfg)
+    return _parse_target_record(payload, mapping_cfg)
 
 
 def get_targets(
@@ -207,7 +299,10 @@ def get_targets(
         return pd.DataFrame(columns=TARGET_FIELDS)
 
     records: list[dict[str, Any]] = []
-    base = f"{cfg.chembl_base.rstrip('/')}/target.json?format=json"
+    base = (
+        f"{cfg.chembl_base.rstrip('/')}/target.json?format=json"
+        f"&include={TARGET_INCLUDE_PARAMS}"
+    )
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&target_chembl_id__in={','.join(chunk)}"

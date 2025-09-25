@@ -45,7 +45,9 @@ def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
     dummy = DummySession()
     monkeypatch.setattr(ii, "_session", dummy)
-    monkeypatch.setattr(ii, "get_limiter", lambda name, rps: DummyLimiter())
+    monkeypatch.setattr(
+        ii, "get_limiter", lambda name, rps, burst=None: DummyLimiter()
+    )
 
     cfg = IupharCfg(base="https://example.org/services", rps=10, burst=10)
 

@@ -13,7 +13,7 @@ import requests
 from cachetools import TTLCache
 from requests import Session
 
-from .config import ApiCfg, ChemblCfg, RetryCfg, session_with_retry
+from .config import ApiCfg, ChemblCacheCfg, RetryCfg, session_with_retry
 from .log import logger
 from .rate_limiter import get_limiter, sleep
 
@@ -43,16 +43,22 @@ class ChemblClient:
         self,
         api: ApiCfg | None = None,
         retry: RetryCfg | None = None,
-        chembl: ChemblCfg | None = None,
+        chembl: ChemblCacheCfg | None = None,
         *,
         session: Session | None = None,
     ) -> None:
-        api = api or ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)")
+        api = api or ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)")
         retry = retry or RetryCfg()
         self.session = session or session_with_retry(api, retry)
-        ttl = chembl.cache_ttl if chembl is not None else ChemblCfg().cache_ttl
+        ttl = (
+            chembl.cache_ttl
+            if chembl is not None
+            else ChemblCacheCfg().cache_ttl
+        )
         maxsize = (
-            chembl.cache_maxsize if chembl is not None else ChemblCfg().cache_maxsize
+            chembl.cache_maxsize
+            if chembl is not None
+            else ChemblCacheCfg().cache_maxsize
         )
         self.cache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._cache_lock = threading.Lock()
@@ -129,14 +135,15 @@ class ChemblClient:
                 logger.info(
                     "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
                 )
-                return cached
+                return cast(dict[str, Any], cached)
             logger.info(
                 "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
             )
 
         last_exc: requests.RequestException | ValueError | None = None
+        attempts = max(1, cfg.retries)
 
-        for attempt in range(1, cfg.retries + 1):
+        for attempt in range(1, attempts + 1):
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
             logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
@@ -163,13 +170,13 @@ class ChemblClient:
                     with self._cache_lock:
                         cached = self.cache.get(cache_key)
                         if cached is not None:
-                            return cached
+                            return cast(dict[str, Any], cached)
                         self.cache[cache_key] = data
                         logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
                         return data
             except (requests.RequestException, ValueError) as exc:
                 last_exc = exc
-                if attempt >= cfg.retries:
+                if attempt >= attempts:
                     logger.exception(
                         "request_fail",
                         extra={"url": url, "status": None, "rps": cfg.rps},
@@ -179,8 +186,9 @@ class ChemblClient:
                 delay += random.uniform(0, cfg.backoff_factor)
                 sleep(delay)
 
-        assert last_exc is not None
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"Request loop exited unexpectedly for {url}")
 
     def clear_cache(self) -> None:
         """Remove all entries from the in-memory cache."""

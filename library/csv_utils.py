@@ -61,6 +61,37 @@ def _normalise_dates(series: pd.Series) -> pd.Series:
     return series
 
 
+def _resolve_sort_columns(
+    df: pd.DataFrame,
+    requested: Sequence[str],
+    *,
+    emit_warning: bool = True,
+) -> list[str]:
+    """Return stable row sort columns honouring ``requested`` when possible."""
+
+    sort_cols = list(requested)
+    if not sort_cols:
+        if df.empty:
+            return []
+        msg = "key_cols must contain at least one column"
+        raise ValueError(msg)
+
+    missing = [col for col in sort_cols if col not in df.columns]
+    if not missing:
+        return sort_cols
+
+    available = [col for col in sort_cols if col in df.columns]
+    fallback = available + [col for col in df.columns if col not in available]
+    if emit_warning:
+        logger.warning(
+            "missing_key_columns",
+            requested=sort_cols,
+            missing=missing,
+            fallback=fallback,
+        )
+    return fallback
+
+
 def write_csv_deterministic(
     df: pd.DataFrame,
     path: str | Path,
@@ -91,7 +122,9 @@ def write_csv_deterministic(
         ``True``, in which case they are omitted with a warning.
     key_cols:
         Sequence of column names defining row ordering. ``None`` is invalid
-        and results in a :class:`ValueError`.
+        and results in a :class:`ValueError`. Missing columns trigger a
+        deterministic fallback that appends remaining columns in their current
+        order. An empty sequence is only permitted when ``df`` is empty.
     chunksize:
         Optional number of rows to write per chunk. Passing a value enables
         streaming output via :meth:`pandas.DataFrame.to_csv`, reducing peak
@@ -169,15 +202,14 @@ def write_csv_deterministic(
     # Sort rows deterministically using a stable algorithm.
     if key_cols is None:
         raise ValueError("key_cols must be provided")
-    sort_cols = list(key_cols)
-    missing = [c for c in sort_cols if c not in work.columns]
-    if missing:
-        msg = f"Missing key columns: {missing}"
-        raise ValueError(msg)
+    key_cols_list = list(key_cols)
+
+    sort_cols = _resolve_sort_columns(work, key_cols_list)
 
     # In-memory sort when ``sort_chunksize`` is not specified or large enough.
-    if sort_chunksize is None or len(work) <= sort_chunksize:
-        work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
+    if not sort_cols or sort_chunksize is None or len(work) <= sort_chunksize:
+        if sort_cols:
+            work.sort_values(by=sort_cols, kind="mergesort", inplace=True)
 
         # Normalise bool and date columns without creating intermediary frames.
         for col in work.columns:
@@ -228,7 +260,7 @@ def write_csv_deterministic(
                 )
                 tmp_paths.append(chunk_path)
 
-            key_indices = [column_names.index(c) for c in sort_cols]
+            key_indices = [column_names.index(c) for c in sort_cols] if sort_cols else []
             key_funcs: list[Callable[[str], object]] = []
             for col in sort_cols:
                 dtype = work.dtypes[col]
@@ -264,8 +296,13 @@ def write_csv_deterministic(
                     except StopIteration:
                         readers[idx][1].close()
                         continue
-                    key = tuple(
-                        func(row[key_indices[i]]) for i, func in enumerate(key_funcs)
+                    key = (
+                        tuple(
+                            func(row[key_indices[i]])
+                            for i, func in enumerate(key_funcs)
+                        )
+                        if key_funcs
+                        else tuple()
                     )
                     heapq.heappush(heap, (key, idx, row))
 
@@ -277,8 +314,13 @@ def write_csv_deterministic(
                     except StopIteration:
                         readers[idx][1].close()
                         continue
-                    key = tuple(
-                        func(row[key_indices[i]]) for i, func in enumerate(key_funcs)
+                    key = (
+                        tuple(
+                            func(row[key_indices[i]])
+                            for i, func in enumerate(key_funcs)
+                        )
+                        if key_funcs
+                        else tuple()
                     )
                     heapq.heappush(heap, (key, idx, row))
 
@@ -330,7 +372,8 @@ def write_csv_chunks_deterministic(
         :func:`write_csv_deterministic`.
     key_cols:
         Columns defining row order. ``None`` is invalid and results in a
-        :class:`ValueError`.
+        :class:`ValueError`. Missing columns trigger the same deterministic
+        fallback used by :func:`write_csv_deterministic`.
     chunksize:
         Number of rows written per chunk.
 
@@ -364,6 +407,7 @@ def write_csv_chunks_deterministic(
 
     if key_cols is None:
         raise ValueError("key_cols must be provided")
+    key_cols_list = list(key_cols)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_paths: list[Path] = []
@@ -383,7 +427,7 @@ def write_csv_chunks_deterministic(
                 df_chunk,
                 tmp_path,
                 col_order=col_order,
-                key_cols=key_cols,
+                key_cols=key_cols_list,
                 chunksize=chunksize,
                 sort_chunksize=sort_chunksize,
                 sep=sep,
@@ -402,7 +446,7 @@ def write_csv_chunks_deterministic(
                 pd.DataFrame(),
                 out_path,
                 col_order=col_order,
-                key_cols=key_cols,
+                key_cols=key_cols_list,
                 chunksize=chunksize,
                 sep=sep,
                 encoding=encoding,
@@ -427,6 +471,7 @@ def write_csv_chunks_deterministic(
         first = next((c for c in current if c is not None), pd.DataFrame())
         columns = list(first.columns)
         dtypes = {col: first.dtypes[col].name for col in columns}
+        resolved_sort_cols = _resolve_sort_columns(first, key_cols_list, emit_warning=False)
 
         def _fmt(value: Any) -> Any:
             if pd.isna(value):
@@ -441,7 +486,7 @@ def write_csv_chunks_deterministic(
         for idx, frame in enumerate(current):
             if frame is not None and not frame.empty:
                 row = frame.iloc[0]
-                key = tuple(row[k] for k in key_cols)
+                key = tuple(row[k] for k in resolved_sort_cols) if resolved_sort_cols else tuple()
                 heapq.heappush(heap, (key, idx, 0))
 
         with out_path.open("w", encoding=encoding, newline="") as fh:
@@ -456,7 +501,11 @@ def write_csv_chunks_deterministic(
                 row_idx += 1
                 if row_idx < len(chunk):
                     next_row = chunk.iloc[row_idx]
-                    key = tuple(next_row[k] for k in key_cols)
+                    key = (
+                        tuple(next_row[k] for k in resolved_sort_cols)
+                        if resolved_sort_cols
+                        else tuple()
+                    )
                     heapq.heappush(heap, (key, file_idx, row_idx))
                 else:
                     try:
@@ -467,7 +516,11 @@ def write_csv_chunks_deterministic(
                         current[file_idx] = next_chunk
                         if not next_chunk.empty:
                             next_row = next_chunk.iloc[0]
-                            key = tuple(next_row[k] for k in key_cols)
+                            key = (
+                                tuple(next_row[k] for k in resolved_sort_cols)
+                                if resolved_sort_cols
+                                else tuple()
+                            )
                             heapq.heappush(heap, (key, file_idx, 0))
 
     write_meta_yaml(out_path, cfg, columns=columns, dtypes=dtypes)

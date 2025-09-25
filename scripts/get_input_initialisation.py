@@ -21,8 +21,9 @@ import sys
 # ruff: noqa: E402
 from pathlib import Path
 
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import argparse
 from collections.abc import Sequence
@@ -205,11 +206,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+            output=str(args.out_dir),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     exit_code = int(args.func(cfg, args))

@@ -78,34 +78,18 @@ def test_finalise_targets_orders_columns_default() -> None:
 
     df = pd.DataFrame(
         {
-            "chembl_id": ["CHEMBL1"],
-            "uniprot": ["P1"],
-            "organism": ["Homo"],
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprotkb_Id": ["P1"],
+            "genus": ["Homo"],
             "b": ["1"],
             "a": ["2"],
         }
     )
-    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
 
-    out = tp.finalise_targets(
-        df,
-        organism,
-        chembl_col="chembl_id",
-        uniprot_col="uniprot",
-        genus_col="organism",
-    )
+    out = tp.finalise_targets(df, organism)
 
-    schema_cols = [
-        (
-            "chembl_id"
-            if c == "target_chembl_id"
-            else "uniprot" if c == "uniprotkb_Id" else "organism" if c == "genus" else c
-        )
-        for c in TARGETS_COLUMN_ORDER
-    ]
-    expected_schema = [c for c in schema_cols if c in out.columns]
-    extra_cols = sorted(c for c in out.columns if c not in schema_cols)
-    assert list(out.columns) == expected_schema + extra_cols
+    assert list(out.columns) == TARGETS_COLUMN_ORDER
 
 
 def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
@@ -156,31 +140,24 @@ def test_finalise_targets_filters_duplicates_and_merges() -> None:
 
     df = pd.DataFrame(
         {
-            "chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
-            "uniprot": ["P12345", "P12345", "nan"],
-            "organism": ["Homo", "Homo", "Mus"],
+            "target_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "uniprotkb_Id": ["P12345", "P12345", "nan"],
+            "genus": ["Homo", "Homo", "Mus"],
             "isoform_names": ["IsoA", "IsoB", "IsoC"],
             "synonyms": ["SynA", "SynB", "SynC"],
             "SUPFAM": ["s1", "s2", "s3"],
             "transmembrane": ["True", "True", "False"],
         }
     )
-    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
 
-    out = tp.finalise_targets(
-        df,
-        organism,
-        chembl_col="chembl_id",
-        uniprot_col="uniprot",
-        genus_col="organism",
-    )
+    out = tp.finalise_targets(df, organism)
 
-    assert list(out["chembl_id"]) == ["CHEMBL1"]
-    assert "SUPFAM" not in out.columns
+    assert list(out["target_chembl_id"]) == ["CHEMBL1"]
+    assert "SUPFAM" in out.columns
     assert out.loc[0, "isoform_names"] == "isoa"
-    assert out.loc[0, "type"] == "Mammal"
     assert out.loc[0, "organism"] == "Homo"
-    assert out["transmembrane"].dtype == "boolean"
+    assert out.loc[0, "features_transmembrane"] == "true"
 
 
 def test_finalise_targets_orders_columns() -> None:
@@ -199,9 +176,7 @@ def test_finalise_targets_orders_columns() -> None:
 
     out = tp.finalise_targets(df, organism)
 
-    schema_cols = [c for c in TARGETS_COLUMN_ORDER if c in out.columns]
-    extra_cols = sorted(c for c in out.columns if c not in schema_cols)
-    assert list(out.columns) == schema_cols + extra_cols
+    assert list(out.columns) == TARGETS_COLUMN_ORDER
 
 
 def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
@@ -209,14 +184,14 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
 
     df = pd.DataFrame(
         {
-            "chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
-            "uniprot": ["P12345", "P12345", "nan"],
-            "organism": ["Homo", "Homo", "Mus"],
+            "target_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "uniprotkb_Id": ["P12345", "P12345", "nan"],
+            "genus": ["Homo", "Homo", "Mus"],
             "synonyms": ["SynA", "SynB", "SynC"],
             "SUPFAM": ["s1", "s2", "s3"],
         }
     )
-    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
 
     input_path = tmp_path / "in.csv"
     df.to_csv(input_path, index=False)
@@ -229,22 +204,9 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
         input_path,
         output_path,
         cfg=cfg,
-        chembl_col="chembl_id",
-        uniprot_col="uniprot",
-        genus_col="organism",
     )
 
-    expected = (
-        tp.finalise_targets(
-            df,
-            organism,
-            chembl_col="chembl_id",
-            uniprot_col="uniprot",
-            genus_col="organism",
-        )
-        .fillna("")
-        .astype(str)
-    )
+    expected = tp.finalise_targets(df, organism).fillna("").astype(str)
     result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     pd.testing.assert_frame_equal(result, expected)
 

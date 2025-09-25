@@ -18,6 +18,7 @@ from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 import library.git_utils as git_utils
 from library.config import Config
+import library.csv_utils as csv_utils
 from library.csv_utils import sha256_file, write_csv_deterministic
 
 
@@ -31,7 +32,8 @@ def test_write_csv_deterministic(tmp_path: Path) -> None:
         }
     )
     path = tmp_path / "out.csv"
-    cfg = Config(api={"user_agent": "test@example.org"})
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
     result = write_csv_deterministic(
         df, path, col_order=["a", "b", "d", "f"], key_cols=["a"], cfg=cfg
     )
@@ -85,11 +87,72 @@ def test_default_sorting_and_order(tmp_path: Path) -> None:
     assert path.read_text(encoding="utf-8-sig") == "a,b\nx,true\ny,false\n"
 
 
+def test_write_csv_deterministic_empty_dataframe_golden(tmp_path: Path) -> None:
+    """Empty frames retain deterministic header order."""
+
+    df = pd.DataFrame(columns=["b", "a"])
+    path = tmp_path / "empty.csv"
+    write_csv_deterministic(df, path, key_cols=sorted(df.columns))
+
+    expected = (
+        Path(__file__).parent / "data" / "golden" / "empty_with_header.csv"
+    ).read_text(encoding="utf-8-sig")
+    assert path.read_text(encoding="utf-8-sig") == expected
+
+
+def test_write_csv_deterministic_empty_no_columns(tmp_path: Path) -> None:
+    """DataFrames without columns can still be written deterministically."""
+
+    df = pd.DataFrame()
+    path = tmp_path / "empty.csv"
+    write_csv_deterministic(df, path, key_cols=[])
+
+    expected = (
+        Path(__file__).parent / "data" / "golden" / "empty_no_columns.csv"
+    ).read_text(encoding="utf-8-sig")
+    assert path.read_text(encoding="utf-8-sig") == expected
+
+
+def test_write_csv_deterministic_requires_key_columns(tmp_path: Path) -> None:
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    path = tmp_path / "out.csv"
+    msg = "key_cols must contain at least one column"
+    with pytest.raises(ValueError, match=msg):
+        write_csv_deterministic(df, path, key_cols=[])
+
+
 def test_write_csv_deterministic_none_key_cols(tmp_path: Path) -> None:
     df = pd.DataFrame({"a": [1], "b": [2]})
     path = tmp_path / "out.csv"
     with pytest.raises(ValueError, match="key_cols must be provided"):
         write_csv_deterministic(df, path, key_cols=None)
+
+
+def test_write_csv_deterministic_missing_sort_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    df = pd.DataFrame({"name": ["beta", "alpha"], "value": [2, 1]})
+    path = tmp_path / "fallback.csv"
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def record(event: str, **payload: object) -> None:
+        events.append((event, payload))
+
+    monkeypatch.setattr(csv_utils.logger, "warning", record)
+
+    write_csv_deterministic(
+        df,
+        path,
+        col_order=["value", "name"],
+        key_cols=["chembl_id"],
+    )
+
+    content = path.read_text(encoding="utf-8-sig")
+    assert content == "value,name\n1,alpha\n2,beta\n"
+
+    fallback_event = [payload for event, payload in events if event == "missing_key_columns"]
+    assert fallback_event
+    assert fallback_event[0]["fallback"] == ["value", "name"]
 
 
 def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
@@ -234,9 +297,14 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
     """_git_sha returns 'unknown' and logs a warning on timeout."""
 
     git_utils._git_sha.cache_clear()
+    monkeypatch.setattr(git_utils, "_read_head_sha", lambda *_: None)
     with patch(
-        "library.git_utils.subprocess.check_output",
-        side_effect=subprocess.CalledProcessError(returncode=1, cmd=["git"]),
+        "library.git_utils.subprocess.run",
+        side_effect=subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["git", "rev-parse", "HEAD"],
+            stderr="fatal: simulated error",
+        ),
     ):
         records: list[tuple[str, dict[str, str] | None]] = []
 

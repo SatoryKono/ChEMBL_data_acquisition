@@ -15,15 +15,9 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "black_box_warning": pa.Column(PA_ANY, required=False, nullable=True),
         "first_approval": pa.Column(PA_ANY, required=False, nullable=True),
         "max_phase": pa.Column(str, required=False, nullable=True),
-        "molecule_structures.canonical_smiles": pa.Column(
-            str, required=False, nullable=True
-        ),
-        "molecule_structures.standard_inchi": pa.Column(
-            str, required=False, nullable=True
-        ),
-        "molecule_structures.standard_inchi_key": pa.Column(
-            str, required=False, nullable=True
-        ),
+        "canonical_smiles": pa.Column(str, required=False, nullable=True),
+        "standard_inchi": pa.Column(str, required=False, nullable=True),
+        "standard_inchi_key": pa.Column(str, required=False, nullable=True),
         "molecule_type": pa.Column(str, required=False, nullable=True),
         "oral": pa.Column(PA_ANY, required=False, nullable=True),
         "parenteral": pa.Column(PA_ANY, required=False, nullable=True),
@@ -39,6 +33,8 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "pubchem_molecular_formula": pa.Column(str, required=False, nullable=True),
         "structure_type": pa.Column(str, required=False, nullable=True),
         "topical": pa.Column(PA_ANY, required=False, nullable=True),
+        "pipeline_version": pa.Column(str, required=False, nullable=True),
+        "timestamp_utc": pa.Column(str, required=False, nullable=True),
     }
 )
 

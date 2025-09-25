@@ -14,6 +14,7 @@ import argparse
 import csv
 import sys
 from collections.abc import Sequence
+from itertools import islice
 from pathlib import Path
 from typing import cast
 
@@ -28,6 +29,7 @@ from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
 from library import target_postprocessing as tp
+from library import protein_classification as pc
 from library import uniprot_library as uu
 from library.chembl_client import ChemblClient
 from library.cli import (
@@ -35,6 +37,7 @@ from library.cli import (
     apply_config_overrides,
     build_root_parser,
     configure_logger,
+    positive_int,
 )
 from library.config import (
     Config,
@@ -44,9 +47,26 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import TargetsSchema, normalize_targets
+from schemas.targets import TARGETS_COLUMN_ORDER
+
+
+
+TARGETS_REQUIRED_COLUMNS: set[str] = {
+    name for name, column in TargetsSchema.columns.items() if column.required
+}
+
+TARGETS_OPTIONAL_COLUMNS: list[str] = [
+    column for column in TARGETS_COLUMN_ORDER if column not in TARGETS_REQUIRED_COLUMNS
+]
+
+TARGETS_OBJECT_COLUMNS: set[str] = {
+    name for name, column in TargetsSchema.columns.items() if str(column.dtype) == "object"
+}
+
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -77,6 +97,47 @@ def _first_token(value: str | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _prepare_targets_for_schema(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, set[str], set[str]]:
+    """Return a copy of ``df`` aligned to :data:`TargetsSchema`.
+
+    The returned frame contains only columns defined in
+    :data:`TARGETS_COLUMN_ORDER`. Missing optional columns are created with
+    ``"-"`` placeholders and schema fields expecting a generic ``object`` dtype
+    are coerced accordingly.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, set[str], set[str]]
+        The prepared dataframe, names of missing required columns and optional
+        columns that were injected.
+    """
+
+    missing_required = TARGETS_REQUIRED_COLUMNS - set(df.columns)
+    missing_optional = {
+        column for column in TARGETS_OPTIONAL_COLUMNS if column not in df.columns
+    }
+
+    if missing_optional:
+        fill_values = {
+            column: (
+                pd.Series(["-"] * len(df), index=df.index, dtype=object)
+                if len(df)
+                else pd.Series(dtype=object)
+            )
+            for column in missing_optional
+        }
+        prepared = df.assign(**fill_values)
+    else:
+        prepared = df.copy()
+
+    prepared = prepared.reindex(columns=TARGETS_COLUMN_ORDER)
+    for column in TARGETS_OBJECT_COLUMNS & set(prepared.columns):
+        prepared[column] = prepared[column].astype(object)
+    return prepared, missing_required, missing_optional
 
 
 def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
@@ -153,6 +214,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "(default: config resources.uniprot_data_dir)"
         ),
     )
+    uniprot.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     uniprot.set_defaults(func=run_uniprot)
 
     # ----------------------------
@@ -169,10 +236,22 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Column name in the input CSV containing identifiers",
     )
     chembl.add_argument(
+        "--chunk-size",
+        type=positive_int,
+        default=5,
+        help="Maximum number of identifiers to request per call",
+    )
+    chembl.add_argument(
         "--timeout",
         type=float,
         default=30.0,
         help="Timeout in seconds for each HTTP request",
+    )
+    chembl.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
     )
     chembl.set_defaults(func=run_chembl)
 
@@ -201,6 +280,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             "Path to the _IUPHAR_family.csv file "
             "(default: config resources.iuphar_family_csv)"
         ),
+    )
+    iuphar.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of rows to process",
     )
     iuphar.set_defaults(func=run_iuphar)
 
@@ -278,6 +363,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         choices=["uniprot_id", "mapping_uniprot_id"],
         help="Column from ChEMBL output to use for UniProt processing",
     )
+    all_cmd.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
     all_cmd.set_defaults(func=run_all)
 
     parser.subparsers_map = {  # type: ignore[attr-defined]
@@ -311,6 +402,15 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     :mod:`tests.test_target_postprocessing`.
 
     """
+    limit = cfg.target.uniprot.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "invalid_limit",
+            section="target.uniprot.limit",
+            limit=limit,
+        )
+        return 1
+
     try:
         df = pd.read_csv(
             args.input_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
@@ -322,7 +422,11 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         df = df[(df[column].str.strip() != "") & (df[column] != "#N/A")].reset_index(
             drop=True
         )
+        if limit is not None:
+            df = df.head(limit)
+            logger.info("process_limit", limit=len(df))
         ids = df[column].tolist()
+        rows_total = len(ids)
 
         from tempfile import NamedTemporaryFile
 
@@ -339,12 +443,14 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
 
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data_dir = cfg.target.uniprot.data_dir
+        uu.init_session(cfg.api, cfg.retry)
         try:
             uu.process(
                 input_csv=str(tmp_path),
                 output_csv=str(output),
                 data_dir=data_dir,
                 cfg=cfg.uniprot,
+                gtop_cfg=cfg.iuphar,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
             )
@@ -354,22 +460,51 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         out_df = pd.read_csv(
             output, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
         )
+        rows_kept = len(out_df)
         if "mapping_uniprot_id" in df.columns:
             out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
-        io.write_csv(
+        csv_path = io.write_csv(
             out_df,
             output,
             cfg=cfg,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
+            key_cols=["uniprot_id"],
+        )
+        rows_dropped = max(rows_total - rows_kept, 0)
+        stats: Stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(csv_path),
+        }
+        inputs = {"input_csv": str(args.input_csv)}
+        if cfg.target.uniprot.data_dir:
+            inputs["data_dir"] = str(cfg.target.uniprot.data_dir)
+        write_meta_yaml(
+            csv_path=csv_path,
+            command=" ".join(sys.argv),
+            config_subset=_serialize_paths(cfg.to_dict()),
+            inputs=inputs,
+            stats=stats,
+            schema="UniProtExport",
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "uniprot_processing_failed",
+            error=str(exc),
+            input=str(args.input_csv),
+            output=str(output),
+        )
         return 1
     try:
         analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
     return 0
 
@@ -390,15 +525,34 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.target.chembl.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "invalid_limit",
+            section="target.chembl.limit",
+            limit=limit,
+        )
+        return 1
+
     # Set up HTTP session with proper headers and retry behaviour
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
-            ids = io.read_ids(
+            ids_iter = io.read_ids(
                 args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "read_fail",
+                error=str(exc),
+                path=str(args.input_csv),
+            )
             return 1
+
+        ids = ids_iter
+        if limit is not None:
+            limited_ids = list(islice(ids_iter, limit))
+            ids = limited_ids
+            logger.info("process_limit", limit=len(limited_ids))
 
         try:
             df = cl.get_targets(
@@ -406,30 +560,31 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg.api,
                 client=client,
                 mapping_cfg=cfg.uniprot_mapping,
+                chunk_size=cfg.target.chembl.chunk_size,
                 timeout=cfg.target.chembl.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
-            logger.error("failed to retrieve targets: %s", exc)
+            logger.error(
+                "chembl_fetch_failed",
+                error=str(exc),
+                chunk_size=cfg.target.chembl.chunk_size,
+                timeout=cfg.target.chembl.timeout,
+            )
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_targets(df)
+        df = add_pipeline_metadata(df)
         rows_total = len(df)
         exit_code = 0
-    # Only enforce columns marked as ``required`` in the schema. Optional columns
-    # may be absent in the input dataset without preventing validation.
-    required_cols = {
-        name for name, col in TargetsSchema.columns.items() if col.required
-    }
-    optional_cols = set(TargetsSchema.columns) - required_cols
-    missing_required = required_cols - set(df.columns)
-    missing_optional = optional_cols - set(df.columns)
+    validation_df, missing_required, missing_optional = _prepare_targets_for_schema(df)
     if not missing_required:
         if missing_optional:
-            logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+            logger.debug(
+                "schema_optional_columns_missing",
+                columns=sorted(missing_optional),
             )
         try:
-            df = TargetsSchema.validate(df, lazy=True)
+            TargetsSchema.validate(validation_df, lazy=True)
         except SchemaErrors as exc:
             failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
             errors = SidecarErrors()
@@ -437,16 +592,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 errors.add_error(row)
             errors.save(failure_path)
             logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+                "validation_failed",
+                failures=len(exc.failure_cases),
+                path=str(failure_path),
             )
-            df = getattr(exc, "validated_data", df)
+            validated_subset = getattr(exc, "validated_data", None)
+            if validated_subset is not None:
+                df = df.loc[validated_subset.index]
             exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
+            "validation_skipped",
+            missing_columns=sorted(missing_required),
         )
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
@@ -460,7 +617,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:
-        logger.error("failed to write output CSV: %s", exc)
+        logger.error(
+            "write_fail",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
 
     stats: Stats = {
@@ -480,7 +641,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     try:
         analyze_table_quality(df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
     return exit_code
 
@@ -501,7 +666,40 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
+    limit = cfg.target.iuphar.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "invalid_limit",
+            section="target.iuphar.limit",
+            limit=limit,
+        )
+        return 1
+
+    tmp_path: Path | None = None
+    source_csv = args.input_csv
+
     try:
+        if limit is not None:
+            df_limited = pd.read_csv(
+                args.input_csv,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                dtype=str,
+                nrows=limit,
+            )
+            logger.info("process_limit", limit=len(df_limited))
+            from tempfile import NamedTemporaryFile
+
+            with NamedTemporaryFile(delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            df_limited.to_csv(
+                tmp_path,
+                index=False,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+            )
+            source_csv = tmp_path
+
         data = ii.IUPHARData.from_files(
             target_path=cfg.target.iuphar.target_csv,
             family_path=cfg.target.iuphar.family_csv,
@@ -509,23 +707,43 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         )
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
-            input_path=args.input_csv,
+            input_path=source_csv,
             output_path=output,
             encoding=cfg.io.csv_encoding,
             sep=cfg.io.csv_sep,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "iuphar_processing_failed",
+            error=str(exc),
+            input=str(source_csv),
+            target_csv=str(cfg.target.iuphar.target_csv),
+            family_csv=str(cfg.target.iuphar.family_csv),
+        )
         return 1
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
     try:
         analyze_table_quality(output, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
     return 0
 
 
-def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame:
+def fetch_chembl(
+    cfg: Config,
+    input_csv: Path,
+    output_csv: Path,
+    limit: int | None = None,
+    *,
+    chunk_size: int | None = None,
+) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
     Parameters
@@ -536,6 +754,8 @@ def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame
         Source of ChEMBL identifiers.
     output_csv:
         Destination for the retrieved records.
+    limit:
+        Optional maximum number of identifiers to process.
 
     Returns
     -------
@@ -545,8 +765,20 @@ def fetch_chembl(cfg: Config, input_csv: Path, output_csv: Path) -> pd.DataFrame
 
     logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
     chembl_args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
-    if run_chembl(cfg, chembl_args) != 0:
-        raise RuntimeError("ChEMBL retrieval failed")
+    original_limit = cfg.target.chembl.limit
+    original_chunk_size = cfg.target.chembl.chunk_size
+    if limit is not None:
+        cfg.target.chembl.limit = limit
+    if chunk_size is not None:
+        cfg.target.chembl.chunk_size = chunk_size
+    try:
+        if run_chembl(cfg, chembl_args) != 0:
+            raise RuntimeError("ChEMBL retrieval failed")
+    finally:
+        if limit is not None:
+            cfg.target.chembl.limit = original_limit
+        if chunk_size is not None:
+            cfg.target.chembl.chunk_size = original_chunk_size
     df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
@@ -715,7 +947,11 @@ def fetch_iuphar(
 
 
 def merge_results(
-    combined_df: pd.DataFrame, iuphar_df: pd.DataFrame, cfg: Config
+    combined_df: pd.DataFrame,
+    iuphar_df: pd.DataFrame,
+    cfg: Config,
+    *,
+    classifier: ii.IUPHARClassifier | None = None,
 ) -> pd.DataFrame:
     """Merge ChEMBL, UniProt and IUPHAR data into a single table.
 
@@ -736,6 +972,9 @@ def merge_results(
 
     logger.info("merge_results_start")
     merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+    if classifier is None:
+        classifier = pc.classifier_from_config(cfg)
+    merged = pc.append_protein_class_predictions(merged, classifier)
     processed = tp.postprocess_targets(merged)
     organism_df = pd.read_csv(
         cfg.target.all.organism_csv,
@@ -767,19 +1006,17 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     """
 
     logger.info("validate_write_start", output=str(output))
-    final_df = normalize_targets(df)
+    normalized = normalize_targets(df)
+    normalized = add_pipeline_metadata(normalized)
+    final_df, missing_required, missing_optional = _prepare_targets_for_schema(
+        normalized
+    )
     exit_code = 0
-    required_cols = {
-        name for name, col in TargetsSchema.columns.items() if col.required
-    }
-    optional_cols = set(TargetsSchema.columns) - required_cols
-    missing_required = required_cols - set(final_df.columns)
-    missing_optional = optional_cols - set(final_df.columns)
     if not missing_required:
         if missing_optional:
-
             logger.warning(
-                "DataFrame is missing optional columns: %s", missing_optional
+                "optional_columns_missing",
+                columns=sorted(missing_optional),
             )
         try:
             final_df = TargetsSchema.validate(final_df, lazy=True)
@@ -790,17 +1027,18 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
                 errors.add_error(row)
             errors.save(failure_path)
             logger.error(
-                "validation failed; wrote %d failure cases to %s",
-                len(exc.failure_cases),
-                failure_path,
+                "validation_failed",
+                failures=len(exc.failure_cases),
+                path=str(failure_path),
             )
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
     else:
         logger.warning(
-            "Skipping validation due to missing required columns: %s",
-            missing_required,
+            "validation_skipped",
+            missing_columns=sorted(missing_required),
         )
+    final_df = final_df.fillna("-")
     final_df = final_df.drop_duplicates()
     io.write_csv(
         final_df,
@@ -808,11 +1046,16 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         cfg=cfg,
         sep=cfg.io.csv_sep,
         encoding=cfg.io.csv_encoding,
+        col_order=TARGETS_COLUMN_ORDER,
     )
     try:
         analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error("failed to generate quality report: %s", exc)
+        logger.error(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+        )
         return 1
     logger.info("validate_write_done", rows=len(final_df))
     return exit_code
@@ -820,6 +1063,15 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
 
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """Run the full target acquisition pipeline."""
+
+    limit = cfg.target.all.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "invalid_limit",
+            section="target.all.limit",
+            limit=limit,
+        )
+        return 1
 
     try:
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
@@ -833,14 +1085,26 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             output.stem + "_iuphar.csv"
         )
 
-        chembl_df = fetch_chembl(cfg, args.input_csv, chembl_out)
+        chembl_df = fetch_chembl(
+            cfg,
+            args.input_csv,
+            chembl_out,
+            limit=limit,
+            chunk_size=cfg.target.all.chunk_size,
+        )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
         exit_code = validate_and_write(merged, output, cfg)
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "pipeline_step_failed",
+            error=str(exc),
+            step="all",
+            input=str(args.input_csv),
+            output=str(args.output_csv or output),
+        )
         return 1
 
 
@@ -848,27 +1112,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults."""
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    subparser_map = getattr(parser, "subparsers_map", {})
+    subparser = subparser_map.get(args.command, parser)
+    limit_value = getattr(args, "limit", None)
+    if limit_value is not None and limit_value <= 0:
+        subparser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
     try:
         mapping: dict[str, str] = {}
         if args.command == "uniprot":
             mapping = {
                 "column": "target.uniprot.column",
                 "data_dir": "target.uniprot.data_dir",
+                "limit": "target.uniprot.limit",
             }
         elif args.command == "chembl":
             mapping = {
                 "column": "target.chembl.column",
+                "chunk_size": "target.chembl.chunk_size",
                 "timeout": "target.chembl.timeout",
+                "limit": "target.chembl.limit",
             }
         elif args.command == "iuphar":
             mapping = {
                 "target_csv": "target.iuphar.target_csv",
                 "family_csv": "target.iuphar.family_csv",
+                "limit": "target.iuphar.limit",
             }
         elif args.command == "all":
             mapping = {
@@ -881,6 +1152,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "chembl_out": "target.all.chembl_out",
                 "uniprot_out": "target.all.uniprot_out",
                 "iuphar_out": "target.all.iuphar_out",
+                "limit": "target.all.limit",
             }
         cfg: Config = apply_config_overrides(
             args, subparser, args.config, mapping=mapping, base_parser=parser
@@ -893,11 +1165,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
     except (ValueError, TypeError) as exc:
-        logger.error("%s", exc)
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("failed to set up directories: %s", exc)
+        logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+        )
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     if hasattr(args, "func"):

@@ -34,7 +34,7 @@ from .rate_limiter import get_limiter, sleep
 # :func:`init_session` with a configuration that provides their own contact
 # information.
 _session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"), RetryCfg()
+    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
 )
 _session_lock = threading.Lock()
 
@@ -176,7 +176,7 @@ def _query_gene_symbol(
     base = cfg.base.rstrip("/")
     url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
-    limiter = get_limiter("iuphar", cfg.rps)
+    limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
 
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
@@ -188,7 +188,12 @@ def _query_gene_symbol(
                     return data[0] if data else {}
         except requests.RequestException as exc:  # pragma: no cover - network errors
             if attempt >= retry.max_attempts:
-                logger.error("IUPHAR web request failed: %s", exc)
+                logger.error(
+                    "request_error",
+                    url=url,
+                    attempt=attempt,
+                    error=str(exc),
+                )
                 break
             backoff = retry.backoff_factor * (2 ** (attempt - 1))
             jitter = random.uniform(0, backoff)
@@ -475,6 +480,7 @@ class IUPHARData:
                                 "IUPHAR_class": "",
                                 "IUPHAR_subclass": "",
                                 "IUPHAR_chain": "",
+                                "IUPHAR_name": "",
                             }
                         )
             return pd.Series(
@@ -484,6 +490,7 @@ class IUPHARData:
                     "IUPHAR_class": record.IUPHAR_class,
                     "IUPHAR_subclass": record.IUPHAR_subclass,
                     "IUPHAR_chain": ">".join(record.IUPHAR_tree),
+                    "IUPHAR_name": record.IUPHAR_name,
                 }
             )
 
@@ -653,7 +660,7 @@ class IUPHARData:
         if base_root.endswith("services"):
             base_root = base_root.rsplit("/", 1)[0]
         data_base = f"{base_root}/DATA"
-        limiter = get_limiter("iuphar", cfg.rps)
+        limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
         timeout = (cfg.timeout_connect, cfg.timeout_read)
 
         def _download(url: str) -> pd.DataFrame:
@@ -666,7 +673,12 @@ class IUPHARData:
                             return pd.read_csv(io.StringIO(resp.text))
                 except requests.RequestException as exc:  # pragma: no cover - network
                     if attempt >= retry_cfg.max_attempts:
-                        logger.error("IUPHAR mapping request failed: %s", exc)
+                        logger.error(
+                            "request_error",
+                            url=url,
+                            attempt=attempt,
+                            error=str(exc),
+                        )
                         raise
                     backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
                     jitter = random.uniform(0, backoff)

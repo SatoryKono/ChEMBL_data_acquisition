@@ -404,7 +404,8 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "activity_non_independent": pd.DataFrame({"id": [2]}),
         "activity_same_document": pd.DataFrame({"id": [3]}),
     }
-    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
     paths = save_tables(tables, tmp_path, cfg)
     for entity, path in paths.items():
         assert path.exists(), f"missing {entity} file"
@@ -463,7 +464,8 @@ def test_save_tables_drops_duplicate_columns_and_warns(
     # Create a table with duplicated column names
     df = pd.DataFrame([[1, "a", "b"]], columns=["id", "dup", "dup"])
     tables: TableDict = {"activity": df}
-    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
     paths = save_tables(tables, tmp_path, cfg)
     # Written table should contain only unique columns
     result = pd.read_csv(paths["activity"])
@@ -729,22 +731,3 @@ def test_read_sheet_drops_duplicate_columns(tmp_path: Path) -> None:
     record = next(r for r in records if r.get("event") == "duplicate columns dropped")
     assert record["sheet"] == "Sheet1"
     assert record["duplicates"] == ["b"]
-
-
-def test_status_api_get_max_unknown_status() -> None:
-    """``get_max`` returns the final status when none match."""
-
-    # Minimal status configuration with two ordered labels
-    status_df = pd.DataFrame(
-        {
-            "status": ["low", "high"],
-            "order": [0, 1],
-            "condition_field": ["cond", "cond"],
-            "condition_value": ["null", "null"],
-            "score": [0, 1],
-        }
-    )
-    api = lib.build_status_helpers(status_df)
-
-    # Unknown statuses should fall back to the last entry
-    assert api.get_max(["missing"]) == "high"

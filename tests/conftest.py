@@ -19,7 +19,9 @@ def cfg() -> Config:
     not need to construct :class:`Config` instances manually.
     """
 
-    return Config(api=ApiCfg(user_agent="test@example.org"))
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
+    return cfg
 
 
 @pytest.fixture()

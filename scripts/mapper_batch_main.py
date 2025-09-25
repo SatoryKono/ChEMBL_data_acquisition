@@ -32,10 +32,20 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 na_values=["#N/A", ""],
             )
         except (FileNotFoundError, OSError) as exc:
-            logger.error("%s", exc)
+            logger.error(
+                "read_fail",
+                error=str(exc),
+                path=str(args.input_csv),
+                encoding=args.encoding,
+                sep=args.sep,
+            )
             return 1
         if args.column not in df.columns:
-            logger.error("column '%s' not found in %s", args.column, args.input_csv)
+            logger.error(
+                "missing_column",
+                column=args.column,
+                path=str(args.input_csv),
+            )
             return 1
 
         ids = [
@@ -52,9 +62,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         )
         for cid, uid in mappings.items():
             if uid:
-                logger.info("mapped", extra={"chembl_id": cid, "uniprot_id": uid})
+                logger.info("mapped", chembl_id=cid, uniprot_id=uid)
             else:
-                logger.warning("no UniProt ID for %s", cid)
+                logger.warning("uniprot_id_missing", chembl_id=cid)
         df["mapping_uniprot_id"] = df[args.column].map(mappings).fillna("")
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         try:
@@ -65,9 +75,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 sep=args.sep,
                 encoding=args.encoding,
             )
-            logger.info("write_done", extra={"path": str(output)})
+            logger.info("write_done", path=str(output))
         except OSError as exc:
-            logger.error("failed to write output CSV: %s", exc)
+            logger.error(
+                "write_fail",
+                error=str(exc),
+                path=str(output),
+            )
             return 1
         return 0
     except Exception as exc:  # pragma: no cover - defensive
@@ -98,13 +112,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", extra={"run_id": log_cfg.run_id})
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
     cfg = apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     print_config(cfg)
     func: Callable[[Config, argparse.Namespace], int] = args.func
     exit_code = func(cfg, args)
-    logger.info("pipeline_end", extra={"exit_code": exit_code})
+    logger.info("pipeline_end", exit_code=exit_code)
     return exit_code
 
 

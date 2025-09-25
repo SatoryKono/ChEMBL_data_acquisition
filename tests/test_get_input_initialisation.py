@@ -70,7 +70,8 @@ def test_run_creates_quality_reports(tmp_path: Path, monkeypatch) -> None:
         format="csv",
         dictionary_dir=tmp_path,
     )
-    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
     result = cli.run(cfg, args)
     assert result == 0
 
@@ -124,7 +125,8 @@ def test_run_missing_activity_logs_error(tmp_path: Path, monkeypatch) -> None:
     )
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
     result = cli.run(cfg, args)
     assert result == 1
     lines = buf.getvalue().splitlines()
@@ -172,7 +174,8 @@ def test_run_missing_columns_logs_specific_error(
     )
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
-    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
     result = cli.run(cfg, args)
     assert result == 1
     lines = buf.getvalue().splitlines()
@@ -188,7 +191,8 @@ def test_run_uses_config_output_dir(tmp_path: Path, monkeypatch) -> None:
     same_doc.write_text("dummy")
     all_doc.write_text("dummy")
 
-    cfg = Config.model_validate({"api": {"user_agent": "test@example.org"}})
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
     cfg.init.output_dir = tmp_path / "default"
 
     tables = {"assay": pd.DataFrame({"id": [1]})}
@@ -213,7 +217,7 @@ def test_main_missing_dictionary_dir(tmp_path: Path, monkeypatch) -> None:
     """``main`` should handle absent dictionary directory gracefully."""
 
     cfg_path = tmp_path / "cfg.yaml"
-    cfg_path.write_text('log:\n  level: "ERROR"\n')
+    cfg_path.write_text('system:\n  log:\n    level: "ERROR"\n')
     same_doc = tmp_path / "same.xlsx"
     all_doc = tmp_path / "all.xlsx"
     same_doc.write_text("dummy")
@@ -222,7 +226,9 @@ def test_main_missing_dictionary_dir(tmp_path: Path, monkeypatch) -> None:
 
     # Skip heavy processing by stubbing ``run``
     monkeypatch.setattr(cli, "run", lambda _cfg, _args: 0)
-    monkeypatch.setenv("CHEMBL_DA__API__USER_AGENT", "test@example.org")
+    monkeypatch.setenv(
+        "CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", "test@example.org"
+    )
 
     result = cli.main(
         [

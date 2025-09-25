@@ -91,17 +91,30 @@ def write_meta_yaml(
     path = Path(csv_path)
     meta_path = path.with_name(path.name + ".meta.yaml")
 
-    metadata: dict[str, Any] = {
-        "generated_at": datetime.now(UTC).isoformat(),
-        "git_sha": _git_sha(),
-        "python_version": platform.python_version(),
-        "platform": platform.platform(),
-        "command": command,
-        "config": _mask_secrets(dict(config_subset)),
-        "inputs": dict(inputs),
-        "stats": stats,
-        "schema": schema,
-    }
+    existing: dict[str, Any] = {}
+    if meta_path.exists():
+        try:
+            with meta_path.open("r", encoding="utf-8") as fh:
+                loaded = yaml.safe_load(fh)
+        except (OSError, yaml.YAMLError):
+            loaded = None
+        if isinstance(loaded, dict):
+            existing = dict(loaded)
+
+    metadata: dict[str, Any] = dict(existing)
+    metadata.update(
+        {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "git_sha": _git_sha(),
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "command": command,
+            "config": _mask_secrets(dict(config_subset)),
+            "inputs": dict(inputs),
+            "stats": stats,
+            "schema": schema,
+        }
+    )
 
     with meta_path.open("w", encoding="utf-8") as fh:
         yaml.safe_dump(metadata, fh, sort_keys=False)

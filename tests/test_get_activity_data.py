@@ -121,6 +121,7 @@ def test_run_chembl_column_order(
     assert rc == 0
 
     schema_cols = list(ActivitiesSchema.columns)
-    expected_head = [c for c in schema_cols if c in df.columns]
-    expected_tail = sorted(c for c in df.columns if c not in schema_cols)
+    available = set(df.columns) | {"pipeline_version", "timestamp_utc"}
+    expected_head = [c for c in schema_cols if c in available]
+    expected_tail = sorted(available - set(schema_cols))
     assert captured["col_order"] == expected_head + expected_tail

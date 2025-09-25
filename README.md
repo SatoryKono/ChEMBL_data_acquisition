@@ -1,11 +1,6 @@
 # ChEMBL Data Acquisition Utilities
 
-Набор утилит и библиотек Python 3.12 для скачивания, валидации,
-агрегации и экспорта биологических данных из открытых API  
-(ChEMBL, PubChem, UniProt, PubMed и др.). Проект демонстрирует
-типичный пайплайн обработки табличных данных: от получения
-идентификаторов до сериализации нормализованных CSV/Parquet
-с сопровождающими метаданными.
+Основная документация и описательные материалы перенесены в каталог [docs/](docs/).
 
 ## Особенности
 
@@ -29,6 +24,25 @@
 | PyYAML        | 6.0               |
 
 Полный список приведён в `requirements-dev.txt` или `pyproject.toml`.
+
+### Среда выполнения
+
+* ОС Linux или macOS с доступом к bash/PowerShell. На Windows рекомендуется
+  устанавливать через WSL2.
+* `pip` версии 23+ и `setuptools`/`wheel` последних релизов:
+
+  ```bash
+  python -m pip install --upgrade pip setuptools wheel
+  ```
+
+* Изолированное окружение:
+
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+  ```
+
+* Разрешение на сетевые запросы к API ChEMBL/PubChem/UniProt (порт 443).
 
 ## Установка
 
@@ -112,6 +126,16 @@ pre-commit run --all-files
 ```bash
 pytest
 ```
+
+Проверка детерминизма итоговых CSV выполняется отдельным скриптом; он сравнивает
+контрольные срезы с актуальным выводом и сигнализирует о дрейфе данных:
+
+```bash
+python scripts/check_determinism.py --log-level DEBUG
+```
+
+Перед запуском убедитесь, что зависимости установлены командой `pip install .[dev]`
+и все файлы в `data/output/` доступны для чтения/записи.
 
 Для smoke-теста CLI выполните:
 
@@ -221,6 +245,8 @@ CHEMBL_DA_LOG_LEVEL=INFO
 CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
 ```
 
+См. также файл `.env.example` с типовыми переменными для контактных e-mail.
+
 Запустить скрипт с автоматической подгрузкой настроек можно так:
 
 ```bash
@@ -239,11 +265,12 @@ python -m dotenv run -- python scripts/get_assay_data.py --input tests/data/assa
 
 ```yaml
 api:
-  user_agent: "chembl-da/0.1 (mailto:info@example.org)"
+  user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
 ```
 
 Параметр можно переопределить в `config.yaml`, через переменную окружения
-`CHEMBL_DA__API__USER_AGENT` или флаг CLI `--api.user_agent`.
+`CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` или флаг CLI
+`--sources.chembl.api.user_agent`.
 
 ## Валидация конфигурации
 
@@ -474,8 +501,8 @@ All scripts share a common set of flags:
 
 Default settings live in ``config.yaml`` and are split into sections for each
 API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
-I/O and processing (``io``, ``jobs``, ``batch``, ``quality``, ``mapper``) and
-general infrastructure (``init``, ``rate``, ``retry``, ``log``). The companion
+I/O (``io``) and general infrastructure (``init``, ``rate``, ``retry``, ``log``).
+The companion
 ``config.schema.json`` file documents these fields and is useful for editor
 validation, but it must **not** be passed to ``--config`` because it lacks
 runtime values such as ``api.user_agent``. A minimal configuration looks like::
@@ -485,8 +512,6 @@ runtime values such as ``api.user_agent``. A minimal configuration looks like::
       rps: 5
     io:
       output_dir: data/output
-    jobs:
-      concurrency: 8
 
 ### Переменные окружения
 
@@ -522,8 +547,6 @@ Most options also provide short aliases. The table lists the supported mappings:
 | `CHEMBL_DA_PUBCHEM_TIMEOUT_READ` | `CHEMBL_DA__PUBCHEM__TIMEOUT_READ` |
 | `CHEMBL_DA_PUBCHEM_RPS` | `CHEMBL_DA__PUBCHEM__RPS` |
 | `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
-| `CHEMBL_DA_CONCURRENCY` | `CHEMBL_DA__JOBS__CONCURRENCY` |
-| `CHEMBL_DA_CHUNK_SIZE` | `CHEMBL_DA__JOBS__CHUNK_SIZE` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__RETRY__MAX_ATTEMPTS` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__RETRY__BACKOFF_FACTOR` |
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
@@ -633,3 +656,5 @@ pytest
 
 MIT License. См. файл `LICENSE` (если присутствует).
 
+
+При обновлении справочных материалов добавляйте их непосредственно в папку `docs`.

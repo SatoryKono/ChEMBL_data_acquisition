@@ -13,11 +13,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from .cli import LoggerConfig, configure_logger
+from .cli import LoggerConfig, apply_config_overrides, configure_logger
 from .cli import build_parser as base_parser
-from .config import ApiCfg, Config, session_with_retry
+from .config import Config, ensure_dirs, print_config, session_with_retry
 from .csv_utils import write_csv_deterministic
-from .log import logger
 from .pubmed import (
     EMPTY_PUBMED,
     _do_request,
@@ -41,6 +40,7 @@ from .pubmed import (
 from .rate_limiter import get_limiter
 
 __all__ = [
+    "Config",
     "read_pmids",
     "_make_request",
     "_handle_response",
@@ -66,25 +66,60 @@ __all__ = [
 
 def parse_args(
     argv: Sequence[str] | None = None,
-) -> tuple[argparse.Namespace, LoggerConfig]:
+) -> tuple[argparse.Namespace, argparse.ArgumentParser, LoggerConfig]:
     """Parse command-line arguments."""
     parser, log_cfg = base_parser("Fetch publication metadata by PMID", column="PMID")
     parser.add_argument(
         "--input-csv",
         dest="input_csv",
+        type=Path,
+        default=argparse.SUPPRESS,
         help="Input CSV path with PMID column",
     )
     args = parser.parse_args(argv)
-    return args, log_cfg
+    return args, parser, log_cfg
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command-line interface entry point."""
-    args, log_cfg = parse_args(argv)
+    args, parser, log_cfg = parse_args(argv)
     log_cfg.level = args.log_level
-    configure_logger(log_cfg)
+    logger = configure_logger(log_cfg)
+    logger.info("pipeline_start", run_id=log_cfg.run_id)
+    try:
+        cfg = apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={
+                "column": "document.pubmed.column",
+                "chunk_size": "document.pubmed.batch_size",
+            },
+        )
+        cfg = Config.model_validate(cfg.model_dump())
+        if args.print_config:
+            print_config(cfg)
+            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
+            return 0
+        ensure_dirs(cfg)
+        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+    except (ValueError, TypeError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+        )
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
 
-    cfg = Config(api=ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"))
     limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
     delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
 
@@ -94,7 +129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
 
     records: list[dict[str, str]] = []
-    batch_size = 100
+    batch_size = cfg.document.pubmed.batch_size
     with session_with_retry(cfg.api, cfg.retry) as session:
         for i in range(0, len(pmids), batch_size):
             batch_pmids = pmids[i : i + batch_size]
@@ -131,6 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     write_csv_deterministic(df, output_path, key_cols=sorted(df.columns))
     logger.info("file_written", path=str(output_path))
+    logger.info("pipeline_done", run_id=log_cfg.run_id)
     return 0
 
 

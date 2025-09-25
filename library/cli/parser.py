@@ -68,6 +68,12 @@ def _positive_int(value: str) -> int:
     return ivalue
 
 
+def positive_int(value: str) -> int:
+    """Public wrapper around :func:`_positive_int` for CLI validators."""
+
+    return _positive_int(value)
+
+
 def add_common_arguments(
     parser: argparse.ArgumentParser, *, defaults: bool = True
 ) -> argparse.ArgumentParser:
@@ -170,9 +176,9 @@ def build_parser(
     return parser, log_cfg
 
 
-def build_root_parser() -> (
-    tuple[argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig]
-):
+def build_root_parser() -> tuple[
+    argparse.ArgumentParser, argparse.ArgumentParser, LoggerConfig
+]:
     """Return parsers containing root-level options and logging config.
 
     Two parsers are produced:
@@ -263,12 +269,52 @@ def configure_logger(
 # ---------------------------------------------------------------------------
 
 # Mapping of common CLI argument names to configuration paths.
+_PATH_PREFIXES: dict[str, list[str]] = {
+    "api": ["sources", "chembl", "api"],
+    "chembl": ["sources", "chembl", "cache"],
+    "openalex": ["sources", "openalex"],
+    "crossref": ["sources", "crossref"],
+    "iuphar": ["sources", "iuphar"],
+    "pubchem": ["sources", "pubchem"],
+    "pubmed": ["sources", "pubmed"],
+    "semantic_scholar": ["sources", "semantic_scholar"],
+    "uniprot": ["sources", "uniprot", "api"],
+    "uniprot_mapping": ["sources", "uniprot", "mapping"],
+    "activity": ["sources", "chembl", "pipelines", "activity"],
+    "assay": ["sources", "chembl", "pipelines", "assay"],
+    "testitem": ["sources", "chembl", "pipelines", "testitem"],
+    "document": ["sources", "chembl", "pipelines", "document"],
+    "target": ["sources", "chembl", "pipelines", "target"],
+    "io": ["local", "io"],
+    "resources": ["local", "resources"],
+    "init": ["local", "init"],
+    "log": ["system", "log"],
+    "rate": ["system", "rate"],
+    "retry": ["system", "retry"],
+    "doc_type": ["system", "doc_type"],
+}
+
+
+def _normalize_path(path: str) -> str:
+    parts = path.split(".") if path else []
+    if not parts:
+        return path
+    head, tail = parts[0], parts[1:]
+    prefix = _PATH_PREFIXES.get(head)
+    if not prefix:
+        return path
+    new_parts = prefix + tail
+    return ".".join(new_parts)
+
+
 _DEFAULT_OVERRIDES: dict[str, str] = {
-    "sep": "io.csv_sep",
-    "encoding": "io.csv_encoding",
-    "log_level": "log.level",
-    "chunk_size": "jobs.chunk_size",
-    "timeout": "api.timeout_read",
+    key: _normalize_path(value)
+    for key, value in {
+        "sep": "io.csv_sep",
+        "encoding": "io.csv_encoding",
+        "log_level": "log.level",
+        "timeout": "api.timeout_read",
+    }.items()
 }
 
 
@@ -332,7 +378,10 @@ def apply_config_overrides(
         If the configuration file cannot be loaded.
     """
 
-    override_map = {**_DEFAULT_OVERRIDES, **(mapping or {})}
+    override_map = {
+        arg: _normalize_path(path)
+        for arg, path in {**_DEFAULT_OVERRIDES, **(mapping or {})}.items()
+    }
 
     cli_overrides: dict[str, Any] = {}
     for arg, key in override_map.items():
@@ -348,9 +397,17 @@ def apply_config_overrides(
             cli_overrides[key] = value
 
     try:
-        cfg = load_config(config_path, cli_overrides=cli_overrides)
+        cfg = load_config(
+            config_path,
+            cli_overrides=cli_overrides,
+            strict=True,
+        )
     except ConfigError as exc:
-        log.logger.error("%s", exc)
+        log.logger.error(
+            "config_load_failed",
+            error=str(exc),
+            config=str(config_path),
+        )
         parser.error(str(exc))
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
