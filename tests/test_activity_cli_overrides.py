@@ -20,7 +20,7 @@ def _create_config(tmp_path: Path) -> Path:
         "  chembl:\n"
         "    pipelines:\n"
         "      activity:\n"
-        "        chunk_size: 10\n"
+        "        batch_size: 10\n"
         "    api:\n"
         "      timeout_read: 30\n"
         "local:\n"
@@ -58,7 +58,7 @@ def _run(
         timeout: float,
     ) -> pd.DataFrame:
         data = list(ids)
-        called["chunk_size"] = chunk_size
+        called["batch_size"] = chunk_size
         return pd.DataFrame({"activity_id": data})
 
     def fake_write(
@@ -90,7 +90,7 @@ def _run(
 def test_default_config_used(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     rc, called = _run(tmp_path, monkeypatch, [])
     assert rc == 0
-    assert called["chunk_size"] == 10
+    assert called["batch_size"] == 10
     assert called["sep"] == "|"
     assert called["encoding"] == "iso-8859-1"
 
@@ -99,9 +99,9 @@ def test_cli_overrides(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     rc, called = _run(
         tmp_path,
         monkeypatch,
-        ["--chunk-size", "3", "--sep", ";", "--encoding", "latin1"],
+        ["--batch-size", "3", "--sep", ";", "--encoding", "latin1"],
     )
     assert rc == 0
-    assert called["chunk_size"] == 3
+    assert called["batch_size"] == 3
     assert called["sep"] == ";"
     assert called["encoding"] == "latin1"

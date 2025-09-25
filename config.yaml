@@ -25,18 +25,18 @@ sources:
     pipelines:
       activity:
         column: "activity_chembl_id"
-        chunk_size: 50
+        batch_size: 50
         timeout: 30.0
         limit: null
         dry_run: false
       assay:
         column: "assay_chembl_id"
-        chunk_size: 50
+        batch_size: 50
         timeout: 30.0
         limit: null
       testitem:
         column: "molecule_chembl_id"
-        chunk_size: 50
+        batch_size: 50
         timeout: 30.0
         limit: null
       document:

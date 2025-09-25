@@ -355,7 +355,7 @@ class RetryCfg(_BaseModel):
 
 class ActivityCfg(_BoolModel):
     column: str = "activity_id"
-    chunk_size: int = Field(5, ge=1)
+    batch_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
     dry_run: bool = False
@@ -368,14 +368,14 @@ class ActivityCfg(_BoolModel):
 
 class AssayCfg(_BaseModel):
     column: str = "assay_chembl_id"
-    chunk_size: int = Field(10, ge=1)
+    batch_size: int = Field(10, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
 
 
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
-    chunk_size: int = Field(5, ge=1)
+    batch_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
 

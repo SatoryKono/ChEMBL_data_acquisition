@@ -8,10 +8,10 @@
           "title": "Column",
           "type": "string"
         },
-        "chunk_size": {
+        "batch_size": {
           "default": 5,
           "minimum": 1,
-          "title": "Chunk Size",
+          "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
@@ -104,10 +104,10 @@
           "title": "Column",
           "type": "string"
         },
-        "chunk_size": {
+        "batch_size": {
           "default": 10,
           "minimum": 1,
-          "title": "Chunk Size",
+          "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
@@ -279,10 +279,10 @@
           "title": "Column",
           "type": "string"
         },
-        "chunk_size": {
+        "batch_size": {
           "default": 5,
           "minimum": 1,
-          "title": "Chunk Size",
+          "title": "Batch Size",
           "type": "integer"
         },
         "sleep": {
@@ -1112,10 +1112,10 @@
           "title": "Column",
           "type": "string"
         },
-        "chunk_size": {
+        "batch_size": {
           "default": 5,
           "minimum": 1,
-          "title": "Chunk Size",
+          "title": "Batch Size",
           "type": "integer"
         },
         "timeout": {
