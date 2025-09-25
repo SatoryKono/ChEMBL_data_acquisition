@@ -43,7 +43,7 @@ def test_malformed_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "jobs:\n  chunk_size: bad\n"
+        "activity:\n  chunk_size: bad\n"
         "resources:\n"
         "  dictionary_dir: dictionary\n"
         "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
@@ -69,7 +69,7 @@ def test_malformed_config_exits(
     assert rc != 0
 
     if caplog.text:
-        assert "jobs.chunk_size" in caplog.text
+        assert "activity.chunk_size" in caplog.text
 
 
 @pytest.mark.parametrize("entry, extra, use_sys", CLIS)
@@ -82,7 +82,7 @@ def test_unknown_key_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "jobs:\n  chunk_size: 5\n"
+        "activity:\n  chunk_size: 5\n"
         "resources:\n"
         "  dictionary_dir: dictionary\n"
         "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
@@ -120,7 +120,7 @@ def test_negative_limit_in_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "jobs:\n  chunk_size: 5\n"
+        "activity:\n  chunk_size: 5\n"
         "resources:\n"
         "  dictionary_dir: dictionary\n"
         "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"

@@ -186,30 +186,7 @@ io:
   cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA__IO__CACHE_DIR)
   csv_sep: ","  # CSV field separator
   csv_encoding: "utf-8-sig"  # Encoding for CSV files
-  csv_index: false  # Include index column when writing CSV
   exist_ok: true  # Create directories with ensure_dirs if missing
-
-jobs:
-  concurrency: 8  # Number of parallel workers (env: CHEMBL_DA__JOBS__CONCURRENCY / CHEMBL_DA_CONCURRENCY)
-  chunk_size: 500  # Records per job chunk (env: CHEMBL_DA__JOBS__CHUNK_SIZE / CHEMBL_DA_CHUNK_SIZE)
-
-batch:
-  size: 1000  # Number of rows per batch (env: CHEMBL_DA__BATCH__SIZE)
-  pause: 0.0  # Delay between batches in seconds (env: CHEMBL_DA__BATCH__PAUSE)
-  concurrency: 2  # Number of concurrent batch workers (env: CHEMBL_DA__BATCH__CONCURRENCY)
-  fail_fast: true  # Abort on first error (env: CHEMBL_DA__BATCH__FAIL_FAST)
-  retry_failed: true  # Retry failed batches (env: CHEMBL_DA__BATCH__RETRY_FAILED)
-
-quality:
-  sample_rows: 0  # Rows to sample for previews (0 = all)
-  corr_method: "pearson"  # Correlation method
-  max_unique_preview: 50  # Preview unique values up to this count
-  bin_count: 20  # Histogram bins for numeric columns
-
-mapper:
-  enable_cache: true  # Cache mapping results
-  strict_schema: true  # Enforce input schema
-  warn_on_cast: true  # Warn when casting types
 
 init:
   same_doc: "data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook

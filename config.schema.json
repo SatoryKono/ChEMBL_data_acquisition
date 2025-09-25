@@ -133,41 +133,6 @@
       "title": "AssayCfg",
       "type": "object"
     },
-    "BatchCfg": {
-      "additionalProperties": false,
-      "properties": {
-        "size": {
-          "default": 1000,
-          "minimum": 1,
-          "title": "Size",
-          "type": "integer"
-        },
-        "pause": {
-          "default": 0.0,
-          "minimum": 0,
-          "title": "Pause",
-          "type": "number"
-        },
-        "concurrency": {
-          "default": 2,
-          "minimum": 1,
-          "title": "Concurrency",
-          "type": "integer"
-        },
-        "fail_fast": {
-          "default": true,
-          "title": "Fail Fast",
-          "type": "boolean"
-        },
-        "retry_failed": {
-          "default": true,
-          "title": "Retry Failed",
-          "type": "boolean"
-        }
-      },
-      "title": "BatchCfg",
-      "type": "object"
-    },
     "ChemblCfg": {
       "additionalProperties": false,
       "properties": {
@@ -486,11 +451,6 @@
           ],
           "title": "Na Markers"
         },
-        "csv_index": {
-          "default": false,
-          "title": "Csv Index",
-          "type": "boolean"
-        },
         "exist_ok": {
           "default": true,
           "title": "Exist Ok",
@@ -542,25 +502,6 @@
       "title": "IupharCfg",
       "type": "object"
     },
-    "JobsCfg": {
-      "additionalProperties": false,
-      "properties": {
-        "concurrency": {
-          "default": 8,
-          "minimum": 1,
-          "title": "Concurrency",
-          "type": "integer"
-        },
-        "chunk_size": {
-          "default": 500,
-          "minimum": 1,
-          "title": "Chunk Size",
-          "type": "integer"
-        }
-      },
-      "title": "JobsCfg",
-      "type": "object"
-    },
     "LogCfg": {
       "additionalProperties": false,
       "properties": {
@@ -581,28 +522,6 @@
         }
       },
       "title": "LogCfg",
-      "type": "object"
-    },
-    "MapperCfg": {
-      "additionalProperties": false,
-      "properties": {
-        "enable_cache": {
-          "default": true,
-          "title": "Enable Cache",
-          "type": "boolean"
-        },
-        "strict_schema": {
-          "default": true,
-          "title": "Strict Schema",
-          "type": "boolean"
-        },
-        "warn_on_cast": {
-          "default": true,
-          "title": "Warn On Cast",
-          "type": "boolean"
-        }
-      },
-      "title": "MapperCfg",
       "type": "object"
     },
     "OpenAlexCfg": {
@@ -742,36 +661,6 @@
         }
       },
       "title": "PubMedCfg",
-      "type": "object"
-    },
-    "QualityCfg": {
-      "additionalProperties": false,
-      "properties": {
-        "sample_rows": {
-          "default": 0,
-          "minimum": 0,
-          "title": "Sample Rows",
-          "type": "integer"
-        },
-        "corr_method": {
-          "default": "pearson",
-          "title": "Corr Method",
-          "type": "string"
-        },
-        "max_unique_preview": {
-          "default": 50,
-          "minimum": 1,
-          "title": "Max Unique Preview",
-          "type": "integer"
-        },
-        "bin_count": {
-          "default": 20,
-          "minimum": 1,
-          "title": "Bin Count",
-          "type": "integer"
-        }
-      },
-      "title": "QualityCfg",
       "type": "object"
     },
     "RateCfg": {
@@ -1302,23 +1191,11 @@
     "io": {
       "$ref": "#/$defs/IoCfg"
     },
-    "jobs": {
-      "$ref": "#/$defs/JobsCfg"
-    },
     "log": {
       "$ref": "#/$defs/LogCfg"
     },
     "init": {
       "$ref": "#/$defs/InitCfg"
-    },
-    "batch": {
-      "$ref": "#/$defs/BatchCfg"
-    },
-    "quality": {
-      "$ref": "#/$defs/QualityCfg"
-    },
-    "mapper": {
-      "$ref": "#/$defs/MapperCfg"
     },
     "rate": {
       "$ref": "#/$defs/RateCfg"

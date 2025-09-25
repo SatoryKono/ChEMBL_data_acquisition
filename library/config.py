@@ -314,18 +314,12 @@ class IoCfg(_BoolModel):
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
     na_markers: Sequence[str] | None = ("#N/A",)
-    csv_index: bool = False
     exist_ok: bool = True
 
-    @field_validator("csv_index", "exist_ok", mode="before")
+    @field_validator("exist_ok", mode="before")
     @classmethod
     def _bools(cls, v: Any) -> bool:
         return cls._parse_bool(v)
-
-
-class JobsCfg(_BaseModel):
-    concurrency: int = Field(8, ge=1)
-    chunk_size: int = Field(500, ge=1)
 
 
 class LogCfg(_BaseModel):
@@ -351,38 +345,6 @@ class InitCfg(_BaseModel):
     same_doc: Path = Path("data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx")
     all_doc: Path = Path("data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx")
     output_dir: Path = Path("data/output/ChEMBL/processed")
-
-
-class BatchCfg(_BoolModel):
-    size: int = Field(1000, ge=1)
-    pause: float = Field(0.0, ge=0)
-    concurrency: int = Field(2, ge=1)
-    fail_fast: bool = True
-    retry_failed: bool = True
-
-    @field_validator("fail_fast", "retry_failed", mode="before")
-    @classmethod
-    def _bools(cls, v: Any) -> bool:
-        return cls._parse_bool(v)
-
-
-class QualityCfg(_BaseModel):
-    sample_rows: int = Field(0, ge=0)
-    corr_method: str = "pearson"
-    max_unique_preview: int = Field(50, ge=1)
-    bin_count: int = Field(20, ge=1)
-
-
-class MapperCfg(_BoolModel):
-    enable_cache: bool = True
-    strict_schema: bool = True
-    warn_on_cast: bool = True
-
-    @field_validator("enable_cache", "strict_schema", "warn_on_cast", mode="before")
-    @classmethod
-    def _bools(cls, v: Any) -> bool:
-        return cls._parse_bool(v)
-
 
 class RateCfg(_BaseModel):
     global_rps: int = Field(8, ge=1)
@@ -522,12 +484,8 @@ class Config(_BaseModel):
     doc_type: DocTypeCfg = Field(default_factory=lambda: DocTypeCfg())
     resources: ResourcesCfg = Field(default_factory=lambda: ResourcesCfg())
     io: IoCfg = Field(default_factory=lambda: IoCfg())
-    jobs: JobsCfg = Field(default_factory=lambda: JobsCfg())
     log: LogCfg = Field(default_factory=lambda: LogCfg())
     init: InitCfg = Field(default_factory=lambda: InitCfg())
-    batch: BatchCfg = Field(default_factory=lambda: BatchCfg())
-    quality: QualityCfg = Field(default_factory=lambda: QualityCfg())
-    mapper: MapperCfg = Field(default_factory=lambda: MapperCfg())
     rate: RateCfg = Field(default_factory=lambda: RateCfg())
     retry: RetryCfg = Field(default_factory=lambda: RetryCfg())
     activity: ActivityCfg = Field(default_factory=lambda: ActivityCfg())
@@ -784,8 +742,6 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
     "CHEMBL_DA_CACHE_MAXSIZE": ["chembl", "cache_maxsize"],
     "CHEMBL_DA_CACHE_TTL": ["chembl", "cache_ttl"],
-    "CHEMBL_DA_CHUNK_SIZE": ["jobs", "chunk_size"],
-    "CHEMBL_DA_CONCURRENCY": ["jobs", "concurrency"],
     "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
     "CHEMBL_DA_GLOBAL_BURST": ["rate", "global_burst"],
     "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
@@ -834,10 +790,6 @@ __all__ = [
     "TargetCfg",
     "ResourcesCfg",
     "IoCfg",
-    "JobsCfg",
-    "BatchCfg",
-    "QualityCfg",
-    "MapperCfg",
     "InitCfg",
     "RateCfg",
     "RetryCfg",

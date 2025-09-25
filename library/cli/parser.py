@@ -273,7 +273,6 @@ _DEFAULT_OVERRIDES: dict[str, str] = {
     "sep": "io.csv_sep",
     "encoding": "io.csv_encoding",
     "log_level": "log.level",
-    "chunk_size": "jobs.chunk_size",
     "timeout": "api.timeout_read",
 }
 

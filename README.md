@@ -503,8 +503,8 @@ All scripts share a common set of flags:
 
 Default settings live in ``config.yaml`` and are split into sections for each
 API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
-I/O and processing (``io``, ``jobs``, ``batch``, ``quality``, ``mapper``) and
-general infrastructure (``init``, ``rate``, ``retry``, ``log``). The companion
+I/O (``io``) and general infrastructure (``init``, ``rate``, ``retry``, ``log``).
+The companion
 ``config.schema.json`` file documents these fields and is useful for editor
 validation, but it must **not** be passed to ``--config`` because it lacks
 runtime values such as ``api.user_agent``. A minimal configuration looks like::
@@ -514,8 +514,6 @@ runtime values such as ``api.user_agent``. A minimal configuration looks like::
       rps: 5
     io:
       output_dir: data/output
-    jobs:
-      concurrency: 8
 
 ### Переменные окружения
 
@@ -551,8 +549,6 @@ Most options also provide short aliases. The table lists the supported mappings:
 | `CHEMBL_DA_PUBCHEM_TIMEOUT_READ` | `CHEMBL_DA__PUBCHEM__TIMEOUT_READ` |
 | `CHEMBL_DA_PUBCHEM_RPS` | `CHEMBL_DA__PUBCHEM__RPS` |
 | `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
-| `CHEMBL_DA_CONCURRENCY` | `CHEMBL_DA__JOBS__CONCURRENCY` |
-| `CHEMBL_DA_CHUNK_SIZE` | `CHEMBL_DA__JOBS__CHUNK_SIZE` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__RETRY__MAX_ATTEMPTS` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__RETRY__BACKOFF_FACTOR` |
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
