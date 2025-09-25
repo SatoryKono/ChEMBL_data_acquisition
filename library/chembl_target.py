@@ -37,6 +37,8 @@ TARGET_FIELDS = [
 
 EMPTY_TARGET: dict[str, str] = {field: "" for field in TARGET_FIELDS}
 
+TARGET_INCLUDE_PARAMS = "protein_classifications,cross_references"
+
 
 def _parse_gene_synonyms(synonyms: list[dict[str, str]]) -> str:
     """Return a sorted, pipe separated list of gene synonyms."""
@@ -257,7 +259,7 @@ def get_target(
     if chembl_target_id in {"", "#N/A"}:
         return dict(EMPTY_TARGET)
     base = cfg.chembl_base.rstrip("/")
-    url = f"{base}/target/{chembl_target_id}.json"
+    url = f"{base}/target/{chembl_target_id}.json?include={TARGET_INCLUDE_PARAMS}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
     payload = _extract_target_payload(data)
@@ -297,7 +299,10 @@ def get_targets(
         return pd.DataFrame(columns=TARGET_FIELDS)
 
     records: list[dict[str, Any]] = []
-    base = f"{cfg.chembl_base.rstrip('/')}/target.json?format=json"
+    base = (
+        f"{cfg.chembl_base.rstrip('/')}/target.json?format=json"
+        f"&include={TARGET_INCLUDE_PARAMS}"
+    )
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         url = f"{base}&target_chembl_id__in={','.join(chunk)}"
