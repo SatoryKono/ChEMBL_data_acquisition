@@ -136,31 +136,35 @@ def fetch_pubmed_records(
 
     Parameters
     ----------
-    pmids:
-        Identifiers to query.
-    sleep:
-
-        Seconds to pause between PubMed and Semantic Scholar requests.
-    pubmed_cfg:
-        Configuration for the PubMed API including base URL and timeouts.
-    semantic_scholar_cfg:
-        Configuration for Semantic Scholar API access.
-    openalex_cfg:
-        Configuration for OpenAlex API access.
-    crossref_cfg:
-        Configuration for CrossRef API access.
-    api_cfg:
-        Shared API configuration providing retry defaults and headers.
-    retry_cfg:
-        Retry behaviour applied to outbound HTTP sessions.
-    pubmed_cfg:
-        Settings for the PubMed API, including timeouts and retry counts.
-    semantic_cfg:
-        Semantic Scholar configuration used for batch enrichment.
-    max_workers:
-        Maximum number of concurrent threads.
-    batch_size:
-        Maximum number of PMIDs per PubMed request.
+    pmids : Iterable[str]
+        Identifiers to query across the PubMed, Semantic Scholar, OpenAlex and
+        CrossRef services.
+    sleep : float, optional
+        Seconds to pause between successive PubMed requests. The same interval
+        is reused when the pipeline falls back to the Semantic Scholar
+        single-record endpoint, preventing the thread pool from overwhelming
+        either API.
+    pubmed_cfg : PubMedCfg, optional
+        Configuration used when requesting PubMed batches, including base URLs,
+        authentication headers and retry behaviour.
+    semantic_scholar_cfg : SemanticScholarCfg, optional
+        Settings for the Semantic Scholar batch and fallback requests.
+    openalex_cfg : OpenAlexCfg, optional
+        Connection parameters for OpenAlex lookups.
+    crossref_cfg : CrossRefCfg, optional
+        Connection parameters for CrossRef lookups driven by the resolved DOI.
+    max_workers : int, optional
+        Maximum number of concurrent worker threads submitting batches. Higher
+        values increase parallelism across both the PubMed batching and the
+        Semantic Scholar enrichment stages.
+    batch_size : int, optional
+        Maximum number of PMIDs per PubMed request. Smaller batches reduce the
+        risk of request failures at the cost of more round-trips and additional
+        Semantic Scholar fallbacks.
+    fallback_doi_map : Mapping[str, str], optional
+        Explicit DOI overrides keyed by PMID. When provided, entries supply the
+        DOI used to seed downstream CrossRef lookups whenever neither PubMed
+        nor Semantic Scholar returns one.
 
     Returns
     -------
@@ -171,9 +175,10 @@ def fetch_pubmed_records(
     -----
     For backward compatibility the function also accepts a
     :class:`~library.config.Config` instance as the first positional argument
-    after ``pmids``. When supplied, connection parameters and batching options
-    are derived from ``config.document.pubmed`` unless overridden explicitly
-    via keyword arguments.
+    after ``pmids``. When supplied, defaults are loaded from
+    ``document.pubmed`` and related API sections before calling helper
+    functions, and any keyword arguments supplied to
+    :func:`fetch_pubmed_records` override those derived settings.
 
     """
 
