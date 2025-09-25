@@ -900,6 +900,48 @@ def iter_ids(csv_path: str, sep: str = ",", encoding: str = "utf-8") -> Iterable
         raise ValueError(f"malformed CSV in file: {csv_path}: {exc}") from exc
 
 
+def _extract_audit_last_update(audit: dict[str, Any]) -> str | None:
+    """Return the latest available audit date for a UniProt entry.
+
+    UniProt's JSON payloads may expose the audit dates using several field
+    names depending on the release. ``lastUpdateDate`` is preferred, but older
+    or transitional payloads can include ``lastAnnotationUpdateDate`` or
+    ``lastSequenceUpdateDate``. Each of those fields can be either a plain
+    string or an object containing a ``value`` key. This helper returns the
+    first populated date found in that priority order.
+
+    Parameters
+    ----------
+    audit:
+        ``entryAudit`` section from a UniProt JSON entry.
+
+    Returns
+    -------
+    str | None
+        The best available audit date, or ``None`` if all candidates are
+        missing.
+    """
+
+    def _coerce_date(value: Any) -> str | None:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            candidate = value.get("value")
+            if isinstance(candidate, str):
+                return candidate
+        return None
+
+    for field in (
+        "lastUpdateDate",
+        "lastAnnotationUpdateDate",
+        "lastSequenceUpdateDate",
+    ):
+        date_value = _coerce_date(audit.get(field))
+        if date_value:
+            return date_value
+    return None
+
+
 def collect_info(
     uid: str, data_dir: Path | str | None = None, *, cfg: UniprotCfg
 ) -> dict[str, Any]:
@@ -1022,8 +1064,8 @@ def collect_info(
                 result["sequence_length"] = str(length)
         audit = entry.get("entryAudit")
         if isinstance(audit, dict):
-            last_update = audit.get("lastUpdateDate")
-            if isinstance(last_update, str):
+            last_update = _extract_audit_last_update(audit)
+            if last_update:
                 result["uniprot_last_update"] = last_update
             version = audit.get("entryVersion")
             if version is not None:
