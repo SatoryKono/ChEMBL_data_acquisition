@@ -14,7 +14,7 @@ All `scripts/get_*_data.py` commands share a common interface:
 | `--sep` | CSV delimiter forwarded to `cfg.io.csv_sep`. |
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
-| `--chunk-size` | Maximum number of identifiers per API request. |
+| `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
 
 Each parser may add domain-specific switches such as `--timeout`, `--limit` or `--dry-run`. After parsing, `apply_config_overrides`
 loads `config.yaml`, applies environment variables, merges CLI overrides back into the configuration, and updates missing CLI
@@ -29,7 +29,7 @@ Before any network calls the utilities invoke `library.config.ensure_dirs`, ensu
 python scripts/get_activity_data.py \
   --input data/input-smoke/activity.csv \
   --column activity_chembl_id \
-  --chunk-size 25 \
+  --batch-size 25 \
   --timeout 45
 ```
 
@@ -43,7 +43,7 @@ python scripts/get_activity_data.py \
 python scripts/get_assay_data.py \
   --input data/input-smoke/assay.csv \
   --column assay_chembl_id \
-  --chunk-size 25
+  --batch-size 25
 ```
 
 Fetches assay metadata from ChEMBL using the configured identifier column.

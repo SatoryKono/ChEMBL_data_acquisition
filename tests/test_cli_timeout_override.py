@@ -23,7 +23,7 @@ def _create_config(tmp_path: Path) -> Path:
         "  chembl:\n"
         "    pipelines:\n"
         "      assay:\n"
-        "        chunk_size: 10\n"
+        "        batch_size: 10\n"
         "      document:\n"
         "        chembl:\n"
         "          chunk_size: 10\n"

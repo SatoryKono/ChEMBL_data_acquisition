@@ -92,7 +92,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 ids,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=cfg.assay.chunk_size,
+                chunk_size=cfg.assay.batch_size,
                 timeout=cfg.assay.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
@@ -100,7 +100,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 "assay_fetch_failed",
                 extra={"msg": str(exc)},
                 error=str(exc),
-                chunk_size=cfg.assay.chunk_size,
+                batch_size=cfg.assay.batch_size,
                 timeout=cfg.assay.timeout,
             )
             return 1
@@ -216,7 +216,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the command-line argument parser."""
     parser, log_cfg = base_parser(
-        "ChEMBL assay data utilities", column="assay_chembl_id", chunk_size=10
+        "ChEMBL assay data utilities",
+        column="assay_chembl_id",
+        chunk_size=10,
+        size_option="--batch-size",
+        size_dest="batch_size",
     )
     parser.add_argument(
         "--timeout",
@@ -251,7 +255,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             mapping={
                 "timeout": "assay.timeout",
                 "column": "assay.column",
-                "chunk_size": "assay.chunk_size",
+                "batch_size": "assay.batch_size",
                 "limit": "assay.limit",
             },
         )

@@ -14,7 +14,7 @@
 | `--sep` | Разделитель CSV; записывается в `cfg.io.csv_sep`. |
 | `--encoding` | Кодировка файла; записывается в `cfg.io.csv_encoding`. |
 | `--column` | Название колонки с идентификаторами. Значение подтягивается из конфигурации на этапе запуска. |
-| `--chunk-size` | Максимальное число идентификаторов в одном запросе. |
+| `--batch-size` / `--chunk-size` | Максимальное число идентификаторов в одном запросе (название опции зависит от пайплайна). |
 
 Конкретные скрипты добавляют дополнительные ключи (`--timeout`, `--limit`, `--dry-run` и т.п.). После разбора аргументов
 `apply_config_overrides` загружает `config.yaml`, применяет переменные окружения, переносит CLI-переопределения в конфигурацию и
@@ -29,7 +29,7 @@
 python scripts/get_activity_data.py \
   --input data/input-smoke/activity.csv \
   --column activity_chembl_id \
-  --chunk-size 25 \
+  --batch-size 25 \
   --timeout 45
 ```
 
@@ -43,7 +43,7 @@ python scripts/get_activity_data.py \
 python scripts/get_assay_data.py \
   --input data/input-smoke/assay.csv \
   --column assay_chembl_id \
-  --chunk-size 25
+  --batch-size 25
 ```
 
 Загружает метаданные ассайев ChEMBL для указанных идентификаторов.

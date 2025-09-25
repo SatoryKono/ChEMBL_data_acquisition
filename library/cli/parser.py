@@ -128,7 +128,13 @@ def add_common_arguments(
 
 
 def build_parser(
-    description: str, *, column: str, chunk_size: int = 10
+    description: str,
+    *,
+    column: str,
+    chunk_size: int = 10,
+    size_option: str = "--chunk-size",
+    size_dest: str = "chunk_size",
+    size_help: str = "Maximum IDs per request",
 ) -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Return a parser with shared options and logging configuration.
 
@@ -140,6 +146,12 @@ def build_parser(
         Default column name for identifier extraction.
     chunk_size:
         Default chunk size for API requests.
+    size_option:
+        CLI option name controlling the batch size.
+    size_dest:
+        Attribute name assigned to the parsed batch size value.
+    size_help:
+        Help text shown for the batch size argument.
 
     Returns
     -------
@@ -155,10 +167,11 @@ def build_parser(
         help="Identifier column in input CSV",
     )
     parser.add_argument(
-        "--chunk-size",
+        size_option,
+        dest=size_dest,
         type=_positive_int,
         default=chunk_size,
-        help="Maximum IDs per request",
+        help=size_help,
     )
     parser.add_argument(
         "--config",

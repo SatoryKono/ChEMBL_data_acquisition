@@ -47,7 +47,7 @@ def test_malformed_config_exits(
         "  chembl:\n"
         "    pipelines:\n"
         "      activity:\n"
-        "        chunk_size: bad\n"
+        "        batch_size: bad\n"
         "local:\n"
         "  resources:\n"
         "    dictionary_dir: dictionary\n"
@@ -74,7 +74,7 @@ def test_malformed_config_exits(
     assert rc != 0
 
     if caplog.text:
-        assert "sources.chembl.pipelines.activity.chunk_size" in caplog.text
+        assert "sources.chembl.pipelines.activity.batch_size" in caplog.text
 
 
 @pytest.mark.parametrize("entry, extra, use_sys", CLIS)
@@ -91,7 +91,7 @@ def test_unknown_key_config_exits(
         "  chembl:\n"
         "    pipelines:\n"
         "      activity:\n"
-        "        chunk_size: 5\n"
+        "        batch_size: 5\n"
         "local:\n"
         "  resources:\n"
         "    dictionary_dir: dictionary\n"
@@ -134,7 +134,7 @@ def test_negative_limit_in_config_exits(
         "  chembl:\n"
         "    pipelines:\n"
         "      activity:\n"
-        "        chunk_size: 5\n"
+        "        batch_size: 5\n"
         "        limit: -1\n"
         "local:\n"
         "  resources:\n"

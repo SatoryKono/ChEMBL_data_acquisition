@@ -22,7 +22,7 @@ def test_run_chembl_handles_request_error(
         column="activity_id",
         sep=",",
         encoding="utf8",
-        chunk_size=5,
+        batch_size=5,
         timeout=30.0,
         limit=None,
         dry_run=False,

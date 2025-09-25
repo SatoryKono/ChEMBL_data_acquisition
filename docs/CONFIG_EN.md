@@ -47,7 +47,7 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | Key | Default | Description |
 | --- | --- | --- |
 | `column` | `activity_chembl_id` | Input column containing activity identifiers. |
-| `chunk_size` | `50` | Batch size for API requests. |
+| `batch_size` | `50` | Batch size for API requests. |
 | `timeout` | `30.0` | Request timeout in seconds. |
 | `limit` | `null` | Optional cap on identifiers processed. |
 | `dry_run` | `false` | Skip network calls and file generation when `true`. |
@@ -57,7 +57,7 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | Key | Default | Description |
 | --- | --- | --- |
 | `column` | `assay_chembl_id` | Input column with assay identifiers. |
-| `chunk_size` | `50` | Batch size for API requests. |
+| `batch_size` | `50` | Batch size for API requests. |
 | `timeout` | `30.0` | Request timeout in seconds. |
 | `limit` | `null` | Optional cap on identifiers processed. |
 
@@ -66,7 +66,7 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | Key | Default | Description |
 | --- | --- | --- |
 | `column` | `molecule_chembl_id` | Input column with compound identifiers. |
-| `chunk_size` | `50` | Batch size for API requests. |
+| `batch_size` | `50` | Batch size for API requests. |
 | `timeout` | `30.0` | Request timeout in seconds. |
 | `limit` | `null` | Optional cap on identifiers processed. |
 
@@ -237,7 +237,7 @@ Any other key can be targeted using the long `CHEMBL_DA__...` form.
 
 * Supply `--config` to point at an alternative YAML file; defaults to `config.yaml`.
 * Pass `--print-config` to print the effective configuration (after environment and CLI overrides) and exit.
-* Any CLI argument mapped via `apply_config_overrides` updates the configuration. For example `--chunk-size 25` sets `sources.chembl.pipelines.activity.chunk_size` for the current run.
+* Any CLI argument mapped via `apply_config_overrides` updates the configuration. For example `--batch-size 25` sets `sources.chembl.pipelines.activity.batch_size` for the current run.
 * Use dotted overrides for rare keys: `python scripts/get_activity_data.py --sources.chembl.api.rps 10`.
 
 ## Validation workflow

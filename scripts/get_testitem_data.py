@@ -170,21 +170,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
 
         logger.info("identifiers_retrieved", count=len(ids))
-        logger.info("chembl_fetch_start", chunk_size=cfg.testitem.chunk_size)
+        logger.info("chembl_fetch_start", batch_size=cfg.testitem.batch_size)
 
         try:
             df = cl.get_testitem(
                 ids,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=cfg.testitem.chunk_size,
+                chunk_size=cfg.testitem.batch_size,
                 timeout=cfg.testitem.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "testitem_fetch_failed",
                 error=str(exc),
-                chunk_size=cfg.testitem.chunk_size,
+                batch_size=cfg.testitem.batch_size,
                 timeout=cfg.testitem.timeout,
             )
             return 1
@@ -305,6 +305,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "ChEMBL and PubChem compound data utilities",
         column="molecule_chembl_id",
         chunk_size=5,
+        size_option="--batch-size",
+        size_dest="batch_size",
     )
     parser.add_argument(
         "--timeout",
@@ -339,7 +341,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             mapping={
                 "timeout": "testitem.timeout",
                 "column": "testitem.column",
-                "chunk_size": "testitem.chunk_size",
+                "batch_size": "testitem.batch_size",
                 "limit": "testitem.limit",
             },
         )
