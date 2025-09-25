@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.activity_extraction`."""
+"""Integration tests for :mod:`scripts.get_activity_data`."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
-from library.activity_extraction import extract_activities
 from library.config import Config
 
 
 class DummyChemblClient:
-    """Test double replacing :class:`library.chembl_client.ChemblClient`."""
+    """Minimal stub replacing :class:`library.chembl_client.ChemblClient`."""
 
-    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - signature matches context
+    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - signature mirrors context
         self.closed = False
 
     def __enter__(self) -> DummyChemblClient:
@@ -26,19 +26,19 @@ class DummyChemblClient:
 
 
 @pytest.fixture()
-def config(tmp_path: Path) -> Config:
-    """Return a :class:`Config` instance writing outputs inside ``tmp_path``."""
+def config_file(tmp_path: Path) -> Path:
+    """Write a temporary configuration rooted in ``tmp_path``."""
 
     cfg = Config()
-    cfg.io.output_dir = tmp_path
-    return cfg
-
-
-@pytest.fixture(autouse=True)
-def stub_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Automatically replace :class:`ChemblClient` with a dummy implementation."""
-
-    monkeypatch.setattr("library.activity_extraction.ChemblClient", DummyChemblClient)
+    cfg.io.output_dir = tmp_path / "output"
+    cfg.io.cache_dir = tmp_path / "cache"
+    cfg.activity.column = "activity_id"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump(cfg.model_dump(mode="json"), sort_keys=False),
+        encoding="utf-8",
+    )
+    return config_path
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +49,8 @@ def stub_quality(monkeypatch: pytest.MonkeyPatch) -> None:
         return pd.DataFrame(), pd.DataFrame()
 
     monkeypatch.setattr(
-        "library.activity_extraction.analyze_table_quality", fake_quality
+        "scripts.get_activity_data.analyze_table_quality",
+        fake_quality,
     )
 
 
@@ -58,10 +59,12 @@ def _write_input(path: Path, identifiers: list[str]) -> None:
     path.write_text(rows, encoding="utf-8")
 
 
-def test_extract_activities_success(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: Config
+def test_cli_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config_file: Path
 ) -> None:
-    """Successful run writes CSV and returns exit code ``0``."""
+    """Successful CLI run writes CSV output and exits with code ``0``."""
+
+    from scripts import get_activity_data
 
     input_csv = tmp_path / "activities.csv"
     output_csv = tmp_path / "result.csv"
@@ -76,17 +79,23 @@ def test_extract_activities_success(
         }
     )
 
+    monkeypatch.setattr("scripts.get_activity_data.ChemblClient", DummyChemblClient)
+
     def fake_get(ids, *, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
         assert list(ids) == ["A1", "A2"]
         return df
 
-    monkeypatch.setattr("library.activity_extraction.cl.get_activities", fake_get)
+    monkeypatch.setattr("scripts.get_activity_data.cl.get_activities", fake_get)
 
-    exit_code = extract_activities(
-        input_csv=input_csv,
-        output_csv=output_csv,
-        cfg=config,
-        command="pytest",
+    exit_code = get_activity_data.main(
+        [
+            "--config",
+            str(config_file),
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+        ]
     )
 
     assert exit_code == 0
@@ -97,10 +106,12 @@ def test_extract_activities_success(
     assert result["activity_id"].tolist() == ["A1", "A2"]
 
 
-def test_extract_activities_validation_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: Config
+def test_cli_validation_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config_file: Path
 ) -> None:
     """Schema failures are exported to a sidecar CSV and signal an error."""
+
+    from scripts import get_activity_data
 
     input_csv = tmp_path / "activities.csv"
     output_csv = tmp_path / "result.csv"
@@ -116,16 +127,22 @@ def test_extract_activities_validation_failure(
         }
     )
 
+    monkeypatch.setattr("scripts.get_activity_data.ChemblClient", DummyChemblClient)
+
     def fake_get(ids, *, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
         return df
 
-    monkeypatch.setattr("library.activity_extraction.cl.get_activities", fake_get)
+    monkeypatch.setattr("scripts.get_activity_data.cl.get_activities", fake_get)
 
-    exit_code = extract_activities(
-        input_csv=input_csv,
-        output_csv=output_csv,
-        cfg=config,
-        command="pytest",
+    exit_code = get_activity_data.main(
+        [
+            "--config",
+            str(config_file),
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+        ]
     )
 
     assert exit_code == 1

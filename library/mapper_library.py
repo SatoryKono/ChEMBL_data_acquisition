@@ -16,6 +16,9 @@ from .log import logger
 from .rate_limiter import get_limiter
 
 
+_UNIPROT_MAPPING_CACHE_MAXSIZE = 128
+
+
 def _map_chembl_to_uniprot(
     chembl_target_id: str,
     cfg: UniprotMappingCfg,
@@ -104,7 +107,7 @@ def _map_chembl_to_uniprot(
     return str(accession)
 
 
-@lru_cache(maxsize=UniprotMappingCfg().cache_maxsize)
+@lru_cache(maxsize=_UNIPROT_MAPPING_CACHE_MAXSIZE)
 def _map_chembl_to_uniprot_cached(
     chembl_target_id: str,
     cfg: UniprotMappingCfg,
@@ -143,9 +146,8 @@ def map_chembl_to_uniprot(
     Notes
     -----
     Results are cached using :func:`functools.lru_cache` with a maximum size
-    defined by :class:`~library.config.UniprotMappingCfg`. If
-    ``cfg.cache_ttl`` is provided, cache entries expire after the given number
-    of seconds.
+    of :data:`_UNIPROT_MAPPING_CACHE_MAXSIZE` entries. If ``cfg.cache_ttl`` is
+    provided, cache entries expire after the given number of seconds.
     """
 
     ttl_hash = int(time.time() // cfg.cache_ttl) if cfg.cache_ttl else None
