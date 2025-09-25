@@ -50,7 +50,7 @@ CrossRef, IUPHAR и др.). Скрипты ориентированы на во�
 3. **Сконфигурируйте доступ**
 
    * Скопируйте `config.yaml` и адаптируйте под свои пути/лимиты (см.
-     [CONFIG.md](CONFIG.md)).
+     [CONFIG_RU.md](../CONFIG_RU.md)).
    * Чувствительные параметры (токены, логины, ключи) храните в `.env` или
      переменных окружения `CHEMBL_DA__SECTION__KEY`.
 
@@ -102,6 +102,6 @@ CrossRef, IUPHAR и др.). Скрипты ориентированы на во�
 ## Дополнительно
 
 * Для локальных проверок используйте `pytest` и `pre-commit run --all-files`.
-* Описание конфигурации — в [CONFIG.md](CONFIG.md).
-* Структура выходных таблиц — в [OUTPUT.md](OUTPUT.md).
-* Пошаговая инструкция запуска — в [USAGE.md](USAGE.md).
+* Описание конфигурации — в [CONFIG_RU.md](../CONFIG_RU.md) (английская версия — [CONFIG_EN.md](../CONFIG_EN.md)).
+* Структура выходных таблиц — в [OUTPUT_RU.md](../OUTPUT_RU.md) (английская версия — [OUTPUT_EN.md](../OUTPUT_EN.md)).
+* Пошаговая инструкция запуска — в [USAGE_RU.md](../USAGE_RU.md) (английская версия — [USAGE_EN.md](../USAGE_EN.md)).
