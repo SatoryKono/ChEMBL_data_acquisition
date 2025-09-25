@@ -145,6 +145,9 @@ def test_run_all_logs_failing_ids(
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
     )
     rc = gdd.run_all(cfg, args)
     assert rc == 1
@@ -262,6 +265,9 @@ def test_run_pubmed_uses_keyword_arguments(
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
     )
 
     exit_code = gdd.run_pubmed(cfg, args)
@@ -276,6 +282,73 @@ def test_run_pubmed_uses_keyword_arguments(
     assert captured["max_workers"] == cfg.document.pubmed.workers
     assert captured["batch_size"] == cfg.document.pubmed.batch_size
     assert captured["fallback_doi_map"] is None
+
+
+def test_build_fallback_doi_map() -> None:
+    """Fallback DOI helper should normalise values and ignore blanks."""
+
+    df = pd.DataFrame(
+        {
+            "PMID": ["1", "2", "3", None],
+            "DOI": ["10.1000/XYZ", "", None, "10.2000/abc"],
+        }
+    )
+
+    result = gdd._build_fallback_doi_map(df, pmid_column="PMID", doi_column="DOI")
+
+    assert result == {"1": "10.1000/xyz"}
+
+
+def test_run_pubmed_uses_fallback_csv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PubMed pipeline should forward fallback DOI mappings when provided."""
+
+    input_csv = tmp_path / "pmids.csv"
+    input_csv.write_text("PMID\n1\n2\n")
+    fallback_csv = tmp_path / "fallback.csv"
+    fallback_csv.write_text("PMID,DOI\n1,10.1000/FOO\n2,\n")
+
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+    monkeypatch.setattr(
+        gdd,
+        "_finalise_export",
+        lambda df, output, cfg, input_csv, key_columns: 0,
+    )
+
+    captured: dict[str, Any] = {}
+
+    def fake_fetch_pubmed_records(
+        pmids: Iterable[str],
+        cfg_param: Config,
+        *,
+        sleep: float,
+        pubmed_cfg: Any | None = None,
+        semantic_scholar_cfg: SemanticScholarCfg,
+        openalex_cfg: OpenAlexCfg,
+        crossref_cfg: CrossRefCfg,
+        max_workers: int,
+        batch_size: int,
+        fallback_doi_map: dict[str, str] | None = None,
+    ) -> pd.DataFrame:
+        captured["fallback_doi_map"] = fallback_doi_map
+        return pd.DataFrame({"PMID": list(pmids)})
+
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
+
+    cfg = Config()
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=fallback_csv,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+    )
+
+    exit_code = gdd.run_pubmed(cfg, args)
+
+    assert exit_code == 0
+    assert captured["fallback_doi_map"] == {"1": "10.1000/foo"}
 
 
 def test_write_csv_column_order(
