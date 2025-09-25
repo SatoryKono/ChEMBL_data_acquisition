@@ -43,14 +43,19 @@ def test_malformed_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "activity:\n  chunk_size: bad\n"
-        "resources:\n"
-        "  dictionary_dir: dictionary\n"
-        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
-        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
-        "  uniprot_data_dir: uniprot\n"
-        "  organism_csv: dictionary/organism.csv\n"
-        "  targets_type_csv: dictionary/targets_type.csv\n"
+        "sources:\n"
+        "  chembl:\n"
+        "    pipelines:\n"
+        "      activity:\n"
+        "        chunk_size: bad\n"
+        "local:\n"
+        "  resources:\n"
+        "    dictionary_dir: dictionary\n"
+        "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "    uniprot_data_dir: uniprot\n"
+        "    organism_csv: dictionary/organism.csv\n"
+        "    targets_type_csv: dictionary/targets_type.csv\n"
     )
     argv = [*extra, "--config", str(cfg)]
     buf = io.StringIO()
@@ -69,7 +74,7 @@ def test_malformed_config_exits(
     assert rc != 0
 
     if caplog.text:
-        assert "activity.chunk_size" in caplog.text
+        assert "sources.chembl.pipelines.activity.chunk_size" in caplog.text
 
 
 @pytest.mark.parametrize("entry, extra, use_sys", CLIS)
@@ -82,14 +87,19 @@ def test_unknown_key_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "activity:\n  chunk_size: 5\n"
-        "resources:\n"
-        "  dictionary_dir: dictionary\n"
-        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
-        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
-        "  uniprot_data_dir: uniprot\n"
-        "  organism_csv: dictionary/organism.csv\n"
-        "  targets_type_csv: dictionary/targets_type.csv\n"
+        "sources:\n"
+        "  chembl:\n"
+        "    pipelines:\n"
+        "      activity:\n"
+        "        chunk_size: 5\n"
+        "local:\n"
+        "  resources:\n"
+        "    dictionary_dir: dictionary\n"
+        "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "    uniprot_data_dir: uniprot\n"
+        "    organism_csv: dictionary/organism.csv\n"
+        "    targets_type_csv: dictionary/targets_type.csv\n"
         "unknown: 1\n"
     )
     argv = [*extra, "--config", str(cfg)]
@@ -120,15 +130,20 @@ def test_negative_limit_in_config_exits(
 ) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(
-        "activity:\n  chunk_size: 5\n"
-        "resources:\n"
-        "  dictionary_dir: dictionary\n"
-        "  iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
-        "  iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
-        "  uniprot_data_dir: uniprot\n"
-        "  organism_csv: dictionary/organism.csv\n"
-        "  targets_type_csv: dictionary/targets_type.csv\n"
-        "activity:\n  limit: -1\n"
+        "sources:\n"
+        "  chembl:\n"
+        "    pipelines:\n"
+        "      activity:\n"
+        "        chunk_size: 5\n"
+        "        limit: -1\n"
+        "local:\n"
+        "  resources:\n"
+        "    dictionary_dir: dictionary\n"
+        "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "    uniprot_data_dir: uniprot\n"
+        "    organism_csv: dictionary/organism.csv\n"
+        "    targets_type_csv: dictionary/targets_type.csv\n"
     )
     buf = io.StringIO()
     orig = configure_logger
@@ -141,7 +156,7 @@ def test_negative_limit_in_config_exits(
     monkeypatch.setattr("scripts.get_activity_data.configure_logger", _conf)
     rc = gad.main(["--config", str(cfg)])
     assert rc != 0
-    assert "activity.limit" in buf.getvalue()
+    assert "sources.chembl.pipelines.activity.limit" in buf.getvalue()
 
 
 def test_doc_type_negative_limit_in_config_exits(
@@ -149,7 +164,7 @@ def test_doc_type_negative_limit_in_config_exits(
     monkeypatch: MonkeyPatch,
 ) -> None:
     cfg = tmp_path / "config.yaml"
-    cfg.write_text("doc_type:\n  limit: -1\n")
+    cfg.write_text("system:\n  doc_type:\n    limit: -1\n")
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("chembl_id\nCHEMBL1\n", encoding="utf8")
     output_csv = tmp_path / "out.csv"
@@ -176,4 +191,4 @@ def test_doc_type_negative_limit_in_config_exits(
     )
 
     assert rc != 0
-    assert "doc_type.limit" in buf.getvalue()
+    assert "system.doc_type.limit" in buf.getvalue()

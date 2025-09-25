@@ -206,17 +206,14 @@ def test_fetch_pubmed_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = Config(
-        api=ApiCfg(user_agent="test@example.com"),
-        openalex=OpenAlexCfg(
-            base="https://example.org",
-            timeout_connect=1,
-            timeout_read=2,
-            retries=4,
-            rps=10,
-            mailto="info@example.org",
-        ),
-    )
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
+    cfg.openalex.base = "https://example.org"
+    cfg.openalex.timeout_connect = 1
+    cfg.openalex.timeout_read = 2
+    cfg.openalex.retries = 4
+    cfg.openalex.rps = 10
+    cfg.openalex.mailto = "info@example.org"
 
     captured: dict[str, Any] = {}
 
@@ -266,17 +263,14 @@ def test_fetch_openalex_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_fetch_crossref_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = Config(
-        api=ApiCfg(user_agent="test@example.com"),
-        crossref=CrossRefCfg(
-            base="https://api.example.org",
-            timeout_connect=2,
-            timeout_read=3,
-            retries=5,
-            rps=8,
-            mailto="info@example.org",
-        ),
-    )
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
+    cfg.crossref.base = "https://api.example.org"
+    cfg.crossref.timeout_connect = 2
+    cfg.crossref.timeout_read = 3
+    cfg.crossref.retries = 5
+    cfg.crossref.rps = 8
+    cfg.crossref.mailto = "info@example.org"
 
     captured: dict[str, Any] = {}
 
@@ -325,7 +319,6 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> Non
         timeout_connect=1,
         timeout_read=2,
         retries=4,
-        encodings=["utf-8"],
     )
     captured: dict[str, Any] = {}
 

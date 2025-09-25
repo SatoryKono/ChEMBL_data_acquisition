@@ -34,7 +34,7 @@ from .rate_limiter import get_limiter, sleep
 # :func:`init_session` with a configuration that provides their own contact
 # information.
 _session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:info@example.org)"), RetryCfg()
+    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
 )
 _session_lock = threading.Lock()
 
@@ -176,7 +176,7 @@ def _query_gene_symbol(
     base = cfg.base.rstrip("/")
     url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
-    limiter = get_limiter("iuphar", cfg.rps)
+    limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
 
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
@@ -660,7 +660,7 @@ class IUPHARData:
         if base_root.endswith("services"):
             base_root = base_root.rsplit("/", 1)[0]
         data_base = f"{base_root}/DATA"
-        limiter = get_limiter("iuphar", cfg.rps)
+        limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
         timeout = (cfg.timeout_connect, cfg.timeout_read)
 
         def _download(url: str) -> pd.DataFrame:

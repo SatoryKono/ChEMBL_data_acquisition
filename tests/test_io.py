@@ -112,8 +112,8 @@ def test_write_meta_serialises_paths(tmp_path: Path, cfg: Config) -> None:
 
     meta_path = Path(f"{path}.meta.yaml")
     meta = yaml.safe_load(meta_path.read_text())
-    assert isinstance(meta["config"]["io"]["output_dir"], str)
-    assert meta["config"]["io"]["output_dir"] == str(cfg.io.output_dir)
+    assert isinstance(meta["config"]["local"]["io"]["output_dir"], str)
+    assert meta["config"]["local"]["io"]["output_dir"] == str(cfg.io.output_dir)
 
 
 def test_write_csv_deterministic_hash(tmp_path: Path, cfg: Config) -> None:

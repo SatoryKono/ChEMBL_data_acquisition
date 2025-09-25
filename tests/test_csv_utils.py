@@ -32,7 +32,8 @@ def test_write_csv_deterministic(tmp_path: Path) -> None:
         }
     )
     path = tmp_path / "out.csv"
-    cfg = Config(api={"user_agent": "test@example.org"})
+    cfg = Config()
+    cfg.api.user_agent = "test@example.org"
     result = write_csv_deterministic(
         df, path, col_order=["a", "b", "d", "f"], key_cols=["a"], cfg=cfg
     )

@@ -1,100 +1,136 @@
 # Configuration Reference
 
 Все скрипты читают настройки из `config.yaml` в корне проекта.
-Структура файла валидируется по `config.schema.json`.  
-Параметры могут быть переопределены переменными окружения
-и флагами командной строки.
+Файл валидируется по `config.schema.json`, поэтому любые неизвестные ключи
+считаются ошибкой. Параметры можно переопределять через переменные окружения и
+флаги командной строки — приоритет следующий: `config.yaml` < окружение < CLI.
 
-## Основные разделы
+## Структура `config.yaml`
 
-### `api`
+| Раздел        | Назначение                                                                      |
+|---------------|---------------------------------------------------------------------------------| 
+| `sources`     | Подключение к удалённым источникам данных (ChEMBL, UniProt, CrossRef и др.).     |
+| `local`       | Пути к локальным ресурсам и каталогам, используемым при обработке.              |
+| `system`      | Общие настройки журнала, повторов и агрегации документации.                     |
 
-| Ключ | Значение по умолчанию | Описание |
-|------|-----------------------|----------|
-| `chembl_base_url` | `https://www.ebi.ac.uk/chembl/api/data` | Базовый URL ChEMBL API |
-| `pubchem_base_url` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | REST‑сервисы PubChem |
-| `uniprot_base_url` | `https://rest.uniprot.org` | API UniProt |
-| `eutils_base_url` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | NCBI E‑utilities |
-| `semanticscholar_base_url` | `https://api.semanticscholar.org/graph/v1` | Semantic Scholar |
-| `openalex_base_url` | `https://api.openalex.org` | OpenAlex |
-| `crossref_base_url` | `https://api.crossref.org` | CrossRef |
-| `gtp_base_url` | `https://www.guidetopharmacology.org` | Guide to Pharmacology |
+Ниже перечислены ключевые параметры. Если значение чувствительно (ключ, токен,
+контактный e-mail), задавайте его через переменную окружения.
 
-### `timeouts`
+### `sources.chembl`
 
-| Ключ | Значение по умолчанию | Описание |
-|------|-----------------------|----------|
-| `connect` | `10` | таймаут установления соединения (сек) |
-| `read`    | `30` | таймаут ожидания ответа (сек) |
+| Ключ                               | Значение по умолчанию | Описание |
+|------------------------------------|-----------------------|----------|
+| `api.chembl_base`                  | `https://www.ebi.ac.uk/chembl/api/data` | Базовый URL API. |
+| `api.user_agent`                   | `chembl-da/0.1 (mailto:contact@example.org)` | User-Agent с контактами. Настройте через `CHEMBL_DA_BASE`/`CHEMBL_DA_USER_AGENT`. |
+| `api.rps` / `api.burst`            | `20`                  | Ограничения скорости для лимитера. |
+| `cache.cache_ttl` / `cache_maxsize`| `3600` / `1024`       | TTL и размер кэша ответов API. |
+| `pipelines.activity.*`             | см. значения          | Параметры загрузки активностей. |
+| `pipelines.assay.*`                | см. значения          | Параметры загрузки ассайев. |
+| `pipelines.testitem.*`             | см. значения          | Параметры загрузки тест-объектов. |
+| `pipelines.document.*`             | см. значения          | Настройки выгрузки публикаций ChEMBL/PubMed. |
+| `pipelines.target.*`               | см. значения          | Пути и ограничения для модулей целей. |
 
-### `rate_limits`
+### `sources.openalex`, `sources.crossref`
 
-| Ключ | Значение по умолчанию | Описание |
-|------|-----------------------|----------|
-| `max_requests_per_second` | `5`   | лимит запросов в секунду |
-| `max_retries`             | `3`   | число повторов при временных ошибках |
-| `backoff_factor`          | `0.3` | коэффициент экспоненциального ожидания |
+Таблицы имеют одинаковую структуру: `base`, `timeout_connect`, `timeout_read`,
+`retries`, `rps`, `burst`, `mailto`. Персональный e-mail обязателен.
 
-### `chembl`
+### `sources.uniprot`
 
-| Ключ | Значение по умолчанию | Описание |
-|------|-----------------------|----------|
-| `cache_ttl`     | `3600` | время жизни кэша ответов API (сек) |
-| `cache_maxsize` | `1024` | максимальное число записей в кэше |
+| Ключ                     | Значение по умолчанию | Описание |
+|--------------------------|-----------------------|----------|
+| `api.base`               | `https://rest.uniprot.org` | REST API UniProt. |
+| `api.delay`              | `0.25`                | Пауза между запросами. |
+| `mapping.base`           | `https://rest.uniprot.org/idmapping` | Сервис ID‑маппинга. |
+| `mapping.poll_interval`  | `0.5`                 | Интервал повторного опроса задачи. |
+| `mapping.timeout`        | `300`                 | Максимальное время ожидания результата. |
+| `mapping.cache_maxsize`  | `128`                 | Размер кэша ответов. |
 
-### `output`
+### `sources.iuphar`, `sources.pubchem`, `sources.pubmed`, `sources.semantic_scholar`
 
-| Ключ | Значение по умолчанию | Описание |
-|------|-----------------------|----------|
-| `data_dir` | `data` | каталог выходных данных |
-| `logs_dir` | `logs` | каталог логов |
-| `tmp_dir`  | `tmp`  | временные файлы |
+Каждый блок содержит базовый URL и ограничения по времени/скорости. Для
+IUPHAR используются глобальные правила ретраев (`system.retry`), поэтому в
+секцию источника вынесены только лимиты RPS/`burst`. Для PubChem
+дополнительно задаётся `delay` и `cache_ttl` (секунды).
 
-## Переопределения через окружение
+### `local.resources`
 
-Шаблон переменной:
+| Ключ              | Значение по умолчанию         | Описание |
+|-------------------|-------------------------------|----------|
+| `dictionary_dir`  | `dictionary`                  | Корень словарей. |
+| `iuphar_target_csv` / `iuphar_family_csv` | см. значения | CSV c сопоставлениями IUPHAR. |
+| `uniprot_data_dir`| `dictionary/uniprot`          | Кэш UniProt JSON. |
+| `organism_csv`    | `dictionary/_Target/targets_type.csv` | Справочник организмов. |
 
-```
-CHEMBL_DA__<SECTION>__<KEY>=value
-```
+### `local.io`
 
-Примеры:
+| Ключ          | Значение по умолчанию | Описание |
+|---------------|-----------------------|----------|
+| `output_dir`  | `data/output`         | Каталог для итоговых файлов. |
+| `cache_dir`   | `.cache`              | Каталог HTTP-кэша. |
+| `csv_sep`     | `,`                   | Разделитель в CSV. |
+| `csv_encoding`| `utf-8-sig`           | Кодировка CSV. |
+| `exist_ok`    | `true`                | Создавать каталоги при отсутствии. |
+
+### `local.init`
+
+Содержит пути к исходным Excel-файлам и директорию вывода подготовленных данных.
+
+### `system`
+
+| Ключ                     | Значение по умолчанию | Описание |
+|--------------------------|-----------------------|----------|
+| `log.level`              | `INFO`                | Уровень логирования. |
+| `log.format` / `datefmt` | см. значения          | Формат сообщений. |
+| `rate.global_rps/burst`  | `100`                 | Глобальные лимиты для токен-бакета. |
+| `rate.limiter_cache_*`   | `128` / `600`         | Настройки кэша лимитеров. |
+| `retry.max_attempts`     | `3`                   | Число повторов при ошибках. |
+| `retry.backoff_factor`   | `0.5`                 | Экспоненциальная задержка. |
+| `retry.status_forcelist` | `[429,500,502,503,504]` | Коды для повторов. |
+| `doc_type.*`             | см. значения          | Весовые коэффициенты классификации документов. |
+
+## Переменные окружения
+
+Переменные формируются по шаблону `CHEMBL_DA__<SECTION>__...__<KEY>`.
+Например:
 
 ```bash
-export CHEMBL_DA__API__CHEMBL_BASE_URL=https://mirror/api
-export CHEMBL_DA__OUTPUT__DATA_DIR=/mnt/datasets
+export CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT="project/1.0 (mailto:me@example.com)"
+export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 ```
 
-Короткие алиасы:
+Для часто используемых настроек доступны короткие алиасы:
 
-| Переменная            | Соответствие              |
-|-----------------------|---------------------------|
-| `CHEMBL_DA_BASE`      | `CHEMBL_DA__API__CHEMBL_BASE_URL` |
-| `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__API__CONNECT` |
-| `CHEMBL_DA_TIMEOUT_READ`    | `CHEMBL_DA__API__READ`    |
-| `CHEMBL_DA_OUTDIR`    | `CHEMBL_DA__OUTPUT__DATA_DIR` |
-| `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
+| Переменная            | Соответствие                                      |
+|-----------------------|---------------------------------------------------|
+| `CHEMBL_DA_BASE`      | `sources.chembl.api.chembl_base`                  |
+| `CHEMBL_DA_RPS`       | `sources.chembl.api.rps`                          |
+| `CHEMBL_DA_BURST`     | `sources.chembl.api.burst`                        |
+| `CHEMBL_DA_TIMEOUT_CONNECT` | `sources.chembl.api.timeout_connect`       |
+| `CHEMBL_DA_TIMEOUT_READ`    | `sources.chembl.api.timeout_read`          |
+| `CHEMBL_DA_CACHE_DIR` | `local.io.cache_dir`                              |
+| `CHEMBL_DA_OUTDIR`    | `local.io.output_dir`                             |
+| `CHEMBL_DA_CACHE_TTL` | `sources.chembl.cache.cache_ttl`                  |
+| `CHEMBL_DA_CACHE_MAXSIZE` | `sources.chembl.cache.cache_maxsize`         |
+| `CHEMBL_DA_GLOBAL_RPS`    | `system.rate.global_rps`                     |
+| `CHEMBL_DA_GLOBAL_BURST`  | `system.rate.global_burst`                   |
 
-Неизвестные переменные игнорируются с предупреждением.
+## CLI-переопределения
 
-## Переопределения через CLI
-
-Каждый ключ может быть указан в виде `--section.key=value`, например:
+Любой параметр можно передать в виде `--path.to.value`. Примеры:
 
 ```bash
 python scripts/get_activity_data.py \
-    --api.chembl_base_url https://mirror/api \
-    --output.data_dir results
+  --sources.chembl.api.user_agent "project/1.0 (mailto:me@example.com)" \
+  --system.retry.max_attempts 5
 ```
 
-CLI‑параметры имеют самый высокий приоритет, затем переменные окружения,
-последним — значения из `config.yaml`.
+## Рекомендации по безопасности
 
-## Советы по использованию
-
-* При работе на многопользовательских системах переназначайте `output.data_dir`.
-* Для краткосрочных экспериментов можно опустить `config.yaml` —
-  скрипты используют значения по умолчанию.
-* Все пути в конфигурации интерпретируются относительно корня проекта,
-  если не указано иное.
-
+* Не коммитьте персональные e-mail или ключи в `config.yaml` — используйте `.env`
+  или переменные окружения.
+* Каталоги из `local.*` лучше переназначать на изолированное хранилище при
+  работе в многопользовательской среде.
+* Значения `rps`/`burst` соблюдайте в соответствии с политиками провайдеров.
+* В репозитории есть `.env.example` с базовым набором переменных для контактов
+  API. Скопируйте его в `.env` и укажите свои значения.

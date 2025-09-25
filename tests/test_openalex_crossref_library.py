@@ -18,17 +18,14 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
 
     monkeypatch.setattr("library.pubmed.query._do_request", fake_do_request)
 
-    cfg = Config(
-        api=ApiCfg(user_agent="test@example.com"),
-        openalex=OpenAlexCfg(
-            base="https://example.org",
-            timeout_connect=1,
-            timeout_read=2,
-            rps=2,
-            burst=5,
-            mailto="x@y.com",
-        ),
-    )
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
+    cfg.openalex.base = "https://example.org"
+    cfg.openalex.timeout_connect = 1
+    cfg.openalex.timeout_read = 2
+    cfg.openalex.rps = 2
+    cfg.openalex.burst = 5
+    cfg.openalex.mailto = "x@y.com"
     limiter = rl.RateLimiter(2)
     ocl.fetch_openalex(requests.Session(), "123", cfg.openalex, limiter)
     assert called["url"] == "https://example.org/works/pmid:123?mailto=x%40y.com"
@@ -48,17 +45,14 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
 
     monkeypatch.setattr("library.pubmed.query._do_request", fake_do_request)
 
-    cfg = Config(
-        api=ApiCfg(user_agent="test@example.com"),
-        crossref=CrossRefCfg(
-            base="https://cr.example.org",
-            timeout_connect=1,
-            timeout_read=2,
-            rps=4,
-            burst=5,
-            mailto="z@e.com",
-        ),
-    )
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
+    cfg.crossref.base = "https://cr.example.org"
+    cfg.crossref.timeout_connect = 1
+    cfg.crossref.timeout_read = 2
+    cfg.crossref.rps = 4
+    cfg.crossref.burst = 5
+    cfg.crossref.mailto = "z@e.com"
     limiter = rl.RateLimiter(4)
     ocl.fetch_crossref(requests.Session(), "10.1/abc", cfg.crossref, limiter)
     assert called["url"] == "https://cr.example.org/works/10.1%2Fabc?mailto=z%40e.com"
@@ -76,10 +70,10 @@ def test_rate_limiter_shared(monkeypatch) -> None:
     monkeypatch.setattr(rl, "sleep", fake_sleep)
     monkeypatch.setattr("library.pubmed.query._do_request", lambda *a, **k: ({}, ""))
 
-    cfg = Config(
-        api=ApiCfg(user_agent="test@example.com"),
-        openalex=OpenAlexCfg(rps=1, mailto="x@y.com"),
-    )
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
+    cfg.openalex.rps = 1
+    cfg.openalex.mailto = "x@y.com"
     limiter = rl.RateLimiter(1)
     session = requests.Session()
     ocl.fetch_openalex(session, "1", cfg.openalex, limiter)

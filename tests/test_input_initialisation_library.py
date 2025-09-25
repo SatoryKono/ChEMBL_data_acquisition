@@ -404,7 +404,8 @@ def test_save_tables_writes_files(tmp_path: Path) -> None:
         "activity_non_independent": pd.DataFrame({"id": [2]}),
         "activity_same_document": pd.DataFrame({"id": [3]}),
     }
-    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
     paths = save_tables(tables, tmp_path, cfg)
     for entity, path in paths.items():
         assert path.exists(), f"missing {entity} file"
@@ -463,7 +464,8 @@ def test_save_tables_drops_duplicate_columns_and_warns(
     # Create a table with duplicated column names
     df = pd.DataFrame([[1, "a", "b"]], columns=["id", "dup", "dup"])
     tables: TableDict = {"activity": df}
-    cfg = Config(api=ApiCfg(user_agent="test@example.com"))
+    cfg = Config()
+    cfg.api.user_agent = "test@example.com"
     paths = save_tables(tables, tmp_path, cfg)
     # Written table should contain only unique columns
     result = pd.read_csv(paths["activity"])

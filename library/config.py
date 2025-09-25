@@ -97,7 +97,7 @@ class ApiCfg(_BaseModel):
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
-    user_agent: str = "chembl-da/0.1 (mailto:info@example.org)"
+    user_agent: str = "chembl-da/0.1 (mailto:contact@example.org)"
 
     @field_validator("chembl_base")
     @classmethod
@@ -116,7 +116,7 @@ class ApiCfg(_BaseModel):
         return v
 
 
-class ChemblCfg(_BaseModel):
+class ChemblCacheCfg(_BaseModel):
     cache_ttl: int = Field(3600, ge=1)
     cache_maxsize: int = Field(1024, ge=1)
 
@@ -128,7 +128,7 @@ class OpenAlexCfg(_BaseModel):
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
-    mailto: str = "info@example.org"
+    mailto: str = "contact@example.org"
 
     @field_validator("base")
     @classmethod
@@ -152,7 +152,7 @@ class CrossRefCfg(_BaseModel):
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
-    mailto: str = "info@example.org"
+    mailto: str = "contact@example.org"
 
     @field_validator("base")
     @classmethod
@@ -173,7 +173,6 @@ class UniprotCfg(_BaseModel):
     base: str = "https://rest.uniprot.org"
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(30, ge=1)
-    retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(0.25, ge=0)
@@ -223,7 +222,6 @@ class IupharCfg(_BaseModel):
     base: str = "https://www.guidetopharmacology.org/services"
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(30, ge=1)
-    retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
 
@@ -279,7 +277,6 @@ class SemanticScholarCfg(_BaseModel):
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(10, ge=1)
     retries: int = Field(2, ge=0)
-    encodings: list[str] = Field(default_factory=lambda: ["utf-8-sig"])
 
     @field_validator("base")
     @classmethod
@@ -466,33 +463,154 @@ class TargetCfg(_BaseModel):
     all: TargetAllCfg = Field(default_factory=lambda: TargetAllCfg())
 
 
-class Config(_BaseModel):
+class ChemblPipelinesCfg(_BaseModel):
+    activity: ActivityCfg = Field(default_factory=lambda: ActivityCfg())
+    assay: AssayCfg = Field(default_factory=lambda: AssayCfg())
+    testitem: TestitemCfg = Field(default_factory=lambda: TestitemCfg())
+    document: DocumentCfg = Field(default_factory=lambda: DocumentCfg())
+    target: TargetCfg = Field(default_factory=lambda: TargetCfg())
+
+
+class ChemblSourceCfg(_BaseModel):
     api: ApiCfg = Field(default_factory=lambda: ApiCfg())
-    chembl: ChemblCfg = Field(default_factory=lambda: ChemblCfg())
-    openalex: OpenAlexCfg = Field(default_factory=lambda: OpenAlexCfg())
-    crossref: CrossRefCfg = Field(default_factory=lambda: CrossRefCfg())
-    uniprot: UniprotCfg = Field(default_factory=lambda: UniprotCfg())
-    uniprot_mapping: UniprotMappingCfg = Field(
+    cache: ChemblCacheCfg = Field(default_factory=lambda: ChemblCacheCfg())
+    pipelines: ChemblPipelinesCfg = Field(
+        default_factory=lambda: ChemblPipelinesCfg()
+    )
+
+
+class UniprotSourceCfg(_BaseModel):
+    api: UniprotCfg = Field(default_factory=lambda: UniprotCfg())
+    mapping: UniprotMappingCfg = Field(
         default_factory=lambda: UniprotMappingCfg()
     )
+
+
+class SourcesCfg(_BaseModel):
+    chembl: ChemblSourceCfg = Field(default_factory=lambda: ChemblSourceCfg())
+    openalex: OpenAlexCfg = Field(default_factory=lambda: OpenAlexCfg())
+    crossref: CrossRefCfg = Field(default_factory=lambda: CrossRefCfg())
+    uniprot: UniprotSourceCfg = Field(default_factory=lambda: UniprotSourceCfg())
     iuphar: IupharCfg = Field(default_factory=lambda: IupharCfg())
     pubchem: PubChemCfg = Field(default_factory=lambda: PubChemCfg())
     pubmed: PubMedCfg = Field(default_factory=lambda: PubMedCfg())
     semantic_scholar: SemanticScholarCfg = Field(
         default_factory=lambda: SemanticScholarCfg()
     )
-    doc_type: DocTypeCfg = Field(default_factory=lambda: DocTypeCfg())
+
+
+class LocalCfg(_BaseModel):
     resources: ResourcesCfg = Field(default_factory=lambda: ResourcesCfg())
     io: IoCfg = Field(default_factory=lambda: IoCfg())
-    log: LogCfg = Field(default_factory=lambda: LogCfg())
     init: InitCfg = Field(default_factory=lambda: InitCfg())
+
+
+class SystemCfg(_BaseModel):
+    log: LogCfg = Field(default_factory=lambda: LogCfg())
     rate: RateCfg = Field(default_factory=lambda: RateCfg())
     retry: RetryCfg = Field(default_factory=lambda: RetryCfg())
-    activity: ActivityCfg = Field(default_factory=lambda: ActivityCfg())
-    assay: AssayCfg = Field(default_factory=lambda: AssayCfg())
-    testitem: TestitemCfg = Field(default_factory=lambda: TestitemCfg())
-    document: DocumentCfg = Field(default_factory=lambda: DocumentCfg())
-    target: TargetCfg = Field(default_factory=lambda: TargetCfg())
+    doc_type: DocTypeCfg = Field(default_factory=lambda: DocTypeCfg())
+
+
+class Config(_BaseModel):
+    sources: SourcesCfg = Field(default_factory=lambda: SourcesCfg())
+    local: LocalCfg = Field(default_factory=lambda: LocalCfg())
+    system: SystemCfg = Field(default_factory=lambda: SystemCfg())
+
+    # -- Compatibility accessors -------------------------------------------------
+    #
+    # The project historically exposed flat attributes such as ``cfg.api`` and
+    # ``cfg.io``.  The configuration structure is now grouped by responsibility,
+    # but the properties below keep the public interface stable while we update
+    # callers incrementally.
+
+    @property
+    def api(self) -> ApiCfg:
+        return self.sources.chembl.api
+
+    @property
+    def chembl(self) -> ChemblCacheCfg:
+        return self.sources.chembl.cache
+
+    @property
+    def openalex(self) -> OpenAlexCfg:
+        return self.sources.openalex
+
+    @property
+    def crossref(self) -> CrossRefCfg:
+        return self.sources.crossref
+
+    @property
+    def uniprot(self) -> UniprotCfg:
+        return self.sources.uniprot.api
+
+    @property
+    def uniprot_mapping(self) -> UniprotMappingCfg:
+        return self.sources.uniprot.mapping
+
+    @property
+    def iuphar(self) -> IupharCfg:
+        return self.sources.iuphar
+
+    @property
+    def pubchem(self) -> PubChemCfg:
+        return self.sources.pubchem
+
+    @property
+    def pubmed(self) -> PubMedCfg:
+        return self.sources.pubmed
+
+    @property
+    def semantic_scholar(self) -> SemanticScholarCfg:
+        return self.sources.semantic_scholar
+
+    @property
+    def doc_type(self) -> DocTypeCfg:
+        return self.system.doc_type
+
+    @property
+    def resources(self) -> ResourcesCfg:
+        return self.local.resources
+
+    @property
+    def io(self) -> IoCfg:
+        return self.local.io
+
+    @property
+    def log(self) -> LogCfg:
+        return self.system.log
+
+    @property
+    def init(self) -> InitCfg:
+        return self.local.init
+
+    @property
+    def rate(self) -> RateCfg:
+        return self.system.rate
+
+    @property
+    def retry(self) -> RetryCfg:
+        return self.system.retry
+
+    @property
+    def activity(self) -> ActivityCfg:
+        return self.sources.chembl.pipelines.activity
+
+    @property
+    def assay(self) -> AssayCfg:
+        return self.sources.chembl.pipelines.assay
+
+    @property
+    def testitem(self) -> TestitemCfg:
+        return self.sources.chembl.pipelines.testitem
+
+    @property
+    def document(self) -> DocumentCfg:
+        return self.sources.chembl.pipelines.document
+
+    @property
+    def target(self) -> TargetCfg:
+        return self.sources.chembl.pipelines.target
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +747,7 @@ def load_config(
         )
 
     _apply_env_overrides(data)
+    _upgrade_legacy_config(data)
 
     if cli_overrides:
         for key, val in cli_overrides.items():
@@ -694,6 +813,85 @@ def _mask_secrets(data: Any) -> Any:
     return data
 
 
+def _merge_mapping(dest: dict[str, Any], src: dict[str, Any]) -> None:
+    """Recursively merge mapping *src* into *dest*."""
+
+    for key, value in src.items():
+        if (
+            key in dest
+            and isinstance(dest[key], dict)
+            and isinstance(value, dict)
+        ):
+            _merge_mapping(dest[key], value)
+        else:
+            dest[key] = value
+
+
+def _upgrade_legacy_config(data: dict[str, Any]) -> None:
+    """Translate legacy flat config keys into the structured layout."""
+
+    sources = data.setdefault("sources", {})
+    chembl = sources.setdefault("chembl", {})
+    pipelines = chembl.setdefault("pipelines", {})
+    local = data.setdefault("local", {})
+    system_cfg = data.setdefault("system", {})
+
+    if "api" in data:
+        chembl.setdefault("api", {})
+        _merge_mapping(chembl["api"], data.pop("api"))
+    if "chembl" in data:
+        chembl.setdefault("cache", {})
+        _merge_mapping(chembl["cache"], data.pop("chembl"))
+
+    for section in (
+        "openalex",
+        "crossref",
+        "iuphar",
+        "pubchem",
+        "pubmed",
+        "semantic_scholar",
+    ):
+        if section in data:
+            sources.setdefault(section, {})
+            _merge_mapping(sources[section], data.pop(section))
+
+    if "uniprot" in data:
+        sources.setdefault("uniprot", {})
+        api_cfg = sources["uniprot"].setdefault("api", {})
+        _merge_mapping(api_cfg, data.pop("uniprot"))
+    if "uniprot_mapping" in data:
+        sources.setdefault("uniprot", {})
+        mapping_cfg = sources["uniprot"].setdefault("mapping", {})
+        _merge_mapping(mapping_cfg, data.pop("uniprot_mapping"))
+
+    for section in ("activity", "assay", "testitem", "document", "target"):
+        if section in data:
+            pipelines.setdefault(section, {})
+            _merge_mapping(pipelines[section], data.pop(section))
+
+    if "resources" in data:
+        local.setdefault("resources", {})
+        _merge_mapping(local["resources"], data.pop("resources"))
+    if "io" in data:
+        local.setdefault("io", {})
+        _merge_mapping(local["io"], data.pop("io"))
+    if "init" in data:
+        local.setdefault("init", {})
+        _merge_mapping(local["init"], data.pop("init"))
+
+    if "log" in data:
+        system_cfg.setdefault("log", {})
+        _merge_mapping(system_cfg["log"], data.pop("log"))
+    if "rate" in data:
+        system_cfg.setdefault("rate", {})
+        _merge_mapping(system_cfg["rate"], data.pop("rate"))
+    if "retry" in data:
+        system_cfg.setdefault("retry", {})
+        _merge_mapping(system_cfg["retry"], data.pop("retry"))
+    if "doc_type" in data:
+        system_cfg.setdefault("doc_type", {})
+        _merge_mapping(system_cfg["doc_type"], data.pop("doc_type"))
+
 def print_config(cfg: Config) -> None:
     """Print ``cfg`` as YAML masking secret values."""
 
@@ -737,25 +935,59 @@ def build_alias_map(
 
 
 _ALIAS_OVERRIDES: dict[str, list[str]] = {
-    "CHEMBL_DA_BASE": ["api", "chembl_base"],
-    "CHEMBL_DA_BURST": ["api", "burst"],
-    "CHEMBL_DA_CACHE_DIR": ["io", "cache_dir"],
-    "CHEMBL_DA_CACHE_MAXSIZE": ["chembl", "cache_maxsize"],
-    "CHEMBL_DA_CACHE_TTL": ["chembl", "cache_ttl"],
-    "CHEMBL_DA_DICT_DIR": ["resources", "dictionary_dir"],
-    "CHEMBL_DA_GLOBAL_BURST": ["rate", "global_burst"],
-    "CHEMBL_DA_GLOBAL_RPS": ["rate", "global_rps"],
-    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["resources", "iuphar_family_csv"],
-    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["resources", "iuphar_target_csv"],
-    "CHEMBL_DA_LIMITER_CACHE_MAXSIZE": ["rate", "limiter_cache_maxsize"],
-    "CHEMBL_DA_LIMITER_CACHE_TTL": ["rate", "limiter_cache_ttl"],
-    "CHEMBL_DA_ORGANISM_CSV": ["resources", "organism_csv"],
-    "CHEMBL_DA_OUTDIR": ["io", "output_dir"],
-    "CHEMBL_DA_RPS": ["api", "rps"],
-    "CHEMBL_DA_TARGETS_TYPE_CSV": ["resources", "targets_type_csv"],
-    "CHEMBL_DA_TIMEOUT_CONNECT": ["api", "timeout_connect"],
-    "CHEMBL_DA_TIMEOUT_READ": ["api", "timeout_read"],
-    "CHEMBL_DA_UNIPROT_DATA_DIR": ["resources", "uniprot_data_dir"],
+    "CHEMBL_DA_BASE": ["sources", "chembl", "api", "chembl_base"],
+    "CHEMBL_DA_BURST": ["sources", "chembl", "api", "burst"],
+    "CHEMBL_DA_CACHE_DIR": ["local", "io", "cache_dir"],
+    "CHEMBL_DA__IO__CACHE_DIR": ["local", "io", "cache_dir"],
+    "CHEMBL_DA__IO__EXIST_OK": ["local", "io", "exist_ok"],
+    "CHEMBL_DA_CACHE_MAXSIZE": ["sources", "chembl", "cache", "cache_maxsize"],
+    "CHEMBL_DA_CACHE_TTL": ["sources", "chembl", "cache", "cache_ttl"],
+    "CHEMBL_DA_DICT_DIR": ["local", "resources", "dictionary_dir"],
+    "CHEMBL_DA_GLOBAL_BURST": ["system", "rate", "global_burst"],
+    "CHEMBL_DA_GLOBAL_RPS": ["system", "rate", "global_rps"],
+    "CHEMBL_DA_IUPHAR_FAMILY_CSV": ["local", "resources", "iuphar_family_csv"],
+    "CHEMBL_DA_IUPHAR_TARGET_CSV": ["local", "resources", "iuphar_target_csv"],
+    "CHEMBL_DA_LIMITER_CACHE_MAXSIZE": ["system", "rate", "limiter_cache_maxsize"],
+    "CHEMBL_DA_LIMITER_CACHE_TTL": ["system", "rate", "limiter_cache_ttl"],
+    "CHEMBL_DA_ORGANISM_CSV": ["local", "resources", "organism_csv"],
+    "CHEMBL_DA_OUTDIR": ["local", "io", "output_dir"],
+    "CHEMBL_DA_RPS": ["sources", "chembl", "api", "rps"],
+    "CHEMBL_DA_TARGETS_TYPE_CSV": ["local", "resources", "targets_type_csv"],
+    "CHEMBL_DA_TIMEOUT_CONNECT": ["sources", "chembl", "api", "timeout_connect"],
+    "CHEMBL_DA_TIMEOUT_READ": ["sources", "chembl", "api", "timeout_read"],
+    "CHEMBL_DA_UNIPROT_DATA_DIR": ["local", "resources", "uniprot_data_dir"],
+    "CHEMBL_DA_OPENALEX_MAILTO": ["sources", "openalex", "mailto"],
+    "CHEMBL_DA_CROSSREF_MAILTO": ["sources", "crossref", "mailto"],
+    "CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT": [
+        "sources",
+        "openalex",
+        "timeout_connect",
+    ],
+    "CHEMBL_DA_OPENALEX_TIMEOUT_READ": [
+        "sources",
+        "openalex",
+        "timeout_read",
+    ],
+    "CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT": [
+        "sources",
+        "crossref",
+        "timeout_connect",
+    ],
+    "CHEMBL_DA_CROSSREF_TIMEOUT_READ": [
+        "sources",
+        "crossref",
+        "timeout_read",
+    ],
+    "CHEMBL_DA_OPENALEX_BASE": ["sources", "openalex", "base"],
+    "CHEMBL_DA_CROSSREF_BASE": ["sources", "crossref", "base"],
+    "CHEMBL_DA_UNIPROT_BASE": ["sources", "uniprot", "api", "base"],
+    "CHEMBL_DA_IUPHAR_BASE": ["sources", "iuphar", "base"],
+    "CHEMBL_DA_PUBCHEM_BASE": ["sources", "pubchem", "base"],
+    "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
+    "CHEMBL_DA_LOG_FORMAT": ["system", "log", "format"],
+    "CHEMBL_DA_LOG_DATEFMT": ["system", "log", "datefmt"],
+    "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["system", "retry", "max_attempts"],
+    "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["system", "retry", "backoff_factor"],
 }
 
 _ALIAS_MAP: dict[str, list[str]] = {
@@ -766,7 +998,7 @@ _ALIAS_MAP: dict[str, list[str]] = {
 
 __all__ = [
     "ApiCfg",
-    "ChemblCfg",
+    "ChemblCacheCfg",
     "OpenAlexCfg",
     "CrossRefCfg",
     "UniprotCfg",
@@ -795,6 +1027,10 @@ __all__ = [
     "RetryCfg",
     "session_with_retry",
     "LogCfg",
+    "ChemblSourceCfg",
+    "SourcesCfg",
+    "LocalCfg",
+    "SystemCfg",
     "Config",
     "ConfigError",
     "ensure_dirs",
