@@ -260,20 +260,42 @@ def fetch_pubmed_records(
                 )
 
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
+                semantic_pmids = [pmid for pmid in pmids_in_batch if pmid]
 
-                # Fetch Semantic Scholar data in a single batch
-                semantic_limiter.acquire()
-                semsch_list = ssl.fetch_semantic_scholar_batch(
-                    session, pmids_in_batch, sleep, cfg=semantic_scholar_cfg
-                )
+                semsch_map: dict[str, dict[str, str]] = {}
+                if semantic_pmids:
+                    # Fetch Semantic Scholar data in a single batch
+                    semantic_limiter.acquire()
+                    semsch_list = ssl.fetch_semantic_scholar_batch(
+                        session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
+                    )
 
-                # Create a map for easy lookup
-                semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
+                    # Create a map for easy lookup
+                    semsch_map = {
+                        s.get("scholar.PMID"): s for s in semsch_list if s.get("scholar.PMID")
+                    }
+
+                    # Fallback to the single-record endpoint when the batch request fails
+                    fallback_pmids: list[str] = []
+                    seen: set[str] = set()
+                    for pmid in semantic_pmids:
+                        if pmid in seen:
+                            continue
+                        seen.add(pmid)
+                        record = semsch_map.get(pmid)
+                        if record is None or record.get("scholar.Error"):
+                            fallback_pmids.append(pmid)
+                    for pmid in fallback_pmids:
+                        semantic_limiter.acquire()
+                        fallback_record = ssl.fetch_semantic_scholar(
+                            session, pmid, sleep, cfg=semantic_scholar_cfg
+                        )
+                        semsch_map[pmid] = fallback_record
 
                 combined_records: list[dict[str, str]] = []
                 for pubmed in pubmed_list:
                     pmid = pubmed.get("PubMed.PMID", "")
-                    semsch = semsch_map.get(pmid, {})
+                    semsch = semsch_map.get(pmid, {}) if pmid else {}
 
                     # Still fetching these individually for now
 

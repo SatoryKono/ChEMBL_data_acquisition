@@ -568,6 +568,74 @@ def test_fetch_pubmed_records_uses_fallback_doi(
     assert df.loc[0, "crossref.DOI"] == fallback["123"]
 
 
+def test_fetch_pubmed_records_falls_back_to_single_semantic_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Semantic Scholar batch failures should be retried via the single endpoint."""
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+    ) -> list[dict[str, str]]:
+        assert batch == ["123"]
+        return [{"PubMed.PMID": "123"}]
+
+    def fake_semantic_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        assert pmids == ["123"]
+        return [
+            {
+                "scholar.PMID": "123",
+                "scholar.Error": "Bad Request",
+                "scholar.DOI": "",
+            }
+        ]
+
+    single_calls: list[str] = []
+
+    def fake_semantic_single(
+        session: Any, pmid: str, sleep: float, cfg: Any | None = None
+    ) -> dict[str, str]:
+        single_calls.append(pmid)
+        return {
+            "scholar.PMID": pmid,
+            "scholar.DOI": "10.1000/fallback",
+            "scholar.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    df = gdd.fetch_pubmed_records(
+        ["123"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert single_calls == ["123"]
+    assert df.loc[0, "scholar.DOI"] == "10.1000/fallback"
+
+
 def test_finalise_export_falls_back_to_default_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
