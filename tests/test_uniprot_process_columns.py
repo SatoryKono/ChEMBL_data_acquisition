@@ -24,10 +24,15 @@ def test_process_writes_expected_columns(
     sample["uniprot_id"] = "P12345"
 
     def fake_collect_info(
-        uid: str, data_dir: Path | str | None = None, *, cfg: UniprotCfg
+        uid: str,
+        data_dir: Path | str | None = None,
+        *,
+        cfg: UniprotCfg,
+        gtop_cfg=None,
     ) -> dict[str, object]:
         assert uid == "P12345"
         assert isinstance(cfg, UniprotCfg)
+        assert gtop_cfg is None
         payload = {**sample, "secondaryAccessions": ["S1", "S2"], "extra": "x"}
         return payload
 
