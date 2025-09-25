@@ -62,8 +62,9 @@ def test_run_chembl_column_order(
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
 
-    expected_head = [c for c in TestitemsSchema.columns if c in df.columns]
-    expected_tail = sorted(c for c in df.columns if c not in TestitemsSchema.columns)
+    available = set(df.columns) | {"pipeline_version", "timestamp_utc"}
+    expected_head = [c for c in TestitemsSchema.columns if c in available]
+    expected_tail = sorted(available - set(TestitemsSchema.columns))
     assert captured["col_order"] == expected_head + expected_tail
 
 

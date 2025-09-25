@@ -26,6 +26,7 @@ from library.config import Config, ensure_dirs, print_config
 from library.io import default_output_path, read_ids, write_csv
 from library.log import logger
 from library.pipeline_targets import PipelineResult, run_pipeline
+from library.pipeline_metadata import add_pipeline_metadata
 
 
 class PipelineConfig(BaseModel):
@@ -140,8 +141,9 @@ def _write_outputs(
     cfg: Config, options: PipelineConfig, result: PipelineResult
 ) -> Path:
     output = options.output_csv or default_output_path(options.input_csv, cfg.io)
+    annotated = add_pipeline_metadata(result.chembl)
     write_csv(
-        result.chembl,
+        annotated,
         output,
         cfg=cfg,
         sep=options.sep,

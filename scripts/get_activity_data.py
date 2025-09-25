@@ -36,6 +36,7 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
@@ -116,6 +117,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_activities(df)
+        df = add_pipeline_metadata(df)
         # Determine final column order: schema-defined columns first in their
         # declared sequence, followed by any additional columns sorted
         # alphabetically to provide deterministic output.

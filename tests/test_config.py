@@ -524,7 +524,10 @@ def test_target_chembl_defaults_match_cli(
     assert exit_code == 0
     assert output_csv.exists()
     header = output_csv.read_text(encoding=cfg.io.csv_encoding).splitlines()[0]
-    assert header == "target_chembl_id"
+    expected_header = cfg.io.csv_sep.join(
+        ["pipeline_version", "target_chembl_id", "timestamp_utc"]
+    )
+    assert header == expected_header
 
 
 def test_log_level_invalid_no_mapping(

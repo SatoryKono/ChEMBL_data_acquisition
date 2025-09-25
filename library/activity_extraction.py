@@ -27,6 +27,8 @@ from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
 from schemas import ActivitiesSchema, normalize_activities
 
+from .pipeline_metadata import add_pipeline_metadata
+
 LOG: Final = logging.getLogger(__name__)
 
 
@@ -159,6 +161,7 @@ def extract_activities(
             return 1
 
     df = normalize_activities(df)
+    df = add_pipeline_metadata(df)
 
     required = {name for name, col in ActivitiesSchema.columns.items() if col.required}
     missing_required = required - set(df.columns)
