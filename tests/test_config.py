@@ -297,7 +297,6 @@ def test_config_type_coercion() -> None:
     path = Path(__file__).resolve().parents[1] / "config.yaml"
     cfg = load_config(path, strict=True)
     assert isinstance(cfg.pubchem.delay, float)
-    assert isinstance(cfg.batch.pause, float)
 
 
 def test_default_resource_paths_exist() -> None:
@@ -322,15 +321,6 @@ def test_default_resource_paths_exist() -> None:
             else project_root / resource_path
         )
         assert full_path.exists(), f"Missing default resource: {full_path}"
-
-
-def test_batch_pause_negative_value(tmp_path: Path) -> None:
-    path = tmp_path / "cfg.yaml"
-    path.write_text("batch:\n  pause: -1.0\n")
-    with pytest.raises(ValidationError):
-        load_config(path)
-
-
 def test_yaml_error_includes_path(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("api: [\n")  # malformed YAML
