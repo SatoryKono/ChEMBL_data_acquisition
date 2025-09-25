@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable, Iterator, Sequence
+from itertools import islice
 from pathlib import Path
 
 if __package__ is None:  # running as a script
@@ -40,6 +41,7 @@ class PipelineConfig(BaseModel):
     sep: str | None = None
     encoding: str | None = None
     na_markers: list[str] | None = None
+    limit: int | None = Field(default=None, ge=1)
 
 
 def _positive_int(value: str) -> int:
@@ -83,6 +85,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Batch size forwarded to fetchers supporting it",
     )
     parser.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=None,
+        help="Maximum number of identifiers to process",
+    )
+    parser.add_argument(
         "--na-marker",
         action="append",
         dest="na_markers",
@@ -100,6 +108,8 @@ def _chunk_iterator(cfg: Config, options: PipelineConfig) -> Iterator[Iterable[s
         encoding=options.encoding,
         na_markers=options.na_markers,
     )
+    if options.limit is not None:
+        ids = islice(ids, options.limit)
     yield from _chunked(ids, options.chunk_size)
 
 
@@ -177,6 +187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "sep": args.sep,
                 "encoding": args.encoding,
                 "na_markers": args.na_markers,
+                "limit": args.limit,
             }
         )
     except ValidationError as exc:
