@@ -134,10 +134,6 @@ sources:
     timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
     timeout_read: 10  # (env: CHEMBL_DA_PUBMED_TIMEOUT_READ)
     retries: 2  # (env: CHEMBL_DA_PUBMED_RETRIES)
-    encodings:  # Attempt when reading PMID CSV files
-      - "utf-8-sig"
-      - "cp1251"
-      - "latin1"
   semantic_scholar:
     base: "https://api.semanticscholar.org/graph/v1"  # Semantic Scholar API root (env: CHEMBL_DA__SOURCES__SEMANTIC_SCHOLAR__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_SEMANTIC_SCHOLAR_TIMEOUT_CONNECT)

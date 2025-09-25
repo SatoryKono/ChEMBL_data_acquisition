@@ -45,8 +45,11 @@
 * `delay`, `poll_interval` (`float`) — паузы между запросами (UniProt, PubChem).
 * `mailto` (`str`, обязателен где требуется) — контактная почта согласно
   требованиям API (CrossRef, OpenAlex).
-* `cache_ttl` (`int` | `null`) — параметр кэша для ID mapping.
-* `encodings` (`list[str]`) — fallback-кодировки при чтении публикаций.
+* `cache_ttl`, `cache_maxsize` (`int` | `null`) — параметры кэша для ID mapping.
+
+Для `pubmed` fallback-кодировки (`utf-8-sig`, `cp1251`, `latin1`) зашиты в коде и
+больше не настраиваются через `config.yaml`.
+
 
 > **Совет:** значения по умолчанию подходят для публичных лимитов. При работе с
 > приватными ключами/квотами увеличивайте `rps`, но не забудьте обновить

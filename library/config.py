@@ -258,9 +258,6 @@ class PubMedCfg(_BaseModel):
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(10, ge=1)
     retries: int = Field(2, ge=0)
-    encodings: list[str] = Field(
-        default_factory=lambda: ["utf-8-sig", "cp1251", "latin1"]
-    )
 
     @field_validator("base")
     @classmethod

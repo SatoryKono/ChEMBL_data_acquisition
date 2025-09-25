@@ -42,6 +42,11 @@ __all__ = [
 
 _SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
 _SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
+_PUBMED_FALLBACK_ENCODINGS: tuple[str, ...] = (
+    "utf-8-sig",
+    "cp1251",
+    "latin1",
+)
 
 
 def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> pd.DataFrame:
@@ -68,7 +73,7 @@ def read_pmids(path: str | Path, cfg: PubMedCfg | None = None) -> pd.DataFrame:
 
     path = Path(path)
     last_exc: Exception | None = None
-    encodings = (cfg or PubMedCfg()).encodings
+    encodings = getattr(cfg or PubMedCfg(), "encodings", _PUBMED_FALLBACK_ENCODINGS)
     for enc in encodings:
         try:
             df = pd.read_csv(path, encoding=enc, dtype=str)

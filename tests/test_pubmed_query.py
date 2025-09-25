@@ -169,7 +169,6 @@ def test_fetch_pubmed_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
         timeout_connect=1,
         timeout_read=2,
         retries=4,
-        encodings=["utf-8"],
     )
     captured: dict[str, Any] = {}
 
