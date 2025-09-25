@@ -84,6 +84,41 @@ from library.table_quality import analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
 
 
+def _build_fallback_doi_map(
+    frame: pd.DataFrame,
+    *,
+    pmid_column: str,
+    doi_column: str,
+) -> dict[str, str]:
+    """Return a mapping of PubMed identifiers to DOI overrides."""
+
+    if pmid_column not in frame.columns or doi_column not in frame.columns:
+        missing = [
+            column
+            for column in (pmid_column, doi_column)
+            if column not in frame.columns
+        ]
+        raise ValueError(
+            "missing columns in fallback DOI file: "
+            f"{', '.join(missing)}"
+        )
+
+    mapping: dict[str, str] = {}
+    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(index=False):
+        if pd.isna(pmid_value):
+            pmid = ""
+        else:
+            pmid = str(pmid_value).strip()
+        if pd.isna(doi_value):
+            doi = ""
+        else:
+            doi = normalise_doi(doi_value)
+        if not pmid or not doi:
+            continue
+        mapping[pmid] = doi
+    return mapping
+
+
 def fetch_pubmed_records(
     pmids: Iterable[str],
     *args: object,
@@ -675,6 +710,33 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         pmids = limited_pmids
         logger.info("process_limit", limit=len(limited_pmids))
 
+    fallback_doi_map: Mapping[str, str] | None = None
+    fallback_csv = getattr(args, "fallback_doi_csv", None)
+    if fallback_csv:
+        try:
+            fallback_frame = io.read_csv(fallback_csv, cfg=cfg.io)
+        except (FileNotFoundError, ValueError) as exc:
+            logger.error(
+                "fallback_doi_read_failed",
+                error=str(exc),
+                path=str(fallback_csv),
+            )
+            return 1
+        try:
+            fallback_map = _build_fallback_doi_map(
+                fallback_frame,
+                pmid_column=getattr(args, "fallback_doi_pmid_column", "PMID"),
+                doi_column=getattr(args, "fallback_doi_value_column", "DOI"),
+            )
+        except ValueError as exc:
+            logger.error(
+                "fallback_doi_invalid",
+                error=str(exc),
+                path=str(fallback_csv),
+            )
+            return 1
+        fallback_doi_map = fallback_map or None
+
     try:
         df = fetch_pubmed_records(
             pmids,
@@ -686,6 +748,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             crossref_cfg=cfg.crossref,
             max_workers=cfg.document.pubmed.workers,
             batch_size=cfg.document.pubmed.batch_size,
+            fallback_doi_map=fallback_doi_map,
         )
         output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
         df = normalize_documents(df)
@@ -951,6 +1014,22 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=None,
         help="Requests per second limit for CrossRef",
+    )
+    pubmed.add_argument(
+        "--fallback-doi-csv",
+        type=Path,
+        default=None,
+        help="Optional CSV file providing PMID to DOI overrides",
+    )
+    pubmed.add_argument(
+        "--fallback-doi-pmid-column",
+        default="PMID",
+        help="Column containing PubMed identifiers in fallback CSV",
+    )
+    pubmed.add_argument(
+        "--fallback-doi-value-column",
+        default="DOI",
+        help="Column containing DOI values in fallback CSV",
     )
     pubmed.set_defaults(func=run_pubmed)
 
