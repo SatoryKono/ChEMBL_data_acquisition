@@ -152,6 +152,60 @@
       "title": "ChemblCacheCfg",
       "type": "object"
     },
+    "MoleculeCatalogCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_path": {
+          "default": "data/cache/molecule_parent_catalog.json",
+          "title": "Cache Path",
+          "type": "string"
+        },
+        "endpoint": {
+          "default": "molecule",
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "child_field": {
+          "default": "molecule_chembl_id",
+          "title": "Child Field",
+          "type": "string"
+        },
+        "parent_field": {
+          "default": "parent_molecule_chembl_id",
+          "title": "Parent Field",
+          "type": "string"
+        },
+        "fields": {
+          "default": [
+            "molecule_chembl_id",
+            "parent_molecule_chembl_id"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "filters": {
+          "default": {
+            "parent_molecule_chembl_id__isnull": "false"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Filters",
+          "type": "object"
+        },
+        "page_size": {
+          "default": 500,
+          "minimum": 1,
+          "title": "Page Size",
+          "type": "integer"
+        }
+      },
+      "title": "MoleculeCatalogCfg",
+      "type": "object"
+    },
     "ChemblPipelinesCfg": {
       "additionalProperties": false,
       "properties": {
@@ -182,6 +236,9 @@
         },
         "cache": {
           "$ref": "#/$defs/ChemblCacheCfg"
+        },
+        "molecule_catalog": {
+          "$ref": "#/$defs/MoleculeCatalogCfg"
         },
         "pipelines": {
           "$ref": "#/$defs/ChemblPipelinesCfg"
