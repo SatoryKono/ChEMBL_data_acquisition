@@ -1,6 +1,12 @@
-"""Heuristics for inferring organism cellularity from taxonomy data."""
+
+"""Utilities for classifying organism cellularity.
+
+This module provides helpers to derive a ``unicellular_organism`` flag
+from basic taxonomic annotations available in ChEMBL dictionaries.
+"""
 
 from __future__ import annotations
+
 
 from dataclasses import dataclass, field
 from typing import Iterable, Mapping, Sequence
@@ -155,6 +161,7 @@ def classify_by_lineage(
     if superkingdom in rules.unicellular_superkingdoms:
         return rules.label_unicellular()
 
+
     if any(token in rules.unicellular_phyla for token in _split_taxonomy(phylum)):
         return rules.label_unicellular()
     if any(token in rules.unicellular_classes for token in _split_taxonomy(klass)):
@@ -192,6 +199,7 @@ def classify_record(
 def add_cellularity(
     df: pd.DataFrame,
     *,
+
     genus_column: str = DEFAULT_GENUS_COLUMN,
     superkingdom_column: str = DEFAULT_SUPERKINGDOM_COLUMN,
     phylum_column: str = DEFAULT_PHYLUM_COLUMN,
