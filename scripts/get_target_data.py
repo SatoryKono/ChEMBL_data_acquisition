@@ -31,6 +31,7 @@ from library import iuphar_library as ii
 from library import target_postprocessing as tp
 from library import protein_classification as pc
 from library import uniprot_library as uu
+from library.chembl_target import normalize_reaction_ec_numbers
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -911,7 +912,9 @@ def fetch_iuphar(
     ]
     if reaction_ec_columns:
         combined_df["reaction_ec_numbers"] = combined_df.apply(
-            lambda r: _pipe_merge([r.get(column) for column in reaction_ec_columns]),
+            lambda r: normalize_reaction_ec_numbers(
+                [r.get(column) for column in reaction_ec_columns]
+            ),
             axis=1,
         )
         extra_reaction_columns = [
