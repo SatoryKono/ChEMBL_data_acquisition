@@ -8,7 +8,11 @@ import pytest
 
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
-from library.molecule_catalog import fetch_parent_catalog, load_parent_catalog
+from library.molecule_catalog import (
+    fetch_parent_catalog,
+    fetch_parent_catalog_for,
+    load_parent_catalog,
+)
 
 
 class DummyClient:
@@ -63,6 +67,68 @@ def test_fetch_parent_catalog_normalises_and_paginates(api_cfg: ApiCfg) -> None:
 
     assert client.calls  # ensure requests were issued
     assert result == {"CHEMBL1": "CHEMBL42", "CHEMBL2": "CHEMBL43"}
+
+
+def test_fetch_parent_catalog_for_returns_only_requested(api_cfg: ApiCfg) -> None:
+    responses = [
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "chembl1",
+                    "parent_molecule_chembl_id": "chembl10",
+                },
+                {
+                    "molecule_chembl_id": "CHEMBL_EXTRA",
+                    "parent_molecule_chembl_id": "CHEMBL99",
+                },
+            ]
+        }
+    ]
+    client = DummyClient(responses)
+
+    result = fetch_parent_catalog_for(
+        [" chembl1 ", "CHEMBL_MISSING"],
+        client=client,
+        api_cfg=api_cfg,
+    )
+
+    assert len(client.calls) == 1
+    assert "CHEMBL1%2CCHEMBL_MISSING" in client.calls[0]
+    assert result == {"CHEMBL1": "CHEMBL10"}
+
+
+def test_fetch_parent_catalog_for_chunks_requests(
+    api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_CHUNK_SIZE", 1)
+    responses = [
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL1",
+                    "parent_molecule_chembl_id": "CHEMBL10",
+                }
+            ]
+        },
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL2",
+                    "parent_molecule_chembl_id": "CHEMBL20",
+                }
+            ]
+        },
+    ]
+    client = DummyClient(responses)
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"],
+        client=client,
+        api_cfg=api_cfg,
+    )
+
+    assert len(client.calls) == 2
+    assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
 
 
 def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:

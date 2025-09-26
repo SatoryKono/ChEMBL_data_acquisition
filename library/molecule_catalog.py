@@ -4,15 +4,29 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlencode, urljoin
 
-from .chembl_client import ChemblClient
+from .chembl_client import ChemblClient, _chunked
 from .config import ApiCfg, MoleculeCatalogCfg
 from .log import logger
 
-__all__ = ["fetch_parent_catalog", "load_parent_catalog"]
+_DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
+_PARENT_LOOKUP_FIELDS = tuple(_DEFAULT_CATALOG_CFG.fields or ()) or (
+    _DEFAULT_CATALOG_CFG.child_field,
+    _DEFAULT_CATALOG_CFG.parent_field,
+)
+_PARENT_LOOKUP_CHILD_FIELD = _DEFAULT_CATALOG_CFG.child_field
+_PARENT_LOOKUP_PARENT_FIELD = _DEFAULT_CATALOG_CFG.parent_field
+_PARENT_LOOKUP_CHUNK_SIZE = _DEFAULT_CATALOG_CFG.page_size
+
+__all__ = [
+    "fetch_parent_catalog",
+    "fetch_parent_catalog_for",
+    "load_parent_catalog",
+]
 
 
 def _normalise_chembl_id(value: str) -> str:
@@ -39,6 +53,78 @@ def _build_initial_url(api_cfg: ApiCfg, catalog_cfg: MoleculeCatalogCfg) -> str:
         params[key] = str(value)
     query = urlencode(params)
     return f"{base}/{resource}?{query}"
+
+
+def fetch_parent_catalog_for(
+    ids: Iterable[str],
+    *,
+    client: ChemblClient,
+    api_cfg: ApiCfg,
+    timeout: float | None = None,
+) -> dict[str, str]:
+    """Fetch parent mappings for *ids* from the ChEMBL API."""
+
+    normalised_ids: list[str] = []
+    for value in ids:
+        try:
+            normalised_ids.append(_normalise_chembl_id(str(value)))
+        except ValueError:
+            continue
+
+    unique_ids: list[str] = []
+    seen: set[str] = set()
+    for item in normalised_ids:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique_ids.append(item)
+
+    if not unique_ids:
+        return {}
+
+    base = api_cfg.chembl_base.rstrip("/")
+    effective_timeout = timeout if timeout is not None else api_cfg.timeout_read
+    result: dict[str, str] = {}
+
+    for chunk in _chunked(unique_ids, _PARENT_LOOKUP_CHUNK_SIZE):
+        params = {
+            "format": "json",
+            "limit": str(len(chunk)),
+            f"{_PARENT_LOOKUP_CHILD_FIELD}__in": ",".join(chunk),
+            "fields": ",".join(_PARENT_LOOKUP_FIELDS),
+        }
+        for key, value in _DEFAULT_CATALOG_CFG.filters.items():
+            params[key] = value
+        url = f"{base}/molecule.json?{urlencode(params)}"
+        data = client.request_json(url, cfg=api_cfg, timeout=effective_timeout)
+        items = (
+            data.get("molecules")
+            or data.get("molecule")
+            or data.get("molecule_parents")
+            or data.get("molecule_parent")
+            or []
+        )
+        if not isinstance(items, list):
+            logger.warning("unexpected_response_items", extra={"url": url})
+            continue
+        allowed = set(chunk)
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            child = item.get(_PARENT_LOOKUP_CHILD_FIELD)
+            parent = item.get(_PARENT_LOOKUP_PARENT_FIELD)
+            if not child or not parent:
+                continue
+            try:
+                child_id = _normalise_chembl_id(str(child))
+                parent_id = _normalise_chembl_id(str(parent))
+            except ValueError:
+                continue
+            if child_id not in allowed:
+                continue
+            result[child_id] = parent_id
+
+    return result
 
 
 def fetch_parent_catalog(
