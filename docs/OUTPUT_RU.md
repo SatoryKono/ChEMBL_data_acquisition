@@ -74,6 +74,6 @@ data/output/
 обогащение PubChem и метаданные запуска, превращая выгрузку в опорное измерение соединений.【F:scripts/get_testitem_data.py†L36-L193】【F:schemas/testitems.py†L12-L31】
 
 Перед распространением данных выполните объединение с каталогом родительских молекул, чтобы добавить
-`parent_molecule_chembl_id` для агрегаций. Отображение хранится в JSON по пути
-`sources.chembl.molecule_catalog.cache_path` и загружается функцией
-`library.molecule_catalog.load_parent_catalog`, которая при необходимости обновляет кэш через API ChEMBL.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L43-L136】
+`parent_molecule_chembl_id` для агрегаций. Отображение хранится в SQLite-кэше по пути
+`sources.chembl.molecule_catalog.sqlite_path`; функция `library.molecule_catalog.load_parent_catalog`
+инициализирует базу (мигрируя legacy JSON из `cache_path`) и при необходимости обновляет её через API ChEMBL.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L108-L189】

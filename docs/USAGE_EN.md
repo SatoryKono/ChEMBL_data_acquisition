@@ -98,15 +98,13 @@ Downloads compound-centric annotations for the supplied identifiers.
 
 ### Parent molecule catalogue requirements
 
-Test item exports must be reconciled with the ChEMBL parent catalogue to expose `parent_molecule_chembl_id`
-used by downstream aggregations. The cache path is configured via
-`sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or adjust the
-location by setting `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
-`CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
- 
-[`sources.chembl.molecule_catalog`](./CONFIG_EN.md#sources-chembl-molecule-catalog) (`cache_path`); keep the JSON file accessible to the runner or override the
-location through CLI/environment aliases such as `--sources.chembl.molecule_catalog.cache-path` or
-`CHEMBL_DA_MOLECULE_CATALOG_CACHE`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+Test item exports must be reconciled with the ChEMBL parent catalogue to expose
+`parent_molecule_chembl_id` used by downstream aggregations. The primary cache is
+stored in SQLite; configure its location via
+`sources.chembl.molecule_catalog.sqlite_path` or the
+`CHEMBL_DA_MOLECULE_CATALOG_SQLITE` alias. Legacy JSON caches referenced by
+`sources.chembl.molecule_catalog.cache_path` are migrated automatically when the
+SQLite database is initialised.【F:config.yaml†L25-L33】【F:library/config.py†L124-L137】【F:library/molecule_catalog.py†L108-L189】
  
 
 Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the

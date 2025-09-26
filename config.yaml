@@ -24,6 +24,7 @@ sources:
       cache_maxsize: 1024  # Max cached ChEMBL responses (env: CHEMBL_DA_CACHE_MAXSIZE)
     molecule_catalog:
       cache_path: "data/cache/molecule_parent_catalog.json"  # Local cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_CACHE)
+      sqlite_path: "data/cache/molecule_parent_catalog.sqlite"  # SQLite cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_SQLITE)
       endpoint: "molecule"  # API resource providing parent relationships
       child_field: "molecule_chembl_id"  # Column containing molecule identifiers
       parent_field: "parent_molecule_chembl_id"  # Column containing parent molecule identifiers

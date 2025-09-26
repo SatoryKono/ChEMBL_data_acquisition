@@ -123,6 +123,7 @@ class ChemblCacheCfg(_BaseModel):
 
 class MoleculeCatalogCfg(_BaseModel):
     cache_path: Path = Path("data/cache/molecule_parent_catalog.json")
+    sqlite_path: Path = Path("data/cache/molecule_parent_catalog.sqlite")
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
@@ -986,6 +987,12 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
         "chembl",
         "molecule_catalog",
         "cache_path",
+    ],
+    "CHEMBL_DA_MOLECULE_CATALOG_SQLITE": [
+        "sources",
+        "chembl",
+        "molecule_catalog",
+        "sqlite_path",
     ],
     "CHEMBL_DA_DICT_DIR": ["local", "resources", "dictionary_dir"],
     "CHEMBL_DA_GLOBAL_BURST": ["system", "rate", "global_burst"],

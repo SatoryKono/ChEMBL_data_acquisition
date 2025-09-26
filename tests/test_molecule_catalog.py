@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,11 @@ import pytest
 
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
-from library.molecule_catalog import fetch_parent_catalog, load_parent_catalog
+from library.molecule_catalog import (
+    ParentCatalogStore,
+    fetch_parent_catalog,
+    load_parent_catalog,
+)
 
 
 class DummyClient:
@@ -68,13 +73,17 @@ def test_fetch_parent_catalog_normalises_and_paginates(api_cfg: ApiCfg) -> None:
 def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
     cache = tmp_path / "catalog.json"
     cache.write_text(json.dumps({"chembl10": "chembl99"}), encoding="utf-8")
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    sqlite_path = tmp_path / "catalog.sqlite"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
 
-    result = load_parent_catalog(
+    store = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
     )
 
-    assert result == {"CHEMBL10": "CHEMBL99"}
+    assert isinstance(store, ParentCatalogStore)
+    assert store.lookup(["CHEMBL10"]) == {"CHEMBL10": "CHEMBL99"}
+    assert not store.was_refreshed
+    assert sqlite_path.is_file()
 
 
 def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
@@ -83,13 +92,35 @@ def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) ->
         "molecule_chembl_id,parent_molecule_chembl_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    sqlite_path = tmp_path / "catalog.sqlite"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
 
-    result = load_parent_catalog(
+    store = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
     )
 
-    assert result == {"CHEMBL1": "CHEMBL42"}
+    assert store.lookup(["CHEMBL1"]) == {"CHEMBL1": "CHEMBL42"}
+
+
+def test_load_parent_catalog_prefers_sqlite_over_json(
+    tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = tmp_path / "catalog.json"
+    cache.write_text(json.dumps({"chembl10": "chembl99"}), encoding="utf-8")
+    sqlite_path = tmp_path / "catalog.sqlite"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
+
+    # Initial load migrates JSON into SQLite.
+    load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
+
+    def fail_loads(*args: object, **kwargs: object) -> None:  # pragma: no cover - guard
+        raise AssertionError("json.loads should not be called once SQLite exists")
+
+    monkeypatch.setattr("library.molecule_catalog.json.loads", fail_loads)
+
+    store = load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
+
+    assert store.lookup(["CHEMBL10"]) == {"CHEMBL10": "CHEMBL99"}
 
 
 def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg) -> None:
@@ -98,7 +129,7 @@ def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg
         "molecule_chembl_id,parant_molecule_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite")
 
     with pytest.raises(ValueError):
         load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
@@ -108,7 +139,8 @@ def test_load_parent_catalog_fetches_and_persists(
     tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache = tmp_path / "catalog.json"
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    sqlite_path = tmp_path / "catalog.sqlite"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
     data = {"CHEMBL50": "CHEMBL60"}
 
     def fake_fetch(
@@ -125,9 +157,12 @@ def test_load_parent_catalog_fetches_and_persists(
         fake_fetch,
     )
 
-    result = load_parent_catalog(
+    store = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
     )
 
-    assert result == data
-    assert json.loads(cache.read_text(encoding="utf-8")) == data
+    assert store.was_refreshed
+    assert store.lookup(["CHEMBL50"]) == data
+    assert sqlite_path.is_file()
+    with sqlite3.connect(sqlite_path) as connection:
+        assert dict(connection.execute("SELECT child, parent FROM parent_catalog")) == data

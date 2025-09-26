@@ -59,12 +59,28 @@ def test_get_testitem_parent_catalog(
             InChIKey="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
         )
 
-    def fake_load_parent_catalog(**_: object) -> dict[str, str]:
+    class FakeCatalog:
+        def __init__(self, mapping: dict[str, str]) -> None:
+            self._mapping = mapping
+            self.was_refreshed = False
+
+        def __bool__(self) -> bool:
+            return bool(self._mapping)
+
+        def lookup(self, children: list[str]) -> dict[str, str]:
+            return {
+                child: self._mapping[child]
+                for child in children
+                if child in self._mapping
+            }
+
+    def fake_load_parent_catalog(**_: object) -> FakeCatalog:
         frame = pd.read_csv(catalog_csv)
-        return {
+        mapping = {
             str(row["molecule_chembl_id"]): str(row["parent_molecule_chembl_id"])
             for _, row in frame.iterrows()
         }
+        return FakeCatalog(mapping)
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)

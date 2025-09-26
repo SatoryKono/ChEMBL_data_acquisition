@@ -102,15 +102,10 @@ python scripts/get_testitem_data.py \
 ### Требования к каталогу родительских молекул
 
 Чтобы получить `parent_molecule_chembl_id` для агрегаций, выгрузку необходимо объединить с каталогом
-родителей ChEMBL. Путь к локальному JSON задаётся через `sources.chembl.molecule_catalog.cache_path`; убедитесь,
-что файл доступен исполнителю, либо задайте новое расположение переменной окружения
-`CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
-`config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
-
-родителей ChEMBL. Путь к локальному JSON задаётся через
-[`sources.chembl.molecule_catalog`](./CONFIG_RU.md#sources-chembl-molecule-catalog) (`cache_path`); убедитесь,
-что файл доступен исполнителю, либо переопределите расположение параметрами CLI (`--sources.chembl.molecule_catalog.cache-path`)
-или переменными окружения (`CHEMBL_DA_MOLECULE_CATALOG_CACHE`).【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+родителей ChEMBL. Основной кэш хранится в SQLite; путь задаётся параметром
+`sources.chembl.molecule_catalog.sqlite_path` или переменной окружения
+`CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. При первом запуске legacy JSON из
+`sources.chembl.molecule_catalog.cache_path` автоматически мигрируется в SQLite.【F:config.yaml†L25-L33】【F:library/config.py†L124-L137】【F:library/molecule_catalog.py†L108-L189】
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
