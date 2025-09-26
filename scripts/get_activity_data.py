@@ -18,6 +18,17 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+    import bootstrap  # type: ignore[import-not-found]
+else:
+    from . import bootstrap  # type: ignore[import-not-found]
+
+bootstrap.ensure_project_root()
+
 from library import chembl_library as cl
 from library import cli
 from library import io
