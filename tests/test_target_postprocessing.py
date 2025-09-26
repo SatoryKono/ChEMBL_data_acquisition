@@ -199,7 +199,7 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
     organism.to_csv(organism_path, index=False)
     output_path = tmp_path / "out.csv"
 
-    cfg.resources.organism_csv = organism_path
+    cfg.target.all.organism_csv = organism_path
     tp.finalise_file(
         input_path,
         output_path,

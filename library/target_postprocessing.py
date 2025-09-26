@@ -631,7 +631,7 @@ def finalise_file(
         Column containing the organism genus used for merging.
     organism_path:
         Optional path to a CSV containing organism ``genus`` and ``type`` columns.
-        Defaults to ``cfg.resources.organism_csv``.
+        Defaults to ``cfg.target.all.organism_csv``.
     sep:
         Field delimiter of the CSV files. Defaults to ``cfg.io.csv_sep``.
     encoding:
@@ -640,7 +640,7 @@ def finalise_file(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    organism_path = organism_path or cfg.resources.organism_csv
+    organism_path = organism_path or cfg.target.all.organism_csv
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
     processed = finalise_targets(

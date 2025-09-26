@@ -355,7 +355,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help=(
             "CSV mapping 'genus' to organism 'type' for finalisation "
-            "(default: config resources.organism_csv)"
+            "(default: config target.all.organism_csv)"
         ),
     )
     all_cmd.add_argument(

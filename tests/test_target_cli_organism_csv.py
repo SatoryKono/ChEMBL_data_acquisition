@@ -14,7 +14,7 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
         "    pipelines:\n"
         "      target:\n"
         "        all:\n"
-        "          organism_csv: dictionary/organism.csv\n"
+        "          organism_csv: dictionary/_Target/organism.csv\n"
         "    api:\n"
         "      timeout_read: 30\n"
         "local:\n"
@@ -25,7 +25,7 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
         "    dictionary_dir: dictionary\n"
         "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
         "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
-        "    targets_type_csv: dictionary/targets_type.csv\n"
+        "    targets_type_csv: dictionary/_Target/targets_type.csv\n"
         "system:\n"
         "  log:\n"
         "    level: INFO\n"
@@ -39,4 +39,4 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(gtd, "run_all", fake_run_all)
     rc = gtd.main(["all", "--config", str(cfg_path)])
     assert rc == 0
-    assert captured["organism_csv"] == Path("dictionary/organism.csv")
+    assert captured["organism_csv"] == Path("dictionary/_Target/organism.csv")

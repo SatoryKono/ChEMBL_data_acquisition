@@ -159,7 +159,7 @@ config:
             family_csv: dictionary\_target\_IUPHAR\_IUPHAR_family.csv
             chunk_size: 5
             timeout: 30.0
-            organism_csv: dictionary\_target\targets_type.csv
+            organism_csv: dictionary\_Target\organism.csv
             uniprot_column: uniprot_id
             chembl_out: null
             uniprot_out: null
@@ -241,8 +241,7 @@ config:
       iuphar_target_csv: dictionary\_target\_IUPHAR\_IUPHAR_target.csv
       iuphar_family_csv: dictionary\_target\_IUPHAR\_IUPHAR_family.csv
       uniprot_data_dir: dictionary\_target\_uniprot
-      organism_csv: dictionary\_target\targets_type.csv
-      targets_type_csv: dictionary\_target\targets_type.csv
+      targets_type_csv: dictionary\_Target\targets_type.csv
     io:
       output_dir: data\output
       cache_dir: .cache
