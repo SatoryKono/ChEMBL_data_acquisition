@@ -11,9 +11,9 @@ from collections.abc import Iterable, Mapping, Sequence
 
 import pandas as pd
 
+from library import cli
 from library import io
 from library.cli import (
-    apply_config_overrides,
     configure_logger,
 )
 from library.cli import (
@@ -139,7 +139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger_inst.info("pipeline_start", run_id=log_cfg.run_id)
 
     try:
-        cfg: Config = apply_config_overrides(
+        cfg: Config = cli.apply_config_overrides(
             args,
             parser,
             args.config,

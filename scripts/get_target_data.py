@@ -23,6 +23,7 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
+from library import cli
 from library import io
 from library import iuphar_library as ii
 from library import protein_classification as pc
@@ -32,7 +33,6 @@ from library.chembl_client import ChemblClient
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     build_root_parser,
     configure_logger,
     positive_int,
@@ -1167,7 +1167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "iuphar_out": "target.all.iuphar_out",
                 "limit": "target.all.limit",
             }
-        cfg: Config = apply_config_overrides(
+        cfg: Config = cli.apply_config_overrides(
             args, subparser, args.config, mapping=mapping, base_parser=parser
         )
         if args.print_config:

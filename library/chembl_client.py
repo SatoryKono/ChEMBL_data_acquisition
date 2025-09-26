@@ -137,9 +137,9 @@ class ChemblClient:
             )
 
         last_exc: requests.RequestException | ValueError | None = None
-        attempts = max(1, cfg.retries)
+        total_attempts = cfg.retries + 1
 
-        for attempt in range(1, attempts + 1):
+        for attempt in range(1, total_attempts + 1):
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
             logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
@@ -172,7 +172,7 @@ class ChemblClient:
                         return data
             except (requests.RequestException, ValueError) as exc:
                 last_exc = exc
-                if attempt >= attempts:
+                if attempt >= total_attempts:
                     logger.exception(
                         "request_fail",
                         extra={"url": url, "status": None, "rps": cfg.rps},

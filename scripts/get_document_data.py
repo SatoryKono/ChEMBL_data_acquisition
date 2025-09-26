@@ -38,6 +38,7 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
+from library import cli
 from library import document_postprocessing as dp
 from library import io
 from library.csv_utils import write_csv_chunks_deterministic
@@ -47,7 +48,6 @@ from library import semantic_scholar_library as ssl
 from library.chembl_client import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     build_root_parser,
     configure_logger,
     positive_int,
@@ -1282,7 +1282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         )
     try:
-        cfg: Config = apply_config_overrides(
+        cfg: Config = cli.apply_config_overrides(
             args,
             subparser,
             args.config,

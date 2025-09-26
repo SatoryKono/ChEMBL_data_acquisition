@@ -8,10 +8,10 @@ from urllib.error import URLError
 
 import pandas as pd
 
+from library import cli
 from library import io
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     configure_logger,
 )
 from library.cli import (
@@ -120,7 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
-        cfg: Config = apply_config_overrides(args, parser, args.config)
+        cfg: Config = cli.apply_config_overrides(args, parser, args.config)
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)

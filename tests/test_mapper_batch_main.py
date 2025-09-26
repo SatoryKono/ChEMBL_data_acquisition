@@ -26,7 +26,7 @@ def test_main_invokes_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
 
     cfg = Config()
     cfg.api.user_agent = "test@example.org"
-    monkeypatch.setattr(cli, "apply_config_overrides", lambda *_, **__: cfg)
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *_, **__: cfg)
     monkeypatch.setattr(cli, "ensure_dirs", lambda *_: None)
 
     printed: dict[str, Config] = {}

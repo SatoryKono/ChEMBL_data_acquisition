@@ -64,7 +64,7 @@ def test_assay_timeout_override(
         cfg.assay.timeout = float(a.timeout)
         return cfg
 
-    monkeypatch.setattr(gas, "apply_config_overrides", fake_apply)
+    monkeypatch.setattr(gas.cli, "apply_config_overrides", fake_apply)
 
     def fake_get_assays(
         ids: Sequence[str],
@@ -124,7 +124,7 @@ def test_document_timeout_override(
         cfg.api.user_agent = "test/0.1 (mailto:test@example.com)"
         return cfg
 
-    monkeypatch.setattr(gdd, "apply_config_overrides", fake_apply_doc)
+    monkeypatch.setattr(gdd.cli, "apply_config_overrides", fake_apply_doc)
 
     def fake_get_documents(
         ids: Sequence[str],
@@ -181,7 +181,7 @@ def test_testitem_timeout_override(
         cfg.testitem.timeout = float(a.timeout)
         return cfg
 
-    monkeypatch.setattr(gtdt, "apply_config_overrides", fake_apply_test)
+    monkeypatch.setattr(gtdt.cli, "apply_config_overrides", fake_apply_test)
 
     def fake_get_testitem(
         ids: Sequence[str],
@@ -254,7 +254,7 @@ def test_target_timeout_override(
         cfg.target.chembl.timeout = float(a.timeout)
         return cfg
 
-    monkeypatch.setattr(gtd, "apply_config_overrides", fake_apply_target)
+    monkeypatch.setattr(gtd.cli, "apply_config_overrides", fake_apply_target)
 
     def fake_get_targets(
         ids: Sequence[str],
@@ -314,7 +314,7 @@ def test_target_chunk_size_override(
         cfg.target.chembl.chunk_size = int(a.chunk_size)
         return cfg
 
-    monkeypatch.setattr(gtd, "apply_config_overrides", fake_apply_chunk)
+    monkeypatch.setattr(gtd.cli, "apply_config_overrides", fake_apply_chunk)
 
     def fake_get_targets(
         ids: Sequence[str],

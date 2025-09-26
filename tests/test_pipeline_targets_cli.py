@@ -74,7 +74,7 @@ def test_cli_forwards_batch_size(
 
     dummy_logger = _DummyLogger()
     monkeypatch.setattr(cli, "configure_logger", lambda cfg: dummy_logger)
-    monkeypatch.setattr(cli, "apply_config_overrides", lambda *a: Config())
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *a: Config())
     monkeypatch.setattr(cli, "ensure_dirs", lambda cfg: None)
     monkeypatch.setattr(cli, "print_config", lambda cfg: None)
     monkeypatch.setattr(cli, "run_pipeline", fake_run_pipeline)
@@ -143,7 +143,7 @@ def test_cli_limit_restricts_rows(
 
     dummy_logger = _DummyLogger()
     monkeypatch.setattr(cli, "configure_logger", lambda cfg: dummy_logger)
-    monkeypatch.setattr(cli, "apply_config_overrides", lambda *a: Config())
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *a: Config())
     monkeypatch.setattr(cli, "ensure_dirs", lambda cfg: None)
     monkeypatch.setattr(cli, "print_config", lambda cfg: None)
     monkeypatch.setattr(cli, "run_pipeline", fake_run_pipeline)

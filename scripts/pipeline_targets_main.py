@@ -12,10 +12,10 @@ from pathlib import Path
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from library import cli
 from library.chembl_client import _chunked
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     build_root_parser,
     configure_logger,
 )
@@ -170,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger_inst = configure_logger(log_cfg)
     pipeline_logger = logger_inst.bind(stage="pipeline")
     pipeline_logger.info("pipeline_start")
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg = cli.apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     print_config(cfg)
     if args.print_config:
