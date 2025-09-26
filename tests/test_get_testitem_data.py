@@ -59,6 +59,38 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     pd.testing.assert_frame_equal(result, expected)
 
 
+def test_add_pubchem_data_uses_parent_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL_CHILD", "CHEMBL_PARENT"],
+            "parent_molecule_chembl_id": ["CHEMBL_PARENT", pd.NA],
+            "canonical_smiles": [pd.NA, "C"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, use_parent_for_salts=True)
+
+    smiles_calls: list[str] = []
+
+    def record_smiles(value: str, _: pl.PubChemCfg) -> str | None:
+        smiles_calls.append(value)
+        return "111" if value == "C" else None
+
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid", lambda *_: None)
+    monkeypatch.setattr(pl, "get_all_cid", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", record_smiles)
+
+    props = pl.Properties("iupac", "formula", "ismiles", "csmiles", "inchi", "inchikey")
+    monkeypatch.setattr(pl, "get_properties", lambda cid, _: props if cid == "111" else None)
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert list(result["pubchem_cid"]) == ["111", "111"]
+    assert result.loc[0, "pubchem_iupac_name"] == "iupac"
+    assert smiles_calls == ["C"]
+
+
 def test_resolve_pubchem_cid_prefers_inchikey(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -133,11 +165,14 @@ def test_resolve_pubchem_cid_uses_parent_when_enabled(
     monkeypatch.setattr(pl, "get_all_cid", lambda *_: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
 
+    parent_context = gtd.ParentContext(row=parent_row)
+
     cid = gtd.resolve_pubchem_cid(
         child_row,
         cache,
         cfg,
-        parent_loader=lambda _: parent_row,
+        parent_loader=lambda _: parent_context,
+        parent_data={"CHEMBL1": parent_context},
     )
 
     assert cid == "42"

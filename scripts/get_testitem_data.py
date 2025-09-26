@@ -276,7 +276,8 @@ def resolve_pubchem_cid(
     cache: MutableMapping[str, str | None],
     cfg: PubChemCfg,
     *,
-    parent_loader: Callable[[str], pd.Series | None] | None = None,
+    parent_loader: Callable[[str], ParentContext | None] | None = None,
+    parent_data: Mapping[str, ParentContext] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
 
@@ -298,79 +299,27 @@ def resolve_pubchem_cid(
             cache[chembl_id] = None
         return None
 
-    if parent_loader is None:
+    parent_context: ParentContext | None = None
+    if parent_data is not None:
+        parent_context = parent_data.get(parent_id)
+
+    if parent_context is None and parent_loader is not None:
+        parent_context = parent_loader(parent_id)
+
+    if parent_context is None:
         if chembl_id and chembl_id not in cache:
             cache[chembl_id] = None
-        return None
-
-    parent_row = parent_loader(parent_id)
-    if parent_row is None:
         logger.info(
             "pubchem_parent_structure_missing",
             child=chembl_id,
             parent=parent_id,
             reason="parent_unavailable",
         )
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
         return None
 
-    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
-    if parent_cid:
-        cache[parent_id] = parent_cid
-        if chembl_id:
-            cache[chembl_id] = parent_cid
-        return parent_cid
-
-
-    return None
-
-
-def resolve_pubchem_cid(
-    row: pd.Series,
-    cache: MutableMapping[str, str | None],
-    cfg: PubChemCfg,
-    *,
-    parent_loader: Callable[[str], pd.Series | None] | None = None,
-) -> str | None:
-    """Resolve PubChem CID for a ChEMBL record."""
-
-    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
-    if cid is not None:
-        return cid
-
-    if not cfg.use_parent_for_salts:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_id = _normalise_identifier(
-        row.get("parent_molecule_chembl_id"), uppercase=True
+    parent_cid = _resolve_cid_from_row(
+        parent_context.row, cache, cfg, chembl_id=parent_id
     )
-    if not parent_id:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    if parent_loader is None:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_row = parent_loader(parent_id)
-    if parent_row is None:
-        logger.info(
-            "pubchem_parent_structure_missing",
-            child=chembl_id,
-            parent=parent_id,
-            reason="parent_unavailable",
-        )
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
     if parent_cid:
         cache[parent_id] = parent_cid
         if chembl_id:
@@ -388,6 +337,14 @@ def resolve_pubchem_cid(
     if chembl_id and chembl_id not in cache:
         cache[chembl_id] = None
     return None
+
+
+@dataclass(frozen=True)
+class ParentContext:
+    """Container storing a parent record for PubChem enrichment."""
+
+    row: pd.Series
+    index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -673,23 +630,24 @@ def add_pubchem_data(
     cid_cache = _load_pubchem_cid_cache(cache_path)
     cache_dirty = False
 
-    local_records: dict[str, pd.Series] = {}
+    parent_data_map: dict[str, ParentContext] = {}
     if "molecule_chembl_id" in result.columns:
-        for index, value in result["molecule_chembl_id"].items():
-            chembl_norm = _normalise_identifier(value, uppercase=True)
-            if chembl_norm and chembl_norm not in local_records:
-                local_records[chembl_norm] = result.loc[index]
+        for index in result.index:
+            row = result.loc[index]
+            chembl_norm = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+            if chembl_norm and chembl_norm not in parent_data_map:
+                parent_data_map[chembl_norm] = ParentContext(row=row.copy(), index=index)
 
-    parent_record_cache: dict[str, pd.Series | None] = {}
+    parent_record_cache: dict[str, ParentContext | None] = {}
 
-    def load_parent_record(parent_id: str) -> pd.Series | None:
+    def load_parent_record(parent_id: str) -> ParentContext | None:
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
         if not parent_norm:
             return None
         if parent_norm in parent_record_cache:
             return parent_record_cache[parent_norm]
-        if parent_norm in local_records:
-            parent_record_cache[parent_norm] = local_records[parent_norm]
+        if parent_norm in parent_data_map:
+            parent_record_cache[parent_norm] = parent_data_map[parent_norm]
             return parent_record_cache[parent_norm]
         if client is None or api_cfg is None:
             parent_record_cache[parent_norm] = None
@@ -714,9 +672,10 @@ def add_pubchem_data(
             parent_record_cache[parent_norm] = None
             return None
         parent_row = parent_df.iloc[0]
-        local_records[parent_norm] = parent_row
-        parent_record_cache[parent_norm] = parent_row
-        return parent_row
+        context = ParentContext(row=parent_row, index=None)
+        parent_data_map[parent_norm] = context
+        parent_record_cache[parent_norm] = context
+        return context
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
@@ -768,6 +727,7 @@ def add_pubchem_data(
             cid_cache,
             cfg,
             parent_loader=load_parent_record,
+            parent_data=parent_data_map,
         )
         cid_by_index[idx] = cid
         if chembl_id:
