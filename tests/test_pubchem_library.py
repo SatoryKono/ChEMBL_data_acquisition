@@ -196,3 +196,116 @@ def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     time.sleep(1.1)
     pl.make_request(url, cfg)
     assert calls["n"] == 2  # cache expired
+
+
+@responses.activate
+def test_resolve_pubchem_record_falls_back_to_name() -> None:
+    """The resolver should follow ``resolve_order`` when lookups fail."""
+
+    cfg = pl.PubChemCfg(
+        resolve_order=("smiles", "pref_name"),
+        retries=1,
+        delay=0,
+        cache_ttl=0,
+    )
+
+    smiles_url = (
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/C/"
+        "property/MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+    name_url = (
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/Aspirin/"
+        "property/MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+
+    responses.add(responses.GET, smiles_url, status=404)
+    responses.add(
+        responses.GET,
+        name_url,
+        json={
+            "PropertyTable": {
+                "Properties": [
+                    {
+                        "CID": 2244,
+                        "IUPACName": "Aspirin",
+                        "MolecularFormula": "C9H8O4",
+                        "IsomericSMILES": "O=C(O)C1=CC=CC=C1OC(=O)C",
+                        "CanonicalSMILES": "CC(=O)OC1=CC=CC=C1C(=O)O",
+                        "InChI": "InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)",
+                        "InChIKey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N",
+                    }
+                ]
+            }
+        },
+        status=200,
+    )
+
+    record = pl.resolve_pubchem_record(
+        {"canonical_smiles": "C", "pref_name": "Aspirin"},
+        cfg,
+        cache={},
+    )
+
+    assert record["pubchem_cid"] == "2244"
+    assert record["pubchem_iupac_name"] == "Aspirin"
+    assert len(responses.calls) == 2
+    assert responses.calls[0].request.url == smiles_url
+    assert responses.calls[1].request.url == name_url
+
+
+@responses.activate
+def test_resolve_pubchem_record_backoff_on_status() -> None:
+    """HTTP 429 and 5xx responses should trigger exponential backoff."""
+
+    cfg = pl.PubChemCfg(
+        resolve_order=("smiles",),
+        retries=3,
+        delay=0,
+        cache_ttl=0,
+        backoff_initial_seconds=0.1,
+        timeout_seconds=5,
+    )
+
+    url = (
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/C/"
+        "property/MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+
+    responses.add(responses.GET, url, status=429)
+    responses.add(responses.GET, url, status=503)
+    responses.add(
+        responses.GET,
+        url,
+        json={
+            "PropertyTable": {
+                "Properties": [
+                    {
+                        "CID": 5793,
+                        "IUPACName": "Acetic acid",
+                        "MolecularFormula": "C2H4O2",
+                        "IsomericSMILES": "CC(=O)O",
+                        "CanonicalSMILES": "CC(=O)O",
+                        "InChI": "InChI=1S/C2H4O2/c1-2(3)4/h1H3,(H,3,4)",
+                        "InChIKey": "QTBSBXVTEAMEQO-UHFFFAOYSA-N",
+                    }
+                ]
+            }
+        },
+        status=200,
+    )
+
+    sleeps: list[float] = []
+
+    def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    record = pl.resolve_pubchem_record(
+        {"canonical_smiles": "C"},
+        cfg,
+        cache={},
+        sleeper=fake_sleep,
+    )
+
+    assert record["pubchem_cid"] == "5793"
+    assert len(responses.calls) == 3
+    assert sleeps == [0.1, 0.2]

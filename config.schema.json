@@ -971,6 +971,40 @@
           "title": "Base",
           "type": "string"
         },
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "resolve_order": {
+          "default": [
+            "cid",
+            "smiles",
+            "inchikey",
+            "inchi",
+            "pref_name"
+          ],
+          "items": {
+            "enum": [
+              "cid",
+              "smiles",
+              "inchikey",
+              "inchi",
+              "pref_name"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Resolve Order",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "minimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
         "timeout_connect": {
           "default": 5,
           "minimum": 1,
@@ -988,6 +1022,12 @@
           "minimum": 0,
           "title": "Retries",
           "type": "integer"
+        },
+        "backoff_initial_seconds": {
+          "default": 1.0,
+          "minimum": 0,
+          "title": "Backoff Initial Seconds",
+          "type": "number"
         },
         "rps": {
           "default": 3,
@@ -1013,6 +1053,26 @@
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
+        },
+        "prefer_local_smiles": {
+          "default": true,
+          "title": "Prefer Local Smiles",
+          "type": "boolean"
+        },
+        "use_parent_for_salts": {
+          "default": true,
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
+        "allow_polymer": {
+          "default": false,
+          "title": "Allow Polymer",
+          "type": "boolean"
+        },
+        "write_not_found_literal": {
+          "default": false,
+          "title": "Write Not Found Literal",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",

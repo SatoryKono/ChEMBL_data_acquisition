@@ -249,9 +249,19 @@ class IupharCfg(_BaseModel):
 
 class PubChemCfg(_BaseModel):
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    enable: bool = True
+    resolve_order: tuple[str, ...] = (
+        "cid",
+        "smiles",
+        "inchikey",
+        "inchi",
+        "pref_name",
+    )
+    timeout_seconds: float = Field(30.0, ge=0)
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(60, ge=1)
     retries: int = Field(3, ge=0)
+    backoff_initial_seconds: float = Field(1.0, ge=0)
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(3.0, ge=0)
@@ -260,6 +270,10 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Time-to-live for PubChem request cache in seconds",
     )
+    prefer_local_smiles: bool = True
+    use_parent_for_salts: bool = True
+    allow_polymer: bool = False
+    write_not_found_literal: bool = False
 
     @field_validator("base")
     @classmethod
@@ -267,6 +281,20 @@ class PubChemCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    @field_validator("resolve_order")
+    @classmethod
+    def _order(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        allowed = {"cid", "smiles", "inchikey", "inchi", "pref_name"}
+        order = tuple(dict.fromkeys(v))
+        invalid = [item for item in order if item not in allowed]
+        if invalid:
+            raise ValueError(
+                "resolve_order must contain only cid, smiles, inchikey, inchi, pref_name"
+            )
+        if not order:
+            raise ValueError("resolve_order must contain at least one identifier")
+        return order
 
 
 class PubMedCfg(_BaseModel):
@@ -1243,6 +1271,34 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_UNIPROT_BASE": ["sources", "uniprot", "api", "base"],
     "CHEMBL_DA_IUPHAR_BASE": ["sources", "iuphar", "base"],
     "CHEMBL_DA_PUBCHEM_BASE": ["sources", "pubchem", "base"],
+    "CHEMBL_DA_PUBCHEM_ENABLE": ["sources", "pubchem", "enable"],
+    "CHEMBL_DA_PUBCHEM_RESOLVE_ORDER": ["sources", "pubchem", "resolve_order"],
+    "CHEMBL_DA_PUBCHEM_TIMEOUT_SECONDS": ["sources", "pubchem", "timeout_seconds"],
+    "CHEMBL_DA_PUBCHEM_BACKOFF_INITIAL_SECONDS": [
+        "sources",
+        "pubchem",
+        "backoff_initial_seconds",
+    ],
+    "CHEMBL_DA_PUBCHEM_PREFER_LOCAL_SMILES": [
+        "sources",
+        "pubchem",
+        "prefer_local_smiles",
+    ],
+    "CHEMBL_DA_PUBCHEM_USE_PARENT_FOR_SALTS": [
+        "sources",
+        "pubchem",
+        "use_parent_for_salts",
+    ],
+    "CHEMBL_DA_PUBCHEM_ALLOW_POLYMER": [
+        "sources",
+        "pubchem",
+        "allow_polymer",
+    ],
+    "CHEMBL_DA_PUBCHEM_WRITE_NOT_FOUND_LITERAL": [
+        "sources",
+        "pubchem",
+        "write_not_found_literal",
+    ],
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
     "CHEMBL_DA_LOG_FORMAT": ["system", "log", "format"],
     "CHEMBL_DA_LOG_DATEFMT": ["system", "log", "datefmt"],

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 import pandas as pd
 import pytest
@@ -11,6 +11,7 @@ import requests
 
 from library import chembl_library as cl
 from library import io
+from library import pubchem_library as pl
 from library.config import Config
 from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
@@ -82,7 +83,14 @@ def test_run_chembl_column_order(
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
 
-    available = set(df.columns) | {"pipeline_version", "timestamp_utc"}
+    available = set(df.columns) | {
+        "pipeline_version",
+        "timestamp_utc",
+        cfg.molecule_catalog.parent_field,
+        "natural_product",
+        "prodrug",
+        "polymer_flag",
+    }
     expected_head = [c for c in TestitemsSchema.columns if c in available]
     expected_tail = sorted(available - set(TestitemsSchema.columns))
     assert captured["col_order"] == expected_head + expected_tail
@@ -141,6 +149,61 @@ def test_run_chembl_initialises_pubchem_session(
     assert captured["init"] == (cfg.api, cfg.retry)
 
 
+def test_add_pubchem_data_respects_enable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When PubChem enrichment is disabled the resolver is not invoked."""
+
+    df = pd.DataFrame({"canonical_smiles": ["C"]})
+    cfg = pl.PubChemCfg(enable=False)
+
+    def unexpected_resolver(*_: object, **__: object) -> dict[str, str]:
+        raise AssertionError("resolver should not be called when disabled")
+
+    result = gtd.add_pubchem_data(df, cfg, resolver=unexpected_resolver)
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_add_pubchem_data_reuses_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`add_pubchem_data` should allow resolver cache reuse across rows."""
+
+    df = pd.DataFrame(
+        {
+            "canonical_smiles": ["C", "C", "CC"],
+            "pref_name": ["foo", "foo", "bar"],
+        }
+    )
+    cfg = pl.PubChemCfg()
+
+    seen: list[tuple[str, str]] = []
+
+    def fake_resolver(
+        row: Mapping[str, object],
+        _: pl.PubChemCfg,
+        *,
+        cache: dict[tuple[str, str], dict[str, str]],
+    ) -> dict[str, str]:
+        key = ("smiles", str(row.get("canonical_smiles", "")))
+        if key in cache:
+            return cache[key]
+        record = {
+            "pubchem_cid": key[1],
+            "pubchem_iupac_name": row.get("pref_name", ""),
+            "pubchem_molecular_formula": "",
+            "pubchem_isomeric_smiles": key[1],
+            "pubchem_canonical_smiles": key[1],
+            "pubchem_inchi": "",
+            "pubchem_inchikey": "",
+        }
+        cache[key] = record
+        seen.append(key)
+        return record
+
+    result = gtd.add_pubchem_data(df, cfg, resolver=fake_resolver)
+
+    assert seen == [("smiles", "C"), ("smiles", "CC")]
+    assert "pubchem_cid" in result.columns
+    assert result["pubchem_cid"].tolist() == ["C", "C", "CC"]
+
+
 
 def test_run_chembl_merges_parent_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
@@ -183,21 +246,15 @@ def test_run_chembl_merges_parent_catalog(
     captured_catalog: dict[str, str] | None = None
     captured_source: str | None = None
 
+    original_attach = gtd.attach_parent_molecule_ids
+
     def fake_attach_parent_molecule_ids(
         frame: pd.DataFrame, **kwargs: object
     ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
         nonlocal captured_catalog, captured_source
         captured_catalog = kwargs.get("catalog")
         captured_source = kwargs.get("source")
-        return (
-            frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
-                missing=0,
-                unique=0,
-                attached=0,
-            ),
-        )
+        return original_attach(frame, **kwargs)
 
     monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)

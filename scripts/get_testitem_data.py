@@ -14,6 +14,7 @@ import argparse
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
+from typing import Any, Callable
 
 import pandas as pd
 import requests
@@ -71,6 +72,15 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
 PARENT_LOOKUP_SOURCE_REMOTE = "remote"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
+
+
+def _parse_resolve_order(value: str) -> tuple[str, ...]:
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if not parts:
+        raise argparse.ArgumentTypeError(
+            "--pubchem-resolve-order requires at least one identifier"
+        )
+    return tuple(parts)
 
 
 @dataclass(frozen=True)
@@ -274,7 +284,12 @@ def attach_parent_molecule_ids(
     return result, stats
 
 
-def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
+def add_pubchem_data(
+    df: pd.DataFrame,
+    cfg: PubChemCfg,
+    *,
+    resolver: Callable[[Mapping[str, Any], PubChemCfg], dict[str, str]] = pl.resolve_pubchem_record,
+) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
     For each canonical SMILES string in ``df``, the function looks up the
@@ -295,59 +310,25 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         ``df`` with additional PubChem columns.
 
     """
-    if df.empty or "canonical_smiles" not in df.columns:
+    if df.empty or not cfg.enable:
         return df
 
-    smiles_list = df["canonical_smiles"].fillna("").tolist()
-    # ``dict.fromkeys`` preserves the order of first occurrence while
-    # removing duplicates. This allows progress output to reflect the
-    # deterministic iteration order of SMILES strings.
-    unique_smiles = [s for s in dict.fromkeys(smiles_list) if s]
-
-    total = len(unique_smiles)
+    records = df.to_dict("records")
+    total = len(records)
     if total:
         logger.info("pubchem_start", total=total)
     else:
         logger.info("pubchem_no_smiles")
+        return df
 
-    records: dict[str, dict[str, str]] = {}
-    for idx, smi in enumerate(unique_smiles, start=1):
+    cache: dict[tuple[str, str], dict[str, str]] = {}
+    enriched: list[dict[str, str]] = []
+
+    for idx, row in enumerate(records, start=1):
         logger.info("pubchem_progress", current=idx, total=total)
-        cid = pl.get_cid_from_smiles(smi, cfg) or ""
-        first_cid = cid.split("|")[0] if cid else ""
-        if first_cid:
-            props = pl.get_properties(first_cid, cfg)
-            records[smi] = {
-                "pubchem_cid": first_cid,
-                "pubchem_iupac_name": props.IUPACName,
-                "pubchem_molecular_formula": props.MolecularFormula,
-                "pubchem_isomeric_smiles": props.iSMILES,
-                "pubchem_canonical_smiles": props.cSMILES,
-                "pubchem_inchi": props.InChI,
-                "pubchem_inchikey": props.InChIKey,
-            }
-        else:
-            records[smi] = {
-                "pubchem_cid": "",
-                "pubchem_iupac_name": "",
-                "pubchem_molecular_formula": "",
-                "pubchem_isomeric_smiles": "",
-                "pubchem_canonical_smiles": "",
-                "pubchem_inchi": "",
-                "pubchem_inchikey": "",
-            }
+        enriched.append(resolver(row, cfg, cache=cache))
 
-    empty = {
-        "pubchem_cid": "",
-        "pubchem_iupac_name": "",
-        "pubchem_molecular_formula": "",
-        "pubchem_isomeric_smiles": "",
-        "pubchem_canonical_smiles": "",
-        "pubchem_inchi": "",
-        "pubchem_inchikey": "",
-    }
-    pubchem_rows = [records.get(smi, empty) for smi in smiles_list]
-    pubchem_df = pd.DataFrame(pubchem_rows)
+    pubchem_df = pd.DataFrame(enriched)
     return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
 
 
@@ -659,6 +640,91 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Maximum number of identifiers to process",
     )
+    parser.add_argument(
+        "--pubchem-enable",
+        dest="pubchem_enable",
+        action="store_true",
+        help="Enable PubChem enrichment",
+    )
+    parser.add_argument(
+        "--pubchem-disable",
+        dest="pubchem_enable",
+        action="store_false",
+        help="Disable PubChem enrichment",
+    )
+    parser.set_defaults(pubchem_enable=None)
+    parser.add_argument(
+        "--pubchem-resolve-order",
+        type=_parse_resolve_order,
+        default=None,
+        help="Comma-separated identifier priority for PubChem resolution",
+    )
+    parser.add_argument(
+        "--pubchem-timeout-seconds",
+        dest="pubchem_timeout_seconds",
+        type=float,
+        default=None,
+        help="Overall timeout in seconds for resolving a PubChem record",
+    )
+    parser.add_argument(
+        "--pubchem-backoff-initial-seconds",
+        dest="pubchem_backoff_initial_seconds",
+        type=float,
+        default=None,
+        help="Initial exponential backoff delay after HTTP 429/5xx",
+    )
+    parser.add_argument(
+        "--pubchem-prefer-local-smiles",
+        dest="pubchem_prefer_local_smiles",
+        action="store_true",
+        help="Prefer ChEMBL SMILES during PubChem resolution",
+    )
+    parser.add_argument(
+        "--pubchem-prefer-pubchem-smiles",
+        dest="pubchem_prefer_local_smiles",
+        action="store_false",
+        help="Prefer cached PubChem SMILES during resolution",
+    )
+    parser.set_defaults(pubchem_prefer_local_smiles=None)
+    parser.add_argument(
+        "--pubchem-use-parent-for-salts",
+        dest="pubchem_use_parent_for_salts",
+        action="store_true",
+        help="Use parent compound identifiers for salt forms",
+    )
+    parser.add_argument(
+        "--pubchem-ignore-parent-for-salts",
+        dest="pubchem_use_parent_for_salts",
+        action="store_false",
+        help="Ignore parent compound identifiers for salt forms",
+    )
+    parser.set_defaults(pubchem_use_parent_for_salts=None)
+    parser.add_argument(
+        "--pubchem-allow-polymer",
+        dest="pubchem_allow_polymer",
+        action="store_true",
+        help="Allow PubChem enrichment for polymer molecules",
+    )
+    parser.add_argument(
+        "--pubchem-skip-polymer",
+        dest="pubchem_allow_polymer",
+        action="store_false",
+        help="Skip PubChem enrichment for polymer molecules",
+    )
+    parser.set_defaults(pubchem_allow_polymer=None)
+    parser.add_argument(
+        "--pubchem-write-not-found-literal",
+        dest="pubchem_write_not_found_literal",
+        action="store_true",
+        help="Write 'Not Found' for missing PubChem fields",
+    )
+    parser.add_argument(
+        "--pubchem-write-empty",
+        dest="pubchem_write_not_found_literal",
+        action="store_false",
+        help="Write empty strings for missing PubChem fields",
+    )
+    parser.set_defaults(pubchem_write_not_found_literal=None)
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -682,6 +748,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "column": "testitem.column",
                 "batch_size": "testitem.batch_size",
                 "limit": "testitem.limit",
+                "pubchem_enable": "pubchem.enable",
+                "pubchem_resolve_order": "pubchem.resolve_order",
+                "pubchem_timeout_seconds": "pubchem.timeout_seconds",
+                "pubchem_backoff_initial_seconds": "pubchem.backoff_initial_seconds",
+                "pubchem_prefer_local_smiles": "pubchem.prefer_local_smiles",
+                "pubchem_use_parent_for_salts": "pubchem.use_parent_for_salts",
+                "pubchem_allow_polymer": "pubchem.allow_polymer",
+                "pubchem_write_not_found_literal": "pubchem.write_not_found_literal",
             },
         )
         if args.print_config:

@@ -129,13 +129,21 @@ sources:
     burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
   pubchem:
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
+    enable: true  # Enable PubChem enrichment (env: CHEMBL_DA_PUBCHEM_ENABLE)
+    resolve_order: [cid, smiles, inchikey, inchi, pref_name]  # Resolution priority (env: CHEMBL_DA_PUBCHEM_RESOLVE_ORDER)
+    timeout_seconds: 30.0  # Total timeout for resolving a record (env: CHEMBL_DA_PUBCHEM_TIMEOUT_SECONDS)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
     retries: 3
+    backoff_initial_seconds: 1.0  # Initial exponential backoff interval (env: CHEMBL_DA_PUBCHEM_BACKOFF_INITIAL_SECONDS)
     rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
     cache_ttl: 3600  # Request cache time-to-live in seconds
+    prefer_local_smiles: true  # Prefer ChEMBL SMILES over cached PubChem value (env: CHEMBL_DA_PUBCHEM_PREFER_LOCAL_SMILES)
+    use_parent_for_salts: true  # Use parent information for salt forms (env: CHEMBL_DA_PUBCHEM_USE_PARENT_FOR_SALTS)
+    allow_polymer: false  # Allow enrichment for polymer records (env: CHEMBL_DA_PUBCHEM_ALLOW_POLYMER)
+    write_not_found_literal: false  # Write "Not Found" for missing fields instead of blanks (env: CHEMBL_DA_PUBCHEM_WRITE_NOT_FOUND_LITERAL)
   pubmed:
     base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__SOURCES__PUBMED__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
