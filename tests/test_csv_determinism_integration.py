@@ -15,5 +15,5 @@ def test_csv_determinism_integration() -> None:
     )
     records = [json.loads(line) for line in proc.stdout.splitlines()]
     hashes = [r["value"] for r in records if r.get("event") == "hash"]
-    assert len(hashes) == 2
-    assert hashes[0] == hashes[1]
+    assert len(hashes) == 3
+    assert len(set(hashes)) == 1

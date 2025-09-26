@@ -76,20 +76,17 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(cl, "get_documents", fake_get_documents)
     monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
 
-    def fake_write_csv(
-        df: pd.DataFrame,
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        **_: Any,
     ) -> Path:
+        list(chunks)
         return path
 
-    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
@@ -326,7 +323,7 @@ def test_run_pubmed_uses_keyword_arguments(
     monkeypatch.setattr(
         gdd,
         "_finalise_export",
-        lambda df, output, cfg, input_csv, key_columns: 0,
+        lambda df, output, cfg, input_csv, key_columns, **kwargs: 0,
     )
 
     cfg = Config()
@@ -381,7 +378,7 @@ def test_run_pubmed_uses_fallback_csv(
     monkeypatch.setattr(
         gdd,
         "_finalise_export",
-        lambda df, output, cfg, input_csv, key_columns: 0,
+        lambda df, output, cfg, input_csv, key_columns, **kwargs: 0,
     )
 
     captured: dict[str, Any] = {}
@@ -450,23 +447,22 @@ def test_write_csv_column_order(
 
     captured: dict[str, Any] = {}
 
-    def fake_write_csv(
-        frame: pd.DataFrame,
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
         key_cols: list[str] | None = None,
         col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        **_: Any,
     ) -> Path:
+        frames = list(chunks)
         captured["col_order"] = list(col_order or [])
-        captured["columns"] = list(frame.columns)
+        captured["columns"] = list(frames[0].columns) if frames else []
         captured["key_cols"] = list(key_cols or [])
         return path
 
-    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
@@ -863,21 +859,19 @@ def test_finalise_export_falls_back_to_default_key(
     output = tmp_path / "documents.csv"
     captured: dict[str, Any] = {}
 
-    def fake_write_csv(
-        frame: pd.DataFrame,
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
         key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        **_: Any,
     ) -> Path:
+        list(chunks)
         captured["key_cols"] = list(key_cols) if key_cols is not None else None
         return path
 
-    monkeypatch.setattr(gdd.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "hash")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})

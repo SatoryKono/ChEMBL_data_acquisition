@@ -45,6 +45,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import document_postprocessing as dp
 from library import io
+from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
@@ -532,6 +533,31 @@ _EXPORT_SORT_FALLBACK = [
 ]
 
 
+_EXPORT_STREAM_CHUNK_SIZE = 10_000
+
+
+def _iter_export_chunks(df: pd.DataFrame, *, chunk_size: int) -> Iterable[pd.DataFrame]:
+    """Yield export-ready DataFrame chunks from ``df``."""
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if df.empty:
+        yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False)
+        return
+
+    total = len(df)
+    for start in range(0, total, chunk_size):
+        stop = start + chunk_size
+        chunk = df.iloc[start:stop]
+        export_chunk = build_dataframe(
+            chunk, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+        )
+        export_chunk = dataframe_to_strings(
+            export_chunk, skip=_NUMERIC_EXPORT_COLUMNS
+        )
+        yield _prepare_export_frame(export_chunk)
+
+
 def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     """Return the first non-empty value across ``columns`` for each row."""
 
@@ -571,6 +597,7 @@ def _finalise_export(
     *,
     input_csv: Path,
     key_columns: Sequence[str] | None = None,
+    chunk_size: int | None = None,
 ) -> int:
     """Validate ``df`` and write CSV/metadata artefacts."""
 
@@ -617,34 +644,35 @@ def _finalise_export(
     rows_kept = len(validated)
     rows_dropped = rows_total - rows_kept
 
-    export_df = build_dataframe(
-        validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
-    )
-    export_df = dataframe_to_strings(export_df, skip=_NUMERIC_EXPORT_COLUMNS)
-    export_df = _prepare_export_frame(export_df)
-
     key_cols: list[str] = []
     if key_columns:
         for column in key_columns:
             mapped = _EXPORT_COLUMN_RENAMES.get(column, column)
-            if mapped in export_df.columns and mapped not in key_cols:
+            if mapped in _EXPORT_COLUMNS and mapped not in key_cols:
                 key_cols.append(mapped)
     if not key_cols:
         for candidate in _EXPORT_SORT_FALLBACK:
-            if candidate in export_df.columns:
+            if candidate in _EXPORT_COLUMNS:
                 key_cols = [candidate]
                 break
     if not key_cols:
         key_cols = [_EXPORT_COLUMNS[0]]
 
     col_order = list(_EXPORT_COLUMNS)
+    stream_chunk = max(1, int(chunk_size or _EXPORT_STREAM_CHUNK_SIZE))
+    export_chunks = _iter_export_chunks(validated, chunk_size=stream_chunk)
     try:
-        csv_path = io.write_csv(
-            export_df,
+        csv_path = write_csv_chunks_deterministic(
+            export_chunks,
             output,
             cfg=cfg,
             key_cols=key_cols,
             col_order=col_order,
+            chunksize=stream_chunk,
+            merge_chunksize=stream_chunk,
+            sort_chunksize=stream_chunk,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
         )
     except OSError as exc:
         logger.error("csv_write_failed", error=str(exc), path=str(output))
@@ -775,6 +803,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
+            chunk_size=cfg.document.pubmed.batch_size,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("pubmed_pipeline_failed", error=str(exc))
@@ -848,6 +877,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
+            chunk_size=cfg.document.chembl.chunk_size,
         )
         return exit_code
 
@@ -932,6 +962,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
+            chunk_size=cfg.document.all.chunk_size,
         )
         return exit_code
 
@@ -979,6 +1010,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg,
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
+        chunk_size=cfg.document.all.chunk_size,
     )
     return exit_code
 
