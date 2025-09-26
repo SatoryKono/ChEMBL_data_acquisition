@@ -1,0 +1,359 @@
+generated_at: '2025-09-26T11:33:38.249400+00:00'
+git_sha: f2f1b6a183d9fcb053c6c7319fc1608ad22fe987
+command: scripts\get_activity_data.py --input data\input\full\activity.csv --output
+  test.csv --limit 100
+columns:
+- activity_id
+- molecule_chembl_id
+- assay_chembl_id
+- activity_comment
+- assay_description
+- assay_variant_accession
+- assay_variant_mutation
+- bao_format
+- bao_label
+- data_validity_comment
+- data_validity_description
+- document_chembl_id
+- pchembl_value
+- potential_duplicate
+- qudt_units
+- record_id
+- relation
+- src_assay_id
+- src_id
+- standard_relation
+- standard_units
+- type
+- units
+- value
+- standard_type
+- standard_value
+- lower_value
+- upper_value
+- activity_properties
+- action_type
+- properties_hash
+- pipeline_version
+- timestamp_utc
+- standard_lower_value
+- standard_upper_value
+dtypes:
+  activity_id: int64
+  molecule_chembl_id: object
+  assay_chembl_id: object
+  activity_comment: object
+  assay_description: object
+  assay_variant_accession: object
+  assay_variant_mutation: object
+  bao_format: object
+  bao_label: object
+  data_validity_comment: object
+  data_validity_description: object
+  document_chembl_id: object
+  pchembl_value: object
+  potential_duplicate: int64
+  qudt_units: object
+  record_id: int64
+  relation: object
+  src_assay_id: float64
+  src_id: int64
+  standard_relation: object
+  standard_units: object
+  type: object
+  units: object
+  value: object
+  standard_type: object
+  standard_value: float64
+  lower_value: float64
+  upper_value: float64
+  activity_properties: string
+  action_type: string
+  properties_hash: string
+  pipeline_version: object
+  timestamp_utc: object
+  standard_lower_value: float64
+  standard_upper_value: object
+config:
+  sources:
+    chembl:
+      api:
+        chembl_base: https://www.ebi.ac.uk/chembl/api/data
+        timeout_connect: 5
+        timeout_read: 30
+        retries: 3
+        backoff_factor: 0.5
+        rps: 20
+        burst: 20
+        user_agent: chembl-da/0.1 (mailto:contact@example.org)
+      cache:
+        cache_ttl: 3600
+        cache_maxsize: 1024
+      molecule_catalog:
+        cache_path: data\cache\molecule_parent_catalog.json
+        sqlite_path: data\cache\molecule_parent_catalog.sqlite
+        endpoint: molecule
+        child_field: molecule_chembl_id
+        parent_field: parent_molecule_chembl_id
+        fields:
+        - molecule_chembl_id
+        - parent_molecule_chembl_id
+        filters:
+          parent_molecule_chembl_id__isnull: 'false'
+        page_size: 500
+      pipelines:
+        activity:
+          column: activity_chembl_id
+          batch_size: 50
+          timeout: 30.0
+          limit: 100
+          dry_run: false
+        assay:
+          column: assay_chembl_id
+          batch_size: 50
+          timeout: 30.0
+          limit: null
+        testitem:
+          column: molecule_chembl_id
+          batch_size: 50
+          timeout: 30.0
+          limit: null
+        document:
+          pubmed:
+            column: PMID
+            sleep: 5.0
+            workers: 1
+            batch_size: 5
+            limit: null
+          chembl:
+            column: document_chembl_id
+            chunk_size: 50
+            timeout: 30.0
+            limit: null
+          all:
+            column: document_chembl_id
+            chunk_size: 5
+            sleep: 5.0
+            workers: 1
+            batch_size: 5
+            timeout: 30.0
+            limit: null
+        target:
+          uniprot:
+            column: uniprot_id
+            data_dir: dictionary\uniprot
+            limit: null
+          chembl:
+            column: target_chembl_id
+            chunk_size: 5
+            timeout: 30.0
+            limit: null
+          iuphar:
+            target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
+            family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+            limit: null
+          all:
+            data_dir: dictionary\uniprot
+            target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
+            family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+            chunk_size: 5
+            timeout: 30.0
+            organism_csv: dictionary\_Target\targets_type.csv
+            uniprot_column: uniprot_id
+            chembl_out: null
+            uniprot_out: null
+            iuphar_out: null
+            limit: null
+    openalex:
+      base: https://api.openalex.org
+      timeout_connect: 5
+      timeout_read: 30
+      retries: 3
+      rps: 5
+      burst: 5
+      mailto: contact@example.org
+    crossref:
+      base: https://api.crossref.org
+      timeout_connect: 5
+      timeout_read: 30
+      retries: 3
+      rps: 5
+      burst: 5
+      mailto: contact@example.org
+    uniprot:
+      api:
+        base: https://rest.uniprot.org
+        timeout_connect: 5
+        timeout_read: 30
+        rps: 25
+        burst: 25
+        delay: 0.25
+      mapping:
+        base: https://rest.uniprot.org/idmapping
+        poll_interval: 0.5
+        timeout: 300.0
+        cache_ttl: null
+    iuphar:
+      base: https://www.guidetopharmacology.org/services
+      timeout_connect: 5
+      timeout_read: 30
+      rps: 5
+      burst: 5
+    pubchem:
+      base: https://pubchem.ncbi.nlm.nih.gov/rest/pug
+      timeout_connect: 5
+      timeout_read: 60
+      retries: 3
+      rps: 5
+      burst: 5
+      delay: 0.2
+      cache_ttl: 3600
+    pubmed:
+      base: https://eutils.ncbi.nlm.nih.gov/entrez/eutils
+      timeout_connect: 5
+      timeout_read: 10
+      retries: 2
+    semantic_scholar:
+      base: https://api.semanticscholar.org/graph/v1
+      timeout_connect: 5
+      timeout_read: 10
+      retries: 2
+  local:
+    resources:
+      dictionary_dir: dictionary
+      iuphar_target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
+      iuphar_family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+      uniprot_data_dir: dictionary\uniprot
+      organism_csv: dictionary\_Target\targets_type.csv
+      targets_type_csv: dictionary\_Target\targets_type.csv
+    io:
+      output_dir: data\output
+      cache_dir: .cache
+      csv_sep: ','
+      csv_encoding: utf-8-sig
+      na_markers:
+      - '#N/A'
+      exist_ok: true
+    init:
+      same_doc: data\input\ChEMBL\ChEMBL_same_document_20_05.xlsx
+      all_doc: data\input\ChEMBL\ChEMBL_all_10_05_step5.xlsx
+      output_dir: data\output\ChEMBL\processed
+  system:
+    log:
+      level: INFO
+      format: '[%(asctime)s] %(levelname)s %(name)s: %(message)s'
+      datefmt: '%Y-%m-%d %H:%M:%S'
+    rate:
+      global_rps: 100
+      global_burst: 100
+      limiter_cache_maxsize: 128
+      limiter_cache_ttl: 600
+    retry:
+      max_attempts: 3
+      backoff_factor: 0.5
+      status_forcelist:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    doc_type:
+      weights:
+        pubmed: 4
+        openalex: 3
+        scholar: 2
+      thresholds:
+        review: 1
+        experimental: 1
+        unknown: 2
+      limit: null
+  activity_bounds:
+    enable_from_relation: true
+    enable_from_uncertainty: false
+    rounding_digits: 3
+    clamp_nonnegative: true
+    log_unknown_relations: true
+  activity_enrichment:
+    action_type:
+      enabled: true
+      column: action_type
+      log_missing: true
+      log_distribution: true
+      metrics:
+        ic50: inhibition
+        ec50: activation
+        ac50: activation
+        ki: binding
+        kd: binding
+      triages: {}
+      functionality:
+        agonist: activation
+        partial agonist: activation
+        antagonist: inhibition
+        inhibitor: inhibition
+        activator: activation
+      mechanism: {}
+      triage_fields:
+      - data_validity_description
+      - data_validity_comment
+      functionality_fields:
+      - functional_activity
+      - action_type
+      mechanism_fields:
+      - mechanism_of_action
+      - mechanism_comment
+      allowlist:
+      - activation
+      - inhibition
+      - binding
+      - pam
+      - nam
+      - triaged
+      - unknown
+      positive_label: PAM
+      negative_label: NAM
+      fallback: unknown
+    activity_properties:
+      enabled: true
+      column: activity_properties
+      summary_column: activity_property_summary
+      name_field: type
+      value_field: value
+      units_field: units
+      separator: '; '
+      pair_separator: '='
+      drop_source_column: true
+      log_missing: false
+      log_distribution: false
+      allowlist:
+      - measurement
+      - assay
+      - comments
+      - effect_features
+      - triage
+      - mechanism
+      - functionality
+      hash_column: properties_hash
+  testitem_molecule_enrichment:
+    enable: true
+    sources:
+      molecule_catalog_path: dictionary\molecule_catalog.csv
+      molecule_hierarchy_path: dictionary\molecule_hierarchy.csv
+    output:
+      salt_as_null_when_absent: true
+    flags:
+      coerce_to_bool: true
+      parent_fallback: true
+    logging:
+      warn_missing_molecule: true
+      warn_inconsistent_flags: true
+python_version: 3.13.7
+platform: Windows-10-10.0.19045-SP0
+inputs:
+  input_csv: data\input\full\activity.csv
+stats:
+  rows_total: 40
+  rows_kept: 40
+  rows_dropped: 0
+  output_sha256: 1e1105aecc51fa7b63c8396cfa6ba6525605881496f9a14e09f0c0dbb41d8da6
+schema: ActivitiesSchema
