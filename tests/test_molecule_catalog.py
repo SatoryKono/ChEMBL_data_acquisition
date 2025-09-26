@@ -104,10 +104,7 @@ def test_fetch_parent_catalog_for_returns_only_requested(api_cfg: ApiCfg) -> Non
     assert result == {"CHEMBL1": "CHEMBL10"}
 
 
-def test_fetch_parent_catalog_for_chunks_requests(
-    api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_CHUNK_SIZE", 1)
+def test_fetch_parent_catalog_for_chunks_requests(api_cfg: ApiCfg) -> None:
     responses = [
         {
             "molecules": [
@@ -127,11 +124,13 @@ def test_fetch_parent_catalog_for_chunks_requests(
         },
     ]
     client = DummyClient(responses)
+    cfg = MoleculeCatalogCfg(page_size=1)
 
     result = fetch_parent_catalog_for(
         ["CHEMBL1", "CHEMBL2"],
         client=client,
         api_cfg=api_cfg,
+        catalog_cfg=cfg,
     )
 
     assert len(client.calls) == 2
@@ -214,7 +213,7 @@ def test_fetch_parent_catalog_for_falls_back_on_bulk_error(
 
     assert result == {"CHEMBL1": "CHEMBL10"}
     fallback_calls = [call for call in client.calls if "/molecule/" in call]
-    assert len(fallback_calls) == api_cfg.retries + 1  # CHEMBL1 succeeds once; CHEMBL2 retries
+    assert len(fallback_calls) == api_cfg.retries + 1
     assert any("CHEMBL1" in call for call in fallback_calls)
 
 
@@ -255,6 +254,81 @@ def test_fetch_parent_catalog_for_partial_fallback_failure(
     assert result == {"CHEMBL1": "CHEMBL10"}
     chembl2_calls = [call for call in client.calls if "/molecule/CHEMBL2" in call]
     assert len(chembl2_calls) == api_cfg.retries
+
+
+def test_fetch_parent_catalog_for_retries_smaller_batch(api_cfg: ApiCfg) -> None:
+    responses = [
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL1",
+                    "parent_molecule_chembl_id": "CHEMBL10",
+                }
+            ]
+        },
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL2",
+                    "parent_molecule_chembl_id": "CHEMBL20",
+                },
+                {
+                    "molecule_chembl_id": "CHEMBL3",
+                    "parent_molecule_chembl_id": "CHEMBL30",
+                },
+            ]
+        },
+    ]
+    client = DummyClient(responses)
+    cfg = MoleculeCatalogCfg(page_size=4)
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert result == {
+        "CHEMBL1": "CHEMBL10",
+        "CHEMBL2": "CHEMBL20",
+        "CHEMBL3": "CHEMBL30",
+    }
+    assert len(client.calls) == 2
+    assert "limit=2" in client.calls[1]
+    assert all("/molecule/CHEMBL" not in call for call in client.calls[1:])
+
+
+def test_fetch_parent_catalog_for_respects_single_limit(api_cfg: ApiCfg) -> None:
+    responses = [
+        {"molecules": []},
+        {
+            "molecule": {
+                "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_chembl_id": "CHEMBL10",
+            }
+        },
+        {
+            "molecule": {
+                "molecule_chembl_id": "CHEMBL2",
+                "parent_molecule_chembl_id": "CHEMBL20",
+            }
+        },
+    ]
+    client = DummyClient(responses)
+    cfg = MoleculeCatalogCfg(page_size=2, fallback_single_limit=1)
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"],
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10"}
+    single_calls = [call for call in client.calls if "/molecule/CHEMBL" in call]
+    assert len(single_calls) == 1
+    assert "CHEMBL2" not in single_calls[0]
 
 
 def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:

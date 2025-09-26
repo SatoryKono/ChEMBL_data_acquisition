@@ -488,6 +488,19 @@
           "minimum": 1,
           "title": "Page Size",
           "type": "integer"
+        },
+        "fallback_single_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Single Limit"
         }
       },
       "title": "MoleculeCatalogCfg",
@@ -1007,6 +1020,20 @@
           "title": "Delay",
           "type": "number"
         },
+        "resolve_order": {
+          "default": [
+            "cache",
+            "inchikey",
+            "name",
+            "smiles"
+          ],
+          "description": "Order of PubChem CID resolvers",
+          "items": {
+            "type": "string"
+          },
+          "title": "Resolve Order",
+          "type": "array"
+        },
         "cache_ttl": {
           "default": 3600,
           "description": "Time-to-live for PubChem request cache in seconds",
@@ -1020,12 +1047,89 @@
           "title": "Prefer Local Smiles",
           "type": "boolean"
         },
+ 
+        "skip_polymers": {
+          "default": false,
+          "description": "Skip PubChem lookups for polymer or mixture records",
+          "title": "Skip Polymers",
+          "type": "boolean"
+        },
+ 
+
+        "prefer_local_values": {
+          "default": true,
+          "description": "Retain pre-existing pubchem_* values when PubChem responses are empty",
+          "title": "Prefer Local Values",
+          "type": "boolean"
+        },
+        "resolve_order": {
+          "default": [
+            "standard_inchi_key",
+            "standard_inchi",
+            "pref_name",
+            "pref_name_partial",
+            "canonical_smiles"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Resolve Order",
+          "type": "array"
+        },
+        "use_parent_for_salts": {
+          "default": true,
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
+        "skip_polymers": {
+          "default": true,
+          "title": "Skip Polymers",
+          "type": "boolean"
+        },
+        "write_not_found_literal": {
+          "default": false,
+          "title": "Write Not Found Literal",
+          "type": "boolean"
+        },
+        "batch_size": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "cache_ttl_hours": {
+          "default": null,
+          "description": "Optional TTL for the persisted CID cache, in hours",
+          "minimum": 0,
+          "title": "Cache Ttl Hours",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "minimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "backoff_initial_seconds": {
+          "default": 0.5,
+          "minimum": 0,
+          "title": "Backoff Initial Seconds",
+          "type": "number"
+        },
+
+ 
         "use_parent_for_salts": {
           "default": false,
           "description": "Resolve PubChem CIDs via parent structures when child lookups fail",
           "title": "Use Parent For Salts",
           "type": "boolean"
         },
+ 
+
+ 
         "cid_cache_path": {
           "default": null,
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",

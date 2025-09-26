@@ -324,7 +324,8 @@ def test_get_target_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.Monke
 
 
 def test_get_testitem_data_smoke(
-    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+    smoke_output_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Smoke-test ``get_testitem_data`` with PubChem augmentation patched."""
 
@@ -332,20 +333,47 @@ def test_get_testitem_data_smoke(
     output_csv = smoke_output_dir / "testitem.csv"
     _cleanup_output(output_csv)
 
+    polymer_smiles = "POLY-SMILES"
+    mixture_smiles = "MIX-SMILES"
+
     def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
-            rows.append(
-                {
-                    "molecule_chembl_id": str(mol_id),
-                    "canonical_smiles": f"C{idx}H{2 * idx + 2}",
-                    "max_phase": "4",
-                    "standard_inchi": f"InChI=1S/C{idx}H{2 * idx + 2}",
-                }
-            )
+            base: dict[str, object] = {
+                "molecule_chembl_id": str(mol_id),
+                "max_phase": "4",
+                "standard_inchi": f"InChI=1S/C{idx}H{2 * idx + 2}",
+            }
+            if idx == 1:
+                base.update(
+                    {
+                        "molecule_type": "Polymer",
+                        "canonical_smiles": polymer_smiles,
+                        "pubchem_cid": "POLY-CID",
+                        "pubchem_iupac_name": "polymer existing",
+                    }
+                )
+            elif idx == 2:
+                base.update(
+                    {
+                        "molecule_type": "Mixture",
+                        "canonical_smiles": mixture_smiles,
+                        "pubchem_cid": "MIX-CID",
+                        "pubchem_iupac_name": "mixture existing",
+                    }
+                )
+            else:
+                base.update(
+                    {
+                        "molecule_type": "Small molecule",
+                        "canonical_smiles": f"C{idx}H{2 * idx + 2}",
+                    }
+                )
+            rows.append(base)
         return pd.DataFrame(rows)
 
     def fake_get_cid(smiles: str, cfg):  # type: ignore[no-untyped-def]
+        smiles_calls.append(smiles)
         return "12345"
 
     def fake_get_properties(cid: str, cfg):  # type: ignore[no-untyped-def]
@@ -369,6 +397,23 @@ def test_get_testitem_data_smoke(
     )
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
 
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.skip_polymers = True
+        return cfg
+
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
+
+    smiles_calls: list[str] = []
+    warning_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        get_testitem_data.logger,
+        "warning",
+        lambda event, **kwargs: warning_events.append((event, kwargs)),
+    )
+
     exit_code = get_testitem_data.main(
         [
             "--input",
@@ -383,6 +428,9 @@ def test_get_testitem_data_smoke(
     )
     assert exit_code == 0
     assert output_csv.exists()
+    assert polymer_smiles not in smiles_calls
+    assert mixture_smiles not in smiles_calls
+    assert any(event == "pubchem_skip_polymers" for event, _ in warning_events)
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -413,3 +461,8 @@ def test_get_testitem_data_smoke(
             "timestamp_utc": ptypes.is_object_dtype,
         },
     )
+
+    polymer_row = df.loc[df["molecule_type"] == "Polymer"].iloc[0]
+    assert polymer_row["pubchem_cid"] == "POLY-CID"
+    mixture_row = df.loc[df["molecule_type"] == "Mixture"].iloc[0]
+    assert mixture_row["pubchem_cid"] == "MIX-CID"
