@@ -11,7 +11,7 @@ if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
 
@@ -121,8 +121,8 @@ def attach_parent_molecule_ids(
     api_cfg: ApiCfg,
     catalog_cfg: MoleculeCatalogCfg,
     timeout: float | None,
-    catalog: dict[str, str] | None = None,
-    catalog_source: str | None = None,
+    catalog: Mapping[str, str] | None = None,
+    source: str | None = None,
 ) -> tuple[pd.DataFrame, ParentLookupStats]:
     """Attach parent molecule identifiers using the ChEMBL catalogue."""
 
@@ -160,8 +160,8 @@ def attach_parent_molecule_ids(
         )
         return result, stats
 
-    catalog_source_resolved = catalog_source
-    catalog_data = catalog
+    source_resolved = source
+    catalog_data = dict(catalog) if catalog is not None else None
 
     if catalog_data is None:
         cache_before = _cache_state(catalog_cfg.cache_path)
@@ -172,11 +172,11 @@ def attach_parent_molecule_ids(
             timeout=timeout,
         )
         cache_after = _cache_state(catalog_cfg.cache_path)
-        catalog_source_resolved = _resolve_parent_source(cache_before, cache_after)
+        source_resolved = _resolve_parent_source(cache_before, cache_after)
     else:
-        if catalog_source_resolved is None:
+        if source_resolved is None:
             cache_exists = catalog_cfg.cache_path.is_file()
-            catalog_source_resolved = (
+            source_resolved = (
                 PARENT_LOOKUP_SOURCE_CACHE
                 if cache_exists
                 else PARENT_LOOKUP_SOURCE_REMOTE
@@ -220,17 +220,22 @@ def attach_parent_molecule_ids(
     else:
         existing_parent = pd.Series(pd.NA, index=result.index, dtype="string")
 
-    combined_parent = existing_parent.fillna(parent_series)
+    combined_parent = existing_parent.copy()
+    update_mask = combined_parent.isna() | combined_parent.eq("")
+    combined_parent.loc[update_mask] = parent_series.loc[update_mask]
     result[parent_column] = combined_parent
 
     missing = int(combined_parent.isna().sum())
     attached = len(result) - missing
 
+    if source_resolved is None:
+        source_resolved = PARENT_LOOKUP_SOURCE_REMOTE
+
     stats = ParentLookupStats(
         source=(
             PARENT_LOOKUP_SOURCE_REMOTE
             if fetched_remote
-            else catalog_source_resolved
+            else source_resolved
         ),
         missing=missing,
         unique=int(len(unique_children)),
@@ -485,7 +490,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 catalog_cfg=cfg.molecule_catalog,
                 timeout=cfg.testitem.timeout,
                 catalog=parent_catalog,
-                catalog_source=parent_catalog_source,
+                source=parent_catalog_source,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error("parent_lookup_failed", error=str(exc))
