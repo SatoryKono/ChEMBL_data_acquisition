@@ -23,7 +23,12 @@ from library import chembl_library as cl
 from library import io
 from library import molecule_catalog
 from library import pubchem_library as pl
-from library.molecule_catalog import load_parent_catalog, write_parent_catalog_cache
+from library.molecule_catalog import (
+    load_parent_catalog,
+    query_parent_catalog,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
+)
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -162,17 +167,27 @@ def attach_parent_molecule_ids(
 
     source_resolved = source
     catalog_data = dict(catalog) if catalog is not None else None
+    normalised_child = _normalise_chembl_ids(result[child_column])
+    unique_children = normalised_child[normalised_child != ""].unique()
+    used_partial_cache = False
 
     if catalog_data is None:
         cache_before = _cache_state(catalog_cfg.cache_path)
-        catalog_data = load_parent_catalog(
-            client=client,
-            api_cfg=api_cfg,
-            catalog_cfg=catalog_cfg,
-            timeout=timeout,
-        )
+        queried = query_parent_catalog(unique_children, catalog_cfg)
         cache_after = _cache_state(catalog_cfg.cache_path)
-        source_resolved = _resolve_parent_source(cache_before, cache_after)
+        if queried or catalog_cfg.sqlite_path.is_file():
+            catalog_data = dict(queried)
+            source_resolved = _resolve_parent_source(cache_before, cache_after)
+            used_partial_cache = True
+        else:
+            catalog_data = load_parent_catalog(
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+            )
+            cache_after = _cache_state(catalog_cfg.cache_path)
+            source_resolved = _resolve_parent_source(cache_before, cache_after)
     else:
         if source_resolved is None:
             cache_exists = catalog_cfg.cache_path.is_file()
@@ -181,9 +196,6 @@ def attach_parent_molecule_ids(
                 if cache_exists
                 else PARENT_LOOKUP_SOURCE_REMOTE
             )
-
-    normalised_child = _normalise_chembl_ids(result[child_column])
-    unique_children = normalised_child[normalised_child != ""].unique()
 
     parent_map = {
         key: catalog_data[key]
@@ -211,7 +223,10 @@ def attach_parent_molecule_ids(
             catalog_data.update(fetched)
             parent_map.update(fetched)
             if catalog is None:
-                write_parent_catalog_cache(catalog_data, catalog_cfg)
+                if used_partial_cache:
+                    update_parent_catalog_cache(fetched, catalog_cfg)
+                else:
+                    write_parent_catalog_cache(catalog_data, catalog_cfg)
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
@@ -425,11 +440,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         if need_lookup and cache_before[0]:
             try:
-                parent_catalog = load_parent_catalog(
-                    client=client,
-                    api_cfg=cfg.api,
+                parent_catalog = query_parent_catalog(
+                    need_lookup,
                     catalog_cfg=cfg.molecule_catalog,
-                    timeout=cfg.testitem.timeout,
                 )
             except (requests.RequestException, ValueError) as exc:
                 logger.error(

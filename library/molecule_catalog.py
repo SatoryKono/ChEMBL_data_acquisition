@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Mapping
@@ -21,11 +22,14 @@ _PARENT_LOOKUP_FIELDS = tuple(_DEFAULT_CATALOG_CFG.fields or ()) or (
 _PARENT_LOOKUP_CHILD_FIELD = _DEFAULT_CATALOG_CFG.child_field
 _PARENT_LOOKUP_PARENT_FIELD = _DEFAULT_CATALOG_CFG.parent_field
 _PARENT_LOOKUP_CHUNK_SIZE = _DEFAULT_CATALOG_CFG.page_size
+_SQLITE_VARIABLE_LIMIT = 900
 
 __all__ = [
     "fetch_parent_catalog",
     "fetch_parent_catalog_for",
     "load_parent_catalog",
+    "query_parent_catalog",
+    "update_parent_catalog_cache",
     "write_parent_catalog_cache",
 ]
 
@@ -226,14 +230,26 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
     return result
 
 
-def write_parent_catalog_cache(
-    catalog: Mapping[str, str], catalog_cfg: MoleculeCatalogCfg
-) -> None:
-    """Persist *catalog* to disk using the configured cache format."""
+def _ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS parent_catalog (
+            child TEXT PRIMARY KEY,
+            parent TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_parent_catalog_parent ON parent_catalog(parent)"
+    )
 
+
+def _write_cache_from_items(
+    items: Iterable[tuple[str, str]], catalog_cfg: MoleculeCatalogCfg
+) -> None:
     cache_path = catalog_cfg.cache_path
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    sorted_items = sorted(catalog.items())
+    entries = list(items)
 
     if cache_path.suffix.lower() == ".csv":
         with cache_path.open("w", encoding="utf-8", newline="") as fh:
@@ -242,7 +258,7 @@ def write_parent_catalog_cache(
                 fieldnames=[catalog_cfg.child_field, catalog_cfg.parent_field],
             )
             writer.writeheader()
-            for child, parent in sorted_items:
+            for child, parent in entries:
                 writer.writerow(
                     {
                         catalog_cfg.child_field: child,
@@ -252,9 +268,137 @@ def write_parent_catalog_cache(
         return
 
     cache_path.write_text(
-        json.dumps(dict(sorted_items), indent=2, sort_keys=True),
+        json.dumps(dict(entries), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def _write_parent_catalog_sqlite(
+    items: Iterable[tuple[str, str]],
+    catalog_cfg: MoleculeCatalogCfg,
+    *,
+    replace: bool,
+) -> None:
+    sqlite_path = catalog_cfg.sqlite_path
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    entries = list(items)
+
+    with sqlite3.connect(sqlite_path) as conn:
+        _ensure_sqlite_schema(conn)
+        if replace:
+            conn.execute("DELETE FROM parent_catalog")
+        if entries:
+            conn.executemany(
+                "INSERT OR REPLACE INTO parent_catalog(child, parent) VALUES (?, ?)",
+                entries,
+            )
+        conn.commit()
+
+
+def _read_sqlite_cache(path: Path) -> tuple[dict[str, str], bool]:
+    if not path.is_file():
+        return {}, False
+    try:
+        with sqlite3.connect(path) as conn:
+            _ensure_sqlite_schema(conn)
+            rows = conn.execute("SELECT child, parent FROM parent_catalog")
+            result = {str(child): str(parent) for child, parent in rows}
+        return result, True
+    except sqlite3.DatabaseError as exc:
+        logger.warning(
+            "invalid_catalog_sqlite",
+            extra={"path": str(path), "error": str(exc)},
+        )
+        return {}, False
+
+
+def _ensure_sqlite_cache(catalog_cfg: MoleculeCatalogCfg) -> bool:
+    sqlite_path = catalog_cfg.sqlite_path
+    if sqlite_path.is_file():
+        return True
+    cached = _read_cache(catalog_cfg.cache_path, catalog_cfg)
+    if not cached:
+        return False
+    items = sorted((str(child), str(parent)) for child, parent in cached.items())
+    _write_parent_catalog_sqlite(items, catalog_cfg, replace=True)
+    return sqlite_path.is_file()
+
+
+def query_parent_catalog(
+    children: Iterable[str], catalog_cfg: MoleculeCatalogCfg
+) -> dict[str, str]:
+    """Return parent mappings for *children* from the SQLite cache."""
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for value in children:
+        try:
+            child_id = _normalise_chembl_id(str(value))
+        except ValueError:
+            continue
+        if child_id in seen:
+            continue
+        seen.add(child_id)
+        unique.append(child_id)
+
+    if not unique:
+        return {}
+
+    if not _ensure_sqlite_cache(catalog_cfg):
+        return {}
+
+    sqlite_path = catalog_cfg.sqlite_path
+    result: dict[str, str] = {}
+
+    try:
+        with sqlite3.connect(sqlite_path) as conn:
+            _ensure_sqlite_schema(conn)
+            for chunk in _chunked(unique, _SQLITE_VARIABLE_LIMIT):
+                if not chunk:
+                    continue
+                placeholders = ",".join("?" for _ in chunk)
+                cursor = conn.execute(
+                    f"SELECT child, parent FROM parent_catalog WHERE child IN ({placeholders})",
+                    chunk,
+                )
+                result.update({str(child): str(parent) for child, parent in cursor})
+    except sqlite3.DatabaseError as exc:
+        logger.warning(
+            "invalid_catalog_sqlite",
+            extra={"path": str(sqlite_path), "error": str(exc)},
+        )
+        return {}
+
+    return result
+
+
+def write_parent_catalog_cache(
+    catalog: Mapping[str, str], catalog_cfg: MoleculeCatalogCfg
+) -> None:
+    """Persist *catalog* to disk using the configured cache format."""
+
+    sorted_items = sorted(
+        (str(child), str(parent)) for child, parent in catalog.items()
+    )
+    _write_cache_from_items(sorted_items, catalog_cfg)
+    _write_parent_catalog_sqlite(sorted_items, catalog_cfg, replace=True)
+
+
+def update_parent_catalog_cache(
+    catalog: Mapping[str, str], catalog_cfg: MoleculeCatalogCfg
+) -> None:
+    """Update the existing cache with *catalog* entries."""
+
+    if not catalog:
+        return
+
+    sorted_items = sorted(
+        (str(child), str(parent)) for child, parent in catalog.items()
+    )
+    _write_parent_catalog_sqlite(sorted_items, catalog_cfg, replace=False)
+    data, ok = _read_sqlite_cache(catalog_cfg.sqlite_path)
+    if ok:
+        _write_cache_from_items(sorted(data.items()), catalog_cfg)
 
 
 def load_parent_catalog(
@@ -268,9 +412,15 @@ def load_parent_catalog(
     """Return the molecule parent catalogue, using the on-disk cache if present."""
 
     cache_path = catalog_cfg.cache_path
+    sqlite_path = catalog_cfg.sqlite_path
     if not force_refresh:
+        sqlite_data, sqlite_ok = _read_sqlite_cache(sqlite_path)
+        if sqlite_ok:
+            return sqlite_data
         cached = _read_cache(cache_path, catalog_cfg)
         if cached:
+            items = sorted(cached.items())
+            _write_parent_catalog_sqlite(items, catalog_cfg, replace=True)
             return cached
 
     result = fetch_parent_catalog(
