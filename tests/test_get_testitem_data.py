@@ -88,6 +88,11 @@ def test_run_chembl_column_order(
     monkeypatch.setattr(
         gtd, "load_parent_catalog", lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"}
     )
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
     monkeypatch.setattr(
         gtd,
@@ -118,6 +123,7 @@ def test_run_chembl_column_order(
         **__: object,
     ) -> Path:
         captured["col_order"] = list(col_order or [])
+        captured["columns"] = list(df.columns)
         return output
 
     monkeypatch.setattr(io, "write_csv", fake_write_csv)
@@ -125,7 +131,7 @@ def test_run_chembl_column_order(
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
 
-    available = set(df.columns) | {"pipeline_version", "timestamp_utc"}
+    available = set(captured.get("columns", []))
     expected_head = [c for c in TestitemsSchema.columns if c in available]
     expected_tail = sorted(available - set(TestitemsSchema.columns))
     assert captured["col_order"] == expected_head + expected_tail
@@ -368,7 +374,7 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     assert fetch_calls == [["CHEMBL1"]]
     assert update_calls == [{"CHEMBL1": "CHEMBL1_PARENT"}]
     assert [source for _, source in attach_calls] == [
-        gtd.PARENT_LOOKUP_SOURCE_REMOTE,
+        gtd.PARENT_LOOKUP_SOURCE_PARTIAL,
         gtd.PARENT_LOOKUP_SOURCE_CACHE,
     ]
 
@@ -659,7 +665,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
         timeout=None,
     )
 
-    assert captured_ids["ids"] == ["CHEMBL2"]
+    assert captured_ids["ids"] == ["CHEMBL1", "CHEMBL2"]
     assert result[catalog_cfg.parent_field].tolist() == [
         "CHEMBL1_PARENT",
         "CHEMBL2_PARENT",
@@ -667,7 +673,58 @@ def test_attach_parent_molecule_ids_fetches_missing(
     assert stats.unique == 2
     assert stats.attached == 2
     assert stats.missing == 0
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
+
+
+def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.sources.chembl.molecule_catalog.child_field
+    parent_field = cfg.sources.chembl.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL10", "CHEMBL11"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    fetch_calls: list[list[str]] = []
+
+    def fake_fetch(
+        ids: list[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        ordered = sorted(ids)
+        fetch_calls.append(ordered)
+        return {value: f"{value}_PARENT" for value in ordered}
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        fake_fetch,
+    )
+
+    monkeypatch.setattr(
+        gtd,
+        "load_parent_catalog",
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("load_parent_catalog should not be called")
+        ),
+    )
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert fetch_calls == [["CHEMBL10", "CHEMBL11"]]
+    assert result[parent_field].tolist() == ["CHEMBL10_PARENT", "CHEMBL11_PARENT"]
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
 
 
 def test_attach_parent_molecule_ids_handles_large_catalog(
@@ -775,7 +832,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         "CHEMBL1_PARENT",
         "CHEMBL2_PARENT",
     ]
-    assert first_stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+    assert first_stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
 
     stored_catalog = json.loads(catalog_cfg.cache_path.read_text(encoding="utf-8"))
     assert stored_catalog == {
@@ -890,7 +947,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     assert stats.unique == 1
     assert stats.attached == 0
     assert stats.missing == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
 
 
 def test_attach_parent_molecule_ids_uses_cache_only(
