@@ -460,17 +460,21 @@ def test_fetch_pubmed_records_accepts_config(
     expected_sleep = config.document.pubmed.sleep
     semantic_cfg = config.semantic_scholar
 
-    def fake_session() -> Any:
-        class DummySession:
-            def __enter__(self) -> DummySession:
-                return self
+    factory_calls: dict[str, Any] = {}
 
-            def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
-                return None
+    class DummySession:
+        def __enter__(self) -> "DummySession":
+            return self
 
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    def fake_session_factory(api_cfg: Any, retry_cfg: Any) -> DummySession:
+        factory_calls["api"] = api_cfg
+        factory_calls["retry"] = retry_cfg
         return DummySession()
 
-    monkeypatch.setattr(gdd.requests, "Session", fake_session)
+    monkeypatch.setattr(gdd, "session_with_retry", fake_session_factory)
 
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
@@ -525,6 +529,8 @@ def test_fetch_pubmed_records_accepts_config(
     monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
     df = gdd.fetch_pubmed_records(["1"], config)
+    assert factory_calls["api"] is config.api
+    assert factory_calls["retry"] is config.retry
     assert "PubMed.PMID" in df.columns
     assert "publication_class" in df.columns
     assert df.loc[0, "PubMed.PMID"] == "1"
@@ -610,7 +616,7 @@ def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     seen_cfg: dict[str, PubMedCfg | None] = {"value": None}
 
@@ -655,7 +661,7 @@ def test_fetch_pubmed_records_uses_fallback_doi(
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
@@ -719,7 +725,7 @@ def test_fetch_pubmed_records_falls_back_to_single_semantic_call(
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
@@ -904,7 +910,7 @@ def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
     monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
-    monkeypatch.setattr(gdd.requests, "Session", DummySession)
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     df = gdd.fetch_pubmed_records(
         pmids,

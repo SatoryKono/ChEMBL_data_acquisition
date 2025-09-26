@@ -65,6 +65,7 @@ from library.config import (
     _serialize_paths,
     ensure_dirs,
     print_config,
+    session_with_retry,
 )
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -281,8 +282,13 @@ def fetch_pubmed_records(
             f" {tuple(type(c).__name__ for c in candidates)}"
         )
 
+    session_cfg = settings
+
     def _fetch_batch(
-        first: object, *rest: object, **__: object
+        first: object,
+        *rest: object,
+        __cfg: Config = session_cfg,
+        **__: object,
     ) -> list[dict[str, str]]:
         """Fetch metadata for a batch of PMIDs.
 
@@ -296,8 +302,9 @@ def fetch_pubmed_records(
         batch_list = _coerce_batch_argument(first, *rest)
 
         try:
-            with requests.Session() as session:
-                pubmed_limiter.acquire()
+
+            with session_with_retry(__cfg.api, __cfg.retry) as session:
+
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
                 )
