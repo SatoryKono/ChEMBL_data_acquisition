@@ -444,6 +444,19 @@ def test_add_pubchem_data_uses_disk_cache(
         assert cache_data == {"CHEMBL1": "321"}
 
 
+def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
+    cache_path = tmp_path / "nested" / "cid_cache.json"
+
+    assert not cache_path.parent.exists()
+
+    gtd._write_pubchem_cid_cache(cache_path, {"CHEMBL1": "321"})
+
+    assert cache_path.exists()
+    payload = json.loads(cache_path.read_text())
+    assert payload["values"] == {"CHEMBL1": "321"}
+    assert payload["metadata"]["version"] == gtd._PUBCHEM_CACHE_SCHEMA_VERSION
+
+
 def test_load_pubchem_cid_cache_expires(tmp_path: Path) -> None:
     cache_path = tmp_path / "cid_cache.json"
     expired_at = datetime.now(timezone.utc) - timedelta(hours=2)

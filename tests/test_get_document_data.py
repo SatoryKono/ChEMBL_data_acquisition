@@ -536,6 +536,72 @@ def test_fetch_pubmed_records_accepts_config(
     assert df.loc[0, "PubMed.PMID"] == "1"
 
 
+def test_fetch_pubmed_records_acquires_pubmed_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PubMed batch requests should acquire the shared rate limiter."""
+
+    class TrackingLimiter:
+        def __init__(self) -> None:
+            self.acquisitions = 0
+
+        def acquire(self) -> None:
+            self.acquisitions += 1
+
+    tracking_limiter = TrackingLimiter()
+    batches_seen: list[list[str]] = []
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+    ) -> list[dict[str, str]]:
+        batches_seen.append(list(batch))
+        assert tracking_limiter.acquisitions == len(batches_seen)
+        return [{"PubMed.PMID": pmid} for pmid in batch]
+
+    def fake_semantic_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [{"scholar.PMID": pmid} for pmid in pmids]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+
+    def fake_get_limiter(name: str, *_, **__) -> Any:
+        if name == "pubmed":
+            return tracking_limiter
+        return DummyLimiter()
+
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+
+    df = gdd.fetch_pubmed_records(
+        ["1", "2"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert batches_seen == [["1"], ["2"]]
+    assert tracking_limiter.acquisitions == len(batches_seen)
+    assert list(df["PubMed.PMID"]) == ["1", "2"]
+
+
 def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

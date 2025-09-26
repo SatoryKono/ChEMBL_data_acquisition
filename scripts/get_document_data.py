@@ -252,6 +252,7 @@ def fetch_pubmed_records(
     rate_cfg = settings.rate
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
+    pubmed_limiter = get_limiter("pubmed", rate_cfg.global_rps, rate_cfg.global_burst)
     semantic_limiter = get_limiter(
         "semantic_scholar", rate_cfg.global_rps, rate_cfg.global_burst
     )
@@ -301,7 +302,9 @@ def fetch_pubmed_records(
         batch_list = _coerce_batch_argument(first, *rest)
 
         try:
+
             with session_with_retry(__cfg.api, __cfg.retry) as session:
+
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
                 )
