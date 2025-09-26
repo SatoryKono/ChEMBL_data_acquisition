@@ -405,14 +405,16 @@ def test_get_testitem_data_smoke(
         get_testitem_data, "analyze_table_quality", lambda *_, **__: None
     )
 
-    original_apply = get_testitem_data.apply_config_overrides
+    original_apply = get_testitem_data.cli.apply_config_overrides
 
     def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
         cfg = original_apply(*args, **kwargs)
         cfg.pubchem.allow_polymer = False
         return cfg
 
-    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
+    monkeypatch.setattr(
+        get_testitem_data.cli, "apply_config_overrides", patched_apply
+    )
 
     smiles_calls: list[str] = []
     warning_events: list[tuple[str, dict[str, object]]] = []

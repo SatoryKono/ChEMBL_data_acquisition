@@ -21,10 +21,10 @@ from pathlib import Path
 import argparse
 from collections.abc import Sequence
 
+from library import cli
 from library import input_initialisation_library as lib
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     configure_logger,
 )
 from library.cli import (
@@ -160,7 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
-        cfg: Config = apply_config_overrides(
+        cfg: Config = cli.apply_config_overrides(
             args,
             parser,
             args.config,
