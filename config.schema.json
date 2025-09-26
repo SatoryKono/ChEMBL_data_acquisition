@@ -97,6 +97,121 @@
           "default": true,
           "title": "Log Distribution",
           "type": "boolean"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {
+            "ac50": "activation",
+            "ec50": "activation",
+            "ic50": "inhibition",
+            "kd": "binding",
+            "ki": "binding"
+          },
+          "title": "Metrics",
+          "type": "object"
+        },
+        "triages": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Triages",
+          "type": "object"
+        },
+        "functionality": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {
+            "activator": "activation",
+            "agonist": "activation",
+            "antagonist": "inhibition",
+            "inhibitor": "inhibition",
+            "partial agonist": "activation"
+          },
+          "title": "Functionality",
+          "type": "object"
+        },
+        "mechanism": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Mechanism",
+          "type": "object"
+        },
+        "triage_fields": {
+          "default": [
+            "data_validity_description",
+            "data_validity_comment"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Triage Fields",
+          "type": "array"
+        },
+        "functionality_fields": {
+          "default": [
+            "functional_activity",
+            "action_type"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Functionality Fields",
+          "type": "array"
+        },
+        "mechanism_fields": {
+          "default": [
+            "mechanism_of_action",
+            "mechanism_comment"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Mechanism Fields",
+          "type": "array"
+        },
+        "allowlist": {
+          "default": [
+            "activation",
+            "inhibition",
+            "binding",
+            "pam",
+            "nam",
+            "triaged",
+            "unknown"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allowlist",
+          "type": "array"
+        },
+        "positive_label": {
+          "default": "PAM",
+          "title": "Positive Label",
+          "type": "string"
+        },
+        "negative_label": {
+          "default": "NAM",
+          "title": "Negative Label",
+          "type": "string"
+        },
+        "fallback": {
+          "default": "unknown",
+          "title": "Fallback",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "title": "ActivityActionTypeCfg",
@@ -106,7 +221,7 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "default": false,
+          "default": true,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -166,6 +281,31 @@
           "default": false,
           "title": "Log Distribution",
           "type": "boolean"
+        },
+        "allowlist": {
+          "default": [
+            "measurement",
+            "assay",
+            "comments",
+            "effect_features",
+            "triage",
+            "mechanism",
+            "functionality"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allowlist",
+          "type": "array"
+        },
+        "hash_column": {
+          "default": "properties_hash",
+          "title": "Hash Column",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "title": "ActivityPropertiesCfg",
@@ -873,6 +1013,12 @@
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
+        },
+        "prefer_local_smiles": {
+          "default": false,
+          "description": "Skip PubChem lookups when local pubchem_* columns are populated",
+          "title": "Prefer Local Smiles",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",
@@ -1345,6 +1491,95 @@
       "title": "TestitemCfg",
       "type": "object"
     },
+    "TestitemMoleculeEnrichmentSourcesCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "molecule_catalog_path": {
+          "default": "dictionary/molecule_catalog.csv",
+          "format": "path",
+          "title": "Molecule Catalog Path",
+          "type": "string"
+        },
+        "molecule_hierarchy_path": {
+          "default": "dictionary/molecule_hierarchy.csv",
+          "format": "path",
+          "title": "Molecule Hierarchy Path",
+          "type": "string"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentSourcesCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentOutputCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "salt_as_null_when_absent": {
+          "default": true,
+          "title": "Salt As Null When Absent",
+          "type": "boolean"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentOutputCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentFlagsCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "coerce_to_bool": {
+          "default": true,
+          "title": "Coerce To Bool",
+          "type": "boolean"
+        },
+        "parent_fallback": {
+          "default": true,
+          "title": "Parent Fallback",
+          "type": "boolean"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentFlagsCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentLoggingCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "warn_missing_molecule": {
+          "default": true,
+          "title": "Warn Missing Molecule",
+          "type": "boolean"
+        },
+        "warn_inconsistent_flags": {
+          "default": true,
+          "title": "Warn Inconsistent Flags",
+          "type": "boolean"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentLoggingCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "sources": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentSourcesCfg"
+        },
+        "output": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentOutputCfg"
+        },
+        "flags": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentFlagsCfg"
+        },
+        "logging": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentLoggingCfg"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentCfg",
+      "type": "object"
+    },
     "UniprotCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1452,6 +1687,9 @@
     },
     "activity_enrichment": {
       "$ref": "#/$defs/ActivityEnrichmentCfg"
+    },
+    "testitem_molecule_enrichment": {
+      "$ref": "#/$defs/TestitemMoleculeEnrichmentCfg"
     },
     "system": {
       "$ref": "#/$defs/SystemCfg"

@@ -121,6 +121,19 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `timeout` | `30.0` | Таймаут запроса (сек.). |
 | `limit` | `null` | Ограничение на число идентификаторов. |
 
+#### Обогащение тест-объектов (`testitem_molecule_enrichment`)
+
+| Ключ | Значение по умолчанию | Описание |
+| --- | --- | --- |
+| `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
+| `sources.molecule_catalog_path` | `dictionary/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
+| `sources.molecule_hierarchy_path` | `dictionary/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
+| `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
+| `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |
+| `logging.warn_missing_molecule` | `true` | Логирует предупреждение, если молекулы нет в иерархии или каталоге. |
+| `logging.warn_inconsistent_flags` | `true` | Сообщает о расхождении флагов между дочерней и родительской записью. |
+
 #### Пайплайн документов (`document`)
 
 | Подсекция | Ключ | Значение | Описание |

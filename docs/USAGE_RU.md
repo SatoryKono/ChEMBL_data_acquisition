@@ -157,6 +157,27 @@ PubChem-дополнение добавляет детерминированны
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
 подкачивает свежие связи ребёнок→родитель из API ChEMBL.【F:library/molecule_catalog.py†L43-L136】
 
+### Обогащение солей и флагов каталога
+
+Опциональный блок `testitem_molecule_enrichment` добавляет к `testitem.csv`
+столбцы `salt_chembl_id`, `natural_product`, `prodrug`, `polymer_flag` на
+основе двух CSV-словарей:
+
+* `dictionary/molecule_hierarchy.csv` со столбцами `molecule_chembl_id`,
+  `parent_molecule_chembl_id` описывает связи соли и родителя.
+* `dictionary/molecule_catalog.csv` со столбцами `molecule_chembl_id`,
+  `natural_product`, `prodrug`, `polymer_flag` содержит булевы признаки.
+
+Если молекулы нет в словарях, в лог попадают предупреждения
+`testitem_enrichment_missing_child_flags` или
+`testitem_enrichment_missing_parent_flags` — проверьте данные или временно
+отключите блок через `testitem_molecule_enrichment.enable=false`. Сообщение
+`testitem_enrichment_inconsistent_flag` сигнализирует о расхождении флагов
+между дочерней и родительской записью до применения фолбэка. Поведение можно
+тонко настроить через `testitem_molecule_enrichment.flags.*`, отключив
+фолбэк или приведение к булевому типу, если downstream-потребители требуют
+исходные текстовые значения.【F:library/testitem_enrichment.py†L17-L216】
+
 ## Инициализация входных данных (`get_input_initialisation.py`)
 
 ```bash

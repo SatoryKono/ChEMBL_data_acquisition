@@ -155,6 +155,28 @@ Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to 
 file before executing the pipeline. The helper reuses the cached mapping when present and fetches the latest
 relationships from the ChEMBL API otherwise.【F:library/molecule_catalog.py†L43-L136】
 
+### Salt and catalogue enrichment
+
+The optional `testitem_molecule_enrichment` stage augments `testitem.csv` with
+`salt_chembl_id`, `natural_product`, `prodrug`, and `polymer_flag` using two
+CSV dictionaries:
+
+* `dictionary/molecule_hierarchy.csv` (columns `molecule_chembl_id`,
+  `parent_molecule_chembl_id`) maps salts to their parent molecules.
+* `dictionary/molecule_catalog.csv` (columns `molecule_chembl_id`,
+  `natural_product`, `prodrug`, `polymer_flag`) stores boolean attributes.
+
+Missing dictionary rows trigger warnings such as
+`testitem_enrichment_missing_child_flags` or
+`testitem_enrichment_missing_parent_flags`; check the catalogue contents or
+disable the stage with `testitem_molecule_enrichment.enable=false` when
+running without the dictionaries. Logs named
+`testitem_enrichment_inconsistent_flag` highlight disagreements between child
+and parent rows before the fallback logic copies the parent values. Adjust the
+behaviour via `testitem_molecule_enrichment.flags.*` to disable the parent
+fallback or boolean coercion when feeding downstream systems that expect the
+raw catalogue tokens.【F:library/testitem_enrichment.py†L17-L216】
+
 ## Input initialisation (`get_input_initialisation.py`)
 
 ```bash

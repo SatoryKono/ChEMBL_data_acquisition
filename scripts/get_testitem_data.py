@@ -11,7 +11,8 @@ if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
-from collections.abc import Mapping, Sequence
+from collections import ChainMap
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
 
@@ -22,6 +23,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io
 from library import molecule_catalog
+from library import testitem_enrichment
 from library import pubchem_library as pl
 from library.molecule_catalog import (
     load_parent_catalog,
@@ -68,8 +70,20 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 
 
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
-PARENT_LOOKUP_SOURCE_REMOTE = "remote"
+PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
+PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
+
+
+PUBCHEM_COLUMNS = [
+    "pubchem_cid",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+    "pubchem_isomeric_smiles",
+    "pubchem_canonical_smiles",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+]
 
 
 @dataclass(frozen=True)
@@ -92,19 +106,21 @@ def _cache_state(path: Path) -> tuple[bool, float | None]:
     return True, stat.st_mtime
 
 
-def _resolve_parent_source(
+def _resolve_catalog_load_source(
     before: tuple[bool, float | None], after: tuple[bool, float | None]
 ) -> str:
-    """Determine parent lookup source from cache state transitions."""
+    """Determine the lookup source after invoking ``load_parent_catalog``."""
 
     before_exists, before_mtime = before
     after_exists, after_mtime = after
 
     if after_exists and before_exists and after_mtime == before_mtime:
         return PARENT_LOOKUP_SOURCE_CACHE
-    if after_exists or before_exists != after_exists:
-        return PARENT_LOOKUP_SOURCE_REMOTE
-    return PARENT_LOOKUP_SOURCE_REMOTE
+    if after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    if before_exists and not after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    return PARENT_LOOKUP_SOURCE_SYNC
 
 
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
@@ -171,36 +187,37 @@ def attach_parent_molecule_ids(
         return result, stats
 
     source_resolved = source
-    catalog_data = dict(catalog) if catalog is not None else None
     normalised_child = _normalise_chembl_ids(result[child_column])
     unique_children = normalised_child[normalised_child != ""].unique()
+    catalog_data: MutableMapping[str, str]
     used_partial_cache = False
+    needs_full_sync = False
+    partial_fetch_used = False
+    full_sync_used = False
 
-    if catalog_data is None:
-        cache_before = _cache_state(catalog_cfg.cache_path)
-        queried = query_parent_catalog(unique_children, catalog_cfg)
-        cache_after = _cache_state(catalog_cfg.cache_path)
-        if queried or catalog_cfg.sqlite_path.is_file():
-            catalog_data = dict(queried)
-            source_resolved = _resolve_parent_source(cache_before, cache_after)
-            used_partial_cache = True
-        else:
-            catalog_data = load_parent_catalog(
-                client=client,
-                api_cfg=api_cfg,
-                catalog_cfg=catalog_cfg,
-                timeout=timeout,
-            )
-            cache_after = _cache_state(catalog_cfg.cache_path)
-            source_resolved = _resolve_parent_source(cache_before, cache_after)
+    if catalog is not None:
+        base_view = {
+            key: catalog[key]
+            for key in unique_children
+            if key in catalog
+        }
+        catalog_data = ChainMap({}, base_view)
     else:
-        if source_resolved is None:
-            cache_exists = catalog_cfg.cache_path.is_file()
-            source_resolved = (
-                PARENT_LOOKUP_SOURCE_CACHE
-                if cache_exists
-                else PARENT_LOOKUP_SOURCE_REMOTE
-            )
+        catalog_data = {}
+        queried = query_parent_catalog(unique_children, catalog_cfg)
+        if queried:
+            catalog_data.update(queried)
+            used_partial_cache = True
+            if source_resolved is None:
+                source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+        else:
+            sqlite_exists = catalog_cfg.sqlite_path.is_file()
+            used_partial_cache = sqlite_exists
+            if sqlite_exists:
+                if source_resolved is None:
+                    source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+            else:
+                needs_full_sync = True
 
     parent_map = {
         key: catalog_data[key]
@@ -208,8 +225,8 @@ def attach_parent_molecule_ids(
         if key in catalog_data
     }
     missing_ids = [key for key in unique_children if key not in parent_map]
-    fetched_remote = False
 
+    fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
         try:
             fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -221,17 +238,38 @@ def attach_parent_molecule_ids(
         except (requests.RequestException, ValueError) as exc:
             logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
             fetched = {}
-        else:
-            if fetched:
-                fetched_remote = True
         if fetched:
+            partial_fetch_used = True
             catalog_data.update(fetched)
             parent_map.update(fetched)
-            if catalog is None:
-                if used_partial_cache:
-                    update_parent_catalog_cache(fetched, catalog_cfg)
-                else:
-                    write_parent_catalog_cache(catalog_data, catalog_cfg)
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            if used_partial_cache:
+                update_parent_catalog_cache(fetched, catalog_cfg)
+            else:
+                write_parent_catalog_cache(catalog_data, catalog_cfg)
+                used_partial_cache = True
+
+    if missing_ids and catalog is None and needs_full_sync:
+        cache_before_load = _cache_state(catalog_cfg.cache_path)
+        catalog_data = load_parent_catalog(
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+        )
+        cache_after_load = _cache_state(catalog_cfg.cache_path)
+        full_sync_used = True
+        source_resolved = _resolve_catalog_load_source(
+            cache_before_load, cache_after_load
+        )
+        if partial_fetch_used:
+            catalog_data.update(fetched)
+        parent_map = {
+            key: catalog_data.get(key, parent_map.get(key, ""))
+            for key in unique_children
+            if key in catalog_data or key in parent_map
+        }
+        missing_ids = [key for key in unique_children if key not in parent_map]
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
@@ -248,15 +286,20 @@ def attach_parent_molecule_ids(
     missing = int(combined_parent.isna().sum())
     attached = len(result) - missing
 
-    if source_resolved is None:
-        source_resolved = PARENT_LOOKUP_SOURCE_REMOTE
+    final_source = source_resolved
+    if full_sync_used:
+        final_source = PARENT_LOOKUP_SOURCE_SYNC
+    elif partial_fetch_used:
+        final_source = PARENT_LOOKUP_SOURCE_PARTIAL
+    elif final_source is None:
+        final_source = (
+            PARENT_LOOKUP_SOURCE_CACHE
+            if used_partial_cache or catalog is not None
+            else PARENT_LOOKUP_SOURCE_SYNC
+        )
 
     stats = ParentLookupStats(
-        source=(
-            PARENT_LOOKUP_SOURCE_REMOTE
-            if fetched_remote
-            else source_resolved
-        ),
+        source=final_source,
         missing=missing,
         unique=int(len(unique_children)),
         attached=int(attached),
@@ -297,20 +340,42 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     if df.empty or "canonical_smiles" not in df.columns:
         return df
 
-    smiles_list = df["canonical_smiles"].fillna("").tolist()
+    result = df.reset_index(drop=True).copy()
+
+    smiles_list = result["canonical_smiles"].fillna("").tolist()
     # ``dict.fromkeys`` preserves the order of first occurrence while
     # removing duplicates. This allows progress output to reflect the
     # deterministic iteration order of SMILES strings.
     unique_smiles = [s for s in dict.fromkeys(smiles_list) if s]
 
-    total = len(unique_smiles)
+    prefer_local = getattr(cfg, "prefer_local_smiles", False)
+    skip_smiles: set[str] = set()
+    if prefer_local:
+        existing_cols = [col for col in PUBCHEM_COLUMNS if col in result.columns]
+        if existing_cols:
+            normalised = pd.DataFrame(
+                {col: result[col].astype("string").replace("", pd.NA) for col in existing_cols}
+            )
+            complete_mask = normalised.notna().all(axis=1)
+            canonical = result.loc[complete_mask, "canonical_smiles"].astype("string")
+            skip_smiles = {
+                str(smi)
+                for smi in canonical[canonical.notna() & canonical.ne("")].tolist()
+            }
+
+    fetch_smiles = [s for s in unique_smiles if s not in skip_smiles]
+
+    total = len(fetch_smiles)
     if total:
         logger.info("pubchem_start", total=total)
     else:
         logger.info("pubchem_no_smiles")
 
-    records: dict[str, dict[str, str]] = {}
-    for idx, smi in enumerate(unique_smiles, start=1):
+    def _value_or_na(value: str | None) -> object:
+        return value if value not in (None, "") else pd.NA
+
+    records: dict[str, dict[str, object]] = {}
+    for idx, smi in enumerate(fetch_smiles, start=1):
         logger.info("pubchem_progress", current=idx, total=total)
         cid = pl.get_cid_from_smiles(smi, cfg) or ""
         first_cid = cid.split("|")[0] if cid else ""
@@ -318,36 +383,36 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
             props = pl.get_properties(first_cid, cfg)
             records[smi] = {
                 "pubchem_cid": first_cid,
-                "pubchem_iupac_name": props.IUPACName,
-                "pubchem_molecular_formula": props.MolecularFormula,
-                "pubchem_isomeric_smiles": props.iSMILES,
-                "pubchem_canonical_smiles": props.cSMILES,
-                "pubchem_inchi": props.InChI,
-                "pubchem_inchikey": props.InChIKey,
+                "pubchem_iupac_name": _value_or_na(props.IUPACName),
+                "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
+                "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
+                "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
+                "pubchem_inchi": _value_or_na(props.InChI),
+                "pubchem_inchikey": _value_or_na(props.InChIKey),
             }
         else:
-            records[smi] = {
-                "pubchem_cid": "",
-                "pubchem_iupac_name": "",
-                "pubchem_molecular_formula": "",
-                "pubchem_isomeric_smiles": "",
-                "pubchem_canonical_smiles": "",
-                "pubchem_inchi": "",
-                "pubchem_inchikey": "",
-            }
+            records[smi] = {col: pd.NA for col in PUBCHEM_COLUMNS}
 
-    empty = {
-        "pubchem_cid": "",
-        "pubchem_iupac_name": "",
-        "pubchem_molecular_formula": "",
-        "pubchem_isomeric_smiles": "",
-        "pubchem_canonical_smiles": "",
-        "pubchem_inchi": "",
-        "pubchem_inchikey": "",
-    }
-    pubchem_rows = [records.get(smi, empty) for smi in smiles_list]
-    pubchem_df = pd.DataFrame(pubchem_rows)
-    return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
+    empty = {col: pd.NA for col in PUBCHEM_COLUMNS}
+    pubchem_rows = [records.get(smi, empty.copy()) for smi in smiles_list]
+    pubchem_df = pd.DataFrame(pubchem_rows, index=result.index).convert_dtypes()
+
+    for col in PUBCHEM_COLUMNS:
+        if col not in pubchem_df.columns:
+            continue
+        new_series = pubchem_df[col].astype("string")
+        if col in result.columns:
+            result[col] = result[col].astype("string")
+            if prefer_local:
+                existing = result[col]
+                missing_mask = existing.isna() | existing.eq("")
+                result.loc[missing_mask, col] = new_series[missing_mask]
+            else:
+                result[col] = new_series
+        else:
+            result[col] = new_series
+
+    return result
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -457,11 +522,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
             cache_after = _cache_state(cfg.molecule_catalog.cache_path)
-            parent_catalog_source = _resolve_parent_source(cache_before, cache_after)
+            parent_catalog_source = (
+                PARENT_LOOKUP_SOURCE_CACHE
+                if cache_after == cache_before
+                else PARENT_LOOKUP_SOURCE_SYNC
+            )
             if parent_catalog:
                 need_lookup -= set(parent_catalog)
 
-        fetched_remote = False
         if need_lookup:
             try:
                 fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -475,9 +543,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 return 1
             if fetched:
                 parent_catalog.update(fetched)
-                fetched_remote = True
-        if fetched_remote:
-            parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
+                update_parent_catalog_cache(fetched, cfg.molecule_catalog)
+                parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
@@ -513,7 +580,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             attached=parent_stats.attached,
             missing=parent_stats.missing,
         )
- 
+
+        enrichment_cfg = cfg.testitem_molecule_enrichment
+        if enrichment_cfg.enable:
+            logger.info("testitem_enrichment_start")
+            try:
+                df = testitem_enrichment.enrich(
+                    df,
+                    cfg=enrichment_cfg,
+                    io_cfg=cfg.io,
+                )
+            except ValueError as exc:
+                logger.error("testitem_enrichment_failed", error=str(exc))
+                return 1
+            logger.info("testitem_enrichment_done")
+
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
         df = add_pipeline_metadata(df)
