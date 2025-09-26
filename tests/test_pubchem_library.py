@@ -218,3 +218,101 @@ def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     time.sleep(1.1)
     pl.make_request(url, cfg)
     assert calls["n"] == 2  # cache expired
+
+
+def test_resolve_pubchem_record_follows_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = pl.PubChemCfg(delay=0, retries=1, backoff_initial_seconds=0.1)
+
+    calls: list[tuple[str, bool]] = []
+
+    def fake_make_request(
+        url: str,
+        cfg: pl.PubChemCfg,
+        *,
+        deadline: float | None = None,
+        return_status: bool = False,
+    ) -> dict[str, object] | tuple[int | None, dict[str, object] | None] | None:
+        calls.append((url, return_status))
+        if "smiles" in url:
+            if return_status:
+                return 404, None
+            return None
+        if "inchikey" in url:
+            data = {"IdentifierList": {"CID": ["321"]}}
+            if return_status:
+                return 200, data
+            return data
+        if "property" in url:
+            return {"PropertyTable": {"Properties": [{"IUPACName": "foo"}]}}
+        raise AssertionError(f"unexpected URL {url}")
+
+    monkeypatch.setattr(pl, "make_request", fake_make_request)
+    monkeypatch.setattr(pl, "_CACHE", None)
+
+    cache: dict[tuple[str, str], tuple[bool, dict[str, str | None] | None]] = {}
+    identifiers = {
+        "cid": None,
+        "smiles": "C",
+        "inchikey": "AAA",
+        "inchi": None,
+        "pref_name": None,
+    }
+
+    record = pl.resolve_pubchem_record(identifiers, cfg, cache=cache)
+
+    assert record["pubchem_cid"] == "321"
+    assert record["pubchem_iupac_name"] == "foo"
+    assert calls[0][0].endswith("/smiles/C/cids/JSON")
+    assert calls[1][0].endswith("/inchikey/AAA/cids/JSON")
+    assert cache[("smiles", "C")] == (False, None)
+    found, stored = cache[("inchikey", "AAA")]
+    assert found
+    assert stored is not None
+
+    call_count = len(calls)
+    second = pl.resolve_pubchem_record(identifiers, cfg, cache=cache)
+    assert second == record
+    assert len(calls) == call_count
+
+
+def test_make_request_backoff_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = pl.PubChemCfg(delay=0, retries=2, backoff_initial_seconds=0.25)
+
+    class StubResponse:
+        def __init__(self, status_code: int, payload: dict[str, object] | None = None) -> None:
+            self.status_code = status_code
+            self._payload = payload or {}
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise requests.HTTPError(response=self)
+
+    responses_iter = iter(
+        [
+            StubResponse(429, {}),
+            StubResponse(200, {"IdentifierList": {"CID": [1]}}),
+        ]
+    )
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> StubResponse:
+        return next(responses_iter)
+
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(pl, "sleep", lambda delay: sleeps.append(delay))
+    monkeypatch.setattr(
+        pl,
+        "get_limiter",
+        lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
+    )
+    monkeypatch.setattr(pl, "_CACHE", None)
+    monkeypatch.setattr(pl._session, "get", fake_get)
+
+    status, data = pl.make_request("https://example.org", cfg, return_status=True)
+
+    assert status == 200
+    assert data == {"IdentifierList": {"CID": [1]}}
+    assert sleeps == [0.25]

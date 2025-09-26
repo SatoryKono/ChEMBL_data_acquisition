@@ -971,6 +971,32 @@
           "title": "Base",
           "type": "string"
         },
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "resolve_order": {
+          "default": [
+            "cid",
+            "smiles",
+            "inchikey",
+            "inchi",
+            "pref_name"
+          ],
+          "items": {
+            "enum": [
+              "cid",
+              "smiles",
+              "inchikey",
+              "inchi",
+              "pref_name"
+            ],
+            "type": "string"
+          },
+          "title": "Resolve Order",
+          "type": "array"
+        },
         "timeout_connect": {
           "default": 5,
           "minimum": 1,
@@ -982,6 +1008,12 @@
           "minimum": 1,
           "title": "Timeout Read",
           "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "minimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
         },
         "retries": {
           "default": 3,
@@ -1007,6 +1039,12 @@
           "title": "Delay",
           "type": "number"
         },
+        "backoff_initial_seconds": {
+          "default": 1.0,
+          "minimum": 0,
+          "title": "Backoff Initial Seconds",
+          "type": "number"
+        },
         "cache_ttl": {
           "default": 3600,
           "description": "Time-to-live for PubChem request cache in seconds",
@@ -1018,6 +1056,24 @@
           "default": false,
           "description": "Skip PubChem lookups when local pubchem_* columns are populated",
           "title": "Prefer Local Smiles",
+          "type": "boolean"
+        },
+        "use_parent_for_salts": {
+          "default": true,
+          "description": "Reuse parent molecule data for salts when available",
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
+        "allow_polymer": {
+          "default": false,
+          "description": "Allow PubChem lookups for polymer flagged molecules",
+          "title": "Allow Polymer",
+          "type": "boolean"
+        },
+        "write_not_found_literal": {
+          "default": false,
+          "description": "Write 'NOT_FOUND' literal when PubChem lookup fails",
+          "title": "Write Not Found Literal",
           "type": "boolean"
         }
       },
