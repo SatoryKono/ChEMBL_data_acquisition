@@ -11,9 +11,9 @@ import pytest
 def test_determinism_script_returns_zero() -> None:
     """Run determinism check script and assert a zero exit code.
 
-    The script writes a small DataFrame twice using the deterministic CSV writer
-    and compares their SHA-256 hashes. When the output is deterministic the
-    script exits with code ``0``.
+    The script now writes a small DataFrame through both deterministic CSV
+    writers and compares their SHA-256 hashes. When the output is deterministic
+    the script exits with code ``0``.
     """
 
     result = subprocess.run(
