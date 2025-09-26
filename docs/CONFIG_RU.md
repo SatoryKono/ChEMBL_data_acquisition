@@ -241,9 +241,9 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Корневая папка словарей. |
-| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
-| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-| `uniprot_data_dir` | `dictionary/uniprot` | Кэшированные ответы UniProt. |
+| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
+| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Классификация типов таргетов. |
 
 

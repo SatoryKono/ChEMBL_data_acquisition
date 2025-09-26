@@ -249,9 +249,9 @@ All URLs must comply with the respective service usage policies, including rate 
 | Key | Default | Description |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
-| `uniprot_data_dir` | `dictionary/uniprot` | Cached UniProt JSON responses. |
+| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
 
 
