@@ -32,9 +32,10 @@ def test_iuphar_merge_preserves_ec_number(
     monkeypatch.setattr(tp, "finalise_targets", lambda df, org: df)
     monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
     monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
-    cfg.target.all.organism_csv = tmp_path / "organism.csv"
-    pd.DataFrame({"genus": [], "type": []}).to_csv(
-        cfg.target.all.organism_csv, index=False
+    monkeypatch.setattr(
+        gtd.organism_classification,
+        "add_cellularity_smart",
+        lambda *_args, **_kwargs: pd.DataFrame({"genus": [], "type": []}),
     )
 
     merged = gtd.merge_results(combined_df, iuphar_df, cfg)

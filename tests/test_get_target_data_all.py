@@ -59,14 +59,14 @@ def test_run_all_uses_local_inputs(
     chembl_data = Path("tests/data/chembl_targets_min.csv")
     uniprot_data = Path("tests/data/uniprot_targets_min.csv")
     iuphar_data = Path("tests/data/iuphar_targets_min.csv")
-    organism_csv = Path("tests/data/organism_min.csv")
-
     original_chunk = cfg.target.chembl.chunk_size
     cfg.target.all.chunk_size = original_chunk + 2
-    cfg.target.all.organism_csv = organism_csv
     cfg.target.all.chembl_out = tmp_path / "chembl_out.csv"
     cfg.target.all.uniprot_out = tmp_path / "uniprot_out.csv"
     cfg.target.all.iuphar_out = tmp_path / "iuphar_out.csv"
+    cfg.target.all.target_csv = iuphar_data
+    cfg.target.all.family_csv = tmp_path / "family.csv"
+    cfg.target.all.family_csv.write_text("id,name\n1,Example\n")
 
     # ------------------------------------------------------------------
     # Patch network-dependent functions to use local files
@@ -103,6 +103,23 @@ def test_run_all_uses_local_inputs(
         return orig_finalise(df, organism, **kw)
 
     monkeypatch.setattr(tp, "finalise_targets", patched_finalise)
+    monkeypatch.setattr(gtd.pc, "classifier_from_config", lambda _cfg: object())
+    monkeypatch.setattr(
+        gtd.pc, "append_protein_class_predictions", lambda df, _cls: df
+    )
+
+    def fake_classification(data: pd.DataFrame, **_: object) -> pd.DataFrame:
+        if "genus" not in data:
+            return pd.DataFrame({"genus": [], "type": []})
+        genus_values = (
+            data["genus"].dropna().astype(str).str.strip().replace("", pd.NA).dropna()
+        )
+        unique = genus_values.drop_duplicates().reset_index(drop=True)
+        return pd.DataFrame({"genus": unique, "type": ["-"] * len(unique)})
+
+    monkeypatch.setattr(
+        gtd.organism_classification, "add_cellularity_smart", fake_classification
+    )
 
     # Skip strict schema validation; the goal is to exercise orchestration.
     monkeypatch.setattr(
