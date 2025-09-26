@@ -94,7 +94,19 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 
 ## Configuration
-- The primary `config.yaml` contains sections such as `api`, `chembl`, `openalex`, `crossref`, `uniprot`, `pubchem`, `document`, `target`, `resources`, `io`, `jobs`, `batch`, etc., with defaults for URLs, timeouts, RPS limits, chunk sizes, and dictionary paths.
+- The top-level structure of `config.yaml` is split into `sources`, `local`, `activity_bounds`, and `system`.
+
+
+- `sources` enumerates every remote dependency: `sources.chembl.api` tunes base URLs, retries, throttling, and headers; `sources.chembl.cache` and `sources.chembl.molecule_catalog` manage on-disk caches; `sources.chembl.pipelines.*` defines identifier columns, batching, and per-pipeline limits; sibling blocks (`sources.openalex`, `sources.crossref`, `sources.uniprot.api`/`mapping`, `sources.iuphar`, `sources.pubchem`, `sources.pubmed`, `sources.semantic_scholar`) provide analogous network and rate-limit settings.
+
+
+- `local` collects filesystem expectations: `local.resources` resolves dictionary folders and reference CSV paths, `local.io` standardises output/cache directories and CSV formatting, while `local.init` lists Excel inputs and destinations for the initialisation workflow.
+
+
+- `activity_bounds` toggles how relation strings are converted into numeric ranges, including rounding digits, clamping, and logging of unknown relations.
+
+
+- `system` centralises application-wide behaviour via `system.log`, `system.rate`, `system.retry`, and `system.doc_type` weighting tables.
 
 
 - Pydantic models enforce typing, URL validation, and a mandatory `user_agent` with an email; precedence order: YAML < environment < CLI.
