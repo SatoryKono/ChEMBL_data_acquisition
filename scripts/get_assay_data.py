@@ -9,8 +9,11 @@ import argparse
 from collections.abc import Sequence
 from itertools import islice
 
+import bootstrap
 import requests
 from pandera.errors import SchemaErrors
+
+bootstrap.ensure_project_root()
 
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
