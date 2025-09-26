@@ -44,6 +44,7 @@
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами. |
+| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; переопределяется переменной `CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. |
 | `endpoint` | `molecule` | Ресурс REST API ChEMBL, из которого подкачиваются данные при обновлении кэша. |
 | `child_field` | `molecule_chembl_id` | Поле ответа API с идентификатором дочерней молекулы. |
 | `parent_field` | `parent_molecule_chembl_id` | Поле ответа API с идентификатором родительской молекулы. |

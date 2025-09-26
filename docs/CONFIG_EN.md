@@ -44,6 +44,7 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | Key | Default | Description |
 | --- | --- | --- |
 | `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs. |
+| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. |
 | `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
 | `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
 | `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
