@@ -1020,6 +1020,20 @@
           "title": "Delay",
           "type": "number"
         },
+        "resolve_order": {
+          "default": [
+            "cache",
+            "inchikey",
+            "name",
+            "smiles"
+          ],
+          "description": "Order of PubChem CID resolvers",
+          "items": {
+            "type": "string"
+          },
+          "title": "Resolve Order",
+          "type": "array"
+        },
         "cache_ttl": {
           "default": 3600,
           "description": "Time-to-live for PubChem request cache in seconds",

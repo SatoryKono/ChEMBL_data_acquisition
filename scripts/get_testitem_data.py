@@ -242,32 +242,30 @@ def _resolve_cid_from_row(
 ) -> str | None:
     """Return a CID for ``row`` using its structure fields."""
 
+    chembl_norm = (
+        _normalise_identifier(chembl_id, uppercase=True)
+        if chembl_id
+        else _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+    )
 
-    if chembl_id and chembl_id in cache and cache[chembl_id]:
-        return cache[chembl_id]
- 
+    candidates = {
+        "standard_inchi_key": _normalise_identifier(
+            row.get("standard_inchi_key"), uppercase=True
+        ),
+        "pubchem_inchikey": _normalise_identifier(
+            row.get("pubchem_inchikey"), uppercase=True
+        ),
+        "standard_inchi": _normalise_identifier(row.get("standard_inchi")),
+        "pubchem_inchi": _normalise_identifier(row.get("pubchem_inchi")),
+        "pref_name": _normalise_identifier(row.get("pref_name")),
+        "canonical_smiles": _normalise_identifier(row.get("canonical_smiles")),
+    }
 
-
-    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
- 
-
-    if chembl_id:
-        cached = cache.get(chembl_id, _CID_CACHE_MISSING)
-        if cached is not _CID_CACHE_MISSING:
-            cid = _select_primary_cid(
-                cached,
-                chembl_id=chembl_id,
-                identifier="cache",
-                value=cached,
-            )
-            if chembl_id not in cache or cid != cached:
-                cache[chembl_id] = cid
-            return cid
-
-
-    def _store(value: str | None) -> str | None:
-        if chembl_id:
-            cache[chembl_id] = value
+    def _store(value: str) -> str:
+        if chembl_norm:
+            cached_value = cache.get(chembl_norm, _CID_CACHE_MISSING)
+            if cached_value in (_CID_CACHE_MISSING, None) or cached_value != value:
+                cache[chembl_norm] = value
         return value
 
     def _attempt(
@@ -280,33 +278,78 @@ def _resolve_cid_from_row(
         resolved = resolver(value, cfg)
         return _select_primary_cid(
             resolved,
-            chembl_id=chembl_id,
+            chembl_id=chembl_norm,
             identifier=identifier,
             value=value,
         )
 
-    inchikey = _normalise_identifier(row.get("standard_inchi_key"), uppercase=True)
-    cid = _attempt("standard_inchi_key", inchikey, pl.get_cid_from_inchikey)
-    if cid:
-        return _store(cid)
+    def _resolve_cached() -> str | None:
+        if not chembl_norm:
+            return None
+        cached_value = cache.get(chembl_norm, _CID_CACHE_MISSING)
+        if cached_value in (_CID_CACHE_MISSING, None):
+            return None
+        cid_primary = _select_primary_cid(
+            cached_value,
+            chembl_id=chembl_norm,
+            identifier="cache",
+            value=cached_value,
+        )
+        if cid_primary and cached_value != cid_primary:
+            cache[chembl_norm] = cid_primary
+        return cid_primary
 
-    inchi = _normalise_identifier(row.get("standard_inchi"))
-    cid = _attempt("standard_inchi", inchi, pl.get_cid_from_inchi)
-    if cid:
-        return _store(cid)
+    resolver_groups: Mapping[str, Sequence[tuple[str, str | None, Callable[[str, PubChemCfg], str | None]]]] = {
+        "inchikey": (
+            (
+                "standard_inchi_key",
+                candidates["standard_inchi_key"],
+                pl.get_cid_from_inchikey,
+            ),
+            (
+                "pubchem_inchikey",
+                candidates["pubchem_inchikey"],
+                pl.get_cid_from_inchikey,
+            ),
+        ),
+        "inchi": (
+            (
+                "standard_inchi",
+                candidates["standard_inchi"],
+                pl.get_cid_from_inchi,
+            ),
+            (
+                "pubchem_inchi",
+                candidates["pubchem_inchi"],
+                pl.get_cid_from_inchi,
+            ),
+        ),
+        "name": (
+            ("pref_name", candidates["pref_name"], pl.get_cid),
+            ("pref_name_partial", candidates["pref_name"], pl.get_all_cid),
+        ),
+        "smiles": (
+            (
+                "canonical_smiles",
+                candidates["canonical_smiles"],
+                pl.get_cid_from_smiles,
+            ),
+        ),
+    }
 
-    pref_name = _normalise_identifier(row.get("pref_name"))
-    cid = _attempt("pref_name", pref_name, pl.get_cid)
-    if cid:
-        return _store(cid)
-    cid = _attempt("pref_name_partial", pref_name, pl.get_all_cid)
-    if cid:
-        return _store(cid)
-
-    smiles = _normalise_identifier(row.get("canonical_smiles"))
-    cid = _attempt("canonical_smiles", smiles, pl.get_cid_from_smiles)
-    if cid:
-        return _store(cid)
+    for stage in cfg.resolve_order:
+        if stage == "cache":
+            cached_cid = _resolve_cached()
+            if cached_cid:
+                return cached_cid
+            continue
+        resolvers = resolver_groups.get(stage)
+        if resolvers is None:
+            raise ValueError(f"Unknown PubChem resolve order entry: {stage!r}")
+        for identifier, value, resolver in resolvers:
+            cid = _attempt(identifier, value, resolver)
+            if cid:
+                return _store(cid)
 
     return None
 
