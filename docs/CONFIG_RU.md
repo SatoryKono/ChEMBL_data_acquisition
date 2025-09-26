@@ -229,11 +229,44 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `uniprot.api` | `https://rest.uniprot.org` | `timeout_connect=5`, `timeout_read=30`, `rps=25`, `burst=25`, `delay=0.25`. |
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5`, `timeout=300.0`, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
-| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | `timeout_connect=5`, `timeout_read=60`, `retries=3`, `rps=5`, `burst=5`, `delay=0.2`, `cache_ttl=3600`, `prefer_local_values=true`, `cache_ttl_hours=null`. |
+| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | См. [детальные настройки PubChem](#pubchem-sourcespubchem). |
 | `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 | `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 
 Соблюдайте требования сервисов по rate limit и указанию контактной информации.
+
+### PubChem (`sources.pubchem`)
+
+Параметры PubChem применяются прежде всего в пайплайне `testitem`. Каждый ключ отражает содержимое [`config.yaml`](../config.yaml)
+и может быть переопределён переменными окружения (см. [Переменные окружения](#переменные-окружения)). В таблице указаны и
+автогенерируемые алиасы `CHEMBL_DA_SOURCES_PUBCHEM_*`, и универсальный формат `CHEMBL_DA__SOURCES__PUBCHEM__*`. Для базового URL
+доступен короткий алиас из таблицы в разделе «Переменные окружения».
+
+| Ключ | Значение по умолчанию | Описание | Переменные окружения |
+| --- | --- | --- | --- |
+| `enable` | `true` | Главный переключатель обогащения данными PubChem. | `CHEMBL_DA_SOURCES_PUBCHEM_ENABLE`, `CHEMBL_DA__SOURCES__PUBCHEM__ENABLE` |
+| `base` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | REST‑эндпоинт PUG, к которому выполняются запросы. | `CHEMBL_DA_PUBCHEM_BASE`, `CHEMBL_DA_SOURCES_PUBCHEM_BASE`, `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `timeout_connect` | `5` | Таймаут установления соединения (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_CONNECT`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_CONNECT` |
+| `timeout_read` | `60` | Таймаут ожидания ответа (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_READ`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_READ` |
+| `timeout_seconds` | `30.0` | Максимальная длительность одной попытки разрешения CID с учётом повторов. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_SECONDS` |
+| `retries` | `3` | Число повторов при временных сбоях. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
+| `rps` | `5` | Локальный лимит запросов в секунду. | `CHEMBL_DA_SOURCES_PUBCHEM_RPS`, `CHEMBL_DA__SOURCES__PUBCHEM__RPS` |
+| `burst` | `5` | Ёмкость токен-бакета, связанного с `rps`. | `CHEMBL_DA_SOURCES_PUBCHEM_BURST`, `CHEMBL_DA__SOURCES__PUBCHEM__BURST` |
+| `delay` | `0.2` | Пауза между повторами (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_DELAY`, `CHEMBL_DA__SOURCES__PUBCHEM__DELAY` |
+| `backoff_initial_seconds` | `0.5` | Начальная задержка экспоненциального backoff после 429/5xx. | `CHEMBL_DA_SOURCES_PUBCHEM_BACKOFF_INITIAL_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__BACKOFF_INITIAL_SECONDS` |
+| `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Очерёдность стратегий при поиске PubChem CID. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
+| `cache_ttl` | `3600` | Время жизни in-memory кэша HTTP (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
+| `cache_ttl_hours` | `null` | TTL (часы) для постоянного CID-кэша; `null` отключает истечение. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
+| `cid_cache_path` | `null` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `batch_size` | `50` | Размер батча для обработчика PubChem. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
+| `prefer_local_smiles` | `false` | Пропускать запросы, если локальные SMILES/InChIKey уже заполнены. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
+| `prefer_local_values` | `true` | Сохранять существующие колонки `pubchem_*`, если ответ пуст. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
+| `use_parent_for_salts` | `true` | Переходить к родительским структурам, если соль не найдена. | `CHEMBL_DA_SOURCES_PUBCHEM_USE_PARENT_FOR_SALTS`, `CHEMBL_DA__SOURCES__PUBCHEM__USE_PARENT_FOR_SALTS` |
+| `allow_polymer` | `false` | Разрешать обработку полимеров и смесей. | `CHEMBL_DA_SOURCES_PUBCHEM_ALLOW_POLYMER`, `CHEMBL_DA__SOURCES__PUBCHEM__ALLOW_POLYMER` |
+| `write_not_found_literal` | `false` | Записывать литерал `Not Found`, если CID не найден. | `CHEMBL_DA_SOURCES_PUBCHEM_WRITE_NOT_FOUND_LITERAL`, `CHEMBL_DA__SOURCES__PUBCHEM__WRITE_NOT_FOUND_LITERAL` |
+
+> Совет: поле `resolve_order` принимает любую последовательность поддерживаемых стратегий; чаще всего полезно оставлять `cache`
+> первым, чтобы использовать прогретый кэш CID.
 
 ## Локальные ресурсы (`local`)
 
