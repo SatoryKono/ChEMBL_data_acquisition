@@ -13,7 +13,7 @@ The pipeline is orchestrated through the shared configuration file `config.yaml`
 | **UniProt REST API** | `uniprot_library.process` retrieves JSON entries while observing RPS thresholds and reusing prepared accession CSVs; the `target all` mode wraps calls and caches results. | Full UniProt cards: names, taxonomy, sequences, secondary accessions, and related cross-references. |
 | **IUPHAR and local CSV files** | `fetch_iuphar` reads local classifiers and, when needed, invokes REST services; `target_postprocessing` merges the reference data with ChEMBL and UniProt extracts. | IUPHAR classifications, families, HGNC identifiers, and predicted protein classes. |
 | **PubChem PUG REST** | The `add_pubchem_data` function initializes a PubChem session, then issues rate-limited requests for unique SMILES via the `pubchem` configuration. | CID, IUPAC names, formulas, InChI, and SMILES used to enrich test items. |
-| **Local dictionaries and prepared CSV/Excel files** | `io.read_ids` and entity modules load files from `dictionary/` and `data/` as input identifier lists or reference tables, reducing external calls. | Restrictive ID lists, target-type dictionaries, organism classifications, and initialization Excel workbooks. |
+| **Local dictionaries and prepared CSV/Excel files** | `io.read_ids` and entity modules load files from `dictionary/` and `data/` as input identifier lists or reference tables, reducing external calls. | Restrictive ID lists, target-type dictionaries, and initialization Excel workbooks. |
 
 ## Data Transformation
 
@@ -53,7 +53,7 @@ Validation relies on `pandera`: when mismatches occur, the `SidecarErrors` helpe
 1. **Acquisition modes** — `get_target_data` supports standalone scenarios (`chembl`, `uniprot`, `iuphar`, `all`). In `chembl` mode the data is normalized (`normalize_targets`), augmented with metadata, and validated with a sidecar for issues; exports include YAML and quality analysis.【F:scripts/get_target_data.py†L528-L650】
 2. **Composite `all` mode** — Sequential functions `fetch_chembl`, `fetch_uniprot`, and `fetch_iuphar` gather data, join UniProt/IUPHAR with ChEMBL, then `merge_results` injects protein class predictions and passes the table to post- and final processing.【F:scripts/get_target_data.py†L949-L1099】
 3. **Target post-processing** — `postprocess_targets` normalizes UniProt identifiers, uppercases gene synonyms, consolidates synonym and EC lists, fills optional fields with defaults, and restructures the column set using `TARGETS_COLUMN_ORDER` while preserving the origin of `target_chembl_id` and accession lists.【F:library/target_postprocessing.py†L1-L443】
-4. **Finalization** — `finalise_targets` removes duplicates and entries lacking UniProt IDs, merges organism classifications, lowercases selected fields, and `validate_and_write` performs normalization, adds metadata, validates against `TargetsSchema`, replaces gaps with “-”, writes CSV with a fixed order, and emits a quality report.【F:library/target_postprocessing.py†L485-L601】【F:scripts/get_target_data.py†L990-L1061】
+4. **Finalization** — `finalise_targets` removes duplicates and entries lacking UniProt IDs, invokes the taxonomy classifier to derive `type` and related flags from UniProt lineage plus ChEMBL species data, lowercases selected fields, and `validate_and_write` performs normalization, adds metadata, validates against `TargetsSchema`, replaces gaps with “-”, writes CSV with a fixed order, and emits a quality report.【F:library/target_postprocessing.py†L485-L601】【F:scripts/get_target_data.py†L990-L1061】
 
 ## Data Export
 
@@ -64,7 +64,7 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 * Assays reference documents (`document_chembl_id`) and targets (`target_chembl_id`), and receive a parallel-target counter during post-processing to highlight well-studied combinations.【F:library/assay_postprocessing.py†L1-L47】
 * Activities bridge assays, molecules, and documents via the respective identifiers and, thanks to operator normalization, align consistently with downstream analytics.【F:schemas/normalize.py†L25-L123】
 * Test items connect ChEMBL and PubChem through SMILES and CID, adding chemical properties for future joins with external compound libraries.【F:scripts/get_testitem_data.py†L49-L193】
-* Targets aggregate UniProt, IUPHAR, and organism classifiers into a single table enriched with protein-class predictions and synonym lists, ready to join with activities and assays via `target_chembl_id`/`uniprot_id`.【F:library/target_postprocessing.py†L181-L599】
+* Targets aggregate UniProt, IUPHAR, and the built-in taxonomy classifier into a single table enriched with protein-class predictions and synonym lists, ready to join with activities and assays via `target_chembl_id`/`uniprot_id`.【F:library/target_postprocessing.py†L181-L599】
 * Documents include normalized DOIs, publication types, and review flags, enabling alignment of assay/activity results with source quality.【F:library/document_postprocessing.py†L202-L268】
 
 ## Project Structure
@@ -73,7 +73,7 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 * **`scripts/`** — CLI wrappers for entity loading, quality reporting, and dictionary maintenance; every command covers input reading, client calls, normalization, validation, and export.
 * **`library/`** — Core business logic: API clients, post-processing (documents, targets, assays), normalization, validation, logging, CSV operations, and sidecar handling.
 * **`schemas/`** — `pandera` schemas and normalization routines for every entity.
-* **`dictionary/` and `data/`** — Local dictionaries, UniProt/IUPHAR caches, organism classifications, and input CSV/Excel files for launching pipelines.
+* **`dictionary/` and `data/`** — Local dictionaries, UniProt/IUPHAR caches, and input CSV/Excel files for launching pipelines.
 * **`docs/`** — Documentation for configuration, execution, and outputs; this report extends it with an end-to-end ETL description.
 
 The report covers the entire cycle—from data sources through normalization, post-processing, and export—highlighting quality controls and entity relationships. It equips newcomers to quickly understand, extend, or troubleshoot existing pipelines without compromising data integrity.
