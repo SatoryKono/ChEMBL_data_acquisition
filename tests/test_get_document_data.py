@@ -612,9 +612,11 @@ def test_fetch_pubmed_records_acquires_pubmed_limiter(
     class TrackingLimiter:
         def __init__(self) -> None:
             self.acquisitions = 0
+            self.history: list[int] = []
 
         def acquire(self) -> None:
             self.acquisitions += 1
+            self.history.append(self.acquisitions)
 
     tracking_limiter = TrackingLimiter()
     batches_seen: list[list[str]] = []
@@ -631,8 +633,9 @@ def test_fetch_pubmed_records_acquires_pubmed_limiter(
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
     ) -> list[dict[str, str]]:
+        acquisition_count = tracking_limiter.acquisitions
         batches_seen.append(list(batch))
-        assert tracking_limiter.acquisitions == len(batches_seen)
+        assert acquisition_count == len(batches_seen)
         return [{"PubMed.PMID": pmid} for pmid in batch]
 
     def fake_semantic_batch(
@@ -667,6 +670,7 @@ def test_fetch_pubmed_records_acquires_pubmed_limiter(
 
     assert batches_seen == [["1"], ["2"]]
     assert tracking_limiter.acquisitions == len(batches_seen)
+    assert tracking_limiter.history == [1, 2]
     assert list(df["PubMed.PMID"]) == ["1", "2"]
 
 
