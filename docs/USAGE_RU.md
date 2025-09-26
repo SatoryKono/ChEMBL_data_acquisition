@@ -53,11 +53,12 @@ python scripts/get_assay_data.py \
 ## Метаданные документов (`get_document_data.py`)
 
 ```bash
-python scripts/get_document_data.py \
+python scripts/get_document_data.py all \
   --input data/input-smoke/documents.csv \
   --column document_chembl_id \
   --batch-size 20
 ```
+
 
 Команда объединяет данные ChEMBL и PubMed. Для разовых корректировок доступны флаги `--batch-size`, `--timeout`, `--limit`,
 `--dry-run`. Вложенные параметры (например `sources.chembl.pipelines.document.pubmed.batch_size`) меняются через конфигурацию
@@ -71,6 +72,12 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```
 
 Альтернативно обновите значение в `config.yaml`.
+
+Выберите подкоманду `pubmed`, `chembl` или `all` в зависимости от требуемых источников.
+Сводку и список ключей смотрите в справке: `python scripts/get_document_data.py --help`
+и `python scripts/get_document_data.py <подкоманда> --help`
+(например, `--batch-size` управляет размером пакета для PubMed).
+
 
 ## Агрегация таргетов (`get_target_data.py`)
 
@@ -99,6 +106,11 @@ python scripts/get_testitem_data.py \
 что файл доступен исполнителю, либо задайте новое расположение переменной окружения
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
 `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+
+родителей ChEMBL. Путь к локальному JSON задаётся через
+[`sources.chembl.molecule_catalog`](./CONFIG_RU.md#sources-chembl-molecule-catalog) (`cache_path`); убедитесь,
+что файл доступен исполнителю, либо переопределите расположение параметрами CLI (`--sources.chembl.molecule_catalog.cache-path`)
+или переменными окружения (`CHEMBL_DA_MOLECULE_CATALOG_CACHE`).【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,

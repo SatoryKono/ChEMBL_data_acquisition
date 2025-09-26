@@ -38,6 +38,17 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `cache_ttl` | `3600` | Time-to-live for cached API responses in seconds. |
 | `cache_maxsize` | `1024` | Maximum number of cached responses. |
 
+<a id="sources-chembl-molecule-catalog"></a>
+### Molecule catalogue (`sources.chembl.molecule_catalog`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs. |
+| `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
+| `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
+| `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
+| `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
+
 ### Pipelines (`sources.chembl.pipelines`)
 
 Each sub-section below defines defaults for the respective CLI utility. CLI arguments are merged back into the configuration before execution.

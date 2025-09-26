@@ -53,7 +53,7 @@ Fetches assay metadata from ChEMBL using the configured identifier column.
 ## Document metadata (`get_document_data.py`)
 
 ```bash
-python scripts/get_document_data.py \
+python scripts/get_document_data.py all \
   --input data/input-smoke/documents.csv \
   --column document_chembl_id \
   --batch-size 20
@@ -71,7 +71,11 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```
 
 The same effect can be achieved by editing `sources.chembl.pipelines.document.pubmed.batch_size` in `config.yaml`.
-
+Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sources.
+Consult `python scripts/get_document_data.py --help` for a summary and
+`python scripts/get_document_data.py <sub-command> --help` for the
+allowed switches (for example, `--batch-size` for PubMed batching).
+ 
 ## Target aggregation (`get_target_data.py`)
 
 ```bash
@@ -99,6 +103,11 @@ used by downstream aggregations. The cache path is configured via
 `sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or adjust the
 location by setting `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
 `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+ 
+[`sources.chembl.molecule_catalog`](./CONFIG_EN.md#sources-chembl-molecule-catalog) (`cache_path`); keep the JSON file accessible to the runner or override the
+location through CLI/environment aliases such as `--sources.chembl.molecule_catalog.cache-path` or
+`CHEMBL_DA_MOLECULE_CATALOG_CACHE`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+ 
 
 Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
 file before executing the pipeline. The helper reuses the cached mapping when present and fetches the latest
