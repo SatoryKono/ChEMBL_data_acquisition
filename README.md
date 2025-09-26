@@ -127,6 +127,13 @@ pre-commit run --all-files
 pytest
 ```
 
+Для съёма покрытия основных модулей используйте плагин `pytest-cov`:
+
+```bash
+pytest --cov=library --cov=scripts --cov=activity_extraction_main \
+       --cov-report=term-missing --cov-report=xml
+```
+
 Проверка детерминизма итоговых CSV выполняется отдельным скриптом; он сравнивает
 контрольные срезы с актуальным выводом и сигнализирует о дрейфе данных:
 

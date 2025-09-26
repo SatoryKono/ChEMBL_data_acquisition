@@ -123,12 +123,31 @@ Environment variables follow the `CHEMBL_DA__SECTION__...__KEY` pattern. For fre
 
 ## Running tests
 
-Use `pytest` for unit and smoke scenarios:
+Create a virtual environment and install the development extras first:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install .[dev]
+```
+
+Then execute the unit and smoke suites with `pytest`:
 
 ```bash
 pytest
 pytest tests/smoke
 ```
+
+To capture code coverage for the main packages (`library/`, `scripts/` and
+`activity_extraction_main.py`) run:
+
+```bash
+pytest --cov=library --cov=scripts --cov=activity_extraction_main \
+       --cov-report=term-missing --cov-report=xml
+```
+
+The command prints uncovered lines in the terminal and generates
+`coverage.xml`, which can be consumed by CI tools or IDEs.
 
 Code quality checks can be executed locally via:
 
