@@ -390,6 +390,7 @@ def attach_parent_molecule_ids(
                 client=client,
                 api_cfg=api_cfg,
                 timeout=timeout,
+                catalog_cfg=catalog_cfg,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
@@ -759,6 +760,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     client=client,
                     api_cfg=cfg.api,
                     timeout=cfg.testitem.timeout,
+                    catalog_cfg=cfg.molecule_catalog,
                 )
             except (requests.RequestException, ValueError) as exc:
                 logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
