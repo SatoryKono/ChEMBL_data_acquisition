@@ -6,6 +6,7 @@ import csv
 import json
 import sqlite3
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from time import perf_counter
 from typing import Mapping
@@ -28,6 +29,9 @@ _PARENT_LOOKUP_SINGLE_LIMIT = _DEFAULT_CATALOG_CFG.fallback_single_limit
 _PARENT_LOOKUP_FALLBACK_THRESHOLD = 1
 _PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN = 1
 _SQLITE_VARIABLE_LIMIT = 900
+_PARENT_LOOKUP_SINGLE_CONCURRENCY = 4
+
+_PARENT_CATALOG_LOADING = False
 
 __all__ = [
     "fetch_parent_catalog",
@@ -250,40 +254,92 @@ def _fetch_parent_catalog_via_helper(
         else:
             remaining = list(pending)
 
-        total_remaining = len(remaining)
-        for chembl_id in remaining:
-            if chembl_id in existing or chembl_id in result:
-                continue
-            if single_limit is not None and single_requests >= single_limit:
+        outstanding = [
+            chembl_id
+            for chembl_id in remaining
+            if chembl_id not in existing and chembl_id not in result
+        ]
+        if outstanding and not _PARENT_CATALOG_LOADING:
+            try:
+                load_parent_catalog(
+                    client=client,
+                    api_cfg=api_cfg,
+                    catalog_cfg=cfg,
+                    timeout=timeout,
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "parent_lookup_cache_refresh_failed",
+                    extra={"error": str(exc)},
+                )
+        if outstanding:
+            cache_hits = query_parent_catalog(outstanding, cfg)
+            if cache_hits:
+                result.update(cache_hits)
+                outstanding = [
+                    chembl_id for chembl_id in outstanding if chembl_id not in cache_hits
+                ]
+
+        if outstanding:
+            if single_limit is not None and len(outstanding) > single_limit:
                 logger.warning(
                     "parent_lookup_single_limit_reached",
                     extra={
                         "limit": single_limit,
-                        "remaining": max(total_remaining - single_requests, 0),
+                        "remaining": len(outstanding) - single_limit,
                     },
                 )
-                break
-            single_requests += 1
-            for attempt in range(1, attempts + 1):
-                try:
-                    pair = fetch_parent_for_id(
-                        chembl_id, client=client, api_cfg=api_cfg, timeout=timeout
-                    )
-                except Exception as exc:  # pragma: no cover - defensive logging
-                    if attempt >= attempts:
+                outstanding = outstanding[:single_limit]
+
+        if outstanding:
+            max_workers = max(1, min(len(outstanding), _PARENT_LOOKUP_SINGLE_CONCURRENCY))
+            single_requests = len(outstanding)
+
+            def _fetch_with_retry(chembl_id: str) -> tuple[str, str] | None:
+                for attempt in range(1, attempts + 1):
+                    try:
+                        pair = fetch_parent_for_id(
+                            chembl_id,
+                            client=client,
+                            api_cfg=api_cfg,
+                            timeout=timeout,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive logging
+                        if attempt >= attempts:
+                            logger.warning(
+                                "parent_lookup_single_failed",
+                                extra={"chembl_id": chembl_id, "error": str(exc)},
+                            )
+                            return None
+                        if delay:
+                            sleep(delay * (2 ** (attempt - 1)))
+                        continue
+                    if pair is None:
+                        return None
+                    return pair
+                return None
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_map = {
+                    executor.submit(_fetch_with_retry, chembl_id): chembl_id
+                    for chembl_id in outstanding
+                }
+                for future in as_completed(future_map):
+                    try:
+                        pair = future.result()
+                    except Exception as exc:  # pragma: no cover - defensive logging
                         logger.warning(
                             "parent_lookup_single_failed",
-                            extra={"chembl_id": chembl_id, "error": str(exc)},
+                            extra={
+                                "chembl_id": future_map[future],
+                                "error": str(exc),
+                            },
                         )
-                        break
-                    if delay:
-                        sleep(delay * (2 ** (attempt - 1)))
-                    continue
-                if pair is None:
-                    break
-                child_id, parent_id = pair
-                result[child_id] = parent_id
-                break
+                        continue
+                    if not pair:
+                        continue
+                    child_id, parent_id = pair
+                    result[child_id] = parent_id
     finally:
         elapsed = perf_counter() - fallback_start
         logger.info(
@@ -673,8 +729,13 @@ def load_parent_catalog(
             _write_parent_catalog_sqlite(items, catalog_cfg, replace=True)
             return cached
 
-    result = fetch_parent_catalog(
-        client=client, api_cfg=api_cfg, catalog_cfg=catalog_cfg, timeout=timeout
-    )
+    global _PARENT_CATALOG_LOADING
+    _PARENT_CATALOG_LOADING = True
+    try:
+        result = fetch_parent_catalog(
+            client=client, api_cfg=api_cfg, catalog_cfg=catalog_cfg, timeout=timeout
+        )
+    finally:
+        _PARENT_CATALOG_LOADING = False
     write_parent_catalog_cache(result, catalog_cfg)
     return result
