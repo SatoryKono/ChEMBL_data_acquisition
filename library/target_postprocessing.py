@@ -484,13 +484,13 @@ def postprocess_file(
 
 def finalise_targets(
     df: pd.DataFrame,
-    organism: pd.DataFrame,
+    classification: pd.DataFrame,
     *,
     chembl_col: str = "target_chembl_id",
     uniprot_col: str = "uniprotkb_Id",
-    genus_col: str = "genus",
+    type_col: str = "type",
 ) -> pd.DataFrame:
-    """Apply final cleaning steps and organism merge.
+    """Apply final cleaning steps and append organism classification.
 
     This function mirrors a Power Query script that was previously used to
     prepare the exportable target table. It filters rows with missing
@@ -501,15 +501,15 @@ def finalise_targets(
     ----------
     df:
         DataFrame produced by :func:`postprocess_targets`.
-    organism:
-        Lookup table with at least ``genus`` and ``type`` columns.
+    classification:
+        Lookup table containing target identifiers and the corresponding
+        organism type labels.
     chembl_col:
         Column containing ChEMBL target identifiers.
     uniprot_col:
         Column containing UniProt identifiers.
-    genus_col:
-        Column containing the organism genus used for merging with
-        ``organism``.
+    type_col:
+        Column in ``classification`` providing the organism type label.
 
     Returns
     -------
@@ -525,20 +525,27 @@ def finalise_targets(
 
     """
     df = df.copy()
-    organism = organism.copy()
+    classification = classification.copy()
 
     internal_mapping = {
         chembl_col: "target_chembl_id",
         uniprot_col: "uniprotkb_Id",
-        genus_col: "genus",
     }
     df = df.rename(columns={k: v for k, v in internal_mapping.items() if k != v})
-    organism = organism.rename(
-        columns={genus_col: "genus"} if genus_col != "genus" else {}
+    classification = classification.rename(
+        columns={
+            chembl_col: "target_chembl_id",
+            type_col: "organism_type",
+        }
+        if chembl_col != "target_chembl_id" or type_col != "organism_type"
+        else {}
     )
 
-    _validate_columns(df, ["target_chembl_id", "uniprotkb_Id", "genus"])
-    _validate_columns(organism, ["genus", "type"])
+    _validate_columns(df, ["target_chembl_id", "uniprotkb_Id"])
+    _validate_columns(classification, ["target_chembl_id", "organism_type"])
+    classification = classification.drop_duplicates(
+        subset="target_chembl_id", keep="first"
+    )
 
     # Drop rows where uniprotkb_Id is the string "nan"
     mask_nan = df["uniprotkb_Id"].astype(str) == "nan"
@@ -578,10 +585,7 @@ def finalise_targets(
         logger.debug("Renaming existing 'type' column to 'target_type'")
         df = df.rename(columns={"type": "target_type"})
 
-    organism_types = organism[["genus", "type"]].rename(
-        columns={"type": "organism_type"}
-    )
-    df = df.merge(organism_types, on="genus", how="left")
+    df = df.merge(classification, on="target_chembl_id", how="left")
 
     # ``organism_type`` is guaranteed to exist after the merge; cast to string
     # and rename to the exported ``type`` column. ``pop`` avoids keeping the
@@ -608,8 +612,8 @@ def finalise_file(
     cfg: Config,
     chembl_col: str = "target_chembl_id",
     uniprot_col: str = "uniprotkb_Id",
-    genus_col: str = "genus",
-    organism_path: Path | str | None = None,
+    classification_path: Path | str | None = None,
+    type_col: str = "type",
     sep: str | None = None,
     encoding: str | None = None,
 ) -> None:
@@ -627,11 +631,11 @@ def finalise_file(
         Column containing ChEMBL target identifiers.
     uniprot_col:
         Column containing UniProt identifiers.
-    genus_col:
-        Column containing the organism genus used for merging.
-    organism_path:
-        Optional path to a CSV containing organism ``genus`` and ``type`` columns.
-        Defaults to ``cfg.resources.organism_csv``.
+    classification_path:
+        Optional path to a CSV containing target ``chembl`` identifiers and
+        organism type labels. Defaults to ``cfg.resources.targets_type_csv``.
+    type_col:
+        Column name in ``classification_path`` storing the organism type labels.
     sep:
         Field delimiter of the CSV files. Defaults to ``cfg.io.csv_sep``.
     encoding:
@@ -640,14 +644,16 @@ def finalise_file(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    organism_path = organism_path or cfg.resources.organism_csv
+    classification_path = classification_path or cfg.resources.targets_type_csv
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
-    organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
+    classification = pd.read_csv(
+        classification_path, sep=sep, encoding=encoding, dtype=str
+    )
     processed = finalise_targets(
         df,
-        organism,
+        classification,
         chembl_col=chembl_col,
         uniprot_col=uniprot_col,
-        genus_col=genus_col,
+        type_col=type_col,
     )
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)

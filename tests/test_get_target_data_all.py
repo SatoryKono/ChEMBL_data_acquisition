@@ -59,11 +59,23 @@ def test_run_all_uses_local_inputs(
     chembl_data = Path("tests/data/chembl_targets_min.csv")
     uniprot_data = Path("tests/data/uniprot_targets_min.csv")
     iuphar_data = Path("tests/data/iuphar_targets_min.csv")
-    organism_csv = Path("tests/data/organism_min.csv")
+    repo_root = Path(__file__).resolve().parents[1]
+    iuphar_target = repo_root / "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+    iuphar_family = repo_root / "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
+
+    classification = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], "type": ["Multicellular organism"]}
+    )
+    targets_type_csv = tmp_path / "targets_type.csv"
+    classification.to_csv(targets_type_csv, index=False)
 
     original_chunk = cfg.target.chembl.chunk_size
     cfg.target.all.chunk_size = original_chunk + 2
-    cfg.target.all.organism_csv = organism_csv
+    cfg.resources.targets_type_csv = targets_type_csv
+    cfg.target.all.target_csv = iuphar_target
+    cfg.target.all.family_csv = iuphar_family
+    cfg.resources.iuphar_target_csv = cfg.target.all.target_csv
+    cfg.resources.iuphar_family_csv = cfg.target.all.family_csv
     cfg.target.all.chembl_out = tmp_path / "chembl_out.csv"
     cfg.target.all.uniprot_out = tmp_path / "uniprot_out.csv"
     cfg.target.all.iuphar_out = tmp_path / "iuphar_out.csv"
@@ -97,10 +109,10 @@ def test_run_all_uses_local_inputs(
     orig_finalise = tp.finalise_targets
 
     def patched_finalise(
-        df: pd.DataFrame, organism: pd.DataFrame, **kw: object
+        df: pd.DataFrame, classification: pd.DataFrame, **kw: object
     ) -> pd.DataFrame:
         df = df.drop(columns=["type"], errors="ignore")
-        return orig_finalise(df, organism, **kw)
+        return orig_finalise(df, classification, **kw)
 
     monkeypatch.setattr(tp, "finalise_targets", patched_finalise)
 

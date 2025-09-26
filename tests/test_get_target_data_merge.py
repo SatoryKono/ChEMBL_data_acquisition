@@ -32,9 +32,9 @@ def test_iuphar_merge_preserves_ec_number(
     monkeypatch.setattr(tp, "finalise_targets", lambda df, org: df)
     monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
     monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
-    cfg.target.all.organism_csv = tmp_path / "organism.csv"
-    pd.DataFrame({"genus": [], "type": []}).to_csv(
-        cfg.target.all.organism_csv, index=False
+    cfg.resources.targets_type_csv = tmp_path / "targets_type.csv"
+    pd.DataFrame({"target_chembl_id": [], "type": []}).to_csv(
+        cfg.resources.targets_type_csv, index=False
     )
 
     merged = gtd.merge_results(combined_df, iuphar_df, cfg)

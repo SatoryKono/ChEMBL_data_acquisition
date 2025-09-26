@@ -85,9 +85,11 @@ def test_finalise_targets_orders_columns_default() -> None:
             "a": ["2"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    classification = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], "type": ["Mammal"]}
+    )
 
-    out = tp.finalise_targets(df, organism)
+    out = tp.finalise_targets(df, classification)
 
     assert list(out.columns) == TARGETS_COLUMN_ORDER
 
@@ -149,9 +151,11 @@ def test_finalise_targets_filters_duplicates_and_merges() -> None:
             "transmembrane": ["True", "True", "False"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    classification = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], "type": ["Mammal"]}
+    )
 
-    out = tp.finalise_targets(df, organism)
+    out = tp.finalise_targets(df, classification)
 
     assert list(out["target_chembl_id"]) == ["CHEMBL1"]
     assert "SUPFAM" in out.columns
@@ -172,9 +176,14 @@ def test_finalise_targets_orders_columns() -> None:
             "genus": ["Homo"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    classification = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "type": ["Mammal", "Rodent"],
+        }
+    )
 
-    out = tp.finalise_targets(df, organism)
+    out = tp.finalise_targets(df, classification)
 
     assert list(out.columns) == TARGETS_COLUMN_ORDER
 
@@ -191,22 +200,26 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
             "SUPFAM": ["s1", "s2", "s3"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
-
+    classification = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "type": ["Mammal", "Rodent"],
+        }
+    )
     input_path = tmp_path / "in.csv"
     df.to_csv(input_path, index=False)
     organism_path = tmp_path / "org.csv"
-    organism.to_csv(organism_path, index=False)
+    classification.to_csv(organism_path, index=False)
     output_path = tmp_path / "out.csv"
 
-    cfg.resources.organism_csv = organism_path
+    cfg.resources.targets_type_csv = organism_path
     tp.finalise_file(
         input_path,
         output_path,
         cfg=cfg,
     )
 
-    expected = tp.finalise_targets(df, organism).fillna("").astype(str)
+    expected = tp.finalise_targets(df, classification).fillna("").astype(str)
     result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     pd.testing.assert_frame_equal(result, expected)
 
@@ -222,16 +235,15 @@ def test_finalise_targets_no_downcast_warning() -> None:
             "transmembrane": ["True"],
         }
     )
-    organism = pd.DataFrame({"organism": ["Homo"], "type": ["Mammal"]})
+    classification = pd.DataFrame({"chembl_id": ["CHEMBL1"], "type": ["Mammal"]})
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", FutureWarning)
         tp.finalise_targets(
             df,
-            organism,
+            classification,
             chembl_col="chembl_id",
             uniprot_col="uniprot",
-            genus_col="organism",
         )
 
 
@@ -245,9 +257,11 @@ def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
             "genus": ["Homo"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+    classification = pd.DataFrame(
+        {"target_chembl_id": ["CHEMBL1"], "type": ["Mammal"]}
+    )
 
-    out = tp.finalise_targets(df, organism)
+    out = tp.finalise_targets(df, classification)
 
     assert "target_chembl_id" in out.columns
     assert "chembl_id" not in out.columns

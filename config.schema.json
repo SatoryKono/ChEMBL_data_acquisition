@@ -1219,13 +1219,13 @@
           "type": "string"
         },
         "iuphar_target_csv": {
-          "default": "dictionary/_IUPHAR/_IUPHAR_target.csv",
+          "default": "dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
           "title": "Iuphar Target Csv",
           "type": "string"
         },
         "iuphar_family_csv": {
-          "default": "dictionary/_IUPHAR/_IUPHAR_family.csv",
+          "default": "dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
           "format": "path",
           "title": "Iuphar Family Csv",
           "type": "string"
@@ -1234,12 +1234,6 @@
           "default": "dictionary/uniprot",
           "format": "path",
           "title": "Uniprot Data Dir",
-          "type": "string"
-        },
-        "organism_csv": {
-          "default": "dictionary/_Target/targets_type.csv",
-          "format": "path",
-          "title": "Organism Csv",
           "type": "string"
         },
         "targets_type_csv": {
@@ -1368,13 +1362,13 @@
           "type": "string"
         },
         "target_csv": {
-          "default": "dictionary/_IUPHAR/_IUPHAR_target.csv",
+          "default": "dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
           "title": "Target Csv",
           "type": "string"
         },
         "family_csv": {
-          "default": "dictionary/_IUPHAR/_IUPHAR_family.csv",
+          "default": "dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
           "format": "path",
           "title": "Family Csv",
           "type": "string"
@@ -1390,12 +1384,6 @@
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
-        },
-        "organism_csv": {
-          "default": "dictionary/_Target/organism.csv",
-          "format": "path",
-          "title": "Organism Csv",
-          "type": "string"
         },
         "uniprot_column": {
           "default": "uniprot_id",
@@ -1519,13 +1507,13 @@
       "additionalProperties": false,
       "properties": {
         "target_csv": {
-          "default": "dictionary/_IUPHAR/_IUPHAR_target.csv",
+          "default": "dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
           "title": "Target Csv",
           "type": "string"
         },
         "family_csv": {
-          "default": "dictionary/_IUPHAR/_IUPHAR_family.csv",
+          "default": "dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
           "format": "path",
           "title": "Family Csv",
           "type": "string"

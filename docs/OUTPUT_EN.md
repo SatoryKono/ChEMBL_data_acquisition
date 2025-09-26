@@ -134,3 +134,14 @@ pipeline detects salts when `parent_molecule_chembl_id` differs from
 normalises catalogue flags to the pandas nullable boolean dtype. Missing child
 flags fall back to the parent entry when available, while absent parent/child
 records are surfaced via warning events for troubleshooting.【F:scripts/get_testitem_data.py†L205-L233】【F:library/testitem_enrichment.py†L17-L216】
+
+## Release notes
+
+- Target finalisation now sources organism types directly from the
+  auto-generated `dictionary/_Target/targets_type.csv`. The legacy
+  organism lookup CSV is no longer bundled. Override
+  `local.resources.targets_type_csv` when custom classifications are
+  required.【F:library/target_postprocessing.py†L485-L608】【F:scripts/get_target_data.py†L1008-L1031】
+- The `get_target_data.py all` sub-command exposes `--targets-type-csv` instead
+  of the legacy `--organism-csv` flag. Update automation scripts that passed the
+  old argument to keep using custom lookup tables.【F:scripts/get_target_data.py†L312-L371】

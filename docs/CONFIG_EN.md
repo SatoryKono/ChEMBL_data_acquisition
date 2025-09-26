@@ -166,15 +166,14 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `iuphar` | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 | `all` | `data_dir` | `dictionary/uniprot` | Directory containing cached UniProt data. |
-|  | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
-|  | `organism_csv` | `dictionary/_Target/targets_type.csv` | Taxonomy and target type mapping. |
 |  | `uniprot_column` | `uniprot_id` | Column used to join UniProt data. |
 |  | `chembl_out` | `null` | Optional override for the combined ChEMBL output path. |
 |  | `uniprot_out` | `null` | Optional override for the combined UniProt output path. |
@@ -203,11 +202,10 @@ All URLs must comply with the respective service usage policies, including rate 
 | Key | Default | Description |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
 | `uniprot_data_dir` | `dictionary/uniprot` | Cached UniProt JSON responses. |
-| `organism_csv` | `dictionary/_Target/targets_type.csv` | Organism and taxonomy mapping. |
-| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
+| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type and organism classification table used during finalisation. |
 
 ### I/O defaults (`local.io`)
 
@@ -281,7 +279,6 @@ Common short aliases:
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |
 | `CHEMBL_DA_IUPHAR_FAMILY_CSV` | `local.resources.iuphar_family_csv` |
-| `CHEMBL_DA_ORGANISM_CSV` | `local.resources.organism_csv` |
 | `CHEMBL_DA_TARGETS_TYPE_CSV` | `local.resources.targets_type_csv` |
 | `CHEMBL_DA_OPENALEX_BASE` | `sources.openalex.base` |
 | `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `sources.openalex.timeout_connect` |
