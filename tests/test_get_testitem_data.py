@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +14,29 @@ from library.config import Config
 from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
+
+class DummyParentCatalog:
+    def __init__(
+        self,
+        mapping: dict[str, str] | None = None,
+        *,
+        refreshed: bool = False,
+    ) -> None:
+        self._mapping = dict(mapping or {})
+        self.refreshed = refreshed
+
+    def lookup_many(self, children: Iterable[str]) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for child in children:
+            if child in self._mapping:
+                result[child] = self._mapping[child]
+        return result
+
+    def upsert_many(self, mapping: dict[str, str]) -> None:
+        self._mapping.update(mapping)
+
+    def __bool__(self) -> bool:  # pragma: no cover - trivial
+        return bool(self._mapping)
 
 def test_run_chembl_column_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
@@ -41,7 +65,9 @@ def test_run_chembl_column_order(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(
-        gtd, "load_parent_catalog", lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"}
+        gtd,
+        "load_parent_catalog",
+        lambda **__: DummyParentCatalog({"CHEMBL1": "CHEMBL1_PARENT"}),
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
     monkeypatch.setattr(
@@ -101,7 +127,7 @@ def test_run_chembl_initialises_pubchem_session(
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: DummyParentCatalog())
 
     monkeypatch.setattr(
         gtd,
@@ -164,7 +190,9 @@ def test_run_chembl_merges_parent_catalog(
     monkeypatch.setattr(
         gtd,
         "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"},
+        lambda **__: DummyParentCatalog(
+            {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"}
+        ),
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
@@ -308,11 +336,12 @@ def test_attach_parent_molecule_ids_fetches_missing(
 
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite3"
 
     monkeypatch.setattr(
         gtd.molecule_catalog,
         "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+        lambda **__: DummyParentCatalog({"CHEMBL1": "CHEMBL1_PARENT"}),
     )
 
     fetched: dict[str, str] = {"CHEMBL2": "CHEMBL2_PARENT"}
@@ -360,11 +389,12 @@ def test_attach_parent_molecule_ids_fetch_failure(
 
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite3"
 
     monkeypatch.setattr(
         gtd.molecule_catalog,
         "load_parent_catalog",
-        lambda **__: {},
+        lambda **__: DummyParentCatalog(),
     )
 
     def failing_fetch(
@@ -406,11 +436,12 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
     catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite3"
 
     monkeypatch.setattr(
         gtd.molecule_catalog,
         "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+        lambda **__: DummyParentCatalog({"CHEMBL1": "CHEMBL1_PARENT"}),
     )
 
     def unexpected_fetch(

@@ -123,6 +123,7 @@ class ChemblCacheCfg(_BaseModel):
 
 class MoleculeCatalogCfg(_BaseModel):
     cache_path: Path = Path("data/cache/molecule_parent_catalog.json")
+    sqlite_path: Path = Path("data/cache/molecule_parent_catalog.sqlite3")
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"

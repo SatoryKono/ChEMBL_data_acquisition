@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -133,14 +132,15 @@ def test_fetch_parent_catalog_for_chunks_requests(
 
 def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
     cache = tmp_path / "catalog.json"
-    cache.write_text(json.dumps({"chembl10": "chembl99"}), encoding="utf-8")
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    cache.write_text('{"chembl10": "chembl99"}', encoding="utf-8")
+    sqlite_path = tmp_path / "catalog.sqlite3"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
 
-    result = load_parent_catalog(
+    catalog = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
     )
 
-    assert result == {"CHEMBL10": "CHEMBL99"}
+    assert catalog.lookup_many(["CHEMBL10"]) == {"CHEMBL10": "CHEMBL99"}
 
 
 def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
@@ -149,13 +149,14 @@ def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) ->
         "molecule_chembl_id,parent_molecule_chembl_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    sqlite_path = tmp_path / "catalog.sqlite3"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
 
-    result = load_parent_catalog(
+    catalog = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
     )
 
-    assert result == {"CHEMBL1": "CHEMBL42"}
+    assert catalog.lookup_many(["CHEMBL1"]) == {"CHEMBL1": "CHEMBL42"}
 
 
 def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg) -> None:
@@ -164,7 +165,8 @@ def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg
         "molecule_chembl_id,parant_molecule_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    sqlite_path = tmp_path / "catalog.sqlite3"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
 
     with pytest.raises(ValueError):
         load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
@@ -174,7 +176,8 @@ def test_load_parent_catalog_fetches_and_persists(
     tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache = tmp_path / "catalog.json"
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    sqlite_path = tmp_path / "catalog.sqlite3"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
     data = {"CHEMBL50": "CHEMBL60"}
 
     def fake_fetch(
@@ -191,9 +194,42 @@ def test_load_parent_catalog_fetches_and_persists(
         fake_fetch,
     )
 
-    result = load_parent_catalog(
+    catalog = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
     )
 
-    assert result == data
-    assert json.loads(cache.read_text(encoding="utf-8")) == data
+    assert catalog.lookup_many(["CHEMBL50"]) == data
+    assert catalog.sqlite_path == sqlite_path
+    assert sqlite_path.is_file()
+    assert catalog.refreshed is True
+
+
+def test_load_parent_catalog_avoids_reloading_json(
+    tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = tmp_path / "catalog.json"
+    cache.write_text('{"chembl1": "chembl10"}', encoding="utf-8")
+    sqlite_path = tmp_path / "catalog.sqlite3"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
+
+    first = load_parent_catalog(
+        client=DummyClient([]),
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert first.lookup_many(["CHEMBL1"]) == {"CHEMBL1": "CHEMBL10"}
+
+    def fail_json_loads(*args: Any, **kwargs: Any) -> None:  # pragma: no cover - defensive
+        raise AssertionError("json.loads should not be called on subsequent runs")
+
+    monkeypatch.setattr("library.molecule_catalog.json.loads", fail_json_loads)
+
+    second = load_parent_catalog(
+        client=DummyClient([]),
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert second.lookup_many(["CHEMBL1"]) == {"CHEMBL1": "CHEMBL10"}
+    assert second.refreshed is False

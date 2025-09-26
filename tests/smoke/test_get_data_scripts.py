@@ -363,7 +363,18 @@ def test_get_testitem_data_smoke(
     monkeypatch.setattr(
         get_testitem_data,
         "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+        lambda **__: type(
+            "_Catalog",
+            (),
+            {
+                "refreshed": False,
+                "lookup_many": lambda self, children: {
+                    c: "CHEMBL1_PARENT" for c in children if c == "CHEMBL1"
+                },
+                "upsert_many": lambda self, values: None,
+                "__bool__": lambda self: True,
+            },
+        )(),
     )
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
 

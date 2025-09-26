@@ -133,10 +133,6 @@ def attach_parent_molecule_ids(
         )
         return result, stats
 
-    cache_path = catalog_cfg.cache_path
-    cache_exists = cache_path.is_file()
-    cache_mtime = cache_path.stat().st_mtime if cache_exists else None
-
     catalog = molecule_catalog.load_parent_catalog(
         client=client,
         api_cfg=api_cfg,
@@ -144,17 +140,16 @@ def attach_parent_molecule_ids(
         timeout=timeout,
     )
 
-    cache_exists_after = cache_path.is_file()
-    cache_mtime_after = cache_path.stat().st_mtime if cache_exists_after else None
-    if cache_exists_after and cache_exists and cache_mtime_after == cache_mtime:
-        source = PARENT_LOOKUP_SOURCE_CACHE
-    else:
-        source = PARENT_LOOKUP_SOURCE_REMOTE
+    source = (
+        PARENT_LOOKUP_SOURCE_REMOTE
+        if catalog.refreshed
+        else PARENT_LOOKUP_SOURCE_CACHE
+    )
 
     normalised_child = _normalise_chembl_ids(result[child_column])
     unique_children = normalised_child[normalised_child != ""].unique()
 
-    parent_map = {key: catalog[key] for key in unique_children if key in catalog}
+    parent_map = catalog.lookup_many(unique_children)
     missing_ids = [key for key in unique_children if key not in parent_map]
     fetched_remote = False
 
@@ -173,8 +168,8 @@ def attach_parent_molecule_ids(
             if fetched:
                 fetched_remote = True
         if fetched:
-            catalog.update(fetched)
             parent_map.update(fetched)
+            catalog.upsert_many(fetched)
 
     parent_series = normalised_child.map(parent_map)
     missing_mask = parent_series.isna()
@@ -369,7 +364,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         parent_column = cfg.molecule_catalog.parent_field
         if parent_catalog and "molecule_chembl_id" in df.columns:
             normalised_ids = _normalise_chembl_ids(df["molecule_chembl_id"])
-            mapped = normalised_ids.map(parent_catalog)
+            lookup_keys = normalised_ids[normalised_ids != ""].unique()
+            mapped_values = parent_catalog.lookup_many(lookup_keys)
+            mapped = normalised_ids.map(mapped_values)
             if parent_column in df.columns:
                 df[parent_column] = df[parent_column].fillna(mapped)
             else:

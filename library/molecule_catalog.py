@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Iterable
+import sqlite3
+from collections.abc import Iterable, Mapping as ABCMapping
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlencode, urljoin
@@ -21,8 +22,108 @@ _PARENT_LOOKUP_FIELDS = tuple(_DEFAULT_CATALOG_CFG.fields or ()) or (
 _PARENT_LOOKUP_CHILD_FIELD = _DEFAULT_CATALOG_CFG.child_field
 _PARENT_LOOKUP_PARENT_FIELD = _DEFAULT_CATALOG_CFG.parent_field
 _PARENT_LOOKUP_CHUNK_SIZE = _DEFAULT_CATALOG_CFG.page_size
+_SQLITE_TABLE = "parent_catalog"
+_SQLITE_CREATE_TABLE = (
+    f"CREATE TABLE IF NOT EXISTS {_SQLITE_TABLE} ("
+    "child TEXT PRIMARY KEY,"
+    "parent TEXT NOT NULL"
+    ")"
+)
+_SQLITE_PARENT_INDEX = (
+    f"CREATE INDEX IF NOT EXISTS ix_{_SQLITE_TABLE}_parent ON {_SQLITE_TABLE} (parent)"
+)
+_SQLITE_MAX_PARAMETERS = 900
+
+
+class ParentCatalog:
+    """SQLite-backed view of the parent molecule catalogue."""
+
+    def __init__(
+        self,
+        sqlite_path: Path,
+        *,
+        has_rows: bool,
+        refreshed: bool,
+    ) -> None:
+        self._sqlite_path = sqlite_path
+        self._has_rows = has_rows
+        self.refreshed = refreshed
+
+    @property
+    def sqlite_path(self) -> Path:
+        """Return the backing SQLite database path."""
+
+        return self._sqlite_path
+
+    def __bool__(self) -> bool:  # pragma: no cover - trivial
+        return self._has_rows
+
+    def lookup_many(self, children: Iterable[str]) -> dict[str, str]:
+        """Return parent mappings for ``children`` from the SQLite cache."""
+
+        normalised: list[str] = []
+        seen: set[str] = set()
+        for value in children:
+            try:
+                child_id = _normalise_chembl_id(str(value))
+            except ValueError:
+                continue
+            if child_id in seen:
+                continue
+            seen.add(child_id)
+            normalised.append(child_id)
+
+        if not normalised:
+            return {}
+
+        result: dict[str, str] = {}
+        with sqlite3.connect(self._sqlite_path) as conn:
+            conn.row_factory = sqlite3.Row
+            for chunk in _chunked(normalised, _SQLITE_MAX_PARAMETERS):
+                placeholders = ",".join("?" for _ in chunk)
+                query = (
+                    f"SELECT child, parent FROM {_SQLITE_TABLE} "
+                    f"WHERE child IN ({placeholders})"
+                )
+                cursor = conn.execute(query, chunk)
+                result.update({row["child"]: row["parent"] for row in cursor})
+        return result
+
+    def upsert_many(self, mapping: Mapping[str, str]) -> None:
+        """Insert or update ``mapping`` in the SQLite cache."""
+
+        rows: list[tuple[str, str]] = []
+        for child, parent in mapping.items():
+            try:
+                child_id = _normalise_chembl_id(str(child))
+                parent_id = _normalise_chembl_id(str(parent))
+            except ValueError:
+                continue
+            rows.append((child_id, parent_id))
+
+        if not rows:
+            return
+
+        with sqlite3.connect(self._sqlite_path) as conn:
+            conn.execute("BEGIN")
+            conn.executemany(
+                f"INSERT INTO {_SQLITE_TABLE} (child, parent) VALUES (?, ?) "
+                "ON CONFLICT(child) DO UPDATE SET parent=excluded.parent",
+                rows,
+            )
+            conn.commit()
+        self._has_rows = True
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the entire parent catalogue as a dictionary."""
+
+        with sqlite3.connect(self._sqlite_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(f"SELECT child, parent FROM {_SQLITE_TABLE}")
+            return {row["child"]: row["parent"] for row in cursor}
 
 __all__ = [
+    "ParentCatalog",
     "fetch_parent_catalog",
     "fetch_parent_catalog_for",
     "load_parent_catalog",
@@ -36,6 +137,46 @@ def _normalise_chembl_id(value: str) -> str:
     if not normalised:
         raise ValueError("empty identifier")
     return normalised
+
+
+def _ensure_sqlite_schema(sqlite_path: Path) -> None:
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(sqlite_path) as conn:
+        conn.execute(_SQLITE_CREATE_TABLE)
+        conn.execute(_SQLITE_PARENT_INDEX)
+        conn.commit()
+
+
+def _sqlite_has_rows(sqlite_path: Path) -> bool:
+    with sqlite3.connect(sqlite_path) as conn:
+        cursor = conn.execute(f"SELECT 1 FROM {_SQLITE_TABLE} LIMIT 1")
+        return cursor.fetchone() is not None
+
+
+def _normalise_catalog_mapping(mapping: Mapping[str, str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for child, parent in mapping.items():
+        try:
+            child_id = _normalise_chembl_id(str(child))
+            parent_id = _normalise_chembl_id(str(parent))
+        except ValueError:
+            continue
+        result[child_id] = parent_id
+    return result
+
+
+def _replace_catalog(sqlite_path: Path, mapping: Mapping[str, str]) -> bool:
+    normalised = _normalise_catalog_mapping(mapping)
+    with sqlite3.connect(sqlite_path) as conn:
+        conn.execute("BEGIN")
+        conn.execute(f"DELETE FROM {_SQLITE_TABLE}")
+        if normalised:
+            conn.executemany(
+                f"INSERT INTO {_SQLITE_TABLE} (child, parent) VALUES (?, ?)",
+                list(normalised.items()),
+            )
+        conn.commit()
+    return bool(normalised)
 
 
 def _build_initial_url(api_cfg: ApiCfg, catalog_cfg: MoleculeCatalogCfg) -> str:
@@ -109,7 +250,7 @@ def fetch_parent_catalog_for(
             continue
         allowed = set(chunk)
         for item in items:
-            if not isinstance(item, Mapping):
+            if not isinstance(item, ABCMapping):
                 continue
             child = item.get(_PARENT_LOOKUP_CHILD_FIELD)
             parent = item.get(_PARENT_LOOKUP_PARENT_FIELD)
@@ -154,7 +295,7 @@ def fetch_parent_catalog(
             logger.warning("unexpected_response_items", extra={"url": next_url})
             items = []
         for item in items:
-            if not isinstance(item, Mapping):
+            if not isinstance(item, ABCMapping):
                 continue
             child = item.get(catalog_cfg.child_field)
             parent = item.get(catalog_cfg.parent_field)
@@ -201,7 +342,7 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
                     except ValueError:
                         continue
                     result[child_id] = parent_id
-                return result
+                return _normalise_catalog_mapping(result)
         except csv.Error as exc:  # pragma: no cover - defensive
             raise ValueError(f"invalid CSV catalog: {path}: {exc}") from exc
     try:
@@ -209,7 +350,7 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
     except json.JSONDecodeError:
         logger.warning("invalid_catalog_cache", extra={"path": str(path)})
         return {}
-    if not isinstance(raw, Mapping):
+    if not isinstance(raw, ABCMapping):
         logger.warning("unexpected_catalog_cache", extra={"path": str(path)})
         return {}
     result: dict[str, str] = {}
@@ -232,21 +373,39 @@ def load_parent_catalog(
     catalog_cfg: MoleculeCatalogCfg,
     timeout: float | None = None,
     force_refresh: bool = False,
-) -> dict[str, str]:
-    """Return the molecule parent catalogue, using the on-disk cache if present."""
+) -> ParentCatalog:
+    """Ensure the parent catalogue cache exists and return a SQLite handle."""
 
+    sqlite_path = catalog_cfg.sqlite_path
     cache_path = catalog_cfg.cache_path
-    if not force_refresh:
+    _ensure_sqlite_schema(sqlite_path)
+
+    refreshed = False
+
+    if force_refresh:
+        data = fetch_parent_catalog(
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+        )
+        has_rows = _replace_catalog(sqlite_path, data)
+        refreshed = True
+        return ParentCatalog(sqlite_path, has_rows=has_rows, refreshed=refreshed)
+
+    has_rows = _sqlite_has_rows(sqlite_path)
+    if not has_rows:
         cached = _read_cache(cache_path, catalog_cfg)
         if cached:
-            return cached
+            has_rows = _replace_catalog(sqlite_path, cached)
+        else:
+            data = fetch_parent_catalog(
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+            )
+            has_rows = _replace_catalog(sqlite_path, data)
+            refreshed = True
 
-    result = fetch_parent_catalog(
-        client=client, api_cfg=api_cfg, catalog_cfg=catalog_cfg, timeout=timeout
-    )
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(
-        json.dumps(dict(sorted(result.items())), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    return result
+    return ParentCatalog(sqlite_path, has_rows=has_rows, refreshed=refreshed)

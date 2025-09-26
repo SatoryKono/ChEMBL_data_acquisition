@@ -193,6 +193,11 @@
           "title": "Cache Path",
           "type": "string"
         },
+        "sqlite_path": {
+          "default": "data/cache/molecule_parent_catalog.sqlite3",
+          "title": "Sqlite Path",
+          "type": "string"
+        },
         "endpoint": {
           "default": "molecule",
           "title": "Endpoint",
