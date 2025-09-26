@@ -259,7 +259,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 * Флаг `--config` позволяет указать альтернативный YAML (по умолчанию `config.yaml`).
 * `--print-config` выводит итоговую конфигурацию (с учётом окружения и CLI) и завершает работу.
 * Аргументы, прокинутые через `apply_config_overrides`, обновляют конфигурацию. Например, `--batch-size 25` задаёт `sources.chembl.pipelines.activity.batch_size` на время запуска.
-* Для редких параметров используйте точечную запись: `python scripts/get_activity_data.py --sources.chembl.api.rps 10`.
+* Вложенные параметры правятся через `config.yaml` или переменные окружения (например, `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`). Флаги вида `--sources.…` парсер не поддерживает.
 
 ## Процесс валидации
 
