@@ -53,14 +53,16 @@ python scripts/get_assay_data.py \
 ## Метаданные документов (`get_document_data.py`)
 
 ```bash
-python scripts/get_document_data.py \
+python scripts/get_document_data.py all \
   --input data/input-smoke/documents.csv \
   --column document_chembl_id \
-  --sources.chembl.pipelines.document.pubmed.batch_size 20
+  --batch-size 20
 ```
 
-Команда объединяет данные ChEMBL и PubMed. Для точечных настроек используйте точечную нотацию аргументов, например для увеличения
-`batch_size` при работе с PubMed.
+Выберите подкоманду `pubmed`, `chembl` или `all` в зависимости от требуемых источников.
+Сводку и список ключей смотрите в справке: `python scripts/get_document_data.py --help`
+и `python scripts/get_document_data.py <подкоманда> --help`
+(например, `--batch-size` управляет размером пакета для PubMed).
 
 ## Агрегация таргетов (`get_target_data.py`)
 

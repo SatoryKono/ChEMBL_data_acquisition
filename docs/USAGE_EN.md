@@ -53,14 +53,16 @@ Fetches assay metadata from ChEMBL using the configured identifier column.
 ## Document metadata (`get_document_data.py`)
 
 ```bash
-python scripts/get_document_data.py \
+python scripts/get_document_data.py all \
   --input data/input-smoke/documents.csv \
   --column document_chembl_id \
-  --sources.chembl.pipelines.document.pubmed.batch_size 20
+  --batch-size 20
 ```
 
-The script merges ChEMBL and PubMed sources. CLI overrides accept dotted paths, enabling fine-tuned adjustments such as increasing
-the PubMed batch size.
+Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sources.
+Consult `python scripts/get_document_data.py --help` for a summary and
+`python scripts/get_document_data.py <sub-command> --help` for the
+allowed switches (for example, `--batch-size` for PubMed batching).
 
 ## Target aggregation (`get_target_data.py`)
 
