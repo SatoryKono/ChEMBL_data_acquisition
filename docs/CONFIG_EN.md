@@ -73,6 +73,36 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | `clamp_nonnegative` | `true` | Clamp negative bounds to zero for concentration-like metrics. |
 | `log_unknown_relations` | `true` | Emit warnings when relation markers are not recognised by the pipeline. |
 
+#### Activity enrichment (`activity_enrichment`)
+
+The activity pipeline enriches raw ChEMBL payloads with canonical lower/upper bounds using the rules implemented by
+`compute_activity_bounds` in `scripts/get_activity_data.py`. Configuration for the feature is stored in the `activity_bounds`
+block and controls the following deterministic stages (executed in order for every row):【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+
+1. Use `standard_lower_value`/`standard_upper_value` when both are populated.
+2. Combine `standard_value` with the opposite explicit limit (for example `standard_upper_value`) and fill the missing bound.
+3. Inspect `standard_relation` when `enable_from_relation` is `true`, mapping operators such as `=`, `≈`, `>=`, `<=`, `between` and `range` to appropriate bounds.
+4. Parse `±` expressions from `standard_text_value` when `enable_from_uncertainty` is enabled.
+
+Each completed step locks in previously derived numbers; disabling a stage simply skips it without mutating earlier results.
+
+Toggles and precision defaults are configured via YAML or environment overrides:
+
+```yaml
+activity_bounds:
+  enable_from_relation: false
+  enable_from_uncertainty: true
+  rounding_digits: 2
+  clamp_nonnegative: true
+```
+
+```bash
+export CHEMBL_DA__ACTIVITY_BOUNDS__ENABLE_FROM_RELATION=false
+export CHEMBL_DA__ACTIVITY_BOUNDS__ROUNDING_DIGITS=2
+```
+
+The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; enrichment-specific options must be changed in the configuration file or via the corresponding `CHEMBL_DA__ACTIVITY_BOUNDS__*` variables. CLI values still win over file/env defaults for overlapping keys declared on the parser (column, batch size, limits).【F:scripts/get_activity_data.py†L536-L603】
+
 #### Assay pipeline (`assay`)
 
 | Key | Default | Description |

@@ -73,6 +73,36 @@
 | `clamp_nonnegative` | `true` | Обрезать отрицательные значения для метрик с неотрицательной областью. |
 | `log_unknown_relations` | `true` | Логировать предупреждение для нераспознанных отношений. |
 
+#### Обогащение активностей (`activity_enrichment`)
+
+Пайплайн активностей дополняет выгрузку нормализованными границами с помощью `compute_activity_bounds` в
+`scripts/get_activity_data.py`. Настройки собраны в блоке `activity_bounds` и управляют последовательностью детерминированных
+шагов, которые выполняются для каждой строки в следующем порядке：【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+
+1. Использовать готовые `standard_lower_value`/`standard_upper_value`, если обе границы заданы.
+2. Скомбинировать `standard_value` с противоположной границей и заполнить пропущенное значение.
+3. Проанализировать `standard_relation`, если `enable_from_relation = true`, сопоставив операторы (`=`, `≈`, `>=`, `<=`, `between`, `range`) с подходящими границами.
+4. Разобрать выражения `значение ± дельта` из `standard_text_value`, когда включён `enable_from_uncertainty`.
+
+Каждый шаг фиксирует найденные значения; отключение этапа просто пропускает его, не затрагивая предыдущие результаты.
+
+Параметры удобно настраивать через YAML или переменные окружения:
+
+```yaml
+activity_bounds:
+  enable_from_relation: false
+  enable_from_uncertainty: true
+  rounding_digits: 2
+  clamp_nonnegative: true
+```
+
+```bash
+export CHEMBL_DA__ACTIVITY_BOUNDS__ENABLE_FROM_RELATION=false
+export CHEMBL_DA__ACTIVITY_BOUNDS__ROUNDING_DIGITS=2
+```
+
+CLI-параметры имеют приоритет над YAML и окружением только для ключей, которые явно прокинуты в парсер (колонка, размер батча, лимит, `--dry-run`). Остальные изменения выполняются через файл настроек или переменные окружения `CHEMBL_DA__ACTIVITY_BOUNDS__*`.【F:scripts/get_activity_data.py†L536-L603】
+
 #### Пайплайн ассайев (`assay`)
 
 | Ключ | Значение по умолчанию | Описание |

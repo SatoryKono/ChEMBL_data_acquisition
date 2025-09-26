@@ -23,6 +23,26 @@ arguments with the final values.
 Before any network calls the utilities invoke `library.config.ensure_dirs`, ensuring that `local.io.output_dir` and
 `local.io.cache_dir` exist (subject to `local.io.exist_ok`).
 
+### Monitoring structured logs
+
+All entry points rely on `library.logging_setup.Logger` and emit JSON lines enriched with a unique `run_id` and context such as `status`/`rps`. Key lifecycle events include:
+
+| Event | When it appears |
+| --- | --- |
+| `pipeline_start` | Immediately after the CLI configures logging and before validation begins.【F:scripts/get_activity_data.py†L558-L565】 |
+| `documents_processed` / `activities_processed` | Periodic progress counters emitted inside the processing loops.【F:scripts/get_document_data.py†L399-L407】【F:scripts/get_activity_data.py†L451-L459】 |
+| `write_done` | Successful CSV write including the path and retained row count.【F:scripts/get_document_data.py†L640-L642】【F:scripts/get_activity_data.py†L506-L522】 |
+| `pipeline_done` / `pipeline_fail` | Final outcome logged before exit.【F:scripts/get_activity_data.py†L571-L579】【F:scripts/get_document_data.py†L1191-L1208】 |
+
+Pipe the output through `jq` or similar tooling for real-time monitoring:
+
+```bash
+python scripts/get_document_data.py all --input docs.csv --column document_chembl_id \
+  | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
+```
+
+Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the default JSON structure for ingestion into log collectors without needing custom formatters.【F:library/logging_setup.py†L1-L120】
+
 ## Activity data (`get_activity_data.py`)
 
 ```bash
@@ -75,6 +95,20 @@ Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sou
 Consult `python scripts/get_document_data.py --help` for a summary and
 `python scripts/get_document_data.py <sub-command> --help` for the
 allowed switches (for example, `--batch-size` for PubMed batching).
+
+```bash
+python scripts/get_document_data.py pubmed \
+  --input data/input-smoke/documents.csv \
+  --column document_chembl_id \
+  --openalex-rps 2.5 \
+  --crossref-rps 1.5 \
+  --fallback-doi-csv data/input-smoke/doi_overrides.csv \
+  --fallback-doi-pmid-column pmid_override \
+  --fallback-doi-value-column doi_override
+```
+
+Use the on-demand rate limit switches to try faster OpenAlex or CrossRef lookups without touching the YAML file; the fallback
+CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried.【F:scripts/get_document_data.py†L989-L1041】
  
 ## Target aggregation (`get_target_data.py`)
 
@@ -95,6 +129,14 @@ python scripts/get_testitem_data.py \
 ```
 
 Downloads compound-centric annotations for the supplied identifiers.
+
+### Tracking `properties_hash`
+
+PubChem enrichment adds deterministic property columns (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
+`pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`).【F:schemas/testitems.py†L30-L38】 To
+monitor changes across releases, export just these columns to a temporary file and compute a SHA-256 digest via
+`library.metadata.file_sha256` or `library.csv_utils.sha256_file`.【F:library/metadata.py†L29-L70】【F:library/csv_utils.py†L530-L560】 Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
+row count stays constant.
 
 ### Parent molecule catalogue requirements
 
@@ -155,6 +197,13 @@ python scripts/get_activity_data.py
 ```
 
 Inspect the effective configuration with `--print-config` before running the pipeline when needed.
+
+## Monitoring structured logs
+
+All CLIs emit JSON logs via `library.logging_setup`. Each record contains a timestamp (`ts`), severity (`level`), event name
+(`event`) and the `run_id` inherited from CLI options; additional key/value pairs are merged after secret redaction. Use tools
+such as `jq` to filter by `event`, `stage` or warning codes (`activity_bounds_*`, `parent_lookup_*`, etc.) when triaging runs.
+Adjust verbosity on demand with `--log-level` or environment overrides without touching `config.yaml`.【F:library/logging_setup.py†L65-L205】
 
 ## Environment variables
 

@@ -23,6 +23,26 @@
 Перед сетевыми вызовами выполняется `library.config.ensure_dirs`, чтобы `local.io.output_dir` и `local.io.cache_dir` существовали
 (если `local.io.exist_ok=true`, каталоги создаются автоматически).
 
+### Мониторинг структурированных логов
+
+Все утилиты используют `library.logging_setup.Logger` и пишут JSON-строки с уникальным `run_id` и дополнительными полями (`status`, `rps` и др.). Основные события:
+
+| Событие | Когда появляется |
+| --- | --- |
+| `pipeline_start` | После настройки логирования и перед валидацией конфигурации.【F:scripts/get_activity_data.py†L558-L565】 |
+| `documents_processed` / `activities_processed` | Периодические счётчики прогресса внутри рабочих циклов.【F:scripts/get_document_data.py†L399-L407】【F:scripts/get_activity_data.py†L451-L459】 |
+| `write_done` | Успешная запись CSV с указанием пути и числа строк.【F:scripts/get_document_data.py†L640-L642】【F:scripts/get_activity_data.py†L506-L522】 |
+| `pipeline_done` / `pipeline_fail` | Финальный статус перед выходом из программы.【F:scripts/get_activity_data.py†L571-L579】【F:scripts/get_document_data.py†L1191-L1208】 |
+
+Для онлайн-контроля направляйте вывод через `jq` или аналогичный инструмент:
+
+```bash
+python scripts/get_document_data.py all --input documents.csv --column document_chembl_id \
+  | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
+```
+
+При необходимости повышайте детализацию ключом `--log-level DEBUG`. JSON-структура совместима с системами сбора логов без дополнительных форматтеров.【F:library/logging_setup.py†L1-L120】
+
 ## Данные активностей (`get_activity_data.py`)
 
 ```bash
@@ -78,6 +98,20 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 и `python scripts/get_document_data.py <подкоманда> --help`
 (например, `--batch-size` управляет размером пакета для PubMed).
 
+```bash
+python scripts/get_document_data.py pubmed \
+  --input data/input-smoke/documents.csv \
+  --column document_chembl_id \
+  --openalex-rps 2.5 \
+  --crossref-rps 1.5 \
+  --fallback-doi-csv data/input-smoke/doi_overrides.csv \
+  --fallback-doi-pmid-column pmid_override \
+  --fallback-doi-value-column doi_override
+```
+
+Флаги `--openalex-rps` и `--crossref-rps` позволяют временно изменить лимиты без правки YAML, а параметры `--fallback-doi-*`
+подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам.【F:scripts/get_document_data.py†L989-L1041】
+
 
 ## Агрегация таргетов (`get_target_data.py`)
 
@@ -98,6 +132,13 @@ python scripts/get_testitem_data.py \
 ```
 
 Выгружает дополнительную информацию о соединениях.
+
+### Контроль `properties_hash`
+
+PubChem-дополнение добавляет детерминированные свойства (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
+`pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`).【F:schemas/testitems.py†L30-L38】 Чтобы
+отслеживать изменения между выгрузками, выгрузите только эти колонки во временный файл и посчитайте SHA-256 с помощью
+`library.metadata.file_sha256` или `library.csv_utils.sha256_file`.【F:library/metadata.py†L29-L70】【F:library/csv_utils.py†L530-L560】 Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
 
 ### Требования к каталогу родительских молекул
 
@@ -157,6 +198,14 @@ python scripts/get_activity_data.py
 ```
 
 При необходимости проверьте итоговую конфигурацию флагом `--print-config` до запуска пайплайна.
+
+## Мониторинг структурированных логов
+
+Все CLI пишут JSON-логи через `library.logging_setup`. Запись включает отметку времени (`ts`), уровень (`level`), событие
+(`event`) и `run_id`, унаследованный от параметров CLI; дополнительные поля добавляются после автоматической маскировки
+секретов. Применяйте `jq` или подобные инструменты, чтобы фильтровать события по `event`, `stage` или кодам предупреждений
+(`activity_bounds_*`, `parent_lookup_*` и т.д.). Меняйте уровень детализации флагом `--log-level` или переменными окружения без
+правок `config.yaml`.【F:library/logging_setup.py†L65-L205】
 
 ## Переменные окружения
 
