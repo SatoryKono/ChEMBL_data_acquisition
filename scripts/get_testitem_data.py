@@ -16,7 +16,7 @@ from collections import ChainMap
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 import pandas as pd
 import requests
@@ -291,6 +291,14 @@ def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
     return normalised
 
 
+class ParentLookupPreparedData(NamedTuple):
+    """Container for precomputed parent lookup data."""
+
+    child_ids: pd.Series
+    existing_parent_ids: pd.Series
+    need_lookup: set[str]
+
+
 def attach_parent_molecule_ids(
     df: pd.DataFrame,
     *,
@@ -300,6 +308,7 @@ def attach_parent_molecule_ids(
     timeout: float | None,
     catalog: Mapping[str, str] | None = None,
     source: str | None = None,
+    precomputed: ParentLookupPreparedData | None = None,
 ) -> tuple[pd.DataFrame, ParentLookupStats]:
     """Attach parent molecule identifiers using the ChEMBL catalogue.
 
@@ -343,7 +352,14 @@ def attach_parent_molecule_ids(
         return result, stats
 
     source_resolved = source
-    normalised_child = _normalise_chembl_ids(result[child_column])
+    if precomputed is not None:
+        normalised_child = (
+            precomputed.child_ids.reindex(result.index, fill_value="")
+            .astype("string")
+            .copy()
+        )
+    else:
+        normalised_child = _normalise_chembl_ids(result[child_column])
     unique_children = normalised_child[normalised_child != ""].unique()
     catalog_data: MutableMapping[str, str]
     used_partial_cache = False
@@ -429,7 +445,13 @@ def attach_parent_molecule_ids(
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
-    if parent_column in result.columns:
+    if precomputed is not None:
+        existing_parent = (
+            precomputed.existing_parent_ids.reindex(result.index)
+            .astype("string")
+            .copy()
+        )
+    elif parent_column in result.columns:
         existing_parent = result[parent_column].astype("string")
     else:
         existing_parent = pd.Series(pd.NA, index=result.index, dtype="string")
@@ -708,6 +730,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
         need_lookup = set(normalised_ids[need_lookup_mask])
+        prepared_need_lookup = set(need_lookup)
+        parent_lookup_data = ParentLookupPreparedData(
+            child_ids=normalised_ids,
+            existing_parent_ids=existing_parent,
+            need_lookup=prepared_need_lookup,
+        )
 
         cache_before = _cache_state(cfg.molecule_catalog.cache_path)
         cache_after = cache_before
@@ -794,6 +822,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 timeout=cfg.testitem.timeout,
                 catalog=catalog_arg,
                 source=parent_catalog_source,
+                precomputed=parent_lookup_data,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error("parent_lookup_failed", error=str(exc))
