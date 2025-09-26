@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any, Hashable, cast
 from urllib.parse import quote
 
@@ -165,8 +166,17 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
 
     attempts = max(cfg.retries, 1)
     backoff_delay = cfg.backoff_initial_seconds
+    deadline: float | None = None
+    if cfg.timeout_seconds > 0:
+        deadline = monotonic() + cfg.timeout_seconds
 
     for attempt in range(1, attempts + 1):
+        if deadline is not None and monotonic() >= deadline:
+            logger.warning(
+                "request_timeout", url=url, attempt=attempt, rps=cfg.rps
+            )
+            logger.info("request_fail", url=url, status=None, rps=cfg.rps)
+            return None
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, url=url, attempt=attempt, rps=cfg.rps)
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
