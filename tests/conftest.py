@@ -10,6 +10,18 @@ import pytest
 from library.config import ApiCfg, Config
 
 
+@pytest.fixture(autouse=True)
+def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disallow outbound HTTP requests during tests."""
+
+    import requests
+
+    def deny(*args: object, **kwargs: object) -> None:
+        raise AssertionError("External network access is disabled during tests")
+
+    monkeypatch.setattr(requests.sessions.Session, "request", deny)
+
+
 @pytest.fixture()
 def cfg() -> Config:
     """Return a baseline :class:`~library.config.Config` instance for tests.
