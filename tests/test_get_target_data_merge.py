@@ -29,14 +29,9 @@ def test_iuphar_merge_preserves_ec_number(
     iuphar_df = pd.DataFrame({"uniprot_id": ["P12345"], "class_a": ["Enzyme"]})
 
     monkeypatch.setattr(tp, "postprocess_targets", lambda df: df)
-    monkeypatch.setattr(tp, "finalise_targets", lambda df, org: df)
+    monkeypatch.setattr(tp, "finalise_targets", lambda df, **_: df)
     monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
     monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
-    cfg.target.all.organism_csv = tmp_path / "organism.csv"
-    pd.DataFrame({"genus": [], "type": []}).to_csv(
-        cfg.target.all.organism_csv, index=False
-    )
-
     merged = gtd.merge_results(combined_df, iuphar_df, cfg)
 
     assert "ec_number" in merged.columns
