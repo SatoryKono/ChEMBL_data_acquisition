@@ -43,12 +43,16 @@
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами. |
-| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; переопределяется переменной `CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. |
+| `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами; переопределяется через `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; используйте `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` или каноничную форму `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`. |
 | `endpoint` | `molecule` | Ресурс REST API ChEMBL, из которого подкачиваются данные при обновлении кэша. |
 | `child_field` | `molecule_chembl_id` | Поле ответа API с идентификатором дочерней молекулы. |
 | `parent_field` | `parent_molecule_chembl_id` | Поле ответа API с идентификатором родительской молекулы. |
+| `force_refresh_existing` | `false` | При `true` пересобирает связи родитель→потомок даже для записей с уже заполненным родителем, заставляя использовать данные из кэша/ChEMBL. |
+| `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | Список полей, которые запрашиваются у ChEMBL при построении или обновлении каталога; расширяйте его для дополнительных атрибутов. |
+| `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Набор фильтров, добавляемых ко всем запросам; по умолчанию выбирает только записи с заполненным родителем в ChEMBL. |
 | `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
+| `fallback_single_limit` | `null` | Ограничение на число одиночных fallback-запросов после неудачных батчей; `null` оставляет fallback без лимита. |
 
 ### Пайплайны (`sources.chembl.pipelines`)
 
