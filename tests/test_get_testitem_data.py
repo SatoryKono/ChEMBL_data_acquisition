@@ -228,6 +228,11 @@ def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
     )
 
     monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
 
     result, stats = gtd.attach_parent_molecule_ids(
         source,
@@ -238,13 +243,18 @@ def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
     )
 
     expected = pd.Series(
-        ["CHEMBL1_EXISTING", pd.NA], index=result.index, dtype="string"
+        [
+            "CHEMBL1_EXISTING",
+            gtd.PARENT_LOOKUP_PLACEHOLDER,
+        ],
+        index=result.index,
+        dtype="string",
     )
     pd.testing.assert_series_equal(
         result[parent_field], expected, check_names=False
     )
-    assert stats.missing == 2
-    assert stats.attached == 0
+    assert stats.missing == 1
+    assert stats.attached == 1
 
 
 def test_run_chembl_parent_catalog_error(
@@ -360,7 +370,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
     catalog_cfg.cache_path = tmp_path / "catalog.json"
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        gtd,
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
@@ -411,11 +421,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
 
-    monkeypatch.setattr(
-        gtd.molecule_catalog,
-        "load_parent_catalog",
-        lambda **__: {},
-    )
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
 
     def failing_fetch(
         ids: list[str],
@@ -441,7 +447,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     )
 
     parent_values = result[catalog_cfg.parent_field].tolist()
-    assert parent_values == [pd.NA]
+    assert parent_values == [gtd.PARENT_LOOKUP_PLACEHOLDER]
     assert stats.unique == 1
     assert stats.attached == 0
     assert stats.missing == 1
@@ -458,7 +464,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        gtd,
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
