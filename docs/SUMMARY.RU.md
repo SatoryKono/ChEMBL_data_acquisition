@@ -145,7 +145,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 4. Подготовить входной CSV с колонкой идентификаторов (по умолчанию `input.csv`/`activity_id`).
 
 
-5. Выполнить нужный CLI-скрипт, например `python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`.
+5. Выполнить нужный CLI-скрипт, например `python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`, чтобы выгрузить данные и записать CSV вместе с метаданными.
 
 
 6. Альтернативные пайплайны: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `get_input_initialisation`, `table_quality_main`.
@@ -298,7 +298,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 
 
 
-7. Выполнена целевая команда (`python -m scripts.get_activities ...` и т.п.) с нужными флагами и лог-уровнем.
+7. Выполнена целевая команда (`python -m scripts.get_activity_data ...` и т.п.) с нужными флагами и лог-уровнем.
 
 
 
@@ -321,7 +321,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 
 ## One-liner setup & run
 ```
-python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
+python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 
