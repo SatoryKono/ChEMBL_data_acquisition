@@ -213,7 +213,13 @@ def annotate_action_properties(df: pd.DataFrame) -> pd.DataFrame:
 
     properties: list[str] = []
     action_types: list[str | None] = []
-    for record in df.to_dict(orient="records"):
+    column_names = tuple(df.columns)
+    records_iter = (
+        dict(zip(column_names, row))
+        for row in df.itertuples(index=False, name=None)
+    )
+
+    for record in records_iter:
         payload = build_activity_properties(record)
         features = payload.get("effect_features", {})
         action_types.append(infer_action_type(features))
