@@ -198,6 +198,19 @@ def test_testitem_timeout_override(
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(gtdt, "add_pubchem_data", lambda df, cfg: df)
     monkeypatch.setattr(
+        gtdt,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtdt.ParentLookupStats(
+                source=gtdt.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
         io,
         "write_csv",
         lambda df, path, *, cfg, sep=None, encoding=None, **k: path,

@@ -55,7 +55,7 @@ The target pipeline offers `uniprot`, `chembl`, `iuphar`, and `all` workflows.
 | --- | --- |
 | **Input sources & format** | CSV list of ChEMBL molecule IDs (default `molecule_chembl_id`) streamed with optional limits.【F:scripts/get_testitem_data.py†L151-L195】 |
 | **External services / files** | ChEMBL API for compound core data plus PubChem API for SMILES-based augmentation.【F:scripts/get_testitem_data.py†L151-L194】【F:scripts/get_testitem_data.py†L49-L123】 |
-| **Key transformations** | Enrich ChEMBL results with PubChem identifiers/properties, normalise, add pipeline metadata, and validate via `TestitemsSchema` capturing failures separately.【F:scripts/get_testitem_data.py†L193-L249】 |
+| **Key transformations** | Enrich ChEMBL results with PubChem identifiers/properties, normalise, join against the cached parent catalogue, add pipeline metadata, and validate via `TestitemsSchema` capturing failures separately.【F:scripts/get_testitem_data.py†L193-L249】【F:library/molecule_catalog.py†L43-L136】 |
 | **Outputs & storage** | CSV with combined ChEMBL/PubChem fields, metadata YAML, and quality diagnostics written beside the export.【F:scripts/get_testitem_data.py†L259-L299】 |
 | **Downstream links** | Activities reference `molecule_chembl_id`, allowing potency and efficacy data to join back to the enriched compound properties.【F:schemas/testitems.py†L12-L38】【F:schemas/activities.py†L13-L33】 |
 
@@ -75,4 +75,4 @@ graph TD
 
 *Targets pipeline* merges ChEMBL, UniProt and IUPHAR attributes, producing IDs referenced by assays and downstream activity analysis.【F:scripts/get_target_data.py†L1088-L1108】【F:schemas/assays.py†L41-L83】
 
-*Test item pipeline* enriches molecules with PubChem properties that contextualise activity results via shared `molecule_chembl_id` keys.【F:scripts/get_testitem_data.py†L151-L299】【F:schemas/activities.py†L13-L33】
+*Test item pipeline* enriches molecules with PubChem properties and surfaces parent-child relationships via the local catalogue, enabling contextualised joins to activity results through `molecule_chembl_id` and `parent_molecule_chembl_id` keys.【F:scripts/get_testitem_data.py†L151-L299】【F:library/molecule_catalog.py†L43-L136】【F:schemas/activities.py†L13-L33】

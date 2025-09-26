@@ -28,6 +28,7 @@ def test_run_chembl_column_order(
         [
             {
                 "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_id": "CHEMBL0",
                 "molecule_type": "Small molecule",
                 "salt_chembl_id": "CHEMBL1-SALT",
                 "chirality": 1,
@@ -42,6 +43,19 @@ def test_run_chembl_column_order(
         gtd, "load_parent_catalog", lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"}
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
@@ -86,7 +100,21 @@ def test_run_chembl_initialises_pubchem_session(
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
+
 
     captured: dict[str, object] = {}
 
@@ -107,6 +135,7 @@ def test_run_chembl_initialises_pubchem_session(
 
     assert rc == 0
     assert captured["init"] == (cfg.api, cfg.retry)
+
 
 
 def test_run_chembl_merges_parent_catalog(
@@ -169,12 +198,14 @@ def test_run_chembl_merges_parent_catalog(
 def test_run_chembl_parent_catalog_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
+
     input_csv = tmp_path / "testitems.csv"
     input_csv.write_text("molecule_chembl_id\nCHEMBL1\n")
 
     args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
 
     monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: pd.DataFrame())
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
@@ -201,3 +232,4 @@ def test_run_chembl_parent_catalog_error(
     rc = gtd.run_chembl(cfg, args)
     assert rc == 1
     assert not called
+

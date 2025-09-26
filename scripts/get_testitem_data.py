@@ -12,6 +12,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections.abc import Sequence
+from dataclasses import dataclass
 from itertools import islice
 
 import pandas as pd
@@ -20,6 +21,7 @@ from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
 from library import io
+from library import molecule_catalog
 from library import pubchem_library as pl
 from library.molecule_catalog import load_parent_catalog
 from library.chembl_client import ChemblClient
@@ -32,7 +34,9 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import (
+    ApiCfg,
     Config,
+    MoleculeCatalogCfg,
     PubChemCfg,
     _serialize_paths,
     ensure_dirs,
@@ -45,6 +49,133 @@ from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 from schemas import TestitemsSchema, normalize_testitems
+
+_TYPO_PARENT_COLUMN = "parant_molecule_id"
+
+
+def ensure_no_parant_column(df: pd.DataFrame) -> None:
+    """Raise a :class:`ValueError` if the legacy typo column is present."""
+
+    if _TYPO_PARENT_COLUMN in df.columns:
+        raise ValueError(
+            "unexpected column 'parant_molecule_id'; use 'parent_molecule_id' instead"
+        )
+
+
+PARENT_LOOKUP_PLACEHOLDER = "-"
+PARENT_LOOKUP_SOURCE_CACHE = "cache"
+PARENT_LOOKUP_SOURCE_REMOTE = "remote"
+PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
+
+
+@dataclass(frozen=True)
+class ParentLookupStats:
+    """Summary information about parent molecule enrichment."""
+
+    source: str
+    missing: int
+    unique: int
+    attached: int
+
+
+def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
+    """Return ``series`` normalised to upper-case ChEMBL identifiers."""
+
+    normalised = (
+        series.fillna("")
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+    return normalised
+
+
+def attach_parent_molecule_ids(
+    df: pd.DataFrame,
+    *,
+    client: ChemblClient,
+    api_cfg: ApiCfg,
+    catalog_cfg: MoleculeCatalogCfg,
+    timeout: float | None,
+) -> tuple[pd.DataFrame, ParentLookupStats]:
+    """Attach parent molecule identifiers using the ChEMBL catalogue."""
+
+    if "parant_molecule_id" in df.columns:
+        raise ValueError(
+            "Input frame contains unexpected column 'parant_molecule_id'."
+        )
+
+    result = df.copy()
+
+    if result.empty:
+        if catalog_cfg.parent_field not in result.columns:
+            result[catalog_cfg.parent_field] = PARENT_LOOKUP_PLACEHOLDER
+        stats = ParentLookupStats(
+            source=PARENT_LOOKUP_SOURCE_SKIPPED,
+            missing=0,
+            unique=0,
+            attached=0,
+        )
+        return result, stats
+
+    child_column = catalog_cfg.child_field
+    parent_column = catalog_cfg.parent_field
+
+    if child_column not in result.columns:
+        logger.warning("parent_lookup_missing_child_column", column=child_column)
+        result[parent_column] = PARENT_LOOKUP_PLACEHOLDER
+        stats = ParentLookupStats(
+            source=PARENT_LOOKUP_SOURCE_SKIPPED,
+            missing=len(result),
+            unique=0,
+            attached=0,
+        )
+        return result, stats
+
+    cache_path = catalog_cfg.cache_path
+    cache_exists = cache_path.is_file()
+    cache_mtime = cache_path.stat().st_mtime if cache_exists else None
+
+    catalog = molecule_catalog.load_parent_catalog(
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=catalog_cfg,
+        timeout=timeout,
+    )
+
+    cache_exists_after = cache_path.is_file()
+    cache_mtime_after = cache_path.stat().st_mtime if cache_exists_after else None
+    if cache_exists_after and cache_exists and cache_mtime_after == cache_mtime:
+        source = PARENT_LOOKUP_SOURCE_CACHE
+    else:
+        source = PARENT_LOOKUP_SOURCE_REMOTE
+
+    normalised_child = _normalise_chembl_ids(result[child_column])
+    unique_children = normalised_child[normalised_child != ""].unique()
+
+    parent_map = {key: catalog[key] for key in unique_children if key in catalog}
+    parent_series = normalised_child.map(parent_map).fillna(PARENT_LOOKUP_PLACEHOLDER)
+    result[parent_column] = parent_series
+
+    missing = int((result[parent_column] == PARENT_LOOKUP_PLACEHOLDER).sum())
+    attached = len(result) - missing
+
+    stats = ParentLookupStats(
+        source=source,
+        missing=missing,
+        unique=int(len(unique_children)),
+        attached=int(attached),
+    )
+
+    logger.info(
+        "parent_lookup_progress",
+        source=stats.source,
+        unique=stats.unique,
+        attached=stats.attached,
+        missing=stats.missing,
+    )
+
+    return result, stats
 
 
 def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
@@ -152,6 +283,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     # Initialise HTTP sessions for downstream HTTP calls
     pl.init_session(cfg.api, cfg.retry)
     # Initialise HTTP session for subsequent ChEMBL requests
+    parent_stats = ParentLookupStats(
+        source=PARENT_LOOKUP_SOURCE_SKIPPED,
+        missing=0,
+        unique=0,
+        attached=0,
+    )
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
             ids_iter = io.read_ids(
@@ -216,6 +353,37 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
+ 
+        try:
+            ensure_no_parant_column(df)
+        except ValueError as exc:
+            logger.error(
+                "invalid_column",
+                column=_TYPO_PARENT_COLUMN,
+                error=str(exc),
+            )
+            return 1
+ 
+        logger.info("parent_lookup_start")
+        try:
+            df, parent_stats = attach_parent_molecule_ids(
+                df,
+                client=client,
+                api_cfg=cfg.api,
+                catalog_cfg=cfg.molecule_catalog,
+                timeout=cfg.testitem.timeout,
+            )
+        except ValueError as exc:
+            logger.error("parent_lookup_failed", error=str(exc))
+            return 1
+        logger.info(
+            "parent_lookup_done",
+            source=parent_stats.source,
+            unique=parent_stats.unique,
+            attached=parent_stats.attached,
+            missing=parent_stats.missing,
+        )
+ 
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
         df = add_pipeline_metadata(df)
@@ -302,6 +470,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         "rows_kept": rows_kept,
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
+        "parent_lookup_source": parent_stats.source,
+        "parent_lookup_missing": parent_stats.missing,
     }
     write_meta_yaml(
         csv_path=csv_path,
