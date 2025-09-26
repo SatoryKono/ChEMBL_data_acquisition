@@ -18,11 +18,12 @@ import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
+from pydantic_core import ErrorDetails
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -1019,11 +1020,16 @@ def _parse_env_value(env_key: str, raw_value: str) -> Any:
     try:
         return yaml.safe_load(raw_value)
     except yaml.YAMLError as exc:
-        raise ConfigError(f"{env_key} could not be parsed: {exc}") from exc
+        logger.debug(
+            "treating %s as plain string due to YAML parse error: %s",
+            env_key,
+            exc,
+        )
+        return raw_value
 
 
 def _normalize_env_errors(
-    errors: list[dict[str, Any]], overrides: dict[tuple[str, ...], str]
+    errors: Sequence[ErrorDetails], overrides: Mapping[tuple[str, ...], str]
 ) -> tuple[list[str], int]:
     """Return formatted messages for validation *errors* caused by overrides."""
 
@@ -1031,10 +1037,16 @@ def _normalize_env_errors(
     handled = 0
     for error in errors:
         loc = error.get("loc", ())
-        if not isinstance(loc, tuple):
+        if not isinstance(loc, Sequence):
             continue
-        path = tuple(str(part).lower() for part in loc if isinstance(part, str))
-        env_key = overrides.get(path)
+        str_path = [str(part).lower() for part in loc if isinstance(part, str)]
+        env_key: str | None = None
+        for index in range(len(str_path), 0, -1):
+            candidate = tuple(str_path[:index])
+            match = overrides.get(candidate)
+            if match:
+                env_key = match
+                break
         if not env_key:
             continue
         messages.append(_format_env_error(env_key, error))
@@ -1042,14 +1054,18 @@ def _normalize_env_errors(
     return messages, handled
 
 
-def _format_env_error(env_key: str, error: dict[str, Any]) -> str:
+def _format_env_error(env_key: str, error: Mapping[str, Any]) -> str:
     """Return a human readable error string for *env_key* based on *error*."""
 
     message = _format_env_error_message(error)
+    loc = error.get("loc")
+    location = _format_error_location(loc) if isinstance(loc, Sequence) else ""
+    if location:
+        return f"{env_key} ({location}) {message}".strip()
     return f"{env_key} {message}".strip()
 
 
-def _format_env_error_message(error: dict[str, Any]) -> str:
+def _format_env_error_message(error: Mapping[str, Any]) -> str:
     """Convert a Pydantic error dictionary into a concise human message."""
 
     error_type = error.get("type")
@@ -1081,6 +1097,21 @@ def _format_env_error_message(error: dict[str, Any]) -> str:
     if message.startswith("Input should be "):
         return "must be " + message[len("Input should be ") :]
     return message
+
+
+def _format_error_location(loc: Sequence[Any] | None) -> str:
+    if not loc:
+        return ""
+    parts: list[str] = []
+    for part in loc:
+        if isinstance(part, int):
+            if parts:
+                parts[-1] = f"{parts[-1]}[{part}]"
+            else:
+                parts.append(f"[{part}]")
+        else:
+            parts.append(str(part))
+    return ".".join(parts)
 
 
 def _is_valid_path(path: list[str]) -> bool:
