@@ -305,6 +305,7 @@ def fetch_pubmed_records(
 
             with session_with_retry(__cfg.api, __cfg.retry) as session:
 
+                pubmed_limiter.acquire()
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
                 )
