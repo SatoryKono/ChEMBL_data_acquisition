@@ -34,6 +34,7 @@ DEFAULT_SUPERKINGDOM_COLUMN = "lineage_superkingdom"
 DEFAULT_PHYLUM_COLUMN = "lineage_phylum"
 DEFAULT_CLASS_COLUMN = "lineage_class"
 DEFAULT_OUTPUT_COLUMN = "type"
+DEFAULT_TAXON_ID_COLUMN = "taxon_id"
 
 DEFAULT_NULL_LITERALS: frozenset[str] = frozenset({"nan", "none", "-", "na"})
 TAXONOMY_SEPARATORS: Sequence[str] = ("|", ";")
@@ -234,9 +235,29 @@ def add_cellularity_smart(
     phylum_col: str = DEFAULT_PHYLUM_COLUMN,
     class_col: str = DEFAULT_CLASS_COLUMN,
     output_col: str = DEFAULT_OUTPUT_COLUMN,
+    taxon_id_col: str = DEFAULT_TAXON_ID_COLUMN,
     rules: OrganismClassificationRules = DEFAULT_RULES,
 ) -> pd.DataFrame:
-    """Backward-compatible wrapper around :func:`add_cellularity`."""
+    """Backward-compatible wrapper around :func:`add_cellularity`.
+
+    Parameters
+    ----------
+    df:
+        Input frame expected to contain the lineage columns used for
+        classification.
+    genus_col, superkingdom_col, phylum_col, class_col:
+        Column names storing taxonomy annotations.
+    output_col:
+        Column receiving the inferred cellularity labels.
+    taxon_id_col:
+        Retained for backwards compatibility with legacy call sites. The
+        identifier is not required for lineage-based inference and therefore
+        ignored.
+    rules:
+        Rule set controlling the inference heuristics.
+    """
+
+    _ = taxon_id_col  # Intentionally ignored; maintained for compatibility.
 
     return add_cellularity(
         df,
