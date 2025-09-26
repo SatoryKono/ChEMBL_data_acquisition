@@ -23,7 +23,7 @@ data/output/
 
 Промежуточные файлы таргет-пайплайна в режиме `all`
 (`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) сохраняются в той же
-директории, если CLI-аргументы не задают другие пути.【F:scripts/get_target_data.py†L1064-L1108】
+директории, если CLI-аргументы не задают другие пути.
 
 ## Sidecar с метаданными (`*.csv.meta.yaml`)
 
@@ -41,13 +41,13 @@ data/output/
 * `schema` — имя схемы валидации.
 
 Если sidecar уже существует, содержимое аккуратно объединяется, чтобы сохранить
-ручные пометки.【F:library/metadata.py†L29-L133】
+ручные пометки.
 
 ## Артефакты валидации
 
 * При ошибках Pandera строки попадают в `<stem>_failure_cases.csv` через
   `SidecarErrors`, что позволяет изучить проблемы без остановки основного
-  пайплайна.【F:library/sidecar.py†L1-L154】
+  пайплайна.
 * `library.table_quality.analyze_table_quality` формирует
   `<stem>_quality_report_table.csv` и
   `<stem>_data_correlation_report_table.csv`. CLI-утилиты сохраняют отчёты рядом с
@@ -55,21 +55,21 @@ data/output/
   подкаталог `<output>/data_validity_report/`.
 
 Все файлы пишутся в UTF-8 и соблюдают детерминированный порядок строк и колонок,
-что упрощает сравнение версий.【F:library/table_quality.py†L1-L192】
+что упрощает сравнение версий.
 
 ## Детерминированная запись CSV
 
 `library.io.write_csv` вызывает `library.csv_utils.write_csv_deterministic`,
 который сортирует строки и колонки по явным ключам и учитывает параметры
 `cfg.io.csv_sep`, `cfg.io.csv_encoding`, а также опциональные `key_cols` и
-`col_order`, переданные пайплайном.【F:library/csv_utils.py†L451-L603】
+`col_order`, переданные пайплайном.
 
 ## Технические колонки пайплайна
 
 Перед валидацией в таблицы добавляются `pipeline_version` и `timestamp_utc`
 (функция `library.pipeline_metadata.add_pipeline_metadata`). Колонки описаны в
 схемах активностей, документов, тест-объектов и других сущностей, поэтому они
-присутствуют даже при пустой выгрузке.【F:library/pipeline_metadata.py†L24-L84】【F:schemas/activities.py†L52-L55】【F:schemas/documents.py†L111-L112】【F:schemas/testitems.py†L41-L42】
+присутствуют даже при пустой выгрузке.
 
 * `pipeline_version` — версия установленного пакета или значение из
   `pyproject.toml`; единое для всех таблиц в рамках запуска.
@@ -80,7 +80,7 @@ data/output/
 
 `scripts/get_document_data.py` обогащает документные выгрузки баллами и метками,
 которые рассчитывает `library.document_pipeline.merge_metadata`.
-В таблице и схеме появляются поля:【F:scripts/get_document_data.py†L607-L676】【F:library/document_pipeline.py†L160-L208】
+В таблице и схеме появляются поля:
 
 | Колонка | Описание |
 | --- | --- |
@@ -88,14 +88,14 @@ data/output/
 | `publication_type_score_review` | Целочисленный вес признаков обзора. |
 | `publication_type_score_experimental` | Вес экспериментальных признаков. |
 | `publication_type_score_unknown` | Вес неоднозначных или неизвестных типов. |
-| `publication_class` | Итоговая метка (`review`, `experimental`, `unknown`), вычисленная классификатором с учётом порогов.【F:library/document_type_classifier.py†L7-L74】 |
+| `publication_class` | Итоговая метка (`review`, `experimental`, `unknown`), вычисленная классификатором с учётом порогов. |
 
 При отсутствии известных токенов баллы равны нулю, а итоговая метка — `unknown`.
 
 ## Границы активности (`lower_value`, `upper_value`)
 
 `activity.csv` включает диапазоны значений, рассчитанные из канонических полей
-ChEMBL `standard_*`. Приоритет действий:【F:scripts/get_activity_data.py†L212-L353】【F:config.yaml†L260-L315】【F:library/config.py†L358-L420】
+ChEMBL `standard_*`. Приоритет действий:
 
 1. Использовать `standard_lower_value` и `standard_upper_value`, если оба
    присутствуют.
@@ -113,7 +113,7 @@ ChEMBL `standard_*`. Приоритет действий:【F:scripts/get_activi
 
 Документный пайплайн записывает `<stem>.quality.json`. `library.document_pipeline.build_quality_report`
 формирует сводку, а `save_quality_report` сохраняет её в стабильном формате для
-сравнения между запусками. Структура отчёта:【F:scripts/get_document_data.py†L636-L674】【F:library/document_pipeline.py†L300-L356】
+сравнения между запусками. Структура отчёта:
 
 | Ключ | Тип | Описание |
 | --- | --- | --- |
@@ -128,7 +128,7 @@ ChEMBL `standard_*`. Приоритет действий:【F:scripts/get_activi
 качества. Каждая строка объединяет данные ChEMBL, обогащение PubChem и служебные
 колонки, обеспечивая опорное измерение соединений. Для работы требуется каталог
 родительских молекул (`sources.chembl.molecule_catalog.cache_path`) и, по
-возможности, CSV-словари с иерархией и признаками солей.【F:scripts/get_testitem_data.py†L36-L299】【F:library/molecule_catalog.py†L43-L136】【F:library/testitem_enrichment.py†L17-L216】【F:config.yaml†L25-L33】
+возможности, CSV-словари с иерархией и признаками солей.
 
 ## Кешированный таргет-пайплайн (`pipeline_targets_main.py`)
 
@@ -137,7 +137,7 @@ ChEMBL `standard_*`. Приоритет действий:【F:scripts/get_activi
 `read_ids`, далее вызывается `library.pipeline_targets.run_pipeline`, добавляются
 метаданные и выполняется детерминированная запись CSV/sidecar. Инструмент полезен
 для проверки конфигурации и параметров батчирования без обращений к внешним
-сервисам.【F:scripts/pipeline_targets_main.py†L43-L141】
+сервисам.
 
 ## Рекомендации по сопровождению
 
