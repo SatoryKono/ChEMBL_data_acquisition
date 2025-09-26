@@ -12,7 +12,6 @@ def test_organism_csv_option_removed(tmp_path, monkeypatch) -> None:
         "    pipelines:\n"
         "      target:\n"
         "        all:\n"
-        "          organism_csv: dictionary/organism.csv\n"
         "    api:\n"
         "      timeout_read: 30\n"
         "local:\n"

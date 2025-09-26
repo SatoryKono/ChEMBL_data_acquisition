@@ -337,5 +337,8 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
+## Release Notes
+- [Release notes](RELEASE_NOTES_EN.md)
+
 
 
