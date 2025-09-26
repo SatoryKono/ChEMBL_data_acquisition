@@ -6,10 +6,12 @@ expected structure of activity dataframes.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import cast
 
 import pandera.pandas as pa
 from pandera.dtypes import DataType
+import yaml
 
 PA_ANY = cast(DataType, None)
 
@@ -23,6 +25,48 @@ _ALLOWED_ACTION_TYPES = {
     "triaged",
     "unknown",
 }
+
+
+def _load_standard_type_values() -> tuple[str, ...]:
+    """Return configured standard type values if available."""
+
+    config_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    try:
+        with config_path.open("r", encoding="utf8") as handle:
+            config = yaml.safe_load(handle) or {}
+    except (FileNotFoundError, yaml.YAMLError, TypeError):
+        return ()
+
+    metrics = (
+        config
+        .get("activity_enrichment", {})
+        .get("action_type", {})
+        .get("metrics", {})
+    )
+    if not isinstance(metrics, dict):
+        return ()
+
+    values: set[str] = set()
+    for key in metrics.keys():
+        token = str(key).strip()
+        if not token:
+            continue
+        variants = {
+            token,
+            token.lower(),
+            token.upper(),
+            token.capitalize(),
+        }
+        if token[0].isalpha():
+            variants.add(token[0].upper() + token[1:])
+        values.update(filter(None, variants))
+    return tuple(sorted(values))
+
+
+_STANDARD_TYPE_VALUES = _load_standard_type_values()
+_STANDARD_TYPE_CHECKS: list[pa.Check] = []
+if _STANDARD_TYPE_VALUES:
+    _STANDARD_TYPE_CHECKS.append(pa.Check.isin(sorted(_STANDARD_TYPE_VALUES)))
 
 
 ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
@@ -53,7 +97,7 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "value": pa.Column(object, required=False, nullable=True),
         "standard_type": pa.Column(
             str,
-            pa.Check.isin(["IC50", "Ki"]),
+            checks=_STANDARD_TYPE_CHECKS,
             required=False,
             nullable=True,
         ),

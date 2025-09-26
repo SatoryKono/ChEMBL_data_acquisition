@@ -68,7 +68,7 @@
 | type | string | ChEMBL `/activity` | Original measurement type returned by the API.|
 | units | string | ChEMBL `/activity` | Original units associated with `value`.|
 | value | string/number | ChEMBL `/activity` | Raw measurement reported by the API.|
-| standard_type | string | ChEMBL `/activity` | Normalized measurement type (restricted to `IC50` or `Ki`).|
+| standard_type | string | ChEMBL `/activity` | Normalized measurement type constrained by configuration (e.g., `IC50`, `EC50`, `Ki`, `KD`).|
 | standard_value | number (float) | ChEMBL `/activity` | Normalized numeric value in molar units; guaranteed non-negative.|
 | standard_lower_value | string/number | ChEMBL `/activity` | Lower bound supplied by ChEMBL when the measurement is a range.|
 | standard_upper_value | string/number | ChEMBL `/activity` | Upper bound supplied by ChEMBL when available.|
