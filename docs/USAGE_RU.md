@@ -128,6 +128,26 @@ python scripts/get_target_data.py \
 
 Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`. Соберите CSV с колонкой `target_chembl_id` (по одной записи в строке); готовый smoke-набор отсутствует.
 
+## Обвязка таргет-пайплайна (`pipeline_targets_main.py`)
+
+```bash
+python scripts/pipeline_targets_main.py \
+  --input tests/data/chembl_targets_min.csv \
+  --output out/targets_cached.csv \
+  --chunk-size 50 \
+  --batch-size 50 \
+  --limit 200
+```
+
+Облегчённая CLI-команда повторяет интерфейс `get_target_data.py`, но запускает
+`library.pipeline_targets.run_pipeline` на подготовленных чанках без сетевых
+запросов. Идентификаторы читаются через `read_ids` с учётом `--chunk-size`,
+`--limit`, разделителя и кодировки, размер батча прокидывается в пайплайн, а
+результат записывается после `add_pipeline_metadata` и `write_csv`, что
+гарантирует ту же детерминированность, что и у основного пайплайна. Утилита
+подходит для проверки переопределений конфигурации, логирования и параметров
+батчирования до запуска `get_target_data` с обращениями к внешним API.【F:scripts/pipeline_targets_main.py†L1-L141】
+
 ## Обогащение тест-объектов (`get_testitem_data.py`)
 
 ```bash

@@ -128,8 +128,24 @@ Before running the smoke command, create a `chembl_ids.csv` file with a header `
 
 ## Генерация данных
 
-Пять основных пайплайнов в каталоге `scripts/` формируют CSV-файлы и размещают
-их в `data/output/`. Пример полноценного пайплайна:
+Шесть основных пайплайнов в каталоге `scripts/` формируют CSV-файлы и
+размещают их в `data/output/`:
+
+* `get_activity_data.py` — извлекает данные активностей из ChEMBL и
+  дополняет их расчётными границами значений.
+* `get_assay_data.py` — выгружает описания ассайев.
+* `get_document_data.py` — объединяет метаданные публикаций из ChEMBL и
+  агрегаторов (PubMed, Semantic Scholar, OpenAlex, Crossref).
+* `get_target_data.py` — собирает информацию о таргетах из ChEMBL, UniProt
+  и IUPHAR.
+* `get_testitem_data.py` — обогащает соединения структурными атрибутами и
+  данными PubChem.
+* `pipeline_targets_main.py` — лёгкая обвязка для
+  `library.pipeline_targets.run_pipeline`, использующая те же параметры CLI,
+  что и боевой таргет-пайплайн, но работающая только с локальными файлами и
+  подготовленными чанками идентификаторов без сетевых вызовов.
+
+Пример полноценного пайплайна:
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
@@ -196,7 +212,28 @@ column.
 
 The input and output both use ``target_chembl_id`` to align with
 validation schemas.
- 
+
+### scripts/pipeline_targets_main.py
+
+Exercise the chunking and batch configuration used by the production
+target pipeline without contacting remote services:
+
+```bash
+python scripts/pipeline_targets_main.py \
+    --input tests/data/chembl_targets_min.csv \
+    --output out/targets_cached.csv \
+    --chunk-size 25 \
+    --batch-size 25 \
+    --limit 100
+```
+
+The command reads target identifiers from the CSV, chunks them according
+to ``--chunk-size`` and ``--limit``, forwards the batch size to
+``library.pipeline_targets.run_pipeline`` and writes the cached ChemBL
+table with pipeline metadata via ``write_csv``. Use it to verify CLI
+overrides, logging and deterministic output before launching the network
+backed ``get_target_data`` pipeline.【F:scripts/pipeline_targets_main.py†L1-L141】
+
 ### library/utils/cli_tools/get_activities.py
 
 Generate dummy activity entries without contacting external services:
