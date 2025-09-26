@@ -124,7 +124,12 @@ def attach_parent_molecule_ids(
     catalog: Mapping[str, str] | None = None,
     source: str | None = None,
 ) -> tuple[pd.DataFrame, ParentLookupStats]:
-    """Attach parent molecule identifiers using the ChEMBL catalogue."""
+    """Attach parent molecule identifiers using the ChEMBL catalogue.
+
+    The function operates on the original ``df`` content and can enrich frames
+    that already contain parent identifiers as well as frames without the
+    ``catalog_cfg.parent_field`` column.
+    """
 
     if "parant_molecule_id" in df.columns:
         raise ValueError(
@@ -223,7 +228,7 @@ def attach_parent_molecule_ids(
     combined_parent = existing_parent.copy()
     update_mask = combined_parent.isna() | combined_parent.eq("")
     combined_parent.loc[update_mask] = parent_series.loc[update_mask]
-    result[parent_column] = combined_parent
+    result[parent_column] = combined_parent.astype("string")
 
     missing = int(combined_parent.isna().sum())
     attached = len(result) - missing
@@ -460,13 +465,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 fetched_remote = True
         if fetched_remote:
             parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
-
-        if parent_catalog and child_column in df.columns:
-            mapped = normalised_ids.map(parent_catalog)
-            if parent_column in df.columns:
-                df[parent_column] = df[parent_column].fillna(mapped)
-            else:
-                df[parent_column] = mapped
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")

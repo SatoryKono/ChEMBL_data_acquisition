@@ -106,6 +106,8 @@ def test_get_testitem_parent_catalog(
     assert output_csv.exists()
 
     df = pd.read_csv(output_csv)
+    assert "parent_molecule_chembl_id" in df.columns
+    assert df["parent_molecule_chembl_id"].isna().sum() == 0
     assert list(df["parent_molecule_chembl_id"]) == [
         "CHEMBL9001",
         "CHEMBL9002",
