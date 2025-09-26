@@ -75,6 +75,115 @@
       "title": "ActivityBoundsCfg",
       "type": "object"
     },
+    "ActivityActionTypeCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "column": {
+          "default": "action_type",
+          "title": "Column",
+          "type": "string"
+        },
+        "log_missing": {
+          "default": true,
+          "title": "Log Missing",
+          "type": "boolean"
+        },
+        "log_distribution": {
+          "default": true,
+          "title": "Log Distribution",
+          "type": "boolean"
+        }
+      },
+      "title": "ActivityActionTypeCfg",
+      "type": "object"
+    },
+    "ActivityPropertiesCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "column": {
+          "default": "activity_properties",
+          "title": "Column",
+          "type": "string"
+        },
+        "summary_column": {
+          "default": "activity_property_summary",
+          "title": "Summary Column",
+          "type": "string"
+        },
+        "name_field": {
+          "default": "type",
+          "title": "Name Field",
+          "type": "string"
+        },
+        "value_field": {
+          "default": "value",
+          "title": "Value Field",
+          "type": "string"
+        },
+        "units_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "units",
+          "title": "Units Field"
+        },
+        "separator": {
+          "default": "; ",
+          "title": "Separator",
+          "type": "string"
+        },
+        "pair_separator": {
+          "default": "=",
+          "title": "Pair Separator",
+          "type": "string"
+        },
+        "drop_source_column": {
+          "default": true,
+          "title": "Drop Source Column",
+          "type": "boolean"
+        },
+        "log_missing": {
+          "default": false,
+          "title": "Log Missing",
+          "type": "boolean"
+        },
+        "log_distribution": {
+          "default": false,
+          "title": "Log Distribution",
+          "type": "boolean"
+        }
+      },
+      "title": "ActivityPropertiesCfg",
+      "type": "object"
+    },
+    "ActivityEnrichmentCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {
+          "$ref": "#/$defs/ActivityActionTypeCfg"
+        },
+        "activity_properties": {
+          "$ref": "#/$defs/ActivityPropertiesCfg"
+        }
+      },
+      "title": "ActivityEnrichmentCfg",
+      "type": "object"
+    },
     "ApiCfg": {
       "additionalProperties": false,
       "description": "Settings for ChEMBL API access.",
@@ -1335,6 +1444,9 @@
     },
     "activity_bounds": {
       "$ref": "#/$defs/ActivityBoundsCfg"
+    },
+    "activity_enrichment": {
+      "$ref": "#/$defs/ActivityEnrichmentCfg"
     },
     "system": {
       "$ref": "#/$defs/SystemCfg"

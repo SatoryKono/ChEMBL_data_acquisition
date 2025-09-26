@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from urllib.parse import urljoin
 
 import pandas as pd
@@ -238,6 +238,7 @@ def get_activities(
     client: ChemblClient,
     chunk_size: int = 5,
     timeout: float | None = None,
+    extra_columns: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Fetch activity records for *ids*.
 
@@ -284,9 +285,19 @@ def get_activities(
                 "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
             )
     if not records:
-        return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+        columns = list(ACTIVITY_COLUMNS)
+        if extra_columns:
+            for column in extra_columns:
+                if column not in columns:
+                    columns.append(column)
+        return pd.DataFrame(columns=columns)
     df = pd.concat(records, ignore_index=True)
-    return df.reindex(columns=ACTIVITY_COLUMNS)
+    columns = list(ACTIVITY_COLUMNS)
+    if extra_columns:
+        for column in extra_columns:
+            if column not in columns:
+                columns.append(column)
+    return df.reindex(columns=columns)
 
 
 def get_testitem(

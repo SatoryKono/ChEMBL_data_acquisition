@@ -14,7 +14,7 @@ def test_get_activity_data_smoke(
 ) -> None:
     input_csv = Path("tests/data/activity_ids_small.csv")
 
-    def fake_get(ids, cfg, client, chunk_size, timeout):
+    def fake_get(ids, cfg, client, chunk_size, timeout, **kwargs):
         int_ids = [int(i) for i in ids]
         return pd.DataFrame(
             {

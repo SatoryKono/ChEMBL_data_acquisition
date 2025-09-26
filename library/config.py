@@ -387,6 +387,73 @@ class ActivityBoundsCfg(_BoolModel):
         return cls._parse_bool(v)
 
 
+class ActivityActionTypeCfg(_BoolModel):
+    enabled: bool = True
+    column: str = "action_type"
+    log_missing: bool = True
+    log_distribution: bool = True
+
+    @field_validator("enabled", "log_missing", "log_distribution", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+    @field_validator("column")
+    @classmethod
+    def _column(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("activity_enrichment.action_type.column must be non-empty")
+        return v
+
+
+class ActivityPropertiesCfg(_BoolModel):
+    enabled: bool = False
+    column: str = "activity_properties"
+    summary_column: str = "activity_property_summary"
+    name_field: str = "type"
+    value_field: str = "value"
+    units_field: str | None = "units"
+    separator: str = "; "
+    pair_separator: str = "="
+    drop_source_column: bool = True
+    log_missing: bool = False
+    log_distribution: bool = False
+
+    @field_validator(
+        "enabled",
+        "drop_source_column",
+        "log_missing",
+        "log_distribution",
+        mode="before",
+    )
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+    @field_validator(
+        "column",
+        "summary_column",
+        "name_field",
+        "value_field",
+        "separator",
+        "pair_separator",
+    )
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        if not v or not str(v).strip():
+            raise ValueError("activity_enrichment.activity_properties fields must be non-empty")
+        return v
+
+
+class ActivityEnrichmentCfg(_BaseModel):
+    action_type: ActivityActionTypeCfg = Field(
+        default_factory=lambda: ActivityActionTypeCfg()
+    )
+    activity_properties: ActivityPropertiesCfg = Field(
+        default_factory=lambda: ActivityPropertiesCfg()
+    )
+
+
 class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
@@ -550,6 +617,9 @@ class Config(_BaseModel):
     system: SystemCfg = Field(default_factory=lambda: SystemCfg())
     activity_bounds: ActivityBoundsCfg = Field(
         default_factory=lambda: ActivityBoundsCfg()
+    )
+    activity_enrichment: ActivityEnrichmentCfg = Field(
+        default_factory=lambda: ActivityEnrichmentCfg()
     )
 
     # -- Compatibility accessors -------------------------------------------------
@@ -1055,6 +1125,9 @@ __all__ = [
     "SemanticScholarCfg",
     "DocTypeCfg",
     "ActivityCfg",
+    "ActivityActionTypeCfg",
+    "ActivityEnrichmentCfg",
+    "ActivityPropertiesCfg",
     "AssayCfg",
     "TestitemCfg",
     "DocumentPubmedCfg",

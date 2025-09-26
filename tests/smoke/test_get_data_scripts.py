@@ -64,7 +64,9 @@ def test_get_activity_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.Mon
     output_csv = smoke_output_dir / "activity.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_activities(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_activities(
+        ids, cfg, client, chunk_size, timeout, **kwargs
+    ):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, raw_id in enumerate(ids, start=1):
             activity_id = int(str(raw_id))

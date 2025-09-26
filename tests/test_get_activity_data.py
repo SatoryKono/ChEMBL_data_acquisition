@@ -31,11 +31,12 @@ def test_run_chembl_respects_limit(
 
     monkeypatch.setattr(io, "read_ids", fake_read_ids)
 
-    captured: dict[str, list[str]] = {}
+    captured: dict[str, object] = {}
 
-    def fake_get(ids, cfg, client, chunk_size, timeout):
+    def fake_get(ids, cfg, client, chunk_size, timeout, **kwargs):
         data = list(ids)
         captured["ids"] = data
+        captured["extra_columns"] = kwargs.get("extra_columns")
         return pd.DataFrame({"activity_id": data})
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
@@ -53,6 +54,7 @@ def test_run_chembl_respects_limit(
     assert rc == 0
     assert captured["ids"] == ["1", "2"]
     assert read_ids == ["1", "2"]
+    assert captured["extra_columns"] == ["action_type"]
 
 
 def test_run_chembl_limit_dry_run(
