@@ -1,2 +1,2 @@
-uniprot_id,uniProtkbId,geneName,recommendedName
-P12345,P12345-1,GENEA,Recommended
+uniprot_id,uniProtkbId,geneName,recommendedName,ec_numbers,reaction_ec_numbers
+P12345,P12345-1,GENEA,Recommended,3.3.3.3,4.4.4.4

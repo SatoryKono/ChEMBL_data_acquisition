@@ -888,6 +888,42 @@ def fetch_iuphar(
         combined_df = combined_df.drop(columns=["uniprot_id_x"], errors="ignore")
         combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
 
+    ec_number_columns = [
+        column
+        for column in combined_df.columns
+        if column.startswith("ec_numbers")
+    ]
+    if ec_number_columns:
+        combined_df["ec_numbers"] = combined_df.apply(
+            lambda r: _pipe_merge([r.get(column) for column in ec_number_columns]),
+            axis=1,
+        )
+        extra_ec_columns = [
+            column for column in ec_number_columns if column != "ec_numbers"
+        ]
+        if extra_ec_columns:
+            combined_df = combined_df.drop(columns=extra_ec_columns, errors="ignore")
+
+    reaction_ec_columns = [
+        column
+        for column in combined_df.columns
+        if column.startswith("reaction_ec_numbers")
+    ]
+    if reaction_ec_columns:
+        combined_df["reaction_ec_numbers"] = combined_df.apply(
+            lambda r: _pipe_merge([r.get(column) for column in reaction_ec_columns]),
+            axis=1,
+        )
+        extra_reaction_columns = [
+            column
+            for column in reaction_ec_columns
+            if column != "reaction_ec_numbers"
+        ]
+        if extra_reaction_columns:
+            combined_df = combined_df.drop(
+                columns=extra_reaction_columns, errors="ignore"
+            )
+
     combined_df["synonyms"] = combined_df.apply(
         lambda r: _pipe_merge(
             [
@@ -908,9 +944,7 @@ def fetch_iuphar(
     combined_df["gene_name"] = combined_df.get("gene", pd.Series(dtype=str)).apply(
         _first_token
     )
-    combined_df = combined_df.drop(
-        columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
-    )
+    combined_df = combined_df.drop(columns=["ec_numbers"], errors="ignore")
 
     from tempfile import NamedTemporaryFile
 
