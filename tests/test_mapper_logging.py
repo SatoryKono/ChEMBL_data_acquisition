@@ -12,7 +12,7 @@ import pandas as pd
 
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
-from scripts import mapper_main
+from library.utils.cli_tools import mapper_main
 
 
 def test_mapper_library_has_no_logging_side_effect() -> None:

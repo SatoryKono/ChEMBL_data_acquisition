@@ -53,15 +53,15 @@ get-activity-data = "library.cli.commands.get_activity_data:main"
 get-assay-data = "library.cli.commands.get_assay_data:main"
 get-target-data = "library.cli.commands.get_target_data:main"
 get-document-data = "library.cli.commands.get_document_data:main"
-get-document-type = "library.cli.commands.get_document_type:main"
-get-input-initialisation = "library.cli.commands.get_input_initialisation:main"
+get-document-type = "library.utils.cli_tools.get_document_type:main"
+get-input-initialisation = "library.utils.cli_tools.get_input_initialisation:main"
 get-testitem-data = "library.cli.commands.get_testitem_data:main"
-csv-utils = "library.cli.commands.csv_utils:main"
-mapper = "library.cli.commands.mapper:main"
-table-quality = "library.cli.commands.table_quality:main"
-chunk-io = "library.cli.commands.chunk_io:main"
-get-activities = "library.cli.commands.get_activities:main"
-check-determinism = "library.cli.commands.check_determinism:main"
+csv-utils = "library.utils.cli_tools.csv_utils_main:main"
+mapper = "library.utils.cli_tools.mapper_main:main"
+table-quality = "library.utils.cli_tools.table_quality_main:main"
+chunk-io = "library.utils.cli_tools.chunk_io_main:main"
+get-activities = "library.utils.cli_tools.get_activities:main"
+check-determinism = "library.utils.cli_tools.check_determinism:main"
 
 [tool.setuptools]
 py-modules = [
@@ -69,16 +69,7 @@ py-modules = [
   "scripts.get_assay_data",
   "scripts.get_target_data",
   "scripts.get_document_data",
-  "scripts.get_document_type",
-  "scripts.get_input_initialisation",
   "scripts.get_testitem_data",
-  "scripts.csv_utils_main",
-  "scripts.mapper_main",
-  "scripts.mapper_batch_main",
-  "scripts.table_quality_main",
-  "scripts.chunk_io_main",
-  "scripts.get_activities",
-  "scripts.check_determinism",
 ]
 
 [tool.setuptools.packages.find]

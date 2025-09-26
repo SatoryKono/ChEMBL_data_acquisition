@@ -12,12 +12,12 @@ from library.logging_setup import Logger
 from scripts import get_activity_data as gad
 from scripts import get_assay_data as gas
 from scripts import get_document_data as gdd
-from scripts import get_document_type as gdoctype
-from scripts import get_input_initialisation as gii
+from library.utils.cli_tools import get_document_type as gdoctype
+from library.utils.cli_tools import get_input_initialisation as gii
 from scripts import get_target_data as gtd
 from scripts import get_testitem_data as gtdt
-from scripts import mapper_main as mapper
-from scripts import table_quality_main as tqm
+from library.utils.cli_tools import mapper_main as mapper
+from library.utils.cli_tools import table_quality_main as tqm
 
 CLIS = [
     (gad.main, [], False),
@@ -174,7 +174,7 @@ def test_doc_type_negative_limit_in_config_exits(
         return orig(cfg, *a, **k)
 
     monkeypatch.setattr("library.cli.configure_logger", _conf)
-    monkeypatch.setattr("scripts.get_document_type.configure_logger", _conf)
+    monkeypatch.setattr("library.utils.cli_tools.get_document_type.configure_logger", _conf)
 
     rc = gdoctype.main(
         [

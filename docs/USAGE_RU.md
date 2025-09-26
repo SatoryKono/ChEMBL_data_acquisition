@@ -176,10 +176,10 @@ PubChem-дополнение добавляет детерминированны
 фолбэк или приведение к булевому типу, если downstream-потребители требуют
 исходные текстовые значения.【F:library/testitem_enrichment.py†L17-L216】
 
-## Инициализация входных данных (`get_input_initialisation.py`)
+## Инициализация входных данных (`library/utils/cli_tools/get_input_initialisation.py`)
 
 ```bash
-python scripts/get_input_initialisation.py \
+python -m library.utils.cli_tools.get_input_initialisation \
   --same-doc data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx \
   --all-doc data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx \
   --out-dir data/output/ChEMBL/processed
@@ -189,10 +189,10 @@ python scripts/get_input_initialisation.py \
 * Создаёт срезы по сущностям (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
 * Добавляет папку `data_validity_report/` с отчётами качества для каждого файла.
 
-## Профайлер качества таблиц (`scripts/table_quality_main.py`)
+## Профайлер качества таблиц (`library/utils/cli_tools/table_quality_main.py`)
 
 ```bash
-python scripts/table_quality_main.py \
+python -m library.utils.cli_tools.table_quality_main \
   --input data/input-smoke/activity.csv \
   --table-name activity
 ```

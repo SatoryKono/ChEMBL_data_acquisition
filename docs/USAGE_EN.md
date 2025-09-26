@@ -177,10 +177,10 @@ behaviour via `testitem_molecule_enrichment.flags.*` to disable the parent
 fallback or boolean coercion when feeding downstream systems that expect the
 raw catalogue tokens.【F:library/testitem_enrichment.py†L17-L216】
 
-## Input initialisation (`get_input_initialisation.py`)
+## Input initialisation (`library/utils/cli_tools/get_input_initialisation.py`)
 
 ```bash
-python scripts/get_input_initialisation.py \
+python -m library.utils.cli_tools.get_input_initialisation \
   --same-doc data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx \
   --all-doc data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx \
   --out-dir data/output/ChEMBL/processed
@@ -190,10 +190,10 @@ python scripts/get_input_initialisation.py \
 * Produces entity-specific slices (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
 * Creates a `data_validity_report/` folder with quality reports for each exported table.
 
-## Table quality profiler (`scripts/table_quality_main.py`)
+## Table quality profiler (`library/utils/cli_tools/table_quality_main.py`)
 
 ```bash
-python scripts/table_quality_main.py \
+python -m library.utils.cli_tools.table_quality_main \
   --input data/input-smoke/activity.csv \
   --table-name activity
 ```

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.table_quality_main import main
+from library.utils.cli_tools.table_quality_main import main
 
 
 def test_print_config_cli(tmp_path: Path, monkeypatch, capsys) -> None:

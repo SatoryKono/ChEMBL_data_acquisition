@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.check_determinism import run_check
+from library.utils.cli_tools.check_determinism import run_check
 
 
 def test_run_check_repeatable(tmp_path: Path) -> None:
