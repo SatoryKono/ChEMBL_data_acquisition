@@ -1033,7 +1033,7 @@
           "title": "Prefer Local Smiles",
           "type": "boolean"
         },
- 
+
         "prefer_local_values": {
           "default": true,
           "description": "Retain pre-existing pubchem_* values when PubChem responses are empty",
@@ -1097,6 +1097,7 @@
           "title": "Backoff Initial Seconds",
           "type": "number"
         },
+
  
         "use_parent_for_salts": {
           "default": false,
@@ -1105,6 +1106,7 @@
           "type": "boolean"
         },
  
+
         "cid_cache_path": {
           "default": null,
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
