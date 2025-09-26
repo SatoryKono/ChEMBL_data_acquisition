@@ -2,10 +2,16 @@
     {
         "activity_id": 2,
         "molecule_chembl_id": "CHEMBL3",
+        "assay_chembl_id": "A0",
         "target_id": "CHEMBL4",
         "standard_type": "IC50",
         "standard_value": -1.0,
+        "standard_relation": ">=",
         "relation": ">",
+        "standard_units": "uM",
         "units": "10 μM",
+        "activity_comment": "negative allosteric modulator",
+        "assay_description": "Binding displacement assay",
+        "data_validity_comment": "Out of range",
     }
 ]

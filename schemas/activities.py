@@ -51,6 +51,8 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         ),
         "lower_value": pa.Column(float, required=False, nullable=True, coerce=True),
         "upper_value": pa.Column(float, required=False, nullable=True, coerce=True),
+        "activity_properties": pa.Column(str, required=False, nullable=True),
+        "action_type": pa.Column(str, required=False, nullable=True),
         "pipeline_version": pa.Column(str, required=False, nullable=True),
         "timestamp_utc": pa.Column(str, required=False, nullable=True),
         #    "pA_value": pa.Column(float, pa.Check.in_range(-14, 14), required=False),
