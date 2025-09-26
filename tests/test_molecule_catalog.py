@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import requests
 
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
 from library.molecule_catalog import (
     fetch_parent_catalog,
     fetch_parent_catalog_for,
+    fetch_parent_for_id,
     load_parent_catalog,
     query_parent_catalog,
     update_parent_catalog_cache,
@@ -85,7 +87,8 @@ def test_fetch_parent_catalog_for_returns_only_requested(api_cfg: ApiCfg) -> Non
                     "parent_molecule_chembl_id": "CHEMBL99",
                 },
             ]
-        }
+        },
+        {"molecule": {"molecule_chembl_id": "CHEMBL_MISSING"}},
     ]
     client = DummyClient(responses)
 
@@ -95,8 +98,9 @@ def test_fetch_parent_catalog_for_returns_only_requested(api_cfg: ApiCfg) -> Non
         api_cfg=api_cfg,
     )
 
-    assert len(client.calls) == 1
+    assert len(client.calls) == 2
     assert "CHEMBL1%2CCHEMBL_MISSING" in client.calls[0]
+    assert client.calls[1].endswith("/molecule/CHEMBL_MISSING.json?format=json&fields=molecule_chembl_id%2Cparent_molecule_chembl_id")
     assert result == {"CHEMBL1": "CHEMBL10"}
 
 
@@ -132,6 +136,125 @@ def test_fetch_parent_catalog_for_chunks_requests(
 
     assert len(client.calls) == 2
     assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
+
+
+def test_fetch_parent_for_id_returns_pair(api_cfg: ApiCfg) -> None:
+    responses = [
+        {
+            "molecule": {
+                "molecule_chembl_id": "chembl1",
+                "parent_molecule_chembl_id": "chembl10",
+            }
+        }
+    ]
+    client = DummyClient(responses)
+
+    pair = fetch_parent_for_id(" chembl1 ", client=client, api_cfg=api_cfg)
+
+    assert pair == ("CHEMBL1", "CHEMBL10")
+    assert client.calls == [
+        "https://www.ebi.ac.uk/chembl/api/data/molecule/CHEMBL1.json?format=json&fields=molecule_chembl_id%2Cparent_molecule_chembl_id"
+    ]
+
+
+def test_fetch_parent_catalog_for_small_batch_uses_single_helper(
+    api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 10)
+    responses = [
+        {
+            "molecule": {
+                "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_chembl_id": "CHEMBL10",
+            }
+        },
+        {
+            "molecule": {
+                "molecule_chembl_id": "CHEMBL2",
+                "parent_molecule_chembl_id": "CHEMBL20",
+            }
+        },
+    ]
+    client = DummyClient(responses)
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"], client=client, api_cfg=api_cfg
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
+    assert all("/molecule/" in call for call in client.calls)
+
+
+def test_fetch_parent_catalog_for_falls_back_on_bulk_error(
+    api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api_cfg = api_cfg.model_copy(update={"backoff_factor": 0})
+    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 1)
+
+    class FallbackClient(DummyClient):
+        def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None = None):
+            if "molecule.json" in url:
+                self.calls.append(url)
+                raise requests.RequestException("bulk failure")
+            return super().request_json(url, cfg=cfg, timeout=timeout)
+
+    responses = [
+        {
+            "molecule": {
+                "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_chembl_id": "CHEMBL10",
+            }
+        }
+    ]
+    client = FallbackClient(responses)
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"], client=client, api_cfg=api_cfg
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10"}
+    fallback_calls = [call for call in client.calls if "/molecule/" in call]
+    assert len(fallback_calls) == api_cfg.retries + 1  # CHEMBL1 succeeds once; CHEMBL2 retries
+    assert any("CHEMBL1" in call for call in fallback_calls)
+
+
+def test_fetch_parent_catalog_for_partial_fallback_failure(
+    api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api_cfg = api_cfg.model_copy(update={"retries": 2, "backoff_factor": 0})
+    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 1)
+
+    class PartiallyFailingClient(DummyClient):
+        def __init__(self) -> None:
+            super().__init__(
+                [
+                    {
+                        "molecule": {
+                            "molecule_chembl_id": "CHEMBL1",
+                            "parent_molecule_chembl_id": "CHEMBL10",
+                        }
+                    }
+                ]
+            )
+
+        def request_json(self, url: str, *, cfg: ApiCfg, timeout: float | None = None):
+            if "molecule.json" in url:
+                self.calls.append(url)
+                raise requests.RequestException("bulk failure")
+            if "CHEMBL2" in url:
+                self.calls.append(url)
+                raise requests.RequestException("single failure")
+            return super().request_json(url, cfg=cfg, timeout=timeout)
+
+    client = PartiallyFailingClient()
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"], client=client, api_cfg=api_cfg
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10"}
+    chembl2_calls = [call for call in client.calls if "/molecule/CHEMBL2" in call]
+    assert len(chembl2_calls) == api_cfg.retries
 
 
 def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
