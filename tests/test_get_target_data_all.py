@@ -17,6 +17,7 @@ import pandas as pd
 from pytest import MonkeyPatch
 
 from library import target_postprocessing as tp
+from library import protein_classification as pc
 from library.config import Config
 from schemas.targets import TARGETS_COLUMN_ORDER
 from schemas import TargetsSchema
@@ -59,11 +60,8 @@ def test_run_all_uses_local_inputs(
     chembl_data = Path("tests/data/chembl_targets_min.csv")
     uniprot_data = Path("tests/data/uniprot_targets_min.csv")
     iuphar_data = Path("tests/data/iuphar_targets_min.csv")
-    organism_csv = Path("tests/data/organism_min.csv")
-
     original_chunk = cfg.target.chembl.chunk_size
     cfg.target.all.chunk_size = original_chunk + 2
-    cfg.target.all.organism_csv = organism_csv
     cfg.target.all.chembl_out = tmp_path / "chembl_out.csv"
     cfg.target.all.uniprot_out = tmp_path / "uniprot_out.csv"
     cfg.target.all.iuphar_out = tmp_path / "iuphar_out.csv"
@@ -90,17 +88,17 @@ def test_run_all_uses_local_inputs(
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *a, **k: None)
+    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
+    monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
 
-    # ``finalise_targets`` expects the ``type`` column to be missing prior to
-    # merging with organism data. The wrapper removes it to mimic production
-    # behaviour and keeps the original logic otherwise.
+    # ``finalise_targets`` expects to derive the cellularity column from taxonomy
+    # fields. The wrapper removes any pre-existing ``type`` column to mimic
+    # production behaviour and keeps the original logic otherwise.
     orig_finalise = tp.finalise_targets
 
-    def patched_finalise(
-        df: pd.DataFrame, organism: pd.DataFrame, **kw: object
-    ) -> pd.DataFrame:
+    def patched_finalise(df: pd.DataFrame, **kw: object) -> pd.DataFrame:
         df = df.drop(columns=["type"], errors="ignore")
-        return orig_finalise(df, organism, **kw)
+        return orig_finalise(df, **kw)
 
     monkeypatch.setattr(tp, "finalise_targets", patched_finalise)
 
@@ -138,7 +136,7 @@ def test_run_all_uses_local_inputs(
     assert row["target_chembl_id"] == "CHEMBL1"
     assert row["uniprot_id_primary"] == "P12345"
     assert row["gene_symbol"] == "GENEA"
-    assert row["target_type"] == "-"
+    assert row["target_type"] == "Multicellular organism"
     assert (
         row["protein_synonym_list"]
         == "gene1|genea|sec1|alpha component|alt|recommended|name1|name2|alpha"

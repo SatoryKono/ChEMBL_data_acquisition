@@ -350,15 +350,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Timeout in seconds for each HTTP request",
     )
     all_cmd.add_argument(
-        "--organism-csv",
-        type=Path,
-        default=None,
-        help=(
-            "CSV mapping 'genus' to organism 'type' for finalisation "
-            "(default: config resources.organism_csv)"
-        ),
-    )
-    all_cmd.add_argument(
         "--uniprot-column",
         default="uniprot_id",
         choices=["uniprot_id", "mapping_uniprot_id"],
@@ -1013,13 +1004,7 @@ def merge_results(
         classifier = pc.classifier_from_config(cfg)
     merged = pc.append_protein_class_predictions(merged, classifier)
     processed = tp.postprocess_targets(merged)
-    organism_df = pd.read_csv(
-        cfg.target.all.organism_csv,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-        dtype=str,
-    )
-    final_df = tp.finalise_targets(processed, organism_df)
+    final_df = tp.finalise_targets(processed)
     logger.info("merge_results_done", rows=len(final_df))
     return final_df
 
@@ -1184,7 +1169,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "data_dir": "target.all.data_dir",
                 "target_csv": "target.all.target_csv",
                 "family_csv": "target.all.family_csv",
-                "organism_csv": "target.all.organism_csv",
                 "uniprot_column": "target.all.uniprot_column",
                 "chembl_out": "target.all.chembl_out",
                 "uniprot_out": "target.all.uniprot_out",

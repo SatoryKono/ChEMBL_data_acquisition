@@ -75,9 +75,45 @@
 
 #### Обогащение активностей (`activity_enrichment`)
 
+Блок отвечает за дополнительные атрибуты, которые записываются в каждую строку активностей. Он работает совместно с
+отдельной конфигурацией `activity_bounds` (описана ниже), отвечающей только за расчёт числовых границ.
+`activity_enrichment` состоит из двух независимых подсекций, каждая включается собственным флагом.
+
+##### Маркировка типа действия (`activity_enrichment.action_type`)
+
+* `enabled` — главный переключатель (по умолчанию `true`).【F:config.yaml†L192-L193】
+* `column` — название выходной колонки с итоговой меткой (`action_type`).【F:config.yaml†L194-L194】
+* Флаги логирования помогают отслеживать диагностические случаи:
+  * `log_missing` выводит предупреждение, если метка не определена (`true`).【F:config.yaml†L195-L195】
+  * `log_distribution` печатает итоговую статистику распределения (`true`).【F:config.yaml†L196-L196】
+* `metrics` сопоставляет типы измерений (IC50, EC50 и т.д.) с базовыми метками (`inhibition`, `activation`, `binding`). Список
+  расширяется при необходимости.【F:config.yaml†L197-L202】
+* `triages`, `functionality`, `mechanism` — словари переопределений для текстовых совпадений. По умолчанию заполнены только
+  типичные функциональные роли (agonist, antagonist и пр.).【F:config.yaml†L203-L210】
+* Списки `triage_fields`, `functionality_fields`, `mechanism_fields` задают, какие исходные колонки просматриваются перед применением
+  значений по метрикам.【F:config.yaml†L211-L219】
+* `allowlist` ограничивает допустимые метки; значения вне списка заменяются на `fallback` после логирования отклонения.【F:config.yaml†L220-L227】
+* `positive_label` и `negative_label` задают читаемые ярлыки для положительных/отрицательных модуляторов (`PAM`/`NAM`), а
+  `fallback` равен `unknown`.【F:config.yaml†L228-L230】
+
+##### Сводка свойств активности (`activity_enrichment.activity_properties`)
+
+* `enabled` — флаг включения (`true`).【F:config.yaml†L231-L233】
+* `column` — исходная колонка со структурированными свойствами (`activity_properties`).【F:config.yaml†L233-L233】
+* `summary_column` — колонка для текстового резюме (`activity_property_summary`).【F:config.yaml†L234-L234】
+* `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).【F:config.yaml†L235-L237】
+* `separator` и `pair_separator` управляют форматированием списка свойств (`"; "` между парами и `"="` между названием и значением).【F:config.yaml†L238-L239】
+* `drop_source_column` удаляет исходную структурированную колонку после агрегации (`true`).【F:config.yaml†L240-L240】
+* Флаги логирования по умолчанию выключены (`log_missing=false`, `log_distribution=false`).【F:config.yaml†L241-L242】
+* `allowlist` ограничивает перечень сохраняемых групп (measurement, assay, comments, effect_features, triage, mechanism,
+  functionality).【F:config.yaml†L243-L250】
+* `hash_column` хранит детерминированный отпечаток итоговых свойств (`properties_hash`) для отслеживания изменений далее по цепочке.【F:config.yaml†L251-L251】
+
+##### Границы активности (`activity_bounds`)
+
 Пайплайн активностей дополняет выгрузку нормализованными границами с помощью `compute_activity_bounds` в
-`scripts/get_activity_data.py`. Настройки собраны в блоке `activity_bounds` и управляют последовательностью детерминированных
-шагов, которые выполняются для каждой строки в следующем порядке：【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+`scripts/get_activity_data.py`. Настройки собраны в отдельном блоке `activity_bounds` (вне `activity_enrichment`) и управляют
+последовательностью детерминированных шагов, которые выполняются для каждой строки в следующем порядке：【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
 
 1. Использовать готовые `standard_lower_value`/`standard_upper_value`, если обе границы заданы.
 2. Скомбинировать `standard_value` с противоположной границей и заполнить пропущенное значение.
@@ -126,8 +162,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
-| `sources.molecule_catalog_path` | `dictionary/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
-| `sources.molecule_hierarchy_path` | `dictionary/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `sources.molecule_catalog_path` | `dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
+| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
 | `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
 | `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
 | `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |
@@ -160,20 +196,21 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Колонка с UniProt ID. |
-|  | `data_dir` | `dictionary/uniprot` | Каталог с кэшированными JSON UniProt. |
+|  | `data_dir` | `dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
 | `chembl` | `column` | `target_chembl_id` | Колонка с таргетами ChEMBL. |
 |  | `chunk_size` | `5` | Размер батча запросов. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `iuphar` | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `all` | `data_dir` | `dictionary/uniprot` | Каталог с данными UniProt. |
-|  | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
+| `all` | `data_dir` | `dictionary/_target/_uniprot` | Каталог с данными UniProt. |
+|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
+
 |  | `uniprot_column` | `uniprot_id` | Колонка для соединения с UniProt. |
 |  | `chembl_out` | `null` | Индивидуальный путь для объединённых данных ChEMBL. |
 |  | `uniprot_out` | `null` | Индивидуальный путь для объединённых данных UniProt. |
@@ -208,6 +245,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 | `uniprot_data_dir` | `dictionary/uniprot` | Кэшированные ответы UniProt. |
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Классификация типов таргетов. |
+
 
 > Таксономическая классификация таргетов теперь вычисляется по данным UniProt в коде пайплайна; отдельный файл `organism.csv` не требуется.
 

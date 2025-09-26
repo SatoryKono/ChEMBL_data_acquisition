@@ -6,8 +6,9 @@ The implementation is a Python translation of a PowerQuery script.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Hashable, cast
 from urllib.parse import quote
 
 import requests
@@ -150,25 +151,10 @@ def get_cid_from_inchikey(inchikey: str, cfg: PubChemCfg) -> str | None:
 
 
 def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
-    """Make an HTTP GET request and return parsed JSON.
+    """Make an HTTP GET request and return parsed JSON."""
 
-    Parameters
-    ----------
-    url: str
-        Endpoint to query.
-    cfg: PubChemCfg
-        API configuration. ``cfg.delay`` specifies the pause between retry
-        attempts.
-
-    Returns
-    -------
-    dict[str, Any] or None
-        Parsed JSON response on success, otherwise ``None`` when all retries
-        are exhausted or a non-recoverable error occurs.
-    """
     global _CACHE
     if _CACHE is None or _CACHE.ttl != cfg.cache_ttl:
-        # Initialise or refresh the cache with the configured TTL.
         _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
 
     cached = _CACHE.get(url)
@@ -177,7 +163,10 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         return cast(dict[str, Any], cached)
     logger.info("cache_miss", url=url, rps=cfg.rps, status="miss")
 
-    for attempt in range(1, cfg.retries + 1):
+    attempts = max(cfg.retries, 1)
+    backoff_delay = cfg.backoff_initial_seconds
+
+    for attempt in range(1, attempts + 1):
         event = "request_start" if attempt == 1 else "request_retry"
         logger.info(event, url=url, attempt=attempt, rps=cfg.rps)
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
@@ -186,7 +175,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)
             )
         except requests.RequestException as exc:  # pragma: no cover - network
-            if attempt >= cfg.retries:
+            if attempt >= attempts:
                 logger.error(
                     "request_error",
                     url=url,
@@ -201,28 +190,47 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     rps=cfg.rps,
                 )
                 return None
-            sleep(cfg.delay)
+            if cfg.delay > 0:
+                sleep(cfg.delay)
             continue
 
-        if response.status_code in (404, 400):
+        status = response.status_code
+        if status == 404:
+            logger.info("request_not_found", url=url, status=status, rps=cfg.rps)
+            logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+            return None
+        if status == 429 or 500 <= status < 600:
+            event_name = "request_rate_limited" if status == 429 else "request_server_error"
+            logger.warning(
+                event_name,
+                url=url,
+                status=status,
+                attempt=attempt,
+                rps=cfg.rps,
+            )
+            if attempt >= attempts:
+                logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+                return None
+            delay = backoff_delay if backoff_delay > 0 else cfg.delay
+            if delay > 0:
+                sleep(delay)
+                backoff_delay = delay * 2
+            continue
+        if status >= 400:
             logger.warning(
                 "request_unexpected_status",
                 url=url,
-                status=response.status_code,
+                status=status,
                 rps=cfg.rps,
             )
-            logger.info(
-                "request_fail",
-                url=url,
-                status=response.status_code,
-                rps=cfg.rps,
-            )
+            logger.info("request_fail", url=url, status=status, rps=cfg.rps)
             return None
+
         try:
             response.raise_for_status()
             data = cast(dict[str, Any], response.json())
         except requests.RequestException as exc:  # pragma: no cover - network
-            if attempt >= cfg.retries:
+            if attempt >= attempts:
                 logger.error(
                     "request_error",
                     url=url,
@@ -230,40 +238,32 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     attempt=attempt,
                     rps=cfg.rps,
                 )
-                logger.info(
-                    "request_fail",
-                    url=url,
-                    status=response.status_code,
-                    rps=cfg.rps,
-                )
+                logger.info("request_fail", url=url, status=status, rps=cfg.rps)
                 return None
-            sleep(cfg.delay)
+            if cfg.delay > 0:
+                sleep(cfg.delay)
             continue
         except ValueError:
             logger.warning(
                 "response_not_json",
                 url=url,
-                status=response.status_code,
+                status=status,
                 rps=cfg.rps,
             )
-            logger.info(
-                "request_fail",
-                url=url,
-                status=response.status_code,
-                rps=cfg.rps,
-            )
+            logger.info("request_fail", url=url, status=status, rps=cfg.rps)
             return None
 
         logger.info(
             "request_ok",
             url=url,
-            status=response.status_code,
+            status=status,
             rps=cfg.rps,
         )
-        assert _CACHE is not None  # for type checker; cache initialised above
+        assert _CACHE is not None
         _CACHE[url] = data
         logger.info("cache_set", url=url, rps=cfg.rps)
         return data
+
     return None
 
 
@@ -285,6 +285,33 @@ def validate_cid(cid: str) -> str | None:
     if cid in {"", "0", "-1"}:
         return None
     return cid
+
+
+def _select_primary_cid(
+    candidates: str | None,
+    *,
+    cache_key: str | None,
+    identifier: str,
+    value: str | None,
+) -> str | None:
+    """Return the first CID from ``candidates`` logging alternatives."""
+
+    if not candidates:
+        return None
+    cid_list = [cid.strip() for cid in str(candidates).split("|") if cid.strip()]
+    if not cid_list:
+        return None
+    primary = cid_list[0]
+    if len(cid_list) > 1:
+        logger.info(
+            "pubchem_multiple_cid",
+            chembl_id=cache_key,
+            identifier=identifier,
+            value=value,
+            cid=primary,
+            alternatives=cid_list[1:],
+        )
+    return primary
 
 
 def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:
@@ -400,6 +427,15 @@ class Properties:
     InChIKey: str | None
 
 
+@dataclass(frozen=True)
+class PubChemResolution:
+    """Result of resolving a PubChem record."""
+
+    cid: str | None
+    source: str | None
+    status: int | None = None
+
+
 def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     """Retrieve chemical properties for a compound by CID.
 
@@ -438,6 +474,140 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
         cast(str | None, item.get("InChI")),
         cast(str | None, item.get("InChIKey")),
     )
+
+
+def resolve_pubchem_record(
+    identifiers: Mapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    cid_cache: MutableMapping[str, str | None] | None = None,
+    cache_key: str | None = None,
+    resolution_cache: MutableMapping[Hashable, PubChemResolution] | None = None,
+    resolution_key: Hashable | None = None,
+) -> PubChemResolution:
+    """Resolve a PubChem CID according to ``cfg.resolve_order``."""
+
+    if resolution_cache is not None and resolution_key is not None:
+        cached_resolution = resolution_cache.get(resolution_key)
+        if cached_resolution is not None:
+            return cached_resolution
+
+    def _remember(resolution: PubChemResolution) -> PubChemResolution:
+        if resolution_cache is not None and resolution_key is not None:
+            resolution_cache[resolution_key] = resolution
+        if resolution.cid and cid_cache is not None and cache_key:
+            existing = cid_cache.get(cache_key)
+            if existing != resolution.cid:
+                cid_cache[cache_key] = resolution.cid
+        return resolution
+
+    def _resolve_cache() -> PubChemResolution | None:
+        if cid_cache is not None and cache_key:
+            cached_value = cid_cache.get(cache_key)
+            if isinstance(cached_value, str) and cached_value:
+                cid = _select_primary_cid(
+                    cached_value,
+                    cache_key=cache_key,
+                    identifier="cache",
+                    value=cached_value,
+                )
+                if cid:
+                    if cached_value != cid:
+                        cid_cache[cache_key] = cid
+                    return PubChemResolution(cid=cid, source="cache")
+        existing_cid = identifiers.get("pubchem_cid")
+        if existing_cid:
+            cid = _select_primary_cid(
+                existing_cid,
+                cache_key=cache_key,
+                identifier="pubchem_cid",
+                value=existing_cid,
+            )
+            if cid:
+                return PubChemResolution(cid=cid, source="pubchem_cid")
+        return None
+
+    def _attempt_candidates(
+        resolver: Callable[[str, PubChemCfg], str | None],
+        candidates: tuple[tuple[str, str | None], ...],
+    ) -> PubChemResolution | None:
+        for identifier, value in candidates:
+            if not value:
+                continue
+            resolved = resolver(value, cfg)
+            cid = _select_primary_cid(
+                resolved,
+                cache_key=cache_key,
+                identifier=identifier,
+                value=value,
+            )
+            if cid:
+                return PubChemResolution(cid=cid, source=identifier)
+        return None
+
+    def _resolve_smiles() -> PubChemResolution | None:
+        candidates = (
+            ("canonical_smiles", identifiers.get("canonical_smiles")),
+            ("pubchem_canonical_smiles", identifiers.get("pubchem_canonical_smiles")),
+            ("isomeric_smiles", identifiers.get("isomeric_smiles")),
+            ("pubchem_isomeric_smiles", identifiers.get("pubchem_isomeric_smiles")),
+        )
+        return _attempt_candidates(get_cid_from_smiles, candidates)
+
+    def _resolve_inchikey() -> PubChemResolution | None:
+        candidates = (
+            ("standard_inchi_key", identifiers.get("standard_inchi_key")),
+            ("pubchem_inchikey", identifiers.get("pubchem_inchikey")),
+        )
+        return _attempt_candidates(get_cid_from_inchikey, candidates)
+
+    def _resolve_inchi() -> PubChemResolution | None:
+        candidates = (
+            ("standard_inchi", identifiers.get("standard_inchi")),
+            ("pubchem_inchi", identifiers.get("pubchem_inchi")),
+        )
+        return _attempt_candidates(get_cid_from_inchi, candidates)
+
+    def _resolve_name() -> PubChemResolution | None:
+        name_value = identifiers.get("pref_name")
+        if not name_value:
+            return None
+        for identifier, resolver in (
+            ("pref_name", get_cid),
+            ("pref_name_partial", get_all_cid),
+        ):
+            resolved = resolver(name_value, cfg)
+            cid = _select_primary_cid(
+                resolved,
+                cache_key=cache_key,
+                identifier=identifier,
+                value=name_value,
+            )
+            if cid:
+                return PubChemResolution(cid=cid, source=identifier)
+        return None
+
+    handlers: dict[str, Callable[[], PubChemResolution | None]] = {
+        "cache": _resolve_cache,
+        "smiles": _resolve_smiles,
+        "inchikey": _resolve_inchikey,
+        "inchi": _resolve_inchi,
+        "pref_name": _resolve_name,
+        "name": _resolve_name,
+    }
+
+    for stage in cfg.resolve_order:
+        handler = handlers.get(stage.lower())
+        if handler is None:
+            raise ValueError(f"Unknown PubChem resolve order entry: {stage!r}")
+        resolution = handler()
+        if resolution and resolution.cid:
+            return _remember(resolution)
+
+    final = PubChemResolution(cid=None, source=None)
+    if resolution_cache is not None and resolution_key is not None:
+        resolution_cache[resolution_key] = final
+    return final
 
 
 def process_compound(compound_name: str, cfg: PubChemCfg) -> dict[str, str | None]:
@@ -481,6 +651,8 @@ __all__ = [
     "get_all_cid",
     "get_standard_name",
     "get_properties",
+    "resolve_pubchem_record",
     "process_compound",
     "Properties",
+    "PubChemResolution",
 ]
