@@ -94,7 +94,19 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 
 
 ## Конфигурация
-- Основной файл `config.yaml` содержит секции `api`, `chembl`, `openalex`, `crossref`, `uniprot`, `pubchem`, `document`, `target`, `resources`, `io`, `jobs`, `batch` и др., с дефолтами для URL, таймаутов, лимитов RPS, chunk-size и путей словарей.
+- Верхний уровень `config.yaml` разделён на блоки `sources`, `local`, `activity_bounds` и `system`.
+
+
+- `sources` описывает все удалённые зависимости: `sources.chembl.api` задаёт базовые URL, ретраи, троттлинг и заголовки; `sources.chembl.cache` и `sources.chembl.molecule_catalog` управляют локальными кешами; `sources.chembl.pipelines.*` фиксирует колонки идентификаторов, размеры батчей и лимиты для пайплайнов; соседние секции (`sources.openalex`, `sources.crossref`, `sources.uniprot.api`/`mapping`, `sources.iuphar`, `sources.pubchem`, `sources.pubmed`, `sources.semantic_scholar`) аналогично настраивают сети и rate limit.
+
+
+- `local` агрегирует файловую структуру: `local.resources` описывает каталоги словарей и ссылочных CSV, `local.io` унифицирует каталоги вывода/кеша и CSV-параметры, а `local.init` перечисляет Excel-источники и директории для пайплайна инициализации.
+
+
+- `activity_bounds` управляет вычислением диапазонов из relation-строк, включая точность округления, ограничение отрицательных значений и логирование неизвестных токенов.
+
+
+- `system` централизует глобальное поведение через `system.log`, `system.rate`, `system.retry` и весовые таблицы `system.doc_type`.
 
 
 - Pydantic-модели обеспечивают типизацию, валидацию адресов и обязательного `user_agent` с email; порядок приоритетов: YAML < env < CLI.
