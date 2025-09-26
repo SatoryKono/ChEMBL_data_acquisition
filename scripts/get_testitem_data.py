@@ -5,12 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime, timedelta, timezone
-
-# ruff: noqa: E402
 from pathlib import Path
-
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
 from collections import ChainMap

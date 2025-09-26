@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from importlib import import_module
-from typing import cast
+from inspect import signature
+from typing import Callable, cast
 
 
 def _resolve_module(module: str):
@@ -32,7 +33,10 @@ def _resolve_module(module: str):
 def _run(module: str, argv: Sequence[str] | None = None) -> int:
     """Execute ``module.main`` from the supported CLI namespaces."""
 
-    main_func = _resolve_module(module).main
+    main_func: Callable[..., int] = _resolve_module(module).main
+    params = signature(main_func).parameters
+    if not params:
+        return cast(int, main_func())
     return cast(int, main_func(argv))
 
 

@@ -9,16 +9,11 @@ If ``--output`` is omitted, a file named
 
 from __future__ import annotations
 
-import sys
-
 # ruff: noqa: E402
 import time
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
-
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 import pandas as pd
 
