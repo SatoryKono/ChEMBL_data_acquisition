@@ -70,7 +70,8 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 
 
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
-PARENT_LOOKUP_SOURCE_REMOTE = "remote"
+PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
+PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
 
 
@@ -94,19 +95,21 @@ def _cache_state(path: Path) -> tuple[bool, float | None]:
     return True, stat.st_mtime
 
 
-def _resolve_parent_source(
+def _resolve_catalog_load_source(
     before: tuple[bool, float | None], after: tuple[bool, float | None]
 ) -> str:
-    """Determine parent lookup source from cache state transitions."""
+    """Determine the lookup source after invoking ``load_parent_catalog``."""
 
     before_exists, before_mtime = before
     after_exists, after_mtime = after
 
     if after_exists and before_exists and after_mtime == before_mtime:
         return PARENT_LOOKUP_SOURCE_CACHE
-    if after_exists or before_exists != after_exists:
-        return PARENT_LOOKUP_SOURCE_REMOTE
-    return PARENT_LOOKUP_SOURCE_REMOTE
+    if after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    if before_exists and not after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    return PARENT_LOOKUP_SOURCE_SYNC
 
 
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
@@ -175,7 +178,11 @@ def attach_parent_molecule_ids(
     source_resolved = source
     normalised_child = _normalise_chembl_ids(result[child_column])
     unique_children = normalised_child[normalised_child != ""].unique()
-    catalog_data: MutableMapping[str, str] | None
+    catalog_data: MutableMapping[str, str]
+    used_partial_cache = False
+    needs_full_sync = False
+    partial_fetch_used = False
+    full_sync_used = False
 
     if catalog is not None:
         base_view = {
@@ -185,34 +192,21 @@ def attach_parent_molecule_ids(
         }
         catalog_data = ChainMap({}, base_view)
     else:
-        catalog_data = None
-    used_partial_cache = False
-
-    if catalog_data is None:
-        cache_before = _cache_state(catalog_cfg.cache_path)
+        catalog_data = {}
         queried = query_parent_catalog(unique_children, catalog_cfg)
-        cache_after = _cache_state(catalog_cfg.cache_path)
-        if queried or catalog_cfg.sqlite_path.is_file():
-            catalog_data = dict(queried)
-            source_resolved = _resolve_parent_source(cache_before, cache_after)
+        if queried:
+            catalog_data.update(queried)
             used_partial_cache = True
+            if source_resolved is None:
+                source_resolved = PARENT_LOOKUP_SOURCE_CACHE
         else:
-            catalog_data = load_parent_catalog(
-                client=client,
-                api_cfg=api_cfg,
-                catalog_cfg=catalog_cfg,
-                timeout=timeout,
-            )
-            cache_after = _cache_state(catalog_cfg.cache_path)
-            source_resolved = _resolve_parent_source(cache_before, cache_after)
-    else:
-        if source_resolved is None:
-            cache_exists = catalog_cfg.cache_path.is_file()
-            source_resolved = (
-                PARENT_LOOKUP_SOURCE_CACHE
-                if cache_exists
-                else PARENT_LOOKUP_SOURCE_REMOTE
-            )
+            sqlite_exists = catalog_cfg.sqlite_path.is_file()
+            used_partial_cache = sqlite_exists
+            if sqlite_exists:
+                if source_resolved is None:
+                    source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+            else:
+                needs_full_sync = True
 
     parent_map = {
         key: catalog_data[key]
@@ -220,8 +214,8 @@ def attach_parent_molecule_ids(
         if key in catalog_data
     }
     missing_ids = [key for key in unique_children if key not in parent_map]
-    fetched_remote = False
 
+    fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
         try:
             fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -233,17 +227,38 @@ def attach_parent_molecule_ids(
         except (requests.RequestException, ValueError) as exc:
             logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
             fetched = {}
-        else:
-            if fetched:
-                fetched_remote = True
         if fetched:
+            partial_fetch_used = True
             catalog_data.update(fetched)
             parent_map.update(fetched)
-            if catalog is None:
-                if used_partial_cache:
-                    update_parent_catalog_cache(fetched, catalog_cfg)
-                else:
-                    write_parent_catalog_cache(catalog_data, catalog_cfg)
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            if used_partial_cache:
+                update_parent_catalog_cache(fetched, catalog_cfg)
+            else:
+                write_parent_catalog_cache(catalog_data, catalog_cfg)
+                used_partial_cache = True
+
+    if missing_ids and catalog is None and needs_full_sync:
+        cache_before_load = _cache_state(catalog_cfg.cache_path)
+        catalog_data = load_parent_catalog(
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+        )
+        cache_after_load = _cache_state(catalog_cfg.cache_path)
+        full_sync_used = True
+        source_resolved = _resolve_catalog_load_source(
+            cache_before_load, cache_after_load
+        )
+        if partial_fetch_used:
+            catalog_data.update(fetched)
+        parent_map = {
+            key: catalog_data.get(key, parent_map.get(key, ""))
+            for key in unique_children
+            if key in catalog_data or key in parent_map
+        }
+        missing_ids = [key for key in unique_children if key not in parent_map]
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
@@ -260,15 +275,20 @@ def attach_parent_molecule_ids(
     missing = int(combined_parent.isna().sum())
     attached = len(result) - missing
 
-    if source_resolved is None:
-        source_resolved = PARENT_LOOKUP_SOURCE_REMOTE
+    final_source = source_resolved
+    if full_sync_used:
+        final_source = PARENT_LOOKUP_SOURCE_SYNC
+    elif partial_fetch_used:
+        final_source = PARENT_LOOKUP_SOURCE_PARTIAL
+    elif final_source is None:
+        final_source = (
+            PARENT_LOOKUP_SOURCE_CACHE
+            if used_partial_cache or catalog is not None
+            else PARENT_LOOKUP_SOURCE_SYNC
+        )
 
     stats = ParentLookupStats(
-        source=(
-            PARENT_LOOKUP_SOURCE_REMOTE
-            if fetched_remote
-            else source_resolved
-        ),
+        source=final_source,
         missing=missing,
         unique=int(len(unique_children)),
         attached=int(attached),
@@ -469,11 +489,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
             cache_after = _cache_state(cfg.molecule_catalog.cache_path)
-            parent_catalog_source = _resolve_parent_source(cache_before, cache_after)
+            parent_catalog_source = (
+                PARENT_LOOKUP_SOURCE_CACHE
+                if cache_after == cache_before
+                else PARENT_LOOKUP_SOURCE_SYNC
+            )
             if parent_catalog:
                 need_lookup -= set(parent_catalog)
 
-        fetched_remote = False
         if need_lookup:
             try:
                 fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -488,10 +511,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             if fetched:
                 parent_catalog.update(fetched)
                 update_parent_catalog_cache(fetched, cfg.molecule_catalog)
-                fetched_remote = True
-                parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
-        if fetched_remote:
-            parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
+                parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
