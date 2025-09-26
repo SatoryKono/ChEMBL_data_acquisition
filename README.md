@@ -108,11 +108,14 @@ pre-commit run --all-files
    files, run one of the data pipelines, for example:
 
   ```bash
-  python -m library.utils.cli_tools.mapper_main --input tests/data/assays.csv \
-      --output out/mapped.csv --log-level DEBUG
-  python -m library.utils.cli_tools.table_quality_main --input tests/data/assays.csv \
-      --output out/report.csv --log-level INFO
+  python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
+      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
+  python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
+      --output out/quality --table-name chembl_targets --log-level INFO
   ```
+
+  Во втором примере аргумент `--output` должен указывать на каталог, в котором
+  будут созданы файлы отчёта.
 
 4. **Run the tests** – see [Тесты](#тесты).
 
