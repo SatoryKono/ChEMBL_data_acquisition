@@ -125,6 +125,26 @@ python scripts/get_target_data.py \
 
 Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository.
 
+## Target pipeline harness (`pipeline_targets_main.py`)
+
+```bash
+python scripts/pipeline_targets_main.py \
+  --input tests/data/chembl_targets_min.csv \
+  --output out/targets_cached.csv \
+  --chunk-size 50 \
+  --batch-size 50 \
+  --limit 200
+```
+
+This lightweight CLI mirrors the argument structure of `get_target_data.py`
+while exercising `library.pipeline_targets.run_pipeline` with cached ChemBL
+chunks only. It reads identifiers via `read_ids`, honours `--chunk-size`,
+`--limit`, delimiter/encoding overrides, forwards the batch size to the
+pipeline and writes the resulting table with `add_pipeline_metadata` and
+`write_csv`, keeping determinism identical to the production pipeline.
+Use it to validate configuration overrides, logging and batching behaviour
+before hitting external APIs.【F:scripts/pipeline_targets_main.py†L1-L141】
+
 ## Test item enrichment (`get_testitem_data.py`)
 
 ```bash

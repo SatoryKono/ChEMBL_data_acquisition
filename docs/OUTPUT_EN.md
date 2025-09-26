@@ -134,3 +134,15 @@ pipeline detects salts when `parent_molecule_chembl_id` differs from
 normalises catalogue flags to the pandas nullable boolean dtype. Missing child
 flags fall back to the parent entry when available, while absent parent/child
 records are surfaced via warning events for troubleshooting.【F:scripts/get_testitem_data.py†L205-L233】【F:library/testitem_enrichment.py†L17-L216】
+
+## Cached target exports (`pipeline_targets_main.py`)
+
+`scripts/pipeline_targets_main.py` produces a ChemBL-only snapshot of the target
+pipeline, mirroring the CLI options of the production runner while skipping
+network calls. The helper chunks identifiers through `read_ids`, passes them to
+`library.pipeline_targets.run_pipeline` with a deterministic ChemBL fetcher,
+annotates the dataframe via `add_pipeline_metadata` and serialises it with
+`write_csv`. The resulting CSV and metadata sidecar follow the same ordering and
+logging conventions as `get_target_data.py`, making the harness ideal for dry
+runs, testing configuration overrides and confirming batching behaviour without
+touching external APIs.【F:scripts/pipeline_targets_main.py†L43-L141】
