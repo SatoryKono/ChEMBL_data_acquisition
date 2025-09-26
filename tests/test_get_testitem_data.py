@@ -59,6 +59,54 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     pd.testing.assert_frame_equal(result, expected)
 
 
+def test_add_pubchem_data_skips_polymers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+            "canonical_smiles": ["", "C", "CC"],
+            "molecule_type": ["Polymer", "Mixture", "Small molecule"],
+            "pubchem_cid": ["111", "222", ""],
+            "pubchem_iupac_name": ["existing", "mixture", ""],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, skip_polymers=True)
+
+    calls: list[str] = []
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    def fake_resolve(row: pd.Series, cache: dict[str, str | None], cfg: pl.PubChemCfg) -> str:
+        calls.append(row["molecule_chembl_id"])
+        return "333"
+
+    monkeypatch.setattr(gtd, "resolve_pubchem_cid", fake_resolve)
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: None)
+    monkeypatch.setattr(
+        gtd.logger,
+        "warning",
+        lambda event, **kwargs: warnings.append((event, kwargs)),
+    )
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert calls == ["CHEMBL3"]
+    assert any(
+        event == "pubchem_skip_polymers"
+        and kwargs.get("count") == 2
+        and kwargs.get("polymer_count") == 1
+        and kwargs.get("mixture_count") == 1
+        and kwargs.get("indexes") == [0, 1]
+        for event, kwargs in warnings
+    )
+
+    assert result.loc[0, "pubchem_cid"] == "111"
+    assert result.loc[0, "pubchem_iupac_name"] == "existing"
+    assert result.loc[1, "pubchem_cid"] == "222"
+    assert result.loc[1, "pubchem_iupac_name"] == "mixture"
+    assert result.loc[2, "pubchem_cid"] == "333"
+
+
 def test_resolve_pubchem_cid_prefers_inchikey(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

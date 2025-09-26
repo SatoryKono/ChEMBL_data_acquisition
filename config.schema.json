@@ -1020,6 +1020,12 @@
           "title": "Prefer Local Smiles",
           "type": "boolean"
         },
+        "skip_polymers": {
+          "default": false,
+          "description": "Skip PubChem lookups for polymer or mixture records",
+          "title": "Skip Polymers",
+          "type": "boolean"
+        },
         "cid_cache_path": {
           "default": null,
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
