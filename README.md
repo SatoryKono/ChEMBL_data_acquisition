@@ -154,8 +154,17 @@ python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 Для smoke-теста CLI выполните:
 
 ```bash
-python -m library.utils.cli_tools.mapper_batch_main --input tests/data/assays.csv \
+python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
     --output out/mapped.csv --log-level INFO
+```
+
+Перед запуском создайте файл `chembl_ids.csv` с заголовком `chembl_id` и
+нужными идентификаторами ChEMBL, например:
+
+```csv
+chembl_id
+CHEMBL1
+CHEMBL2
 ```
 
 
@@ -276,8 +285,17 @@ CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
 Запустить скрипт с автоматической подгрузкой настроек можно так:
 
 ```bash
-python -m dotenv run -- python scripts/get_assay_data.py --input tests/data/assays.csv \\
+python -m dotenv run -- python scripts/get_assay_data.py --input assay_ids.csv \\
     --output out/assays.csv
+```
+
+Файл `assay_ids.csv` должен содержать столбец `assay_chembl_id` с нужными
+идентификаторами, например:
+
+```csv
+assay_chembl_id
+CHEMBL1234567
+CHEMBL2345678
 ```
 
 Утилиты читают переменные окружения автоматически, поэтому значения из
@@ -358,7 +376,7 @@ api:
 Пример включения JSON‑формата через переменную окружения:
 
 ```bash
-LOG_FORMAT=json python scripts/get_assay_data.py --input tests/data/assays.csv \
+LOG_FORMAT=json python scripts/get_assay_data.py --input assay_ids.csv \
     --output out/assays.csv --log-level INFO
 ```
 
@@ -366,7 +384,7 @@ LOG_FORMAT=json python scripts/get_assay_data.py --input tests/data/assays.csv \
 `CHEMBL_DA_LOG_LEVEL`:
 
 ```bash
-CHEMBL_DA_LOG_LEVEL=DEBUG python scripts/get_assay_data.py --input tests/data/assays.csv \
+CHEMBL_DA_LOG_LEVEL=DEBUG python scripts/get_assay_data.py --input assay_ids.csv \
     --output out/assays.csv
 ```
 
