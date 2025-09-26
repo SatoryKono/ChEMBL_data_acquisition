@@ -123,7 +123,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 - Configuration points to the root `dictionary` directory, IUPHAR and UniProt references, plus `targets_type.csv` and related CSVs for target classification.
 
 
-- `input_initialisation_library` consumes `dictionary/_Curation/citation_fraction.csv` and `dictionary/_Target/targets_type.csv` to compute citation metrics, target types, and other attributes; missing files trigger explicit errors with expected paths.
+- `input_initialisation_library` consumes dictionaries from `dictionary/_Target` (classification tables such as `targets_type.csv`), `dictionary/_target` (IUPHAR and UniProt JSON/CSV metadata), and `dictionary/_testitem` (molecule catalog, hierarchy, and test item listings) to compute citation metrics, target types, and other attributes; missing files trigger explicit errors with expected paths.
 
 
 - Enrichment stages read local UniProt JSON and classification CSVs to reconcile external references with the ChEMBL export.

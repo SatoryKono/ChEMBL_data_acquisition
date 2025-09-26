@@ -123,7 +123,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 - Конфигурация указывает базовый каталог `dictionary`, пути к IUPHAR и UniProt справочникам, а также `targets_type.csv` и связанные csv-файлы для классификации таргетов.
 
 
-- Модуль `input_initialisation_library` использует файлы `dictionary/_Curation/citation_fraction.csv` и `dictionary/_Target/targets_type.csv` для расчёта показателей цитирования, типов таргетов и других атрибутов; при отсутствии файлов генерируется понятная ошибка с ожидаемыми путями.
+- Модуль `input_initialisation_library` использует словари из каталогов `dictionary/_Target` (классификационные таблицы, например `targets_type.csv`), `dictionary/_target` (метаданные IUPHAR и UniProt в JSON/CSV) и `dictionary/_testitem` (каталоги молекул, иерархия и перечни test item) для расчёта показателей цитирования, типов таргетов и других атрибутов; при отсутствии файлов генерируется понятная ошибка с ожидаемыми путями.
 
 
 - В процессе обогащения таблиц используется чтение локальных UniProt JSON и CSV классификаций, что позволяет согласовать внешние справочники с выгрузкой ChEMBL.
