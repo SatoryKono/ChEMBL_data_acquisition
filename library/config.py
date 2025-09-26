@@ -135,6 +135,7 @@ class MoleculeCatalogCfg(_BaseModel):
         default_factory=lambda: {"parent_molecule_chembl_id__isnull": "false"}
     )
     page_size: int = Field(500, ge=1)
+    fallback_single_limit: int | None = Field(default=None, ge=1)
 
 
 class OpenAlexCfg(_BaseModel):
@@ -267,6 +268,10 @@ class PubChemCfg(_BaseModel):
     cid_cache_path: Path | None = Field(
         default=None,
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
+    )
+    use_parent_for_salts: bool = Field(
+        False,
+        description="Resolve PubChem CIDs via parent structures when child lookups fail",
     )
 
     @field_validator("base")

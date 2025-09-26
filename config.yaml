@@ -69,7 +69,7 @@ sources:
       target:
         uniprot:
           column: "uniprot_id"
-          data_dir: "dictionary/uniprot"
+          data_dir: "dictionary/_target/_uniprot"
           limit: null
         chembl:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
@@ -77,16 +77,16 @@ sources:
           timeout: 30.0
           limit: null
         iuphar:
-          target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"
-          family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"
+          target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+          family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           limit: null
         all:
-          data_dir: "dictionary/uniprot"
-          target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"
-          family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"
+          data_dir: "dictionary/_target/_uniprot"
+          target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+          family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           chunk_size: 5
           timeout: 30.0
-          organism_csv: "dictionary/_Target/targets_type.csv"
+          organism_csv: "dictionary/_target/targets_type.csv"
           uniprot_column: "uniprot_id"
           chembl_out: null
           uniprot_out: null
@@ -136,6 +136,7 @@ sources:
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
     cache_ttl: 3600  # Request cache time-to-live in seconds
+    use_parent_for_salts: false  # Attempt parent structures when salt lookups fail
   pubmed:
     base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__SOURCES__PUBMED__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
@@ -150,11 +151,11 @@ sources:
 local:
   resources:
     dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
-    iuphar_target_csv: "dictionary/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
-    iuphar_family_csv: "dictionary/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
-    uniprot_data_dir: "dictionary/uniprot"  # Directory containing cached UniProt JSON files
-    organism_csv: "dictionary/_Target/targets_type.csv"  # Organism taxonomy mapping file
-    targets_type_csv: "dictionary/_Target/targets_type.csv"  # Target type mapping table
+    iuphar_target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
+    iuphar_family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
+    uniprot_data_dir: "dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
+    organism_csv: "dictionary/_target/targets_type.csv"  # Organism taxonomy mapping file
+    targets_type_csv: "dictionary/_target/targets_type.csv"  # Target type mapping table
   io:
     output_dir: "data/output"  # Directory for generated datasets
     cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
@@ -233,8 +234,8 @@ activity_enrichment:
 testitem_molecule_enrichment:
   enable: true
   sources:
-    molecule_catalog_path: "dictionary/molecule_catalog.csv"
-    molecule_hierarchy_path: "dictionary/molecule_hierarchy.csv"
+    molecule_catalog_path: "dictionary/_testitem/molecule_catalog.csv"
+    molecule_hierarchy_path: "dictionary/_testitem/molecule_hierarchy.csv"
   output:
     salt_as_null_when_absent: true
   flags:

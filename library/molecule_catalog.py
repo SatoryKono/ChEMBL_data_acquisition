@@ -7,6 +7,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
+from time import perf_counter
 from typing import Mapping
 from urllib.parse import urlencode, urljoin
 
@@ -23,6 +24,7 @@ _PARENT_LOOKUP_FIELDS = tuple(_DEFAULT_CATALOG_CFG.fields or ()) or (
 _PARENT_LOOKUP_CHILD_FIELD = _DEFAULT_CATALOG_CFG.child_field
 _PARENT_LOOKUP_PARENT_FIELD = _DEFAULT_CATALOG_CFG.parent_field
 _PARENT_LOOKUP_CHUNK_SIZE = _DEFAULT_CATALOG_CFG.page_size
+_PARENT_LOOKUP_SINGLE_LIMIT = _DEFAULT_CATALOG_CFG.fallback_single_limit
 _PARENT_LOOKUP_FALLBACK_THRESHOLD = 1
 _PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN = 1
 _SQLITE_VARIABLE_LIMIT = 900
@@ -190,33 +192,111 @@ def _fetch_parent_catalog_via_helper(
     api_cfg: ApiCfg,
     timeout: float | None,
     existing: Mapping[str, str],
+    catalog_cfg: MoleculeCatalogCfg | None = None,
+    allow_rebatch: bool = True,
 ) -> dict[str, str]:
+    cfg = catalog_cfg or _DEFAULT_CATALOG_CFG
+    pending: list[str] = []
+    seen: set[str] = set()
+    for chembl_id in ids:
+        if chembl_id in existing or chembl_id in seen:
+            continue
+        seen.add(chembl_id)
+        pending.append(chembl_id)
+
+    if not pending:
+        return {}
+
     attempts = max(_PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN, api_cfg.retries)
     delay = api_cfg.backoff_factor
+    single_limit = cfg.fallback_single_limit
     result: dict[str, str] = {}
-    for chembl_id in ids:
-        if chembl_id in existing or chembl_id in result:
-            continue
-        for attempt in range(1, attempts + 1):
-            try:
-                pair = fetch_parent_for_id(
-                    chembl_id, client=client, api_cfg=api_cfg, timeout=timeout
-                )
-            except Exception as exc:  # pragma: no cover - defensive logging
-                if attempt >= attempts:
-                    logger.warning(
-                        "parent_lookup_single_failed",
-                        extra={"chembl_id": chembl_id, "error": str(exc)},
+    batch_attempts = 0
+    single_requests = 0
+    fallback_start = perf_counter()
+
+    try:
+        retry_chunk_size = 0
+        if allow_rebatch:
+            base_chunk_size = max(1, cfg.page_size)
+            retry_chunk_size = base_chunk_size // 2
+            if retry_chunk_size < 2:
+                retry_chunk_size = 0
+            elif retry_chunk_size >= base_chunk_size and base_chunk_size > 1:
+                retry_chunk_size = base_chunk_size - 1
+            retry_chunk_size = min(len(pending), retry_chunk_size)
+
+        remaining: list[str] = []
+        if retry_chunk_size and len(pending) > 1:
+            for chunk in _chunked(pending, retry_chunk_size):
+                batch_attempts += 1
+                try:
+                    chunk_result = _fetch_parent_catalog_chunk(
+                        chunk, client=client, api_cfg=api_cfg, timeout=timeout
                     )
-                    break
-                if delay:
-                    sleep(delay * (2 ** (attempt - 1)))
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.warning(
+                        "parent_lookup_rebatch_failed",
+                        extra={"count": len(chunk), "error": str(exc)},
+                    )
+                    remaining.extend(chunk)
+                    continue
+                result.update(chunk_result)
+                missing = [
+                    chembl_id for chembl_id in chunk if chembl_id not in chunk_result
+                ]
+                if missing:
+                    remaining.extend(missing)
+        else:
+            remaining = list(pending)
+
+        total_remaining = len(remaining)
+        for chembl_id in remaining:
+            if chembl_id in existing or chembl_id in result:
                 continue
-            if pair is None:
+            if single_limit is not None and single_requests >= single_limit:
+                logger.warning(
+                    "parent_lookup_single_limit_reached",
+                    extra={
+                        "limit": single_limit,
+                        "remaining": max(total_remaining - single_requests, 0),
+                    },
+                )
                 break
-            child_id, parent_id = pair
-            result[child_id] = parent_id
-            break
+            single_requests += 1
+            for attempt in range(1, attempts + 1):
+                try:
+                    pair = fetch_parent_for_id(
+                        chembl_id, client=client, api_cfg=api_cfg, timeout=timeout
+                    )
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    if attempt >= attempts:
+                        logger.warning(
+                            "parent_lookup_single_failed",
+                            extra={"chembl_id": chembl_id, "error": str(exc)},
+                        )
+                        break
+                    if delay:
+                        sleep(delay * (2 ** (attempt - 1)))
+                    continue
+                if pair is None:
+                    break
+                child_id, parent_id = pair
+                result[child_id] = parent_id
+                break
+    finally:
+        elapsed = perf_counter() - fallback_start
+        logger.info(
+            "parent_lookup_fallback_summary",
+            extra={
+                "attempted": len(pending),
+                "resolved": len(result),
+                "single_ids": single_requests,
+                "batch_attempts": batch_attempts,
+                "elapsed_seconds": elapsed,
+            },
+        )
+
     return result
 
 
@@ -226,6 +306,7 @@ def fetch_parent_catalog_for(
     client: ChemblClient,
     api_cfg: ApiCfg,
     timeout: float | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
 ) -> dict[str, str]:
     """Fetch parent mappings for *ids* from the ChEMBL API."""
 
@@ -247,6 +328,7 @@ def fetch_parent_catalog_for(
     if not unique_ids:
         return {}
 
+    cfg = catalog_cfg or _DEFAULT_CATALOG_CFG
     effective_timeout = timeout if timeout is not None else api_cfg.timeout_read
     result: dict[str, str] = {}
 
@@ -257,13 +339,16 @@ def fetch_parent_catalog_for(
             api_cfg=api_cfg,
             timeout=effective_timeout,
             existing=result,
+            catalog_cfg=cfg,
+            allow_rebatch=False,
         )
         result.update(fallback_result)
         return result
 
     fallback_candidates: list[str] = []
 
-    for chunk in _chunked(unique_ids, _PARENT_LOOKUP_CHUNK_SIZE):
+    chunk_size = max(1, cfg.page_size)
+    for chunk in _chunked(unique_ids, chunk_size):
         try:
             chunk_result = _fetch_parent_catalog_chunk(
                 chunk, client=client, api_cfg=api_cfg, timeout=effective_timeout
@@ -290,6 +375,7 @@ def fetch_parent_catalog_for(
                 api_cfg=api_cfg,
                 timeout=effective_timeout,
                 existing=result,
+                catalog_cfg=cfg,
             )
             result.update(fallback_result)
 
