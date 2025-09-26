@@ -22,6 +22,12 @@ sources:
     cache:
       cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA_CACHE_TTL)
       cache_maxsize: 1024  # Max cached ChEMBL responses (env: CHEMBL_DA_CACHE_MAXSIZE)
+    molecule_catalog:
+      cache_path: "data/cache/molecule_parent_catalog.json"  # Local cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_CACHE)
+      endpoint: "molecule"  # API resource providing parent relationships
+      child_field: "molecule_chembl_id"  # Column containing molecule identifiers
+      parent_field: "parent_molecule_chembl_id"  # Column containing parent molecule identifiers
+      page_size: 500  # Page size for catalog fetching
     pipelines:
       activity:
         column: "activity_chembl_id"

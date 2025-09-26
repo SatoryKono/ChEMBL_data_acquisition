@@ -133,6 +133,19 @@ def test_cache_dir_alias(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert cfg.io.cache_dir == cache
 
 
+def test_molecule_catalog_cache_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    cache = tmp_path / "catalog.json"
+    monkeypatch.setenv("CHEMBL_DA_MOLECULE_CATALOG_CACHE", str(cache))
+
+    cfg = load_config(path)
+
+    assert cfg.molecule_catalog.cache_path == cache
+
+
 def test_chembl_cache_maxsize_from_yaml(tmp_path: Path) -> None:
     """Custom ``chembl.cache_maxsize`` should override the default."""
 

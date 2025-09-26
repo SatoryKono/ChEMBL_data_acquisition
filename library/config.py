@@ -121,6 +121,21 @@ class ChemblCacheCfg(_BaseModel):
     cache_maxsize: int = Field(1024, ge=1)
 
 
+class MoleculeCatalogCfg(_BaseModel):
+    cache_path: Path = Path("data/cache/molecule_parent_catalog.json")
+    endpoint: str = "molecule"
+    child_field: str = "molecule_chembl_id"
+    parent_field: str = "parent_molecule_chembl_id"
+    fields: tuple[str, ...] = (
+        "molecule_chembl_id",
+        "parent_molecule_chembl_id",
+    )
+    filters: dict[str, str] = Field(
+        default_factory=lambda: {"parent_molecule_chembl_id__isnull": "false"}
+    )
+    page_size: int = Field(500, ge=1)
+
+
 class OpenAlexCfg(_BaseModel):
     base: str = "https://api.openalex.org"
     timeout_connect: int = Field(5, ge=1)
@@ -469,6 +484,9 @@ class ChemblPipelinesCfg(_BaseModel):
 class ChemblSourceCfg(_BaseModel):
     api: ApiCfg = Field(default_factory=lambda: ApiCfg())
     cache: ChemblCacheCfg = Field(default_factory=lambda: ChemblCacheCfg())
+    molecule_catalog: MoleculeCatalogCfg = Field(
+        default_factory=lambda: MoleculeCatalogCfg()
+    )
     pipelines: ChemblPipelinesCfg = Field(
         default_factory=lambda: ChemblPipelinesCfg()
     )
@@ -526,6 +544,10 @@ class Config(_BaseModel):
     @property
     def chembl(self) -> ChemblCacheCfg:
         return self.sources.chembl.cache
+
+    @property
+    def molecule_catalog(self) -> MoleculeCatalogCfg:
+        return self.sources.chembl.molecule_catalog
 
     @property
     def openalex(self) -> OpenAlexCfg:
@@ -937,6 +959,12 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA__IO__EXIST_OK": ["local", "io", "exist_ok"],
     "CHEMBL_DA_CACHE_MAXSIZE": ["sources", "chembl", "cache", "cache_maxsize"],
     "CHEMBL_DA_CACHE_TTL": ["sources", "chembl", "cache", "cache_ttl"],
+    "CHEMBL_DA_MOLECULE_CATALOG_CACHE": [
+        "sources",
+        "chembl",
+        "molecule_catalog",
+        "cache_path",
+    ],
     "CHEMBL_DA_DICT_DIR": ["local", "resources", "dictionary_dir"],
     "CHEMBL_DA_GLOBAL_BURST": ["system", "rate", "global_burst"],
     "CHEMBL_DA_GLOBAL_RPS": ["system", "rate", "global_rps"],
@@ -994,6 +1022,7 @@ _ALIAS_MAP: dict[str, list[str]] = {
 __all__ = [
     "ApiCfg",
     "ChemblCacheCfg",
+    "MoleculeCatalogCfg",
     "OpenAlexCfg",
     "CrossRefCfg",
     "UniprotCfg",
