@@ -340,6 +340,7 @@ python -m venv .venv && source .venv/bin/activate && pip install .[dev] && pytho
 
 
 ## Release Notes
-- Target taxonomy classification now runs entirely in code. Remove any references to
-  `dictionary/_Target/organism.csv` when upgrading; the lookup file is no longer shipped.
+- Target taxonomy classification now runs entirely in code; the legacy organism lookup
+  CSV and `--organism-csv` CLI flag have been removed. Update custom packaging or
+  deployment scripts that referenced them.
 
