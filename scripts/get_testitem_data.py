@@ -77,6 +77,14 @@ class ParentLookupStats:
     attached: int
 
 
+class ParentCatalog(dict[str, str]):
+    """Parent catalogue mapping with optional provenance metadata."""
+
+    def __init__(self, data: dict[str, str], *, source: str | None = None) -> None:
+        super().__init__(data)
+        self.source = source
+
+
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
     """Return ``series`` normalised to upper-case ChEMBL identifiers."""
 
@@ -96,6 +104,7 @@ def attach_parent_molecule_ids(
     api_cfg: ApiCfg,
     catalog_cfg: MoleculeCatalogCfg,
     timeout: float | None,
+    catalog: dict[str, str] | None = None,
 ) -> tuple[pd.DataFrame, ParentLookupStats]:
     """Attach parent molecule identifiers using the ChEMBL catalogue."""
 
@@ -137,17 +146,26 @@ def attach_parent_molecule_ids(
     cache_exists = cache_path.is_file()
     cache_mtime = cache_path.stat().st_mtime if cache_exists else None
 
-    catalog = molecule_catalog.load_parent_catalog(
-        client=client,
-        api_cfg=api_cfg,
-        catalog_cfg=catalog_cfg,
-        timeout=timeout,
-    )
+    if catalog is None:
+        catalog = molecule_catalog.load_parent_catalog(
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+        )
 
     cache_exists_after = cache_path.is_file()
     cache_mtime_after = cache_path.stat().st_mtime if cache_exists_after else None
-    if cache_exists_after and cache_exists and cache_mtime_after == cache_mtime:
-        source = PARENT_LOOKUP_SOURCE_CACHE
+    provided_source = getattr(catalog, "source", None)
+    if isinstance(provided_source, str):
+        source = provided_source
+    elif cache_exists_after and cache_exists:
+        if cache_mtime_after is not None and cache_mtime_after == cache_mtime:
+            source = PARENT_LOOKUP_SOURCE_CACHE
+        else:
+            source = PARENT_LOOKUP_SOURCE_REMOTE
+    elif cache_exists_after and not cache_exists:
+        source = PARENT_LOOKUP_SOURCE_REMOTE
     else:
         source = PARENT_LOOKUP_SOURCE_REMOTE
 
@@ -155,11 +173,16 @@ def attach_parent_molecule_ids(
     unique_children = normalised_child[normalised_child != ""].unique()
 
     parent_map = {key: catalog[key] for key in unique_children if key in catalog}
-    parent_series = normalised_child.map(parent_map)
-    missing_mask = parent_series.isna()
-    parent_series = parent_series.astype("string")
-    result[parent_column] = parent_series
+    parent_series = normalised_child.map(parent_map).astype("string")
+    if parent_column in result.columns:
+        existing_parent = result[parent_column].astype("string")
+        combined_parent = existing_parent.fillna(parent_series)
+    else:
+        combined_parent = parent_series
 
+    result[parent_column] = combined_parent
+
+    missing_mask = combined_parent.isna()
     missing = int(missing_mask.sum())
     attached = len(result) - missing
 
@@ -313,8 +336,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("identifiers_retrieved", count=len(ids))
         logger.info("chembl_fetch_start", batch_size=cfg.testitem.batch_size)
 
+        cache_path = cfg.molecule_catalog.cache_path
+        cache_exists = cache_path.is_file()
+        cache_mtime = cache_path.stat().st_mtime if cache_exists else None
+
         try:
-            parent_catalog = load_parent_catalog(
+            parent_catalog_raw = load_parent_catalog(
                 client=client,
                 api_cfg=cfg.api,
                 catalog_cfg=cfg.molecule_catalog,
@@ -327,6 +354,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(cfg.molecule_catalog.cache_path),
             )
             return 1
+
+        cache_exists_after = cache_path.is_file()
+        cache_mtime_after = cache_path.stat().st_mtime if cache_exists_after else None
+        if (
+            cache_exists_after
+            and cache_exists
+            and cache_mtime_after is not None
+            and cache_mtime_after == cache_mtime
+        ):
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
+        else:
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
+
+        parent_catalog = ParentCatalog(
+            parent_catalog_raw, source=parent_catalog_source
+        )
 
         try:
             df = cl.get_testitem(
@@ -375,6 +418,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 api_cfg=cfg.api,
                 catalog_cfg=cfg.molecule_catalog,
                 timeout=cfg.testitem.timeout,
+                catalog=parent_catalog,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error("parent_lookup_failed", error=str(exc))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Any, cast
 from pathlib import Path
 
 import pandas as pd
@@ -44,10 +45,16 @@ def test_run_chembl_column_order(
         gtd, "load_parent_catalog", lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"}
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
-    monkeypatch.setattr(
-        gtd,
-        "attach_parent_molecule_ids",
-        lambda frame, **kwargs: (
+    captured_catalog: list[gtd.ParentCatalog | dict[str, str] | None] = []
+
+    def fake_attach(
+        frame: pd.DataFrame,
+        *,
+        catalog: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
+        captured_catalog.append(catalog if isinstance(catalog, gtd.ParentCatalog) else None)
+        return (
             frame,
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
@@ -55,8 +62,9 @@ def test_run_chembl_column_order(
                 unique=0,
                 attached=0,
             ),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
@@ -84,6 +92,7 @@ def test_run_chembl_column_order(
     expected_head = [c for c in TestitemsSchema.columns if c in available]
     expected_tail = sorted(available - set(TestitemsSchema.columns))
     assert captured["col_order"] == expected_head + expected_tail
+    assert captured_catalog and isinstance(captured_catalog[0], gtd.ParentCatalog)
 
 
 def test_run_chembl_initialises_pubchem_session(
@@ -299,4 +308,34 @@ def test_run_chembl_parent_catalog_request_error(
         and details.get("path") == str(cfg.molecule_catalog.cache_path)
         for event, details in errors
     )
+
+
+def test_attach_parent_molecule_ids_uses_supplied_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame(
+        [{"molecule_chembl_id": "CHEMBL1"}]
+    )
+    cfg.molecule_catalog.cache_path = tmp_path / "parent_catalog.json"
+
+    provided_catalog = gtd.ParentCatalog(
+        {"CHEMBL1": "CHEMBL0"}, source=gtd.PARENT_LOOKUP_SOURCE_REMOTE
+    )
+
+    def fail_load(**_: Any) -> dict[str, str]:  # pragma: no cover - defensive
+        raise AssertionError("load_parent_catalog should not be called")
+
+    monkeypatch.setattr(gtd.molecule_catalog, "load_parent_catalog", fail_load)
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=cast(gtd.ChemblClient, object()),
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=None,
+        catalog=provided_catalog,
+    )
+
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+    assert result[cfg.molecule_catalog.parent_field].tolist() == ["CHEMBL0"]
 
