@@ -30,70 +30,58 @@
 
 ### Среда выполнения
 
-* ОС Linux или macOS с доступом к bash/PowerShell. На Windows рекомендуется
-  устанавливать через WSL2.
-* `pip` версии 23+ и `setuptools`/`wheel` последних релизов:
+* ОС Linux или macOS с доступом к bash/PowerShell. На Windows рекомендуется устанавливать через WSL2.
+* Актуальные версии `pip`, `setuptools` и `wheel`, см. шаги в разделе [Installation / Установка](#installation--установка).
+* Разрешение на сетевые запросы к API ChEMBL/PubChem/UniProt (порт 443).
+
+## Installation / Установка
+
+### Runtime environment / Среда выполнения
+
+* Linux or macOS shell with Bash or PowerShell support (Windows users should rely on WSL2). / ОС Linux или macOS с доступом к bash/PowerShell (на Windows используйте WSL2).
+* Upgrade packaging tools before installing the project. / Перед установкой обновите инструменты распространения пакетов.
 
   ```bash
   python -m pip install --upgrade pip setuptools wheel
   ```
 
-* Изолированное окружение:
+* Create an isolated virtual environment to keep dependencies local. / Создайте изолированное виртуальное окружение, чтобы зависимости не конфликтовали.
 
   ```bash
   python -m venv .venv
-  source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+  source .venv/bin/activate  # Windows: .venv\Scripts\activate
   ```
 
-* Разрешение на сетевые запросы к API ChEMBL/PubChem/UniProt (порт 443).
+### Steps / Шаги
 
-## Установка
+**EN.** Clone the repository, switch into it and install the package with development extras. Afterwards enable the pre-commit hooks so formatting, linting, type checking and unit tests run automatically.
+
+**RU.** Клонируйте репозиторий, перейдите в каталог и установите пакет с dev-зависимостями. Затем активируйте pre-commit-хуки для автоматического форматирования, линтинга, проверки типов и тестов.
 
 ```bash
-
 git clone https://github.com/<org>/ChEMBL_data_acquisition.git
-
+cd ChEMBL_data_acquisition
 pip install .[dev]
-# или установить в editable-режиме
-pip install -e .[dev]
-```
-
-Install the project together with development tools such as
-``black``, ``ruff``, ``mypy`` and ``pytest`` as well as testing utilities like
-``hypothesis``, ``responses`` and ``psutil``. Sensitive configuration like API
-tokens should be stored in a local ``.env`` file – see
-[`Конфигурация через .env`](#конфигурация-через-env) for details.
-
-After installing the dependencies, enable the pre-commit hooks so that
-formatting, linting and type checking run automatically before each commit:
-
-```bash
 pre-commit install
 ```
 
-To trigger all checks manually across the repository, execute:
+Sensitive configuration such as API tokens belongs in a local ``.env`` file – see [`Конфигурация через .env`](#конфигурация-через-env) for usage guidelines.
 
-```bash
-pre-commit run --all-files
-```
+## Quick Start / Быстрый старт
 
-## Quick Start
- 
+1. **Install dependencies / Установите зависимости** – follow the steps in [Installation / Установка](#installation--установка).
 
-1. **Install dependencies** – see [Установка](#установка).
-
-2. **Initialise pre-commit hooks**
+2. **Initialise pre-commit hooks / Активируйте pre-commit-хуки**
 
    ```bash
    pre-commit install
-   pre-commit run --all-files
    ```
 
-   The first command sets up Git hooks to run formatting, linting, static
-   type checking and tests before each commit. The second command executes
-   the hooks across the entire codebase.
+   EN: Git hooks ensure formatting, linting, static type checks and tests run before each commit.
 
-3. **Run a sample script**
+   RU: Git-хуки автоматически запускают форматирование, линтеры, проверки типов и тесты перед каждым коммитом.
+
+3. **Run a sample script / Запустите демонстрационный скрипт**
 
    ```bash
    python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
@@ -117,55 +105,25 @@ pre-commit run --all-files
   Во втором примере аргумент `--output` должен указывать на каталог, в котором
   будут созданы файлы отчёта.
 
-4. **Run the tests** – see [Тесты](#тесты).
+4. **Run the tests / Запустите тесты** – refer to [Tests / Тесты](#tests--тесты).
 
 
-## Тесты
+## Tests / Тесты
 
-Запустите линтеры, форматирование и проверки типов:
+**EN.** The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags when required. Determinism and smoke checks are available through dedicated CLI helpers.
+
+**RU.** Команда `pre-commit` запускает форматирование, линтеры и проверку типов. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Детеминизм и smoke-проверки доступны в отдельных CLI.
 
 ```bash
 pre-commit run --all-files
-```
-
-Запустите тесты:
-
-```bash
 pytest
-```
-
-Для съёма покрытия основных модулей используйте плагин `pytest-cov`:
-
-```bash
-pytest --cov=library --cov=scripts \
-       --cov-report=term-missing --cov-report=xml
-```
-
-Проверка детерминизма итоговых CSV выполняется отдельным скриптом; он сравнивает
-контрольные срезы с актуальным выводом и сигнализирует о дрейфе данных:
-
-```bash
+pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
-```
-
-Перед запуском убедитесь, что зависимости установлены командой `pip install .[dev]`
-и все файлы в `data/output/` доступны для чтения/записи.
-
-Для smoke-теста CLI выполните:
-
-```bash
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
     --output out/mapped.csv --log-level INFO
 ```
 
-Перед запуском создайте файл `chembl_ids.csv` с заголовком `chembl_id` и
-нужными идентификаторами ChEMBL, например:
-
-```csv
-chembl_id
-CHEMBL1
-CHEMBL2
-```
+Before running the smoke command, create a `chembl_ids.csv` file with a header `chembl_id` and the required identifiers. / Перед запуском smoke-команды создайте `chembl_ids.csv` со столбцом `chembl_id` и нужными идентификаторами.
 
 
 ## Генерация данных
@@ -371,7 +329,11 @@ api:
 
 Диапазоны допустимых значений описаны в [`config.schema.json`](./config.schema.json), где для `api.rps` указан минимум `1`.
 
-## Логирование
+## Logging / Логирование
+
+**EN.** CLI helpers configure structured JSON logging via ``library.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity and format.
+
+**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.logging_setup.configure_logger``. Управляйте форматом и уровнем логов переменными окружения или ключами CLI.
 
 Пример включения JSON‑формата через переменную окружения:
 
@@ -429,34 +391,11 @@ Typical log entries look like:
 {"ts":"2024-05-01T12:00:03Z","level":"INFO","event":"pipeline_done","run_id":"abc123","stage":"pipeline","elapsed":3.2}
 ```
 
-## Installation
+## Reproducibility / Воспроизводимость
 
-Clone the repository and install the package together with development tools:
+**EN.** Deterministic CSV writers in ``library.io`` keep outputs and metadata stable across runs.
 
-```bash
-git clone https://example.com/ChEMBL_data_acquisition.git
-
-cd ChEMBL_data_acquisition
-pip install .[dev]       # с инструментами разработки
-pre-commit install       # git‑хуки: black/ruff/mypy/pytest
-pre-commit run --all-files
-```
-
-## Быстрый старт
-
-```bash
- 
-# загрузка активности по идентификаторам из тестового CSV
-python -m scripts.get_activity_data \
-    --input tests/data/activity_ids_small.csv \
-    --output out/activities.csv \
-    --limit 10 --log-level INFO
-
-# демонстрационный dry-run: только логирование без файловых операций
-python -m library.utils.cli_tools.get_activities --limit 10 --dry-run
-```
-
-## Reproducibility
+**RU.** Детерминированные CSV-выгрузки из ``library.io`` обеспечивают повторяемость данных и метаданных между запусками.
 
 The function ``library.csv_utils.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
@@ -691,12 +630,13 @@ ChEMBL_data_acquisition/
 (`CHEMBL_DA__...`) и ключей CLI.
 Подробности в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md).
 
-## Вывод и метаданные
+## Output and metadata / Вывод и метаданные
 
-Все сгенерированные CSV/Parquet и отчёты сохраняются в `data/output`
-(см. [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) или английскую версию [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
-Рядом создаются файлы `*.meta.yaml` с коммитом Git, параметрами запуска,
-контрольной суммой SHA‑256 и статистикой строк/колонок.
+**EN.** Pipelines persist deterministic CSV tables via ``library.io.write_csv`` and place accompanying ``*.meta.yaml`` sidecars in ``data/output``.
+
+**RU.** Пайплайны сохраняют детерминированные CSV с помощью ``library.io.write_csv`` и добавляют рядом файлы ``*.meta.yaml`` в каталоге ``data/output``.
+
+Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) for layout details.
 
 ## Dtype Inspector
 
@@ -711,7 +651,11 @@ python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO
 Consider wiring the script into CI to detect dtype changes early.  The tool is
 lightweight and makes only a handful of requests per dataset.
 
-## Разработка и тестирование
+## Development and testing / Разработка и тестирование
+
+**EN.** Individual tools such as ``ruff``, ``black`` and ``mypy`` are wired into ``pre-commit`` but can be executed manually when iterating on specific modules.
+
+**RU.** Отдельные утилиты ``ruff``, ``black`` и ``mypy`` подключены к ``pre-commit``, но их можно запускать вручную при доработке отдельных модулей.
 
 ```bash
 ruff check scripts library library/utils/cli_tools
@@ -720,8 +664,7 @@ mypy scripts library
 pytest
 ```
 
-Тестовые наборы расположены в `tests/data`.  
-Скрипт `library.utils.cli_tools.check_determinism` проверяет повторяемость CSV‑вывода.
+Test datasets live in ``tests/data``; ``library.utils.cli_tools.check_determinism`` validates repeatable CSV output. / Тестовые наборы лежат в ``tests/data``; ``library.utils.cli_tools.check_determinism`` проверяет повторяемость CSV-вывода.
 
 ## Лицензия
 
