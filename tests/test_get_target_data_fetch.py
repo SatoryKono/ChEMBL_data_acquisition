@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +12,7 @@ from pytest import MonkeyPatch
 
 from library.config import Config
 from scripts import get_target_data as gtd
+from schemas import TargetsSchema
 
 
 def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
@@ -214,3 +216,61 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
     assert "synonyms" in combined_df.columns
     assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
+
+
+def test_run_all_preserves_reaction_ec_numbers(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    chembl_data = Path("tests/data/chembl_targets_min.csv")
+    uniprot_data = Path("tests/data/uniprot_targets_min.csv")
+    iuphar_data = Path("tests/data/iuphar_targets_min.csv")
+    organism_csv = Path("tests/data/organism_min.csv")
+
+    cfg.target.all.organism_csv = organism_csv
+    cfg.target.all.chembl_out = tmp_path / "chembl_out.csv"
+    cfg.target.all.uniprot_out = tmp_path / "uniprot_out.csv"
+    cfg.target.all.iuphar_out = tmp_path / "iuphar_out.csv"
+    cfg.target.all.uniprot_column = "uniprot_id"
+
+    def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        shutil.copy(chembl_data, args.output_csv)
+        return 0
+
+    def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
+        shutil.copy(uniprot_data, args.output_csv)
+        return 0
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        shutil.copy(iuphar_data, args.output_csv)
+        return 0
+
+    monkeypatch.setattr(gtd, "run_chembl", fake_run_chembl)
+    monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+
+    original_finalise = gtd.tp.finalise_targets
+
+    def patched_finalise(
+        df: pd.DataFrame, organism: pd.DataFrame, **kwargs: object
+    ) -> pd.DataFrame:
+        df = df.drop(columns=["type"], errors="ignore")
+        return original_finalise(df, organism, **kwargs)
+
+    monkeypatch.setattr(gtd.tp, "finalise_targets", patched_finalise)
+    monkeypatch.setattr(
+        TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df)
+    )
+
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text(
+        "target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
+    )
+    output_csv = tmp_path / "out.csv"
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    exit_code = gtd.run_all(cfg, args)
+    assert exit_code == 0
+
+    result = pd.read_csv(output_csv, dtype=str)
+    assert result.loc[0, "reaction_ec_numbers"] == "2.2.2.2|4.4.4.4"
