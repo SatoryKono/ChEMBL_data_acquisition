@@ -26,6 +26,7 @@ __all__ = [
     "fetch_parent_catalog",
     "fetch_parent_catalog_for",
     "load_parent_catalog",
+    "write_parent_catalog_cache",
 ]
 
 
@@ -225,6 +226,37 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
     return result
 
 
+def write_parent_catalog_cache(
+    catalog: Mapping[str, str], catalog_cfg: MoleculeCatalogCfg
+) -> None:
+    """Persist *catalog* to disk using the configured cache format."""
+
+    cache_path = catalog_cfg.cache_path
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    sorted_items = sorted(catalog.items())
+
+    if cache_path.suffix.lower() == ".csv":
+        with cache_path.open("w", encoding="utf-8", newline="") as fh:
+            writer = csv.DictWriter(
+                fh,
+                fieldnames=[catalog_cfg.child_field, catalog_cfg.parent_field],
+            )
+            writer.writeheader()
+            for child, parent in sorted_items:
+                writer.writerow(
+                    {
+                        catalog_cfg.child_field: child,
+                        catalog_cfg.parent_field: parent,
+                    }
+                )
+        return
+
+    cache_path.write_text(
+        json.dumps(dict(sorted_items), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def load_parent_catalog(
     *,
     client: ChemblClient,
@@ -244,9 +276,5 @@ def load_parent_catalog(
     result = fetch_parent_catalog(
         client=client, api_cfg=api_cfg, catalog_cfg=catalog_cfg, timeout=timeout
     )
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(
-        json.dumps(dict(sorted(result.items())), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    write_parent_catalog_cache(result, catalog_cfg)
     return result
