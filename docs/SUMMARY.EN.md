@@ -1,5 +1,5 @@
 # Project Overview
-- ChEMBL Data Acquisition is a suite of Python 3.12 CLI scripts and libraries for downloading, normalizing, and exporting biodata from the ChEMBL, PubChem, UniProt, PubMed, and related APIs with deterministic CSV/Parquet outputs.
+- ChEMBL Data Acquisition is a suite of Python 3.12 CLI scripts and libraries for downloading, normalizing, and exporting biodata from the ChEMBL, PubChem, UniProt, PubMed, and related APIs with deterministic CSV exports and metadata sidecar files.
 
 
 - The project ships unified launch flags, streaming CSV handling, validation schemas, reference lookups, and an execution metadata/logging stack.
