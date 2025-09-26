@@ -21,9 +21,15 @@ def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> No
     df = pd.DataFrame({"canonical_smiles": ["C"]})
     cfg = pl.PubChemCfg(delay=0)
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
+    def fake_resolver(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache: dict[tuple[str, str], tuple[bool, dict[str, str | None] | None]],
+    ) -> dict[str, str | None]:
+        return {col: None for col in gtd.PUBCHEM_COLUMNS}
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = gtd.add_pubchem_data(df, cfg, resolver=fake_resolver)
     pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
     assert pubchem_cols
     assert result[pubchem_cols].isna().all().all()
@@ -45,18 +51,97 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     )
     cfg = pl.PubChemCfg(delay=0, prefer_local_smiles=True)
 
-    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+    def fail(*_: object, **__: object) -> dict[str, str | None]:  # pragma: no cover - defensive
         raise AssertionError("PubChem lookup should not be called")
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
-    monkeypatch.setattr(pl, "get_properties", fail)
-
-    result = gtd.add_pubchem_data(df, cfg)
+    result = gtd.add_pubchem_data(df, cfg, resolver=fail)
 
     expected = df.copy()
     for column in gtd.PUBCHEM_COLUMNS:
         expected[column] = expected[column].astype("string")
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_add_pubchem_data_reuses_cached_resolutions() -> None:
+    df = pd.DataFrame({"canonical_smiles": ["C", "C"]})
+    cfg = pl.PubChemCfg(delay=0)
+
+    computed: list[str] = []
+
+    def fake_resolver(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache: dict[tuple[str, str], tuple[bool, dict[str, str | None] | None]],
+    ) -> dict[str, str | None]:
+        key = ("smiles", identifiers.get("smiles") or "")
+        cached = cache.get(key)
+        if cached is not None:
+            found, record = cached
+            assert found
+            assert record is not None
+            return dict(record)
+        computed.append(key[1])
+        record = {col: f"value-{key[1]}" if col == "pubchem_cid" else None for col in gtd.PUBCHEM_COLUMNS}
+        cache[key] = (True, record)
+        cache[("cid", record["pubchem_cid"])] = (True, record)
+        return dict(record)
+
+    result = gtd.add_pubchem_data(df, cfg, resolver=fake_resolver)
+
+    assert computed == ["C"]
+    assert result["pubchem_cid"].tolist() == ["value-C", "value-C"]
+
+
+def test_add_pubchem_data_caches_not_found_failures() -> None:
+    df = pd.DataFrame({"canonical_smiles": ["C", "C"]})
+    cfg = pl.PubChemCfg(delay=0)
+
+    computed: list[str] = []
+
+    def fake_resolver(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache: dict[tuple[str, str], tuple[bool, dict[str, str | None] | None]],
+    ) -> dict[str, str | None]:
+        key = ("smiles", identifiers.get("smiles") or "")
+        cached = cache.get(key)
+        if cached is not None:
+            found, _ = cached
+            assert not found
+            return {col: None for col in gtd.PUBCHEM_COLUMNS}
+        computed.append(key[1])
+        cache[key] = (False, None)
+        return {col: None for col in gtd.PUBCHEM_COLUMNS}
+
+    _ = gtd.add_pubchem_data(df, cfg, resolver=fake_resolver)
+
+    assert computed == ["C"]
+
+
+def test_add_pubchem_data_retries_transient_failures() -> None:
+    df = pd.DataFrame({"canonical_smiles": ["C", "C"]})
+    cfg = pl.PubChemCfg(delay=0)
+
+    attempts: list[str] = []
+
+    def fake_resolver(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache: dict[tuple[str, str], tuple[bool, dict[str, str | None] | None]],
+    ) -> dict[str, str | None]:
+        key = ("smiles", identifiers.get("smiles") or "")
+        attempts.append(key[1])
+        # Simulate transient error by not touching the cache on first attempt
+        if attempts.count(key[1]) > 1:
+            cache[key] = (False, None)
+        return {col: None for col in gtd.PUBCHEM_COLUMNS}
+
+    _ = gtd.add_pubchem_data(df, cfg, resolver=fake_resolver)
+
+    assert attempts == ["C", "C"]
 
 
 def test_run_chembl_column_order(

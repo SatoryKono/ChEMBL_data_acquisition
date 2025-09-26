@@ -249,12 +249,22 @@ class IupharCfg(_BaseModel):
 
 class PubChemCfg(_BaseModel):
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    enable: bool = True
+    resolve_order: tuple[str, ...] = (
+        "cid",
+        "smiles",
+        "inchikey",
+        "inchi",
+        "pref_name",
+    )
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(60, ge=1)
+    timeout_seconds: float = Field(30.0, ge=0)
     retries: int = Field(3, ge=0)
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(3.0, ge=0)
+    backoff_initial_seconds: float = Field(1.0, ge=0)
     cache_ttl: int = Field(
         3600,
         ge=0,
@@ -264,6 +274,18 @@ class PubChemCfg(_BaseModel):
         False,
         description="Skip PubChem lookups when local pubchem_* columns are populated",
     )
+    use_parent_for_salts: bool = Field(
+        True,
+        description="Reuse parent molecule data for salts when available",
+    )
+    allow_polymer: bool = Field(
+        False,
+        description="Allow PubChem lookups for polymer flagged molecules",
+    )
+    write_not_found_literal: bool = Field(
+        False,
+        description="Write 'NOT_FOUND' literal when PubChem lookup fails",
+    )
 
     @field_validator("base")
     @classmethod
@@ -271,6 +293,31 @@ class PubChemCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    @field_validator("resolve_order", mode="before")
+    @classmethod
+    def _normalize_order(cls, value: Any) -> tuple[str, ...]:
+        allowed = {"cid", "smiles", "inchikey", "inchi", "pref_name"}
+        if isinstance(value, str):
+            parts = [item.strip() for item in value.split(",") if item.strip()]
+        elif isinstance(value, Sequence):
+            parts = list(value)
+        elif value is None:
+            parts = []
+        else:
+            raise TypeError("resolve_order must be a sequence or comma separated string")
+        for item in parts:
+            if item not in allowed:
+                raise ValueError(
+                    "resolve_order entries must be one of 'cid', 'smiles', 'inchikey', 'inchi', 'pref_name'"
+                )
+        return tuple(parts) if parts else (
+            "cid",
+            "smiles",
+            "inchikey",
+            "inchi",
+            "pref_name",
+        )
 
 
 class PubMedCfg(_BaseModel):
@@ -1247,6 +1294,34 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_UNIPROT_BASE": ["sources", "uniprot", "api", "base"],
     "CHEMBL_DA_IUPHAR_BASE": ["sources", "iuphar", "base"],
     "CHEMBL_DA_PUBCHEM_BASE": ["sources", "pubchem", "base"],
+    "CHEMBL_DA_PUBCHEM_ENABLE": ["sources", "pubchem", "enable"],
+    "CHEMBL_DA_PUBCHEM_RESOLVE_ORDER": ["sources", "pubchem", "resolve_order"],
+    "CHEMBL_DA_PUBCHEM_TIMEOUT_SECONDS": ["sources", "pubchem", "timeout_seconds"],
+    "CHEMBL_DA_PUBCHEM_BACKOFF_INITIAL_SECONDS": [
+        "sources",
+        "pubchem",
+        "backoff_initial_seconds",
+    ],
+    "CHEMBL_DA_PUBCHEM_PREFER_LOCAL_SMILES": [
+        "sources",
+        "pubchem",
+        "prefer_local_smiles",
+    ],
+    "CHEMBL_DA_PUBCHEM_USE_PARENT_FOR_SALTS": [
+        "sources",
+        "pubchem",
+        "use_parent_for_salts",
+    ],
+    "CHEMBL_DA_PUBCHEM_ALLOW_POLYMER": [
+        "sources",
+        "pubchem",
+        "allow_polymer",
+    ],
+    "CHEMBL_DA_PUBCHEM_WRITE_NOT_FOUND_LITERAL": [
+        "sources",
+        "pubchem",
+        "write_not_found_literal",
+    ],
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
     "CHEMBL_DA_LOG_FORMAT": ["system", "log", "format"],
     "CHEMBL_DA_LOG_DATEFMT": ["system", "log", "datefmt"],
