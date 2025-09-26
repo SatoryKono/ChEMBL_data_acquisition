@@ -1,3 +1,4 @@
+
 """Utilities for classifying organism cellularity.
 
 This module provides helpers to derive a ``unicellular_organism`` flag
@@ -78,9 +79,11 @@ def _any_in(values: pd.Series, options: Iterable[str]) -> pd.Series:
     return values.isin(set(options))
 
 
+
 def add_cellularity_smart(
     df: pd.DataFrame,
     *,
+
     genus_col: str,
     superkingdom_col: str,
     phylum_col: str,

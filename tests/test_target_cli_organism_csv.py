@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from scripts import get_target_data as gtd
 
 
-def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
-    """``organism_csv`` argument should default to the config value."""
+def test_organism_csv_option_removed(tmp_path, monkeypatch) -> None:
+    """The ``all`` command no longer exposes an ``--organism-csv`` option."""
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
         "sources:\n"
@@ -30,13 +28,13 @@ def test_organism_csv_default_from_config(tmp_path, monkeypatch) -> None:
         "  log:\n"
         "    level: INFO\n"
     )
-    captured: dict[str, Path] = {}
+    captured: dict[str, object] = {}
 
     def fake_run_all(cfg, args) -> int:  # type: ignore[unused-argument]
-        captured["organism_csv"] = args.organism_csv
+        captured["has_organism_csv"] = hasattr(args, "organism_csv")
         return 0
 
     monkeypatch.setattr(gtd, "run_all", fake_run_all)
     rc = gtd.main(["all", "--config", str(cfg_path)])
     assert rc == 0
-    assert captured["organism_csv"] == Path("dictionary/organism.csv")
+    assert not captured["has_organism_csv"]

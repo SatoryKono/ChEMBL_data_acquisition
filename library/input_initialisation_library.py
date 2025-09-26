@@ -22,7 +22,9 @@ import pandas as pd
 from .config import Config
 from .io import write_csv
 from .log import logger
+
 from . import organism_classification
+
 
 EntityName = Literal[
     "activity",
@@ -168,6 +170,37 @@ FLOAT_COLS: set[str] = {
 
 DATE_COLS: set[str] = {
     "publication_date",
+}
+
+TARGET_TYPE_USECOLS: frozenset[str] = frozenset(
+    {
+        "target_chembl_id",
+        "target_sort_order",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "gene_index",
+        "taxon_index",
+        "multifunctional_enzyme",
+        "genus",
+        "superkingdom",
+        "phylum",
+    }
+)
+
+TARGET_TYPE_OPTIONAL_COLS: frozenset[str] = frozenset({"lineage_class"})
+
+TARGET_TYPE_DTYPES: dict[str, str] = {
+    "target_chembl_id": "string",
+    "target_sort_order": "string",
+    "IUPHAR_class": "string",
+    "IUPHAR_subclass": "string",
+    "gene_index": "string",
+    "taxon_index": "string",
+    "multifunctional_enzyme": "string",
+    "genus": "string",
+    "superkingdom": "string",
+    "phylum": "string",
+    "lineage_class": "string",
 }
 
 
@@ -478,6 +511,7 @@ def process_activity_table(
 
     targets = pd.read_csv(
         targets_path,
+
         usecols=[
             "target_chembl_id",
             "IUPHAR_class",
@@ -504,6 +538,7 @@ def process_activity_table(
             "phylum": "string",
             "taxon_id": "string",
         },
+
     )
 
     df = df.merge(
@@ -520,6 +555,7 @@ def process_activity_table(
                 "taxon_id",
                 "gene_index",
                 "taxon_index",
+                "organism_cellularity",
             ]
         ],
         how="left",
@@ -533,6 +569,7 @@ def process_activity_table(
         df["multifunctional_enzyme"], "multifunctional_enzyme"
     )
 
+
     df = organism_classification.add_cellularity_smart(
         df,
         genus_col="genus",
@@ -543,6 +580,7 @@ def process_activity_table(
     )
 
     df.drop(columns=["genus", "superkingdom", "phylum", "taxon_id"], inplace=True)
+
 
     # --- final ordering ----------------------------------------------------
     final_cols = [

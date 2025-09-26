@@ -529,6 +529,7 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
                 "superkingdom",
                 "phylum",
                 "taxon_id",
+
             ]
         )
         + "\n"
@@ -545,6 +546,7 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
                 "Bacteria",
                 "Pseudomonadota",
                 "511145",
+
             ]
         )
         + "\n"
@@ -648,6 +650,7 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
             ]
         )
         + "\nT1,,,,,, ,Homo,Eukaryota,Chordata,9606\n"
+
     )
 
     res = process_activity_table(df, tmp_path)
@@ -715,6 +718,7 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
             ]
         )
         + "\nT1,ClassB,, , , ,False,,Viruses,,11676\n"
+
     )
 
     res = process_activity_table(df, tmp_path)
