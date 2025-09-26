@@ -52,6 +52,16 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | `limit` | `null` | Optional cap on identifiers processed. |
 | `dry_run` | `false` | Skip network calls and file generation when `true`. |
 
+#### Activity bounds (`activity_bounds`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `enable_from_relation` | `true` | Derive bounds from `standard_value` and relation operators when explicit limits are absent. |
+| `enable_from_uncertainty` | `false` | Parse `standard_text_value` expressions like `value ± delta` to generate bounds. |
+| `rounding_digits` | `3` | Decimal digits used when rounding the derived limits. |
+| `clamp_nonnegative` | `true` | Clamp negative bounds to zero for concentration-like metrics. |
+| `log_unknown_relations` | `true` | Emit warnings when relation markers are not recognised by the pipeline. |
+
 #### Assay pipeline (`assay`)
 
 | Key | Default | Description |

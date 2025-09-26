@@ -42,6 +42,39 @@
       "title": "ActivityCfg",
       "type": "object"
     },
+    "ActivityBoundsCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable_from_relation": {
+          "default": true,
+          "title": "Enable From Relation",
+          "type": "boolean"
+        },
+        "enable_from_uncertainty": {
+          "default": false,
+          "title": "Enable From Uncertainty",
+          "type": "boolean"
+        },
+        "rounding_digits": {
+          "default": 3,
+          "minimum": 0,
+          "title": "Rounding Digits",
+          "type": "integer"
+        },
+        "clamp_nonnegative": {
+          "default": true,
+          "title": "Clamp Nonnegative",
+          "type": "boolean"
+        },
+        "log_unknown_relations": {
+          "default": true,
+          "title": "Log Unknown Relations",
+          "type": "boolean"
+        }
+      },
+      "title": "ActivityBoundsCfg",
+      "type": "object"
+    },
     "ApiCfg": {
       "additionalProperties": false,
       "description": "Settings for ChEMBL API access.",
@@ -1299,6 +1332,9 @@
     },
     "local": {
       "$ref": "#/$defs/LocalCfg"
+    },
+    "activity_bounds": {
+      "$ref": "#/$defs/ActivityBoundsCfg"
     },
     "system": {
       "$ref": "#/$defs/SystemCfg"
