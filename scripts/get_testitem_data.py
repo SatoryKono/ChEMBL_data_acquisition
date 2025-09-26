@@ -133,8 +133,16 @@ def _load_pubchem_cid_cache(path: Path | None) -> dict[str, str | None]:
             cache[key] = None
             continue
         value = _normalise_identifier(raw_value)
-        if value:
-            cache[key] = value
+        if not value:
+            continue
+        primary = _select_primary_cid(
+            value,
+            chembl_id=key,
+            identifier="cache_file",
+            value=value,
+        )
+        if primary is not None:
+            cache[key] = primary
     return cache
 
 
@@ -191,8 +199,19 @@ def resolve_pubchem_cid(
     """Resolve PubChem CID for a ChEMBL record."""
 
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    if chembl_id and chembl_id in cache:
-        return cache[chembl_id]
+
+    if chembl_id:
+        cached = cache.get(chembl_id, _CID_CACHE_MISSING)
+        if cached is not _CID_CACHE_MISSING:
+            cid = _select_primary_cid(
+                cached,
+                chembl_id=chembl_id,
+                identifier="cache",
+                value=cached,
+            )
+            if chembl_id not in cache or cid != cached:
+                cache[chembl_id] = cid
+            return cid
 
     def _store(value: str | None) -> str | None:
         if chembl_id:
