@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 import pandas as pd
 import pytest
@@ -21,7 +21,13 @@ def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> No
     df = pd.DataFrame({"canonical_smiles": ["C"]})
     cfg = pl.PubChemCfg(delay=0)
 
+    gtd._PUBCHEM_IDENTIFIER_CACHE.clear()
     monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid", lambda *_: None)
+    monkeypatch.setattr(pl, "get_all_cid", lambda *_: None)
+    monkeypatch.setattr(pl, "get_properties", lambda *_: pl.Properties(None, None, None, None, None, None))
 
     result = gtd.add_pubchem_data(df, cfg)
     pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
@@ -45,10 +51,12 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     )
     cfg = pl.PubChemCfg(delay=0, prefer_local_smiles=True)
 
+    gtd._PUBCHEM_IDENTIFIER_CACHE.clear()
+
     def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
         raise AssertionError("PubChem lookup should not be called")
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+    monkeypatch.setattr(gtd, "resolve_pubchem_cid", fail)
     monkeypatch.setattr(pl, "get_properties", fail)
 
     result = gtd.add_pubchem_data(df, cfg)
@@ -58,6 +66,86 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
         expected[column] = expected[column].astype("string")
     pd.testing.assert_frame_equal(result, expected)
 
+
+def test_resolve_pubchem_cid_uses_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    cache = {"CHEMBL1": "123"}
+    row = {"molecule_chembl_id": "CHEMBL1", "standard_inchi_key": "ABC"}
+
+    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("Resolver should use cache before lookups")
+
+    gtd._PUBCHEM_IDENTIFIER_CACHE.clear()
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", fail)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
+    monkeypatch.setattr(pl, "get_cid", fail)
+    monkeypatch.setattr(pl, "get_all_cid", fail)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+
+    cid = gtd.resolve_pubchem_cid(row, cache, pl.PubChemCfg(delay=0))
+    assert cid == "123"
+
+
+def test_resolve_pubchem_cid_lookup_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def record(label: str, result: str | None) -> Callable[[str, object], str | None]:
+        def handler(value: str, *_: object) -> str | None:
+            calls.append(label)
+            return result
+
+        return handler
+
+    row = {
+        "molecule_chembl_id": "CHEMBL2",
+        "standard_inchi_key": " inchikey ",
+        "standard_inchi": " inchi ",
+        "pref_name": " test compound ",
+        "canonical_smiles": "C",
+    }
+
+    gtd._PUBCHEM_IDENTIFIER_CACHE.clear()
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", record("inchikey", None))
+    monkeypatch.setattr(pl, "get_cid_from_inchi", record("inchi", None))
+    monkeypatch.setattr(pl, "get_cid", record("pref_name_exact", "10|11"))
+    monkeypatch.setattr(pl, "get_all_cid", record("pref_name_partial", None))
+    monkeypatch.setattr(pl, "get_cid_from_smiles", record("smiles", "12"))
+
+    cache: dict[str, str] = {}
+    cid = gtd.resolve_pubchem_cid(row, cache, pl.PubChemCfg(delay=0))
+
+    assert cid == "10"
+    assert calls == ["inchikey", "inchi", "pref_name_exact"]
+    assert cache.get("CHEMBL2") == "10"
+
+
+def test_add_pubchem_data_updates_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL3"],
+            "canonical_smiles": ["C"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+
+    gtd._PUBCHEM_IDENTIFIER_CACHE.clear()
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_all_cid", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda value, cfg: "123")
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda *_: pl.Properties("name", "H2", "iSMILES", "cSMILES", "InChI", "InChIKey"),
+    )
+
+    result = gtd.add_pubchem_data(df, cfg, cache_dir=tmp_path)
+
+    assert result.loc[0, "pubchem_cid"] == "123"
+    cache_path = tmp_path / gtd.PUBCHEM_CID_CACHE_FILENAME
+    assert cache_path.exists()
+    cached = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cached == {"CHEMBL3": "123"}
 
 def test_run_chembl_column_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
@@ -93,7 +181,7 @@ def test_run_chembl_column_order(
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg, **__: df)
     monkeypatch.setattr(
         gtd,
         "attach_parent_molecule_ids",
@@ -151,7 +239,7 @@ def test_run_chembl_initialises_pubchem_session(
         {"molecule_chembl_id": ["CHEMBL1"], "molecule_type": ["Small molecule"]}
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg, **__: frame)
     monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
 
     monkeypatch.setattr(
@@ -228,7 +316,7 @@ def test_run_chembl_merges_parent_catalog(
         return parent_catalog
 
     monkeypatch.setattr(gtd, "query_parent_catalog", fake_query_parent_catalog)
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *_args, **_kwargs: frame)
     captured_catalog: dict[str, str] | None = None
     captured_source: str | None = None
 
@@ -313,7 +401,7 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     source = pd.DataFrame([{child_field: "CHEMBL1", parent_field: pd.NA}])
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *_args, **_kwargs: frame)
 
     cache_path = tmp_path / "parent_catalog.json"
     cache_path.write_text("{}", encoding="utf-8")
@@ -452,7 +540,7 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
     monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *_args, **_kwargs: frame)
     monkeypatch.setattr(
         gtd,
         "attach_parent_molecule_ids",
@@ -523,7 +611,7 @@ def test_run_chembl_parent_catalog_error(
             ]
         ),
     )
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *_args, **_kwargs: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
@@ -579,7 +667,7 @@ def test_run_chembl_parent_catalog_request_error(
             ]
         ),
     )
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *_args, **_kwargs: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
