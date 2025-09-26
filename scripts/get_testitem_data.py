@@ -45,6 +45,17 @@ from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 from schemas import TestitemsSchema, normalize_testitems
 
+_TYPO_PARENT_COLUMN = "parant_molecule_id"
+
+
+def ensure_no_parant_column(df: pd.DataFrame) -> None:
+    """Raise a :class:`ValueError` if the legacy typo column is present."""
+
+    if _TYPO_PARENT_COLUMN in df.columns:
+        raise ValueError(
+            "unexpected column 'parant_molecule_id'; use 'parent_molecule_id' instead"
+        )
+
 
 def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
@@ -192,6 +203,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
+        try:
+            ensure_no_parant_column(df)
+        except ValueError as exc:
+            logger.error(
+                "invalid_column",
+                column=_TYPO_PARENT_COLUMN,
+                error=str(exc),
+            )
+            return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
         df = add_pipeline_metadata(df)
