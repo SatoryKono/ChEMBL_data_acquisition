@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -490,6 +491,74 @@ def test_attach_parent_molecule_ids_fetches_missing(
     assert stats.attached == 2
     assert stats.missing == 0
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+
+
+def test_attach_parent_molecule_ids_updates_cache_for_reuse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.cache_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_cfg.cache_path.write_text(
+        json.dumps({"CHEMBL1": "CHEMBL1_PARENT"}, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    fetch_calls: list[list[str]] = []
+
+    def fake_fetch(
+        ids: list[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        fetch_calls.append(list(ids))
+        return {"CHEMBL2": "CHEMBL2_PARENT"}
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        fake_fetch,
+    )
+
+    first_result, first_stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert fetch_calls == [["CHEMBL2"]]
+    assert first_result[catalog_cfg.parent_field].tolist() == [
+        "CHEMBL1_PARENT",
+        "CHEMBL2_PARENT",
+    ]
+    assert first_stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+
+    stored_catalog = json.loads(catalog_cfg.cache_path.read_text(encoding="utf-8"))
+    assert stored_catalog == {
+        "CHEMBL1": "CHEMBL1_PARENT",
+        "CHEMBL2": "CHEMBL2_PARENT",
+    }
+
+    second_result, second_stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert fetch_calls == [["CHEMBL2"]]
+    assert second_result[catalog_cfg.parent_field].tolist() == [
+        "CHEMBL1_PARENT",
+        "CHEMBL2_PARENT",
+    ]
+    assert second_stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
 
 
 def test_attach_parent_molecule_ids_fetch_failure(

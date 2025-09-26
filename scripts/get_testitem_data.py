@@ -23,7 +23,7 @@ from library import chembl_library as cl
 from library import io
 from library import molecule_catalog
 from library import pubchem_library as pl
-from library.molecule_catalog import load_parent_catalog
+from library.molecule_catalog import load_parent_catalog, write_parent_catalog_cache
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -210,6 +210,8 @@ def attach_parent_molecule_ids(
         if fetched:
             catalog_data.update(fetched)
             parent_map.update(fetched)
+            if catalog is None:
+                write_parent_catalog_cache(catalog_data, catalog_cfg)
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
