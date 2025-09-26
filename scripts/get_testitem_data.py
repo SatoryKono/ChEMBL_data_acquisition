@@ -682,7 +682,7 @@ def attach_parent_molecule_ids(
         missing_ids = [key for key in unique_children if key not in parent_map]
         uncovered_children = len(missing_ids)
 
-    parent_series = normalised_child.map(parent_map).astype("string")
+    refreshed_parent = normalised_child.map(parent_map).astype("string")
 
     if precomputed is not None:
         existing_parent = (
@@ -697,7 +697,14 @@ def attach_parent_molecule_ids(
 
     combined_parent = existing_parent.copy()
     update_mask = combined_parent.isna() | combined_parent.eq("")
-    combined_parent.loc[update_mask] = parent_series.loc[update_mask]
+    combined_parent.loc[update_mask] = refreshed_parent.loc[update_mask]
+
+    if getattr(catalog_cfg, "force_refresh_existing", False):
+        existing_normalised = combined_parent.fillna("").astype("string")
+        refreshed_normalised = refreshed_parent.fillna("").astype("string")
+        mismatch_mask = existing_normalised != refreshed_normalised
+        if mismatch_mask.any():
+            combined_parent.loc[mismatch_mask] = refreshed_parent.loc[mismatch_mask]
     result[parent_column] = combined_parent.astype("string")
 
     missing = int(combined_parent.isna().sum())
@@ -1090,7 +1097,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         else:
             existing_parent = pd.Series("", index=df.index, dtype="string")
 
-        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
+        if getattr(cfg.molecule_catalog, "force_refresh_existing", False):
+            need_lookup_mask = normalised_ids != ""
+        else:
+            need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
         need_lookup = set(normalised_ids[need_lookup_mask])
         prepared_need_lookup = set(need_lookup)
         parent_lookup_data = ParentLookupPreparedData(

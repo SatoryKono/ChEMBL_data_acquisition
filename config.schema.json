@@ -462,6 +462,11 @@
           "title": "Parent Field",
           "type": "string"
         },
+        "force_refresh_existing": {
+          "default": false,
+          "title": "Force Refresh Existing",
+          "type": "boolean"
+        },
         "fields": {
           "default": [
             "molecule_chembl_id",
