@@ -130,6 +130,7 @@ def test_run_chembl_column_order(
         "upper_value",
         "activity_properties",
         "action_type",
+        "properties_hash",
     }
     expected_head = [c for c in schema_cols if c in available]
     expected_tail = sorted(available - set(schema_cols))

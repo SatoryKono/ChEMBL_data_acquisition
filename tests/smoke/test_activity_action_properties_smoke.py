@@ -70,9 +70,12 @@ def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:
     assert exit_code == 0
 
     result = pd.read_csv(output_csv)
-    assert set(["action_type", "activity_properties"]).issubset(result.columns)
-    assert result["action_type"].tolist() == ["PAM", "NAM"]
+    assert set(["action_type", "activity_properties", "properties_hash"]).issubset(
+        result.columns
+    )
+    assert result["action_type"].tolist() == ["inhibition", "inhibition"]
 
     payloads = result["activity_properties"].map(json.loads).tolist()
     assert payloads[0]["effect_features"]["positive"] is True
     assert payloads[1]["effect_features"]["negative"] is True
+    assert all(isinstance(value, str) and len(value) == 64 for value in result["properties_hash"].tolist())

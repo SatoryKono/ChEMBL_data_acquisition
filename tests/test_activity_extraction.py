@@ -108,6 +108,9 @@ def test_cli_success(
         "timestamp_utc",
         "lower_value",
         "upper_value",
+        "action_type",
+        "activity_properties",
+        "properties_hash",
     }
     assert set(result.columns) == expected_columns
     assert result["activity_id"].tolist() == ["A1", "A2"]
