@@ -203,7 +203,13 @@ def _resolve_cid_from_row(
     """Return a CID for ``row`` using its structure fields."""
 
 
+    if chembl_id and chembl_id in cache and cache[chembl_id]:
+        return cache[chembl_id]
+ 
+
+
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+ 
 
     if chembl_id:
         cached = cache.get(chembl_id, _CID_CACHE_MISSING)
@@ -261,6 +267,61 @@ def _resolve_cid_from_row(
     cid = _attempt("canonical_smiles", smiles, pl.get_cid_from_smiles)
     if cid:
         return _store(cid)
+
+    return None
+
+
+def resolve_pubchem_cid(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    parent_loader: Callable[[str], pd.Series | None] | None = None,
+) -> str | None:
+    """Resolve PubChem CID for a ChEMBL record."""
+
+    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
+    if cid is not None:
+        return cid
+
+    if not cfg.use_parent_for_salts:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_id = _normalise_identifier(
+        row.get("parent_molecule_chembl_id"), uppercase=True
+    )
+    if not parent_id:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    if parent_loader is None:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_row = parent_loader(parent_id)
+    if parent_row is None:
+        logger.info(
+            "pubchem_parent_structure_missing",
+            child=chembl_id,
+            parent=parent_id,
+            reason="parent_unavailable",
+        )
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
+    if parent_cid:
+        cache[parent_id] = parent_cid
+        if chembl_id:
+            cache[chembl_id] = parent_cid
+        return parent_cid
+
 
     return None
 
