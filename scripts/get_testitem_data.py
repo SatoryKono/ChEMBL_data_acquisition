@@ -137,7 +137,7 @@ def attach_parent_molecule_ids(
     cache_exists = cache_path.is_file()
     cache_mtime = cache_path.stat().st_mtime if cache_exists else None
 
-    catalog = molecule_catalog.load_parent_catalog(
+    catalog = load_parent_catalog(
         client=client,
         api_cfg=api_cfg,
         catalog_cfg=catalog_cfg,
@@ -179,7 +179,13 @@ def attach_parent_molecule_ids(
     parent_series = normalised_child.map(parent_map)
     missing_mask = parent_series.isna()
     parent_series = parent_series.astype("string")
-    result[parent_column] = parent_series
+
+    if parent_column not in result.columns:
+        result[parent_column] = pd.Series(pd.NA, index=result.index, dtype="string")
+
+    result[parent_column] = (
+        result[parent_column].astype("string").fillna(parent_series)
+    )
 
     missing = int(missing_mask.sum())
     attached = len(result) - missing
