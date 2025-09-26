@@ -197,6 +197,43 @@ def test_run_chembl_merges_parent_catalog(
     ]
 
 
+def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+) -> None:
+    parent_field = cfg.molecule_catalog.parent_field
+    cache_path = tmp_path / "parent_cache.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+
+    source = pd.DataFrame(
+        {
+            cfg.molecule_catalog.child_field: ["CHEMBL1", "CHEMBL2"],
+            parent_field: ["CHEMBL1_EXISTING", pd.NA],
+        }
+    )
+
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        source,
+        client=object(),
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=None,
+    )
+
+    expected = pd.Series(
+        ["CHEMBL1_EXISTING", pd.NA], index=result.index, dtype="string"
+    )
+    pd.testing.assert_series_equal(
+        result[parent_field], expected, check_names=False
+    )
+    assert stats.missing == 2
+    assert stats.attached == 0
+
+
 def test_run_chembl_parent_catalog_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
