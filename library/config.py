@@ -135,6 +135,7 @@ class MoleculeCatalogCfg(_BaseModel):
         default_factory=lambda: {"parent_molecule_chembl_id__isnull": "false"}
     )
     page_size: int = Field(500, ge=1)
+    fallback_single_limit: int | None = Field(default=None, ge=1)
 
 
 class OpenAlexCfg(_BaseModel):
@@ -264,6 +265,7 @@ class PubChemCfg(_BaseModel):
         False,
         description="Skip PubChem lookups when local pubchem_* columns are populated",
     )
+ 
     skip_polymers: bool = Field(
         False,
         description=(
@@ -271,9 +273,37 @@ class PubChemCfg(_BaseModel):
             " pubchem_* values"
         ),
     )
+ 
+    prefer_local_values: bool = Field(
+        True,
+        description="Retain pre-existing pubchem_* values when lookups return empty results",
+    )
+    resolve_order: tuple[str, ...] = (
+        "standard_inchi_key",
+        "standard_inchi",
+        "pref_name",
+        "pref_name_partial",
+        "canonical_smiles",
+    )
+    use_parent_for_salts: bool = True
+    skip_polymers: bool = True
+    write_not_found_literal: bool = False
+    batch_size: int = Field(50, ge=1)
+    cache_ttl_hours: float | None = Field(
+        None,
+        ge=0,
+        description="Optional TTL for the persisted CID cache, expressed in hours",
+    )
+    timeout_seconds: float = Field(30.0, ge=0)
+    backoff_initial_seconds: float = Field(0.5, ge=0)
+ 
     cid_cache_path: Path | None = Field(
         default=None,
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
+    )
+    use_parent_for_salts: bool = Field(
+        False,
+        description="Resolve PubChem CIDs via parent structures when child lookups fail",
     )
 
     @field_validator("base")
