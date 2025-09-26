@@ -93,15 +93,16 @@ pre-commit run --all-files
 3. **Run a sample script**
 
    ```bash
-   python -m scripts.get_activities --input tests/data/activity_ids_small.csv \
-       --output out/activities.csv --limit 10 --log-level INFO
+   python -m scripts.get_activities --limit 10 --log-level INFO
    ```
 
-   The command reads the bundled test identifiers and writes a normalised CSV
-   to ``out/activities.csv``. Common CLI flags include ``--input`` and
-   ``--output`` for file paths, ``--limit`` to cap processed records,
-   ``--log-level`` for verbosity, ``--sep`` for CSV delimiter and
-   ``--encoding`` for file encoding. Direct execution via ``python scripts/get_activities.py`` requires installing the project or adding the repository root to ``PYTHONPATH``; using ``-m scripts.get_activities`` avoids this extra setup. Additional examples:
+   This lightweight helper only emits structured log messages describing the
+   dummy activity rows it would generate; it neither reads input files nor
+   writes outputs. Use it to verify logging configuration and CLI wiring before
+   launching full pipelines. Common CLI flags include ``--limit`` to cap
+   processed records, ``--log-level`` for verbosity, ``--sep`` for CSV delimiter
+   and ``--encoding`` for file encoding. For end-to-end exports that create
+   files, run one of the data pipelines, for example:
 
    ```bash
    python mapper_main.py --input tests/data/assays.csv \
@@ -154,14 +155,18 @@ python -m scripts.mapper_batch_main --input tests/data/assays.csv \
 
 ## Генерация данных
 
-Скрипты из каталога `scripts/` создают CSV-файлы и сохраняют их в `data/output/`. Пример:
+Большинство скриптов из каталога `scripts/` формируют CSV-файлы и размещают их
+в `data/output/`. Пример полноценного пайплайна:
 
 ```bash
-python -m scripts.get_activities --input tests/data/activity_ids_small.csv \
+python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
     --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
-Результирующие файлы располагаются в `data/output/`. Каталог игнорируется Git и автоматически публикуется как артефакт CI.
+Команда извлекает данные из API ChEMBL, сохраняет таблицу и сопутствующий
+`*.meta.yaml`. Скрипт `scripts.get_activities` предназначен только для
+демонстрационного логирования и не выполняет файловых операций. Каталог с
+результатами игнорируется Git и автоматически публикуется как артефакт CI.
 
 ## Usage
 
@@ -414,7 +419,8 @@ python -m scripts.get_activity_data \
     --input tests/data/activity_ids_small.csv \
     --output out/activities.csv \
     --limit 10 --log-level INFO
- 
+
+# демонстрационный dry-run: только логирование без файловых операций
 python -m scripts.get_activities --limit 10 --dry-run
 ```
 

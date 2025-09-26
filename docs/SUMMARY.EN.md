@@ -158,7 +158,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
    - The column name is loaded from `sources.chembl.pipelines.activity.column` in the configuration (default `activity_chembl_id`) and can be overridden via `--column` or `config.yaml`.
 
 
-5. Execute the desired CLI script, e.g. `python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`.
+5. Execute the desired CLI script, e.g. `python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`, which downloads data and writes the CSV/metadata files.
 
 
 6. Alternative pipelines: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `get_input_initialisation`, `table_quality_main`.
@@ -311,7 +311,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 
 
-7. Target command (`python -m scripts.get_activities ...`, etc.) executed with required flags and log level.
+7. Target command (`python -m scripts.get_activity_data ...`, etc.) executed with required flags and log level.
 
 
 
@@ -334,7 +334,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 ## One-liner Setup & Run
 ```
-python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
+python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 
