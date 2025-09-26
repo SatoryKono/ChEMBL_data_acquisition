@@ -488,6 +488,19 @@
           "minimum": 1,
           "title": "Page Size",
           "type": "integer"
+        },
+        "fallback_single_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Single Limit"
         }
       },
       "title": "MoleculeCatalogCfg",

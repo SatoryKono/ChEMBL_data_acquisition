@@ -135,6 +135,7 @@ class MoleculeCatalogCfg(_BaseModel):
         default_factory=lambda: {"parent_molecule_chembl_id__isnull": "false"}
     )
     page_size: int = Field(500, ge=1)
+    fallback_single_limit: int | None = Field(default=None, ge=1)
 
 
 class OpenAlexCfg(_BaseModel):
