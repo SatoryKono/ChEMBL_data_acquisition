@@ -354,6 +354,28 @@ def test_default_resource_paths_exist() -> None:
             else project_root / resource_path
         )
         assert full_path.exists(), f"Missing default resource: {full_path}"
+
+
+def test_config_class_default_resources_exist() -> None:
+    """Direct ``Config`` instantiation should point to real resources."""
+
+    cfg = Config()
+    resources = cfg.resources
+    project_root = Path(__file__).resolve().parents[1]
+    for field in (
+        "dictionary_dir",
+        "iuphar_target_csv",
+        "iuphar_family_csv",
+        "uniprot_data_dir",
+        "targets_type_csv",
+    ):
+        resource_path = getattr(resources, field)
+        resolved = (
+            resource_path
+            if resource_path.is_absolute()
+            else project_root / resource_path
+        )
+        assert resolved.exists(), f"Missing default resource: {resolved}"
 def test_yaml_error_includes_path(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("sources:\n  chembl:\n    api: [\n")  # malformed YAML
