@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter, sleep
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from library import chembl_library as cl
+from library import molecule_catalog
 from library import pubchem_library as pl
+from library.config import ApiCfg, MoleculeCatalogCfg
 from scripts import get_testitem_data
 
 
@@ -61,6 +64,14 @@ def test_get_testitem_parent_catalog(
     def fail_load_parent_catalog(**_: object) -> dict[str, str]:  # pragma: no cover
         pytest.fail("load_parent_catalog should not be triggered for partial coverage")
 
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.resolve_order = ("cache", "smiles")
+        return cfg
+
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -166,6 +177,14 @@ def test_get_testitem_skips_parent_lookup_when_present(
         fetch_called = True
         return {}
 
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.resolve_order = ("cache", "smiles")
+        return cfg
+
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -197,3 +216,41 @@ def test_get_testitem_skips_parent_lookup_when_present(
     df = pd.read_csv(output_csv)
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
     assert fetch_called is False
+
+
+def test_parent_lookup_fallback_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure fallback requests are executed with bounded parallelism."""
+
+    ids = [f"CHEMBL{i}" for i in range(1, 9)]
+    mapping = {chembl_id: f"{chembl_id}_P" for chembl_id in ids}
+    api_cfg = ApiCfg()
+    catalog_cfg = MoleculeCatalogCfg()
+
+    monkeypatch.setattr(molecule_catalog, "_PARENT_LOOKUP_SINGLE_CONCURRENCY", 8)
+    monkeypatch.setattr(molecule_catalog, "query_parent_catalog", lambda children, catalog_cfg: {})
+    monkeypatch.setattr(molecule_catalog, "load_parent_catalog", lambda **_: {})
+
+    fetch_calls: list[str] = []
+
+    def fake_fetch_parent_for_id(chembl_id: str, **_: object) -> tuple[str, str]:
+        fetch_calls.append(chembl_id)
+        sleep(0.05)
+        return chembl_id, mapping[chembl_id]
+
+    monkeypatch.setattr(molecule_catalog, "fetch_parent_for_id", fake_fetch_parent_for_id)
+
+    start = perf_counter()
+    result = molecule_catalog._fetch_parent_catalog_via_helper(
+        ids,
+        client=SimpleNamespace(),
+        api_cfg=api_cfg,
+        timeout=None,
+        existing={},
+        catalog_cfg=catalog_cfg,
+        allow_rebatch=False,
+    )
+    elapsed = perf_counter() - start
+
+    assert result == mapping
+    assert set(fetch_calls) == set(ids)
+    assert elapsed < 0.3
