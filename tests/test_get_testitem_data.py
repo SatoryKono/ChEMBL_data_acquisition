@@ -18,6 +18,32 @@ from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
 
+def prepare_parent_lookup_data(
+    df: pd.DataFrame, catalog_cfg
+) -> gtd.ParentLookupPreparedData:
+    child_column = catalog_cfg.child_field
+    parent_column = catalog_cfg.parent_field
+
+    if child_column in df.columns:
+        normalised_child = gtd._normalise_chembl_ids(df[child_column])
+    else:
+        normalised_child = pd.Series("", index=df.index, dtype="string")
+
+    if parent_column in df.columns:
+        existing_parent = gtd._normalise_chembl_ids(df[parent_column])
+    else:
+        existing_parent = pd.Series("", index=df.index, dtype="string")
+
+    need_lookup_mask = (normalised_child != "") & (existing_parent == "")
+    need_lookup = set(normalised_child[need_lookup_mask])
+
+    return gtd.ParentLookupPreparedData(
+        child_ids=normalised_child,
+        existing_parent_ids=existing_parent,
+        need_lookup=need_lookup,
+    )
+
+
 def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> None:
     df = pd.DataFrame({"canonical_smiles": ["C"]})
     cfg = pl.PubChemCfg(delay=0)
@@ -369,11 +395,15 @@ def test_run_chembl_column_order(
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg, **__: df)
-    monkeypatch.setattr(
-        gtd,
-        "attach_parent_molecule_ids",
-        lambda frame, **kwargs: (
+
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
+    captured_precomputed: dict[str, object] = {"data": None, "frame": None}
+
+    def fake_attach_parent_molecule_ids(frame: pd.DataFrame, **kwargs: object):
+        captured_precomputed["data"] = kwargs.get("precomputed")
+        captured_precomputed["frame"] = frame.copy()
+        return (
+
             frame,
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
@@ -382,8 +412,9 @@ def test_run_chembl_column_order(
                 attached=0,
                 uncovered=0,
             ),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
@@ -407,6 +438,30 @@ def test_run_chembl_column_order(
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
+
+    prepared = captured_precomputed["data"]
+    assert isinstance(prepared, gtd.ParentLookupPreparedData)
+    captured_frame = captured_precomputed["frame"]
+    assert isinstance(captured_frame, pd.DataFrame)
+    expected_prepared = prepare_parent_lookup_data(
+        captured_frame, cfg.molecule_catalog
+    )
+    pd.testing.assert_series_equal(
+        prepared.child_ids, expected_prepared.child_ids, check_names=False
+    )
+    pd.testing.assert_series_equal(
+        prepared.existing_parent_ids,
+        expected_prepared.existing_parent_ids,
+        check_names=False,
+    )
+    assert prepared.existing_parent_ids.tolist() == expected_prepared.existing_parent_ids.tolist()
+    expected_need_lookup = set(
+        expected_prepared.child_ids[
+            (expected_prepared.child_ids != "")
+            & (expected_prepared.existing_parent_ids == "")
+        ]
+    )
+    assert prepared.need_lookup == expected_need_lookup
 
     available = set(captured.get("columns", []))
     expected_head = [c for c in TestitemsSchema.columns if c in available]
@@ -913,8 +968,12 @@ def test_run_chembl_parent_catalog_request_error(
     )
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_fetches_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
 
@@ -947,12 +1006,16 @@ def test_attach_parent_molecule_ids_fetches_missing(
         fake_fetch,
     )
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     result, stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed,
     )
 
     assert captured_ids["ids"] == ["CHEMBL1", "CHEMBL2"]
@@ -966,8 +1029,12 @@ def test_attach_parent_molecule_ids_fetches_missing(
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     child_field = cfg.sources.chembl.molecule_catalog.child_field
     parent_field = cfg.sources.chembl.molecule_catalog.parent_field
@@ -1004,12 +1071,16 @@ def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
         ),
     )
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     result, stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed,
     )
 
     assert fetch_calls == [["CHEMBL10", "CHEMBL11"]]
@@ -1017,8 +1088,12 @@ def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_handles_large_catalog(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame(
         {
@@ -1057,6 +1132,9 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
 
     tracking_catalog = TrackingMapping(base_catalog)
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     result, stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
@@ -1065,6 +1143,7 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
         timeout=None,
         catalog=tracking_catalog,
         source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        precomputed=precomputed,
     )
 
     expected_values = [f"CHEMBL{i}_PARENT" for i in range(1, 4)]
@@ -1077,8 +1156,12 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
     assert set(tracking_catalog.lookups) == {"CHEMBL1", "CHEMBL2", "CHEMBL3"}
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_handles_partial_remote_success(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
 
@@ -1102,23 +1185,31 @@ def test_attach_parent_molecule_ids_handles_partial_remote_success(
 
     monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     result, stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed,
     )
 
     parent_values = result[catalog_cfg.parent_field].tolist()
     assert parent_values == ["CHEMBL1_PARENT", pd.NA]
     assert stats.attached == 1
     assert stats.missing == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_updates_cache_for_reuse(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
 
@@ -1149,12 +1240,16 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         fake_fetch,
     )
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     first_result, first_stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed,
     )
 
     assert fetch_calls == [["CHEMBL2"]]
@@ -1170,12 +1265,16 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         "CHEMBL2": "CHEMBL2_PARENT",
     }
 
+    precomputed_second = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     second_result, second_stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed_second,
     )
 
     assert fetch_calls == [["CHEMBL2"]]
@@ -1186,8 +1285,12 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
     assert second_stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_uses_sqlite_after_migration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
 
@@ -1208,12 +1311,16 @@ def test_attach_parent_molecule_ids_uses_sqlite_after_migration(
 
     monkeypatch.setattr(gtd.molecule_catalog.json, "loads", counting_loads)
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     first_result, _ = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed,
     )
 
     assert calls["loads"] == 1
@@ -1221,20 +1328,28 @@ def test_attach_parent_molecule_ids_uses_sqlite_after_migration(
 
     calls["loads"] = 0
 
+    precomputed_second = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     second_result, _ = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed_second,
     )
 
     assert calls["loads"] == 0
     assert second_result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_fetch_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
 
@@ -1264,12 +1379,16 @@ def test_attach_parent_molecule_ids_fetch_failure(
         failing_fetch,
     )
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     result, stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        precomputed=precomputed,
     )
 
     parent_values = result[catalog_cfg.parent_field].tolist()
@@ -1280,8 +1399,12 @@ def test_attach_parent_molecule_ids_fetch_failure(
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
 
 
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_uses_cache_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
 
@@ -1312,6 +1435,9 @@ def test_attach_parent_molecule_ids_uses_cache_only(
         unexpected_fetch,
     )
 
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
     result, stats = gtd.attach_parent_molecule_ids(
         df,
         client=object(),
@@ -1320,6 +1446,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
         timeout=None,
         catalog={"CHEMBL1": "CHEMBL1_PARENT"},
         source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        precomputed=precomputed,
     )
 
     assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
