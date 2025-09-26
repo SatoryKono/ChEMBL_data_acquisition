@@ -636,6 +636,11 @@ def add_pubchem_data(
     client: ChemblClient | None = None,
     api_cfg: ApiCfg | None = None,
     timeout: float | None = None,
+    cid_cache: MutableMapping[str, str | None] | None = None,
+    resolution_cache: MutableMapping[
+        tuple[str | None, ...], pl.PubChemResolution
+    ] | None = None,
+    parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
 ) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
@@ -721,9 +726,11 @@ def add_pubchem_data(
 
     cache_path = getattr(cfg, "cid_cache_path", None)
     cache_ttl_hours = getattr(cfg, "cache_ttl_hours", None)
-    cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
+    if cid_cache is None:
+        cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
     cache_dirty = False
-    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    if resolution_cache is None:
+        resolution_cache = {}
 
     local_records: dict[str, pd.Series] = {}
     if "molecule_chembl_id" in result.columns:
@@ -732,7 +739,8 @@ def add_pubchem_data(
             if chembl_norm and chembl_norm not in local_records:
                 local_records[chembl_norm] = result.loc[index]
 
-    parent_record_cache: dict[str, pd.Series | None] = {}
+    if parent_record_cache is None:
+        parent_record_cache = {}
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
@@ -1066,11 +1074,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
                 need_lookup -= set(fallback_catalog)
 
-        logger.info("pubchem_augment_start")
-        df = add_pubchem_data(df, cfg.pubchem)
-        logger.info("pubchem_augment_done")
- 
-
         try:
             ensure_no_parant_column(df)
         except ValueError as exc:
@@ -1108,6 +1111,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             uncovered=parent_stats.uncovered,
         )
 
+        pubchem_cid_cache: dict[str, str | None] | None = None
+        pubchem_resolution_cache: dict[
+            tuple[str | None, ...], pl.PubChemResolution
+        ] | None = None
+        pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
+        if getattr(cfg.pubchem, "enable", True):
+            pubchem_cid_cache = _load_pubchem_cid_cache(
+                getattr(cfg.pubchem, "cid_cache_path", None),
+                ttl_hours=getattr(cfg.pubchem, "cache_ttl_hours", None),
+            )
+            pubchem_resolution_cache = {}
+            pubchem_parent_record_cache = {}
+
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(
             df,
@@ -1115,6 +1131,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             client=client,
             api_cfg=cfg.api,
             timeout=cfg.testitem.timeout,
+            cid_cache=pubchem_cid_cache,
+            resolution_cache=pubchem_resolution_cache,
+            parent_record_cache=pubchem_parent_record_cache,
         )
         logger.info("pubchem_augment_done")
 

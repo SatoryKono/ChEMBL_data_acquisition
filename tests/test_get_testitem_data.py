@@ -646,6 +646,85 @@ def test_run_chembl_initialises_pubchem_session(
 
 
 
+def test_run_chembl_calls_pubchem_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text(
+        "molecule_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
+    )
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
+    df = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                "canonical_smiles": "C",
+                "molecule_type": "Small molecule",
+                "parent_molecule_chembl_id": pd.NA,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+                uncovered=0,
+            ),
+        ),
+    )
+
+    cfg.pubchem.cid_cache_path = tmp_path / "pubchem_cache.json"
+    cfg.pubchem.delay = 0
+
+    resolve_calls: list[Mapping[str, str | None]] = []
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        pubchem_cfg: pl.PubChemCfg,
+        **kwargs: object,
+    ) -> pl.PubChemResolution:
+        resolve_calls.append(identifiers)
+        return pl.PubChemResolution(cid="321", source="resolver")
+
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
+
+    props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
+    monkeypatch.setattr(gtd.pl, "init_session", lambda api, retry: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+
+    rc = gtd.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert len(resolve_calls) == 1
+
+
 def test_run_chembl_merges_parent_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
