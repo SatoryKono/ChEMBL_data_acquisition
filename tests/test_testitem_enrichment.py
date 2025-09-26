@@ -5,8 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library.config import Config
 from library import testitem_enrichment
+from library.config import Config
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -14,14 +14,18 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     frame.to_csv(path, index=False)
 
 
-def test_enrich_adds_flags_and_salt(
-    tmp_path: Path, cfg: Config
-) -> None:
+def test_enrich_adds_flags_and_salt(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame(
         [
             {"molecule_chembl_id": "CHEMBL100"},
-            {"molecule_chembl_id": "CHEMBL200", "parent_molecule_chembl_id": "CHEMBL0200P"},
-            {"molecule_chembl_id": "CHEMBL300", "parent_molecule_chembl_id": "CHEMBL300"},
+            {
+                "molecule_chembl_id": "CHEMBL200",
+                "parent_molecule_chembl_id": "CHEMBL0200P",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL300",
+                "parent_molecule_chembl_id": "CHEMBL300",
+            },
         ]
     )
 
@@ -29,8 +33,14 @@ def test_enrich_adds_flags_and_salt(
     _write_csv(
         hierarchy_path,
         [
-            {"molecule_chembl_id": "CHEMBL100", "parent_molecule_chembl_id": "CHEMBL0100P"},
-            {"molecule_chembl_id": "CHEMBL200", "parent_molecule_chembl_id": "CHEMBL0200P"},
+            {
+                "molecule_chembl_id": "CHEMBL100",
+                "parent_molecule_chembl_id": "CHEMBL0100P",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL200",
+                "parent_molecule_chembl_id": "CHEMBL0200P",
+            },
         ],
     )
 
@@ -38,10 +48,30 @@ def test_enrich_adds_flags_and_salt(
     _write_csv(
         catalog_path,
         [
-            {"molecule_chembl_id": "CHEMBL100", "natural_product": "Y", "prodrug": "", "polymer_flag": "0"},
-            {"molecule_chembl_id": "CHEMBL0100P", "natural_product": "", "prodrug": "N", "polymer_flag": ""},
-            {"molecule_chembl_id": "CHEMBL200", "natural_product": "N", "prodrug": "Y", "polymer_flag": "1"},
-            {"molecule_chembl_id": "CHEMBL0200P", "natural_product": "", "prodrug": "Y", "polymer_flag": "0"},
+            {
+                "molecule_chembl_id": "CHEMBL100",
+                "natural_product": "Y",
+                "prodrug": "",
+                "polymer_flag": "0",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL0100P",
+                "natural_product": "",
+                "prodrug": "N",
+                "polymer_flag": "",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL200",
+                "natural_product": "N",
+                "prodrug": "Y",
+                "polymer_flag": "1",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL0200P",
+                "natural_product": "",
+                "prodrug": "Y",
+                "polymer_flag": "0",
+            },
         ],
     )
 
@@ -74,8 +104,14 @@ def test_enrich_logs_missing_and_inconsistent(
 ) -> None:
     df = pd.DataFrame(
         [
-            {"molecule_chembl_id": "CHEMBL500", "parent_molecule_chembl_id": "CHEMBL0500P"},
-            {"molecule_chembl_id": "CHEMBL600", "parent_molecule_chembl_id": "CHEMBL0600P"},
+            {
+                "molecule_chembl_id": "CHEMBL500",
+                "parent_molecule_chembl_id": "CHEMBL0500P",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL600",
+                "parent_molecule_chembl_id": "CHEMBL0600P",
+            },
         ]
     )
 
@@ -83,7 +119,10 @@ def test_enrich_logs_missing_and_inconsistent(
     _write_csv(
         hierarchy_path,
         [
-            {"molecule_chembl_id": "CHEMBL500", "parent_molecule_chembl_id": "CHEMBL0500P"},
+            {
+                "molecule_chembl_id": "CHEMBL500",
+                "parent_molecule_chembl_id": "CHEMBL0500P",
+            },
         ],
     )
 
@@ -91,8 +130,18 @@ def test_enrich_logs_missing_and_inconsistent(
     _write_csv(
         catalog_path,
         [
-            {"molecule_chembl_id": "CHEMBL500", "natural_product": "Y", "prodrug": "N", "polymer_flag": "0"},
-            {"molecule_chembl_id": "CHEMBL0500P", "natural_product": "N", "prodrug": "Y", "polymer_flag": "1"},
+            {
+                "molecule_chembl_id": "CHEMBL500",
+                "natural_product": "Y",
+                "prodrug": "N",
+                "polymer_flag": "0",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL0500P",
+                "natural_product": "N",
+                "prodrug": "Y",
+                "polymer_flag": "1",
+            },
         ],
     )
 
@@ -118,14 +167,21 @@ def test_enrich_logs_missing_and_inconsistent(
     assert "testitem_enrichment_missing_parent_flags" in event_names
 
 
-def test_enrich_respects_configuration_options(
-    tmp_path: Path, cfg: Config
-) -> None:
+def test_enrich_respects_configuration_options(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame(
         [
-            {"molecule_chembl_id": "CHEMBL800", "parent_molecule_chembl_id": "CHEMBL0800P"},
-            {"molecule_chembl_id": "CHEMBL810", "parent_molecule_chembl_id": "CHEMBL0810P"},
-            {"molecule_chembl_id": "CHEMBL900", "parent_molecule_chembl_id": "CHEMBL900"},
+            {
+                "molecule_chembl_id": "CHEMBL800",
+                "parent_molecule_chembl_id": "CHEMBL0800P",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL810",
+                "parent_molecule_chembl_id": "CHEMBL0810P",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL900",
+                "parent_molecule_chembl_id": "CHEMBL900",
+            },
         ]
     )
 
@@ -133,8 +189,14 @@ def test_enrich_respects_configuration_options(
     _write_csv(
         hierarchy_path,
         [
-            {"molecule_chembl_id": "CHEMBL800", "parent_molecule_chembl_id": "CHEMBL0800P"},
-            {"molecule_chembl_id": "CHEMBL810", "parent_molecule_chembl_id": "CHEMBL0810P"},
+            {
+                "molecule_chembl_id": "CHEMBL800",
+                "parent_molecule_chembl_id": "CHEMBL0800P",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL810",
+                "parent_molecule_chembl_id": "CHEMBL0810P",
+            },
         ],
     )
 
@@ -142,9 +204,24 @@ def test_enrich_respects_configuration_options(
     _write_csv(
         catalog_path,
         [
-            {"molecule_chembl_id": "CHEMBL800", "natural_product": "Y", "prodrug": "N", "polymer_flag": "0"},
-            {"molecule_chembl_id": "CHEMBL0800P", "natural_product": "N", "prodrug": "Y", "polymer_flag": "1"},
-            {"molecule_chembl_id": "CHEMBL0810P", "natural_product": "N", "prodrug": "N", "polymer_flag": "0"},
+            {
+                "molecule_chembl_id": "CHEMBL800",
+                "natural_product": "Y",
+                "prodrug": "N",
+                "polymer_flag": "0",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL0800P",
+                "natural_product": "N",
+                "prodrug": "Y",
+                "polymer_flag": "1",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL0810P",
+                "natural_product": "N",
+                "prodrug": "N",
+                "polymer_flag": "0",
+            },
         ],
     )
 

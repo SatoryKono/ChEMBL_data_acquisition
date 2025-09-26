@@ -12,8 +12,8 @@ from pytest import MonkeyPatch
 
 from library import protein_classification as pc
 from library.config import Config
-from scripts import get_target_data as gtd
 from schemas import TargetsSchema
+from scripts import get_target_data as gtd
 
 
 class DummyRecord:
@@ -32,7 +32,9 @@ class DummyClassifier:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
-    def get(self, target_id: str, family_id: str, ec_number: str, name: str) -> DummyRecord:
+    def get(
+        self, target_id: str, family_id: str, ec_number: str, name: str
+    ) -> DummyRecord:
         self.calls.append(("get", (target_id, family_id, ec_number, name)))
         return DummyRecord()
 
@@ -152,9 +154,7 @@ def test_run_uniprot_writes_sidecar(
     monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
 ) -> None:
     input_csv = tmp_path / "targets.csv"
-    input_csv.write_text(
-        "uniprot_id\nP12345\nP23456\n", encoding=cfg.io.csv_encoding
-    )
+    input_csv.write_text("uniprot_id\nP12345\nP23456\n", encoding=cfg.io.csv_encoding)
     output_csv = tmp_path / "uniprot.csv"
     cfg.target.uniprot.data_dir = tmp_path
 
@@ -283,7 +283,9 @@ def test_run_all_preserves_reaction_ec_numbers(
     orig_finalise = gtd.tp.finalise_targets
 
     def patched_finalise(df: pd.DataFrame, **kwargs: object) -> pd.DataFrame:
-        df = df.drop(columns=[col for col in ("type", "target_type") if col in df.columns])
+        df = df.drop(
+            columns=[col for col in ("type", "target_type") if col in df.columns]
+        )
         return orig_finalise(df, **kwargs)
 
     monkeypatch.setattr(gtd.tp, "finalise_targets", patched_finalise)
@@ -292,9 +294,7 @@ def test_run_all_preserves_reaction_ec_numbers(
     )
 
     input_csv = tmp_path / "targets.csv"
-    input_csv.write_text(
-        "target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding
-    )
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding)
     output_csv = tmp_path / "out.csv"
 
     args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)

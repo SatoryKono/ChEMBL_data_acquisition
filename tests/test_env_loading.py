@@ -15,9 +15,7 @@ def test_env_file_overrides(tmp_path, monkeypatch) -> None:
     )
 
     env_path = tmp_path / ".env"
-    env_path.write_text(
-        "CHEMBL_DA__SOURCES__CHEMBL__API__RPS=7\n", encoding="utf8"
-    )
+    env_path.write_text("CHEMBL_DA__SOURCES__CHEMBL__API__RPS=7\n", encoding="utf8")
 
     for line in env_path.read_text(encoding="utf8").splitlines():
         key, value = line.split("=", 1)

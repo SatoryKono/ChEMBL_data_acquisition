@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pandas as pd
-
 import yaml
 
 from library.config import Config
@@ -42,8 +41,12 @@ def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:
     )
 
     monkeypatch.setattr("scripts.get_activity_data.ChemblClient", DummyChemblClient)
-    monkeypatch.setattr("scripts.get_activity_data.cl.get_activities", lambda *_, **__: df)
-    monkeypatch.setattr("scripts.get_activity_data.analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "scripts.get_activity_data.cl.get_activities", lambda *_, **__: df
+    )
+    monkeypatch.setattr(
+        "scripts.get_activity_data.analyze_table_quality", lambda *_, **__: None
+    )
     monkeypatch.setattr("scripts.get_activity_data.write_meta_yaml", lambda **__: None)
     monkeypatch.setattr("scripts.get_activity_data.file_sha256", lambda _: "deadbeef")
 
@@ -78,4 +81,7 @@ def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:
     payloads = result["activity_properties"].map(json.loads).tolist()
     assert payloads[0]["effect_features"]["positive"] is True
     assert payloads[1]["effect_features"]["negative"] is True
-    assert all(isinstance(value, str) and len(value) == 64 for value in result["properties_hash"].tolist())
+    assert all(
+        isinstance(value, str) and len(value) == 64
+        for value in result["properties_hash"].tolist()
+    )

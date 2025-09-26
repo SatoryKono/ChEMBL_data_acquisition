@@ -6,10 +6,10 @@ The implementation is a Python translation of a PowerQuery script.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Callable, Hashable, Mapping, MutableMapping
 from dataclasses import dataclass
 from time import monotonic
-from typing import Any, Hashable, cast
+from typing import Any, cast
 from urllib.parse import quote
 
 import requests
@@ -172,9 +172,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
 
     for attempt in range(1, attempts + 1):
         if deadline is not None and monotonic() >= deadline:
-            logger.warning(
-                "request_timeout", url=url, attempt=attempt, rps=cfg.rps
-            )
+            logger.warning("request_timeout", url=url, attempt=attempt, rps=cfg.rps)
             logger.info("request_fail", url=url, status=None, rps=cfg.rps)
             return None
         event = "request_start" if attempt == 1 else "request_retry"
@@ -210,7 +208,9 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             logger.info("request_fail", url=url, status=status, rps=cfg.rps)
             return None
         if status == 429 or 500 <= status < 600:
-            event_name = "request_rate_limited" if status == 429 else "request_server_error"
+            event_name = (
+                "request_rate_limited" if status == 429 else "request_server_error"
+            )
             logger.warning(
                 event_name,
                 url=url,
@@ -638,7 +638,11 @@ def process_compound(compound_name: str, cfg: PubChemCfg) -> dict[str, str | Non
     """
     cid = get_cid(compound_name, cfg)
     standard = get_standard_name(cid, cfg) if cid else None
-    props = get_properties(cid, cfg) if cid else Properties(None, None, None, None, None, None)
+    props = (
+        get_properties(cid, cfg)
+        if cid
+        else Properties(None, None, None, None, None, None)
+    )
     return {
         "Name": compound_name,
         "CID": cid,

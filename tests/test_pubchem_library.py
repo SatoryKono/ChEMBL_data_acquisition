@@ -289,7 +289,9 @@ def test_get_properties_returns_none_for_missing() -> None:
         f"{cfg.base.rstrip('/')}/compound/cid/{cid}/property/"
         "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
     )
-    responses.add(responses.GET, url, json={"PropertyTable": {"Properties": [{}]}}, status=200)
+    responses.add(
+        responses.GET, url, json={"PropertyTable": {"Properties": [{}]}}, status=200
+    )
 
     props = pl.get_properties(cid, cfg)
 

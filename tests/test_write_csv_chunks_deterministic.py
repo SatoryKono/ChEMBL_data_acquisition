@@ -56,9 +56,7 @@ def test_write_csv_chunks_deterministic_missing_keys(tmp_path: Path) -> None:
         key_cols=["chembl_id"],
     )
 
-    chunk_iter = (
-        shuffled.iloc[i : i + 2] for i in range(0, len(shuffled), 2)
-    )
+    chunk_iter = (shuffled.iloc[i : i + 2] for i in range(0, len(shuffled), 2))
     write_csv_chunks_deterministic(
         chunk_iter,
         path_chunks,

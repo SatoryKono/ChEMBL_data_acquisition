@@ -101,13 +101,12 @@ def _build_fallback_doi_map(
             for column in (pmid_column, doi_column)
             if column not in frame.columns
         ]
-        raise ValueError(
-            "missing columns in fallback DOI file: "
-            f"{', '.join(missing)}"
-        )
+        raise ValueError(f"missing columns in fallback DOI file: {', '.join(missing)}")
 
     mapping: dict[str, str] = {}
-    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(index=False):
+    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(
+        index=False
+    ):
         if pd.isna(pmid_value):
             pmid = ""
         else:
@@ -303,9 +302,7 @@ def fetch_pubmed_records(
         batch_list = _coerce_batch_argument(first, *rest)
 
         try:
-
             with session_with_retry(__cfg.api, __cfg.retry) as session:
-
                 pubmed_limiter.acquire()
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
@@ -324,7 +321,9 @@ def fetch_pubmed_records(
 
                     # Create a map for easy lookup
                     semsch_map = {
-                        s.get("scholar.PMID"): s for s in semsch_list if s.get("scholar.PMID")
+                        s.get("scholar.PMID"): s
+                        for s in semsch_list
+                        if s.get("scholar.PMID")
                     }
 
                     # Fallback to the single-record endpoint when the batch request fails
@@ -432,7 +431,6 @@ _NUMERIC_EXPORT_COLUMNS = {
 
 
 _EXPORT_COLUMNS = [
-
     "PubMed.PMID",
     "PubMed.DOI",
     "PubMed.ArticleTitle",

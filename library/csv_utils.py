@@ -260,7 +260,9 @@ def write_csv_deterministic(
                 )
                 tmp_paths.append(chunk_path)
 
-            key_indices = [column_names.index(c) for c in sort_cols] if sort_cols else []
+            key_indices = (
+                [column_names.index(c) for c in sort_cols] if sort_cols else []
+            )
             key_funcs: list[Callable[[str], object]] = []
             for col in sort_cols:
                 dtype = work.dtypes[col]
@@ -471,7 +473,9 @@ def write_csv_chunks_deterministic(
         first = next((c for c in current if c is not None), pd.DataFrame())
         columns = list(first.columns)
         dtypes = {col: first.dtypes[col].name for col in columns}
-        resolved_sort_cols = _resolve_sort_columns(first, key_cols_list, emit_warning=False)
+        resolved_sort_cols = _resolve_sort_columns(
+            first, key_cols_list, emit_warning=False
+        )
 
         def _fmt(value: Any) -> Any:
             if pd.isna(value):
@@ -486,7 +490,11 @@ def write_csv_chunks_deterministic(
         for idx, frame in enumerate(current):
             if frame is not None and not frame.empty:
                 row = frame.iloc[0]
-                key = tuple(row[k] for k in resolved_sort_cols) if resolved_sort_cols else tuple()
+                key = (
+                    tuple(row[k] for k in resolved_sort_cols)
+                    if resolved_sort_cols
+                    else tuple()
+                )
                 heapq.heappush(heap, (key, idx, 0))
 
         with out_path.open("w", encoding=encoding, newline="") as fh:

@@ -15,7 +15,6 @@ from .config import UniprotMappingCfg
 from .log import logger
 from .rate_limiter import get_limiter
 
-
 _UNIPROT_MAPPING_CACHE_MAXSIZE = 128
 
 

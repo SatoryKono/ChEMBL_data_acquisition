@@ -25,15 +25,15 @@ from .document_type_terms import (
 )
 from .logging_setup import Logger, LoggerConfig, configure_logger
 from .organism_classification import (
+    TYPE_MULTICELLULAR,
+    TYPE_UNICELLULAR,
+    TYPE_VIRAL,
     OrganismClassificationRules,
     add_cellularity,
     add_cellularity_smart,
     classify_by_lineage,
     classify_record,
     normalize,
-    TYPE_MULTICELLULAR,
-    TYPE_UNICELLULAR,
-    TYPE_VIRAL,
 )
 from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors

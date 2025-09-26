@@ -5,10 +5,13 @@ import pytest
 
 from library.config import ActivityBoundsCfg
 from schemas import normalize_activities
-from scripts.get_activity_data import compute_activity_bounds, logger as activity_logger
+from scripts.get_activity_data import compute_activity_bounds
+from scripts.get_activity_data import logger as activity_logger
 
 
-def _compute_frame(data: list[dict[str, object]], cfg: ActivityBoundsCfg | None = None) -> pd.DataFrame:
+def _compute_frame(
+    data: list[dict[str, object]], cfg: ActivityBoundsCfg | None = None
+) -> pd.DataFrame:
     frame = pd.DataFrame(data)
     normalised = normalize_activities(frame)
     return compute_activity_bounds(normalised, cfg or ActivityBoundsCfg())
@@ -17,15 +20,27 @@ def _compute_frame(data: list[dict[str, object]], cfg: ActivityBoundsCfg | None 
 def test_compute_activity_bounds_unit_normalization() -> None:
     df = _compute_frame(
         [
-            {"standard_value": 1.0, "standard_relation": "=", "value": 1000.0, "units": "pM"},
-            {"standard_value": 1.0, "standard_relation": "=", "value": 0.001, "units": "uM"},
+            {
+                "standard_value": 1.0,
+                "standard_relation": "=",
+                "value": 1000.0,
+                "units": "pM",
+            },
+            {
+                "standard_value": 1.0,
+                "standard_relation": "=",
+                "value": 0.001,
+                "units": "uM",
+            },
         ]
     )
     assert df["lower_value"].tolist() == pytest.approx([1.0, 1.0])
     assert df["upper_value"].tolist() == pytest.approx([1.0, 1.0])
 
 
-def test_compute_activity_bounds_swaps_conflicts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compute_activity_bounds_swaps_conflicts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     events: list[str] = []
 
     def fake_warning(event: str, **_: object) -> None:
@@ -96,7 +111,9 @@ def test_compute_activity_bounds_uncertainty_toggle() -> None:
 def test_compute_activity_bounds_golden_samples() -> None:
     input_df = pd.read_csv("tests/data/activity_bounds_input.csv")
     expected = pd.read_csv("tests/data/activity_bounds_expected.csv")
-    result = compute_activity_bounds(normalize_activities(input_df), ActivityBoundsCfg())
+    result = compute_activity_bounds(
+        normalize_activities(input_df), ActivityBoundsCfg()
+    )
     pd.testing.assert_frame_equal(
         result[["activity_id", "lower_value", "upper_value"]],
         expected,

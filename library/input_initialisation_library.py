@@ -19,12 +19,10 @@ except ImportError as exc:  # pragma: no cover - Python <3.7
 
 import pandas as pd
 
+from . import organism_classification
 from .config import Config
 from .io import write_csv
 from .log import logger
-
-from . import organism_classification
-
 
 EntityName = Literal[
     "activity",
@@ -511,7 +509,6 @@ def process_activity_table(
 
     targets = pd.read_csv(
         targets_path,
-
         usecols=[
             "target_chembl_id",
             "IUPHAR_class",
@@ -538,7 +535,6 @@ def process_activity_table(
             "phylum": "string",
             "taxon_id": "string",
         },
-
     )
 
     df = df.merge(
@@ -555,7 +551,6 @@ def process_activity_table(
                 "taxon_id",
                 "gene_index",
                 "taxon_index",
-                "organism_cellularity",
             ]
         ],
         how="left",
@@ -565,22 +560,39 @@ def process_activity_table(
     # input dataframe already contains some of these fields.
     df = df.loc[:, ~df.columns.duplicated()]
 
+    if "organism_cellularity" not in df.columns:
+        df["organism_cellularity"] = pd.Series(dtype="string")
+
     df["multifunctional_enzyme"] = _safe_to_bool(
         df["multifunctional_enzyme"], "multifunctional_enzyme"
     )
-
 
     df = organism_classification.add_cellularity_smart(
         df,
         genus_col="genus",
         superkingdom_col="superkingdom",
         phylum_col="phylum",
-        taxon_id_col="taxon_id",
-        output_col="unicellular_organism",
+        output_col="organism_cellularity",
     )
 
-    df.drop(columns=["genus", "superkingdom", "phylum", "taxon_id"], inplace=True)
+    unicellular_labels = {
+        organism_classification.TYPE_UNICELLULAR,
+        organism_classification.TYPE_VIRAL,
+    }
+    df["unicellular_organism"] = (
+        df["organism_cellularity"].astype("string").isin(unicellular_labels)
+    ).astype("boolean")
 
+    df.drop(
+        columns=[
+            "genus",
+            "superkingdom",
+            "phylum",
+            "taxon_id",
+            "organism_cellularity",
+        ],
+        inplace=True,
+    )
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
@@ -1586,5 +1598,3 @@ def normalize_pair_columns(df: pd.DataFrame) -> pd.DataFrame:
         elif key == "activityid2":
             rename[col] = "activity_chembl_id2"
     return df.rename(columns=rename)
-
-

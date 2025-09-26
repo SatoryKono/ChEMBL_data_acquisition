@@ -3,8 +3,8 @@ import json
 import pandas as pd
 import pytest
 
-from library.config import ActivityActionTypeCfg, ActivityPropertiesCfg
 from library.activity_action_properties import annotate_action_properties
+from library.config import ActivityActionTypeCfg, ActivityPropertiesCfg
 from scripts.get_activity_data import (
     _extract_effect_features,
     _normalise_mapping,
@@ -44,11 +44,7 @@ def test_infer_action_type_metric_precedence() -> None:
     cfg = ActivityActionTypeCfg()
     record = _record(activity_comment="positive allosteric modulator")
     features = _extract_effect_features(record)
-    allowlist = {
-        token
-        for value in cfg.allowlist
-        if (token := value.strip().lower())
-    }
+    allowlist = {token for value in cfg.allowlist if (token := value.strip().lower())}
     result = infer_action_type(
         record,
         cfg,
@@ -67,13 +63,11 @@ def test_infer_action_type_metric_precedence() -> None:
 
 def test_infer_action_type_allosteric_fallback() -> None:
     cfg = ActivityActionTypeCfg()
-    record = _record(standard_type="TGI50", activity_comment="positive allosteric modulator")
+    record = _record(
+        standard_type="TGI50", activity_comment="positive allosteric modulator"
+    )
     features = _extract_effect_features(record)
-    allowlist = {
-        token
-        for value in cfg.allowlist
-        if (token := value.strip().lower())
-    }
+    allowlist = {token for value in cfg.allowlist if (token := value.strip().lower())}
     trackers = _tracker()
     result = infer_action_type(
         record,
@@ -141,16 +135,22 @@ def test_apply_activity_annotations_adds_columns() -> None:
     assert pytest.approx(payload["measurement"]["value"], rel=1e-6) == 1.5
 
 
-def test_annotate_action_properties_streams_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_annotate_action_properties_streams_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     original_to_dict = pd.DataFrame.to_dict
     original_itertuples = pd.DataFrame.itertuples
 
-    def fail_on_records(self: pd.DataFrame, orient: str = "dict", *args: object, **kwargs: object):
+    def fail_on_records(
+        self: pd.DataFrame, orient: str = "dict", *args: object, **kwargs: object
+    ):
         if orient == "records":
             raise AssertionError("to_dict with orient='records' should not be used")
-        return original_to_dict(self, orient=orient, *args, **kwargs)
+        return original_to_dict(self, orient, *args, **kwargs)
 
-    def tracking_itertuples(self: pd.DataFrame, index: bool = False, name: str | None = None):
+    def tracking_itertuples(
+        self: pd.DataFrame, index: bool = False, name: str | None = None
+    ):
         call_count[0] += 1
         iterator = original_itertuples(self, index=index, name=name)
 
@@ -166,13 +166,15 @@ def test_annotate_action_properties_streams_rows(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(pd.DataFrame, "to_dict", fail_on_records)
     monkeypatch.setattr(pd.DataFrame, "itertuples", tracking_itertuples)
 
-    large_frame = pd.DataFrame([
-        _record(
-            activity_comment="positive allosteric modulator",
-            standard_value=index,
-        )
-        for index in range(1000)
-    ])
+    large_frame = pd.DataFrame(
+        [
+            _record(
+                activity_comment="positive allosteric modulator",
+                standard_value=index,
+            )
+            for index in range(1000)
+        ]
+    )
 
     annotated = annotate_action_properties(large_frame)
 

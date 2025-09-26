@@ -416,6 +416,7 @@ class InitCfg(_BaseModel):
     all_doc: Path = Path("data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx")
     output_dir: Path = Path("data/output/ChEMBL/processed")
 
+
 class RateCfg(_BaseModel):
     global_rps: int = Field(8, ge=1)
     global_burst: int = Field(8, ge=1)
@@ -539,7 +540,9 @@ class ActivityActionTypeCfg(_BoolModel):
             items = list(value)
         cleaned = [str(item).strip() for item in items if str(item).strip()]
         if not cleaned:
-            raise ValueError("activity_enrichment.action_type field lists must be non-empty")
+            raise ValueError(
+                "activity_enrichment.action_type field lists must be non-empty"
+            )
         return cleaned
 
 
@@ -590,7 +593,9 @@ class ActivityPropertiesCfg(_BoolModel):
     @classmethod
     def _non_empty(cls, v: str) -> str:
         if not v or not str(v).strip():
-            raise ValueError("activity_enrichment.activity_properties fields must be non-empty")
+            raise ValueError(
+                "activity_enrichment.activity_properties fields must be non-empty"
+            )
         return v
 
 
@@ -776,16 +781,12 @@ class ChemblSourceCfg(_BaseModel):
     molecule_catalog: MoleculeCatalogCfg = Field(
         default_factory=lambda: MoleculeCatalogCfg()
     )
-    pipelines: ChemblPipelinesCfg = Field(
-        default_factory=lambda: ChemblPipelinesCfg()
-    )
+    pipelines: ChemblPipelinesCfg = Field(default_factory=lambda: ChemblPipelinesCfg())
 
 
 class UniprotSourceCfg(_BaseModel):
     api: UniprotCfg = Field(default_factory=lambda: UniprotCfg())
-    mapping: UniprotMappingCfg = Field(
-        default_factory=lambda: UniprotMappingCfg()
-    )
+    mapping: UniprotMappingCfg = Field(default_factory=lambda: UniprotMappingCfg())
 
 
 class SourcesCfg(_BaseModel):
@@ -1226,11 +1227,7 @@ def _merge_mapping(dest: dict[str, Any], src: dict[str, Any]) -> None:
     """Recursively merge mapping *src* into *dest*."""
 
     for key, value in src.items():
-        if (
-            key in dest
-            and isinstance(dest[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in dest and isinstance(dest[key], dict) and isinstance(value, dict):
             _merge_mapping(dest[key], value)
         else:
             dest[key] = value
@@ -1300,6 +1297,7 @@ def _upgrade_legacy_config(data: dict[str, Any]) -> None:
     if "doc_type" in data:
         system_cfg.setdefault("doc_type", {})
         _merge_mapping(system_cfg["doc_type"], data.pop("doc_type"))
+
 
 def print_config(cfg: Config) -> None:
     """Print ``cfg`` as YAML masking secret values."""

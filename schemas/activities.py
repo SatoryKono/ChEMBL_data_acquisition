@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import cast
 
 import pandera.pandas as pa
-from pandera.dtypes import DataType
 import yaml
+from pandera.dtypes import DataType
 
 PA_ANY = cast(DataType, None)
 
@@ -38,10 +38,7 @@ def _load_standard_type_values() -> tuple[str, ...]:
         return ()
 
     metrics = (
-        config
-        .get("activity_enrichment", {})
-        .get("action_type", {})
-        .get("metrics", {})
+        config.get("activity_enrichment", {}).get("action_type", {}).get("metrics", {})
     )
     if not isinstance(metrics, dict):
         return ()

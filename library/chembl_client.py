@@ -50,11 +50,7 @@ class ChemblClient:
         api = api or ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)")
         retry = retry or RetryCfg()
         self.session = session or session_with_retry(api, retry)
-        ttl = (
-            chembl.cache_ttl
-            if chembl is not None
-            else ChemblCacheCfg().cache_ttl
-        )
+        ttl = chembl.cache_ttl if chembl is not None else ChemblCacheCfg().cache_ttl
         maxsize = (
             chembl.cache_maxsize
             if chembl is not None

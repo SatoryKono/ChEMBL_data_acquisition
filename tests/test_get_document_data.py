@@ -21,8 +21,6 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
 )
-from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
-from schemas import DocumentsSchema
 from scripts import get_document_data as gdd
 
 
@@ -119,9 +117,7 @@ def test_run_all_logs_failing_ids(
     chunk_size = cfg.document.all.chunk_size
     ids = [f"CHEMBL{i}" for i in range(1, chunk_size + 3)]
     input_csv = tmp_path / "docs.csv"
-    input_csv.write_text(
-        "document_chembl_id\n" + "\n".join(ids) + "\n"
-    )
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids) + "\n")
 
     class DummyClient:
         def __enter__(self) -> DummyClient:
@@ -172,9 +168,7 @@ def test_run_all_passes_generator_to_get_documents(
     cfg = Config()
     ids = [f"CHEMBL{i}" for i in range(1, 4)]
     input_csv = tmp_path / "docs.csv"
-    input_csv.write_text(
-        "document_chembl_id\n" + "\n".join(ids) + "\n"
-    )
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids) + "\n")
 
     class DummyClient:
         def __enter__(self) -> DummyClient:
@@ -479,7 +473,6 @@ def test_write_csv_column_order(
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
 
 
-
 def test_fetch_pubmed_records_handles_generic_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -525,7 +518,7 @@ def test_fetch_pubmed_records_accepts_config(
     factory_calls: dict[str, Any] = {}
 
     class DummySession:
-        def __enter__(self) -> "DummySession":
+        def __enter__(self) -> DummySession:
             return self
 
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
