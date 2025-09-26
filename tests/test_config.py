@@ -344,6 +344,8 @@ def test_default_resource_paths_exist() -> None:
         "iuphar_target_csv",
         "iuphar_family_csv",
         "uniprot_data_dir",
+        "targets_type_csv",
+
     ):
         resource_path = getattr(resources, field)
         full_path = (

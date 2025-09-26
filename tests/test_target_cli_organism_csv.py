@@ -11,6 +11,7 @@ from library.config import Config
 from scripts import get_target_data as gtd
 
 
+
 class DummyRecord:
   """Lightweight stand-in for :class:`IUPHARClassificationRecord`."""
 
