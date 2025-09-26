@@ -4,7 +4,7 @@ import argparse
 import io
 import json
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -116,8 +116,14 @@ def test_run_all_logs_failing_ids(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Log message should include IDs when document retrieval fails."""
+
+    cfg = Config()
+    chunk_size = cfg.document.all.chunk_size
+    ids = [f"CHEMBL{i}" for i in range(1, chunk_size + 3)]
     input_csv = tmp_path / "docs.csv"
-    input_csv.write_text("document_chembl_id\nCHEMBL1\nCHEMBL2\n")
+    input_csv.write_text(
+        "document_chembl_id\n" + "\n".join(ids) + "\n"
+    )
 
     class DummyClient:
         def __enter__(self) -> DummyClient:
@@ -141,7 +147,6 @@ def test_run_all_logs_failing_ids(
 
     buffer = io.StringIO()
     configure_logger(LoggerConfig(level="ERROR", stream=buffer))
-    cfg = Config()
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=tmp_path / "out.csv",
@@ -156,9 +161,72 @@ def test_run_all_logs_failing_ids(
     records = [json.loads(line) for line in log_output.splitlines() if line.strip()]
     assert any(
         record.get("event") == "chembl_documents_fetch_failed"
-        and record.get("ids") == ["CHEMBL1", "CHEMBL2"]
+        and record.get("ids") == ids[:chunk_size]
         for record in records
     )
+
+
+def test_run_all_passes_generator_to_get_documents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``run_all`` should pass a generator into ``get_documents``."""
+
+    cfg = Config()
+    ids = [f"CHEMBL{i}" for i in range(1, 4)]
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text(
+        "document_chembl_id\n" + "\n".join(ids) + "\n"
+    )
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    captured: dict[str, object] = {}
+
+    def fake_get_documents(
+        ids_iter: Iterable[str],
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        assert not isinstance(ids_iter, list)
+        assert isinstance(ids_iter, Iterator)
+        values = list(ids_iter)
+        captured["values"] = values
+        return pd.DataFrame({"document_chembl_id": values})
+
+    monkeypatch.setattr(cl, "get_documents", fake_get_documents)
+    monkeypatch.setattr(gdd.dp, "postprocess_documents", lambda df: df)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+
+    def fake_finalise_export(*args: Any, **kwargs: Any) -> int:
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+    monkeypatch.setattr(
+        gdd,
+        "fetch_pubmed_records",
+        lambda *args, **kwargs: pytest.fail("unexpected call"),
+    )
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+    )
+
+    rc = gdd.run_all(cfg, args)
+    assert rc == 0
+    assert captured["values"] == ids
 
 
 def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:

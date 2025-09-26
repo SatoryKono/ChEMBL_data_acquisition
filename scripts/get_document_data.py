@@ -35,7 +35,7 @@ if __package__ is None:  # running as a script
 import argparse
 from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from itertools import islice
+from itertools import chain, islice
 from typing import cast
 
 import pandas as pd
@@ -882,12 +882,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         ids_source = limited_ids
         logger.info("process_limit", limit=len(limited_ids))
 
-    chunk_ids: list[str] = []
+    iterator = iter(ids_source)
+    sample_size = cfg.document.all.chunk_size
+    sample_ids = list(islice(iterator, sample_size))
+    ids_for_fetch = chain(sample_ids, iterator)
     try:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            chunk_ids = list(ids_source)  # capture IDs for logging on failure
             doc_df = cl.get_documents(
-                chunk_ids,
+                ids_for_fetch,
                 cfg=cfg.api,
                 client=client,
                 chunk_size=cfg.document.all.chunk_size,
@@ -896,7 +898,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     except (requests.RequestException, ValueError) as exc:
         logger.error(
             "chembl_documents_fetch_failed",
-            ids=chunk_ids,
+            ids=sample_ids,
             error=str(exc),
             chunk_size=cfg.document.all.chunk_size,
         )
