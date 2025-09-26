@@ -120,5 +120,8 @@ def test_collect_info_enriches_gtop(tmp_path: Path) -> None:
 
     assert result["gtop_natural_ligands_n"] == "2"
     assert result["gtop_interactions_n"] == "3"
-    assert result["gtop_function_text_short"] == "Physiological function: Regulates sample process"
+    assert (
+        result["gtop_function_text_short"]
+        == "Physiological function: Regulates sample process"
+    )
     assert len(responses.calls) == 3

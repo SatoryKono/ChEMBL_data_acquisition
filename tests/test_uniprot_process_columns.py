@@ -50,4 +50,3 @@ def test_process_writes_expected_columns(
     row = df.loc[0]
     assert row["uniprot_id"] == "P12345"
     assert row["secondaryAccessions"] == "S1|S2"
-

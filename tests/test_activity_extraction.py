@@ -81,9 +81,7 @@ def test_cli_success(
 
     monkeypatch.setattr("scripts.get_activity_data.ChemblClient", DummyChemblClient)
 
-    def fake_get(
-        ids, *, cfg, client, chunk_size, timeout, **kwargs
-    ):  # type: ignore[no-untyped-def]
+    def fake_get(ids, *, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         assert list(ids) == ["A1", "A2"]
         return df
 
@@ -139,9 +137,7 @@ def test_cli_validation_failure(
 
     monkeypatch.setattr("scripts.get_activity_data.ChemblClient", DummyChemblClient)
 
-    def fake_get(
-        ids, *, cfg, client, chunk_size, timeout, **kwargs
-    ):  # type: ignore[no-untyped-def]
+    def fake_get(ids, *, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         return df
 
     monkeypatch.setattr("scripts.get_activity_data.cl.get_activities", fake_get)

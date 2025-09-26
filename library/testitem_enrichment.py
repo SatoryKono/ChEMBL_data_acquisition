@@ -25,18 +25,13 @@ class _SourceFrames:
 def _read_source(path: Path, *, io_cfg: IoCfg) -> pd.DataFrame:
     """Read a CSV file using the shared I/O configuration."""
 
-    return io.read_csv(path, cfg=io_cfg, dtype="string")
+    return io.read_csv(path, cfg=io_cfg, dtype=pd.StringDtype())
 
 
 def _normalise_ids(series: pd.Series) -> pd.Series:
     """Return ``series`` with whitespace trimmed and converted to upper case."""
 
-    normalised = (
-        series.fillna("")
-        .astype("string")
-        .str.strip()
-        .str.upper()
-    )
+    normalised = series.fillna("").astype("string").str.strip().str.upper()
     return normalised.mask(normalised == "", other=pd.NA)
 
 
@@ -126,7 +121,9 @@ def _prepare_catalog(
 
     if cfg.flags.coerce_to_bool:
         for column in _FLAG_COLUMNS:
-            catalog[column], unknown_values = _coerce_flag_values(catalog[column], column)
+            catalog[column], unknown_values = _coerce_flag_values(
+                catalog[column], column
+            )
             unknown_by_column[column] = unknown_values
     else:
         for column in _FLAG_COLUMNS:
@@ -189,7 +186,9 @@ def enrich(
         hierarchy = hierarchy.drop_duplicates(
             subset=["molecule_chembl_id"], keep="first"
         ).set_index("molecule_chembl_id")
-        parent_from_hierarchy = child_ids.map(hierarchy["parent_molecule_chembl_id"].to_dict())
+        parent_from_hierarchy = child_ids.map(
+            hierarchy["parent_molecule_chembl_id"].to_dict()
+        )
         parent_ids = parent_ids.fillna(parent_from_hierarchy)
 
     parent_ids = parent_ids.astype("string")
@@ -206,13 +205,11 @@ def enrich(
 
     if cfg.logging.warn_missing_molecule and not catalog.empty:
         known_ids = set(catalog.index)
-        missing_children = sorted({value for value in child_ids.dropna() if value not in known_ids})
+        missing_children = sorted(
+            {value for value in child_ids.dropna() if value not in known_ids}
+        )
         missing_parents = sorted(
-            {
-                value
-                for value in parent_ids.dropna()
-                if value not in known_ids
-            }
+            {value for value in parent_ids.dropna() if value not in known_ids}
         )
         if missing_children:
             logger.warning(
@@ -250,9 +247,7 @@ def enrich(
 
         if cfg.logging.warn_inconsistent_flags:
             inconsistent = (
-                child_flag.notna()
-                & parent_flag.notna()
-                & (child_flag != parent_flag)
+                child_flag.notna() & parent_flag.notna() & (child_flag != parent_flag)
             )
             if inconsistent.any():
                 logger.warning(

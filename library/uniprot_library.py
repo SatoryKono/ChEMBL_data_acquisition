@@ -887,7 +887,10 @@ def _fetch_gtop_endpoint(
             return response.json()
     except (json.JSONDecodeError, ValueError) as exc:
         logger.warning(
-            "gtop_json_decode_failed", gtop_id=gtop_id, endpoint=endpoint, error=str(exc)
+            "gtop_json_decode_failed",
+            gtop_id=gtop_id,
+            endpoint=endpoint,
+            error=str(exc),
         )
     except requests.RequestException as exc:  # pragma: no cover - network failures
         logger.warning(
@@ -1251,9 +1254,7 @@ def process(
                 info = collect_info(uid, data_dir, cfg=cfg, gtop_cfg=gtop_cfg)
                 unexpected = sorted(set(info) - expected_columns)
                 if unexpected:
-                    logger.debug(
-                        "uniprot_extra_fields", uid=uid, columns=unexpected
-                    )
+                    logger.debug("uniprot_extra_fields", uid=uid, columns=unexpected)
                 row = {
                     column: ("" if info.get(column) is None else info.get(column))
                     for column in fieldnames

@@ -29,7 +29,9 @@ class DummyClassifier:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
-    def get(self, target_id: str, family_id: str, ec_number: str, name: str) -> DummyRecord:
+    def get(
+        self, target_id: str, family_id: str, ec_number: str, name: str
+    ) -> DummyRecord:
         self.calls.append(("get", (target_id, family_id, ec_number, name)))
         return DummyRecord()
 
@@ -72,7 +74,9 @@ def test_iuphar_merge_preserves_ec_number(
     orig_finalise = tp.finalise_targets
 
     def patched_finalise(df: pd.DataFrame, **kwargs: object) -> pd.DataFrame:
-        df = df.drop(columns=[col for col in ("type", "target_type") if col in df.columns])
+        df = df.drop(
+            columns=[col for col in ("type", "target_type") if col in df.columns]
+        )
         return orig_finalise(df, **kwargs)
 
     monkeypatch.setattr(tp, "finalise_targets", patched_finalise)

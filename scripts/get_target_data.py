@@ -28,11 +28,11 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
-from library import target_postprocessing as tp
 from library import protein_classification as pc
+from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.chembl_target import normalize_reaction_ec_numbers
 from library.chembl_client import ChemblClient
+from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
     apply_config_overrides,
@@ -54,8 +54,6 @@ from library.table_quality import analyze_table_quality
 from schemas import TargetsSchema, normalize_targets
 from schemas.targets import TARGETS_COLUMN_ORDER
 
-
-
 TARGETS_REQUIRED_COLUMNS: set[str] = {
     name for name, column in TargetsSchema.columns.items() if column.required
 }
@@ -65,9 +63,10 @@ TARGETS_OPTIONAL_COLUMNS: list[str] = [
 ]
 
 TARGETS_OBJECT_COLUMNS: set[str] = {
-    name for name, column in TargetsSchema.columns.items() if str(column.dtype) == "object"
+    name
+    for name, column in TargetsSchema.columns.items()
+    if str(column.dtype) == "object"
 }
-
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -881,9 +880,7 @@ def fetch_iuphar(
         combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
 
     ec_number_columns = [
-        column
-        for column in combined_df.columns
-        if column.startswith("ec_numbers")
+        column for column in combined_df.columns if column.startswith("ec_numbers")
     ]
     if ec_number_columns:
         combined_df["ec_numbers"] = combined_df.apply(
@@ -909,9 +906,7 @@ def fetch_iuphar(
             axis=1,
         )
         extra_reaction_columns = [
-            column
-            for column in reaction_ec_columns
-            if column != "reaction_ec_numbers"
+            column for column in reaction_ec_columns if column != "reaction_ec_numbers"
         ]
         if extra_reaction_columns:
             combined_df = combined_df.drop(

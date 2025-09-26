@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Iterable
 
 import pandas as pd
 import pytest
@@ -52,21 +52,19 @@ def _assert_column_types(
         else:
             checks = tuple(validators)
         if not any(check(series) for check in checks):
-            raise AssertionError(
-                f"unexpected dtype for {column}: {series.dtype!s}"
-            )
+            raise AssertionError(f"unexpected dtype for {column}: {series.dtype!s}")
 
 
-def test_get_activity_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_activity_data_smoke(
+    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Smoke-test ``get_activity_data`` with bundled identifiers."""
 
     input_csv = Path("data/input-smoke/activity.csv")
     output_csv = smoke_output_dir / "activity.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_activities(
-        ids, cfg, client, chunk_size, timeout, **kwargs
-    ):  # type: ignore[no-untyped-def]
+    def fake_get_activities(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, raw_id in enumerate(ids, start=1):
             activity_id = int(str(raw_id))
@@ -83,7 +81,9 @@ def test_get_activity_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.Mon
         return pd.DataFrame(rows)
 
     monkeypatch.setattr(cl, "get_activities", fake_get_activities)
-    monkeypatch.setattr(get_activity_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        get_activity_data, "analyze_table_quality", lambda *_, **__: None
+    )
 
     exit_code = get_activity_data.main(
         [
@@ -128,7 +128,9 @@ def test_get_activity_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.Mon
     )
 
 
-def test_get_assay_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_assay_data_smoke(
+    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Smoke-test ``get_assay_data`` using canned assay identifiers."""
 
     input_csv = Path("data/input-smoke/assay.csv")
@@ -219,7 +221,9 @@ def test_get_document_data_smoke(
         return pd.DataFrame(rows)
 
     monkeypatch.setattr(cl, "get_documents", fake_get_documents)
-    monkeypatch.setattr(get_document_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        get_document_data, "analyze_table_quality", lambda *_, **__: None
+    )
 
     exit_code = get_document_data.main(
         [
@@ -261,7 +265,9 @@ def test_get_document_data_smoke(
     )
 
 
-def test_get_target_data_smoke(smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_target_data_smoke(
+    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Smoke-test ``get_target_data`` using the ``chembl`` pipeline."""
 
     input_csv = Path("data/input-smoke/targets.csv")
@@ -395,7 +401,9 @@ def test_get_testitem_data_smoke(
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
-    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
+    )
 
     original_apply = get_testitem_data.apply_config_overrides
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # ruff: noqa: E402
 from pathlib import Path
@@ -14,26 +14,18 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections import ChainMap
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from itertools import islice, tee
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
-from library import io
-from library import molecule_catalog
-from library import testitem_enrichment
+from library import io, molecule_catalog, testitem_enrichment
 from library import pubchem_library as pl
-from library.molecule_catalog import (
-    load_parent_catalog,
-    query_parent_catalog,
-    update_parent_catalog_cache,
-    write_parent_catalog_cache,
-)
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -54,6 +46,12 @@ from library.config import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.molecule_catalog import (
+    load_parent_catalog,
+    query_parent_catalog,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
+)
 from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
@@ -152,10 +150,10 @@ def _load_pubchem_cid_cache(
             except ValueError:
                 updated_at = None
             if updated_at is not None and updated_at.tzinfo is None:
-                updated_at = updated_at.replace(tzinfo=timezone.utc)
+                updated_at = updated_at.replace(tzinfo=UTC)
             if updated_at is not None:
                 expires_at = updated_at + timedelta(hours=ttl_hours)
-                if expires_at <= datetime.now(timezone.utc):
+                if expires_at <= datetime.now(UTC):
                     logger.info("pubchem_cache_expired", path=str(path))
                     return {}
 
@@ -181,7 +179,9 @@ def _load_pubchem_cid_cache(
     return cache
 
 
-def _write_pubchem_cid_cache(path: Path | None, cache: Mapping[str, str | None]) -> None:
+def _write_pubchem_cid_cache(
+    path: Path | None, cache: Mapping[str, str | None]
+) -> None:
     """Persist CID cache mapping to disk."""
 
     if path is None:
@@ -199,7 +199,7 @@ def _write_pubchem_cid_cache(path: Path | None, cache: Mapping[str, str | None])
             payload = {
                 "metadata": {
                     "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                 },
                 "values": serialisable,
             }
@@ -283,7 +283,8 @@ def resolve_pubchem_cid(
     cfg: PubChemCfg,
     *,
     parent_loader: Callable[[str], pd.Series | None] | None = None,
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None = None,
+    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
+    | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
 
@@ -400,12 +401,7 @@ def _resolve_catalog_load_source(
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
     """Return ``series`` normalised to upper-case ChEMBL identifiers."""
 
-    normalised = (
-        series.fillna("")
-        .astype("string")
-        .str.strip()
-        .str.upper()
-    )
+    normalised = series.fillna("").astype("string").str.strip().str.upper()
     return normalised
 
 
@@ -436,9 +432,7 @@ def attach_parent_molecule_ids(
     """
 
     if "parant_molecule_id" in df.columns:
-        raise ValueError(
-            "Input frame contains unexpected column 'parant_molecule_id'."
-        )
+        raise ValueError("Input frame contains unexpected column 'parant_molecule_id'.")
 
     result = df.copy()
 
@@ -503,11 +497,7 @@ def attach_parent_molecule_ids(
     uncovered_children = 0
 
     if catalog is not None:
-        base_view = {
-            key: catalog[key]
-            for key in unique_children
-            if key in catalog
-        }
+        base_view = {key: catalog[key] for key in unique_children if key in catalog}
         catalog_data = ChainMap({}, base_view)
     else:
         catalog_data = {}
@@ -525,9 +515,7 @@ def attach_parent_molecule_ids(
                     source_resolved = PARENT_LOOKUP_SOURCE_CACHE
 
     parent_map = {
-        key: catalog_data[key]
-        for key in unique_children
-        if key in catalog_data
+        key: catalog_data[key] for key in unique_children if key in catalog_data
     }
     missing_ids = [key for key in unique_children if key not in parent_map]
     uncovered_children = len(missing_ids)
@@ -639,9 +627,8 @@ def add_pubchem_data(
     api_cfg: ApiCfg | None = None,
     timeout: float | None = None,
     cid_cache: MutableMapping[str, str | None] | None = None,
-    resolution_cache: MutableMapping[
-        tuple[str | None, ...], pl.PubChemResolution
-    ] | None = None,
+    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
+    | None = None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
 ) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
@@ -682,7 +669,10 @@ def add_pubchem_data(
     existing_cols = [col for col in PUBCHEM_COLUMNS if col in result.columns]
     if prefer_local and existing_cols:
         normalised = pd.DataFrame(
-            {col: result[col].astype("string").replace("", pd.NA) for col in existing_cols}
+            {
+                col: result[col].astype("string").replace("", pd.NA)
+                for col in existing_cols
+            }
         )
         complete_mask = normalised.notna().all(axis=1)
     else:
@@ -691,23 +681,16 @@ def add_pubchem_data(
     def _mask_for(series: pd.Series | None, keyword: str) -> pd.Series:
         if series is None:
             return pd.Series(False, index=result.index)
-        normalised = (
-            series.astype("string")
-            .fillna("")
-            .str.strip()
-            .str.casefold()
-        )
+        normalised = series.astype("string").fillna("").str.strip().str.casefold()
         return normalised.str.contains(keyword.casefold(), regex=False, na=False)
 
     molecule_type_series = result.get("molecule_type")
     structure_type_series = result.get("structure_type")
-    polymer_mask = (
-        _mask_for(molecule_type_series, "polymer")
-        | _mask_for(structure_type_series, "polymer")
+    polymer_mask = _mask_for(molecule_type_series, "polymer") | _mask_for(
+        structure_type_series, "polymer"
     )
-    mixture_mask = (
-        _mask_for(molecule_type_series, "mixture")
-        | _mask_for(structure_type_series, "mixture")
+    mixture_mask = _mask_for(molecule_type_series, "mixture") | _mask_for(
+        structure_type_series, "mixture"
     )
 
     polymer_indexes = set(polymer_mask[polymer_mask].index.tolist())
@@ -782,7 +765,7 @@ def add_pubchem_data(
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
-            result["molecule_chembl_id"], result["pubchem_cid"]
+            result["molecule_chembl_id"], result["pubchem_cid"], strict=False
         ):
             chembl_id = _normalise_identifier(chembl_raw, uppercase=True)
             if not chembl_id:
@@ -800,7 +783,11 @@ def add_pubchem_data(
         for idx, row in result.iterrows()
         if idx not in skip_indexes
         and not (
-            (chembl_id := _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True))
+            (
+                chembl_id := _normalise_identifier(
+                    row.get("molecule_chembl_id"), uppercase=True
+                )
+            )
             and chembl_id in cid_cache
             and cid_cache[chembl_id]
         )
@@ -852,7 +839,7 @@ def add_pubchem_data(
         return value if value not in (None, "") else pd.NA
 
     lookup_cids: set[str] = set()
-    for idx, cid in zip(result.index, cid_list):
+    for idx, cid in zip(result.index, cid_list, strict=False):
         if not cid:
             continue
         if idx in skip_indexes:
@@ -866,7 +853,7 @@ def add_pubchem_data(
         properties[cid] = pl.get_properties(cid, cfg)
 
     pubchem_rows: list[dict[str, object]] = []
-    for idx, cid in zip(result.index, cid_list):
+    for idx, cid in zip(result.index, cid_list, strict=False):
         row_data: dict[str, object] = {col: pd.NA for col in PUBCHEM_COLUMNS}
         if idx in skip_indexes:
             for column in PUBCHEM_COLUMNS:
@@ -905,7 +892,9 @@ def add_pubchem_data(
                 missing_mask = existing.isna() | existing.eq("")
                 result.loc[missing_mask, col] = new_series[missing_mask]
             elif prefer_values:
-                incoming = new_series.where(~(new_series.isna() | new_series.eq("")), pd.NA)
+                incoming = new_series.where(
+                    ~(new_series.isna() | new_series.eq("")), pd.NA
+                )
                 combined = incoming.combine_first(existing)
                 result[col] = combined.astype("string")
             else:
@@ -1089,11 +1078,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 error=str(exc),
             )
             return 1
- 
+
         logger.info("parent_lookup_start")
         try:
-            catalog_arg = parent_catalog if parent_catalog else (
-                None if need_lookup else parent_catalog
+            catalog_arg = (
+                parent_catalog
+                if parent_catalog
+                else (None if need_lookup else parent_catalog)
             )
             df, parent_stats = attach_parent_molecule_ids(
                 df,
@@ -1118,9 +1109,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
         pubchem_cid_cache: dict[str, str | None] | None = None
-        pubchem_resolution_cache: dict[
-            tuple[str | None, ...], pl.PubChemResolution
-        ] | None = None
+        pubchem_resolution_cache: (
+            dict[tuple[str | None, ...], pl.PubChemResolution] | None
+        ) = None
         pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
         if getattr(cfg.pubchem, "enable", True):
             pubchem_cid_cache = _load_pubchem_cid_cache(

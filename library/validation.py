@@ -77,7 +77,9 @@ def _combine_failure_cases(cases: list[pd.DataFrame]) -> pd.DataFrame:
 class _SupportsDataFrameValidate(Protocol):
     """Protocol describing the subset of pandera schema API we rely on."""
 
-    def validate(self, dataframe: pd.DataFrame, *args: Any, **kwargs: Any) -> pd.DataFrame:
+    def validate(
+        self, dataframe: pd.DataFrame, *args: Any, **kwargs: Any
+    ) -> pd.DataFrame:
         """Validate *dataframe* and return the cleansed result."""
 
 
@@ -102,7 +104,9 @@ def _validate_with_schema(
         except SchemaErrors as exc:
             failure_cases = exc.failure_cases.copy()
             indices = _unique_indices(
-                failure_cases["index"] if "index" in failure_cases else pd.Series(dtype=object)
+                failure_cases["index"]
+                if "index" in failure_cases
+                else pd.Series(dtype=object)
             )
             if not indices:
                 logger.info(

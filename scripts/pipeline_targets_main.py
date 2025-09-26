@@ -25,8 +25,8 @@ from library.cli import (
 from library.config import Config, ensure_dirs, print_config
 from library.io import default_output_path, read_ids, write_csv
 from library.log import logger
-from library.pipeline_targets import PipelineResult, run_pipeline
 from library.pipeline_metadata import add_pipeline_metadata
+from library.pipeline_targets import PipelineResult, run_pipeline
 
 
 class PipelineConfig(BaseModel):

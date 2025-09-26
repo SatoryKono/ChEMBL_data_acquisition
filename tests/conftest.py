@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from library.config import ApiCfg, Config
+from library.config import Config
 
 
 @pytest.fixture()
