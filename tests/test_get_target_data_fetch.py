@@ -213,4 +213,5 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
     assert "synonyms" in combined_df.columns
+    assert combined_df.loc[0, "reaction_ec_numbers"] == "2.2.2.2|4.4.4.4"
     assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"

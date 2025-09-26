@@ -92,6 +92,24 @@ def _pipe_merge(values: Sequence[str | None]) -> str:
     return "|".join(sorted(tokens))
 
 
+def _merge_pipe_columns(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Normalise duplicate ``column`` variants (e.g. ``*_x``/``*_y``) into one."""
+
+    variants = [column, *(c for c in df.columns if c.startswith(f"{column}_"))]
+    available = [c for c in variants if c in df.columns]
+    if not available:
+        df[column] = pd.Series([""] * len(df), index=df.index, dtype=str)
+        return df
+
+    df[column] = df.apply(
+        lambda r: _pipe_merge([r.get(name) for name in available]), axis=1
+    )
+    drop_cols = [c for c in available if c != column]
+    if drop_cols:
+        df = df.drop(columns=drop_cols)
+    return df
+
+
 def _first_token(value: str | None) -> str:
     """Return the first token from a pipe-delimited ``value``."""
     if isinstance(value, str) and value:
@@ -888,6 +906,9 @@ def fetch_iuphar(
         combined_df = combined_df.drop(columns=["uniprot_id_x"], errors="ignore")
         combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
 
+    for column in ["ec_numbers", "reaction_ec_numbers"]:
+        combined_df = _merge_pipe_columns(combined_df, column)
+
     combined_df["synonyms"] = combined_df.apply(
         lambda r: _pipe_merge(
             [
@@ -908,9 +929,7 @@ def fetch_iuphar(
     combined_df["gene_name"] = combined_df.get("gene", pd.Series(dtype=str)).apply(
         _first_token
     )
-    combined_df = combined_df.drop(
-        columns=["ec_numbers", "reaction_ec_numbers"], errors="ignore"
-    )
+    combined_df = combined_df.drop(columns=["ec_numbers"], errors="ignore")
 
     from tempfile import NamedTemporaryFile
 
