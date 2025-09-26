@@ -41,7 +41,7 @@ If the sidecar already exists the new metadata is merged, preserving manually ad
   CSV.
 * `library.table_quality.analyze_table_quality` generates `<stem>_quality_report_table.csv` and
   `<stem>_data_correlation_report_table.csv`. CLI utilities place these files alongside the dataset, while
-  `scripts/get_input_initialisation.py` stores them under `<output>/data_validity_report/`.
+  `library.utils.cli_tools.get_input_initialisation` stores them under `<output>/data_validity_report/`.
 
 All reports are written using UTF-8 encoding and share the same deterministic ordering rules as the main exports.
 

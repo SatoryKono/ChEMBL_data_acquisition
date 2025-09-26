@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from scripts import csv_utils_main as cli
+from library.utils.cli_tools import csv_utils_main as cli
 
 
 def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

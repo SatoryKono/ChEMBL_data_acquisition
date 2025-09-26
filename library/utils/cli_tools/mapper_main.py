@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 import argparse
 from collections.abc import Sequence

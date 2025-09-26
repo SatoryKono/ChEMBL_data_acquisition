@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
-from scripts import mapper_main
+from library.utils.cli_tools import mapper_main
 
 
 def test_run_logs_exception(monkeypatch, tmp_path: Path, cfg: Config) -> None:

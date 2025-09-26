@@ -8,7 +8,7 @@ Example
 -------
 Run with default settings::
 
-    python scripts/dtype_inspector_main.py --log-level INFO
+    python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO
 """
 
 from __future__ import annotations

@@ -93,7 +93,7 @@ pre-commit run --all-files
 3. **Run a sample script**
 
    ```bash
-   python -m scripts.get_activities --limit 10 --log-level INFO
+   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
    ```
 
    This lightweight helper only emits structured log messages describing the
@@ -105,9 +105,9 @@ pre-commit run --all-files
    files, run one of the data pipelines, for example:
 
   ```bash
-  python scripts/mapper_main.py --input tests/data/assays.csv \
+  python -m library.utils.cli_tools.mapper_main --input tests/data/assays.csv \
       --output out/mapped.csv --log-level DEBUG
-  python scripts/table_quality_main.py --input tests/data/assays.csv \
+  python -m library.utils.cli_tools.table_quality_main --input tests/data/assays.csv \
       --output out/report.csv --log-level INFO
   ```
 
@@ -139,7 +139,7 @@ pytest --cov=library --cov=scripts \
 контрольные срезы с актуальным выводом и сигнализирует о дрейфе данных:
 
 ```bash
-python scripts/check_determinism.py --log-level DEBUG
+python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 ```
 
 Перед запуском убедитесь, что зависимости установлены командой `pip install .[dev]`
@@ -148,15 +148,15 @@ python scripts/check_determinism.py --log-level DEBUG
 Для smoke-теста CLI выполните:
 
 ```bash
-python -m scripts.mapper_batch_main --input tests/data/assays.csv \
+python -m library.utils.cli_tools.mapper_batch_main --input tests/data/assays.csv \
     --output out/mapped.csv --log-level INFO
 ```
 
 
 ## Генерация данных
 
-Большинство скриптов из каталога `scripts/` формируют CSV-файлы и размещают их
-в `data/output/`. Пример полноценного пайплайна:
+Пять основных пайплайнов в каталоге `scripts/` формируют CSV-файлы и размещают
+их в `data/output/`. Пример полноценного пайплайна:
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
@@ -164,9 +164,12 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ```
 
 Команда извлекает данные из API ChEMBL, сохраняет таблицу и сопутствующий
-`*.meta.yaml`. Скрипт `scripts.get_activities` предназначен только для
-демонстрационного логирования и не выполняет файловых операций. Каталог с
-результатами игнорируется Git и автоматически публикуется как артефакт CI.
+`*.meta.yaml`. Утилиты разработки и отладки перенесены в
+`library/utils/cli_tools/`, например модуль `get_activities` предназначен
+только для демонстрационного логирования и не выполняет файловых операций.
+См. [docs/CLI_TOOLS.md](docs/CLI_TOOLS.md) для кратких описаний и типовых
+команд. Каталог с результатами игнорируется Git и автоматически публикуется
+как артефакт CI.
 
 > **Примечание.** Ранее эта функциональность была доступна через
 > `activity_extraction_main.py`. Теперь используйте модульный запуск
@@ -221,12 +224,12 @@ column.
 The input and output both use ``target_chembl_id`` to align with
 validation schemas.
  
-### scripts/get_activities.py
+### library/utils/cli_tools/get_activities.py
 
 Generate dummy activity entries without contacting external services:
 
 ```bash
-python -m scripts.get_activities --limit 500 --dry-run
+python -m library.utils.cli_tools.get_activities --limit 500 --dry-run
 ```
 
 The command logs that it would generate 500 activity rows and exits without
@@ -426,7 +429,7 @@ python -m scripts.get_activity_data \
     --limit 10 --log-level INFO
 
 # демонстрационный dry-run: только логирование без файловых операций
-python -m scripts.get_activities --limit 10 --dry-run
+python -m library.utils.cli_tools.get_activities --limit 10 --dry-run
 ```
 
 ## Reproducibility
@@ -438,10 +441,10 @@ the Git commit, command-line arguments and relevant configuration to allow
 others to reproduce the output. Commit both the CSV and its metadata sidecar to
 version control.
 
-Verify deterministic behaviour with the helper script ``scripts/check_determinism.py``:
+Verify deterministic behaviour with the helper script ``library.utils.cli_tools.check_determinism``:
 
 ```bash
-python scripts/check_determinism.py --log-level INFO
+python -m library.utils.cli_tools.check_determinism --log-level INFO
 ```
 
 The script writes a sample CSV twice using ``write_csv_deterministic`` and
@@ -496,7 +499,7 @@ An overview of the output directory layout and metadata sidecars is available in
 
 ### Table quality analysis
 
-``scripts/table_quality_main.py`` profiles arbitrary CSV files and reports column
+``library.utils.cli_tools.table_quality_main`` profiles arbitrary CSV files and reports column
 statistics along with correlations between numeric fields. Example usage:
 
 ```python
@@ -510,7 +513,7 @@ quality, corr = analyze_table_quality(df, table_name="data")
 Running the CLI saves ``data_quality_report_table.csv`` and
 ``data_data_correlation_report_table.csv`` in the current working directory::
 
-    python scripts/table_quality_main.py --input data.csv --table-name data
+    python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 
 All scripts share a common set of flags:
 
@@ -625,7 +628,7 @@ automatically converted.
  
 ```bash
 # профилирование качества таблицы
-python scripts/table_quality_main.py \
+python -m library.utils.cli_tools.table_quality_main \
     --input tests/data/activity.csv \
     --table-name activity
 ```
@@ -678,7 +681,7 @@ set of identifiers and logs the resulting pandas dtypes.  Run this periodically
 to spot schema drift when upstream services change their responses.
 
 ```bash
-python scripts/dtype_inspector_main.py --log-level INFO
+python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO
 ```
 
 Consider wiring the script into CI to detect dtype changes early.  The tool is
@@ -687,14 +690,14 @@ lightweight and makes only a handful of requests per dataset.
 ## Разработка и тестирование
 
 ```bash
-ruff check scripts library mapper_main.py table_quality_main.py
-black scripts library mapper_main.py table_quality_main.py
-mypy scripts library mapper_main.py table_quality_main.py
+ruff check scripts library library/utils/cli_tools
+black scripts library library/utils/cli_tools
+mypy scripts library
 pytest
 ```
 
 Тестовые наборы расположены в `tests/data`.  
-Скрипт `scripts/check_determinism.py` проверяет повторяемость CSV‑вывода.
+Скрипт `library.utils.cli_tools.check_determinism` проверяет повторяемость CSV‑вывода.
 
 ## Лицензия
 

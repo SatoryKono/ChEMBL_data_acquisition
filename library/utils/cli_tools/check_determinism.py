@@ -17,13 +17,13 @@ from tempfile import TemporaryDirectory
 from time import perf_counter
 
 if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 try:
     import pandas as pd
 except ImportError as exc:  # pragma: no cover - import-time check
     raise SystemExit(
-        "pandas is required to run scripts/check_determinism.py."
+        "pandas is required to run library.utils.cli_tools.check_determinism."
         " Install it with 'pip install pandas'."
     ) from exc
 

@@ -2,7 +2,7 @@
 
 ## ETL Overview
 
-The pipeline is orchestrated through the shared configuration file `config.yaml`, which defines base URLs for external APIs, retry parameters, RPS limits, logging settings, and directories for inputs and outputs. Command scripts in `scripts/` are organized by entity and rely on shared utilities for I/O, normalization, validation, and logging from the `library/` package, ensuring repeatable execution for documents, assays, activities, test items, and targets.
+The pipeline is orchestrated through the shared configuration file `config.yaml`, which defines base URLs for external APIs, retry parameters, RPS limits, logging settings, and directories for inputs and outputs. Command scripts in `scripts/` are organized by entity and rely on shared utilities for I/O, normalization, validation, and logging from the `library/` package, while auxiliary helpers live under `library.utils.cli_tools`, ensuring repeatable execution for documents, assays, activities, test items, and targets.
 
 ## Data Sources
 

@@ -40,7 +40,7 @@ data/output/
 * При ошибках проверки Pandera проблемные строки сохраняются в `<stem>_failure_cases.csv` рядом с основным файлом.
 * `library.table_quality.analyze_table_quality` создаёт отчёты `<stem>_quality_report_table.csv` и
   `<stem>_data_correlation_report_table.csv`. CLI-утилиты размещают их рядом с экспортом, а
-  `scripts/get_input_initialisation.py` — в подкаталоге `<output>/data_validity_report/`.
+  `library.utils.cli_tools.get_input_initialisation` — в подкаталоге `<output>/data_validity_report/`.
 
 Все отчёты записываются в кодировке UTF-8 и наследуют детерминированный порядок строк и колонок.
 

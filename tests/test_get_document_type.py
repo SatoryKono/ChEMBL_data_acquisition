@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from scripts.get_document_type import classify_dataframe
+from library.utils.cli_tools.get_document_type import classify_dataframe
 
 
 def test_classify_dataframe_basic() -> None:

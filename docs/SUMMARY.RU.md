@@ -161,7 +161,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 5. Выполнить нужный CLI-скрипт, например `python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`, чтобы выгрузить данные и записать CSV вместе с метаданными.
 
 
-6. Альтернативные пайплайны: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `get_input_initialisation`, `table_quality_main`.
+6. Альтернативные пайплайны: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `library.utils.cli_tools.get_input_initialisation`, `library.utils.cli_tools.table_quality_main`.
 
 
 7. Проверить созданные CSV и `.meta.yaml` в `data/output` (или указанном каталоге).
@@ -169,7 +169,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 
 
 ## Тесты и проверка результатов
-- Общие проверки качества: `pre-commit run --all-files`, `pytest`, `scripts/check_determinism.py --log-level DEBUG`. Эти команды обеспечивают форматирование, линтинг, типизацию, юнит-тесты и детерминизм вывода.
+- Общие проверки качества: `pre-commit run --all-files`, `pytest`, `library.utils.cli_tools.check_determinism --log-level DEBUG`. Эти команды обеспечивают форматирование, линтинг, типизацию, юнит-тесты и детерминизм вывода.
 
 
 - Smoke-тесты CLI подтверждают успешную генерацию CSV при подключении заглушек API и хешированию файлов.
@@ -197,7 +197,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 
 
 
-- `table_quality_main.py` и `get_input_initialisation.py` дополнительно формируют отчёты качества (`<table>_quality_report_table.csv`, `<table>_data_correlation_report_table.csv`).
+- `library.utils.cli_tools.table_quality_main` и `library.utils.cli_tools.get_input_initialisation` дополнительно формируют отчёты качества (`<table>_quality_report_table.csv`, `<table>_data_correlation_report_table.csv`).
 
 
 - В данные автоматически добавляются столбцы `pipeline_version` и `timestamp_utc` для трассируемости выпусков.
@@ -321,7 +321,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 9. Проверены логи/JSON на отсутствие ошибок и наличие run_id.
 
 
-10. При необходимости запущены `pytest` и `scripts/check_determinism.py --log-level DEBUG`.
+10. При необходимости запущены `pytest` и `library.utils.cli_tools.check_determinism --log-level DEBUG`.
 
 
 11. В случае ошибок валидации просмотрены `*_failure_cases.csv` для исправления данных.

@@ -161,7 +161,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 5. Execute the desired CLI script, e.g. `python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`, which downloads data and writes the CSV/metadata files.
 
 
-6. Alternative pipelines: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `get_input_initialisation`, `table_quality_main`.
+6. Alternative pipelines: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `library.utils.cli_tools.get_input_initialisation`, `library.utils.cli_tools.table_quality_main`.
 
 
 7. Inspect the generated CSV and `.meta.yaml` files under `data/output` (or the configured directory).
@@ -169,7 +169,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 
 ## Tests and Verification
-- Core quality checks: `pre-commit run --all-files`, `pytest`, `scripts/check_determinism.py --log-level DEBUG`; these commands cover formatting, linting, typing, unit tests, and deterministic output.
+- Core quality checks: `pre-commit run --all-files`, `pytest`, `library.utils.cli_tools.check_determinism --log-level DEBUG`; these commands cover formatting, linting, typing, unit tests, and deterministic output.
 
 
 - CLI smoke tests validate successful CSV generation with API stubs and file hashing.
@@ -197,7 +197,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 
 
-- `table_quality_main.py` and `get_input_initialisation.py` also emit quality reports (`<table>_quality_report_table.csv`, `<table>_data_correlation_report_table.csv`).
+- `library.utils.cli_tools.table_quality_main` and `library.utils.cli_tools.get_input_initialisation` also emit quality reports (`<table>_quality_report_table.csv`, `<table>_data_correlation_report_table.csv`).
 
 
 - Data outputs automatically receive `pipeline_version` and `timestamp_utc` columns for release traceability.
@@ -321,7 +321,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 9. Reviewed JSON logs for errors and presence of run_id.
 
 
-10. If needed, ran `pytest` and `scripts/check_determinism.py --log-level DEBUG`.
+10. If needed, ran `pytest` and `library.utils.cli_tools.check_determinism --log-level DEBUG`.
 
 
 11. Investigated any `*_failure_cases.csv` to remediate data issues.
