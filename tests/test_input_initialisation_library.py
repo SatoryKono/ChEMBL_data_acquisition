@@ -525,7 +525,10 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
                 "taxon_index",
                 "target_sort_order",
                 "multifunctional_enzyme",
-                "organism_type",
+                "genus",
+                "superkingdom",
+                "phylum",
+                "lineage_class",
             ]
         )
         + "\n"
@@ -538,7 +541,10 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
                 "",
                 "",
                 "True",
-                "Unicellular organism",
+                "Escherichia",
+                "Bacteria",
+                "Proteobacteria",
+                "Gammaproteobacteria",
             ]
         )
         + "\n"
@@ -635,10 +641,19 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
                 "taxon_index",
                 "target_sort_order",
                 "multifunctional_enzyme",
-                "organism_type",
+                "genus",
+                "superkingdom",
+                "phylum",
+                "lineage_class",
             ]
         )
-        + "\nT1,,,,,, ,Multicellular organism\n"
+        + "\n"
+        + "\n".join(
+            [
+                "T1,,,,,, ,Homo,Eukaryota,Chordata,Mammalia",
+                "",
+            ]
+        )
     )
 
     res = process_activity_table(df, tmp_path)
@@ -699,10 +714,13 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
                 "taxon_index",
                 "target_sort_order",
                 "multifunctional_enzyme",
-                "organism_type",
+                "genus",
+                "superkingdom",
+                "phylum",
+                "lineage_class",
             ]
         )
-        + "\nT1,ClassB,, , , ,False,Viruses\n"
+        + "\nT1,ClassB,, , , ,False,,Viruses,,\n"
     )
 
     res = process_activity_table(df, tmp_path)
