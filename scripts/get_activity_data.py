@@ -22,6 +22,7 @@ from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
 from library import io
+from library.activity_action_properties import annotate_action_properties
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -427,6 +428,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_activities(df)
+        df = annotate_action_properties(df)
         df = add_pipeline_metadata(df)
         df = compute_activity_bounds(df, cfg.activity_bounds)
         # Determine final column order: schema-defined columns first in their

@@ -1,2 +1,2 @@
-activity_id,molecule_chembl_id,target_id,standard_type,standard_value,relation,units
-1,CHEMBL1,CHEMBL2,IC50,5.0,<,5 μM
+activity_id,molecule_chembl_id,assay_chembl_id,target_id,standard_type,standard_value,standard_relation,relation,standard_units,units,activity_comment,assay_description,assay_variant_accession,assay_variant_mutation,data_validity_comment
+1,CHEMBL1,A0,CHEMBL2,IC50,5.0,<=,<,uM,5 μM,,Calcium flux assay,,,
