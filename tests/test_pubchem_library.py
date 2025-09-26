@@ -158,6 +158,7 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
     pl.make_request("https://example.org", cfg)
 
     assert sleeps == [1]
+    assert attempts["n"] == 2
 
 
 @responses.activate

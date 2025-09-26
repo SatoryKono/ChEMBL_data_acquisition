@@ -12,8 +12,8 @@ USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
 
 
 @responses.activate
-def test_session_with_retry_retries_post() -> None:
-    """Ensure POST requests are retried when configured."""
+def test_session_with_retry_makes_single_attempt() -> None:
+    """The HTTP adapter leaves retry attempts to higher-level clients."""
 
     url = "http://example.com/post"
     responses.add(responses.POST, url, status=500)
@@ -25,5 +25,5 @@ def test_session_with_retry_retries_post() -> None:
     )
     response = session.post(url)
 
-    assert response.status_code == 200
-    assert len(responses.calls) == 2
+    assert response.status_code == 500
+    assert len(responses.calls) == 1

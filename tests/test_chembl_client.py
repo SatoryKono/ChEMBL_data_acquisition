@@ -135,6 +135,7 @@ def test_request_json_backoff_grows(monkeypatch) -> None:
     client.request_json("http://example.com", cfg=cfg)
 
     assert sleep_times == [1.0, 2.0]
+    assert len(session.calls) == 3
 
 
 def test_request_json_respects_zero_retries() -> None:

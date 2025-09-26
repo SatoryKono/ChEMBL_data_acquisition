@@ -25,7 +25,7 @@
 | `chembl_base` | `https://www.ebi.ac.uk/chembl/api/data` | Базовый URL ChEMBL REST API. |
 | `timeout_connect` | `5` | Таймаут установки соединения (сек.). |
 | `timeout_read` | `30` | Таймаут ожидания ответа (сек.). |
-| `retries` | `3` | Количество HTTP-повторов. |
+| `retries` | `3` | Максимум попыток, выполняемых клиентскими обёртками; общий HTTP-адаптер повторы не делает. |
 | `backoff_factor` | `0.5` | Множитель экспоненциального backoff между повторами. |
 | `rps` | `20` | Лимит запросов в секунду для rate limiter. |
 | `burst` | `20` | Размер «ведра» токенов. |
@@ -249,7 +249,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `timeout_connect` | `5` | Таймаут установления соединения (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_CONNECT`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_CONNECT` |
 | `timeout_read` | `60` | Таймаут ожидания ответа (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_READ`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_READ` |
 | `timeout_seconds` | `30.0` | Максимальная длительность одной попытки разрешения CID с учётом повторов. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_SECONDS` |
-| `retries` | `3` | Число повторов при временных сбоях. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
+| `retries` | `3` | Число попыток, которое выполнит цикл повторов PubChem, прежде чем сдаться. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
 | `rps` | `5` | Локальный лимит запросов в секунду. | `CHEMBL_DA_SOURCES_PUBCHEM_RPS`, `CHEMBL_DA__SOURCES__PUBCHEM__RPS` |
 | `burst` | `5` | Ёмкость токен-бакета, связанного с `rps`. | `CHEMBL_DA_SOURCES_PUBCHEM_BURST`, `CHEMBL_DA__SOURCES__PUBCHEM__BURST` |
 | `delay` | `0.2` | Пауза между повторами (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_DELAY`, `CHEMBL_DA__SOURCES__PUBCHEM__DELAY` |
