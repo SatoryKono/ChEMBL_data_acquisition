@@ -1013,6 +1013,11 @@
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
+        },
+        "use_parent_for_salts": {
+          "default": false,
+          "title": "Use Parent For Salts",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",

@@ -129,6 +129,7 @@ sources:
     burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
   pubchem:
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
+    use_parent_for_salts: false  # Re-query parent structures for salts missing CID assignments
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
     retries: 3

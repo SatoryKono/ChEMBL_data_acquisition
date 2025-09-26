@@ -260,6 +260,7 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Time-to-live for PubChem request cache in seconds",
     )
+    use_parent_for_salts: bool = False
 
     @field_validator("base")
     @classmethod

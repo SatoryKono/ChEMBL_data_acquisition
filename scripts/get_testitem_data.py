@@ -12,7 +12,7 @@ if __package__ is None:  # running as a script
 
 import argparse
 from collections import ChainMap
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
 
@@ -72,6 +72,29 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
 PARENT_LOOKUP_SOURCE_REMOTE = "remote"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
+
+
+_PUBCHEM_STRUCTURE_COLUMNS = (
+    "canonical_smiles",
+    "standard_inchi",
+    "standard_inchi_key",
+)
+
+_STRUCTURE_RESOLVERS: tuple[tuple[str, str], ...] = (
+    ("canonical_smiles", "get_cid_from_smiles"),
+    ("standard_inchi", "get_cid_from_inchi"),
+    ("standard_inchi_key", "get_cid_from_inchikey"),
+)
+
+_EMPTY_PUBCHEM_ROW = {
+    "pubchem_cid": "",
+    "pubchem_iupac_name": "",
+    "pubchem_molecular_formula": "",
+    "pubchem_isomeric_smiles": "",
+    "pubchem_canonical_smiles": "",
+    "pubchem_inchi": "",
+    "pubchem_inchikey": "",
+}
 
 
 @dataclass(frozen=True)
@@ -285,35 +308,164 @@ def attach_parent_molecule_ids(
     return result, stats
 
 
-def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
-    """Augment ChEMBL records with PubChem information.
+def _clean_structure_value(value: object) -> str:
+    """Normalise structural identifiers for PubChem lookups."""
 
-    For each canonical SMILES string in ``df``, the function looks up the
-    corresponding PubChem CID and basic chemical properties. The PubChem
-    fields are appended to the input frame. If a SMILES string cannot be
-    resolved, empty values are inserted.
+    if pd.isna(value):
+        return ""
+    text = str(value).strip()
+    return text
 
-    Parameters
-    ----------
-    df:
-        Data frame returned by :func:`library.chembl_library.get_testitem`.
-    cfg:
-        PubChem configuration options.
 
-    Returns
-    -------
-    pandas.DataFrame
-        ``df`` with additional PubChem columns.
+class _ParentStructureLoader:
+    """Provide parent structural information from local data or the API."""
 
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        *,
+        client: ChemblClient | None,
+        api_cfg: ApiCfg | None,
+        timeout: float | None,
+    ) -> None:
+        self._client = client
+        self._api_cfg = api_cfg
+        self._timeout = timeout
+        self._local: dict[str, dict[str, str]] = {}
+        self._remote: dict[str, dict[str, str] | None] = {}
+
+        if "molecule_chembl_id" in df.columns:
+            columns = ["molecule_chembl_id", *(_PUBCHEM_STRUCTURE_COLUMNS)]
+            source = df.reindex(columns=columns).copy()
+            source["molecule_chembl_id"] = (
+                source["molecule_chembl_id"].fillna("").astype("string").str.upper()
+            )
+            for row in source.itertuples(index=False):
+                chembl_id = row[0]
+                if not chembl_id:
+                    continue
+                values = {
+                    column: _clean_structure_value(value)
+                    for column, value in zip(_PUBCHEM_STRUCTURE_COLUMNS, row[1:])
+                }
+                self._local[chembl_id] = values
+
+    def get(self, chembl_id: str) -> dict[str, str] | None:
+        """Return structural identifiers for *chembl_id*."""
+
+        key = _clean_structure_value(chembl_id).upper()
+        if not key:
+            return None
+        if key in self._local:
+            return self._local[key]
+        if key in self._remote:
+            return self._remote[key]
+        if self._client is None or self._api_cfg is None:
+            self._remote[key] = None
+            return None
+
+        frame = cl.get_testitem(
+            [key],
+            cfg=self._api_cfg,
+            client=self._client,
+            chunk_size=1,
+            timeout=self._timeout,
+        )
+        if frame.empty:
+            self._remote[key] = None
+            return None
+        record = {
+            column: _clean_structure_value(frame.iloc[0].get(column, ""))
+            for column in _PUBCHEM_STRUCTURE_COLUMNS
+        }
+        self._remote[key] = record
+        return record
+
+
+def resolve_pubchem_cid(
+    row: pd.Series,
+    *,
+    cfg: PubChemCfg,
+    structure_cache: MutableMapping[tuple[str, str], str | None],
+    parent_loader: Callable[[str], dict[str, str] | None],
+    use_parent_for_salts: bool,
+    missing_parent_log: set[str],
+) -> str:
+    """Resolve the primary PubChem CID for ``row``.
+
+    The function attempts child structural identifiers first. When the CID is
+    unavailable and ``use_parent_for_salts`` is enabled, parent structures are
+    retrieved on demand and used for a second lookup. A warning is emitted if
+    the parent record lacks structural identifiers.
     """
-    if df.empty or "canonical_smiles" not in df.columns:
+
+    child_id = _clean_structure_value(row.get("molecule_chembl_id", ""))
+
+    def _lookup(structure_map: Mapping[str, str], source: str) -> str:
+        has_structure = False
+        for column, resolver_name in _STRUCTURE_RESOLVERS:
+            value = _clean_structure_value(structure_map.get(column, ""))
+            if not value:
+                continue
+            has_structure = True
+            cache_key = (column, value)
+            if cache_key not in structure_cache:
+                resolver = getattr(pl, resolver_name)
+                raw_cid = resolver(value, cfg)
+                first_cid = raw_cid.split("|")[0] if raw_cid else ""
+                structure_cache[cache_key] = first_cid or ""
+            cached = structure_cache[cache_key] or ""
+            if cached:
+                return cached
+        if source == "parent" and not has_structure:
+            parent_id = _clean_structure_value(row.get("parent_molecule_chembl_id", ""))
+            if parent_id:
+                marker = f"{child_id}->{parent_id}"
+                if marker not in missing_parent_log:
+                    missing_parent_log.add(marker)
+                    logger.warning(
+                        "pubchem_parent_structure_missing",
+                        child=child_id or None,
+                        parent=parent_id,
+                    )
+        return ""
+
+    cid = _lookup(row, "child")
+    if cid or not use_parent_for_salts:
+        return cid
+
+    parent_id = _clean_structure_value(row.get("parent_molecule_chembl_id", ""))
+    if not parent_id:
+        return ""
+
+    parent_record = parent_loader(parent_id)
+    if parent_record is None:
+        return ""
+
+    return _lookup(parent_record, "parent")
+
+
+def add_pubchem_data(
+    df: pd.DataFrame,
+    cfg: PubChemCfg,
+    *,
+    client: ChemblClient | None = None,
+    api_cfg: ApiCfg | None = None,
+    timeout: float | None = None,
+) -> pd.DataFrame:
+    """Augment ChEMBL records with PubChem information."""
+
+    if df.empty:
         return df
 
-    smiles_list = df["canonical_smiles"].fillna("").tolist()
-    # ``dict.fromkeys`` preserves the order of first occurrence while
-    # removing duplicates. This allows progress output to reflect the
-    # deterministic iteration order of SMILES strings.
-    unique_smiles = [s for s in dict.fromkeys(smiles_list) if s]
+    result = df.copy()
+    canonical_series = result.get("canonical_smiles")
+    if canonical_series is not None:
+        smiles_list = canonical_series.fillna("").tolist()
+        unique_smiles = [s for s in dict.fromkeys(smiles_list) if s]
+    else:
+        smiles_list = []
+        unique_smiles = []
 
     total = len(unique_smiles)
     if total:
@@ -321,15 +473,45 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     else:
         logger.info("pubchem_no_smiles")
 
-    records: dict[str, dict[str, str]] = {}
-    for idx, smi in enumerate(unique_smiles, start=1):
-        logger.info("pubchem_progress", current=idx, total=total)
-        cid = pl.get_cid_from_smiles(smi, cfg) or ""
-        first_cid = cid.split("|")[0] if cid else ""
-        if first_cid:
-            props = pl.get_properties(first_cid, cfg)
-            records[smi] = {
-                "pubchem_cid": first_cid,
+    parent_loader = _ParentStructureLoader(
+        result,
+        client=client,
+        api_cfg=api_cfg,
+        timeout=timeout,
+    ).get
+    structure_cache: dict[tuple[str, str], str | None] = {}
+    property_cache: dict[str, dict[str, str]] = {}
+    missing_parent_log: set[str] = set()
+
+    pubchem_rows: list[dict[str, str]] = []
+    seen_smiles: set[str] = set()
+    progress = 0
+
+    for _, row in result.iterrows():
+        canonical = _clean_structure_value(row.get("canonical_smiles", ""))
+        if canonical and canonical not in seen_smiles:
+            seen_smiles.add(canonical)
+            progress += 1
+            if total:
+                logger.info("pubchem_progress", current=progress, total=total)
+
+        cid = resolve_pubchem_cid(
+            row,
+            cfg=cfg,
+            structure_cache=structure_cache,
+            parent_loader=parent_loader,
+            use_parent_for_salts=getattr(cfg, "use_parent_for_salts", False),
+            missing_parent_log=missing_parent_log,
+        )
+
+        if not cid:
+            pubchem_rows.append(_EMPTY_PUBCHEM_ROW.copy())
+            continue
+
+        if cid not in property_cache:
+            props = pl.get_properties(cid, cfg)
+            property_cache[cid] = {
+                "pubchem_cid": cid,
                 "pubchem_iupac_name": props.IUPACName,
                 "pubchem_molecular_formula": props.MolecularFormula,
                 "pubchem_isomeric_smiles": props.iSMILES,
@@ -337,27 +519,14 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
                 "pubchem_inchi": props.InChI,
                 "pubchem_inchikey": props.InChIKey,
             }
-        else:
-            records[smi] = {
-                "pubchem_cid": "",
-                "pubchem_iupac_name": "",
-                "pubchem_molecular_formula": "",
-                "pubchem_isomeric_smiles": "",
-                "pubchem_canonical_smiles": "",
-                "pubchem_inchi": "",
-                "pubchem_inchikey": "",
-            }
 
-    empty = {
-        "pubchem_cid": "",
-        "pubchem_iupac_name": "",
-        "pubchem_molecular_formula": "",
-        "pubchem_isomeric_smiles": "",
-        "pubchem_canonical_smiles": "",
-        "pubchem_inchi": "",
-        "pubchem_inchikey": "",
-    }
-    pubchem_rows = [records.get(smi, empty) for smi in smiles_list]
+        pubchem_rows.append(property_cache[cid])
+
+    if not pubchem_rows:
+        return result
+
+    pubchem_frame = pd.DataFrame(pubchem_rows, index=result.index)
+    return pd.concat([result, pubchem_frame], axis=1)
     pubchem_df = pd.DataFrame(pubchem_rows)
     return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
 
@@ -490,10 +659,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 fetched_remote = True
         if fetched_remote:
             parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
-        logger.info("pubchem_augment_start")
-        df = add_pubchem_data(df, cfg.pubchem)
-        logger.info("pubchem_augment_done")
- 
+
         try:
             ensure_no_parant_column(df)
         except ValueError as exc:
@@ -525,6 +691,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             attached=parent_stats.attached,
             missing=parent_stats.missing,
         )
+
+        logger.info("pubchem_augment_start")
+        df = add_pubchem_data(
+            df,
+            cfg.pubchem,
+            client=client,
+            api_cfg=cfg.api,
+            timeout=cfg.testitem.timeout,
+        )
+        logger.info("pubchem_augment_done")
 
         enrichment_cfg = cfg.testitem_molecule_enrichment
         if enrichment_cfg.enable:

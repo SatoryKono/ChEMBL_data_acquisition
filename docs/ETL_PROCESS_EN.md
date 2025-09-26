@@ -44,7 +44,7 @@ Validation relies on `pandera`: when mismatches occur, the `SidecarErrors` helpe
 
 ### Test-item pipeline
 
-1. **ChEMBL + PubChem aggregation** — After loading ChEMBL data, `add_pubchem_data` iterates unique canonical SMILES, fetches CID and properties, then concatenates results; unmatched cases keep empty rows to preserve table structure.【F:scripts/get_testitem_data.py†L49-L123】
+1. **ChEMBL + PubChem aggregation** — After loading ChEMBL data, `add_pubchem_data` iterates unique canonical SMILES, fetches CID and properties, then concatenates results. When `pubchem.use_parent_for_salts` is enabled, salts that lack a match reuse their parent structures, and missing parent structures are logged explicitly; unmatched cases still keep empty rows to preserve table structure.【F:scripts/get_testitem_data.py†L49-L123】
 2. **Normalization and validation** — `normalize_testitems` standardizes string fields, `add_pipeline_metadata` injects technical columns, and `validate_testitems` in lazy mode captures errors and persists them via `SidecarErrors` without halting the main flow.【F:scripts/get_testitem_data.py†L151-L250】
 3. **Export** — As with other pipelines, columns follow the schema-then-alphabet rule; CSV and YAML are written, SHA-256 is computed, and a quality report checks determinism and logs the outcome.【F:scripts/get_testitem_data.py†L256-L299】
 
