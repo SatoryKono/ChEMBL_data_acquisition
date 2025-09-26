@@ -1028,6 +1028,12 @@
             "string",
             "null"
           ]
+        },
+        "use_parent_for_salts": {
+          "default": false,
+          "description": "Fallback to parent_molecule_chembl_id identifiers when salt lookups fail",
+          "title": "Use Parent For Salts",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",

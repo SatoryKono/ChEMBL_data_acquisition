@@ -99,6 +99,56 @@ def test_resolve_pubchem_cid_prefers_inchikey(
     assert calls == ["inchikey"]
 
 
+def test_add_pubchem_data_uses_parent_when_salt_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL100_SALT",
+                "parent_molecule_chembl_id": "CHEMBL100",
+                "standard_inchi_key": None,
+                "standard_inchi": None,
+                "pref_name": "Salt",  # intentionally insufficient for lookup
+                "canonical_smiles": "N",
+            },
+            {
+                "molecule_chembl_id": "CHEMBL100",
+                "parent_molecule_chembl_id": "CHEMBL100",
+                "standard_inchi_key": "PARENTKEY",
+                "standard_inchi": None,
+                "pref_name": "Parent",
+                "canonical_smiles": "C",
+            },
+        ]
+    )
+
+    cfg = pl.PubChemCfg(delay=0, use_parent_for_salts=True)
+
+    calls: list[str] = []
+
+    def fake_get_cid_from_inchikey(value: str, _: pl.PubChemCfg) -> str | None:
+        calls.append(value)
+        if value == "PARENTKEY":
+            return "111"
+        return None
+
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", fake_get_cid_from_inchikey)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_all_cid", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_, **__: None)
+
+    props = pl.Properties("Name", "Formula", "iSMILES", "cSMILES", "InChI", "InChIKey")
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert list(result["pubchem_cid"]) == ["111", "111"]
+    assert list(result["pubchem_iupac_name"]) == ["Name", "Name"]
+    assert calls == ["PARENTKEY"]
+
+
 def test_add_pubchem_data_uses_disk_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -186,7 +186,10 @@ def _select_primary_cid(
 
 
 def resolve_pubchem_cid(
-    row: pd.Series, cache: MutableMapping[str, str | None], cfg: PubChemCfg
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    parent: ParentPubchemContext | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
 
@@ -194,48 +197,79 @@ def resolve_pubchem_cid(
     if chembl_id and chembl_id in cache:
         return cache[chembl_id]
 
-    def _store(value: str | None) -> str | None:
-        if chembl_id:
-            cache[chembl_id] = value
-        return value
-
-    def _attempt(
-        identifier: str,
-        value: str | None,
-        resolver: Callable[[str, PubChemCfg], str | None],
+    def _resolve_from_row(
+        source_row: pd.Series,
+        *,
+        current_id: str | None,
     ) -> str | None:
-        if not value:
-            return None
-        resolved = resolver(value, cfg)
-        return _select_primary_cid(
-            resolved,
-            chembl_id=chembl_id,
-            identifier=identifier,
-            value=value,
-        )
+        def _attempt(
+            identifier: str,
+            value: str | None,
+            resolver: Callable[[str, PubChemCfg], str | None],
+        ) -> str | None:
+            if not value:
+                return None
+            resolved = resolver(value, cfg)
+            return _select_primary_cid(
+                resolved,
+                chembl_id=current_id,
+                identifier=identifier,
+                value=value,
+            )
 
-    inchikey = _normalise_identifier(row.get("standard_inchi_key"), uppercase=True)
-    cid = _attempt("standard_inchi_key", inchikey, pl.get_cid_from_inchikey)
-    if cid:
-        return _store(cid)
+        inchikey = _normalise_identifier(source_row.get("standard_inchi_key"), uppercase=True)
+        cid_result = _attempt("standard_inchi_key", inchikey, pl.get_cid_from_inchikey)
+        if cid_result:
+            return cid_result
 
-    inchi = _normalise_identifier(row.get("standard_inchi"))
-    cid = _attempt("standard_inchi", inchi, pl.get_cid_from_inchi)
-    if cid:
-        return _store(cid)
+        inchi = _normalise_identifier(source_row.get("standard_inchi"))
+        cid_result = _attempt("standard_inchi", inchi, pl.get_cid_from_inchi)
+        if cid_result:
+            return cid_result
 
-    pref_name = _normalise_identifier(row.get("pref_name"))
-    cid = _attempt("pref_name", pref_name, pl.get_cid)
-    if cid:
-        return _store(cid)
-    cid = _attempt("pref_name_partial", pref_name, pl.get_all_cid)
-    if cid:
-        return _store(cid)
+        pref_name = _normalise_identifier(source_row.get("pref_name"))
+        cid_result = _attempt("pref_name", pref_name, pl.get_cid)
+        if cid_result:
+            return cid_result
+        cid_result = _attempt("pref_name_partial", pref_name, pl.get_all_cid)
+        if cid_result:
+            return cid_result
 
-    smiles = _normalise_identifier(row.get("canonical_smiles"))
-    cid = _attempt("canonical_smiles", smiles, pl.get_cid_from_smiles)
+        smiles = _normalise_identifier(source_row.get("canonical_smiles"))
+        cid_result = _attempt("canonical_smiles", smiles, pl.get_cid_from_smiles)
+        if cid_result:
+            return cid_result
+
+        return None
+
+    cid = _resolve_from_row(row, current_id=chembl_id)
     if cid:
-        return _store(cid)
+        if chembl_id:
+            cache[chembl_id] = cid
+        return cid
+
+    if cfg.use_parent_for_salts and parent is not None:
+        parent_id = parent.chembl_id
+        if parent_id:
+            if parent_id in cache:
+                parent_cached = cache[parent_id]
+                if parent_cached:
+                    if chembl_id:
+                        cache[chembl_id] = parent_cached
+                    return parent_cached
+                if chembl_id and chembl_id not in cache:
+                    cache[chembl_id] = None
+                return None
+
+            parent_row = parent.row
+            if parent_row is not None:
+                parent_cid = _resolve_from_row(parent_row, current_id=parent_id)
+                if parent_cid:
+                    cache[parent_id] = parent_cid
+                    if chembl_id:
+                        cache[chembl_id] = parent_cid
+                    return parent_cid
+                cache[parent_id] = None
 
     if chembl_id and chembl_id not in cache:
         cache[chembl_id] = None
@@ -250,6 +284,15 @@ class ParentLookupStats:
     missing: int
     unique: int
     attached: int
+
+
+@dataclass(frozen=True)
+class ParentPubchemContext:
+    """Parent lookup context for PubChem resolution."""
+
+    chembl_id: str | None
+    index: int | None
+    row: pd.Series | None
 
 
 def _cache_state(path: Path) -> tuple[bool, float | None]:
@@ -511,6 +554,20 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     cid_cache = _load_pubchem_cid_cache(cache_path)
     cache_dirty = False
 
+    parent_lookup_enabled = getattr(cfg, "use_parent_for_salts", False)
+    parent_column_name: str | None = None
+    if parent_lookup_enabled:
+        for candidate in ("parent_molecule_chembl_id", "parent_molecule_id"):
+            if candidate in result.columns:
+                parent_column_name = candidate
+                break
+    parent_index_by_id: dict[str, int] = {}
+    if parent_lookup_enabled and parent_column_name and "molecule_chembl_id" in result.columns:
+        for idx, value in result["molecule_chembl_id"].items():
+            chembl_value = _normalise_identifier(value, uppercase=True)
+            if chembl_value and chembl_value not in parent_index_by_id:
+                parent_index_by_id[chembl_value] = int(idx)
+
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
             result["molecule_chembl_id"], result["pubchem_cid"]
@@ -548,6 +605,28 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
             continue
 
         chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+        parent_ctx: ParentPubchemContext | None = None
+        parent_state_before: tuple[bool, object] | None = None
+        parent_id: str | None = None
+        if parent_lookup_enabled and parent_column_name:
+            parent_id = _normalise_identifier(row.get(parent_column_name), uppercase=True)
+            if parent_id:
+                parent_state_before = (
+                    parent_id in cid_cache,
+                    cid_cache[parent_id] if parent_id in cid_cache else _CID_CACHE_MISSING,
+                )
+                parent_index = parent_index_by_id.get(parent_id)
+                parent_row: pd.Series | None
+                if parent_index is None or int(parent_index) == int(idx):
+                    parent_row = None
+                else:
+                    parent_row = result.loc[parent_index]
+                parent_ctx = ParentPubchemContext(
+                    chembl_id=parent_id,
+                    index=parent_index,
+                    row=parent_row,
+                )
+
         lookup_required = not (
             chembl_id and chembl_id in cid_cache and cid_cache[chembl_id]
         )
@@ -556,12 +635,19 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         if lookup_required and total:
             progress += 1
             logger.info("pubchem_progress", current=progress, total=total)
-        cid = resolve_pubchem_cid(row, cid_cache, cfg)
+        cid = resolve_pubchem_cid(row, cid_cache, cfg, parent=parent_ctx)
         cid_by_index[idx] = cid
         if chembl_id:
             after_present = chembl_id in cid_cache
             after_value = cid_cache[chembl_id] if after_present else _CID_CACHE_MISSING
             if before_present != after_present or after_value != before_value:
+                cache_dirty = True
+        if parent_lookup_enabled and parent_id:
+            after_parent_present = parent_id in cid_cache
+            after_parent_value = (
+                cid_cache[parent_id] if after_parent_present else _CID_CACHE_MISSING
+            )
+            if parent_state_before != (after_parent_present, after_parent_value):
                 cache_dirty = True
 
     if cache_dirty:

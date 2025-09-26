@@ -268,6 +268,12 @@ class PubChemCfg(_BaseModel):
         default=None,
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
     )
+    use_parent_for_salts: bool = Field(
+        False,
+        description=(
+            "Fallback to parent_molecule_chembl_id identifiers when salt lookups fail"
+        ),
+    )
 
     @field_validator("base")
     @classmethod
