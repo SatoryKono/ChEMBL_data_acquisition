@@ -26,13 +26,18 @@ from .log import logger
 UTC = timezone.utc  # noqa: UP017
 
 
-class Stats(TypedDict):
-    """Execution statistics written to the metadata file."""
-
+class _StatsRequired(TypedDict):
     rows_total: int
     rows_kept: int
     rows_dropped: int
     output_sha256: str
+
+
+class Stats(_StatsRequired, total=False):
+    """Execution statistics written to the metadata file."""
+
+    parent_lookup_source: str
+    parent_lookup_missing: int
 
 
 def file_sha256(path: Path | str) -> str:
