@@ -22,6 +22,7 @@ import pandas as pd
 from .config import Config
 from .io import write_csv
 from .log import logger
+from .organism_classification import add_cellularity_smart
 
 EntityName = Literal[
     "activity",
@@ -167,6 +168,37 @@ FLOAT_COLS: set[str] = {
 
 DATE_COLS: set[str] = {
     "publication_date",
+}
+
+TARGET_TYPE_USECOLS: frozenset[str] = frozenset(
+    {
+        "target_chembl_id",
+        "target_sort_order",
+        "IUPHAR_class",
+        "IUPHAR_subclass",
+        "gene_index",
+        "taxon_index",
+        "multifunctional_enzyme",
+        "genus",
+        "superkingdom",
+        "phylum",
+    }
+)
+
+TARGET_TYPE_OPTIONAL_COLS: frozenset[str] = frozenset({"lineage_class"})
+
+TARGET_TYPE_DTYPES: dict[str, str] = {
+    "target_chembl_id": "string",
+    "target_sort_order": "string",
+    "IUPHAR_class": "string",
+    "IUPHAR_subclass": "string",
+    "gene_index": "string",
+    "taxon_index": "string",
+    "multifunctional_enzyme": "string",
+    "genus": "string",
+    "superkingdom": "string",
+    "phylum": "string",
+    "lineage_class": "string",
 }
 
 
@@ -477,16 +509,32 @@ def process_activity_table(
 
     targets = pd.read_csv(
         targets_path,
-        dtype={
-            "target_chembl_id": "string",
-            "IUPHAR_class": "string",
-            "IUPHAR_subclass": "string",
-            "taxon_index": "string",
-            "gene_index": "string",
-            "target_sort_order": "string",
-            "multifunctional_enzyme": "string",
-            "organism_type": "string",
-        },
+        usecols=lambda col: (
+            col in TARGET_TYPE_USECOLS or col in TARGET_TYPE_OPTIONAL_COLS
+        ),
+        dtype=TARGET_TYPE_DTYPES,
+    )
+
+    taxonomy_cols = ["genus", "superkingdom", "phylum", "lineage_class"]
+    for col in taxonomy_cols:
+        if col not in targets.columns:
+            targets[col] = pd.Series(pd.NA, index=targets.index, dtype="string")
+        else:
+            targets[col] = targets[col].astype("string")
+
+    taxonomy = targets[["target_chembl_id", *taxonomy_cols]].copy()
+    taxonomy = add_cellularity_smart(
+        taxonomy,
+        genus_col="genus",
+        superkingdom_col="superkingdom",
+        phylum_col="phylum",
+        class_col="lineage_class",
+        output_col="organism_cellularity",
+    )
+    targets = targets.merge(
+        taxonomy[["target_chembl_id", "organism_cellularity"]],
+        on="target_chembl_id",
+        how="left",
     )
 
     df = df.merge(
@@ -497,11 +545,9 @@ def process_activity_table(
                 "multifunctional_enzyme",
                 "IUPHAR_class",
                 "IUPHAR_subclass",
-                "organism_type",
-                "IUPHAR_class",
-                "IUPHAR_subclass",
                 "gene_index",
                 "taxon_index",
+                "organism_cellularity",
             ]
         ],
         how="left",
@@ -521,10 +567,10 @@ def process_activity_table(
         "Unicellular organism": True,
     }
     df["unicellular_organism"] = _safe_to_bool(
-        df["organism_type"].map(mapping), "unicellular_organism"
+        df["organism_cellularity"].map(mapping), "unicellular_organism"
     ).fillna(False)
 
-    df.drop(columns=["organism_type"], inplace=True)
+    df.drop(columns=["organism_cellularity"], inplace=True)
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
