@@ -1,4 +1,3 @@
-
 """Utilities for classifying organism cellularity.
 
 This module provides helpers to derive a ``unicellular_organism`` flag
@@ -7,9 +6,8 @@ from basic taxonomic annotations available in ChEMBL dictionaries.
 
 from __future__ import annotations
 
-
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -114,7 +112,9 @@ class OrganismClassificationRules:
 DEFAULT_RULES = OrganismClassificationRules()
 
 
-def normalize(value: object | None, *, rules: OrganismClassificationRules = DEFAULT_RULES) -> str:
+def normalize(
+    value: object | None, *, rules: OrganismClassificationRules = DEFAULT_RULES
+) -> str:
     """Return a lowercase normalised taxonomy token."""
 
     if isinstance(value, pd.Series):
@@ -161,7 +161,6 @@ def classify_by_lineage(
     if superkingdom in rules.unicellular_superkingdoms:
         return rules.label_unicellular()
 
-
     if any(token in rules.unicellular_phyla for token in _split_taxonomy(phylum)):
         return rules.label_unicellular()
     if any(token in rules.unicellular_classes for token in _split_taxonomy(klass)):
@@ -199,7 +198,6 @@ def classify_record(
 def add_cellularity(
     df: pd.DataFrame,
     *,
-
     genus_column: str = DEFAULT_GENUS_COLUMN,
     superkingdom_column: str = DEFAULT_SUPERKINGDOM_COLUMN,
     phylum_column: str = DEFAULT_PHYLUM_COLUMN,

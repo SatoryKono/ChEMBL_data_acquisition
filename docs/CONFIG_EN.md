@@ -86,43 +86,43 @@ This block controls derived annotations appended to every activity row. It works
 
 ##### Action type labelling (`activity_enrichment.action_type`)
 
-* `enabled` — master switch (`true` by default).【F:config.yaml†L192-L193】
-* `column` — name of the output column that stores the resolved label (`action_type`).【F:config.yaml†L194-L194】
+* `enabled` — master switch (`true` by default).
+* `column` — name of the output column that stores the resolved label (`action_type`).
 * Logging flags control diagnostics when the source data does not produce a value:
-  * `log_missing` emits a warning when the label cannot be determined (`true`).【F:config.yaml†L195-L195】
-  * `log_distribution` prints summary statistics after enrichment (`true`).【F:config.yaml†L196-L196】
+  * `log_missing` emits a warning when the label cannot be determined (`true`).
+  * `log_distribution` prints summary statistics after enrichment (`true`).
 * `metrics` maps activity measurements (IC50, EC50, etc.) to default labels such as `inhibition` or `activation`. Extend the
-  mapping to support additional metrics.【F:config.yaml†L197-L202】
+  mapping to support additional metrics.
 * `triages`, `functionality` and `mechanism` are optional overrides for explicit text matches. The defaults keep `triages` and
-  `mechanism` empty while normalising common functional annotations (agonist, antagonist, etc.).【F:config.yaml†L203-L210】
+  `mechanism` empty while normalising common functional annotations (agonist, antagonist, etc.).
 * The helper field lists (`triage_fields`, `functionality_fields`, `mechanism_fields`) decide which columns are scanned for
-  keywords or manual labels before applying metric defaults.【F:config.yaml†L211-L219】
+  keywords or manual labels before applying metric defaults.
 * `allowlist` enumerates labels allowed in the output. Values not present in the list fall back to `fallback` after logging the
-  anomaly.【F:config.yaml†L220-L227】
+  anomaly.
 * `positive_label` and `negative_label` define human-readable aliases used when the data represents positive/negative modulators
-  (`PAM`/`NAM`). The neutral fallback is `unknown`.【F:config.yaml†L228-L230】
+  (`PAM`/`NAM`). The neutral fallback is `unknown`.
 
 ##### Activity properties flattening (`activity_enrichment.activity_properties`)
 
-* `enabled` — feature switch (`true`).【F:config.yaml†L231-L233】
-* `column` — name of the raw JSON-like source column (`activity_properties`).【F:config.yaml†L233-L233】
-* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).【F:config.yaml†L234-L234】
-* `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).【F:config.yaml†L235-L237】
+* `enabled` — feature switch (`true`).
+* `column` — name of the raw JSON-like source column (`activity_properties`).
+* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).
+* `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).
 * `separator` and `pair_separator` control formatting when properties are concatenated (`"; "` between pairs,
-  `"="` between name and value).【F:config.yaml†L238-L239】
-* `drop_source_column` removes the original structured column after summarisation (`true`).【F:config.yaml†L240-L240】
-* Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.【F:config.yaml†L241-L242】
+  `"="` between name and value).
+* `drop_source_column` removes the original structured column after summarisation (`true`).
+* Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.
 * `allowlist` restricts which property groups are retained (measurement, assay, comments, effect_features, triage, mechanism,
-  functionality).【F:config.yaml†L243-L250】
+  functionality).
 * `hash_column` stores a deterministic fingerprint of the preserved properties (`properties_hash`), enabling change detection in
-  downstream jobs.【F:config.yaml†L251-L251】
+  downstream jobs.
 
 ##### Activity bounds (`activity_bounds`)
 
 The activity pipeline enriches raw ChEMBL payloads with canonical lower/upper bounds using the rules implemented by
 `compute_activity_bounds` in `scripts/get_activity_data.py`. Configuration for this feature is stored in the
 `activity_bounds` block (separate from `activity_enrichment`) and controls the following deterministic stages (executed
-in order for every row):【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+in order for every row):
 
 1. Use `standard_lower_value`/`standard_upper_value` when both are populated.
 2. Combine `standard_value` with the opposite explicit limit (for example `standard_upper_value`) and fill the missing bound.
@@ -147,7 +147,7 @@ export CHEMBL_DA__ACTIVITY_BOUNDS__ENABLE_FROM_RELATION=false
 export CHEMBL_DA__ACTIVITY_BOUNDS__ROUNDING_DIGITS=2
 ```
 
-The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; enrichment-specific options must be changed in the configuration file or via the corresponding `CHEMBL_DA__ACTIVITY_BOUNDS__*` variables. CLI values still win over file/env defaults for overlapping keys declared on the parser (column, batch size, limits).【F:scripts/get_activity_data.py†L536-L603】
+The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; enrichment-specific options must be changed in the configuration file or via the corresponding `CHEMBL_DA__ACTIVITY_BOUNDS__*` variables. CLI values still win over file/env defaults for overlapping keys declared on the parser (column, batch size, limits).
 
 #### Assay pipeline (`assay`)
 

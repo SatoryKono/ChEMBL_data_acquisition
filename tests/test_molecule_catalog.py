@@ -10,6 +10,7 @@ import requests
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
 from library.molecule_catalog import (
+    _read_cache,
     fetch_parent_catalog,
     fetch_parent_catalog_for,
     fetch_parent_for_id,
@@ -32,7 +33,7 @@ class DummyClient:
         try:
             return self._responses.pop(0)
         except IndexError:  # pragma: no cover - defensive
-            raise AssertionError("unexpected request")
+            raise AssertionError("unexpected request") from None
 
 
 @pytest.fixture()
@@ -100,7 +101,9 @@ def test_fetch_parent_catalog_for_returns_only_requested(api_cfg: ApiCfg) -> Non
 
     assert len(client.calls) == 2
     assert "CHEMBL1%2CCHEMBL_MISSING" in client.calls[0]
-    assert client.calls[1].endswith("/molecule/CHEMBL_MISSING.json?format=json&fields=molecule_chembl_id%2Cparent_molecule_chembl_id")
+    assert client.calls[1].endswith(
+        "/molecule/CHEMBL_MISSING.json?format=json&fields=molecule_chembl_id%2Cparent_molecule_chembl_id"
+    )
     assert result == {"CHEMBL1": "CHEMBL10"}
 
 
@@ -159,7 +162,9 @@ def test_fetch_parent_for_id_returns_pair(api_cfg: ApiCfg) -> None:
 def test_fetch_parent_catalog_for_small_batch_uses_single_helper(
     api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 10)
+    monkeypatch.setattr(
+        "library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 10
+    )
     responses = [
         {
             "molecule": {
@@ -331,12 +336,12 @@ def test_fetch_parent_catalog_for_respects_single_limit(api_cfg: ApiCfg) -> None
     assert "CHEMBL2" not in single_calls[0]
 
 
-def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
+def test_load_parent_catalog_reads_existing_cache(
+    tmp_path: Path, api_cfg: ApiCfg
+) -> None:
     cache = tmp_path / "catalog.json"
     cache.write_text(json.dumps({"chembl10": "chembl99"}), encoding="utf-8")
-    cfg = MoleculeCatalogCfg(
-        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
-    )
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite")
 
     result = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
@@ -351,9 +356,7 @@ def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) ->
         "molecule_chembl_id,parent_molecule_chembl_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(
-        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
-    )
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite")
 
     result = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
@@ -362,15 +365,15 @@ def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) ->
     assert result == {"CHEMBL1": "CHEMBL42"}
 
 
-def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg) -> None:
+def test_load_parent_catalog_invalid_csv_columns(
+    tmp_path: Path, api_cfg: ApiCfg
+) -> None:
     cache = tmp_path / "catalog.csv"
     cache.write_text(
         "molecule_chembl_id,parant_molecule_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(
-        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
-    )
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite")
 
     with pytest.raises(ValueError):
         load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
@@ -380,9 +383,7 @@ def test_load_parent_catalog_fetches_and_persists(
     tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache = tmp_path / "catalog.json"
-    cfg = MoleculeCatalogCfg(
-        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
-    )
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite")
     data = {"CHEMBL50": "CHEMBL60"}
 
     def fake_fetch(
@@ -434,3 +435,26 @@ def test_update_parent_catalog_cache_appends(tmp_path: Path, api_cfg: ApiCfg) ->
 
     assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
     assert json.loads(cache.read_text(encoding="utf-8")) == result
+
+
+def test_read_cache_invalid_json_returns_empty(tmp_path: Path) -> None:
+    """Gracefully ignore cache files containing malformed JSON."""
+
+    cache_path = tmp_path / "cache.json"
+    cache_path.write_text("[1, 2, 3]", encoding="utf-8")
+    cfg = MoleculeCatalogCfg(cache_path=cache_path)
+
+    assert _read_cache(cache_path, cfg) == {}
+
+
+def test_read_cache_missing_csv_columns_raises(tmp_path: Path) -> None:
+    """CSV caches missing required headers should raise an explicit error."""
+
+    cache_path = tmp_path / "cache.csv"
+    cache_path.write_text("child\nCHEMBL1\n", encoding="utf-8")
+    cfg = MoleculeCatalogCfg(
+        cache_path=cache_path, child_field="child", parent_field="parent"
+    )
+
+    with pytest.raises(ValueError, match="missing columns"):
+        _read_cache(cache_path, cfg)

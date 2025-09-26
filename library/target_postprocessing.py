@@ -174,7 +174,9 @@ def _pipe_merge_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.Series:
     if not available:
         return _default_series(df)
 
-    merged = df.apply(lambda row: _pipe_merge([row.get(col) for col in available]), axis=1)
+    merged = df.apply(
+        lambda row: _pipe_merge([row.get(col) for col in available]), axis=1
+    )
     merged = merged.replace("", "-")
     return merged.fillna("-")
 
@@ -187,7 +189,14 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["target_chembl_id"] = _series_or_default(df, "target_chembl_id")
     aligned["uniprot_id_primary"] = _series_or_default(df, "uniprotkb_Id")
     aligned["uniprot_ids_all"] = _pipe_merge_columns(
-        df, ["uniprotkb_Id", "uniprot_id", "secondary_uniprot_id", "secondaryAccessions", "mapping_uniprot_id"]
+        df,
+        [
+            "uniprotkb_Id",
+            "uniprot_id",
+            "secondary_uniprot_id",
+            "secondaryAccessions",
+            "mapping_uniprot_id",
+        ],
     )
     aligned["isoform_ids"] = _series_or_default(df, "isoform_ids")
     aligned["isoform_names"] = _series_or_default(df, "isoform_names")
@@ -219,7 +228,9 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["gtop_synonyms"] = _series_or_default(df, "synonyms")
     aligned["gtop_natural_ligands_n"] = _series_or_default(df, "gtop_natural_ligands_n")
     aligned["gtop_interactions_n"] = _series_or_default(df, "gtop_interactions_n")
-    aligned["gtop_function_text_short"] = _series_or_default(df, "gtop_function_text_short")
+    aligned["gtop_function_text_short"] = _series_or_default(
+        df, "gtop_function_text_short"
+    )
     aligned["uniprot_last_update"] = _series_or_default(df, "uniprot_last_update")
     aligned["uniprot_version"] = _series_or_default(df, "uniprot_version")
     aligned["pipeline_version"] = _series_or_default(df, "pipeline_version")
@@ -233,7 +244,9 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["secondaryAccessions"] = _series_or_default(df, "secondaryAccessions")
     aligned["recommendedName"] = _series_or_default(df, "recommendedName")
     aligned["geneName"] = _series_or_default(df, "geneName")
-    aligned["secondaryAccessionNames"] = _series_or_default(df, "secondaryAccessionNames")
+    aligned["secondaryAccessionNames"] = _series_or_default(
+        df, "secondaryAccessionNames"
+    )
     aligned["molecular_function"] = _series_or_default(df, "molecular_function")
     aligned["cellular_component"] = _series_or_default(df, "cellular_component")
     aligned["subcellular_location"] = _series_or_default(df, "subcellular_location")
@@ -262,7 +275,9 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["tax_id"] = _series_or_default(df, "tax_id")
     aligned["species_group_flag"] = _series_or_default(df, "species_group_flag")
     aligned["target_components"] = _series_or_default(df, "target_components")
-    aligned["protein_classifications"] = _series_or_default(df, "protein_classifications")
+    aligned["protein_classifications"] = _series_or_default(
+        df, "protein_classifications"
+    )
     aligned["cross_references"] = _series_or_default(df, "cross_references")
     aligned["gene_symbol_list"] = _series_or_default(df, "gene")
     aligned["protein_synonym_list"] = _series_or_default(df, "synonyms")
@@ -271,9 +286,15 @@ def align_target_columns(df: pd.DataFrame) -> pd.DataFrame:
     aligned["protein_class_pred_L1"] = _series_or_default(df, "protein_class_pred_L1")
     aligned["protein_class_pred_L2"] = _series_or_default(df, "protein_class_pred_L2")
     aligned["protein_class_pred_L3"] = _series_or_default(df, "protein_class_pred_L3")
-    aligned["protein_class_pred_rule_id"] = _series_or_default(df, "protein_class_pred_rule_id")
-    aligned["protein_class_pred_evidence"] = _series_or_default(df, "protein_class_pred_evidence")
-    aligned["protein_class_pred_confidence"] = _series_or_default(df, "protein_class_pred_confidence")
+    aligned["protein_class_pred_rule_id"] = _series_or_default(
+        df, "protein_class_pred_rule_id"
+    )
+    aligned["protein_class_pred_evidence"] = _series_or_default(
+        df, "protein_class_pred_evidence"
+    )
+    aligned["protein_class_pred_confidence"] = _series_or_default(
+        df, "protein_class_pred_confidence"
+    )
     aligned["iuphar_target_id"] = _series_or_default(df, "target_id")
     aligned["iuphar_family_id"] = _series_or_default(df, "IUPHAR_family_id")
     aligned["iuphar_type"] = _series_or_default(df, "IUPHAR_type")
@@ -601,6 +622,7 @@ def finalise_targets(
     df = align_target_columns(df)
 
     return df
+
 
 def finalise_file(
     input_path: Path | str,

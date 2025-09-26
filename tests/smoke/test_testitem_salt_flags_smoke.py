@@ -104,7 +104,9 @@ def test_testitem_salt_flags_smoke(
             hierarchy=hierarchy, catalog=catalog
         ),
     )
-    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
+    )
 
     exit_code = get_testitem_data.main(
         [

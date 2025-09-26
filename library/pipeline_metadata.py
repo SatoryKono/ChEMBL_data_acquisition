@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
@@ -13,7 +13,7 @@ import pandas as pd
 try:  # Python 3.11+
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python <3.11
-    import tomli as tomllib  # type: ignore[no-redef]
+    import tomli as tomllib  # type: ignore[import-not-found, no-redef]
 
 _PACKAGE_NAME: Final[str] = "chembl-data-acquisition"
 _DEFAULT_VERSION: Final[str] = "0.0.0"
@@ -30,7 +30,10 @@ def _read_version_from_pyproject() -> str:
     try:
         with _PYPROJECT_PATH.open("rb") as handle:
             data = tomllib.load(handle)
-    except (OSError, tomllib.TOMLDecodeError):  # pragma: no cover - unlikely during tests
+    except (
+        OSError,
+        tomllib.TOMLDecodeError,
+    ):  # pragma: no cover - unlikely during tests
         return _DEFAULT_VERSION
     project = data.get("project")
     if isinstance(project, dict):
@@ -54,7 +57,7 @@ def get_pipeline_version() -> str:
 def get_timestamp_utc() -> str:
     """Return an ISO 8601 timestamp representing the pipeline execution time."""
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @lru_cache(maxsize=1)
@@ -74,7 +77,7 @@ def add_pipeline_metadata(df: pd.DataFrame) -> pd.DataFrame:
         # Preserve dtypes while ensuring the columns exist for empty frames.
         metadata_values = pipeline_metadata()
         result = df.copy()
-        for column, value in metadata_values.items():
+        for column, _value in metadata_values.items():
             result[column] = pd.Series(dtype="string")
         return result
 
@@ -90,4 +93,3 @@ __all__ = [
     "get_timestamp_utc",
     "pipeline_metadata",
 ]
-

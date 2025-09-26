@@ -9,9 +9,6 @@ from collections.abc import Iterable, Iterator, Sequence
 from itertools import islice
 from pathlib import Path
 
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -25,8 +22,8 @@ from library.cli import (
 from library.config import Config, ensure_dirs, print_config
 from library.io import default_output_path, read_ids, write_csv
 from library.log import logger
-from library.pipeline_targets import PipelineResult, run_pipeline
 from library.pipeline_metadata import add_pipeline_metadata
+from library.pipeline_targets import PipelineResult, run_pipeline
 
 
 class PipelineConfig(BaseModel):

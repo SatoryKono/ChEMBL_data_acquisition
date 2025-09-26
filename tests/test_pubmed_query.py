@@ -12,10 +12,7 @@ import requests
 
 from library import rate_limiter as rl
 from library.config import (
-    ApiCfg,
     Config,
-    CrossRefCfg,
-    OpenAlexCfg,
     PubMedCfg,
     SemanticScholarCfg,
 )
@@ -120,7 +117,9 @@ def test_do_request_attempt_count(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pq, "_make_request", fake_make_request)
 
     data, err = pq._do_request(
-        cast(requests.Session, DummySession(DummyResponse(200, text="{}", json_data={}))),
+        cast(
+            requests.Session, DummySession(DummyResponse(200, text="{}", json_data={}))
+        ),
         "http://example.org",
         delay=0,
         retries=2,
