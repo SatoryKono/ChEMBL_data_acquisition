@@ -113,7 +113,7 @@ python scripts/get_document_data.py pubmed \
 ```
 
 Use the on-demand rate limit switches to try faster OpenAlex or CrossRef lookups without touching the YAML file; the fallback
-CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column` (the default headers are `pmid_override` and `doi_override`).【F:scripts/get_document_data.py†L989-L1041】
+CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column`; when left unspecified the CLI expects `PMID` and `DOI`, while the example above demonstrates custom headers via explicit overrides.【F:scripts/get_document_data.py†L989-L1041】
  
 ## Target aggregation (`get_target_data.py`)
 
