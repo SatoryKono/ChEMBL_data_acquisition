@@ -317,7 +317,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 catalog_cfg=cfg.molecule_catalog,
                 timeout=cfg.testitem.timeout,
             )
-        except ValueError as exc:
+        except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "parent_catalog_invalid",
                 error=str(exc),
@@ -373,7 +373,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 catalog_cfg=cfg.molecule_catalog,
                 timeout=cfg.testitem.timeout,
             )
-        except ValueError as exc:
+        except (requests.RequestException, ValueError) as exc:
             logger.error("parent_lookup_failed", error=str(exc))
             return 1
         logger.info(

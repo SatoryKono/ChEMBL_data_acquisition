@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import requests
 
 from library import chembl_library as cl
 from library import io
@@ -233,4 +234,69 @@ def test_run_chembl_parent_catalog_error(
     rc = gtd.run_chembl(cfg, args)
     assert rc == 1
     assert not called
+
+
+def test_run_chembl_parent_catalog_request_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: pd.DataFrame())
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+
+    monkeypatch.setattr(
+        gtd,
+        "load_parent_catalog",
+        lambda **__: (_ for _ in ()).throw(requests.RequestException("boom")),
+    )
+
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
+
+    called = False
+
+    def fake_write_csv(*args: object, **kwargs: object) -> Path:  # pragma: no cover
+        nonlocal called
+        called = True
+        return Path("unused.csv")
+
+    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+
+    errors: list[tuple[str, dict[str, object]]] = []
+
+    def fake_logger_error(event: str, *args: object, **kwargs: object) -> None:
+        errors.append((event, kwargs))
+
+    monkeypatch.setattr(gtd.logger, "error", fake_logger_error)
+
+    rc = gtd.run_chembl(cfg, args)
+    assert rc == 1
+    assert not called
+    assert any(
+        event == "parent_catalog_invalid"
+        and details.get("error") == "boom"
+        and details.get("path") == str(cfg.molecule_catalog.cache_path)
+        for event, details in errors
+    )
 
