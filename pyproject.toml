@@ -65,11 +65,26 @@ check-determinism = "library.utils.cli_tools.check_determinism:main"
 
 [tool.setuptools]
 py-modules = [
+  "scripts.check_determinism",
+  "scripts.chunk_io",
+  "scripts.chunk_io_main",
+  "scripts.csv_utils",
+  "scripts.csv_utils_main",
+  "scripts.dtype_inspector",
+  "scripts.dtype_inspector_main",
+  "scripts.get_activities",
   "scripts.get_activity_data",
   "scripts.get_assay_data",
-  "scripts.get_target_data",
   "scripts.get_document_data",
+  "scripts.get_document_type",
+  "scripts.get_input_initialisation",
+  "scripts.get_target_data",
   "scripts.get_testitem_data",
+  "scripts.mapper",
+  "scripts.mapper_batch_main",
+  "scripts.mapper_main",
+  "scripts.table_quality",
+  "scripts.table_quality_main",
 ]
 
 [tool.setuptools.packages.find]
