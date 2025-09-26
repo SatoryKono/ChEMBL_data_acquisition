@@ -1030,6 +1030,76 @@ def test_attach_parent_molecule_ids_fetches_missing(
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
+def test_attach_parent_molecule_ids_skips_filled_children(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
+) -> None:
+    child_field = cfg.sources.chembl.molecule_catalog.child_field
+    parent_field = cfg.sources.chembl.molecule_catalog.parent_field
+    df = pd.DataFrame(
+        {
+            child_field: ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+            parent_field: ["CHEMBL1_PARENT", pd.NA, "CHEMBL3_PARENT"],
+        }
+    )
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    query_calls: list[tuple[str, ...]] = []
+    fetch_calls: list[list[str]] = []
+
+    def fake_query(children: Iterable[str], catalog_cfg: object) -> dict[str, str]:
+        captured = tuple(str(child) for child in children)
+        query_calls.append(captured)
+        return {}
+
+    def fake_fetch(
+        ids: Iterable[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        ordered = [str(child) for child in ids]
+        fetch_calls.append(ordered)
+        return {value: f"{value}_PARENT" for value in ordered}
+
+    monkeypatch.setattr(gtd, "query_parent_catalog", fake_query)
+    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
+    monkeypatch.setattr(gtd, "write_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
+
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        precomputed=precomputed,
+    )
+
+    expected_lookup = ("CHEMBL2",)
+    assert query_calls == [expected_lookup]
+    assert fetch_calls == [["CHEMBL2"]]
+    assert result[parent_field].tolist() == [
+        "CHEMBL1_PARENT",
+        "CHEMBL2_PARENT",
+        "CHEMBL3_PARENT",
+    ]
+    assert stats.unique == 1
+    assert stats.attached == 3
+    assert stats.missing == 0
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
+
+
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
