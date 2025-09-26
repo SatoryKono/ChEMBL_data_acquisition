@@ -86,7 +86,7 @@ Downloads compound-centric annotations for the supplied identifiers.
 
 Test item exports must be reconciled with the ChEMBL parent catalogue to expose `parent_molecule_chembl_id`
 used by downstream aggregations. The cache path is configured via
-`sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or override the
+[`sources.chembl.molecule_catalog`](./CONFIG_EN.md#sources-chembl-molecule-catalog) (`cache_path`); keep the JSON file accessible to the runner or override the
 location through CLI/environment aliases such as `--sources.chembl.molecule_catalog.cache-path` or
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
 
