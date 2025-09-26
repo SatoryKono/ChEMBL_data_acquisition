@@ -233,22 +233,19 @@ def _select_primary_cid(
     return primary
 
 
-def _resolve_cid_from_row(
-    row: pd.Series,
-    cache: MutableMapping[str, str | None],
-    cfg: PubChemCfg,
-    *,
-    chembl_id: str | None,
-) -> str | None:
-    """Return a CID for ``row`` using its structure fields."""
+def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
+    """Return mapping of identifier names to normalised values."""
 
-    chembl_norm = (
-        _normalise_identifier(chembl_id, uppercase=True)
-        if chembl_id
-        else _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    )
-
-    candidates = {
+    return {
+        "pubchem_cid": _normalise_identifier(row.get("pubchem_cid")),
+        "canonical_smiles": _normalise_identifier(row.get("canonical_smiles")),
+        "pubchem_canonical_smiles": _normalise_identifier(
+            row.get("pubchem_canonical_smiles")
+        ),
+        "isomeric_smiles": _normalise_identifier(row.get("isomeric_smiles")),
+        "pubchem_isomeric_smiles": _normalise_identifier(
+            row.get("pubchem_isomeric_smiles")
+        ),
         "standard_inchi_key": _normalise_identifier(
             row.get("standard_inchi_key"), uppercase=True
         ),
@@ -258,100 +255,24 @@ def _resolve_cid_from_row(
         "standard_inchi": _normalise_identifier(row.get("standard_inchi")),
         "pubchem_inchi": _normalise_identifier(row.get("pubchem_inchi")),
         "pref_name": _normalise_identifier(row.get("pref_name")),
-        "canonical_smiles": _normalise_identifier(row.get("canonical_smiles")),
     }
 
-    def _store(value: str) -> str:
-        if chembl_norm:
-            cached_value = cache.get(chembl_norm, _CID_CACHE_MISSING)
-            if cached_value in (_CID_CACHE_MISSING, None) or cached_value != value:
-                cache[chembl_norm] = value
-        return value
 
-    def _attempt(
-        identifier: str,
-        value: str | None,
-        resolver: Callable[[str, PubChemCfg], str | None],
-    ) -> str | None:
-        if not value:
-            return None
-        resolved = resolver(value, cfg)
-        return _select_primary_cid(
-            resolved,
-            chembl_id=chembl_norm,
-            identifier=identifier,
-            value=value,
-        )
+def _pubchem_resolution_key(row: pd.Series) -> tuple[str | None, ...]:
+    """Return a hashable key describing identifiers used for PubChem lookup."""
 
-    def _resolve_cached() -> str | None:
-        if not chembl_norm:
-            return None
-        cached_value = cache.get(chembl_norm, _CID_CACHE_MISSING)
-        if cached_value in (_CID_CACHE_MISSING, None):
-            return None
-        cid_primary = _select_primary_cid(
-            cached_value,
-            chembl_id=chembl_norm,
-            identifier="cache",
-            value=cached_value,
-        )
-        if cid_primary and cached_value != cid_primary:
-            cache[chembl_norm] = cid_primary
-        return cid_primary
-
-    resolver_groups: Mapping[str, Sequence[tuple[str, str | None, Callable[[str, PubChemCfg], str | None]]]] = {
-        "inchikey": (
-            (
-                "standard_inchi_key",
-                candidates["standard_inchi_key"],
-                pl.get_cid_from_inchikey,
-            ),
-            (
-                "pubchem_inchikey",
-                candidates["pubchem_inchikey"],
-                pl.get_cid_from_inchikey,
-            ),
-        ),
-        "inchi": (
-            (
-                "standard_inchi",
-                candidates["standard_inchi"],
-                pl.get_cid_from_inchi,
-            ),
-            (
-                "pubchem_inchi",
-                candidates["pubchem_inchi"],
-                pl.get_cid_from_inchi,
-            ),
-        ),
-        "name": (
-            ("pref_name", candidates["pref_name"], pl.get_cid),
-            ("pref_name_partial", candidates["pref_name"], pl.get_all_cid),
-        ),
-        "smiles": (
-            (
-                "canonical_smiles",
-                candidates["canonical_smiles"],
-                pl.get_cid_from_smiles,
-            ),
-        ),
-    }
-
-    for stage in cfg.resolve_order:
-        if stage == "cache":
-            cached_cid = _resolve_cached()
-            if cached_cid:
-                return cached_cid
-            continue
-        resolvers = resolver_groups.get(stage)
-        if resolvers is None:
-            raise ValueError(f"Unknown PubChem resolve order entry: {stage!r}")
-        for identifier, value, resolver in resolvers:
-            cid = _attempt(identifier, value, resolver)
-            if cid:
-                return _store(cid)
-
-    return None
+    identifiers = _pubchem_identifiers(row)
+    return (
+        identifiers.get("canonical_smiles"),
+        identifiers.get("pubchem_canonical_smiles"),
+        identifiers.get("isomeric_smiles"),
+        identifiers.get("pubchem_isomeric_smiles"),
+        identifiers.get("standard_inchi_key"),
+        identifiers.get("pubchem_inchikey"),
+        identifiers.get("standard_inchi"),
+        identifiers.get("pubchem_inchi"),
+        identifiers.get("pref_name"),
+    )
 
 
 def resolve_pubchem_cid(
@@ -360,11 +281,23 @@ def resolve_pubchem_cid(
     cfg: PubChemCfg,
     *,
     parent_loader: Callable[[str], pd.Series | None] | None = None,
+    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
 
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
+    identifiers = _pubchem_identifiers(row)
+    resolution_key = _pubchem_resolution_key(row)
+
+    resolution = pl.resolve_pubchem_record(
+        identifiers,
+        cfg,
+        cid_cache=cache,
+        cache_key=chembl_id,
+        resolution_cache=resolution_cache,
+        resolution_key=resolution_key,
+    )
+    cid = resolution.cid
     if cid is not None:
         return cid
 
@@ -398,62 +331,13 @@ def resolve_pubchem_cid(
             cache[chembl_id] = None
         return None
 
-    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
-    if parent_cid:
-        cache[parent_id] = parent_cid
-        if chembl_id:
-            cache[chembl_id] = parent_cid
-        return parent_cid
-
-
-    return None
-
-
-def resolve_pubchem_cid(
-    row: pd.Series,
-    cache: MutableMapping[str, str | None],
-    cfg: PubChemCfg,
-    *,
-    parent_loader: Callable[[str], pd.Series | None] | None = None,
-) -> str | None:
-    """Resolve PubChem CID for a ChEMBL record."""
-
-    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
-    if cid is not None:
-        return cid
-
-    if not cfg.use_parent_for_salts:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_id = _normalise_identifier(
-        row.get("parent_molecule_chembl_id"), uppercase=True
+    parent_cid = resolve_pubchem_cid(
+        parent_row,
+        cache,
+        cfg,
+        parent_loader=parent_loader,
+        resolution_cache=resolution_cache,
     )
-    if not parent_id:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    if parent_loader is None:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_row = parent_loader(parent_id)
-    if parent_row is None:
-        logger.info(
-            "pubchem_parent_structure_missing",
-            child=chembl_id,
-            parent=parent_id,
-            reason="parent_unavailable",
-        )
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
     if parent_cid:
         cache[parent_id] = parent_cid
         if chembl_id:
@@ -775,6 +659,10 @@ def add_pubchem_data(
     if df.empty:
         return df
 
+    if not getattr(cfg, "enable", True):
+        logger.info("pubchem_disabled")
+        return df
+
     result = df.reset_index(drop=True).copy()
     prefer_local = getattr(cfg, "prefer_local_smiles", False)
     existing_cols = [col for col in PUBCHEM_COLUMNS if col in result.columns]
@@ -812,8 +700,8 @@ def add_pubchem_data(
     mixture_indexes = set(mixture_mask[mixture_mask].index.tolist())
 
     skip_indexes: set[int] = set()
-    skip_polymers = getattr(cfg, "skip_polymers", False)
-    if skip_polymers:
+    allow_polymer = getattr(cfg, "allow_polymer", False)
+    if not allow_polymer:
         skip_indexes = polymer_indexes | mixture_indexes
         if skip_indexes:
             logger.warning(
@@ -828,6 +716,7 @@ def add_pubchem_data(
     cache_ttl_hours = getattr(cfg, "cache_ttl_hours", None)
     cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
     cache_dirty = False
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
 
     local_records: dict[str, pd.Series] = {}
     if "molecule_chembl_id" in result.columns:
@@ -928,6 +817,7 @@ def add_pubchem_data(
             cid_cache,
             cfg,
             parent_loader=load_parent_record,
+            resolution_cache=resolution_cache,
         )
         cid_by_index[idx] = cid
         if chembl_id:
@@ -979,6 +869,8 @@ def add_pubchem_data(
                 row_data["pubchem_canonical_smiles"] = _value_or_na(props.cSMILES)
                 row_data["pubchem_inchi"] = _value_or_na(props.InChI)
                 row_data["pubchem_inchikey"] = _value_or_na(props.InChIKey)
+        elif getattr(cfg, "write_not_found_literal", False):
+            row_data["pubchem_cid"] = "Not Found"
         pubchem_rows.append(row_data)
 
     pubchem_df = pd.DataFrame(pubchem_rows, index=result.index).convert_dtypes()

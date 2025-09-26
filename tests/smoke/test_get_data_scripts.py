@@ -401,7 +401,7 @@ def test_get_testitem_data_smoke(
 
     def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
         cfg = original_apply(*args, **kwargs)
-        cfg.pubchem.skip_polymers = True
+        cfg.pubchem.allow_polymer = False
         return cfg
 
     monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)

@@ -979,6 +979,12 @@
     "PubChemCfg": {
       "additionalProperties": false,
       "properties": {
+        "enable": {
+          "default": true,
+          "description": "Enable PubChem augmentation for test item data",
+          "title": "Enable",
+          "type": "boolean"
+        },
         "base": {
           "default": "https://pubchem.ncbi.nlm.nih.gov/rest/pug",
           "title": "Base",
@@ -995,6 +1001,13 @@
           "minimum": 1,
           "title": "Timeout Read",
           "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "description": "Overall timeout applied to individual PubChem lookups",
+          "minimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
         },
         "retries": {
           "default": 3,
@@ -1015,19 +1028,28 @@
           "type": "integer"
         },
         "delay": {
-          "default": 3.0,
+          "default": 0.2,
+          "description": "Base delay between retries for network errors",
           "minimum": 0,
           "title": "Delay",
+          "type": "number"
+        },
+        "backoff_initial_seconds": {
+          "default": 0.5,
+          "description": "Initial delay when backing off after 429/5xx responses",
+          "minimum": 0,
+          "title": "Backoff Initial Seconds",
           "type": "number"
         },
         "resolve_order": {
           "default": [
             "cache",
+            "smiles",
             "inchikey",
-            "name",
-            "smiles"
+            "inchi",
+            "pref_name"
           ],
-          "description": "Order of PubChem CID resolvers",
+          "description": "Ordered list of lookup strategies when resolving PubChem CIDs",
           "items": {
             "type": "string"
           },
@@ -1036,70 +1058,14 @@
         },
         "cache_ttl": {
           "default": 3600,
-          "description": "Time-to-live for PubChem request cache in seconds",
+          "description": "Time-to-live for the in-memory PubChem request cache in seconds",
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
         },
-        "prefer_local_smiles": {
-          "default": false,
-          "description": "Skip PubChem lookups when local pubchem_* columns are populated",
-          "title": "Prefer Local Smiles",
-          "type": "boolean"
-        },
- 
-        "skip_polymers": {
-          "default": false,
-          "description": "Skip PubChem lookups for polymer or mixture records",
-          "title": "Skip Polymers",
-          "type": "boolean"
-        },
- 
-
-        "prefer_local_values": {
-          "default": true,
-          "description": "Retain pre-existing pubchem_* values when PubChem responses are empty",
-          "title": "Prefer Local Values",
-          "type": "boolean"
-        },
-        "resolve_order": {
-          "default": [
-            "standard_inchi_key",
-            "standard_inchi",
-            "pref_name",
-            "pref_name_partial",
-            "canonical_smiles"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "title": "Resolve Order",
-          "type": "array"
-        },
-        "use_parent_for_salts": {
-          "default": true,
-          "title": "Use Parent For Salts",
-          "type": "boolean"
-        },
-        "skip_polymers": {
-          "default": true,
-          "title": "Skip Polymers",
-          "type": "boolean"
-        },
-        "write_not_found_literal": {
-          "default": false,
-          "title": "Write Not Found Literal",
-          "type": "boolean"
-        },
-        "batch_size": {
-          "default": 50,
-          "minimum": 1,
-          "title": "Batch Size",
-          "type": "integer"
-        },
         "cache_ttl_hours": {
           "default": null,
-          "description": "Optional TTL for the persisted CID cache, in hours",
+          "description": "Optional TTL for the persisted CID cache in hours",
           "minimum": 0,
           "title": "Cache Ttl Hours",
           "type": [
@@ -1107,29 +1073,6 @@
             "null"
           ]
         },
-        "timeout_seconds": {
-          "default": 30.0,
-          "minimum": 0,
-          "title": "Timeout Seconds",
-          "type": "number"
-        },
-        "backoff_initial_seconds": {
-          "default": 0.5,
-          "minimum": 0,
-          "title": "Backoff Initial Seconds",
-          "type": "number"
-        },
-
- 
-        "use_parent_for_salts": {
-          "default": false,
-          "description": "Resolve PubChem CIDs via parent structures when child lookups fail",
-          "title": "Use Parent For Salts",
-          "type": "boolean"
-        },
- 
-
- 
         "cid_cache_path": {
           "default": null,
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
@@ -1138,6 +1081,42 @@
             "string",
             "null"
           ]
+        },
+        "batch_size": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "prefer_local_smiles": {
+          "default": false,
+          "description": "Skip PubChem lookups when existing pubchem_* columns are complete",
+          "title": "Prefer Local Smiles",
+          "type": "boolean"
+        },
+        "prefer_local_values": {
+          "default": true,
+          "description": "Retain existing pubchem_* values when lookups return empty results",
+          "title": "Prefer Local Values",
+          "type": "boolean"
+        },
+        "use_parent_for_salts": {
+          "default": true,
+          "description": "Resolve PubChem CIDs via parent structures when child lookups fail",
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
+        "allow_polymer": {
+          "default": false,
+          "description": "Allow PubChem lookups for polymer or mixture records",
+          "title": "Allow Polymer",
+          "type": "boolean"
+        },
+        "write_not_found_literal": {
+          "default": false,
+          "description": "Write 'Not Found' when PubChem lookups fail",
+          "title": "Write Not Found Literal",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",

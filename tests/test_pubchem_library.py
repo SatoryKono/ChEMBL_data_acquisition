@@ -161,6 +161,73 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
 
 
 @responses.activate
+def test_resolve_pubchem_record_falls_back_to_inchikey(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolver should try subsequent identifiers when earlier ones fail."""
+
+    cfg = pl.PubChemCfg(delay=0, backoff_initial_seconds=0, retries=3)
+    monkeypatch.setattr(
+        pl,
+        "get_limiter",
+        lambda *args, **kwargs: type("L", (), {"acquire": lambda self: None})(),
+    )
+
+    identifiers = {
+        "canonical_smiles": "C",
+        "standard_inchi_key": "AAA",
+    }
+
+    smiles_url = f"{cfg.base.rstrip('/')}/compound/smiles/C/cids/JSON"
+    inchikey_url = f"{cfg.base.rstrip('/')}/compound/inchikey/AAA/cids/JSON"
+    responses.add(responses.GET, smiles_url, status=404)
+    responses.add(
+        responses.GET,
+        inchikey_url,
+        json={"IdentifierList": {"CID": [321]}},
+        status=200,
+    )
+
+    resolution = pl.resolve_pubchem_record(identifiers, cfg)
+
+    assert resolution.cid == "321"
+    assert resolution.source == "standard_inchi_key"
+
+
+@responses.activate
+def test_resolve_pubchem_record_backoff_on_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """429/5xx responses should trigger exponential backoff."""
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(pl, "sleep", lambda delay: sleeps.append(delay))
+    monkeypatch.setattr(
+        pl,
+        "get_limiter",
+        lambda *args, **kwargs: type("L", (), {"acquire": lambda self: None})(),
+    )
+
+    cfg = pl.PubChemCfg(delay=0, backoff_initial_seconds=0.1, retries=3)
+    identifiers = {"canonical_smiles": "C"}
+    url = f"{cfg.base.rstrip('/')}/compound/smiles/C/cids/JSON"
+
+    responses.add(responses.GET, url, status=429)
+    responses.add(responses.GET, url, status=503)
+    responses.add(
+        responses.GET,
+        url,
+        json={"IdentifierList": {"CID": [111]}},
+        status=200,
+    )
+
+    resolution = pl.resolve_pubchem_record(identifiers, cfg)
+
+    assert resolution.cid == "111"
+    assert sleeps == [0.1, 0.2]
+
+
+@responses.activate
 def test_get_properties_returns_none_for_missing() -> None:
     """Missing PubChem fields should be returned as ``None``."""
 
