@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 import pandas as pd
 import pytest
@@ -528,6 +528,66 @@ def test_attach_parent_molecule_ids_fetches_missing(
     assert stats.attached == 2
     assert stats.missing == 0
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+
+
+def test_attach_parent_molecule_ids_handles_large_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+        }
+    )
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    base_catalog = {
+        f"CHEMBL{i}": f"CHEMBL{i}_PARENT"
+        for i in range(1, 5000)
+    }
+
+    class TrackingMapping(Mapping[str, str]):
+        def __init__(self, data: Mapping[str, str]) -> None:
+            self._data = dict(data)
+            self.lookups: list[str] = []
+            self.iterations = 0
+
+        def __getitem__(self, key: str) -> str:
+            self.lookups.append(key)
+            return self._data[key]
+
+        def __iter__(self):  # type: ignore[override]
+            self.iterations += 1
+            return iter(self._data)
+
+        def __len__(self) -> int:
+            return len(self._data)
+
+        def __contains__(self, key: object) -> bool:
+            return key in self._data
+
+    tracking_catalog = TrackingMapping(base_catalog)
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        catalog=tracking_catalog,
+        source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+    )
+
+    expected_values = [f"CHEMBL{i}_PARENT" for i in range(1, 4)]
+    assert result[catalog_cfg.parent_field].tolist() == expected_values
+    assert stats.unique == 3
+    assert stats.attached == 3
+    assert stats.missing == 0
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert tracking_catalog.iterations == 0
+    assert set(tracking_catalog.lookups) == {"CHEMBL1", "CHEMBL2", "CHEMBL3"}
 
 
 def test_attach_parent_molecule_ids_updates_cache_for_reuse(
