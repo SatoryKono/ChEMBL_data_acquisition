@@ -49,6 +49,17 @@ data/output/
 `library.io.write_csv` вызывает `library.csv_utils.write_csv_deterministic`, сортируя колонки и строки по ключевым столбцам.
 Поведение следует настройкам `cfg.io.csv_sep`, `cfg.io.csv_encoding` и учитывает аргументы `key_cols`/`col_order`.
 
+## Границы активности (`lower_value`, `upper_value`)
+
+В `activity.csv` появились поля `lower_value` и `upper_value`, вычисляемые после нормализации в `scripts/get_activity_data.py`. Алгоритм использует только канонические поля `standard_*`, уже приведённые ChEMBL к общим единицам. Очерёдность источников для каждой строки:
+
+1. Явные границы `standard_lower_value` и `standard_upper_value`.
+2. Пары `standard_value` + `standard_upper_value`: минимальное значение заполняет `lower_value`, максимальное — `upper_value`, если соответствующая граница ещё пуста.
+3. Интерпретация отношений при `activity_bounds.enable_from_relation = true`: `=`/`≈`/`~` задают обе границы, `>=` — только `lower_value`, `<=` — только `upper_value`, `between`/`range` требуют второго нормализованного числа. Неизвестные маркеры оставляют поля пустыми и логируются. Если доступно только исходное `value` без нормализованного аналога, выводится предупреждение `activity_bounds_missing_standard_value`.
+4. При включённом `activity_bounds.enable_from_uncertainty` разбираются записи вида `значение ± дельта` из `standard_text_value` при наличии канонического значения.
+
+Результат округляется до `activity_bounds.rounding_digits` знаков (по умолчанию `3`) и обрезается до нуля для концентрационных метрик, когда `activity_bounds.clamp_nonnegative = true`. Определение таких метрик опирается на эвристики по `standard_type` и `standard_units`. Остальные столбцы не меняются, порядок колонок остаётся детерминированным согласно схеме.【F:scripts/get_activity_data.py†L1-L234】【F:config.yaml†L108-L147】【F:library/config.py†L358-L420】【F:schemas/activities.py†L32-L64】
+
 ## Рекомендации по ведению архива
 
 * Выделяйте под каждый запуск отдельную папку с датой (`YYYYMMDD/`) для удобного сравнения.

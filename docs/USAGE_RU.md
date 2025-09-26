@@ -36,6 +36,8 @@ python scripts/get_activity_data.py \
 * Использует колонку `sources.chembl.pipelines.activity.column` (по умолчанию `activity_chembl_id`).
 * Создаёт основной CSV, sidecar `*.meta.yaml`, при необходимости `*_failure_cases.csv` и отчёты качества.
 * Поддерживает `--limit` (ограничение по количеству ID) и `--dry-run` (проверка входных данных без запросов к API).
+* Заполняет `lower_value` и `upper_value` на основе канонических полей `standard_*`. Поведение (отношения, разбор `±`, округление, обрезка и логирование) настраивается блоком `activity_bounds.*` в конфигурации.
+* Следите за предупреждениями `activity_bounds_unknown_relation` и `activity_bounds_missing_standard_value` в логах — они указывают строки, где границы не удалось восстановить или оператор отношения неизвестен.
 
 ## Описания ассайев (`get_assay_data.py`)
 

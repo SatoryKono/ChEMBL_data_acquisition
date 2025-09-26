@@ -165,6 +165,13 @@ local:
     all_doc: "data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
     output_dir: "data/output/ChEMBL/processed"  # Output directory for processed files
 
+activity_bounds:
+  enable_from_relation: true      # Derive bounds from relation/value pairs when explicit bounds are absent
+  enable_from_uncertainty: false  # Parse ± expressions when available
+  rounding_digits: 3              # Decimal places for lower_value/upper_value
+  clamp_nonnegative: true         # Clamp negative bounds for concentration-style metrics
+  log_unknown_relations: true     # Emit warnings for unrecognised relation tokens
+
 system:
   log:
     level: "INFO"  # Default logging level (env: CHEMBL_DA_LOG_LEVEL)

@@ -1,0 +1,11 @@
+activity_id,standard_value,standard_upper_value,standard_lower_value,standard_relation,standard_text_value,standard_type,standard_units,relation,value,extra_note
+A1,1.3,1.5,1.1,,,IC50,nM,,,
+A2,2.2,,,<=,,IC50,nM,,,
+A3,3.0,4.0,,range,,Ki,nM,,,
+A4,5.0,,,=,,IC50,nM,,,
+A5,6.0,,,>=,,IC50,nM,,,
+A6,7.0,,,??,,Ki,nM,,,
+A7,,8.0,9.0,,,IC50,nM,,,
+A8,,0.5,-0.5,,,IC50,nM,,,
+A9,8.0,,,=,8 ± 0.5,Ki,nM,,,
+A10,,,,>=,,IC50,nM,,100.0,

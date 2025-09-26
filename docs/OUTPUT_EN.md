@@ -51,6 +51,17 @@ All reports are written using UTF-8 encoding and share the same deterministic or
 ensure identical results on repeated runs. The helper honours `cfg.io.csv_sep`, `cfg.io.csv_encoding` and optional
 `key_cols`/`col_order` arguments supplied by the pipeline.
 
+## Activity bounds (`lower_value`, `upper_value`)
+
+`activity.csv` now exposes canonical value ranges via the `lower_value` and `upper_value` columns produced after normalisation in `scripts/get_activity_data.py`. The pipeline works exclusively with ChEMBL `standard_*` fields so that all limits remain in the canonical units already validated by the schema. Priority is applied row-wise in the following order:
+
+1. Explicit bounds from `standard_lower_value` and `standard_upper_value` when provided by the API.
+2. Paired values such as `standard_value` + `standard_upper_value`, using the minimum as the lower bound and the maximum as the upper bound if one side was previously missing.
+3. Relation-driven inference when `activity_bounds.enable_from_relation` is `true`: `=`/`≈`/`~` set both bounds, `>=` fills only `lower_value`, `<=` fills only `upper_value`, while `between`/`range` expects a second canonical number. Unknown relation markers are left empty and logged for diagnosis. Missing canonical values despite the presence of a raw `value` trigger an `activity_bounds_missing_standard_value` warning so that data issues can be addressed upstream.
+4. Optional parsing of `±` expressions from `standard_text_value` when `activity_bounds.enable_from_uncertainty` is enabled, guarded by the same canonical-unit requirement.
+
+Derived bounds are rounded to `activity_bounds.rounding_digits` decimal places (default `3`) and clamped to zero for concentration-like metrics when `activity_bounds.clamp_nonnegative` is `true`, using heuristics based on `standard_type`/`standard_units`. All operations preserve existing columns and honour the deterministic column ordering enforced by the schema.【F:scripts/get_activity_data.py†L1-L234】【F:config.yaml†L108-L147】【F:library/config.py†L358-L420】【F:schemas/activities.py†L32-L64】
+
 ## Housekeeping recommendations
 
 * Keep historical runs in dated subdirectories (`YYYYMMDD/`) to simplify comparisons.

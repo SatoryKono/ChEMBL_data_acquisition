@@ -36,6 +36,8 @@ python scripts/get_activity_data.py \
 * Reads the column configured at `sources.chembl.pipelines.activity.column` (`activity_chembl_id` by default).
 * Writes the main CSV, `*.meta.yaml`, optional `*_failure_cases.csv` and quality reports.
 * Supports `--limit` to restrict the number of identifiers and `--dry-run` to validate inputs without API calls.
+* Populates `lower_value` and `upper_value` using canonical `standard_*` fields. Tweak the behaviour via `activity_bounds.*` in the configuration (relation-based inference, ± parsing, rounding, clamping and logging).
+* Monitor warnings such as `activity_bounds_unknown_relation` or `activity_bounds_missing_standard_value` in the log output; they indicate rows where bounds could not be derived or the relation marker is not recognised.
 
 ## Assay descriptions (`get_assay_data.py`)
 

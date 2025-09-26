@@ -368,6 +368,25 @@ class RetryCfg(_BaseModel):
     )
 
 
+class ActivityBoundsCfg(_BoolModel):
+    enable_from_relation: bool = True
+    enable_from_uncertainty: bool = False
+    rounding_digits: int = Field(3, ge=0)
+    clamp_nonnegative: bool = True
+    log_unknown_relations: bool = True
+
+    @field_validator(
+        "enable_from_relation",
+        "enable_from_uncertainty",
+        "clamp_nonnegative",
+        "log_unknown_relations",
+        mode="before",
+    )
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
 class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
@@ -529,6 +548,9 @@ class Config(_BaseModel):
     sources: SourcesCfg = Field(default_factory=lambda: SourcesCfg())
     local: LocalCfg = Field(default_factory=lambda: LocalCfg())
     system: SystemCfg = Field(default_factory=lambda: SystemCfg())
+    activity_bounds: ActivityBoundsCfg = Field(
+        default_factory=lambda: ActivityBoundsCfg()
+    )
 
     # -- Compatibility accessors -------------------------------------------------
     #
