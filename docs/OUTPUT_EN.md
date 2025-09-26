@@ -76,6 +76,7 @@ Each row combines ChEMBL fields (`molecule_chembl_id`, structure descriptors, li
 augmentation, and pipeline metadata, allowing the dataset to serve as the canonical compound dimension.【F:scripts/get_testitem_data.py†L36-L193】【F:schemas/testitems.py†L12-L31】
 
 Before distributing the export, join it with the parent molecule catalogue to expose
-`parent_molecule_chembl_id` for roll-ups. The mapping is stored in the JSON file configured at
-`sources.chembl.molecule_catalog.cache_path` and loaded via
-`library.molecule_catalog.load_parent_catalog`, which refreshes the cache from the ChEMBL API when needed.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L43-L136】
+`parent_molecule_chembl_id` for roll-ups. The mapping resides in the SQLite cache at
+`sources.chembl.molecule_catalog.sqlite_path`; `library.molecule_catalog.load_parent_catalog`
+initialises the database (migrating any legacy JSON configured via
+`cache_path`) and refreshes it from the ChEMBL API when necessary.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L108-L189】

@@ -14,6 +14,17 @@ from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
 
+class DummyParentCatalog:
+    def __init__(self, data: dict[str, str], *, refreshed: bool = False) -> None:
+        self._data = data
+        self.was_refreshed = refreshed
+
+    def __bool__(self) -> bool:
+        return bool(self._data)
+
+    def lookup(self, children: list[str]) -> dict[str, str]:
+        return {child: self._data[child] for child in children if child in self._data}
+
 def test_run_chembl_column_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -41,7 +52,9 @@ def test_run_chembl_column_order(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(
-        gtd, "load_parent_catalog", lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"}
+        gtd,
+        "load_parent_catalog",
+        lambda **__: DummyParentCatalog({"CHEMBL1": "CHEMBL1_PARENT"}),
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
     monkeypatch.setattr(
@@ -101,7 +114,9 @@ def test_run_chembl_initialises_pubchem_session(
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(
+        gtd, "load_parent_catalog", lambda **__: DummyParentCatalog({})
+    )
 
     monkeypatch.setattr(
         gtd,
@@ -164,7 +179,9 @@ def test_run_chembl_merges_parent_catalog(
     monkeypatch.setattr(
         gtd,
         "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"},
+        lambda **__: DummyParentCatalog(
+            {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"}
+        ),
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
@@ -296,7 +313,7 @@ def test_run_chembl_parent_catalog_request_error(
     assert any(
         event == "parent_catalog_invalid"
         and details.get("error") == "boom"
-        and details.get("path") == str(cfg.molecule_catalog.cache_path)
+        and details.get("path") == str(cfg.molecule_catalog.sqlite_path)
         for event, details in errors
     )
 

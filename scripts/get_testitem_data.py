@@ -133,10 +133,6 @@ def attach_parent_molecule_ids(
         )
         return result, stats
 
-    cache_path = catalog_cfg.cache_path
-    cache_exists = cache_path.is_file()
-    cache_mtime = cache_path.stat().st_mtime if cache_exists else None
-
     catalog = molecule_catalog.load_parent_catalog(
         client=client,
         api_cfg=api_cfg,
@@ -144,17 +140,14 @@ def attach_parent_molecule_ids(
         timeout=timeout,
     )
 
-    cache_exists_after = cache_path.is_file()
-    cache_mtime_after = cache_path.stat().st_mtime if cache_exists_after else None
-    if cache_exists_after and cache_exists and cache_mtime_after == cache_mtime:
-        source = PARENT_LOOKUP_SOURCE_CACHE
-    else:
-        source = PARENT_LOOKUP_SOURCE_REMOTE
+    source = (
+        PARENT_LOOKUP_SOURCE_REMOTE if catalog.was_refreshed else PARENT_LOOKUP_SOURCE_CACHE
+    )
 
     normalised_child = _normalise_chembl_ids(result[child_column])
     unique_children = normalised_child[normalised_child != ""].unique()
 
-    parent_map = {key: catalog[key] for key in unique_children if key in catalog}
+    parent_map = catalog.lookup(list(unique_children))
     parent_series = normalised_child.map(parent_map)
     missing_mask = parent_series.isna()
     parent_series = parent_series.astype("string")
@@ -324,7 +317,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             logger.error(
                 "parent_catalog_invalid",
                 error=str(exc),
-                path=str(cfg.molecule_catalog.cache_path),
+                path=str(cfg.molecule_catalog.sqlite_path),
             )
             return 1
 
@@ -348,7 +341,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         parent_column = cfg.molecule_catalog.parent_field
         if parent_catalog and "molecule_chembl_id" in df.columns:
             normalised_ids = _normalise_chembl_ids(df["molecule_chembl_id"])
-            mapped = normalised_ids.map(parent_catalog)
+            unique_children = [child for child in normalised_ids.unique() if child]
+            parent_map = parent_catalog.lookup(unique_children)
+            mapped = normalised_ids.map(parent_map)
             if parent_column in df.columns:
                 df[parent_column] = df[parent_column].fillna(mapped)
             else:

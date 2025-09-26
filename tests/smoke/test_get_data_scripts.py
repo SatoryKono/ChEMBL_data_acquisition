@@ -356,6 +356,21 @@ def test_get_testitem_data_smoke(
             InChIKey="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
         )
 
+    class FakeCatalog:
+        def __init__(self, mapping: dict[str, str]) -> None:
+            self._mapping = mapping
+            self.was_refreshed = False
+
+        def __bool__(self) -> bool:
+            return bool(self._mapping)
+
+        def lookup(self, children: list[str]) -> dict[str, str]:
+            return {
+                child: self._mapping[child]
+                for child in children
+                if child in self._mapping
+            }
+
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -363,7 +378,7 @@ def test_get_testitem_data_smoke(
     monkeypatch.setattr(
         get_testitem_data,
         "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+        lambda **__: FakeCatalog({"CHEMBL1": "CHEMBL1_PARENT"}),
     )
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
 

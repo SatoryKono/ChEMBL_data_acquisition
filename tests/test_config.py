@@ -146,6 +146,19 @@ def test_molecule_catalog_cache_alias(
     assert cfg.molecule_catalog.cache_path == cache
 
 
+def test_molecule_catalog_sqlite_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    sqlite_path = tmp_path / "catalog.sqlite"
+    monkeypatch.setenv("CHEMBL_DA_MOLECULE_CATALOG_SQLITE", str(sqlite_path))
+
+    cfg = load_config(path)
+
+    assert cfg.molecule_catalog.sqlite_path == sqlite_path
+
+
 def test_chembl_cache_maxsize_from_yaml(tmp_path: Path) -> None:
     """Custom ``chembl.cache_maxsize`` should override the default."""
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlencode, urljoin
@@ -12,7 +14,60 @@ from .chembl_client import ChemblClient
 from .config import ApiCfg, MoleculeCatalogCfg
 from .log import logger
 
-__all__ = ["fetch_parent_catalog", "load_parent_catalog"]
+__all__ = [
+    "ParentCatalogStore",
+    "fetch_parent_catalog",
+    "load_parent_catalog",
+]
+
+_SQLITE_PARAMETER_LIMIT = 999
+
+
+class ParentCatalogStore:
+    """Read-only view over the cached parent catalogue stored in SQLite."""
+
+    def __init__(self, path: Path, *, refreshed: bool) -> None:
+        self._path = path
+        self._refreshed = refreshed
+
+    @property
+    def path(self) -> Path:
+        """Return the backing SQLite database path."""
+
+        return self._path
+
+    @property
+    def was_refreshed(self) -> bool:
+        """Whether the catalogue was refreshed from the remote endpoint."""
+
+        return self._refreshed
+
+    def __bool__(self) -> bool:
+        return _sqlite_has_rows(self._path)
+
+    def lookup(self, children: Sequence[str]) -> dict[str, str]:
+        """Return a mapping for ``children`` found in the cache."""
+
+        if not children:
+            return {}
+
+        # ``children`` are expected to be normalised already, yet we only
+        # retain non-empty identifiers to avoid unnecessary queries.
+        filtered = list(dict.fromkeys(child for child in children if child))
+        if not filtered:
+            return {}
+
+        result: dict[str, str] = {}
+        with sqlite3.connect(self._path) as connection:
+            for chunk in _chunked(filtered, _SQLITE_PARAMETER_LIMIT):
+                placeholders = ",".join("?" for _ in chunk)
+                query = (
+                    f"SELECT child, parent FROM parent_catalog "
+                    f"WHERE child IN ({placeholders})"
+                )
+                for child, parent in connection.execute(query, tuple(chunk)):
+                    result[str(child)] = str(parent)
+        return result
 
 
 def _normalise_chembl_id(value: str) -> str:
@@ -139,6 +194,50 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
     return result
 
 
+def _write_sqlite_cache(path: Path, data: Mapping[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TABLE IF EXISTS parent_catalog")
+        connection.execute(
+            "CREATE TABLE parent_catalog (child TEXT PRIMARY KEY, parent TEXT NOT NULL)"
+        )
+        rows = sorted((str(child), str(parent)) for child, parent in data.items())
+        connection.executemany(
+            "INSERT INTO parent_catalog (child, parent) VALUES (?, ?)",
+            rows,
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS parent_catalog_parent_idx"
+            " ON parent_catalog (parent)"
+        )
+
+
+def _sqlite_has_rows(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    with sqlite3.connect(path) as connection:
+        cursor = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='parent_catalog'"
+        )
+        if cursor.fetchone() is None:
+            return False
+        cursor = connection.execute("SELECT 1 FROM parent_catalog LIMIT 1")
+        return cursor.fetchone() is not None
+
+
+def _chunked(values: Iterable[str], limit: int) -> Iterator[list[str]]:
+    if limit <= 0:
+        raise ValueError("chunk size must be positive")
+    chunk: list[str] = []
+    for value in values:
+        chunk.append(value)
+        if len(chunk) >= limit:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
 def load_parent_catalog(
     *,
     client: ChemblClient,
@@ -146,21 +245,24 @@ def load_parent_catalog(
     catalog_cfg: MoleculeCatalogCfg,
     timeout: float | None = None,
     force_refresh: bool = False,
-) -> dict[str, str]:
-    """Return the molecule parent catalogue, using the on-disk cache if present."""
+) -> ParentCatalogStore:
+    """Ensure the parent catalogue cache exists and return a SQLite-backed view."""
 
-    cache_path = catalog_cfg.cache_path
+    sqlite_path = catalog_cfg.sqlite_path
+    refreshed = False
+
+    if not force_refresh and _sqlite_has_rows(sqlite_path):
+        return ParentCatalogStore(sqlite_path, refreshed=refreshed)
+
     if not force_refresh:
-        cached = _read_cache(cache_path, catalog_cfg)
+        cached = _read_cache(catalog_cfg.cache_path, catalog_cfg)
         if cached:
-            return cached
+            _write_sqlite_cache(sqlite_path, cached)
+            return ParentCatalogStore(sqlite_path, refreshed=refreshed)
 
     result = fetch_parent_catalog(
         client=client, api_cfg=api_cfg, catalog_cfg=catalog_cfg, timeout=timeout
     )
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(
-        json.dumps(dict(sorted(result.items())), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    return result
+    _write_sqlite_cache(sqlite_path, result)
+    refreshed = True
+    return ParentCatalogStore(sqlite_path, refreshed=refreshed)
