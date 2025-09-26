@@ -155,11 +155,18 @@ def attach_parent_molecule_ids(
     unique_children = normalised_child[normalised_child != ""].unique()
 
     parent_map = {key: catalog[key] for key in unique_children if key in catalog}
-    parent_series = normalised_child.map(parent_map)
-    missing_mask = parent_series.isna()
-    parent_series = parent_series.astype("string")
-    result[parent_column] = parent_series
+    parent_series = normalised_child.map(parent_map).astype("string")
 
+    if parent_column in result.columns:
+        existing_parent = result[parent_column].astype("string")
+        combined_parent = existing_parent.fillna(parent_series)
+    else:
+        combined_parent = parent_series
+
+    combined_parent = combined_parent.astype("string")
+    result[parent_column] = combined_parent
+
+    missing_mask = combined_parent.isna()
     missing = int(missing_mask.sum())
     attached = len(result) - missing
 

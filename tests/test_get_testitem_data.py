@@ -197,6 +197,39 @@ def test_run_chembl_merges_parent_catalog(
     ]
 
 
+def test_attach_parent_preserves_existing_value(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_chembl_id": "CHEMBL_PARENT_EXISTING",
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "load_parent_catalog",
+        lambda *, client, api_cfg, catalog_cfg, timeout: {},
+    )
+
+    enriched, stats = gtd.attach_parent_molecule_ids(
+        frame,
+        client=object(),
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=cfg.testitem.timeout,
+    )
+
+    assert enriched[cfg.molecule_catalog.parent_field].tolist() == [
+        "CHEMBL_PARENT_EXISTING"
+    ]
+    assert stats.missing == 0
+    assert stats.attached == 1
+
+
 def test_run_chembl_parent_catalog_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
