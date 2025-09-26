@@ -24,6 +24,17 @@ from .document_type_terms import (
     parse_terms,
 )
 from .logging_setup import Logger, LoggerConfig, configure_logger
+from .organism_classification import (
+    OrganismClassificationRules,
+    add_cellularity,
+    add_cellularity_smart,
+    classify_by_lineage,
+    classify_record,
+    normalize,
+    TYPE_MULTICELLULAR,
+    TYPE_UNICELLULAR,
+    TYPE_VIRAL,
+)
 from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors
 from .timing import log_duration
@@ -48,4 +59,13 @@ __all__ = [
     "configure_logger",
     "CSVExportArgs",
     "log_duration",
+    "OrganismClassificationRules",
+    "add_cellularity",
+    "add_cellularity_smart",
+    "classify_by_lineage",
+    "classify_record",
+    "normalize",
+    "TYPE_MULTICELLULAR",
+    "TYPE_UNICELLULAR",
+    "TYPE_VIRAL",
 ]
