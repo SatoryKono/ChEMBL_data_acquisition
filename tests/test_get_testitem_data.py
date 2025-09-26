@@ -189,8 +189,22 @@ def test_run_chembl_merges_parent_catalog(
         nonlocal captured_catalog, captured_source
         captured_catalog = kwargs.get("catalog")
         captured_source = kwargs.get("source")
+        catalog_cfg = kwargs.get("catalog_cfg")
+        mapping = captured_catalog or {}
+        parent_field = (
+            catalog_cfg.parent_field if catalog_cfg is not None else "parent_molecule_chembl_id"
+        )
+        child_field = (
+            catalog_cfg.child_field if catalog_cfg is not None else "molecule_chembl_id"
+        )
+        updated = frame.copy()
+        parent_series = updated[parent_field].astype("string")
+        mask = parent_series.isna() | parent_series.eq("")
+        updated.loc[mask, parent_field] = (
+            updated.loc[mask, child_field].map(mapping).astype("string")
+        )
         return (
-            frame,
+            updated,
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
@@ -527,6 +541,46 @@ def test_attach_parent_molecule_ids_fetches_missing(
     assert stats.unique == 2
     assert stats.attached == 2
     assert stats.missing == 0
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+
+
+def test_attach_parent_molecule_ids_handles_partial_remote_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+
+    remote_result = {"CHEMBL1": "CHEMBL1_PARENT"}
+
+    def fake_fetch(
+        ids: list[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        assert ids == ["CHEMBL1", "CHEMBL2"]
+        return remote_result
+
+    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    parent_values = result[catalog_cfg.parent_field].tolist()
+    assert parent_values == ["CHEMBL1_PARENT", pd.NA]
+    assert stats.attached == 1
+    assert stats.missing == 1
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
 
 
