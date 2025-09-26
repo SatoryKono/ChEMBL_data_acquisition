@@ -265,6 +265,15 @@ class PubChemCfg(_BaseModel):
         False,
         description="Skip PubChem lookups when local pubchem_* columns are populated",
     )
+ 
+    skip_polymers: bool = Field(
+        False,
+        description=(
+            "Skip PubChem lookups for polymer or mixture records, retaining existing"
+            " pubchem_* values"
+        ),
+    )
+ 
     prefer_local_values: bool = Field(
         True,
         description="Retain pre-existing pubchem_* values when lookups return empty results",
@@ -287,6 +296,7 @@ class PubChemCfg(_BaseModel):
     )
     timeout_seconds: float = Field(30.0, ge=0)
     backoff_initial_seconds: float = Field(0.5, ge=0)
+ 
     cid_cache_path: Path | None = Field(
         default=None,
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",

@@ -718,6 +718,44 @@ def add_pubchem_data(
     else:
         complete_mask = pd.Series(False, index=result.index)
 
+    def _mask_for(series: pd.Series | None, keyword: str) -> pd.Series:
+        if series is None:
+            return pd.Series(False, index=result.index)
+        normalised = (
+            series.astype("string")
+            .fillna("")
+            .str.strip()
+            .str.casefold()
+        )
+        return normalised.str.contains(keyword.casefold(), regex=False, na=False)
+
+    molecule_type_series = result.get("molecule_type")
+    structure_type_series = result.get("structure_type")
+    polymer_mask = (
+        _mask_for(molecule_type_series, "polymer")
+        | _mask_for(structure_type_series, "polymer")
+    )
+    mixture_mask = (
+        _mask_for(molecule_type_series, "mixture")
+        | _mask_for(structure_type_series, "mixture")
+    )
+
+    polymer_indexes = set(polymer_mask[polymer_mask].index.tolist())
+    mixture_indexes = set(mixture_mask[mixture_mask].index.tolist())
+
+    skip_indexes: set[int] = set()
+    skip_polymers = getattr(cfg, "skip_polymers", False)
+    if skip_polymers:
+        skip_indexes = polymer_indexes | mixture_indexes
+        if skip_indexes:
+            logger.warning(
+                "pubchem_skip_polymers",
+                count=len(skip_indexes),
+                polymer_count=len(skip_indexes & polymer_indexes),
+                mixture_count=len(skip_indexes & mixture_indexes),
+                indexes=[int(index) for index in sorted(skip_indexes)],
+            )
+
     cache_path = getattr(cfg, "cid_cache_path", None)
     cache_ttl_hours = getattr(cfg, "cache_ttl_hours", None)
     cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
@@ -786,7 +824,8 @@ def add_pubchem_data(
     total = sum(
         1
         for idx, row in result.iterrows()
-        if not (
+        if idx not in skip_indexes
+        and not (
             (chembl_id := _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True))
             and chembl_id in cid_cache
             and cid_cache[chembl_id]
@@ -800,6 +839,9 @@ def add_pubchem_data(
     cid_by_index: dict[int, str | None] = {}
     progress = 0
     for idx, row in result.iterrows():
+        if idx in skip_indexes:
+            cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
+            continue
         if prefer_local and bool(complete_mask.loc[idx]):
             cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
             continue
@@ -838,6 +880,8 @@ def add_pubchem_data(
     for idx, cid in zip(result.index, cid_list):
         if not cid:
             continue
+        if idx in skip_indexes:
+            continue
         if prefer_local and bool(complete_mask.loc[idx]):
             continue
         lookup_cids.add(cid)
@@ -847,8 +891,14 @@ def add_pubchem_data(
         properties[cid] = pl.get_properties(cid, cfg)
 
     pubchem_rows: list[dict[str, object]] = []
-    for cid in cid_list:
+    for idx, cid in zip(result.index, cid_list):
         row_data: dict[str, object] = {col: pd.NA for col in PUBCHEM_COLUMNS}
+        if idx in skip_indexes:
+            for column in PUBCHEM_COLUMNS:
+                if column in result.columns:
+                    row_data[column] = result.loc[idx, column]
+            pubchem_rows.append(row_data)
+            continue
         if cid:
             row_data["pubchem_cid"] = cid
             props = properties.get(cid)
