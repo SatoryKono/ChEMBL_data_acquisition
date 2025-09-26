@@ -22,6 +22,7 @@ import pandas as pd
 from .config import Config
 from .io import write_csv
 from .log import logger
+from . import organism_classification
 
 EntityName = Literal[
     "activity",
@@ -477,6 +478,19 @@ def process_activity_table(
 
     targets = pd.read_csv(
         targets_path,
+        usecols=[
+            "target_chembl_id",
+            "IUPHAR_class",
+            "IUPHAR_subclass",
+            "gene_index",
+            "taxon_index",
+            "target_sort_order",
+            "multifunctional_enzyme",
+            "genus",
+            "superkingdom",
+            "phylum",
+            "taxon_id",
+        ],
         dtype={
             "target_chembl_id": "string",
             "IUPHAR_class": "string",
@@ -485,7 +499,10 @@ def process_activity_table(
             "gene_index": "string",
             "target_sort_order": "string",
             "multifunctional_enzyme": "string",
-            "organism_type": "string",
+            "genus": "string",
+            "superkingdom": "string",
+            "phylum": "string",
+            "taxon_id": "string",
         },
     )
 
@@ -497,9 +514,10 @@ def process_activity_table(
                 "multifunctional_enzyme",
                 "IUPHAR_class",
                 "IUPHAR_subclass",
-                "organism_type",
-                "IUPHAR_class",
-                "IUPHAR_subclass",
+                "genus",
+                "superkingdom",
+                "phylum",
+                "taxon_id",
                 "gene_index",
                 "taxon_index",
             ]
@@ -515,16 +533,16 @@ def process_activity_table(
         df["multifunctional_enzyme"], "multifunctional_enzyme"
     )
 
-    mapping = {
-        "Multicellular organism": False,
-        "Viruses": True,
-        "Unicellular organism": True,
-    }
-    df["unicellular_organism"] = _safe_to_bool(
-        df["organism_type"].map(mapping), "unicellular_organism"
-    ).fillna(False)
+    df = organism_classification.add_cellularity_smart(
+        df,
+        genus_col="genus",
+        superkingdom_col="superkingdom",
+        phylum_col="phylum",
+        taxon_id_col="taxon_id",
+        output_col="unicellular_organism",
+    )
 
-    df.drop(columns=["organism_type"], inplace=True)
+    df.drop(columns=["genus", "superkingdom", "phylum", "taxon_id"], inplace=True)
 
     # --- final ordering ----------------------------------------------------
     final_cols = [
