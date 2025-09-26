@@ -387,12 +387,30 @@ class ActivityBoundsCfg(_BoolModel):
         return cls._parse_bool(v)
 
 
+class ActivityActionCfg(_BaseModel):
+    metrics: dict[str, str] = Field(default_factory=dict)
+    allosteric: dict[str, str] = Field(default_factory=dict)
+    functionality: dict[str, str] = Field(default_factory=dict)
+    mechanism: dict[str, str] = Field(default_factory=dict)
+    fallback: str | None = None
+
+
+class ActivityPropertiesCfg(_BaseModel):
+    allowlist: list[str] = Field(default_factory=list)
+    triage: dict[str, dict[str, str]] = Field(default_factory=dict)
+    hash_fields: list[str] = Field(default_factory=list)
+
+
 class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
     dry_run: bool = False
+    action: ActivityActionCfg = Field(default_factory=lambda: ActivityActionCfg())
+    properties: ActivityPropertiesCfg = Field(
+        default_factory=lambda: ActivityPropertiesCfg()
+    )
 
     @field_validator("dry_run", mode="before")
     @classmethod
@@ -1054,6 +1072,8 @@ __all__ = [
     "PubMedCfg",
     "SemanticScholarCfg",
     "DocTypeCfg",
+    "ActivityActionCfg",
+    "ActivityPropertiesCfg",
     "ActivityCfg",
     "AssayCfg",
     "TestitemCfg",

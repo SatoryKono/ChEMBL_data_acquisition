@@ -35,6 +35,39 @@ sources:
         timeout: 30.0
         limit: null
         dry_run: false
+        action:
+          metrics:
+            ic50: inhibition
+            ki: inhibition
+            kd: binding
+            ec50: activation
+            ac50: activation
+          allosteric:
+            positive allosteric modulator: modulation_positive
+            negative allosteric modulator: modulation_negative
+          functionality:
+            agonist: agonist
+            antagonist: antagonist
+            inverse agonist: antagonist
+            partial agonist: agonist
+          mechanism:
+            inhibitor: inhibition
+            activator: activation
+            blocker: antagonist
+          fallback: unknown
+        properties:
+          allowlist:
+            - activity_comment
+            - data_validity_comment
+            - data_validity_description
+            - bao_label
+          triage:
+            data_validity_description:
+              manually validated: validated
+              manually triaged out: triaged_out
+              not determined: undetermined
+          hash_fields:
+            - data_validity_description
       assay:
         column: "assay_chembl_id"
         batch_size: 50
