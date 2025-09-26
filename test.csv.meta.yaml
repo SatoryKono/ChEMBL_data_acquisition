@@ -1,5 +1,5 @@
-generated_at: '2025-09-26T13:10:15.921955+00:00'
-git_sha: 5b2953ae6ec73bd453a8aa5bc44611c2cf0cda2f
+generated_at: '2025-09-26T13:25:38.008689+00:00'
+git_sha: 8c473b65506b37c39f02c7b54f0c8647d504fd66
 command: scripts\get_activity_data.py --input data\input\full\activity.csv --output
   test.csv --limit 100
 columns:
@@ -101,6 +101,7 @@ config:
         filters:
           parent_molecule_chembl_id__isnull: 'false'
         page_size: 500
+        fallback_single_limit: null
       pipelines:
         activity:
           column: activity_chembl_id
@@ -207,10 +208,23 @@ config:
       rps: 5
       burst: 5
       delay: 0.2
+      resolve_order:
+      - standard_inchi_key
+      - standard_inchi
+      - pref_name
+      - pref_name_partial
+      - canonical_smiles
       cache_ttl: 3600
       prefer_local_smiles: false
-      cid_cache_path: null
+      skip_polymers: true
+      prefer_local_values: true
       use_parent_for_salts: false
+      write_not_found_literal: false
+      batch_size: 50
+      cache_ttl_hours: null
+      timeout_seconds: 30.0
+      backoff_initial_seconds: 0.5
+      cid_cache_path: null
     pubmed:
       base: https://eutils.ncbi.nlm.nih.gov/entrez/eutils
       timeout_connect: 5
@@ -358,5 +372,5 @@ stats:
   rows_total: 40
   rows_kept: 40
   rows_dropped: 0
-  output_sha256: c1d52e1f4d9cb757c027e1e57c8cb23fefcc9ffc713130f49e67b1d645c8f662
+  output_sha256: c67d4912aebe876a915b45a5d678d97aacaabcfdd34a0c1e040975c7a04048bb
 schema: ActivitiesSchema
