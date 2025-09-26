@@ -488,6 +488,19 @@
           "minimum": 1,
           "title": "Page Size",
           "type": "integer"
+        },
+        "fallback_single_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Single Limit"
         }
       },
       "title": "MoleculeCatalogCfg",
@@ -1020,6 +1033,7 @@
           "title": "Prefer Local Smiles",
           "type": "boolean"
         },
+ 
         "prefer_local_values": {
           "default": true,
           "description": "Retain pre-existing pubchem_* values when PubChem responses are empty",
@@ -1083,6 +1097,14 @@
           "title": "Backoff Initial Seconds",
           "type": "number"
         },
+ 
+        "use_parent_for_salts": {
+          "default": false,
+          "description": "Resolve PubChem CIDs via parent structures when child lookups fail",
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
+ 
         "cid_cache_path": {
           "default": null,
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
