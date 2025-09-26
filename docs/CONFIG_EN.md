@@ -43,12 +43,16 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs. |
-| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. |
+| `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
 | `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
 | `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
 | `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
+| `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
+| `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
+| `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
+| `fallback_single_limit` | `null` | Caps the number of single-molecule fallback requests performed after bulk fetching fails; `null` keeps the fallback unlimited. |
 
 ### Pipelines (`sources.chembl.pipelines`)
 
