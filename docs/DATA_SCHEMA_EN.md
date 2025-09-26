@@ -40,7 +40,7 @@
 ## Output Tables
 
 ### activity.csv (processed export)
-- **Purpose:** normalized set of experimental activity measurements retrieved from the ChEMBL API and annotated with pipeline metadata.【F:scripts/get_activity_data.py†L63-L220】【F:library/chembl_assay.py†L62-L111】【F:schemas/activities.py†L16-L56】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** normalized set of experimental activity measurements retrieved from the ChEMBL API, extended with derived bounds, structured annotations, and pipeline metadata.【F:scripts/get_activity_data.py†L63-L357】【F:library/chembl_assay.py†L62-L111】【F:schemas/activities.py†L16-L78】【F:library/pipeline_metadata.py†L60-L84】
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
@@ -70,6 +70,13 @@
 | value | string/number | ChEMBL `/activity` | Raw measurement reported by the API.|
 | standard_type | string | ChEMBL `/activity` | Normalized measurement type (restricted to `IC50` or `Ki`).|
 | standard_value | number (float) | ChEMBL `/activity` | Normalized numeric value in molar units; guaranteed non-negative.|
+| standard_lower_value | string/number | ChEMBL `/activity` | Lower bound supplied by ChEMBL when the measurement is a range.|
+| standard_upper_value | string/number | ChEMBL `/activity` | Upper bound supplied by ChEMBL when available.|
+| lower_value | number (float) | Derived field | Consolidated lower limit inferred from ChEMBL bounds, relations or uncertainty metadata.|
+| upper_value | number (float) | Derived field | Consolidated upper limit inferred from ChEMBL bounds, relations or uncertainty metadata.|
+| activity_properties | JSON string | Derived field | Canonical JSON payload describing the measurement, assay context and enrichment flags.|
+| action_type | string | Derived field | Normalized action label (e.g., `PAM`, `NAM`) detected from annotations and configured lookups.|
+| properties_hash | string | Derived field | SHA-256 checksum of `activity_properties` for change tracking.|
 | pipeline_version | string | Pipeline metadata | Version of the `chembl-data-acquisition` package stamped onto the export.|
 | timestamp_utc | ISO 8601 string | Pipeline metadata | UTC timestamp indicating when the export was created.|
 
@@ -283,11 +290,16 @@
 | iuphar_full_name_path | string | IUPHAR | Full name path within the IUPHAR hierarchy.|
 
 ### testitem.csv (processed export)
-- **Purpose:** enriched description of ChEMBL compounds combining structural attributes and PubChem augmentation plus pipeline metadata.【F:scripts/get_testitem_data.py†L36-L114】【F:library/chembl_assay.py†L91-L111】【F:schemas/testitems.py†L12-L37】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** enriched description of ChEMBL compounds combining parent hierarchy, structural attributes, PubChem augmentation, catalog flags, and pipeline metadata.【F:scripts/get_testitem_data.py†L36-L356】【F:library/testitem_enrichment.py†L151-L239】【F:schemas/testitems.py†L14-L47】【F:library/pipeline_metadata.py†L60-L84】
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
 | molecule_chembl_id | string | ChEMBL `/molecule` | Primary molecule identifier.|
+| parent_molecule_chembl_id | string | ChEMBL hierarchy/catalog | Identifier of the parent molecule used for salt roll-ups.|
+| salt_chembl_id | string | Derived field | Copies the child identifier when the molecule is a salt; otherwise blank or `-` per configuration.|
+| natural_product | boolean (nullable) | Molecule catalog | Normalized flag indicating natural-product origin.|
+| prodrug | boolean (nullable) | Molecule catalog | Normalized flag identifying prodrug records.|
+| polymer_flag | boolean (nullable) | Molecule catalog | Normalized polymer indicator from the catalog.|
 | black_box_warning | string/boolean | ChEMBL `/molecule` | Black-box warning flag.|
 | first_approval | string/date | ChEMBL `/molecule` | Year or date of the first regulatory approval (as provided).|
 | max_phase | string | ChEMBL `/molecule` | Maximum clinical phase reached.|

@@ -128,33 +128,31 @@ sources:
     rps: 5  # (env: CHEMBL_DA_IUPHAR_RPS)
     burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
   pubchem:
+    enable: true  # Toggle PubChem augmentation (env: CHEMBL_DA_PUBCHEM_ENABLE)
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
+    timeout_seconds: 30.0
     retries: 3
     rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
+    backoff_initial_seconds: 0.5
+    resolve_order:
+      - cache
+      - smiles
+      - inchikey
+      - inchi
+      - pref_name
     cache_ttl: 3600  # Request cache time-to-live in seconds
-
+    cache_ttl_hours: null  # Persisted CID cache TTL in hours; null disables expiry
+    cid_cache_path: null
+    batch_size: 50
     prefer_local_smiles: false
     prefer_local_values: true
-    resolve_order:
-      - standard_inchi_key
-      - standard_inchi
-      - pref_name
-      - pref_name_partial
-      - canonical_smiles
     use_parent_for_salts: true
-    skip_polymers: true
+    allow_polymer: false
     write_not_found_literal: false
-    batch_size: 50
-    cache_ttl_hours: null  # Persisted CID cache TTL in hours; null disables expiry
-    timeout_seconds: 30.0
-    backoff_initial_seconds: 0.5
-
- 
-    use_parent_for_salts: false  # Attempt parent structures when salt lookups fail
 
   pubmed:
     base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__SOURCES__PUBMED__BASE)

@@ -75,13 +75,54 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 
 #### Activity enrichment (`activity_enrichment`)
 
+This block controls derived annotations appended to every activity row. It works alongside the separate
+`activity_bounds` configuration (documented below) that is responsible solely for calculating numerical limits.
+`activity_enrichment` itself is divided into two independent sub-sections that can be toggled individually.
+
+##### Action type labelling (`activity_enrichment.action_type`)
+
+* `enabled` — master switch (`true` by default).【F:config.yaml†L192-L193】
+* `column` — name of the output column that stores the resolved label (`action_type`).【F:config.yaml†L194-L194】
+* Logging flags control diagnostics when the source data does not produce a value:
+  * `log_missing` emits a warning when the label cannot be determined (`true`).【F:config.yaml†L195-L195】
+  * `log_distribution` prints summary statistics after enrichment (`true`).【F:config.yaml†L196-L196】
+* `metrics` maps activity measurements (IC50, EC50, etc.) to default labels such as `inhibition` or `activation`. Extend the
+  mapping to support additional metrics.【F:config.yaml†L197-L202】
+* `triages`, `functionality` and `mechanism` are optional overrides for explicit text matches. The defaults keep `triages` and
+  `mechanism` empty while normalising common functional annotations (agonist, antagonist, etc.).【F:config.yaml†L203-L210】
+* The helper field lists (`triage_fields`, `functionality_fields`, `mechanism_fields`) decide which columns are scanned for
+  keywords or manual labels before applying metric defaults.【F:config.yaml†L211-L219】
+* `allowlist` enumerates labels allowed in the output. Values not present in the list fall back to `fallback` after logging the
+  anomaly.【F:config.yaml†L220-L227】
+* `positive_label` and `negative_label` define human-readable aliases used when the data represents positive/negative modulators
+  (`PAM`/`NAM`). The neutral fallback is `unknown`.【F:config.yaml†L228-L230】
+
+##### Activity properties flattening (`activity_enrichment.activity_properties`)
+
+* `enabled` — feature switch (`true`).【F:config.yaml†L231-L233】
+* `column` — name of the raw JSON-like source column (`activity_properties`).【F:config.yaml†L233-L233】
+* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).【F:config.yaml†L234-L234】
+* `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).【F:config.yaml†L235-L237】
+* `separator` and `pair_separator` control formatting when properties are concatenated (`"; "` between pairs,
+  `"="` between name and value).【F:config.yaml†L238-L239】
+* `drop_source_column` removes the original structured column after summarisation (`true`).【F:config.yaml†L240-L240】
+* Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.【F:config.yaml†L241-L242】
+* `allowlist` restricts which property groups are retained (measurement, assay, comments, effect_features, triage, mechanism,
+  functionality).【F:config.yaml†L243-L250】
+* `hash_column` stores a deterministic fingerprint of the preserved properties (`properties_hash`), enabling change detection in
+  downstream jobs.【F:config.yaml†L251-L251】
+
+##### Activity bounds (`activity_bounds`)
+
 The activity pipeline enriches raw ChEMBL payloads with canonical lower/upper bounds using the rules implemented by
-`compute_activity_bounds` in `scripts/get_activity_data.py`. Configuration for the feature is stored in the `activity_bounds`
-block and controls the following deterministic stages (executed in order for every row):【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+`compute_activity_bounds` in `scripts/get_activity_data.py`. Configuration for this feature is stored in the
+`activity_bounds` block (separate from `activity_enrichment`) and controls the following deterministic stages (executed
+in order for every row):【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
 
 1. Use `standard_lower_value`/`standard_upper_value` when both are populated.
 2. Combine `standard_value` with the opposite explicit limit (for example `standard_upper_value`) and fill the missing bound.
-3. Inspect `standard_relation` when `enable_from_relation` is `true`, mapping operators such as `=`, `≈`, `>=`, `<=`, `between` and `range` to appropriate bounds.
+3. Inspect `standard_relation` when `enable_from_relation` is `true`, mapping operators such as `=`, `≈`, `>=`, `<=`, `between`
+   and `range` to appropriate bounds.
 4. Parse `±` expressions from `standard_text_value` when `enable_from_uncertainty` is enabled.
 
 Each completed step locks in previously derived numbers; disabling a stage simply skips it without mutating earlier results.
@@ -126,8 +167,8 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | Key | Default | Description |
 | --- | --- | --- |
 | `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
-| `sources.molecule_catalog_path` | `dictionary/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
-| `sources.molecule_hierarchy_path` | `dictionary/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `sources.molecule_catalog_path` | `dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
+| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
 | `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
 | `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
 | `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
@@ -160,21 +201,21 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Column with UniProt identifiers. |
-|  | `data_dir` | `dictionary/uniprot` | Directory holding cached UniProt JSON files. |
+|  | `data_dir` | `dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 | `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `iuphar` | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `all` | `data_dir` | `dictionary/uniprot` | Directory containing cached UniProt data. |
-|  | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+| `all` | `data_dir` | `dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
+|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
-|  | `organism_csv` | `dictionary/_Target/targets_type.csv` | Taxonomy and target type mapping. |
+|  | `organism_csv` | `dictionary/_target/targets_type.csv` | Taxonomy and target type mapping. |
 |  | `uniprot_column` | `uniprot_id` | Column used to join UniProt data. |
 |  | `chembl_out` | `null` | Optional override for the combined ChEMBL output path. |
 |  | `uniprot_out` | `null` | Optional override for the combined UniProt output path. |
@@ -203,11 +244,11 @@ All URLs must comply with the respective service usage policies, including rate 
 | Key | Default | Description |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
-| `uniprot_data_dir` | `dictionary/uniprot` | Cached UniProt JSON responses. |
-| `organism_csv` | `dictionary/_Target/targets_type.csv` | Organism and taxonomy mapping. |
-| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
+| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
+| `organism_csv` | `dictionary/_target/targets_type.csv` | Organism and taxonomy mapping. |
+| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Target type classification table. |
 
 ### I/O defaults (`local.io`)
 

@@ -127,6 +127,7 @@ class MoleculeCatalogCfg(_BaseModel):
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
+    force_refresh_existing: bool = False
     fields: tuple[str, ...] = (
         "molecule_chembl_id",
         "parent_molecule_chembl_id",
@@ -249,65 +250,77 @@ class IupharCfg(_BaseModel):
 
 
 class PubChemCfg(_BaseModel):
+    """Settings for resolving PubChem data."""
+
+    enable: bool = Field(
+        True,
+        description="Enable PubChem augmentation for test item data",
+    )
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(60, ge=1)
+    timeout_seconds: float = Field(
+        30.0,
+        ge=0,
+        description="Overall timeout applied to individual PubChem lookups",
+    )
     retries: int = Field(3, ge=0)
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
-    delay: float = Field(3.0, ge=0)
-    resolve_order: list[str] = Field(
-        default_factory=lambda: ["cache", "inchikey", "name", "smiles"],
-        description="Order of PubChem CID resolvers",
+    delay: float = Field(
+        0.2,
+        ge=0,
+        description="Base delay between retries for network errors",
+    )
+    backoff_initial_seconds: float = Field(
+        0.5,
+        ge=0,
+        description="Initial delay when backing off after 429/5xx responses",
+    )
+    resolve_order: tuple[str, ...] = Field(
+        (
+            "cache",
+            "smiles",
+            "inchikey",
+            "inchi",
+            "pref_name",
+        ),
+        description="Ordered list of lookup strategies when resolving PubChem CIDs",
     )
     cache_ttl: int = Field(
         3600,
         ge=0,
-        description="Time-to-live for PubChem request cache in seconds",
+        description="Time-to-live for the in-memory PubChem request cache in seconds",
     )
-    prefer_local_smiles: bool = Field(
-        False,
-        description="Skip PubChem lookups when local pubchem_* columns are populated",
-    )
- 
-    skip_polymers: bool = Field(
-        False,
-        description=(
-            "Skip PubChem lookups for polymer or mixture records, retaining existing"
-            " pubchem_* values"
-        ),
-    )
- 
-    prefer_local_values: bool = Field(
-        True,
-        description="Retain pre-existing pubchem_* values when lookups return empty results",
-    )
-    resolve_order: tuple[str, ...] = (
-        "standard_inchi_key",
-        "standard_inchi",
-        "pref_name",
-        "pref_name_partial",
-        "canonical_smiles",
-    )
-    use_parent_for_salts: bool = True
-    skip_polymers: bool = True
-    write_not_found_literal: bool = False
-    batch_size: int = Field(50, ge=1)
     cache_ttl_hours: float | None = Field(
         None,
         ge=0,
-        description="Optional TTL for the persisted CID cache, expressed in hours",
+        description="Optional TTL for the persisted CID cache in hours",
     )
-    timeout_seconds: float = Field(30.0, ge=0)
-    backoff_initial_seconds: float = Field(0.5, ge=0)
- 
     cid_cache_path: Path | None = Field(
         default=None,
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
     )
-    use_parent_for_salts: bool = Field(
+    batch_size: int = Field(50, ge=1)
+    prefer_local_smiles: bool = Field(
         False,
+        description="Skip PubChem lookups when existing pubchem_* columns are complete",
+    )
+    prefer_local_values: bool = Field(
+        True,
+        description="Retain existing pubchem_* values when lookups return empty results",
+    )
+    use_parent_for_salts: bool = Field(
+        True,
         description="Resolve PubChem CIDs via parent structures when child lookups fail",
+    )
+    allow_polymer: bool = Field(
+        False,
+        description="Allow PubChem lookups for polymer or mixture records",
+    )
+    write_not_found_literal: bool = Field(
+        False,
+        description="Write 'Not Found' when PubChem lookups fail",
     )
 
     @field_validator("base")
