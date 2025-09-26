@@ -33,10 +33,10 @@ All entry points rely on `library.logging_setup.Logger` and emit JSON lines enri
 
 | Event | When it appears |
 | --- | --- |
-| `pipeline_start` | Immediately after the CLI configures logging and before validation begins.【F:scripts/get_activity_data.py†L558-L565】 |
-| `documents_processed` / `activities_processed` | Periodic progress counters emitted inside the processing loops.【F:scripts/get_document_data.py†L399-L407】【F:scripts/get_activity_data.py†L451-L459】 |
-| `write_done` | Successful CSV write including the path and retained row count.【F:scripts/get_document_data.py†L640-L642】【F:scripts/get_activity_data.py†L506-L522】 |
-| `pipeline_done` / `pipeline_fail` | Final outcome logged before exit.【F:scripts/get_activity_data.py†L571-L579】【F:scripts/get_document_data.py†L1191-L1208】 |
+| `pipeline_start` | Immediately after the CLI configures logging and before validation begins. |
+| `documents_processed` / `activities_processed` | Periodic progress counters emitted inside the processing loops. |
+| `write_done` | Successful CSV write including the path and retained row count. |
+| `pipeline_done` / `pipeline_fail` | Final outcome logged before exit. |
 
 Pipe the output through `jq` or similar tooling for real-time monitoring:
 
@@ -45,7 +45,7 @@ python scripts/get_document_data.py all --input docs.csv --column document_chemb
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
-Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the default JSON structure for ingestion into log collectors without needing custom formatters.【F:library/logging_setup.py†L1-L120】
+Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the default JSON structure for ingestion into log collectors without needing custom formatters.
 
 ## Activity data (`get_activity_data.py`)
 
@@ -113,7 +113,7 @@ python scripts/get_document_data.py pubmed \
 ```
 
 Use the on-demand rate limit switches to try faster OpenAlex or CrossRef lookups without touching the YAML file; the fallback
-CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column`; when left unspecified the CLI expects `PMID` and `DOI`, while the example above demonstrates custom headers via explicit overrides. The PubMed sub-command defaults to the `PMID` identifier column, so omit `--column` when the source CSV already uses that header.【F:scripts/get_document_data.py†L989-L1041】
+CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column`; when left unspecified the CLI expects `PMID` and `DOI`, while the example above demonstrates custom headers via explicit overrides. The PubMed sub-command defaults to the `PMID` identifier column, so omit `--column` when the source CSV already uses that header.
  
 ## Target aggregation (`get_target_data.py`)
 
@@ -143,7 +143,7 @@ chunks only. It reads identifiers via `read_ids`, honours `--chunk-size`,
 pipeline and writes the resulting table with `add_pipeline_metadata` and
 `write_csv`, keeping determinism identical to the production pipeline.
 Use it to validate configuration overrides, logging and batching behaviour
-before hitting external APIs.【F:scripts/pipeline_targets_main.py†L1-L141】
+before hitting external APIs.
 
 ## Test item enrichment (`get_testitem_data.py`)
 
@@ -158,9 +158,9 @@ Downloads compound-centric annotations for the supplied identifiers. The command
 ### Tracking `properties_hash`
 
 PubChem enrichment adds deterministic property columns (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
-`pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`).【F:schemas/testitems.py†L30-L38】 To
+`pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`). To
 monitor changes across releases, export just these columns to a temporary file and compute a SHA-256 digest via
-`library.metadata.file_sha256` or `library.csv_utils.sha256_file`.【F:library/metadata.py†L29-L70】【F:library/csv_utils.py†L530-L560】 Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
+`library.metadata.file_sha256` or `library.csv_utils.sha256_file`. Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
 row count stays constant.
 
 ### Parent molecule catalogue requirements
@@ -172,13 +172,13 @@ used by downstream aggregations. The cache path is configured via
 keep the JSON file accessible to the runner or adjust the location by setting
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
 `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing
-`config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+`config.yaml`.
 
  
 
 Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
 file before executing the pipeline. The helper reuses the cached mapping when present and fetches the latest
-relationships from the ChEMBL API otherwise.【F:library/molecule_catalog.py†L43-L136】
+relationships from the ChEMBL API otherwise.
 
 ### Salt and catalogue enrichment
 
@@ -200,7 +200,7 @@ running without the dictionaries. Logs named
 and parent rows before the fallback logic copies the parent values. Adjust the
 behaviour via `testitem_molecule_enrichment.flags.*` to disable the parent
 fallback or boolean coercion when feeding downstream systems that expect the
-raw catalogue tokens.【F:library/testitem_enrichment.py†L17-L216】
+raw catalogue tokens.
 
 ## Input initialisation (`library/utils/cli_tools/get_input_initialisation.py`)
 
@@ -250,7 +250,7 @@ Inspect the effective configuration with `--print-config` before running the pip
 All CLIs emit JSON logs via `library.logging_setup`. Each record contains a timestamp (`ts`), severity (`level`), event name
 (`event`) and the `run_id` inherited from CLI options; additional key/value pairs are merged after secret redaction. Use tools
 such as `jq` to filter by `event`, `stage` or warning codes (`activity_bounds_*`, `parent_lookup_*`, etc.) when triaging runs.
-Adjust verbosity on demand with `--log-level` or environment overrides without touching `config.yaml`.【F:library/logging_setup.py†L65-L205】
+Adjust verbosity on demand with `--log-level` or environment overrides without touching `config.yaml`.
 
 ## Environment variables
 

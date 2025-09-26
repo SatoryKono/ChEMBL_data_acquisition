@@ -232,7 +232,7 @@ to ``--chunk-size`` and ``--limit``, forwards the batch size to
 ``library.pipeline_targets.run_pipeline`` and writes the cached ChemBL
 table with pipeline metadata via ``write_csv``. Use it to verify CLI
 overrides, logging and deterministic output before launching the network
-backed ``get_target_data`` pipeline.【F:scripts/pipeline_targets_main.py†L1-L141】
+backed ``get_target_data`` pipeline.
 
 ### library/utils/cli_tools/get_activities.py
 
