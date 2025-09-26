@@ -966,6 +966,11 @@
     "PubChemCfg": {
       "additionalProperties": false,
       "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
         "base": {
           "default": "https://pubchem.ncbi.nlm.nih.gov/rest/pug",
           "title": "Base",
@@ -982,6 +987,12 @@
           "minimum": 1,
           "title": "Timeout Read",
           "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "minimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
         },
         "retries": {
           "default": 3,
@@ -1007,6 +1018,33 @@
           "title": "Delay",
           "type": "number"
         },
+        "backoff_initial_seconds": {
+          "default": 0.5,
+          "minimum": 0,
+          "title": "Backoff Initial Seconds",
+          "type": "number"
+        },
+        "resolve_order": {
+          "default": [
+            "cached_cid",
+            "smiles",
+            "inchikey",
+            "inchi",
+            "pref_name"
+          ],
+          "items": {
+            "enum": [
+              "cached_cid",
+              "smiles",
+              "inchikey",
+              "inchi",
+              "pref_name"
+            ],
+            "type": "string"
+          },
+          "title": "Resolve Order",
+          "type": "array"
+        },
         "cache_ttl": {
           "default": 3600,
           "description": "Time-to-live for PubChem request cache in seconds",
@@ -1019,6 +1057,24 @@
           "description": "Skip PubChem lookups when local pubchem_* columns are populated",
           "title": "Prefer Local Smiles",
           "type": "boolean"
+        },
+        "use_parent_for_salts": {
+          "default": true,
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
+        "allow_polymer": {
+          "default": false,
+          "title": "Allow Polymer",
+          "type": "boolean"
+        },
+        "write_not_found_literal": {
+          "default": null,
+          "title": "Write Not Found Literal",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "cid_cache_path": {
           "default": null,

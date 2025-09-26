@@ -218,3 +218,123 @@ def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     time.sleep(1.1)
     pl.make_request(url, cfg)
     assert calls["n"] == 2  # cache expired
+
+
+@responses.activate
+def test_resolve_pubchem_record_fallback_order() -> None:
+    """Resolver should follow the configured order and update caches."""
+
+    cfg = pl.PubChemCfg(
+        base="https://example.org/api",
+        delay=0,
+        timeout_seconds=5.0,
+        backoff_initial_seconds=0.1,
+        resolve_order=("smiles", "pref_name"),
+    )
+    row = {
+        "molecule_chembl_id": "CHEMBL1",
+        "canonical_smiles": "C",
+        "pref_name": "methane",
+    }
+    smiles_url = "https://example.org/api/compound/smiles/C/cids/JSON"
+    name_url = "https://example.org/api/compound/name/methane/cids/JSON"
+    props_url = (
+        "https://example.org/api/compound/cid/10/property/"
+        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+    responses.add(responses.GET, smiles_url, status=404)
+    responses.add(
+        responses.GET,
+        name_url,
+        json={"IdentifierList": {"CID": [10, 10]}},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        props_url,
+        json={
+            "PropertyTable": {
+                "Properties": [
+                    {
+                        "IUPACName": "Methane",
+                        "MolecularFormula": "CH4",
+                        "IsomericSMILES": "C",
+                        "CanonicalSMILES": "C",
+                        "InChI": "InChI=1S/CH4/h1H4",
+                        "InChIKey": "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+                    }
+                ]
+            }
+        },
+        status=200,
+    )
+
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[str, pl.PubChemRecord] = {}
+
+    record = pl.resolve_pubchem_record(
+        row,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+    )
+
+    assert record.cid == "10"
+    assert record.resolved_by == "pref_name"
+    assert cid_cache["CHEMBL1"] == "10"
+    assert responses.calls[0].request.url == smiles_url
+    assert responses.calls[1].request.url.startswith(name_url)
+    assert responses.calls[2].request.url == props_url
+
+
+@responses.activate
+def test_resolve_pubchem_record_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP 429/5xx responses should trigger exponential backoff."""
+
+    delays: list[float] = []
+
+    def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr(pl, "sleep", fake_sleep)
+    cfg = pl.PubChemCfg(
+        base="https://example.org/api",
+        delay=0,
+        timeout_seconds=10.0,
+        backoff_initial_seconds=0.5,
+        resolve_order=("smiles",),
+    )
+    row = {
+        "molecule_chembl_id": "CHEMBL2",
+        "canonical_smiles": "CC",
+    }
+    smiles_url = "https://example.org/api/compound/smiles/CC/cids/JSON"
+    props_url = (
+        "https://example.org/api/compound/cid/11/property/"
+        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+    responses.add(responses.GET, smiles_url, status=429)
+    responses.add(responses.GET, smiles_url, status=500)
+    responses.add(
+        responses.GET,
+        smiles_url,
+        json={"IdentifierList": {"CID": [11]}},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        props_url,
+        json={"PropertyTable": {"Properties": [{"IUPACName": "ethane"}]}},
+        status=200,
+    )
+
+    cid_cache: dict[str, str | None] = {}
+    record = pl.resolve_pubchem_record(
+        row,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache={},
+    )
+
+    assert record.cid == "11"
+    assert delays == [0.5, 1.0]

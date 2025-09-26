@@ -247,14 +247,33 @@ class IupharCfg(_BaseModel):
         return v
 
 
+_PUBCHEM_ALLOWED_RESOLVE_STEPS = (
+    "cached_cid",
+    "smiles",
+    "inchikey",
+    "inchi",
+    "pref_name",
+)
+
+
 class PubChemCfg(_BaseModel):
+    enable: bool = True
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(60, ge=1)
+    timeout_seconds: float = Field(30.0, ge=0)
     retries: int = Field(3, ge=0)
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(3.0, ge=0)
+    backoff_initial_seconds: float = Field(0.5, ge=0)
+    resolve_order: tuple[str, ...] = (
+        "cached_cid",
+        "smiles",
+        "inchikey",
+        "inchi",
+        "pref_name",
+    )
     cache_ttl: int = Field(
         3600,
         ge=0,
@@ -263,6 +282,18 @@ class PubChemCfg(_BaseModel):
     prefer_local_smiles: bool = Field(
         False,
         description="Skip PubChem lookups when local pubchem_* columns are populated",
+    )
+    use_parent_for_salts: bool = Field(
+        True,
+        description="Attempt to reuse parent molecule lookups for salt records",
+    )
+    allow_polymer: bool = Field(
+        False,
+        description="Perform PubChem lookups for polymer records when True",
+    )
+    write_not_found_literal: str | None = Field(
+        default=None,
+        description="Optional literal written when PubChem data is unavailable",
     )
     cid_cache_path: Path | None = Field(
         default=None,
@@ -275,6 +306,35 @@ class PubChemCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    @field_validator("resolve_order", mode="before")
+    @classmethod
+    def _resolve_order(cls, value: Any) -> tuple[str, ...]:
+        if isinstance(value, str):
+            parts = [part.strip() for part in value.split(",") if part.strip()]
+        else:
+            parts = list(value)
+        seen: set[str] = set()
+        order: list[str] = []
+        for item in parts:
+            if item not in _PUBCHEM_ALLOWED_RESOLVE_STEPS:
+                raise ValueError(
+                    "resolve_order entries must be one of: "
+                    + ", ".join(_PUBCHEM_ALLOWED_RESOLVE_STEPS)
+                )
+            if item in seen:
+                continue
+            seen.add(item)
+            order.append(item)
+        if not order:
+            return (
+                "cached_cid",
+                "smiles",
+                "inchikey",
+                "inchi",
+                "pref_name",
+            )
+        return tuple(order)
 
 
 class PubMedCfg(_BaseModel):

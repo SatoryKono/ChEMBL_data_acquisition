@@ -128,14 +128,27 @@ sources:
     rps: 5  # (env: CHEMBL_DA_IUPHAR_RPS)
     burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
   pubchem:
+    enable: true  # Toggle PubChem enrichment stage (env: CHEMBL_DA_PUBCHEM_ENABLE)
+    resolve_order:  # Resolution order for PubChem lookups
+      - cached_cid
+      - smiles
+      - inchikey
+      - inchi
+      - pref_name
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
+    timeout_seconds: 30.0  # Overall deadline for a single PubChem resolution attempt
     retries: 3
     rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
+    backoff_initial_seconds: 0.5  # Starting delay for exponential backoff on 429/5xx responses
     cache_ttl: 3600  # Request cache time-to-live in seconds
+    use_parent_for_salts: true  # Reuse parent compound CID when available for salt records
+    allow_polymer: false  # Disable PubChem lookups for polymer records by default
+    prefer_local_smiles: false  # Skip lookups when local pubchem_* columns already populated
+    write_not_found_literal: null  # Optional literal written when PubChem data is unavailable
   pubmed:
     base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__SOURCES__PUBMED__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)

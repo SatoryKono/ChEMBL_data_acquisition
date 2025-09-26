@@ -158,107 +158,16 @@ def _write_pubchem_cid_cache(path: Path | None, cache: Mapping[str, str | None])
         logger.warning("pubchem_cache_write_failed", path=str(path), error=str(exc))
 
 
-def _select_primary_cid(
-    candidates: str | None,
-    *,
-    chembl_id: str | None,
-    identifier: str,
-    value: str | None,
-) -> str | None:
-    """Return the primary CID from a pipe-separated list."""
+def _value_or_na(value: str | None) -> object:
+    """Return ``value`` when present, otherwise :data:`pandas.NA`."""
 
-    if not candidates:
-        return None
-    cid_list = [cid.strip() for cid in str(candidates).split("|") if cid.strip()]
-    if not cid_list:
-        return None
-    primary = cid_list[0]
-    if len(cid_list) > 1:
-        logger.info(
-            "pubchem_multiple_cid",
-            chembl_id=chembl_id,
-            identifier=identifier,
-            value=value,
-            cid=primary,
-            alternatives=cid_list[1:],
-        )
-    return primary
-
-
-def resolve_pubchem_cid(
-    row: pd.Series, cache: MutableMapping[str, str | None], cfg: PubChemCfg
-) -> str | None:
-    """Resolve PubChem CID for a ChEMBL record."""
-
-    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    if chembl_id and chembl_id in cache:
-        return cache[chembl_id]
-
-    inchikey = _normalise_identifier(row.get("standard_inchi_key"), uppercase=True)
-    if inchikey:
-        cid = _select_primary_cid(
-            pl.get_cid_from_inchikey(inchikey, cfg),
-            chembl_id=chembl_id,
-            identifier="standard_inchi_key",
-            value=inchikey,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
-
-    inchi = _normalise_identifier(row.get("standard_inchi"))
-    if inchi:
-        cid = _select_primary_cid(
-            pl.get_cid_from_inchi(inchi, cfg),
-            chembl_id=chembl_id,
-            identifier="standard_inchi",
-            value=inchi,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
-
-    pref_name = _normalise_identifier(row.get("pref_name"))
-    if pref_name:
-        cid = _select_primary_cid(
-            pl.get_cid(pref_name, cfg),
-            chembl_id=chembl_id,
-            identifier="pref_name",
-            value=pref_name,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
-        cid = _select_primary_cid(
-            pl.get_all_cid(pref_name, cfg),
-            chembl_id=chembl_id,
-            identifier="pref_name_partial",
-            value=pref_name,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
-
-    smiles = _normalise_identifier(row.get("canonical_smiles"))
-    if smiles:
-        cid = _select_primary_cid(
-            pl.get_cid_from_smiles(smiles, cfg),
-            chembl_id=chembl_id,
-            identifier="canonical_smiles",
-            value=smiles,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
-
-    if chembl_id and chembl_id not in cache:
-        cache[chembl_id] = None
-    return None
+    if value is None:
+        return pd.NA
+    if isinstance(value, str):
+        return value if value else pd.NA
+    if pd.isna(value):
+        return pd.NA
+    return value
 
 
 @dataclass(frozen=True)
@@ -492,26 +401,8 @@ def attach_parent_molecule_ids(
 
 
 def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
-    """Augment ChEMBL records with PubChem information.
+    """Augment ChEMBL records with PubChem information."""
 
-    For each canonical SMILES string in ``df``, the function looks up the
-    corresponding PubChem CID and basic chemical properties. The PubChem
-    fields are appended to the input frame. If a SMILES string cannot be
-    resolved, empty values are inserted.
-
-    Parameters
-    ----------
-    df:
-        Data frame returned by :func:`library.chembl_library.get_testitem`.
-    cfg:
-        PubChem configuration options.
-
-    Returns
-    -------
-    pandas.DataFrame
-        ``df`` with additional PubChem columns.
-
-    """
     if df.empty:
         return df
 
@@ -545,79 +436,97 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
             if before is _CID_CACHE_MISSING or before != cid_value:
                 cache_dirty = True
 
-    total = sum(
-        1
-        for idx, row in result.iterrows()
-        if not (
-            (chembl_id := _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True))
-            and chembl_id in cid_cache
-            and cid_cache[chembl_id]
-        )
-    )
-    if total:
-        logger.info("pubchem_start", total=total)
+    if not cfg.enable:
+        logger.info("pubchem_disabled")
+        total = 0
     else:
-        logger.info("pubchem_no_smiles")
+        total = sum(
+            1
+            for idx, row in result.iterrows()
+            if not (prefer_local and bool(complete_mask.loc[idx]))
+            and not (
+                (chembl_id := _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True))
+                and chembl_id in cid_cache
+                and cid_cache[chembl_id]
+            )
+        )
+        if total:
+            logger.info("pubchem_start", total=total)
+        else:
+            logger.info("pubchem_no_smiles")
 
-    cid_by_index: dict[int, str | None] = {}
+    literal = getattr(cfg, "write_not_found_literal", None)
+    resolution_cache: dict[str, pl.PubChemRecord] = {}
+    records_by_index: dict[int, pl.PubChemRecord] = {}
     progress = 0
+
+    def _record_from_row(row: pd.Series) -> pl.PubChemRecord:
+        return pl.PubChemRecord(
+            _normalise_identifier(row.get("pubchem_cid")),
+            pl.Properties(
+                _normalise_identifier(row.get("pubchem_iupac_name")),
+                _normalise_identifier(row.get("pubchem_molecular_formula")),
+                _normalise_identifier(row.get("pubchem_isomeric_smiles")),
+                _normalise_identifier(row.get("pubchem_canonical_smiles")),
+                _normalise_identifier(row.get("pubchem_inchi")),
+                _normalise_identifier(row.get("pubchem_inchikey"), uppercase=True),
+            ),
+            "local",
+        )
+
     for idx, row in result.iterrows():
         if prefer_local and bool(complete_mask.loc[idx]):
-            cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
+            records_by_index[idx] = _record_from_row(row)
+            continue
+        if not cfg.enable:
+            records_by_index[idx] = _record_from_row(row)
             continue
 
         chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
         lookup_required = not (
             chembl_id and chembl_id in cid_cache and cid_cache[chembl_id]
         )
-        before_present = chembl_id in cid_cache if chembl_id else False
-        before_value = cid_cache[chembl_id] if before_present else _CID_CACHE_MISSING
         if lookup_required and total:
             progress += 1
             logger.info("pubchem_progress", current=progress, total=total)
-        cid = resolve_pubchem_cid(row, cid_cache, cfg)
-        cid_by_index[idx] = cid
+
+        before_present = chembl_id in cid_cache if chembl_id else False
+        before_value = cid_cache[chembl_id] if before_present else _CID_CACHE_MISSING
+
+        record = pl.resolve_pubchem_record(
+            row,
+            cfg,
+            cid_cache=cid_cache,
+            resolution_cache=resolution_cache,
+        )
+        records_by_index[idx] = record
+
         if chembl_id:
             after_present = chembl_id in cid_cache
             after_value = cid_cache[chembl_id] if after_present else _CID_CACHE_MISSING
-            if before_present != after_present or after_value != before_value:
+            if after_present != before_present or after_value != before_value:
                 cache_dirty = True
 
     if cache_dirty:
         _write_pubchem_cid_cache(cache_path, cid_cache)
 
-    cid_list = [cid_by_index.get(idx) for idx in result.index]
-
-    def _value_or_na(value: str | None) -> object:
-        return value if value not in (None, "") else pd.NA
-
-    lookup_cids: set[str] = set()
-    for idx, cid in zip(result.index, cid_list):
-        if not cid:
-            continue
-        if prefer_local and bool(complete_mask.loc[idx]):
-            continue
-        lookup_cids.add(cid)
-
-    properties: dict[str, pl.Properties] = {}
-    for cid in sorted(lookup_cids):
-        properties[cid] = pl.get_properties(cid, cfg)
-
     pubchem_rows: list[dict[str, object]] = []
-    for cid in cid_list:
+    for idx in result.index:
+        record = records_by_index.get(idx)
         row_data: dict[str, object] = {col: pd.NA for col in PUBCHEM_COLUMNS}
-        if cid:
-            row_data["pubchem_cid"] = cid
-            props = properties.get(cid)
-            if props:
-                row_data["pubchem_iupac_name"] = _value_or_na(props.IUPACName)
-                row_data["pubchem_molecular_formula"] = _value_or_na(
-                    props.MolecularFormula
-                )
-                row_data["pubchem_isomeric_smiles"] = _value_or_na(props.iSMILES)
-                row_data["pubchem_canonical_smiles"] = _value_or_na(props.cSMILES)
-                row_data["pubchem_inchi"] = _value_or_na(props.InChI)
-                row_data["pubchem_inchikey"] = _value_or_na(props.InChIKey)
+        if record and record.cid:
+            row_data["pubchem_cid"] = record.cid
+        props = record.properties if record else None
+        if props:
+            row_data["pubchem_iupac_name"] = _value_or_na(props.IUPACName)
+            row_data["pubchem_molecular_formula"] = _value_or_na(props.MolecularFormula)
+            row_data["pubchem_isomeric_smiles"] = _value_or_na(props.iSMILES)
+            row_data["pubchem_canonical_smiles"] = _value_or_na(props.cSMILES)
+            row_data["pubchem_inchi"] = _value_or_na(props.InChI)
+            row_data["pubchem_inchikey"] = _value_or_na(props.InChIKey)
+        if (not record or not record.cid) and literal:
+            for col in PUBCHEM_COLUMNS:
+                row_data[col] = literal
         pubchem_rows.append(row_data)
 
     pubchem_df = pd.DataFrame(pubchem_rows, index=result.index).convert_dtypes()
@@ -969,6 +878,60 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Maximum number of identifiers to process",
     )
+    parser.add_argument(
+        "--pubchem-enable",
+        dest="pubchem_enable",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable PubChem lookups (default taken from configuration)",
+    )
+    parser.add_argument(
+        "--pubchem-resolve-order",
+        dest="pubchem_resolve_order",
+        default=None,
+        help="Comma-separated PubChem resolution order",
+    )
+    parser.add_argument(
+        "--pubchem-timeout",
+        dest="pubchem_timeout_seconds",
+        type=float,
+        default=None,
+        help="Overall timeout in seconds for resolving a record",
+    )
+    parser.add_argument(
+        "--pubchem-backoff",
+        dest="pubchem_backoff_initial_seconds",
+        type=float,
+        default=None,
+        help="Initial delay for PubChem exponential backoff",
+    )
+    parser.add_argument(
+        "--pubchem-prefer-local-smiles",
+        dest="pubchem_prefer_local_smiles",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Prefer existing pubchem_* columns over remote lookups",
+    )
+    parser.add_argument(
+        "--pubchem-parent-for-salts",
+        dest="pubchem_use_parent_for_salts",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Reuse parent molecule CID for salt records when available",
+    )
+    parser.add_argument(
+        "--pubchem-allow-polymer",
+        dest="pubchem_allow_polymer",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Allow PubChem lookups for polymer records",
+    )
+    parser.add_argument(
+        "--pubchem-not-found",
+        dest="pubchem_write_not_found_literal",
+        default=None,
+        help="Literal written when PubChem data is unavailable",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -992,6 +955,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "column": "testitem.column",
                 "batch_size": "testitem.batch_size",
                 "limit": "testitem.limit",
+                "pubchem_enable": "pubchem.enable",
+                "pubchem_resolve_order": "pubchem.resolve_order",
+                "pubchem_timeout_seconds": "pubchem.timeout_seconds",
+                "pubchem_backoff_initial_seconds": "pubchem.backoff_initial_seconds",
+                "pubchem_prefer_local_smiles": "pubchem.prefer_local_smiles",
+                "pubchem_use_parent_for_salts": "pubchem.use_parent_for_salts",
+                "pubchem_allow_polymer": "pubchem.allow_polymer",
+                "pubchem_write_not_found_literal": "pubchem.write_not_found_literal",
             },
         )
         if args.print_config:

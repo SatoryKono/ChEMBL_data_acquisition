@@ -21,7 +21,16 @@ def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> No
     df = pd.DataFrame({"canonical_smiles": ["C"]})
     cfg = pl.PubChemCfg(delay=0)
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
+    empty_record = pl.PubChemRecord(
+        None,
+        pl.Properties(None, None, None, None, None, None),
+        None,
+    )
+    monkeypatch.setattr(
+        pl,
+        "resolve_pubchem_record",
+        lambda *_, **__: empty_record,
+    )
 
     result = gtd.add_pubchem_data(df, cfg)
     pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
@@ -48,8 +57,7 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
         raise AssertionError("PubChem lookup should not be called")
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
-    monkeypatch.setattr(pl, "get_properties", fail)
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fail)
 
     result = gtd.add_pubchem_data(df, cfg)
 
@@ -57,46 +65,6 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     for column in gtd.PUBCHEM_COLUMNS:
         expected[column] = expected[column].astype("string")
     pd.testing.assert_frame_equal(result, expected)
-
-
-def test_resolve_pubchem_cid_prefers_inchikey(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    row = pd.Series(
-        {
-            "molecule_chembl_id": "chembl1",
-            "standard_inchi_key": "abc-key",
-            "standard_inchi": "ignored",
-            "pref_name": "ignored",
-            "canonical_smiles": "C",
-        }
-    )
-    cfg = pl.PubChemCfg(delay=0)
-    cache: dict[str, str | None] = {}
-    calls: list[str] = []
-
-    def record_call(name: str) -> None:  # pragma: no cover - helper
-        calls.append(name)
-
-    monkeypatch.setattr(
-        pl,
-        "get_cid_from_inchikey",
-        lambda value, cfg: (record_call("inchikey"), "10|20")[1],
-    )
-
-    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("unexpected resolver invocation")
-
-    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
-    monkeypatch.setattr(pl, "get_cid", fail)
-    monkeypatch.setattr(pl, "get_all_cid", fail)
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
-
-    cid = gtd.resolve_pubchem_cid(row, cache, cfg)
-
-    assert cid == "10"
-    assert cache["CHEMBL1"] == "10"
-    assert calls == ["inchikey"]
 
 
 def test_add_pubchem_data_uses_disk_cache(
@@ -113,15 +81,6 @@ def test_add_pubchem_data_uses_disk_cache(
     )
 
     cfg = pl.PubChemCfg(delay=0, cid_cache_path=cache_path)
-
-    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("PubChem lookup should not be called")
-
-    monkeypatch.setattr(pl, "get_cid_from_inchikey", fail)
-    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
-    monkeypatch.setattr(pl, "get_cid", fail)
-    monkeypatch.setattr(pl, "get_all_cid", fail)
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
 
     props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
     monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
