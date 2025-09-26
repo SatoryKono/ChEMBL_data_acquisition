@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from library.iuphar_library import ClassificationRecord
 from library import protein_classification as pc
+from library.iuphar_library import ClassificationRecord
 
 
 class DummyClassifier:
@@ -23,7 +23,9 @@ class DummyClassifier:
     def get(self, *_args: object, **_kwargs: object) -> ClassificationRecord:
         return self.record
 
-    def by_molecular_function(self, *_args: object, **_kwargs: object) -> ClassificationRecord:
+    def by_molecular_function(
+        self, *_args: object, **_kwargs: object
+    ) -> ClassificationRecord:
         return self.fallback
 
 

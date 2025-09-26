@@ -34,8 +34,8 @@ import yaml
 
 from . import validation
 from .config import Config, IoCfg, _serialize_paths
-from .log import logger
 from .git_utils import _git_sha
+from .log import logger
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera as pa

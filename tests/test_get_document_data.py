@@ -4,7 +4,7 @@ import argparse
 import io
 import json
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +21,6 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
 )
-from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
-from schemas import DocumentsSchema
 from scripts import get_document_data as gdd
 
 
@@ -76,20 +74,18 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(cl, "get_documents", fake_get_documents)
     monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
 
-    def fake_write_csv(
-        df: pd.DataFrame,
+    def fake_write_export_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        key_cols: Sequence[str],
+        chunk_size: int | None,
     ) -> Path:
+        list(chunks)
         return path
 
-    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "_write_export_chunks", fake_write_export_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
@@ -121,9 +117,7 @@ def test_run_all_logs_failing_ids(
     chunk_size = cfg.document.all.chunk_size
     ids = [f"CHEMBL{i}" for i in range(1, chunk_size + 3)]
     input_csv = tmp_path / "docs.csv"
-    input_csv.write_text(
-        "document_chembl_id\n" + "\n".join(ids) + "\n"
-    )
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids) + "\n")
 
     class DummyClient:
         def __enter__(self) -> DummyClient:
@@ -174,9 +168,7 @@ def test_run_all_passes_generator_to_get_documents(
     cfg = Config()
     ids = [f"CHEMBL{i}" for i in range(1, 4)]
     input_csv = tmp_path / "docs.csv"
-    input_csv.write_text(
-        "document_chembl_id\n" + "\n".join(ids) + "\n"
-    )
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids) + "\n")
 
     class DummyClient:
         def __enter__(self) -> DummyClient:
@@ -450,23 +442,20 @@ def test_write_csv_column_order(
 
     captured: dict[str, Any] = {}
 
-    def fake_write_csv(
-        frame: pd.DataFrame,
+    def fake_write_export_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        key_cols: Sequence[str],
+        chunk_size: int | None,
     ) -> Path:
-        captured["col_order"] = list(col_order or [])
-        captured["columns"] = list(frame.columns)
-        captured["key_cols"] = list(key_cols or [])
+        frames = list(chunks)
+        captured["columns"] = list(frames[0].columns) if frames else []
+        captured["key_cols"] = list(key_cols)
         return path
 
-    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "_write_export_chunks", fake_write_export_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
@@ -480,10 +469,8 @@ def test_write_csv_column_order(
     )
     rc = gdd.run_chembl(cfg, args)
     assert rc == 0
-    assert captured["col_order"] == gdd._EXPORT_COLUMNS
     assert captured["columns"] == gdd._EXPORT_COLUMNS
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
-
 
 
 def test_fetch_pubmed_records_handles_generic_error(
@@ -531,7 +518,7 @@ def test_fetch_pubmed_records_accepts_config(
     factory_calls: dict[str, Any] = {}
 
     class DummySession:
-        def __enter__(self) -> "DummySession":
+        def __enter__(self) -> DummySession:
             return self
 
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
@@ -863,21 +850,19 @@ def test_finalise_export_falls_back_to_default_key(
     output = tmp_path / "documents.csv"
     captured: dict[str, Any] = {}
 
-    def fake_write_csv(
-        frame: pd.DataFrame,
+    def fake_write_export_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        key_cols: Sequence[str],
+        chunk_size: int | None,
     ) -> Path:
-        captured["key_cols"] = list(key_cols) if key_cols is not None else None
+        list(chunks)
+        captured["key_cols"] = list(key_cols)
         return path
 
-    monkeypatch.setattr(gdd.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "_write_export_chunks", fake_write_export_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "hash")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})

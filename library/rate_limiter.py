@@ -48,9 +48,7 @@ class RateLimiter:
             with self._lock:
                 now = time.monotonic()
                 elapsed = now - self._updated
-                self._tokens = min(
-                    float(self.burst), self._tokens + elapsed * self.rps
-                )
+                self._tokens = min(float(self.burst), self._tokens + elapsed * self.rps)
                 if self._tokens >= 1 or math.isclose(
                     self._tokens, 1.0, rel_tol=0.0, abs_tol=1e-9
                 ):

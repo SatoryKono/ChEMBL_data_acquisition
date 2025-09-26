@@ -36,10 +36,10 @@
 
 | Событие | Когда появляется |
 | --- | --- |
-| `pipeline_start` | После настройки логирования и перед валидацией конфигурации.【F:scripts/get_activity_data.py†L558-L565】 |
-| `documents_processed` / `activities_processed` | Периодические счётчики прогресса внутри рабочих циклов.【F:scripts/get_document_data.py†L399-L407】【F:scripts/get_activity_data.py†L451-L459】 |
-| `write_done` | Успешная запись CSV с указанием пути и числа строк.【F:scripts/get_document_data.py†L640-L642】【F:scripts/get_activity_data.py†L506-L522】 |
-| `pipeline_done` / `pipeline_fail` | Финальный статус перед выходом из программы.【F:scripts/get_activity_data.py†L571-L579】【F:scripts/get_document_data.py†L1191-L1208】 |
+| `pipeline_start` | После настройки логирования и перед валидацией конфигурации. |
+| `documents_processed` / `activities_processed` | Периодические счётчики прогресса внутри рабочих циклов. |
+| `write_done` | Успешная запись CSV с указанием пути и числа строк. |
+| `pipeline_done` / `pipeline_fail` | Финальный статус перед выходом из программы. |
 
 Для онлайн-контроля направляйте вывод через `jq` или аналогичный инструмент:
 
@@ -48,7 +48,7 @@ python scripts/get_document_data.py all --input documents.csv --column document_
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
-При необходимости повышайте детализацию ключом `--log-level DEBUG`. JSON-структура совместима с системами сбора логов без дополнительных форматтеров.【F:library/logging_setup.py†L1-L120】
+При необходимости повышайте детализацию ключом `--log-level DEBUG`. JSON-структура совместима с системами сбора логов без дополнительных форматтеров.
 
 ## Данные активностей (`get_activity_data.py`)
 
@@ -118,7 +118,7 @@ python scripts/get_document_data.py pubmed \
 ```
 
 Флаги `--openalex-rps` и `--crossref-rps` позволяют временно изменить лимиты без правки YAML, а параметры `--fallback-doi-*`
-подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column`; если не задавать их явно, CLI ожидает заголовки `PMID` и `DOI`, а в примере выше показано переименование через явные параметры. Подкоманда PubMed по умолчанию ожидает колонку `PMID`, поэтому флаг `--column` можно опустить, если CSV уже использует это имя.【F:scripts/get_document_data.py†L989-L1041】
+подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column`; если не задавать их явно, CLI ожидает заголовки `PMID` и `DOI`, а в примере выше показано переименование через явные параметры. Подкоманда PubMed по умолчанию ожидает колонку `PMID`, поэтому флаг `--column` можно опустить, если CSV уже использует это имя.
 
 
 ## Агрегация таргетов (`get_target_data.py`)
@@ -149,7 +149,7 @@ python scripts/pipeline_targets_main.py \
 результат записывается после `add_pipeline_metadata` и `write_csv`, что
 гарантирует ту же детерминированность, что и у основного пайплайна. Утилита
 подходит для проверки переопределений конфигурации, логирования и параметров
-батчирования до запуска `get_target_data` с обращениями к внешним API.【F:scripts/pipeline_targets_main.py†L1-L141】
+батчирования до запуска `get_target_data` с обращениями к внешним API.
 
 ## Обогащение тест-объектов (`get_testitem_data.py`)
 
@@ -164,9 +164,9 @@ python scripts/get_testitem_data.py \
 ### Контроль `properties_hash`
 
 PubChem-дополнение добавляет детерминированные свойства (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
-`pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`).【F:schemas/testitems.py†L30-L38】 Чтобы
+`pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`). Чтобы
 отслеживать изменения между выгрузками, выгрузите только эти колонки во временный файл и посчитайте SHA-256 с помощью
-`library.metadata.file_sha256` или `library.csv_utils.sha256_file`.【F:library/metadata.py†L29-L70】【F:library/csv_utils.py†L530-L560】 Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
+`library.metadata.file_sha256` или `library.csv_utils.sha256_file`. Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
 
 ### Требования к каталогу родительских молекул
 
@@ -176,12 +176,12 @@ PubChem-дополнение добавляет детерминированны
 что файл доступен исполнителю, либо задайте новое расположение переменной окружения
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
 
-`config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+`config.yaml`.
 
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
-подкачивает свежие связи ребёнок→родитель из API ChEMBL.【F:library/molecule_catalog.py†L43-L136】
+подкачивает свежие связи ребёнок→родитель из API ChEMBL.
 
 ### Обогащение солей и флагов каталога
 
@@ -202,7 +202,7 @@ PubChem-дополнение добавляет детерминированны
 между дочерней и родительской записью до применения фолбэка. Поведение можно
 тонко настроить через `testitem_molecule_enrichment.flags.*`, отключив
 фолбэк или приведение к булевому типу, если downstream-потребители требуют
-исходные текстовые значения.【F:library/testitem_enrichment.py†L17-L216】
+исходные текстовые значения.
 
 ## Инициализация входных данных (`library/utils/cli_tools/get_input_initialisation.py`)
 
@@ -252,7 +252,7 @@ python scripts/get_activity_data.py
 (`event`) и `run_id`, унаследованный от параметров CLI; дополнительные поля добавляются после автоматической маскировки
 секретов. Применяйте `jq` или подобные инструменты, чтобы фильтровать события по `event`, `stage` или кодам предупреждений
 (`activity_bounds_*`, `parent_lookup_*` и т.д.). Меняйте уровень детализации флагом `--log-level` или переменными окружения без
-правок `config.yaml`.【F:library/logging_setup.py†L65-L205】
+правок `config.yaml`.
 
 ## Переменные окружения
 

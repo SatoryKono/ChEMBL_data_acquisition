@@ -22,7 +22,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -383,6 +383,7 @@ class IoCfg(_BoolModel):
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
     na_markers: Sequence[str] | None = ("#N/A",)
+    csv_chunksize: int = Field(10000, ge=1)
     exist_ok: bool = True
 
     @field_validator("exist_ok", mode="before")
@@ -414,6 +415,7 @@ class InitCfg(_BaseModel):
     same_doc: Path = Path("data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx")
     all_doc: Path = Path("data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx")
     output_dir: Path = Path("data/output/ChEMBL/processed")
+
 
 class RateCfg(_BaseModel):
     global_rps: int = Field(8, ge=1)
@@ -538,7 +540,9 @@ class ActivityActionTypeCfg(_BoolModel):
             items = list(value)
         cleaned = [str(item).strip() for item in items if str(item).strip()]
         if not cleaned:
-            raise ValueError("activity_enrichment.action_type field lists must be non-empty")
+            raise ValueError(
+                "activity_enrichment.action_type field lists must be non-empty"
+            )
         return cleaned
 
 
@@ -589,7 +593,9 @@ class ActivityPropertiesCfg(_BoolModel):
     @classmethod
     def _non_empty(cls, v: str) -> str:
         if not v or not str(v).strip():
-            raise ValueError("activity_enrichment.activity_properties fields must be non-empty")
+            raise ValueError(
+                "activity_enrichment.activity_properties fields must be non-empty"
+            )
         return v
 
 
@@ -775,16 +781,12 @@ class ChemblSourceCfg(_BaseModel):
     molecule_catalog: MoleculeCatalogCfg = Field(
         default_factory=lambda: MoleculeCatalogCfg()
     )
-    pipelines: ChemblPipelinesCfg = Field(
-        default_factory=lambda: ChemblPipelinesCfg()
-    )
+    pipelines: ChemblPipelinesCfg = Field(default_factory=lambda: ChemblPipelinesCfg())
 
 
 class UniprotSourceCfg(_BaseModel):
     api: UniprotCfg = Field(default_factory=lambda: UniprotCfg())
-    mapping: UniprotMappingCfg = Field(
-        default_factory=lambda: UniprotMappingCfg()
-    )
+    mapping: UniprotMappingCfg = Field(default_factory=lambda: UniprotMappingCfg())
 
 
 class SourcesCfg(_BaseModel):
@@ -981,8 +983,9 @@ def _set_by_path(data: dict[str, Any], path: list[str], value: Any) -> None:
     cur[path[-1]] = value
 
 
-def _apply_env_overrides(data: dict[str, Any]) -> None:
+def _apply_env_overrides(data: dict[str, Any]) -> dict[tuple[str, ...], str]:
     prefix = "CHEMBL_DA"
+    overrides: dict[tuple[str, ...], str] = {}
     for env_key, env_val in os.environ.items():
         key = env_key.upper()
         if key in _ALIAS_MAP:
@@ -995,7 +998,89 @@ def _apply_env_overrides(data: dict[str, Any]) -> None:
         if not _is_valid_path(parts):
             logger.warning(f"Environment variable {key} ignored")
             continue
-        _set_by_path(data, parts, env_val)
+        value = _parse_env_value(key, env_val)
+        _set_by_path(data, parts, value)
+        overrides[tuple(parts)] = key
+    return overrides
+
+
+def _parse_env_value(env_key: str, raw_value: str) -> Any:
+    """Normalize *raw_value* from environment variable *env_key*.
+
+    Empty strings are returned unchanged to avoid coercing intentional blanks to
+    ``None``. Other values are parsed using :func:`yaml.safe_load` so that
+    numbers, booleans, lists, and mappings are deserialized before validation.
+    """
+
+    if raw_value == "":
+        return ""
+    if raw_value and raw_value.strip() == "":
+        return raw_value
+    try:
+        return yaml.safe_load(raw_value)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"{env_key} could not be parsed: {exc}") from exc
+
+
+def _normalize_env_errors(
+    errors: list[dict[str, Any]], overrides: dict[tuple[str, ...], str]
+) -> tuple[list[str], int]:
+    """Return formatted messages for validation *errors* caused by overrides."""
+
+    messages: list[str] = []
+    handled = 0
+    for error in errors:
+        loc = error.get("loc", ())
+        if not isinstance(loc, tuple):
+            continue
+        path = tuple(str(part).lower() for part in loc if isinstance(part, str))
+        env_key = overrides.get(path)
+        if not env_key:
+            continue
+        messages.append(_format_env_error(env_key, error))
+        handled += 1
+    return messages, handled
+
+
+def _format_env_error(env_key: str, error: dict[str, Any]) -> str:
+    """Return a human readable error string for *env_key* based on *error*."""
+
+    message = _format_env_error_message(error)
+    return f"{env_key} {message}".strip()
+
+
+def _format_env_error_message(error: dict[str, Any]) -> str:
+    """Convert a Pydantic error dictionary into a concise human message."""
+
+    error_type = error.get("type")
+    ctx: dict[str, Any] = error.get("ctx") or {}
+    if error_type == "greater_than_equal" and "ge" in ctx:
+        return f"must be ≥{ctx['ge']}"
+    if error_type == "greater_than" and "gt" in ctx:
+        return f"must be >{ctx['gt']}"
+    if error_type == "less_than_equal" and "le" in ctx:
+        return f"must be ≤{ctx['le']}"
+    if error_type == "less_than" and "lt" in ctx:
+        return f"must be <{ctx['lt']}"
+    if error_type == "int_parsing":
+        return "must be an integer"
+    if error_type == "float_parsing":
+        return "must be a number"
+    if error_type == "bool_parsing":
+        return "must be a boolean"
+    if error_type in {"string_type", "string_parsing"}:
+        return "must be a string"
+    if error_type == "list_type":
+        return "must be a list"
+    if error_type == "dict_type":
+        return "must be a mapping"
+    if error_type in {"enum", "literal_error"} and "expected" in ctx:
+        expected = ", ".join(map(str, ctx["expected"]))
+        return f"must be one of {expected}"
+    message = error.get("msg", "is invalid")
+    if message.startswith("Input should be "):
+        return "must be " + message[len("Input should be ") :]
+    return message
 
 
 def _is_valid_path(path: list[str]) -> bool:
@@ -1062,7 +1147,7 @@ def load_config(
             "provide an application config file such as config.yaml."
         )
 
-    _apply_env_overrides(data)
+    env_overrides = _apply_env_overrides(data)
     _upgrade_legacy_config(data)
 
     if cli_overrides:
@@ -1076,7 +1161,16 @@ def load_config(
             raise ValueError(msg)
         logger.warning(msg)
 
-    cfg = Config.model_validate(data)
+    try:
+        cfg = Config.model_validate(data)
+    except ValidationError as exc:
+        env_messages, handled = _normalize_env_errors(exc.errors(), env_overrides)
+        if env_messages:
+            message = "; ".join(env_messages)
+            if handled < len(exc.errors()):
+                message = f"{message}; additional validation errors: {exc}"
+            raise ConfigError(message) from exc
+        raise
 
     if not cfg.io.exist_ok:
         for p in (cfg.io.output_dir, cfg.io.cache_dir):
@@ -1133,11 +1227,7 @@ def _merge_mapping(dest: dict[str, Any], src: dict[str, Any]) -> None:
     """Recursively merge mapping *src* into *dest*."""
 
     for key, value in src.items():
-        if (
-            key in dest
-            and isinstance(dest[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in dest and isinstance(dest[key], dict) and isinstance(value, dict):
             _merge_mapping(dest[key], value)
         else:
             dest[key] = value
@@ -1207,6 +1297,7 @@ def _upgrade_legacy_config(data: dict[str, Any]) -> None:
     if "doc_type" in data:
         system_cfg.setdefault("doc_type", {})
         _merge_mapping(system_cfg["doc_type"], data.pop("doc_type"))
+
 
 def print_config(cfg: Config) -> None:
     """Print ``cfg`` as YAML masking secret values."""

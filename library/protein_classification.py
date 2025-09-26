@@ -30,7 +30,6 @@ _CONFIDENCE_MAP: Mapping[str, str] = {
 
 
 def classifier_from_config(cfg: Config) -> IUPHARClassifier:
-
     data = IUPHARData.from_files(
         target_path=cfg.target.iuphar.target_csv,
         family_path=cfg.target.iuphar.family_csv,
@@ -40,7 +39,6 @@ def classifier_from_config(cfg: Config) -> IUPHARClassifier:
 
 
 def _normalise(value: object | None) -> str:
-
     if value is None:
         return ""
     if isinstance(value, float) and pd.isna(value):
@@ -52,21 +50,16 @@ def _normalise(value: object | None) -> str:
 
 
 def _select_evidence(row: pd.Series, status: str) -> str:
-
     evidence_map: Mapping[str, str] = {
         "target_id": _normalise(
             row.get("target_id")
             or row.get("IUPHAR_target_id")
             or row.get("GuidetoPHARMACOLOGY")
         ),
-        "family_id": _normalise(
-            row.get("IUPHAR_family_id") or row.get("family_id")
-        ),
+        "family_id": _normalise(row.get("IUPHAR_family_id") or row.get("family_id")),
         "ec_number": _normalise(row.get("ec_number")),
         "name": _normalise(
-            row.get("iuphar_name")
-            or row.get("IUPHAR_name")
-            or row.get("pref_name")
+            row.get("iuphar_name") or row.get("IUPHAR_name") or row.get("pref_name")
         ),
         "molecular_function": _normalise(row.get("molecular_function")),
     }
@@ -75,7 +68,6 @@ def _select_evidence(row: pd.Series, status: str) -> str:
 
 @dataclass
 class Prediction:
-
     L1: str
     L2: str
     L3: str
@@ -85,7 +77,6 @@ class Prediction:
 
     @classmethod
     def from_record(cls, record: ClassificationRecord, *, evidence: str) -> Prediction:
-
         status = record.STATUS or "N/A"
         confidence = _CONFIDENCE_MAP.get(status, "low")
         rule_id = status if status not in {"", "N/A"} else "-"
@@ -99,7 +90,6 @@ class Prediction:
         )
 
     def as_dict(self) -> dict[str, str]:
-
         return {
             "protein_class_pred_L1": self.L1 or "-",
             "protein_class_pred_L2": self.L2 or "-",
@@ -113,7 +103,6 @@ class Prediction:
 def append_protein_class_predictions(
     df: pd.DataFrame, classifier: IUPHARClassifier
 ) -> pd.DataFrame:
-
     result = df.copy()
     if result.empty:
         for column in PREDICTION_COLUMNS:
@@ -125,9 +114,7 @@ def append_protein_class_predictions(
         family_id = _normalise(row.get("IUPHAR_family_id") or row.get("family_id"))
         ec_number = _normalise(row.get("ec_number"))
         name = _normalise(
-            row.get("iuphar_name")
-            or row.get("IUPHAR_name")
-            or row.get("pref_name")
+            row.get("iuphar_name") or row.get("IUPHAR_name") or row.get("pref_name")
         )
 
         record = classifier.get(target_id, family_id, ec_number, name)
@@ -142,6 +129,7 @@ def append_protein_class_predictions(
 
     predictions = result.apply(_predict, axis=1)
     for column in PREDICTION_COLUMNS:
-        result[column] = predictions[column].fillna("-").replace("", "-").astype("string")
+        result[column] = (
+            predictions[column].fillna("-").replace("", "-").astype("string")
+        )
     return result
-

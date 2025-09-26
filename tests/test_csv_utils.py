@@ -16,9 +16,9 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
+import library.csv_utils as csv_utils
 import library.git_utils as git_utils
 from library.config import Config
-import library.csv_utils as csv_utils
 from library.csv_utils import sha256_file, write_csv_deterministic
 
 
@@ -150,7 +150,9 @@ def test_write_csv_deterministic_missing_sort_columns(
     content = path.read_text(encoding="utf-8-sig")
     assert content == "value,name\n1,alpha\n2,beta\n"
 
-    fallback_event = [payload for event, payload in events if event == "missing_key_columns"]
+    fallback_event = [
+        payload for event, payload in events if event == "missing_key_columns"
+    ]
     assert fallback_event
     assert fallback_event[0]["fallback"] == ["value", "name"]
 

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from importlib import import_module
+
 from inspect import signature
 from typing import Callable, cast
 
+from types import ModuleType
 
-def _resolve_module(module: str):
+
+
+def _resolve_module(module: str) -> ModuleType:
     """Return the module object for the requested CLI tool."""
 
     if "." in module:
@@ -40,4 +44,4 @@ def _run(module: str, argv: Sequence[str] | None = None) -> int:
     return cast(int, main_func(argv))
 
 
-__all__ = ["_run"]
+__all__: list[str] = ["_run"]

@@ -198,8 +198,10 @@ def _apply_uncertainty_bounds(
         return lower, upper
     lower.loc[mask] = base.loc[mask] - delta.loc[mask]
     upper.loc[mask] = base.loc[mask] + delta.loc[mask]
-    mismatch = mask & std_values.notna() & ~np.isclose(
-        std_values.loc[mask], base.loc[mask], equal_nan=True
+    mismatch = (
+        mask
+        & std_values.notna()
+        & ~np.isclose(std_values.loc[mask], base.loc[mask], equal_nan=True)
     )
     if mismatch.any():
         logger.warning(
@@ -233,12 +235,8 @@ def compute_activity_bounds(
 
     range_mask = std_values.notna() & std_upper.notna()
     if range_mask.any():
-        range_lower = pd.Series(
-            np.minimum(std_values, std_upper), index=result.index
-        )
-        range_upper = pd.Series(
-            np.maximum(std_values, std_upper), index=result.index
-        )
+        range_lower = pd.Series(np.minimum(std_values, std_upper), index=result.index)
+        range_upper = pd.Series(np.maximum(std_values, std_upper), index=result.index)
         lower_fill = range_mask & lower.isna()
         upper_fill = range_mask & upper.isna()
         if lower_fill.any():
@@ -294,10 +292,7 @@ def compute_activity_bounds(
             if upper_needed.any():
                 upper.loc[upper_needed] = between_upper.loc[upper_needed]
 
-        missing_second = (
-            between_mask
-            & (std_values.isna() | std_upper.isna())
-        )
+        missing_second = between_mask & (std_values.isna() | std_upper.isna())
         if missing_second.any():
             logger.warning(
                 "activity_bounds_missing_range_values",
@@ -422,7 +417,7 @@ def _has_value(value: Any) -> bool:
         return False
     if isinstance(value, str):
         return bool(value.strip())
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return any(_has_value(item) for item in value)
     if isinstance(value, Mapping):
         return any(_has_value(item) for item in value.values())
@@ -444,12 +439,16 @@ def _clean_structure(data: Any) -> Any:
         return cleaned or None
     if isinstance(data, list):
         cleaned_list = [
-            item for item in (_clean_structure(value) for value in data) if _has_value(item)
+            item
+            for item in (_clean_structure(value) for value in data)
+            if _has_value(item)
         ]
         return cleaned_list or None
     if isinstance(data, tuple):
         cleaned_tuple = tuple(
-            item for item in (_clean_structure(value) for value in data) if _has_value(item)
+            item
+            for item in (_clean_structure(value) for value in data)
+            if _has_value(item)
         )
         return cleaned_tuple or None
     return data
@@ -475,7 +474,9 @@ def _extract_effect_features(record: Mapping[str, Any]) -> dict[str, Any]:
     positive_hits = sorted({kw for kw in _POSITIVE_KEYWORDS if kw in text})
     negative_hits = sorted({kw for kw in _NEGATIVE_KEYWORDS if kw in text})
     is_allosteric = bool(
-        positive_hits or negative_hits or any(keyword in text for keyword in _ALLOSTERIC_KEYWORDS)
+        positive_hits
+        or negative_hits
+        or any(keyword in text for keyword in _ALLOSTERIC_KEYWORDS)
     )
     return {
         "allosteric": is_allosteric,
@@ -673,7 +674,9 @@ def build_activity_properties(
         }
         break
 
-    functionality_value = _first_non_empty(record.get(field) for field in functionality_fields)
+    functionality_value = _first_non_empty(
+        record.get(field) for field in functionality_fields
+    )
     mechanism_value = _first_non_empty(record.get(field) for field in mechanism_fields)
 
     payload = {
@@ -692,7 +695,9 @@ def build_activity_properties(
     if not cleaned:
         return None, None
 
-    json_text = json.dumps(cleaned, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    json_text = json.dumps(
+        cleaned, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    )
     hash_value = None
     if properties_cfg.hash_column:
         hash_value = sha256(json_text.encode("utf-8")).hexdigest()
@@ -808,7 +813,9 @@ def apply_activity_annotations(
             )
 
     if properties_cfg.enabled:
-        properties_series = pd.Series(property_values, index=result.index, dtype="string")
+        properties_series = pd.Series(
+            property_values, index=result.index, dtype="string"
+        )
         result[properties_cfg.column] = properties_series
         if properties_cfg.log_missing:
             missing = int(properties_series.isna().sum())
@@ -847,6 +854,7 @@ def apply_activity_annotations(
         )
 
     return result
+
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
@@ -906,13 +914,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         enrichment_cfg = cfg.activity_enrichment
         extra_columns: list[str] = []
         action_cfg = enrichment_cfg.action_type
-        if (
-            action_cfg.enabled
-            or action_cfg.log_missing
-            or action_cfg.log_distribution
-        ):
+        if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
             extra_columns.append(action_cfg.column)
-        properties_cfg = enrichment_cfg.activity_properties
         extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
 
         try:
@@ -966,7 +969,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             try:
                 validation_result = validate_activities(df, return_result=True)
             except SchemaErrors as exc:
-                failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
+                failure_path = Path(output).with_name(
+                    f"{Path(output).stem}_failure_cases.csv"
+                )
                 errors = SidecarErrors()
                 for row in exc.failure_cases.to_dict("records"):
                     errors.add_error(row)

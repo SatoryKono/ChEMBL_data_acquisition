@@ -6,9 +6,9 @@ free of duplicate requirement entries.
 
 from __future__ import annotations
 
+import tomllib
 from collections import defaultdict
 from pathlib import Path
-import tomllib
 
 
 def test_optional_dependencies_are_unique() -> None:
@@ -20,7 +20,9 @@ def test_optional_dependencies_are_unique() -> None:
 
     duplicates: dict[str, set[str]] = defaultdict(set)
 
-    for extra_name, requirements in data.get("project", {}).get("optional-dependencies", {}).items():
+    for extra_name, requirements in (
+        data.get("project", {}).get("optional-dependencies", {}).items()
+    ):
         seen: set[str] = set()
         for requirement in requirements:
             normalized = requirement.strip()
@@ -31,5 +33,7 @@ def test_optional_dependencies_are_unique() -> None:
 
     assert not duplicates, (
         "Duplicate optional dependency entries detected: "
-        + ", ".join(f"{group}: {sorted(values)}" for group, values in sorted(duplicates.items()))
+        + ", ".join(
+            f"{group}: {sorted(values)}" for group, values in sorted(duplicates.items())
+        )
     )

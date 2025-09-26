@@ -40,6 +40,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import document_postprocessing as dp
 from library import io
+from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
@@ -95,13 +96,12 @@ def _build_fallback_doi_map(
             for column in (pmid_column, doi_column)
             if column not in frame.columns
         ]
-        raise ValueError(
-            "missing columns in fallback DOI file: "
-            f"{', '.join(missing)}"
-        )
+        raise ValueError(f"missing columns in fallback DOI file: {', '.join(missing)}")
 
     mapping: dict[str, str] = {}
-    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(index=False):
+    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(
+        index=False
+    ):
         if pd.isna(pmid_value):
             pmid = ""
         else:
@@ -297,9 +297,7 @@ def fetch_pubmed_records(
         batch_list = _coerce_batch_argument(first, *rest)
 
         try:
-
             with session_with_retry(__cfg.api, __cfg.retry) as session:
-
                 pubmed_limiter.acquire()
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
@@ -318,7 +316,9 @@ def fetch_pubmed_records(
 
                     # Create a map for easy lookup
                     semsch_map = {
-                        s.get("scholar.PMID"): s for s in semsch_list if s.get("scholar.PMID")
+                        s.get("scholar.PMID"): s
+                        for s in semsch_list
+                        if s.get("scholar.PMID")
                     }
 
                     # Fallback to the single-record endpoint when the batch request fails
@@ -426,7 +426,6 @@ _NUMERIC_EXPORT_COLUMNS = {
 
 
 _EXPORT_COLUMNS = [
-
     "PubMed.PMID",
     "PubMed.DOI",
     "PubMed.ArticleTitle",
@@ -559,6 +558,61 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     return frame[_EXPORT_COLUMNS]
 
 
+def _iter_export_chunks(
+    df: pd.DataFrame,
+    *,
+    chunk_size: int | None,
+) -> Iterable[pd.DataFrame]:
+    """Yield export-ready chunks with deterministic column ordering."""
+
+    total_rows = len(df)
+    if total_rows == 0:
+        empty = dataframe_to_strings(df.copy(), skip=_NUMERIC_EXPORT_COLUMNS)
+        yield _prepare_export_frame(empty)
+        return
+
+    effective_size = chunk_size if chunk_size and chunk_size > 0 else total_rows
+    for start in range(0, total_rows, effective_size):
+        stop = start + effective_size
+        chunk = df.iloc[start:stop].copy()
+        chunk = dataframe_to_strings(chunk, skip=_NUMERIC_EXPORT_COLUMNS)
+        yield _prepare_export_frame(chunk)
+
+
+def _resolve_chunk_size(value: int | None) -> int | None:
+    """Return ``value`` when positive, otherwise ``None``."""
+
+    if value is None:
+        return None
+    if value <= 0:
+        logger.warning("invalid_csv_chunksize", value=value)
+        return None
+    return value
+
+
+def _write_export_chunks(
+    chunks: Iterable[pd.DataFrame],
+    path: Path,
+    *,
+    cfg: Config,
+    key_cols: Sequence[str],
+    chunk_size: int | None,
+) -> Path:
+    """Stream ``chunks`` to ``path`` using the deterministic CSV writer."""
+
+    kwargs: dict[str, object] = {
+        "col_order": list(_EXPORT_COLUMNS),
+        "key_cols": list(key_cols),
+        "sep": cfg.io.csv_sep,
+        "encoding": cfg.io.csv_encoding,
+        "cfg": cfg,
+    }
+    if chunk_size:
+        kwargs["chunksize"] = chunk_size
+        kwargs["merge_chunksize"] = chunk_size
+    return write_csv_chunks_deterministic(chunks, path, **kwargs)
+
+
 def _finalise_export(
     df: pd.DataFrame,
     output: Path,
@@ -569,8 +623,10 @@ def _finalise_export(
 ) -> int:
     """Validate ``df`` and write CSV/metadata artefacts."""
 
-    df = add_pipeline_metadata(df)
-    ordered = build_dataframe(df, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False)
+    df_with_metadata = add_pipeline_metadata(df)
+    ordered = build_dataframe(
+        df_with_metadata, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+    )
     rows_total = len(ordered)
     exit_code = 0
     required_cols = {
@@ -612,34 +668,40 @@ def _finalise_export(
     rows_kept = len(validated)
     rows_dropped = rows_total - rows_kept
 
-    export_df = build_dataframe(
+    export_ready = build_dataframe(
         validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
     )
-    export_df = dataframe_to_strings(export_df, skip=_NUMERIC_EXPORT_COLUMNS)
-    export_df = _prepare_export_frame(export_df)
+
+    renamed_columns = {
+        column: _EXPORT_COLUMN_RENAMES.get(column, column)
+        for column in export_ready.columns
+    }
+    final_column_names = set(renamed_columns.values())
 
     key_cols: list[str] = []
     if key_columns:
         for column in key_columns:
             mapped = _EXPORT_COLUMN_RENAMES.get(column, column)
-            if mapped in export_df.columns and mapped not in key_cols:
+            if mapped in final_column_names and mapped not in key_cols:
                 key_cols.append(mapped)
     if not key_cols:
         for candidate in _EXPORT_SORT_FALLBACK:
-            if candidate in export_df.columns:
+            if candidate in final_column_names:
                 key_cols = [candidate]
                 break
     if not key_cols:
         key_cols = [_EXPORT_COLUMNS[0]]
 
-    col_order = list(_EXPORT_COLUMNS)
+    chunk_size = _resolve_chunk_size(getattr(cfg.io, "csv_chunksize", None))
+    chunks = _iter_export_chunks(export_ready, chunk_size=chunk_size)
+
     try:
-        csv_path = io.write_csv(
-            export_df,
+        csv_path = _write_export_chunks(
+            chunks,
             output,
             cfg=cfg,
             key_cols=key_cols,
-            col_order=col_order,
+            chunk_size=chunk_size,
         )
     except OSError as exc:
         logger.error("csv_write_failed", error=str(exc), path=str(output))
@@ -663,7 +725,7 @@ def _finalise_export(
 
     quality_path = csv_path.with_suffix(".quality.json")
     try:
-        report = build_quality_report(validated)
+        report = build_quality_report(export_ready)
         save_quality_report(report, quality_path)
     except (OSError, TypeError, ValueError) as exc:
         logger.error(
@@ -674,7 +736,7 @@ def _finalise_export(
         return 1
 
     try:
-        analyze_table_quality(validated, table_name=str(csv_path.with_suffix("")))
+        analyze_table_quality(export_ready, table_name=str(csv_path.with_suffix("")))
     except ValueError as exc:
         logger.error("quality_report_generation_failed", error=str(exc))
         return 1
