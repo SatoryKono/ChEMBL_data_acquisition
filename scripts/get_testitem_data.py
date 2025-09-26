@@ -166,8 +166,16 @@ def _load_pubchem_cid_cache(
             cache[key] = None
             continue
         value = _normalise_identifier(raw_value)
-        if value:
-            cache[key] = value
+        if not value:
+            continue
+        primary = _select_primary_cid(
+            value,
+            chembl_id=key,
+            identifier="cache_file",
+            value=value,
+        )
+        if primary is not None:
+            cache[key] = primary
     return cache
 
 
@@ -225,14 +233,37 @@ def _select_primary_cid(
     return primary
 
 
-def resolve_pubchem_cid(
-    row: pd.Series, cache: MutableMapping[str, str | None], cfg: PubChemCfg
+def _resolve_cid_from_row(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    chembl_id: str | None,
 ) -> str | None:
-    """Resolve PubChem CID for a ChEMBL record."""
+    """Return a CID for ``row`` using its structure fields."""
+
+
+    if chembl_id and chembl_id in cache and cache[chembl_id]:
+        return cache[chembl_id]
+ 
+
 
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    if chembl_id and chembl_id in cache:
-        return cache[chembl_id]
+ 
+
+    if chembl_id:
+        cached = cache.get(chembl_id, _CID_CACHE_MISSING)
+        if cached is not _CID_CACHE_MISSING:
+            cid = _select_primary_cid(
+                cached,
+                chembl_id=chembl_id,
+                identifier="cache",
+                value=cached,
+            )
+            if chembl_id not in cache or cid != cached:
+                cache[chembl_id] = cid
+            return cid
+
 
     def _store(value: str | None) -> str | None:
         if chembl_id:
@@ -277,6 +308,123 @@ def resolve_pubchem_cid(
     if cid:
         return _store(cid)
 
+    return None
+
+
+def resolve_pubchem_cid(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    parent_loader: Callable[[str], pd.Series | None] | None = None,
+) -> str | None:
+    """Resolve PubChem CID for a ChEMBL record."""
+
+    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
+    if cid is not None:
+        return cid
+
+    if not cfg.use_parent_for_salts:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_id = _normalise_identifier(
+        row.get("parent_molecule_chembl_id"), uppercase=True
+    )
+    if not parent_id:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    if parent_loader is None:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_row = parent_loader(parent_id)
+    if parent_row is None:
+        logger.info(
+            "pubchem_parent_structure_missing",
+            child=chembl_id,
+            parent=parent_id,
+            reason="parent_unavailable",
+        )
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
+    if parent_cid:
+        cache[parent_id] = parent_cid
+        if chembl_id:
+            cache[chembl_id] = parent_cid
+        return parent_cid
+
+
+    return None
+
+
+def resolve_pubchem_cid(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    parent_loader: Callable[[str], pd.Series | None] | None = None,
+) -> str | None:
+    """Resolve PubChem CID for a ChEMBL record."""
+
+    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
+    if cid is not None:
+        return cid
+
+    if not cfg.use_parent_for_salts:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_id = _normalise_identifier(
+        row.get("parent_molecule_chembl_id"), uppercase=True
+    )
+    if not parent_id:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    if parent_loader is None:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_row = parent_loader(parent_id)
+    if parent_row is None:
+        logger.info(
+            "pubchem_parent_structure_missing",
+            child=chembl_id,
+            parent=parent_id,
+            reason="parent_unavailable",
+        )
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
+    if parent_cid:
+        cache[parent_id] = parent_cid
+        if chembl_id:
+            cache[chembl_id] = parent_cid
+        return parent_cid
+
+    logger.info(
+        "pubchem_parent_structure_missing",
+        child=chembl_id,
+        parent=parent_id,
+        reason="structure_unresolved",
+    )
+    if parent_id and parent_id not in cache:
+        cache[parent_id] = None
     if chembl_id and chembl_id not in cache:
         cache[chembl_id] = None
     return None
@@ -290,6 +438,7 @@ class ParentLookupStats:
     missing: int
     unique: int
     attached: int
+    uncovered: int
 
 
 def _cache_state(path: Path) -> tuple[bool, float | None]:
@@ -365,6 +514,7 @@ def attach_parent_molecule_ids(
             missing=0,
             unique=0,
             attached=0,
+            uncovered=0,
         )
         return result, stats
 
@@ -379,6 +529,7 @@ def attach_parent_molecule_ids(
             missing=len(result),
             unique=0,
             attached=0,
+            uncovered=len(result),
         )
         return result, stats
 
@@ -390,6 +541,7 @@ def attach_parent_molecule_ids(
     needs_full_sync = False
     partial_fetch_used = False
     full_sync_used = False
+    uncovered_children = 0
 
     if catalog is not None:
         base_view = {
@@ -412,8 +564,6 @@ def attach_parent_molecule_ids(
             if sqlite_exists:
                 if source_resolved is None:
                     source_resolved = PARENT_LOOKUP_SOURCE_CACHE
-            else:
-                needs_full_sync = True
 
     parent_map = {
         key: catalog_data[key]
@@ -421,6 +571,7 @@ def attach_parent_molecule_ids(
         if key in catalog_data
     }
     missing_ids = [key for key in unique_children if key not in parent_map]
+    uncovered_children = len(missing_ids)
 
     fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
@@ -430,6 +581,7 @@ def attach_parent_molecule_ids(
                 client=client,
                 api_cfg=api_cfg,
                 timeout=timeout,
+                catalog_cfg=catalog_cfg,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
@@ -439,11 +591,14 @@ def attach_parent_molecule_ids(
             catalog_data.update(fetched)
             parent_map.update(fetched)
             missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
             if used_partial_cache:
                 update_parent_catalog_cache(fetched, catalog_cfg)
             else:
                 write_parent_catalog_cache(catalog_data, catalog_cfg)
                 used_partial_cache = True
+
+    needs_full_sync = catalog is None and uncovered_children > 0
 
     if missing_ids and catalog is None and needs_full_sync:
         cache_before_load = _cache_state(catalog_cfg.cache_path)
@@ -466,6 +621,7 @@ def attach_parent_molecule_ids(
             if key in catalog_data or key in parent_map
         }
         missing_ids = [key for key in unique_children if key not in parent_map]
+        uncovered_children = len(missing_ids)
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
@@ -499,6 +655,7 @@ def attach_parent_molecule_ids(
         missing=missing,
         unique=int(len(unique_children)),
         attached=int(attached),
+        uncovered=int(uncovered_children),
     )
 
     logger.info(
@@ -507,12 +664,20 @@ def attach_parent_molecule_ids(
         unique=stats.unique,
         attached=stats.attached,
         missing=stats.missing,
+        uncovered=stats.uncovered,
     )
 
     return result, stats
 
 
-def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
+def add_pubchem_data(
+    df: pd.DataFrame,
+    cfg: PubChemCfg,
+    *,
+    client: ChemblClient | None = None,
+    api_cfg: ApiCfg | None = None,
+    timeout: float | None = None,
+) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
     For each canonical SMILES string in ``df``, the function looks up the
@@ -526,6 +691,12 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         Data frame returned by :func:`library.chembl_library.get_testitem`.
     cfg:
         PubChem configuration options.
+    client:
+        Optional ChEMBL client reused to fetch parent structures.
+    api_cfg:
+        Optional API configuration required when ``client`` is supplied.
+    timeout:
+        Optional timeout for parent lookups via :func:`cl.get_testitem`.
 
     Returns
     -------
@@ -551,6 +722,51 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     cache_ttl_hours = getattr(cfg, "cache_ttl_hours", None)
     cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
     cache_dirty = False
+
+    local_records: dict[str, pd.Series] = {}
+    if "molecule_chembl_id" in result.columns:
+        for index, value in result["molecule_chembl_id"].items():
+            chembl_norm = _normalise_identifier(value, uppercase=True)
+            if chembl_norm and chembl_norm not in local_records:
+                local_records[chembl_norm] = result.loc[index]
+
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    def load_parent_record(parent_id: str) -> pd.Series | None:
+        parent_norm = _normalise_identifier(parent_id, uppercase=True)
+        if not parent_norm:
+            return None
+        if parent_norm in parent_record_cache:
+            return parent_record_cache[parent_norm]
+        if parent_norm in local_records:
+            parent_record_cache[parent_norm] = local_records[parent_norm]
+            return parent_record_cache[parent_norm]
+        if client is None or api_cfg is None:
+            parent_record_cache[parent_norm] = None
+            return None
+        try:
+            parent_df = cl.get_testitem(
+                [parent_norm],
+                cfg=api_cfg,
+                client=client,
+                chunk_size=1,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "pubchem_parent_load_failed",
+                parent=parent_norm,
+                error=str(exc),
+            )
+            parent_record_cache[parent_norm] = None
+            return None
+        if parent_df.empty:
+            parent_record_cache[parent_norm] = None
+            return None
+        parent_row = parent_df.iloc[0]
+        local_records[parent_norm] = parent_row
+        parent_record_cache[parent_norm] = parent_row
+        return parent_row
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
@@ -597,7 +813,12 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         if lookup_required and total:
             progress += 1
             logger.info("pubchem_progress", current=progress, total=total)
-        cid = resolve_pubchem_cid(row, cid_cache, cfg)
+        cid = resolve_pubchem_cid(
+            row,
+            cid_cache,
+            cfg,
+            parent_loader=load_parent_record,
+        )
         cid_by_index[idx] = cid
         if chembl_id:
             after_present = chembl_id in cid_cache
@@ -701,6 +922,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         missing=0,
         unique=0,
         attached=0,
+        uncovered=0,
     )
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
@@ -783,8 +1005,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             if parent_catalog:
                 need_lookup -= set(parent_catalog)
 
-        fetched_remote = False
-        if need_lookup and not parent_catalog:
+        if need_lookup:
+            try:
+                fetched = molecule_catalog.fetch_parent_catalog_for(
+                    need_lookup,
+                    client=client,
+                    api_cfg=cfg.api,
+                    timeout=cfg.testitem.timeout,
+                    catalog_cfg=cfg.molecule_catalog,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
+                return 1
+            if fetched:
+                parent_catalog.update(fetched)
+                update_parent_catalog_cache(fetched, cfg.molecule_catalog)
+                parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
+
+                need_lookup -= set(fetched)
+
+        if need_lookup:
             try:
                 fallback_catalog = load_parent_catalog(
                     client=client,
@@ -799,25 +1039,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 parent_catalog.update(fallback_catalog)
                 parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
                 need_lookup -= set(fallback_catalog)
-        if need_lookup:
-            try:
-                fetched = molecule_catalog.fetch_parent_catalog_for(
-                    need_lookup,
-                    client=client,
-                    api_cfg=cfg.api,
-                    timeout=cfg.testitem.timeout,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
-                return 1
-            if fetched:
-                parent_catalog.update(fetched)
-                update_parent_catalog_cache(fetched, cfg.molecule_catalog)
-                parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
+
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
  
+
         try:
             ensure_no_parant_column(df)
         except ValueError as exc:
@@ -851,7 +1078,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             unique=parent_stats.unique,
             attached=parent_stats.attached,
             missing=parent_stats.missing,
+            uncovered=parent_stats.uncovered,
         )
+
+        logger.info("pubchem_augment_start")
+        df = add_pubchem_data(
+            df,
+            cfg.pubchem,
+            client=client,
+            api_cfg=cfg.api,
+            timeout=cfg.testitem.timeout,
+        )
+        logger.info("pubchem_augment_done")
 
         enrichment_cfg = cfg.testitem_molecule_enrichment
         if enrichment_cfg.enable:

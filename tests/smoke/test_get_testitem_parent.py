@@ -30,7 +30,6 @@ def test_get_testitem_parent_catalog(
     """Smoke-test parent catalogue enrichment for test items."""
 
     input_csv = Path("tests/data/input-smoke/testitem.csv")
-    catalog_csv = Path("tests/data/input-smoke/molecule_catalog.csv")
     output_csv = smoke_output_dir / "testitem_parent.csv"
     _cleanup_output(output_csv)
 
@@ -59,33 +58,39 @@ def test_get_testitem_parent_catalog(
             InChIKey="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
         )
 
-    def fake_load_parent_catalog(**_: object) -> dict[str, str]:
-        frame = pd.read_csv(catalog_csv)
-        return {
-            str(row["molecule_chembl_id"]): str(row["parent_molecule_chembl_id"])
-            for _, row in frame.iterrows()
-        }
+    def fail_load_parent_catalog(**_: object) -> dict[str, str]:  # pragma: no cover
+        pytest.fail("load_parent_catalog should not be triggered for partial coverage")
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
-    monkeypatch.setattr(get_testitem_data, "load_parent_catalog", fake_load_parent_catalog)
-    monkeypatch.setattr(
-        get_testitem_data,
-        "_cache_state",
-        lambda _path: (True, 0.0),
-    )
+    monkeypatch.setattr(get_testitem_data, "load_parent_catalog", fail_load_parent_catalog)
+    monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
     fetch_calls: list[list[str]] = []
+    mapping = {
+        "CHEMBL1": "CHEMBL9001",
+        "CHEMBL2": "CHEMBL9002",
+    }
 
     def fake_fetch_parent_catalog_for(ids, **_: object) -> dict[str, str]:
         fetch_calls.append(list(ids))
-        return {}
+        return {key: mapping[key] for key in ids if key in mapping}
 
     monkeypatch.setattr(
         get_testitem_data.molecule_catalog,
         "fetch_parent_catalog_for",
         fake_fetch_parent_catalog_for,
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "write_parent_catalog_cache",
+        lambda data, cfg: None,
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "update_parent_catalog_cache",
+        lambda data, cfg: None,
     )
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
 
@@ -112,7 +117,8 @@ def test_get_testitem_parent_catalog(
         "CHEMBL9001",
         "CHEMBL9002",
     ]
-    assert fetch_calls == []
+    assert fetch_calls and len(fetch_calls) == 1
+    assert set(fetch_calls[0]) == {"CHEMBL1", "CHEMBL2"}
 
 
 def test_get_testitem_skips_parent_lookup_when_present(

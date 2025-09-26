@@ -196,7 +196,7 @@ def test_testitem_timeout_override(
         return pd.DataFrame({"molecule_chembl_id": data})
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
-    monkeypatch.setattr(gtdt, "add_pubchem_data", lambda df, cfg: df)
+    monkeypatch.setattr(gtdt, "add_pubchem_data", lambda df, cfg, **__: df)
     monkeypatch.setattr(
         gtdt,
         "attach_parent_molecule_ids",
@@ -207,6 +207,7 @@ def test_testitem_timeout_override(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         ),
     )

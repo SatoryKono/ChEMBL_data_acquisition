@@ -1,5 +1,5 @@
-generated_at: '2025-09-26T11:33:38.249400+00:00'
-git_sha: f2f1b6a183d9fcb053c6c7319fc1608ad22fe987
+generated_at: '2025-09-26T13:03:53.140141+00:00'
+git_sha: 9909972b28d1dbc08591a32c1a9e21c8ae539017
 command: scripts\get_activity_data.py --input data\input\full\activity.csv --output
   test.csv --limit 100
 columns:
@@ -141,7 +141,7 @@ config:
         target:
           uniprot:
             column: uniprot_id
-            data_dir: dictionary\uniprot
+            data_dir: dictionary\_target\_uniprot
             limit: null
           chembl:
             column: target_chembl_id
@@ -149,16 +149,16 @@ config:
             timeout: 30.0
             limit: null
           iuphar:
-            target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
-            family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+            target_csv: dictionary\_target\_IUPHAR\_IUPHAR_target.csv
+            family_csv: dictionary\_target\_IUPHAR\_IUPHAR_family.csv
             limit: null
           all:
-            data_dir: dictionary\uniprot
-            target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
-            family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
+            data_dir: dictionary\_target\_uniprot
+            target_csv: dictionary\_target\_IUPHAR\_IUPHAR_target.csv
+            family_csv: dictionary\_target\_IUPHAR\_IUPHAR_family.csv
             chunk_size: 5
             timeout: 30.0
-            organism_csv: dictionary\_Target\targets_type.csv
+            organism_csv: dictionary\_target\targets_type.csv
             uniprot_column: uniprot_id
             chembl_out: null
             uniprot_out: null
@@ -208,6 +208,8 @@ config:
       burst: 5
       delay: 0.2
       cache_ttl: 3600
+      prefer_local_smiles: false
+      cid_cache_path: null
     pubmed:
       base: https://eutils.ncbi.nlm.nih.gov/entrez/eutils
       timeout_connect: 5
@@ -221,11 +223,11 @@ config:
   local:
     resources:
       dictionary_dir: dictionary
-      iuphar_target_csv: dictionary\_IUPHAR\_IUPHAR_target.csv
-      iuphar_family_csv: dictionary\_IUPHAR\_IUPHAR_family.csv
-      uniprot_data_dir: dictionary\uniprot
-      organism_csv: dictionary\_Target\targets_type.csv
-      targets_type_csv: dictionary\_Target\targets_type.csv
+      iuphar_target_csv: dictionary\_target\_IUPHAR\_IUPHAR_target.csv
+      iuphar_family_csv: dictionary\_target\_IUPHAR\_IUPHAR_family.csv
+      uniprot_data_dir: dictionary\_target\_uniprot
+      organism_csv: dictionary\_target\targets_type.csv
+      targets_type_csv: dictionary\_target\targets_type.csv
     io:
       output_dir: data\output
       cache_dir: .cache
@@ -337,8 +339,8 @@ config:
   testitem_molecule_enrichment:
     enable: true
     sources:
-      molecule_catalog_path: dictionary\molecule_catalog.csv
-      molecule_hierarchy_path: dictionary\molecule_hierarchy.csv
+      molecule_catalog_path: dictionary\_testitem\molecule_catalog.csv
+      molecule_hierarchy_path: dictionary\_testitem\molecule_hierarchy.csv
     output:
       salt_as_null_when_absent: true
     flags:
@@ -355,5 +357,5 @@ stats:
   rows_total: 40
   rows_kept: 40
   rows_dropped: 0
-  output_sha256: 1e1105aecc51fa7b63c8396cfa6ba6525605881496f9a14e09f0c0dbb41d8da6
+  output_sha256: 8692928fd5d1db5816290beebfdedf7a5c49800de399e108087ad9204690f6f8
 schema: ActivitiesSchema
