@@ -104,12 +104,12 @@ pre-commit run --all-files
    and ``--encoding`` for file encoding. For end-to-end exports that create
    files, run one of the data pipelines, for example:
 
-   ```bash
-   python mapper_main.py --input tests/data/assays.csv \
-       --output out/mapped.csv --log-level DEBUG
-   python table_quality_main.py --input tests/data/assays.csv \
-       --output out/report.csv --log-level INFO
-   ```
+  ```bash
+  python scripts/mapper_main.py --input tests/data/assays.csv \
+      --output out/mapped.csv --log-level DEBUG
+  python scripts/table_quality_main.py --input tests/data/assays.csv \
+      --output out/report.csv --log-level INFO
+  ```
 
 4. **Run the tests** – see [Тесты](#тесты).
 
@@ -491,7 +491,7 @@ An overview of the output directory layout and metadata sidecars is available in
 
 ### Table quality analysis
 
-``table_quality_main.py`` profiles arbitrary CSV files and reports column
+``scripts/table_quality_main.py`` profiles arbitrary CSV files and reports column
 statistics along with correlations between numeric fields. Example usage:
 
 ```python
@@ -505,65 +505,90 @@ quality, corr = analyze_table_quality(df, table_name="data")
 Running the CLI saves ``data_quality_report_table.csv`` and
 ``data_data_correlation_report_table.csv`` in the current working directory::
 
-    python table_quality_main.py --input data.csv --table-name data
+    python scripts/table_quality_main.py --input data.csv --table-name data
 
 All scripts share a common set of flags:
 
 ## Configuration
 
 
-Default settings live in ``config.yaml`` and are split into sections for each
-API (``api``, ``openalex``, ``crossref``, ``uniprot``, ``iuphar``, ``pubchem``),
-I/O (``io``) and general infrastructure (``init``, ``rate``, ``retry``, ``log``).
-The companion
-``config.schema.json`` file documents these fields and is useful for editor
-validation, but it must **not** be passed to ``--config`` because it lacks
-runtime values such as ``api.user_agent``. A minimal configuration looks like::
+Default settings live in ``config.yaml`` and are grouped into three top-level
+sections:
+
+* ``sources`` – external services such as ChEMBL, OpenAlex, Crossref, UniProt,
+  IUPHAR and PubChem (including pipeline-specific settings).
+* ``local`` – file system inputs and outputs, cached resources and workbook
+  paths.
+* ``system`` – shared concerns such as logging, retry strategy, rate limiting
+  and document-type normalisation.
+
+The companion ``config.schema.json`` file documents these fields and is useful
+for editor validation, but it must **not** be passed to ``--config`` because it
+lacks runtime values such as ``sources.chembl.api.user_agent``. A minimal
+configuration looks like::
 
 
-    api:
-      rps: 5
-    io:
-      output_dir: data/output
+    sources:
+      chembl:
+        api:
+          rps: 5
+    local:
+      io:
+        output_dir: data/output
 
 ### Переменные окружения
 
 Environment variables override values from the YAML file. Names follow the
-``CHEMBL_DA__SECTION__KEY`` pattern with double underscores separating
-sections and keys. For example, to enable debug logging:
+``CHEMBL_DA__...`` pattern with double underscores separating each nested
+section. For example, to enable debug logging:
 
 ```bash
 export CHEMBL_DA__LOG__LEVEL=DEBUG
 ```
 
-Most options also provide short aliases. The table lists the supported mappings:
+Most options also provide short aliases for backwards compatibility. The table
+lists every supported alias and the canonical key it maps to:
 
 | Alias | Equivalent key |
 |-------|----------------|
-| `CHEMBL_DA_BASE` | `CHEMBL_DA__API__CHEMBL_BASE` |
-| `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__API__TIMEOUT_CONNECT` |
-| `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__API__TIMEOUT_READ` |
-| `CHEMBL_DA_RPS` | `CHEMBL_DA__API__RPS` |
-| `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `CHEMBL_DA__OPENALEX__TIMEOUT_CONNECT` |
-| `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `CHEMBL_DA__OPENALEX__TIMEOUT_READ` |
-| `CHEMBL_DA_OPENALEX_RPS` | `CHEMBL_DA__OPENALEX__RPS` |
-| `CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT` | `CHEMBL_DA__CROSSREF__TIMEOUT_CONNECT` |
-| `CHEMBL_DA_CROSSREF_TIMEOUT_READ` | `CHEMBL_DA__CROSSREF__TIMEOUT_READ` |
-| `CHEMBL_DA_CROSSREF_RPS` | `CHEMBL_DA__CROSSREF__RPS` |
-| `CHEMBL_DA_UNIPROT_TIMEOUT_CONNECT` | `CHEMBL_DA__UNIPROT__TIMEOUT_CONNECT` |
-| `CHEMBL_DA_UNIPROT_TIMEOUT_READ` | `CHEMBL_DA__UNIPROT__TIMEOUT_READ` |
-| `CHEMBL_DA_UNIPROT_RPS` | `CHEMBL_DA__UNIPROT__RPS` |
-| `CHEMBL_DA_IUPHAR_TIMEOUT_CONNECT` | `CHEMBL_DA__IUPHAR__TIMEOUT_CONNECT` |
-| `CHEMBL_DA_IUPHAR_TIMEOUT_READ` | `CHEMBL_DA__IUPHAR__TIMEOUT_READ` |
-| `CHEMBL_DA_IUPHAR_RPS` | `CHEMBL_DA__IUPHAR__RPS` |
-| `CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT` | `CHEMBL_DA__PUBCHEM__TIMEOUT_CONNECT` |
-| `CHEMBL_DA_PUBCHEM_TIMEOUT_READ` | `CHEMBL_DA__PUBCHEM__TIMEOUT_READ` |
-| `CHEMBL_DA_PUBCHEM_RPS` | `CHEMBL_DA__PUBCHEM__RPS` |
-| `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__IO__OUTPUT_DIR` |
-| `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__RETRY__MAX_ATTEMPTS` |
-| `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__RETRY__BACKOFF_FACTOR` |
-| `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__LOG__LEVEL` |
-| `CHEMBL_DA_LOG_FORMAT` | `CHEMBL_DA__LOG__FORMAT` |
+| `CHEMBL_DA_BASE` | `CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE` |
+| `CHEMBL_DA_BURST` | `CHEMBL_DA__SOURCES__CHEMBL__API__BURST` |
+| `CHEMBL_DA_CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
+| `CHEMBL_DA_CACHE_MAXSIZE` | `CHEMBL_DA__SOURCES__CHEMBL__CACHE__CACHE_MAXSIZE` |
+| `CHEMBL_DA_CACHE_TTL` | `CHEMBL_DA__SOURCES__CHEMBL__CACHE__CACHE_TTL` |
+| `CHEMBL_DA_CROSSREF_BASE` | `CHEMBL_DA__SOURCES__CROSSREF__BASE` |
+| `CHEMBL_DA_CROSSREF_MAILTO` | `CHEMBL_DA__SOURCES__CROSSREF__MAILTO` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT` | `CHEMBL_DA__SOURCES__CROSSREF__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_CROSSREF_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__CROSSREF__TIMEOUT_READ` |
+| `CHEMBL_DA_DICT_DIR` | `CHEMBL_DA__LOCAL__RESOURCES__DICTIONARY_DIR` |
+| `CHEMBL_DA_GLOBAL_BURST` | `CHEMBL_DA__SYSTEM__RATE__GLOBAL_BURST` |
+| `CHEMBL_DA_GLOBAL_RPS` | `CHEMBL_DA__SYSTEM__RATE__GLOBAL_RPS` |
+| `CHEMBL_DA_IUPHAR_BASE` | `CHEMBL_DA__SOURCES__IUPHAR__BASE` |
+| `CHEMBL_DA_IUPHAR_FAMILY_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__IUPHAR_FAMILY_CSV` |
+| `CHEMBL_DA_IUPHAR_TARGET_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__IUPHAR_TARGET_CSV` |
+| `CHEMBL_DA_LIMITER_CACHE_MAXSIZE` | `CHEMBL_DA__SYSTEM__RATE__LIMITER_CACHE_MAXSIZE` |
+| `CHEMBL_DA_LIMITER_CACHE_TTL` | `CHEMBL_DA__SYSTEM__RATE__LIMITER_CACHE_TTL` |
+| `CHEMBL_DA_LOG_DATEFMT` | `CHEMBL_DA__SYSTEM__LOG__DATEFMT` |
+| `CHEMBL_DA_LOG_FORMAT` | `CHEMBL_DA__SYSTEM__LOG__FORMAT` |
+| `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__SYSTEM__LOG__LEVEL` |
+| `CHEMBL_DA_MOLECULE_CATALOG_CACHE` | `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH` |
+| `CHEMBL_DA_OPENALEX_BASE` | `CHEMBL_DA__SOURCES__OPENALEX__BASE` |
+| `CHEMBL_DA_OPENALEX_MAILTO` | `CHEMBL_DA__SOURCES__OPENALEX__MAILTO` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `CHEMBL_DA__SOURCES__OPENALEX__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__OPENALEX__TIMEOUT_READ` |
+| `CHEMBL_DA_ORGANISM_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__ORGANISM_CSV` |
+| `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__LOCAL__IO__OUTPUT_DIR` |
+| `CHEMBL_DA_PUBCHEM_BASE` | `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__SYSTEM__RETRY__BACKOFF_FACTOR` |
+| `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__SYSTEM__RETRY__MAX_ATTEMPTS` |
+| `CHEMBL_DA_RPS` | `CHEMBL_DA__SOURCES__CHEMBL__API__RPS` |
+| `CHEMBL_DA_TARGETS_TYPE_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__TARGETS_TYPE_CSV` |
+| `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__SOURCES__CHEMBL__API__TIMEOUT_CONNECT` |
+| `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__CHEMBL__API__TIMEOUT_READ` |
+| `CHEMBL_DA_UNIPROT_BASE` | `CHEMBL_DA__SOURCES__UNIPROT__API__BASE` |
+| `CHEMBL_DA_UNIPROT_DATA_DIR` | `CHEMBL_DA__LOCAL__RESOURCES__UNIPROT_DATA_DIR` |
+| `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
+| `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
 See ``docs/CONFIG_EN.md`` for a complete overview of all configuration options
 (русская версия — ``docs/CONFIG_RU.md``).
@@ -583,25 +608,26 @@ values after all overrides have been applied. The final precedence is::
 Only the top-level command line scripts read the configuration file. Modules
 under ``library/`` expect a :class:`Config` (or one of its subsections) to be
 passed explicitly, making dependencies clear and avoiding hidden global state.
-The directories referenced by ``io.output_dir`` and ``io.cache_dir`` are checked
-but not created when loading the configuration. Scripts that need these paths
-can call :func:`library.config.ensure_dirs` after :func:`load_config` to create
-them if they are missing and ``io.exist_ok`` permits it.
+The directories referenced by ``local.io.output_dir`` and ``local.io.cache_dir``
+are checked but not created when loading the configuration. Scripts that need
+these paths can call :func:`library.config.ensure_dirs` after
+:func:`load_config` to create them if they are missing and ``local.io.exist_ok``
+permits it.
 
-Path values such as ``io.output_dir``, ``io.cache_dir`` and the ``init``
+Path values such as ``local.io.output_dir``, ``local.io.cache_dir`` and the ``local.init``
 workbook paths are exposed as :class:`pathlib.Path` objects. String values in
 ``config.yaml`` or overrides from the environment and command line are
 automatically converted.
  
-
+```bash
 # профилирование качества таблицы
-python table_quality_main.py \
+python scripts/table_quality_main.py \
     --input tests/data/activity.csv \
     --table-name activity
 ```
 
 `--output` по умолчанию формируется как `output_<имя_входа>_YYYYMMDD.csv`
-в каталоге, заданном `io.output_dir`.  
+в каталоге, заданном `local.io.output_dir`.
 Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md) и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
 
 ## Структура проекта
@@ -631,7 +657,7 @@ ChEMBL_data_acquisition/
 ## Конфигурация
 
 Параметры читаются из `config.yaml`, переменных окружения
-(`CHEMBL_DA__SECTION__KEY`) и ключей CLI.
+(`CHEMBL_DA__...`) и ключей CLI.
 Подробности в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md).
 
 ## Вывод и метаданные

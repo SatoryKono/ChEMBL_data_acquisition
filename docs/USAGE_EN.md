@@ -142,11 +142,13 @@ row count stays constant.
 
 Test item exports must be reconciled with the ChEMBL parent catalogue to expose `parent_molecule_chembl_id`
 used by downstream aggregations. The cache path is configured via
+
 [`sources.chembl.molecule_catalog.cache_path`](./CONFIG_EN.md#sources-chembl-molecule-catalog);
 keep the JSON file accessible to the runner or adjust the location by setting
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
 `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing
 `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+
  
 
 Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
@@ -188,10 +190,10 @@ python scripts/get_input_initialisation.py \
 * Produces entity-specific slices (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
 * Creates a `data_validity_report/` folder with quality reports for each exported table.
 
-## Table quality profiler (`table_quality_main.py`)
+## Table quality profiler (`scripts/table_quality_main.py`)
 
 ```bash
-python table_quality_main.py \
+python scripts/table_quality_main.py \
   --input data/input-smoke/activity.csv \
   --table-name activity
 ```

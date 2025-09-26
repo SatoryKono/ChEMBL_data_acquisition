@@ -147,7 +147,9 @@ PubChem-дополнение добавляет детерминированны
 [`sources.chembl.molecule_catalog.cache_path`](./CONFIG_RU.md#sources-chembl-molecule-catalog); убедитесь,
 что файл доступен исполнителю, либо задайте новое расположение переменной окружения
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
+
 `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
@@ -187,10 +189,10 @@ python scripts/get_input_initialisation.py \
 * Создаёт срезы по сущностям (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
 * Добавляет папку `data_validity_report/` с отчётами качества для каждого файла.
 
-## Профайлер качества таблиц (`table_quality_main.py`)
+## Профайлер качества таблиц (`scripts/table_quality_main.py`)
 
 ```bash
-python table_quality_main.py \
+python scripts/table_quality_main.py \
   --input data/input-smoke/activity.csv \
   --table-name activity
 ```
