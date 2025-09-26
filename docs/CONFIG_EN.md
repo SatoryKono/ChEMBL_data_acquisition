@@ -289,6 +289,10 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
 
 
+The `dictionary/_target` folder mirrors the current repository layout; all
+IUPHAR and UniProt lookups are stored there by default.
+
+
 ### I/O defaults (`local.io`)
 
 | Key | Default | Description |
