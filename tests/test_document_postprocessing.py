@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import pandas as pd
 
 from library import document_postprocessing as dp
@@ -32,3 +34,33 @@ def test_postprocess_documents_creates_flags_and_sorts() -> None:
         "OpenAlex.PublicationTypes",
     ]:
         assert col not in result.columns
+
+
+@pytest.fixture
+def documents_with_numeric_date_parts() -> pd.DataFrame:
+    """Return rows with numeric date components that require padding."""
+
+    return pd.DataFrame(
+        {
+            "document_chembl_id": ["DOC_A", "DOC_B", "DOC_C"],
+            "PubMed.DayCompleted": [2, 0, 0],
+            "PubMed.MonthCompleted": [5, 9, 3],
+            "PubMed.YearCompleted": [2020, 2019, 85],
+            "PubMed.DayRevised": [0, 7, 0],
+            "PubMed.MonthRevised": [0, 9, 0],
+            "PubMed.YearRevised": [0, 2019, 0],
+        }
+    )
+
+
+def test_postprocess_documents_zero_pads_date_components(
+    documents_with_numeric_date_parts: pd.DataFrame,
+) -> None:
+    """Numeric month/day values are padded in the generated ``date_code``."""
+
+    result = dp.postprocess_documents(documents_with_numeric_date_parts)
+    date_by_doc = dict(zip(result["document_chembl_id"], result["date_code"]))
+
+    assert date_by_doc["DOC_A"] == "2020-05-02"
+    assert date_by_doc["DOC_B"] == "2019-09-07"
+    assert date_by_doc["DOC_C"] == "0085-03-01"
