@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, Mapping
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -631,6 +632,100 @@ def test_run_chembl_initialises_pubchem_session(
     assert rc == 0
     assert captured["init"] == (cfg.api, cfg.retry)
 
+
+def test_run_chembl_uses_lazy_identifier_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text(
+        "molecule_chembl_id\nCHEMBL1\nCHEMBL2\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    class SingleUseIterable:
+        def __init__(self, values: list[str]) -> None:
+            self._values = values
+            self.iterations = 0
+
+        def __iter__(self):
+            if self.iterations:
+                raise AssertionError("identifiers iterator consumed multiple times")
+            self.iterations += 1
+            yield from self._values
+
+    ids_source = SingleUseIterable(["CHEMBL1", "CHEMBL2"])
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: ids_source)
+
+    received_ids: object | None = None
+
+    def fake_get_testitem(ids, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal received_ids
+        received_ids = ids
+        values = list(ids)
+        return pd.DataFrame(
+            [
+                {
+                    cfg.molecule_catalog.child_field: value,
+                    cfg.molecule_catalog.parent_field: pd.NA,
+                }
+                for value in values
+            ]
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+    monkeypatch.setattr(gtd.pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *args, **__: frame)
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+                uncovered=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(gtd, "normalize_testitems", lambda frame: frame)
+    monkeypatch.setattr(gtd, "add_pipeline_metadata", lambda frame: frame)
+    monkeypatch.setattr(
+        gtd,
+        "validate_testitems",
+        lambda frame, return_result=True: SimpleNamespace(
+            data=frame,
+            failure_cases=pd.DataFrame(),
+        ),
+    )
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
+
+    rc = gtd.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert ids_source.iterations == 1
+    assert received_ids is not None
+    assert not isinstance(received_ids, list)
+    assert received_ids.__class__.__name__ == "_tee"
 
 
 def test_run_chembl_merges_parent_catalog(

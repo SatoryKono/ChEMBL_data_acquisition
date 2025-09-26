@@ -16,7 +16,7 @@ import argparse
 from collections import ChainMap
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
-from itertools import islice
+from itertools import islice, tee
 from typing import Any, Callable, NamedTuple
 
 import pandas as pd
@@ -91,6 +91,8 @@ PUBCHEM_COLUMNS = [
 
 _PUBCHEM_CID_CACHE_ENCODING = "utf-8"
 _CID_CACHE_MISSING = object()
+
+_FETCH_ERROR_SAMPLE_SIZE = 10
 
 
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
@@ -942,15 +944,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         uncovered=0,
     )
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        sample_ids: tuple[str, ...] = ()
         try:
             ids_iter = io.read_ids(
                 args.input_csv, column=cfg.testitem.column, cfg=cfg.io
             )
             if limit is not None:
-                ids = list(islice(ids_iter, limit))
-                logger.info("process_limit", limit=len(ids))
-            else:
-                ids = list(ids_iter)
+                ids_iter = islice(ids_iter, limit)
+            ids_iter, sample_iter = tee(ids_iter)
+            sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
         except (FileNotFoundError, ValueError) as exc:
             logger.error(
                 "read_fail",
@@ -959,12 +961,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
 
-        logger.info("identifiers_retrieved", count=len(ids))
         logger.info("chembl_fetch_start", batch_size=cfg.testitem.batch_size)
 
         try:
             df = cl.get_testitem(
-                ids,
+                ids_iter,
                 cfg=cfg.api,
                 client=client,
                 chunk_size=cfg.testitem.batch_size,
@@ -976,9 +977,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 error=str(exc),
                 batch_size=cfg.testitem.batch_size,
                 timeout=cfg.testitem.timeout,
+                sample_ids=list(sample_ids),
             )
             return 1
-        logger.info("chembl_fetch_done", rows=len(df))
+        rows = len(df)
+        logger.info("chembl_fetch_done", rows=rows)
+        logger.info("identifiers_retrieved", count=rows)
+        if limit is not None:
+            logger.info("process_limit", limit=min(limit, rows))
         parent_column = cfg.molecule_catalog.parent_field
         child_column = cfg.molecule_catalog.child_field
 
