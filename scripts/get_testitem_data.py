@@ -184,7 +184,7 @@ def _write_pubchem_cid_cache(path: Path | None, cache: Mapping[str, str | None])
 
     if path is None:
         return
-    ensure_dirs(path.parent)
+    path.parent.mkdir(parents=True, exist_ok=True)
     serialisable: dict[str, str] = {}
     for key, value in cache.items():
         if not key:
