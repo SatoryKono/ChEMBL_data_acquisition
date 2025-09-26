@@ -22,9 +22,9 @@
 | Компонент     | Минимальная версия |
 |---------------|-------------------|
 | Python        | 3.12              |
-| pandas        | 2.1               |
-| requests      | 2.31              |
-| PyYAML        | 6.0               |
+| pandas        | 2.3.2             |
+| requests      | 2.32.5            |
+| PyYAML        | 6.0.2             |
 
 Полный список приведён в `requirements-dev.txt` или `pyproject.toml`.
 
@@ -449,7 +449,8 @@ python -m library.utils.cli_tools.check_determinism --log-level INFO
 
 The script writes a sample CSV twice using ``write_csv_deterministic`` and
 compares SHA-256 hashes. It requires the ``pandas`` package; install it with
-``pip install pandas`` if it is not already available in your environment.
+``pip install pandas==2.3.2`` if it is not already available in your environment
+so the versions stay aligned with ``pyproject.toml``.
 This check also runs in the project's CI pipeline and will fail the build
 if the hashes differ.
 
