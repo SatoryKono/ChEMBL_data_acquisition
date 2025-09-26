@@ -11,9 +11,52 @@ import requests
 
 from library import chembl_library as cl
 from library import io
+from library import pubchem_library as pl
 from library.config import Config
 from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
+
+
+def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame({"canonical_smiles": ["C"]})
+    cfg = pl.PubChemCfg(delay=0)
+
+    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
+
+    result = gtd.add_pubchem_data(df, cfg)
+    pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
+    assert pubchem_cols
+    assert result[pubchem_cols].isna().all().all()
+    assert not (result[pubchem_cols] == "Not Found").any().any()
+
+
+def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame(
+        {
+            "canonical_smiles": ["C"],
+            "pubchem_cid": ["1"],
+            "pubchem_iupac_name": ["methane"],
+            "pubchem_molecular_formula": ["CH4"],
+            "pubchem_isomeric_smiles": ["C"],
+            "pubchem_canonical_smiles": ["C"],
+            "pubchem_inchi": ["InChI=1S/CH4/h1H4"],
+            "pubchem_inchikey": ["VNWKTOKETHGBQD-UHFFFAOYSA-N"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, prefer_local_smiles=True)
+
+    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("PubChem lookup should not be called")
+
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+    monkeypatch.setattr(pl, "get_properties", fail)
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    expected = df.copy()
+    for column in gtd.PUBCHEM_COLUMNS:
+        expected[column] = expected[column].astype("string")
+    pd.testing.assert_frame_equal(result, expected)
 
 
 def test_run_chembl_column_order(

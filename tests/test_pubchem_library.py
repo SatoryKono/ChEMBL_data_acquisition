@@ -160,6 +160,28 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
     assert sleeps == [1]
 
 
+@responses.activate
+def test_get_properties_returns_none_for_missing() -> None:
+    """Missing PubChem fields should be returned as ``None``."""
+
+    cfg = pl.PubChemCfg(delay=0)
+    cid = "123"
+    url = (
+        f"{cfg.base.rstrip('/')}/compound/cid/{cid}/property/"
+        "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
+    )
+    responses.add(responses.GET, url, json={"PropertyTable": {"Properties": [{}]}}, status=200)
+
+    props = pl.get_properties(cid, cfg)
+
+    assert props.IUPACName is None
+    assert props.MolecularFormula is None
+    assert props.iSMILES is None
+    assert props.cSMILES is None
+    assert props.InChI is None
+    assert props.InChIKey is None
+
+
 def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cache entries should be evicted after the configured TTL."""
 

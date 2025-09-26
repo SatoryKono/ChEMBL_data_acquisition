@@ -260,6 +260,10 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Time-to-live for PubChem request cache in seconds",
     )
+    prefer_local_smiles: bool = Field(
+        False,
+        description="Skip PubChem lookups when local pubchem_* columns are populated",
+    )
 
     @field_validator("base")
     @classmethod
