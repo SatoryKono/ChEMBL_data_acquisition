@@ -191,10 +191,10 @@ python scripts/get_input_initialisation.py \
 * Создаёт срезы по сущностям (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
 * Добавляет папку `data_validity_report/` с отчётами качества для каждого файла.
 
-## Профайлер качества таблиц (`table_quality_main.py`)
+## Профайлер качества таблиц (`scripts/table_quality_main.py`)
 
 ```bash
-python table_quality_main.py \
+python scripts/table_quality_main.py \
   --input data/input-smoke/activity.csv \
   --table-name activity
 ```
