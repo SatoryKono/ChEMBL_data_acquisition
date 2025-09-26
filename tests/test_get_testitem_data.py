@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, Mapping
 
 import pandas as pd
@@ -57,6 +58,29 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     for column in gtd.PUBCHEM_COLUMNS:
         expected[column] = expected[column].astype("string")
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_add_pubchem_data_preserves_existing_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "canonical_smiles": ["C"],
+            "pubchem_cid": ["LOCAL"],
+            "pubchem_iupac_name": ["local"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, prefer_local_smiles=False, prefer_local_values=True)
+
+    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
+    monkeypatch.setattr(
+        pl, "get_properties", lambda *_: pl.Properties(None, None, None, None, None, None)
+    )
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert result.loc[0, "pubchem_iupac_name"] == "local"
+    assert result.loc[0, "pubchem_cid"] == "LOCAL"
 
 
 def test_resolve_pubchem_cid_prefers_inchikey(
@@ -130,7 +154,29 @@ def test_add_pubchem_data_uses_disk_cache(
 
     assert result.loc[0, "pubchem_cid"] == "321"
     assert result.loc[0, "pubchem_iupac_name"] == "name"
-    assert json.loads(cache_path.read_text()) == {"CHEMBL1": "321"}
+    cache_data = json.loads(cache_path.read_text())
+    if "values" in cache_data:
+        assert cache_data["values"] == {"CHEMBL1": "321"}
+        assert cache_data["metadata"]["version"] == gtd._PUBCHEM_CACHE_SCHEMA_VERSION
+    else:
+        assert cache_data == {"CHEMBL1": "321"}
+
+
+def test_load_pubchem_cid_cache_expires(tmp_path: Path) -> None:
+    cache_path = tmp_path / "cid_cache.json"
+    expired_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    payload = {
+        "metadata": {
+            "version": gtd._PUBCHEM_CACHE_SCHEMA_VERSION,
+            "updated_at": expired_at.isoformat(),
+        },
+        "values": {"CHEMBL1": "321"},
+    }
+    cache_path.write_text(json.dumps(payload))
+
+    cache = gtd._load_pubchem_cid_cache(cache_path, ttl_hours=1)
+
+    assert cache == {}
 
 
 def test_run_chembl_column_order(

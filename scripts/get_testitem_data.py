@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 
 # ruff: noqa: E402
 from pathlib import Path
@@ -108,7 +109,12 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     return normalised.upper() if uppercase else normalised
 
 
-def _load_pubchem_cid_cache(path: Path | None) -> dict[str, str | None]:
+_PUBCHEM_CACHE_SCHEMA_VERSION = 1
+
+
+def _load_pubchem_cid_cache(
+    path: Path | None, *, ttl_hours: float | None = None
+) -> dict[str, str | None]:
     """Load CID cache mapping from disk."""
 
     if path is None:
@@ -121,11 +127,38 @@ def _load_pubchem_cid_cache(path: Path | None) -> dict[str, str | None]:
     except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - I/O errors
         logger.warning("pubchem_cache_load_failed", path=str(path), error=str(exc))
         return {}
-    if not isinstance(data, Mapping):
+    metadata: Mapping[str, Any] | None = None
+    values_source: Mapping[str, Any] | None = None
+    if isinstance(data, Mapping) and "values" in data:
+        values_candidate = data.get("values")
+        if isinstance(values_candidate, Mapping):
+            values_source = values_candidate
+            metadata_candidate = data.get("metadata")
+            if isinstance(metadata_candidate, Mapping):
+                metadata = metadata_candidate
+    elif isinstance(data, Mapping):
+        values_source = data
+    else:
         logger.warning("pubchem_cache_invalid", path=str(path))
         return {}
+
+    if ttl_hours and ttl_hours > 0 and metadata is not None:
+        updated_raw = metadata.get("updated_at")
+        if isinstance(updated_raw, str):
+            try:
+                updated_at = datetime.fromisoformat(updated_raw)
+            except ValueError:
+                updated_at = None
+            if updated_at is not None and updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=timezone.utc)
+            if updated_at is not None:
+                expires_at = updated_at + timedelta(hours=ttl_hours)
+                if expires_at <= datetime.now(timezone.utc):
+                    logger.info("pubchem_cache_expired", path=str(path))
+                    return {}
+
     cache: dict[str, str | None] = {}
-    for raw_key, raw_value in data.items():
+    for raw_key, raw_value in (values_source or {}).items():
         key = _normalise_identifier(raw_key, uppercase=True)
         if not key:
             continue
@@ -153,7 +186,14 @@ def _write_pubchem_cid_cache(path: Path | None, cache: Mapping[str, str | None])
         serialisable[key] = value
     try:
         with path.open("w", encoding=_PUBCHEM_CID_CACHE_ENCODING) as handle:
-            json.dump(serialisable, handle, indent=2, sort_keys=True)
+            payload = {
+                "metadata": {
+                    "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "values": serialisable,
+            }
+            json.dump(payload, handle, indent=2, sort_keys=True)
     except OSError as exc:  # pragma: no cover - I/O errors
         logger.warning("pubchem_cache_write_failed", path=str(path), error=str(exc))
 
@@ -508,7 +548,8 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         complete_mask = pd.Series(False, index=result.index)
 
     cache_path = getattr(cfg, "cid_cache_path", None)
-    cid_cache = _load_pubchem_cid_cache(cache_path)
+    cache_ttl_hours = getattr(cfg, "cache_ttl_hours", None)
+    cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
     cache_dirty = False
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
@@ -603,16 +644,22 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
 
     pubchem_df = pd.DataFrame(pubchem_rows, index=result.index).convert_dtypes()
 
+    prefer_values = getattr(cfg, "prefer_local_values", False)
+
     for col in PUBCHEM_COLUMNS:
         if col not in pubchem_df.columns:
             continue
         new_series = pubchem_df[col].astype("string")
         if col in result.columns:
-            result[col] = result[col].astype("string")
+            existing = result[col].astype("string")
+            result[col] = existing
             if prefer_local:
-                existing = result[col]
                 missing_mask = existing.isna() | existing.eq("")
                 result.loc[missing_mask, col] = new_series[missing_mask]
+            elif prefer_values:
+                incoming = new_series.where(~(new_series.isna() | new_series.eq("")), pd.NA)
+                combined = incoming.combine_first(existing)
+                result[col] = combined.astype("string")
             else:
                 result[col] = new_series
         else:
