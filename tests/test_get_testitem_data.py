@@ -39,6 +39,19 @@ def test_run_chembl_column_order(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda df, cfg: df)
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
@@ -83,6 +96,19 @@ def test_run_chembl_initialises_pubchem_session(
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
 
     captured: dict[str, object] = {}
 
