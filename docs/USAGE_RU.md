@@ -115,7 +115,7 @@ python scripts/get_document_data.py pubmed \
 ```
 
 Флаги `--openalex-rps` и `--crossref-rps` позволяют временно изменить лимиты без правки YAML, а параметры `--fallback-doi-*`
-подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column` (по умолчанию `pmid_override` и `doi_override`).【F:scripts/get_document_data.py†L989-L1041】
+подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column`; если не задавать их явно, CLI ожидает заголовки `PMID` и `DOI`, а в примере выше показано переименование через явные параметры.【F:scripts/get_document_data.py†L989-L1041】
 
 
 ## Агрегация таргетов (`get_target_data.py`)
