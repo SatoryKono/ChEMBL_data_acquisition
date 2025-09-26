@@ -8,7 +8,7 @@ pipelines.
 
 | Aspect | Details |
 | --- | --- |
-| **Input sources & format** | CSV containing an identifier column (default `activity_id`) read lazily via `io.read_ids`. Optional `--limit` and `--dry-run` flags gate processing.【F:scripts/get_activity_data.py†L78-L118】 |
+| **Input sources & format** | CSV containing an identifier column (default `activity_chembl_id`, inherited from the `activity.column` setting in `config.yaml` unless `--column` overrides it) read lazily via `io.read_ids`. Optional `--limit` and `--dry-run` flags gate processing.【F:scripts/get_activity_data.py†L78-L118】【F:config.yaml†L33-L38】【F:scripts/get_activity_data.py†L1054-L1104】 |
 | **External services / files** | ChEMBL API accessed through `ChemblClient` with configurable chunking and timeouts.【F:scripts/get_activity_data.py†L78-L117】 |
 | **Key transformations** | Normalise API payloads, append pipeline metadata, enforce schema column ordering, validate against `ActivitiesSchema`, and log per-row validation failures to sidecar CSVs.【F:scripts/get_activity_data.py†L118-L188】 |
 | **Outputs & storage** | Primary CSV written to the requested or default output path, metadata YAML containing run statistics, and table-quality diagnostics.【F:scripts/get_activity_data.py†L181-L221】 |
