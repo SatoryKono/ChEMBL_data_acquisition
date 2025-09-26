@@ -56,11 +56,21 @@ python scripts/get_assay_data.py \
 python scripts/get_document_data.py \
   --input data/input-smoke/documents.csv \
   --column document_chembl_id \
-  --sources.chembl.pipelines.document.pubmed.batch_size 20
+  --batch-size 20
 ```
 
-Команда объединяет данные ChEMBL и PubMed. Для точечных настроек используйте точечную нотацию аргументов, например для увеличения
-`batch_size` при работе с PubMed.
+Команда объединяет данные ChEMBL и PubMed. Для разовых корректировок доступны флаги `--batch-size`, `--timeout`, `--limit`,
+`--dry-run`. Вложенные параметры (например `sources.chembl.pipelines.document.pubmed.batch_size`) меняются через конфигурацию
+или переменные окружения, например:
+
+```bash
+CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
+  python scripts/get_document_data.py \
+    --input data/input-smoke/documents.csv \
+    --column document_chembl_id
+```
+
+Альтернативно обновите значение в `config.yaml`.
 
 ## Агрегация таргетов (`get_target_data.py`)
 
@@ -86,8 +96,9 @@ python scripts/get_testitem_data.py \
 
 Чтобы получить `parent_molecule_chembl_id` для агрегаций, выгрузку необходимо объединить с каталогом
 родителей ChEMBL. Путь к локальному JSON задаётся через `sources.chembl.molecule_catalog.cache_path`; убедитесь,
-что файл доступен исполнителю, либо переопределите расположение параметрами CLI (`--sources.chembl.molecule_catalog.cache-path`)
-или переменными окружения (`CHEMBL_DA_MOLECULE_CATALOG_CACHE`).【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+что файл доступен исполнителю, либо задайте новое расположение переменной окружения
+`CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
+`config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
@@ -116,17 +127,24 @@ python table_quality_main.py \
 
 Генерирует `<table-name>_quality_report_table.csv` и `<table-name>_data_correlation_report_table.csv`, используя настройки `local.io`.
 
-## Переопределения через CLI
+## Переопределения конфигурации во время запуска
 
-Любой параметр можно задать точечной записью:
+CLI-флаги покрывают задокументированные аргументы каждого скрипта. Например, пайплайн активностей поддерживает
+`--batch-size`, `--timeout`, `--limit`, `--dry-run`:
 
 ```bash
-# Временно поднять лимит ChEMBL по RPS
-python scripts/get_activity_data.py --sources.chembl.api.rps 10
-
-# Изменить разделитель CSV без правки config.yaml
-python scripts/get_assay_data.py --sep ';'
+python scripts/get_activity_data.py --batch-size 25 --timeout 45
 ```
+
+Вложенные параметры меняются через `config.yaml` или переменные окружения. Чтобы временно увеличить лимит запросов
+к ChEMBL без правки файла, экспортируйте переменную и запустите команду в том же сеансе:
+
+```bash
+export CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10
+python scripts/get_activity_data.py
+```
+
+При необходимости проверьте итоговую конфигурацию флагом `--print-config` до запуска пайплайна.
 
 ## Переменные окружения
 

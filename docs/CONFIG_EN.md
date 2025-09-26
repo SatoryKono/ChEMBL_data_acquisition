@@ -248,7 +248,7 @@ Any other key can be targeted using the long `CHEMBL_DA__...` form.
 * Supply `--config` to point at an alternative YAML file; defaults to `config.yaml`.
 * Pass `--print-config` to print the effective configuration (after environment and CLI overrides) and exit.
 * Any CLI argument mapped via `apply_config_overrides` updates the configuration. For example `--batch-size 25` sets `sources.chembl.pipelines.activity.batch_size` for the current run.
-* Use dotted overrides for rare keys: `python scripts/get_activity_data.py --sources.chembl.api.rps 10`.
+* Nested parameters are changed via `config.yaml` or environment variables such as `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`. Flags like `--sources.…` are not defined by the parsers.
 
 ## Validation workflow
 
