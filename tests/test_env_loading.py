@@ -35,7 +35,10 @@ def test_env_override_invalid_value(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setenv("CHEMBL_DA_RPS", "0")
 
-    with pytest.raises(ConfigError, match="CHEMBL_DA_RPS must be ≥1"):
+    with pytest.raises(
+        ConfigError,
+        match=r"CHEMBL_DA_RPS \(sources\.chembl\.api\.rps\) must be ≥1",
+    ):
         load_config(cfg_path)
 
 
@@ -45,5 +48,8 @@ def test_env_override_invalid_yaml(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setenv("CHEMBL_DA_RPS", "[1, 2")
 
-    with pytest.raises(ConfigError, match="CHEMBL_DA_RPS could not be parsed"):
+    with pytest.raises(
+        ConfigError,
+        match=r"CHEMBL_DA_RPS \(sources\.chembl\.api\.rps\) must be an integer",
+    ):
         load_config(cfg_path)
