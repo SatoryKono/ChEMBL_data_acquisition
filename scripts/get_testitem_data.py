@@ -68,7 +68,8 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 
 
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
-PARENT_LOOKUP_SOURCE_REMOTE = "remote"
+PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
+PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
 
 
@@ -102,9 +103,9 @@ def _resolve_parent_source(
 
     if after_exists and before_exists and after_mtime == before_mtime:
         return PARENT_LOOKUP_SOURCE_CACHE
-    if after_exists or before_exists != after_exists:
-        return PARENT_LOOKUP_SOURCE_REMOTE
-    return PARENT_LOOKUP_SOURCE_REMOTE
+    if after_exists and (not before_exists or after_mtime != before_mtime):
+        return PARENT_LOOKUP_SOURCE_SYNC
+    return PARENT_LOOKUP_SOURCE_CACHE
 
 
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
@@ -176,40 +177,27 @@ def attach_parent_molecule_ids(
     unique_children = normalised_child[normalised_child != ""].unique()
     used_partial_cache = False
 
+    partial_fetch_performed = False
+    full_sync_performed = False
+
     if catalog_data is None:
         cache_before = _cache_state(catalog_cfg.cache_path)
         queried = query_parent_catalog(unique_children, catalog_cfg)
         cache_after = _cache_state(catalog_cfg.cache_path)
-        if queried or catalog_cfg.sqlite_path.is_file():
-            catalog_data = dict(queried)
+        catalog_data = dict(queried)
+        used_partial_cache = bool(queried) or catalog_cfg.sqlite_path.is_file()
+        if queried:
             source_resolved = _resolve_parent_source(cache_before, cache_after)
-            used_partial_cache = True
-        else:
-            catalog_data = load_parent_catalog(
-                client=client,
-                api_cfg=api_cfg,
-                catalog_cfg=catalog_cfg,
-                timeout=timeout,
-            )
-            cache_after = _cache_state(catalog_cfg.cache_path)
+        elif source_resolved is None and cache_after[0]:
             source_resolved = _resolve_parent_source(cache_before, cache_after)
     else:
         if source_resolved is None:
-            cache_exists = catalog_cfg.cache_path.is_file()
-            source_resolved = (
-                PARENT_LOOKUP_SOURCE_CACHE
-                if cache_exists
-                else PARENT_LOOKUP_SOURCE_REMOTE
-            )
+            source_resolved = PARENT_LOOKUP_SOURCE_CACHE
 
-    parent_map = {
-        key: catalog_data[key]
-        for key in unique_children
-        if key in catalog_data
-    }
-    missing_ids = [key for key in unique_children if key not in parent_map]
-    fetched_remote = False
+    catalog_data = catalog_data or {}
+    missing_ids = [key for key in unique_children if key not in catalog_data]
 
+    fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
         try:
             fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -221,17 +209,33 @@ def attach_parent_molecule_ids(
         except (requests.RequestException, ValueError) as exc:
             logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
             fetched = {}
-        else:
-            if fetched:
-                fetched_remote = True
         if fetched:
             catalog_data.update(fetched)
-            parent_map.update(fetched)
-            if catalog is None:
-                if used_partial_cache:
-                    update_parent_catalog_cache(fetched, catalog_cfg)
-                else:
-                    write_parent_catalog_cache(catalog_data, catalog_cfg)
+            partial_fetch_performed = True
+            if used_partial_cache:
+                update_parent_catalog_cache(fetched, catalog_cfg)
+            else:
+                write_parent_catalog_cache(catalog_data, catalog_cfg)
+        missing_ids = [key for key in unique_children if key not in catalog_data]
+
+    if missing_ids and catalog is None:
+        cache_before = _cache_state(catalog_cfg.cache_path)
+        loaded_catalog = load_parent_catalog(
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+        )
+        catalog_data.update(loaded_catalog)
+        cache_after = _cache_state(catalog_cfg.cache_path)
+        source_resolved = _resolve_parent_source(cache_before, cache_after)
+        full_sync_performed = True
+
+    parent_map = {
+        key: catalog_data[key]
+        for key in unique_children
+        if key in catalog_data
+    }
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
@@ -249,12 +253,14 @@ def attach_parent_molecule_ids(
     attached = len(result) - missing
 
     if source_resolved is None:
-        source_resolved = PARENT_LOOKUP_SOURCE_REMOTE
+        source_resolved = PARENT_LOOKUP_SOURCE_CACHE
 
     stats = ParentLookupStats(
         source=(
-            PARENT_LOOKUP_SOURCE_REMOTE
-            if fetched_remote
+            PARENT_LOOKUP_SOURCE_SYNC
+            if full_sync_performed
+            else PARENT_LOOKUP_SOURCE_PARTIAL
+            if partial_fetch_performed
             else source_resolved
         ),
         missing=missing,
@@ -457,11 +463,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
             cache_after = _cache_state(cfg.molecule_catalog.cache_path)
-            parent_catalog_source = _resolve_parent_source(cache_before, cache_after)
             if parent_catalog:
+                parent_catalog_source = _resolve_parent_source(
+                    cache_before, cache_after
+                )
                 need_lookup -= set(parent_catalog)
 
-        fetched_remote = False
+        partial_fetch_performed = False
         if need_lookup:
             try:
                 fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -475,9 +483,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 return 1
             if fetched:
                 parent_catalog.update(fetched)
-                fetched_remote = True
-        if fetched_remote:
-            parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
+                partial_fetch_performed = True
+        if partial_fetch_performed:
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
+
+        if parent_catalog:
+            lookup_series = pd.Series(
+                normalised_ids.map(parent_catalog),
+                index=df.index,
+                dtype="string",
+            )
+            if parent_column not in df.columns:
+                df[parent_column] = pd.Series(
+                    pd.NA, index=df.index, dtype="string"
+                )
+            to_update = need_lookup_mask & lookup_series.notna() & lookup_series.ne("")
+            if to_update.any():
+                df.loc[to_update, parent_column] = lookup_series.loc[to_update]
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
