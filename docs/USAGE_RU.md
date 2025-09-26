@@ -122,10 +122,31 @@ python scripts/get_assay_data.py --sep ';'
 
 ## Запуск тестов
 
+Создайте виртуальное окружение и установите dev-зависимости:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install .[dev]
+```
+
+После этого запустите unit- и smoke-наборы:
+
 ```bash
 pytest
 pytest tests/smoke
 ```
+
+Для съёма покрытия основных модулей (`library/`, `scripts/`,
+`activity_extraction_main.py`) используйте:
+
+```bash
+pytest --cov=library --cov=scripts --cov=activity_extraction_main \
+       --cov-report=term-missing --cov-report=xml
+```
+
+Команда показывает непройденные строки в терминале и сохраняет `coverage.xml`
+для CI либо IDE.
 
 Для проверки качества кода можно выполнить:
 
