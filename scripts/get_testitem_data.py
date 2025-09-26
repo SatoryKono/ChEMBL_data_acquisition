@@ -16,7 +16,7 @@ from collections import ChainMap
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 import requests
@@ -194,67 +194,48 @@ def resolve_pubchem_cid(
     if chembl_id and chembl_id in cache:
         return cache[chembl_id]
 
-    inchikey = _normalise_identifier(row.get("standard_inchi_key"), uppercase=True)
-    if inchikey:
-        cid = _select_primary_cid(
-            pl.get_cid_from_inchikey(inchikey, cfg),
+    def _store(value: str | None) -> str | None:
+        if chembl_id:
+            cache[chembl_id] = value
+        return value
+
+    def _attempt(
+        identifier: str,
+        value: str | None,
+        resolver: Callable[[str, PubChemCfg], str | None],
+    ) -> str | None:
+        if not value:
+            return None
+        resolved = resolver(value, cfg)
+        return _select_primary_cid(
+            resolved,
             chembl_id=chembl_id,
-            identifier="standard_inchi_key",
-            value=inchikey,
+            identifier=identifier,
+            value=value,
         )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
+
+    inchikey = _normalise_identifier(row.get("standard_inchi_key"), uppercase=True)
+    cid = _attempt("standard_inchi_key", inchikey, pl.get_cid_from_inchikey)
+    if cid:
+        return _store(cid)
 
     inchi = _normalise_identifier(row.get("standard_inchi"))
-    if inchi:
-        cid = _select_primary_cid(
-            pl.get_cid_from_inchi(inchi, cfg),
-            chembl_id=chembl_id,
-            identifier="standard_inchi",
-            value=inchi,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
+    cid = _attempt("standard_inchi", inchi, pl.get_cid_from_inchi)
+    if cid:
+        return _store(cid)
 
     pref_name = _normalise_identifier(row.get("pref_name"))
-    if pref_name:
-        cid = _select_primary_cid(
-            pl.get_cid(pref_name, cfg),
-            chembl_id=chembl_id,
-            identifier="pref_name",
-            value=pref_name,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
-        cid = _select_primary_cid(
-            pl.get_all_cid(pref_name, cfg),
-            chembl_id=chembl_id,
-            identifier="pref_name_partial",
-            value=pref_name,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
+    cid = _attempt("pref_name", pref_name, pl.get_cid)
+    if cid:
+        return _store(cid)
+    cid = _attempt("pref_name_partial", pref_name, pl.get_all_cid)
+    if cid:
+        return _store(cid)
 
     smiles = _normalise_identifier(row.get("canonical_smiles"))
-    if smiles:
-        cid = _select_primary_cid(
-            pl.get_cid_from_smiles(smiles, cfg),
-            chembl_id=chembl_id,
-            identifier="canonical_smiles",
-            value=smiles,
-        )
-        if cid:
-            if chembl_id:
-                cache[chembl_id] = cid
-            return cid
+    cid = _attempt("canonical_smiles", smiles, pl.get_cid_from_smiles)
+    if cid:
+        return _store(cid)
 
     if chembl_id and chembl_id not in cache:
         cache[chembl_id] = None
