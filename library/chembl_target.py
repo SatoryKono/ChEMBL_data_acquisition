@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from typing import Any
 
@@ -45,6 +46,49 @@ REACTION_EC_EXCLUDED_XREFS = {
     "METACYC",
     "EC_REACTION",
 }
+
+_EC_TOKEN_SPLIT = re.compile(r"[|;,/\\\s]+")
+_EC_FULL_PATTERN = re.compile(r"^\d+(?:\.(?:\d+|-)){3}$")
+
+
+def normalize_reaction_ec_numbers(values: Iterable[str | None]) -> str:
+    """Return a pipe-delimited string of sanitized EC numbers from ``values``."""
+
+    numbers = _collect_normalized_ec_tokens(values)
+    return "|".join(sorted(numbers))
+
+
+def _collect_normalized_ec_tokens(values: Iterable[str | None]) -> set[str]:
+    """Return a set of EC numbers extracted from ``values``."""
+
+    numbers: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        for token in _split_ec_candidates(value):
+            cleaned = _normalise_ec_token(token)
+            if cleaned and _EC_FULL_PATTERN.fullmatch(cleaned):
+                numbers.add(cleaned)
+    return numbers
+
+
+def _split_ec_candidates(value: str) -> list[str]:
+    """Return tokens parsed from ``value`` using standard separators."""
+
+    return [token for token in _EC_TOKEN_SPLIT.split(value) if token]
+
+
+def _normalise_ec_token(token: str) -> str:
+    """Return a cleaned EC token stripped of prefixes and whitespace."""
+
+    token = token.strip()
+    if not token:
+        return ""
+    upper = token.upper()
+    if upper.startswith("EC"):
+        token = token[2:]
+        token = token.lstrip(":._- ")
+    return token.strip()
 
 
 def _parse_gene_synonyms(synonyms: list[dict[str, str]]) -> str:
@@ -130,8 +174,7 @@ def _serialize_structure(value: Any) -> str:
 def _collect_reaction_ec_numbers(components: list[dict[str, Any]]) -> str:
     """Return pipe-delimited reaction EC numbers discovered in ``components``."""
 
-    numbers: list[str] = []
-    seen: set[str] = set()
+    candidates: list[str] = []
     for component in components:
         synonyms = _get_items(
             component.get("target_component_synonyms"), "target_component_synonym"
@@ -140,19 +183,17 @@ def _collect_reaction_ec_numbers(components: list[dict[str, Any]]) -> str:
             syn_type = (synonym.get("syn_type") or "").upper()
             if syn_type in {"REACTION", "REACTION_NUMBER", "EC_REACTION_NUMBER"}:
                 value = synonym.get("component_synonym", "")
-                if isinstance(value, str) and value and value not in seen:
-                    seen.add(value)
-                    numbers.append(value)
+                if isinstance(value, str) and value:
+                    candidates.append(value)
         xrefs = _get_items(component.get("target_component_xrefs"), "target")
         for xref in xrefs:
             src = (xref.get("xref_src_db") or "").upper()
             if src in REACTION_EC_EXCLUDED_XREFS:
                 continue
             value = xref.get("xref_id")
-            if isinstance(value, str) and value and value not in seen:
-                seen.add(value)
-                numbers.append(value)
-    return "|".join(numbers)
+            if isinstance(value, str) and value:
+                candidates.append(value)
+    return normalize_reaction_ec_numbers(candidates)
 
 
 def _get_items(container: Any, key: str) -> list[Any]:

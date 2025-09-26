@@ -32,4 +32,34 @@ def test_collect_reaction_ec_numbers_excludes_reactome_like_xrefs() -> None:
         }
     ]
 
-    assert _collect_reaction_ec_numbers(components) == "1.1.1.1|2.2.2.2|SABIO:555"
+    assert _collect_reaction_ec_numbers(components) == "1.1.1.1|2.2.2.2"
+
+
+def test_collect_reaction_ec_numbers_filters_non_ec_tokens() -> None:
+    """Ensure only strict EC numbers survive from mixed inputs."""
+
+    components = [
+        {
+            "target_component_synonyms": {
+                "target_component_synonym": [
+                    {
+                        "syn_type": "reaction",
+                        "component_synonym": "EC 3.1.1.1",
+                    },
+                    {
+                        "syn_type": "reaction_number",
+                        "component_synonym": "Not an EC",
+                    },
+                ]
+            },
+            "target_component_xrefs": {
+                "target": [
+                    {"xref_src_db": "OTHER", "xref_id": "1.1.-.-"},
+                    {"xref_src_db": "OTHER", "xref_id": "SABIO:555"},
+                    {"xref_src_db": "OTHER", "xref_id": "4.2.1.1"},
+                ]
+            },
+        }
+    ]
+
+    assert _collect_reaction_ec_numbers(components) == "1.1.-.-|3.1.1.1|4.2.1.1"
