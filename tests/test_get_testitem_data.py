@@ -183,7 +183,7 @@ def test_run_chembl_merges_parent_catalog(
     ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
         nonlocal captured_catalog, captured_source
         captured_catalog = kwargs.get("catalog")
-        captured_source = kwargs.get("catalog_source")
+        captured_source = kwargs.get("source")
         return (
             frame,
             gtd.ParentLookupStats(
@@ -576,7 +576,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
         catalog_cfg=catalog_cfg,
         timeout=None,
         catalog={"CHEMBL1": "CHEMBL1_PARENT"},
-        catalog_source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
     )
 
     assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
