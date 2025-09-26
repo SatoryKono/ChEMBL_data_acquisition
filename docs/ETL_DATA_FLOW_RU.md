@@ -53,7 +53,7 @@
 | --- | --- |
 | **Источники и формат входа** | CSV со списком идентификаторов молекул ChEMBL (по умолчанию `molecule_chembl_id`), потоковое чтение с опциональными ограничениями.【F:scripts/get_testitem_data.py†L151-L195】 |
 | **Внешние сервисы / файлы** | API ChEMBL для базовых данных соединений и API PubChem для обогащения по SMILES.【F:scripts/get_testitem_data.py†L151-L194】【F:scripts/get_testitem_data.py†L49-L123】 |
-| **Ключевые преобразования** | Обогащение результатов ChEMBL идентификаторами/свойствами PubChem, нормализация, добавление метаданных запуска и валидация схемой `TestitemsSchema` с вынесением ошибок в отдельные файлы.【F:scripts/get_testitem_data.py†L193-L249】 |
+| **Ключевые преобразования** | Обогащение результатов ChEMBL идентификаторами/свойствами PubChem, нормализация, объединение с кэшированным каталогом родителей, добавление метаданных запуска и валидация схемой `TestitemsSchema` с вынесением ошибок в отдельные файлы.【F:scripts/get_testitem_data.py†L193-L249】【F:library/molecule_catalog.py†L43-L136】 |
 | **Выход и хранение** | CSV с объединёнными полями ChEMBL/PubChem, YAML с метаданными и диагностикой качества рядом с экспортом.【F:scripts/get_testitem_data.py†L259-L299】 |
 | **Связи** | Таблица активностей использует `molecule_chembl_id`, что позволяет связывать показатели активности с обогащёнными свойствами соединений.【F:schemas/testitems.py†L12-L38】【F:schemas/activities.py†L13-L33】 |
 
@@ -72,4 +72,4 @@ graph TD
 
 *Конвейер таргетов* объединяет атрибуты ChEMBL, UniProt и IUPHAR, формируя идентификаторы, на которые ссылаются ассаи и аналитика активностей.【F:scripts/get_target_data.py†L1088-L1108】【F:schemas/assays.py†L41-L83】
 
-*Конвейер тест-айтемов* обогащает молекулы свойствами PubChem, которые используются в активности через общий ключ `molecule_chembl_id`.【F:scripts/get_testitem_data.py†L151-L299】【F:schemas/activities.py†L13-L33】
+*Конвейер тест-айтемов* обогащает молекулы свойствами PubChem и добавляет связи родитель→потомок из локального каталога, что позволяет использовать как `molecule_chembl_id`, так и `parent_molecule_chembl_id` при объединении с активностями.【F:scripts/get_testitem_data.py†L151-L299】【F:library/molecule_catalog.py†L43-L136】【F:schemas/activities.py†L13-L33】

@@ -80,6 +80,18 @@ python scripts/get_testitem_data.py \
 
 Downloads compound-centric annotations for the supplied identifiers.
 
+### Parent molecule catalogue requirements
+
+Test item exports must be reconciled with the ChEMBL parent catalogue to expose `parent_molecule_chembl_id`
+used by downstream aggregations. The cache path is configured via
+`sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or override the
+location through CLI/environment aliases such as `--sources.chembl.molecule_catalog.cache-path` or
+`CHEMBL_DA_MOLECULE_CATALOG_CACHE`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+
+Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
+file before executing the pipeline. The helper reuses the cached mapping when present and fetches the latest
+relationships from the ChEMBL API otherwise.【F:library/molecule_catalog.py†L43-L136】
+
 ## Input initialisation (`get_input_initialisation.py`)
 
 ```bash
