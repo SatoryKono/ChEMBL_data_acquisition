@@ -249,6 +249,21 @@ def test_run_all_preserves_reaction_ec_numbers(
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
 
+    sentinel_classifier = object()
+    classifier_calls: dict[str, int | bool] = {"from_config": 0, "append": False}
+
+    def fake_classifier_from_config(cfg_obj: Config) -> object:
+        classifier_calls["from_config"] += 1
+        return sentinel_classifier
+
+    def fake_append(df: pd.DataFrame, classifier: object) -> pd.DataFrame:
+        assert classifier is sentinel_classifier
+        classifier_calls["append"] = True
+        return df
+
+    monkeypatch.setattr(gtd.pc, "classifier_from_config", fake_classifier_from_config)
+    monkeypatch.setattr(gtd.pc, "append_protein_class_predictions", fake_append)
+
     original_finalise = gtd.tp.finalise_targets
 
     def patched_finalise(
@@ -274,3 +289,5 @@ def test_run_all_preserves_reaction_ec_numbers(
 
     result = pd.read_csv(output_csv, dtype=str)
     assert result.loc[0, "reaction_ec_numbers"] == "2.2.2.2|4.4.4.4"
+    assert classifier_calls["from_config"] == 1
+    assert classifier_calls["append"] is True

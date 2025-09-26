@@ -91,6 +91,21 @@ def test_run_all_uses_local_inputs(
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *a, **k: None)
 
+    sentinel_classifier = object()
+    classifier_calls: dict[str, int | bool] = {"from_config": 0, "append": False}
+
+    def fake_classifier_from_config(cfg_obj: Config) -> object:
+        classifier_calls["from_config"] += 1
+        return sentinel_classifier
+
+    def fake_append(df: pd.DataFrame, classifier: object) -> pd.DataFrame:
+        assert classifier is sentinel_classifier
+        classifier_calls["append"] = True
+        return df
+
+    monkeypatch.setattr(gtd.pc, "classifier_from_config", fake_classifier_from_config)
+    monkeypatch.setattr(gtd.pc, "append_protein_class_predictions", fake_append)
+
     # ``finalise_targets`` expects the ``type`` column to be missing prior to
     # merging with organism data. The wrapper removes it to mimic production
     # behaviour and keeps the original logic otherwise.
@@ -143,3 +158,6 @@ def test_run_all_uses_local_inputs(
         row["protein_synonym_list"]
         == "gene1|genea|sec1|alpha component|alt|recommended|name1|name2|alpha"
     )
+
+    assert classifier_calls["from_config"] == 1
+    assert classifier_calls["append"] is True
