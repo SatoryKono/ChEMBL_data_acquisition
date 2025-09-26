@@ -75,9 +75,45 @@
 
 #### Обогащение активностей (`activity_enrichment`)
 
+Блок отвечает за дополнительные атрибуты, которые записываются в каждую строку активностей. Он работает совместно с
+отдельной конфигурацией `activity_bounds` (описана ниже), отвечающей только за расчёт числовых границ.
+`activity_enrichment` состоит из двух независимых подсекций, каждая включается собственным флагом.
+
+##### Маркировка типа действия (`activity_enrichment.action_type`)
+
+* `enabled` — главный переключатель (по умолчанию `true`).【F:config.yaml†L192-L193】
+* `column` — название выходной колонки с итоговой меткой (`action_type`).【F:config.yaml†L194-L194】
+* Флаги логирования помогают отслеживать диагностические случаи:
+  * `log_missing` выводит предупреждение, если метка не определена (`true`).【F:config.yaml†L195-L195】
+  * `log_distribution` печатает итоговую статистику распределения (`true`).【F:config.yaml†L196-L196】
+* `metrics` сопоставляет типы измерений (IC50, EC50 и т.д.) с базовыми метками (`inhibition`, `activation`, `binding`). Список
+  расширяется при необходимости.【F:config.yaml†L197-L202】
+* `triages`, `functionality`, `mechanism` — словари переопределений для текстовых совпадений. По умолчанию заполнены только
+  типичные функциональные роли (agonist, antagonist и пр.).【F:config.yaml†L203-L210】
+* Списки `triage_fields`, `functionality_fields`, `mechanism_fields` задают, какие исходные колонки просматриваются перед применением
+  значений по метрикам.【F:config.yaml†L211-L219】
+* `allowlist` ограничивает допустимые метки; значения вне списка заменяются на `fallback` после логирования отклонения.【F:config.yaml†L220-L227】
+* `positive_label` и `negative_label` задают читаемые ярлыки для положительных/отрицательных модуляторов (`PAM`/`NAM`), а
+  `fallback` равен `unknown`.【F:config.yaml†L228-L230】
+
+##### Сводка свойств активности (`activity_enrichment.activity_properties`)
+
+* `enabled` — флаг включения (`true`).【F:config.yaml†L231-L233】
+* `column` — исходная колонка со структурированными свойствами (`activity_properties`).【F:config.yaml†L233-L233】
+* `summary_column` — колонка для текстового резюме (`activity_property_summary`).【F:config.yaml†L234-L234】
+* `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).【F:config.yaml†L235-L237】
+* `separator` и `pair_separator` управляют форматированием списка свойств (`"; "` между парами и `"="` между названием и значением).【F:config.yaml†L238-L239】
+* `drop_source_column` удаляет исходную структурированную колонку после агрегации (`true`).【F:config.yaml†L240-L240】
+* Флаги логирования по умолчанию выключены (`log_missing=false`, `log_distribution=false`).【F:config.yaml†L241-L242】
+* `allowlist` ограничивает перечень сохраняемых групп (measurement, assay, comments, effect_features, triage, mechanism,
+  functionality).【F:config.yaml†L243-L250】
+* `hash_column` хранит детерминированный отпечаток итоговых свойств (`properties_hash`) для отслеживания изменений далее по цепочке.【F:config.yaml†L251-L251】
+
+##### Границы активности (`activity_bounds`)
+
 Пайплайн активностей дополняет выгрузку нормализованными границами с помощью `compute_activity_bounds` в
-`scripts/get_activity_data.py`. Настройки собраны в блоке `activity_bounds` и управляют последовательностью детерминированных
-шагов, которые выполняются для каждой строки в следующем порядке：【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+`scripts/get_activity_data.py`. Настройки собраны в отдельном блоке `activity_bounds` (вне `activity_enrichment`) и управляют
+последовательностью детерминированных шагов, которые выполняются для каждой строки в следующем порядке：【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
 
 1. Использовать готовые `standard_lower_value`/`standard_upper_value`, если обе границы заданы.
 2. Скомбинировать `standard_value` с противоположной границей и заполнить пропущенное значение.
