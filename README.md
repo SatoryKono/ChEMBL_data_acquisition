@@ -131,7 +131,7 @@ pytest
 Для съёма покрытия основных модулей используйте плагин `pytest-cov`:
 
 ```bash
-pytest --cov=library --cov=scripts --cov=activity_extraction_main \
+pytest --cov=library --cov=scripts \
        --cov-report=term-missing --cov-report=xml
 ```
 
@@ -167,6 +167,11 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 `*.meta.yaml`. Скрипт `scripts.get_activities` предназначен только для
 демонстрационного логирования и не выполняет файловых операций. Каталог с
 результатами игнорируется Git и автоматически публикуется как артефакт CI.
+
+> **Примечание.** Ранее эта функциональность была доступна через
+> `activity_extraction_main.py`. Теперь используйте модульный запуск
+> `python -m scripts.get_activity_data`, что упрощает сопровождение и
+> работу в виртуальных окружениях.
 
 ## Usage
 

@@ -249,11 +249,10 @@ pytest
 pytest tests/smoke
 ```
 
-To capture code coverage for the main packages (`library/`, `scripts/` and
-`activity_extraction_main.py`) run:
+To capture code coverage for the main packages (`library/` and `scripts/`) run:
 
 ```bash
-pytest --cov=library --cov=scripts --cov=activity_extraction_main \
+pytest --cov=library --cov=scripts \
        --cov-report=term-missing --cov-report=xml
 ```
 

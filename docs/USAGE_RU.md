@@ -248,11 +248,10 @@ pytest
 pytest tests/smoke
 ```
 
-Для съёма покрытия основных модулей (`library/`, `scripts/`,
-`activity_extraction_main.py`) используйте:
+Для съёма покрытия основных модулей (`library/`, `scripts/`) используйте:
 
 ```bash
-pytest --cov=library --cov=scripts --cov=activity_extraction_main \
+pytest --cov=library --cov=scripts \
        --cov-report=term-missing --cov-report=xml
 ```
 
