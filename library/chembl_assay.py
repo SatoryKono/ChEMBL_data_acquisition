@@ -96,6 +96,7 @@ TESTITEM_STRUCTURE_COLUMNS = {
 
 TESTITEM_COLUMNS = [
     "molecule_chembl_id",
+    "parent_molecule_id",
     "pref_name",
     "max_phase",
     "molecule_type",

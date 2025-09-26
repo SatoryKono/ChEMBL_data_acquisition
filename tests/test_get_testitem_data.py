@@ -28,6 +28,7 @@ def test_run_chembl_column_order(
         [
             {
                 "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_id": "CHEMBL0",
                 "molecule_type": "Small molecule",
                 "salt_chembl_id": "CHEMBL1-SALT",
                 "chirality": 1,
@@ -129,3 +130,47 @@ def test_run_chembl_initialises_pubchem_session(
 
     assert rc == 0
     assert captured["init"] == (cfg.api, cfg.retry)
+
+
+def test_ensure_no_parant_column_detects_typo() -> None:
+    """Utility rejects frames containing the typo column."""
+
+    df = pd.DataFrame({"parant_molecule_id": ["CHEMBL0"]})
+
+    with pytest.raises(ValueError):
+        gtd.ensure_no_parant_column(df)
+
+
+def test_run_chembl_fails_on_parant_column(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    """``run_chembl`` aborts early when the typo column is present."""
+
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "parant_molecule_id": ["CHEMBL0"],
+        }
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
+
+    def fail_write(*_: object, **__: object) -> Path:
+        raise AssertionError("write_csv should not be called when validation fails")
+
+    monkeypatch.setattr(io, "write_csv", fail_write)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+
+    rc = gtd.run_chembl(cfg, args)
+
+    assert rc == 1
