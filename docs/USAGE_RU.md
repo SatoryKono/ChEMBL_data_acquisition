@@ -23,6 +23,10 @@
 Перед сетевыми вызовами выполняется `library.config.ensure_dirs`, чтобы `local.io.output_dir` и `local.io.cache_dir` существовали
 (если `local.io.exist_ok=true`, каталоги создаются автоматически).
 
+### Примерные входные файлы
+
+В репозитории есть несколько компактных наборов в `tests/data/` для быстрой проверки пайплайнов (например, `tests/data/activity_ids_small.csv` и `tests/data/input-smoke/testitem.csv`). Пайплайны без готовых примеров требуют пользовательских CSV с колонкой идентификатора из `config.yaml` или переданной через `--column`.
+
 ### Мониторинг структурированных логов
 
 Все утилиты используют `library.logging_setup.Logger` и пишут JSON-строки с уникальным `run_id` и дополнительными полями (`status`, `rps` и др.). Основные события:
@@ -47,12 +51,13 @@ python scripts/get_document_data.py all --input documents.csv --column document_
 
 ```bash
 python scripts/get_activity_data.py \
-  --input data/input-smoke/activity.csv \
-  --column activity_chembl_id \
+  --input tests/data/activity_ids_small.csv \
+  --column activity_id \
   --batch-size 25 \
   --timeout 45
 ```
 
+* В репозитории доступен файл `tests/data/activity_ids_small.csv`; задайте `--column activity_id` (либо переименуйте колонку в `activity_chembl_id`, чтобы использовать настройки по умолчанию).
 * Использует колонку `sources.chembl.pipelines.activity.column` (по умолчанию `activity_chembl_id`).
 * Создаёт основной CSV, sidecar `*.meta.yaml`, при необходимости `*_failure_cases.csv` и отчёты качества.
 * Поддерживает `--limit` (ограничение по количеству ID) и `--dry-run` (проверка входных данных без запросов к API).
@@ -63,31 +68,31 @@ python scripts/get_activity_data.py \
 
 ```bash
 python scripts/get_assay_data.py \
-  --input data/input-smoke/assay.csv \
+  --input path/to/assay_ids.csv \
   --column assay_chembl_id \
   --batch-size 25
 ```
 
-Загружает метаданные ассайев ChEMBL для указанных идентификаторов.
+Загружает метаданные ассайев ChEMBL для указанных идентификаторов. Подготовьте CSV с заголовком `assay_chembl_id` (либо передайте своё имя колонки через `--column`) — готового smoke-файла в репозитории нет.
 
 ## Метаданные документов (`get_document_data.py`)
 
 ```bash
 python scripts/get_document_data.py all \
-  --input data/input-smoke/documents.csv \
+  --input path/to/documents.csv \
   --column document_chembl_id \
   --batch-size 20
 ```
 
 
-Команда объединяет данные ChEMBL и PubMed. Для разовых корректировок доступны флаги `--batch-size`, `--timeout`, `--limit`,
+Команда объединяет данные ChEMBL и PubMed. Подготовьте CSV с колонкой `document_chembl_id` или передайте имя своей колонки через `--column` — smoke-набор для пайплайна в репозитории отсутствует. Для разовых корректировок доступны флаги `--batch-size`, `--timeout`, `--limit`,
 `--dry-run`. Вложенные параметры (например `sources.chembl.pipelines.document.pubmed.batch_size`) меняются через конфигурацию
 или переменные окружения, например:
 
 ```bash
 CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
   python scripts/get_document_data.py \
-    --input data/input-smoke/documents.csv \
+    --input path/to/documents.csv \
     --column document_chembl_id
 ```
 
@@ -100,38 +105,38 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 
 ```bash
 python scripts/get_document_data.py pubmed \
-  --input data/input-smoke/documents.csv \
+  --input path/to/documents.csv \
   --column document_chembl_id \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
-  --fallback-doi-csv data/input-smoke/doi_overrides.csv \
+  --fallback-doi-csv path/to/doi_overrides.csv \
   --fallback-doi-pmid-column pmid_override \
   --fallback-doi-value-column doi_override
 ```
 
 Флаги `--openalex-rps` и `--crossref-rps` позволяют временно изменить лимиты без правки YAML, а параметры `--fallback-doi-*`
-подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам.【F:scripts/get_document_data.py†L989-L1041】
+подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column` (по умолчанию `pmid_override` и `doi_override`).【F:scripts/get_document_data.py†L989-L1041】
 
 
 ## Агрегация таргетов (`get_target_data.py`)
 
 ```bash
 python scripts/get_target_data.py \
-  --input data/input-smoke/targets.csv \
+  --input path/to/targets.csv \
   --column target_chembl_id
 ```
 
-Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`.
+Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`. Соберите CSV с колонкой `target_chembl_id` (по одной записи в строке); готовый smoke-набор отсутствует.
 
 ## Обогащение тест-объектов (`get_testitem_data.py`)
 
 ```bash
 python scripts/get_testitem_data.py \
-  --input data/input-smoke/testitem.csv \
+  --input tests/data/input-smoke/testitem.csv \
   --column molecule_chembl_id
 ```
 
-Выгружает дополнительную информацию о соединениях.
+Выгружает дополнительную информацию о соединениях. Можно использовать комплект `tests/data/input-smoke/testitem.csv` или собственный CSV с нужной колонкой идентификаторов.
 
 ### Контроль `properties_hash`
 
@@ -161,9 +166,9 @@ PubChem-дополнение добавляет детерминированны
 столбцы `salt_chembl_id`, `natural_product`, `prodrug`, `polymer_flag` на
 основе двух CSV-словарей:
 
-* `dictionary/_testitem/molecule_hierarchy.csv` со столбцами `molecule_chembl_id`,
+* `tests/data/input-smoke/molecule_hierarchy.csv` со столбцами `molecule_chembl_id`,
   `parent_molecule_chembl_id` описывает связи соли и родителя.
-* `dictionary/_testitem/molecule_catalog.csv` со столбцами `molecule_chembl_id`,
+* `tests/data/input-smoke/molecule_catalog.csv` со столбцами `molecule_chembl_id`,
   `natural_product`, `prodrug`, `polymer_flag` содержит булевы признаки.
 
 Если молекулы нет в словарях, в лог попадают предупреждения
@@ -180,24 +185,24 @@ PubChem-дополнение добавляет детерминированны
 
 ```bash
 python -m library.utils.cli_tools.get_input_initialisation \
-  --same-doc data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx \
-  --all-doc data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx \
-  --out-dir data/output/ChEMBL/processed
+  --same-doc path/to/ChEMBL_same_document.xlsx \
+  --all-doc path/to/ChEMBL_all.xlsx \
+  --out-dir path/to/output
 ```
 
 * Формирует таблицы пар (`pairs_same_document.csv`, `pairs_independent.csv`, `pairs_non_independent.csv`).
 * Создаёт срезы по сущностям (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
-* Добавляет папку `data_validity_report/` с отчётами качества для каждого файла.
+* Добавляет папку `data_validity_report/` с отчётами качества для каждого файла. Используйте исходные Excel-выгрузки вашего процесса ChEMBL — демонстрационные файлы в репозитории не поставляются.
 
 ## Профайлер качества таблиц (`library/utils/cli_tools/table_quality_main.py`)
 
 ```bash
 python -m library.utils.cli_tools.table_quality_main \
-  --input data/input-smoke/activity.csv \
+  --input tests/data/activities_valid.csv \
   --table-name activity
 ```
 
-Генерирует `<table-name>_quality_report_table.csv` и `<table-name>_data_correlation_report_table.csv`, используя настройки `local.io`.
+Генерирует `<table-name>_quality_report_table.csv` и `<table-name>_data_correlation_report_table.csv`, используя настройки `local.io`. При необходимости подставьте собственные CSV.
 
 ## Переопределения конфигурации во время запуска
 

@@ -23,6 +23,10 @@ arguments with the final values.
 Before any network calls the utilities invoke `library.config.ensure_dirs`, ensuring that `local.io.output_dir` and
 `local.io.cache_dir` exist (subject to `local.io.exist_ok`).
 
+### Sample inputs
+
+The repository includes a few compact fixtures under `tests/data/` for smoke-level experimentation (for example, `tests/data/activity_ids_small.csv` and `tests/data/input-smoke/testitem.csv`). Pipelines without bundled samples require user-provided CSVs that expose the identifier column referenced in `config.yaml` or overridden via `--column`.
+
 ### Monitoring structured logs
 
 All entry points rely on `library.logging_setup.Logger` and emit JSON lines enriched with a unique `run_id` and context such as `status`/`rps`. Key lifecycle events include:
@@ -47,12 +51,13 @@ Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the de
 
 ```bash
 python scripts/get_activity_data.py \
-  --input data/input-smoke/activity.csv \
-  --column activity_chembl_id \
+  --input tests/data/activity_ids_small.csv \
+  --column activity_id \
   --batch-size 25 \
   --timeout 45
 ```
 
+* The repository ships `tests/data/activity_ids_small.csv` for smoke-style runs; override `--column` to the file header (`activity_id`) or rename the column to `activity_chembl_id` to rely on defaults.
 * Reads the column configured at `sources.chembl.pipelines.activity.column` (`activity_chembl_id` by default).
 * Writes the main CSV, `*.meta.yaml`, optional `*_failure_cases.csv` and quality reports.
 * Supports `--limit` to restrict the number of identifiers and `--dry-run` to validate inputs without API calls.
@@ -63,30 +68,30 @@ python scripts/get_activity_data.py \
 
 ```bash
 python scripts/get_assay_data.py \
-  --input data/input-smoke/assay.csv \
+  --input path/to/assay_ids.csv \
   --column assay_chembl_id \
   --batch-size 25
 ```
 
-Fetches assay metadata from ChEMBL using the configured identifier column.
+Fetches assay metadata from ChEMBL using the configured identifier column. Prepare a CSV with a single header named `assay_chembl_id` (or pass `--column` to match your file). The project does not contain a bundled smoke file for assays.
 
 ## Document metadata (`get_document_data.py`)
 
 ```bash
 python scripts/get_document_data.py all \
-  --input data/input-smoke/documents.csv \
+  --input path/to/documents.csv \
   --column document_chembl_id \
   --batch-size 20
 ```
 
-The script merges ChEMBL and PubMed sources. Use the exposed flags (`--batch-size`, `--timeout`, `--limit`, `--dry-run`) for
+The script merges ChEMBL and PubMed sources. Prepare a CSV with the `document_chembl_id` column or override `--column` to match your schema—the repository does not bundle a smoke dataset for this pipeline. Use the exposed flags (`--batch-size`, `--timeout`, `--limit`, `--dry-run`) for
 one-off tweaks. Nested parameters such as the PubMed batch size are managed via configuration or environment variables, for
 example:
 
 ```bash
 CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
   python scripts/get_document_data.py \
-    --input data/input-smoke/documents.csv \
+    --input path/to/documents.csv \
     --column document_chembl_id
 ```
 
@@ -98,37 +103,37 @@ allowed switches (for example, `--batch-size` for PubMed batching).
 
 ```bash
 python scripts/get_document_data.py pubmed \
-  --input data/input-smoke/documents.csv \
+  --input path/to/documents.csv \
   --column document_chembl_id \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
-  --fallback-doi-csv data/input-smoke/doi_overrides.csv \
+  --fallback-doi-csv path/to/doi_overrides.csv \
   --fallback-doi-pmid-column pmid_override \
   --fallback-doi-value-column doi_override
 ```
 
 Use the on-demand rate limit switches to try faster OpenAlex or CrossRef lookups without touching the YAML file; the fallback
-CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried.【F:scripts/get_document_data.py†L989-L1041】
+CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column` (the default headers are `pmid_override` and `doi_override`).【F:scripts/get_document_data.py†L989-L1041】
  
 ## Target aggregation (`get_target_data.py`)
 
 ```bash
 python scripts/get_target_data.py \
-  --input data/input-smoke/targets.csv \
+  --input path/to/targets.csv \
   --column target_chembl_id
 ```
 
-Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`.
+Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository.
 
 ## Test item enrichment (`get_testitem_data.py`)
 
 ```bash
 python scripts/get_testitem_data.py \
-  --input data/input-smoke/testitem.csv \
+  --input tests/data/input-smoke/testitem.csv \
   --column molecule_chembl_id
 ```
 
-Downloads compound-centric annotations for the supplied identifiers.
+Downloads compound-centric annotations for the supplied identifiers. The command can be executed with the bundled smoke dataset in `tests/data/input-smoke/testitem.csv` or any CSV that exposes the required identifier column.
 
 ### Tracking `properties_hash`
 
@@ -161,9 +166,9 @@ The optional `testitem_molecule_enrichment` stage augments `testitem.csv` with
 `salt_chembl_id`, `natural_product`, `prodrug`, and `polymer_flag` using two
 CSV dictionaries:
 
-* `dictionary/_testitem/molecule_hierarchy.csv` (columns `molecule_chembl_id`,
+* `tests/data/input-smoke/molecule_hierarchy.csv` (columns `molecule_chembl_id`,
   `parent_molecule_chembl_id`) maps salts to their parent molecules.
-* `dictionary/_testitem/molecule_catalog.csv` (columns `molecule_chembl_id`,
+* `tests/data/input-smoke/molecule_catalog.csv` (columns `molecule_chembl_id`,
   `natural_product`, `prodrug`, `polymer_flag`) stores boolean attributes.
 
 Missing dictionary rows trigger warnings such as
@@ -181,25 +186,25 @@ raw catalogue tokens.【F:library/testitem_enrichment.py†L17-L216】
 
 ```bash
 python -m library.utils.cli_tools.get_input_initialisation \
-  --same-doc data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx \
-  --all-doc data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx \
-  --out-dir data/output/ChEMBL/processed
+  --same-doc path/to/ChEMBL_same_document.xlsx \
+  --all-doc path/to/ChEMBL_all.xlsx \
+  --out-dir path/to/output
 ```
 
 * Builds pair tables (`pairs_same_document.csv`, `pairs_independent.csv`, `pairs_non_independent.csv`).
 * Produces entity-specific slices (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
-* Creates a `data_validity_report/` folder with quality reports for each exported table.
+* Creates a `data_validity_report/` folder with quality reports for each exported table. Supply the original Excel exports from your ChEMBL workflow—example fixtures are not part of the repository.
 
 ## Table quality profiler (`library/utils/cli_tools/table_quality_main.py`)
 
 ```bash
 python -m library.utils.cli_tools.table_quality_main \
-  --input data/input-smoke/activity.csv \
+  --input tests/data/activities_valid.csv \
   --table-name activity
 ```
 
 Generates `<table-name>_quality_report_table.csv` and `<table-name>_data_correlation_report_table.csv` using the CSV defaults from
-`local.io`.
+`local.io`. Replace the sample file with your own extracts to analyse custom tables.
 
 ## Runtime configuration overrides
 
