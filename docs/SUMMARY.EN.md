@@ -94,7 +94,19 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 
 ## Configuration
-- The primary `config.yaml` contains sections such as `api`, `chembl`, `openalex`, `crossref`, `uniprot`, `pubchem`, `document`, `target`, `resources`, `io`, `jobs`, `batch`, etc., with defaults for URLs, timeouts, RPS limits, chunk sizes, and dictionary paths.
+- The top-level structure of `config.yaml` is split into `sources`, `local`, `activity_bounds`, and `system`.
+
+
+- `sources` enumerates every remote dependency: `sources.chembl.api` tunes base URLs, retries, throttling, and headers; `sources.chembl.cache` and `sources.chembl.molecule_catalog` manage on-disk caches; `sources.chembl.pipelines.*` defines identifier columns, batching, and per-pipeline limits; sibling blocks (`sources.openalex`, `sources.crossref`, `sources.uniprot.api`/`mapping`, `sources.iuphar`, `sources.pubchem`, `sources.pubmed`, `sources.semantic_scholar`) provide analogous network and rate-limit settings.
+
+
+- `local` collects filesystem expectations: `local.resources` resolves dictionary folders and reference CSV paths, `local.io` standardises output/cache directories and CSV formatting, while `local.init` lists Excel inputs and destinations for the initialisation workflow.
+
+
+- `activity_bounds` toggles how relation strings are converted into numeric ranges, including rounding digits, clamping, and logging of unknown relations.
+
+
+- `system` centralises application-wide behaviour via `system.log`, `system.rate`, `system.retry`, and `system.doc_type` weighting tables.
 
 
 - Pydantic models enforce typing, URL validation, and a mandatory `user_agent` with an email; precedence order: YAML < environment < CLI.
@@ -142,10 +154,11 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 3. Run `pre-commit install` and optionally `pre-commit run --all-files` for an initial quality sweep.
 
 
-4. Prepare an input CSV with the required identifier column (defaults: `input.csv`/`activity_id`).
+4. Prepare an input CSV with the required identifier column (defaults: `input.csv`/`activity_chembl_id`).
+   - The column name is loaded from `sources.chembl.pipelines.activity.column` in the configuration (default `activity_chembl_id`) and can be overridden via `--column` or `config.yaml`.
 
 
-5. Execute the desired CLI script, e.g. `python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`.
+5. Execute the desired CLI script, e.g. `python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`, which downloads data and writes the CSV/metadata files.
 
 
 6. Alternative pipelines: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `get_input_initialisation`, `table_quality_main`.
@@ -298,7 +311,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 
 
-7. Target command (`python -m scripts.get_activities ...`, etc.) executed with required flags and log level.
+7. Target command (`python -m scripts.get_activity_data ...`, etc.) executed with required flags and log level.
 
 
 
@@ -321,7 +334,7 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases
 
 ## One-liner Setup & Run
 ```
-python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
+python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 

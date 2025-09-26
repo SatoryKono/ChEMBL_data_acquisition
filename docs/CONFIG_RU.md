@@ -38,6 +38,17 @@
 | `cache_ttl` | `3600` | Время жизни кэша API-ответов (сек.). |
 | `cache_maxsize` | `1024` | Максимальное число кэшированных ответов. |
 
+<a id="sources-chembl-molecule-catalog"></a>
+### Каталог молекул (`sources.chembl.molecule_catalog`)
+
+| Ключ | Значение по умолчанию | Описание |
+| --- | --- | --- |
+| `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами. |
+| `endpoint` | `molecule` | Ресурс REST API ChEMBL, из которого подкачиваются данные при обновлении кэша. |
+| `child_field` | `molecule_chembl_id` | Поле ответа API с идентификатором дочерней молекулы. |
+| `parent_field` | `parent_molecule_chembl_id` | Поле ответа API с идентификатором родительской молекулы. |
+| `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
+
 ### Пайплайны (`sources.chembl.pipelines`)
 
 Каждый подпункт задаёт значения по умолчанию для одноимённого CLI-скрипта. Изменения аргументов CLI синхронизируются с конфигурацией перед запуском.
@@ -248,7 +259,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 * Флаг `--config` позволяет указать альтернативный YAML (по умолчанию `config.yaml`).
 * `--print-config` выводит итоговую конфигурацию (с учётом окружения и CLI) и завершает работу.
 * Аргументы, прокинутые через `apply_config_overrides`, обновляют конфигурацию. Например, `--batch-size 25` задаёт `sources.chembl.pipelines.activity.batch_size` на время запуска.
-* Для редких параметров используйте точечную запись: `python scripts/get_activity_data.py --sources.chembl.api.rps 10`.
+* Вложенные параметры правятся через `config.yaml` или переменные окружения (например, `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`). Флаги вида `--sources.…` парсер не поддерживает.
 
 ## Процесс валидации
 

@@ -53,15 +53,29 @@ Fetches assay metadata from ChEMBL using the configured identifier column.
 ## Document metadata (`get_document_data.py`)
 
 ```bash
-python scripts/get_document_data.py \
+python scripts/get_document_data.py all \
   --input data/input-smoke/documents.csv \
   --column document_chembl_id \
-  --sources.chembl.pipelines.document.pubmed.batch_size 20
+  --batch-size 20
 ```
 
-The script merges ChEMBL and PubMed sources. CLI overrides accept dotted paths, enabling fine-tuned adjustments such as increasing
-the PubMed batch size.
+The script merges ChEMBL and PubMed sources. Use the exposed flags (`--batch-size`, `--timeout`, `--limit`, `--dry-run`) for
+one-off tweaks. Nested parameters such as the PubMed batch size are managed via configuration or environment variables, for
+example:
 
+```bash
+CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
+  python scripts/get_document_data.py \
+    --input data/input-smoke/documents.csv \
+    --column document_chembl_id
+```
+
+The same effect can be achieved by editing `sources.chembl.pipelines.document.pubmed.batch_size` in `config.yaml`.
+Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sources.
+Consult `python scripts/get_document_data.py --help` for a summary and
+`python scripts/get_document_data.py <sub-command> --help` for the
+allowed switches (for example, `--batch-size` for PubMed batching).
+ 
 ## Target aggregation (`get_target_data.py`)
 
 ```bash
@@ -86,9 +100,14 @@ Downloads compound-centric annotations for the supplied identifiers.
 
 Test item exports must be reconciled with the ChEMBL parent catalogue to expose `parent_molecule_chembl_id`
 used by downstream aggregations. The cache path is configured via
-`sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or override the
+`sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or adjust the
+location by setting `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
+`CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+ 
+[`sources.chembl.molecule_catalog`](./CONFIG_EN.md#sources-chembl-molecule-catalog) (`cache_path`); keep the JSON file accessible to the runner or override the
 location through CLI/environment aliases such as `--sources.chembl.molecule_catalog.cache-path` or
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+ 
 
 Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
 file before executing the pipeline. The helper reuses the cached mapping when present and fetches the latest
@@ -118,17 +137,24 @@ python table_quality_main.py \
 Generates `<table-name>_quality_report_table.csv` and `<table-name>_data_correlation_report_table.csv` using the CSV defaults from
 `local.io`.
 
-## Configuration overrides from the CLI
+## Runtime configuration overrides
 
-Any CLI option can target nested configuration keys using dotted notation. Examples:
+CLI flags cover the documented arguments for each script. For example, the activity pipeline accepts
+`--batch-size`, `--timeout`, `--limit` and `--dry-run`:
 
 ```bash
-# Increase the global ChEMBL rate limit for a single run
-python scripts/get_activity_data.py --sources.chembl.api.rps 10
-
-# Change the CSV delimiter without editing config.yaml
-python scripts/get_assay_data.py --sep ';'
+python scripts/get_activity_data.py --batch-size 25 --timeout 45
 ```
+
+Nested configuration values are adjusted via `config.yaml` or environment variables. To temporarily raise the
+ChEMBL API rate limit without editing the file, export an override and execute the command in the same shell:
+
+```bash
+export CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10
+python scripts/get_activity_data.py
+```
+
+Inspect the effective configuration with `--print-config` before running the pipeline when needed.
 
 ## Environment variables
 

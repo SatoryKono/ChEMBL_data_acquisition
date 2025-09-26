@@ -342,14 +342,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
         logger.info("chembl_fetch_done", rows=len(df))
+        parent_column = cfg.molecule_catalog.parent_field
         if parent_catalog and "molecule_chembl_id" in df.columns:
-            mapped = df["molecule_chembl_id"].map(parent_catalog)
-            if "parent_molecule_chembl_id" in df.columns:
-                df["parent_molecule_chembl_id"] = df[
-                    "parent_molecule_chembl_id"
-                ].fillna(mapped)
+            normalised_ids = _normalise_chembl_ids(df["molecule_chembl_id"])
+            mapped = normalised_ids.map(parent_catalog)
+            if parent_column in df.columns:
+                df[parent_column] = df[parent_column].fillna(mapped)
             else:
-                df["parent_molecule_chembl_id"] = mapped
+                df[parent_column] = mapped
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
