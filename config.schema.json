@@ -1019,6 +1019,12 @@
           "description": "Skip PubChem lookups when local pubchem_* columns are populated",
           "title": "Prefer Local Smiles",
           "type": "boolean"
+        },
+        "use_parent_for_salts": {
+          "default": false,
+          "description": "Fall back to parent structures when PubChem CID lookup fails",
+          "title": "Use Parent For Salts",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",

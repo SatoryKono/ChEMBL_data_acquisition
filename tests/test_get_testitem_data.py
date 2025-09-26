@@ -59,6 +59,102 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     pd.testing.assert_frame_equal(result, expected)
 
 
+def test_add_pubchem_data_uses_parent_structures(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                "parent_molecule_chembl_id": "CHEMBL2",
+                "canonical_smiles": None,
+                "standard_inchi": None,
+                "standard_inchi_key": None,
+            },
+            {
+                "molecule_chembl_id": "CHEMBL2",
+                "parent_molecule_chembl_id": None,
+                "canonical_smiles": "C",
+                "standard_inchi": "InChI=1S/CH4/h1H4",
+                "standard_inchi_key": "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+            },
+        ]
+    )
+    cfg = pl.PubChemCfg(delay=0, use_parent_for_salts=True)
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_get_cid_from_smiles(smiles: str, _: pl.PubChemCfg) -> str | None:
+        calls.append(("smiles", smiles))
+        return "10" if smiles == "C" else None
+
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid_from_smiles)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", lambda *_: None)
+
+    properties = pl.Properties(
+        IUPACName="Methane",
+        MolecularFormula="CH4",
+        iSMILES="C",
+        cSMILES="C",
+        InChI="InChI=1S/CH4/h1H4",
+        InChIKey="VNWKTOKETHGBQD-UHFFFAOYSA-N",
+    )
+    monkeypatch.setattr(pl, "get_properties", lambda *_: properties)
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert list(result["pubchem_cid"].astype("string")) == ["10", "10"]
+    assert any(call == ("smiles", "C") for call in calls)
+
+
+def test_add_pubchem_data_logs_missing_parent_structure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL100",
+                "parent_molecule_chembl_id": "CHEMBL200",
+                "canonical_smiles": None,
+                "standard_inchi": None,
+                "standard_inchi_key": None,
+            },
+            {
+                "molecule_chembl_id": "CHEMBL200",
+                "parent_molecule_chembl_id": None,
+                "canonical_smiles": None,
+                "standard_inchi": None,
+                "standard_inchi_key": None,
+            },
+        ]
+    )
+    cfg = pl.PubChemCfg(delay=0, use_parent_for_salts=True)
+
+    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("PubChem lookup should not be invoked")
+
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", fail)
+    monkeypatch.setattr(pl, "get_properties", fail)
+
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured.append((event, kwargs))
+
+    monkeypatch.setattr(gtd.logger, "warning", fake_warning)
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert result[gtd.PUBCHEM_COLUMNS].isna().all().all()
+    assert any(
+        event == "pubchem_parent_missing_structure"
+        and details.get("child_id") == "CHEMBL100"
+        and details.get("parent_id") == "CHEMBL200"
+        for event, details in captured
+    )
+
+
 def test_run_chembl_column_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
