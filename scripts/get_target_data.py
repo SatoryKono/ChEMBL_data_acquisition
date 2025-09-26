@@ -28,6 +28,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
+from library import organism_classification
 from library import target_postprocessing as tp
 from library import protein_classification as pc
 from library import uniprot_library as uu
@@ -348,15 +349,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=30.0,
         help="Timeout in seconds for each HTTP request",
-    )
-    all_cmd.add_argument(
-        "--organism-csv",
-        type=Path,
-        default=None,
-        help=(
-            "CSV mapping 'genus' to organism 'type' for finalisation "
-            "(default: config resources.organism_csv)"
-        ),
     )
     all_cmd.add_argument(
         "--uniprot-column",
@@ -1013,11 +1005,13 @@ def merge_results(
         classifier = pc.classifier_from_config(cfg)
     merged = pc.append_protein_class_predictions(merged, classifier)
     processed = tp.postprocess_targets(merged)
-    organism_df = pd.read_csv(
-        cfg.target.all.organism_csv,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-        dtype=str,
+    organism_df = organism_classification.add_cellularity_smart(
+        merged,
+        genus_col="genus",
+        superkingdom_col="superkingdom",
+        phylum_col="phylum",
+        lineage_class_col="lineage_class",
+        taxon_id_col="taxon_id",
     )
     final_df = tp.finalise_targets(processed, organism_df)
     logger.info("merge_results_done", rows=len(final_df))
@@ -1184,7 +1178,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "data_dir": "target.all.data_dir",
                 "target_csv": "target.all.target_csv",
                 "family_csv": "target.all.family_csv",
-                "organism_csv": "target.all.organism_csv",
                 "uniprot_column": "target.all.uniprot_column",
                 "chembl_out": "target.all.chembl_out",
                 "uniprot_out": "target.all.uniprot_out",
