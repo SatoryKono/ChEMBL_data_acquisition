@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
+import pandas as pd
 import pandera.pandas as pa
 from pandera.dtypes import DataType
 
@@ -16,6 +17,10 @@ TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "parent_molecule_chembl_id": pa.Column(
             str, required=False, nullable=True
         ),
+        "salt_chembl_id": pa.Column(str, required=False, nullable=True),
+        "natural_product": pa.Column(pd.BooleanDtype(), required=False, nullable=True),
+        "prodrug": pa.Column(pd.BooleanDtype(), required=False, nullable=True),
+        "polymer_flag": pa.Column(pd.BooleanDtype(), required=False, nullable=True),
 
         "black_box_warning": pa.Column(PA_ANY, required=False, nullable=True),
         "first_approval": pa.Column(PA_ANY, required=False, nullable=True),

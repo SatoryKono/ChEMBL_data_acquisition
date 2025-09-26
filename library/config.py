@@ -482,6 +482,61 @@ class TestitemCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):
+    molecule_catalog_path: Path = Path("dictionary/molecule_catalog.csv")
+    molecule_hierarchy_path: Path = Path("dictionary/molecule_hierarchy.csv")
+
+
+class TestitemMoleculeEnrichmentOutputCfg(_BoolModel):
+    salt_as_null_when_absent: bool = True
+
+    @field_validator("salt_as_null_when_absent", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
+class TestitemMoleculeEnrichmentFlagsCfg(_BoolModel):
+    coerce_to_bool: bool = True
+    parent_fallback: bool = True
+
+    @field_validator("coerce_to_bool", "parent_fallback", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
+class TestitemMoleculeEnrichmentLoggingCfg(_BoolModel):
+    warn_missing_molecule: bool = True
+    warn_inconsistent_flags: bool = True
+
+    @field_validator("warn_missing_molecule", "warn_inconsistent_flags", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
+class TestitemMoleculeEnrichmentCfg(_BoolModel):
+    enable: bool = True
+    sources: TestitemMoleculeEnrichmentSourcesCfg = Field(
+        default_factory=lambda: TestitemMoleculeEnrichmentSourcesCfg()
+    )
+    output: TestitemMoleculeEnrichmentOutputCfg = Field(
+        default_factory=lambda: TestitemMoleculeEnrichmentOutputCfg()
+    )
+    flags: TestitemMoleculeEnrichmentFlagsCfg = Field(
+        default_factory=lambda: TestitemMoleculeEnrichmentFlagsCfg()
+    )
+    logging: TestitemMoleculeEnrichmentLoggingCfg = Field(
+        default_factory=lambda: TestitemMoleculeEnrichmentLoggingCfg()
+    )
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
 class DocumentPubmedCfg(_BaseModel):
     column: str = "PMID"
     sleep: float = Field(5.0, ge=0)
@@ -621,6 +676,9 @@ class Config(_BaseModel):
     )
     activity_enrichment: ActivityEnrichmentCfg = Field(
         default_factory=lambda: ActivityEnrichmentCfg()
+    )
+    testitem_molecule_enrichment: TestitemMoleculeEnrichmentCfg = Field(
+        default_factory=lambda: TestitemMoleculeEnrichmentCfg()
     )
 
     # -- Compatibility accessors -------------------------------------------------
@@ -1131,6 +1189,11 @@ __all__ = [
     "ActivityPropertiesCfg",
     "AssayCfg",
     "TestitemCfg",
+    "TestitemMoleculeEnrichmentCfg",
+    "TestitemMoleculeEnrichmentFlagsCfg",
+    "TestitemMoleculeEnrichmentLoggingCfg",
+    "TestitemMoleculeEnrichmentOutputCfg",
+    "TestitemMoleculeEnrichmentSourcesCfg",
     "DocumentPubmedCfg",
     "DocumentChemblCfg",
     "DocumentAllCfg",

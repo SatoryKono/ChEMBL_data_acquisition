@@ -125,3 +125,12 @@ Before distributing the export, join it with the parent molecule catalogue to ex
 `parent_molecule_chembl_id` for roll-ups. The mapping is stored in the JSON file configured at
 `sources.chembl.molecule_catalog.cache_path` and loaded via
 `library.molecule_catalog.load_parent_catalog`, which refreshes the cache from the ChEMBL API when needed.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L43-L136】
+
+An additional enrichment stage reads `dictionary/molecule_hierarchy.csv` and
+`dictionary/molecule_catalog.csv` to populate the salt identifier and the
+`natural_product`, `prodrug`, `polymer_flag` booleans before validation. The
+pipeline detects salts when `parent_molecule_chembl_id` differs from
+`molecule_chembl_id`, fills `salt_chembl_id` with the child identifier, and
+normalises catalogue flags to the pandas nullable boolean dtype. Missing child
+flags fall back to the parent entry when available, while absent parent/child
+records are surfaced via warning events for troubleshooting.【F:scripts/get_testitem_data.py†L205-L233】【F:library/testitem_enrichment.py†L17-L216】

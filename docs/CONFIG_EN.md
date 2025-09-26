@@ -121,6 +121,19 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | `timeout` | `30.0` | Request timeout in seconds. |
 | `limit` | `null` | Optional cap on identifiers processed. |
 
+#### Test item molecule enrichment (`testitem_molecule_enrichment`)
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
+| `sources.molecule_catalog_path` | `dictionary/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
+| `sources.molecule_hierarchy_path` | `dictionary/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
+| `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
+| `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
+| `logging.warn_missing_molecule` | `true` | Log warnings when a molecule listed in the export is not present in the hierarchy or catalogue. |
+| `logging.warn_inconsistent_flags` | `true` | Emit warnings when child and parent flags disagree before fallback. |
+
 #### Document pipeline (`document`)
 
 | Sub-section | Key | Default | Description |
