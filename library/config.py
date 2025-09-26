@@ -264,6 +264,10 @@ class PubChemCfg(_BaseModel):
         False,
         description="Skip PubChem lookups when local pubchem_* columns are populated",
     )
+    use_parent_for_salts: bool = Field(
+        False,
+        description="Fall back to parent structures when PubChem CID lookup fails",
+    )
 
     @field_validator("base")
     @classmethod
