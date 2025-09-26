@@ -300,3 +300,144 @@ def test_run_chembl_parent_catalog_request_error(
         for event, details in errors
     )
 
+
+def test_attach_parent_molecule_ids_fetches_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "load_parent_catalog",
+        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+    )
+
+    fetched: dict[str, str] = {"CHEMBL2": "CHEMBL2_PARENT"}
+    captured_ids: dict[str, list[str]] = {}
+
+    def fake_fetch(
+        ids: list[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        captured_ids["ids"] = list(ids)
+        return fetched
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        fake_fetch,
+    )
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert captured_ids["ids"] == ["CHEMBL2"]
+    assert result[catalog_cfg.parent_field].tolist() == [
+        "CHEMBL1_PARENT",
+        "CHEMBL2_PARENT",
+    ]
+    assert stats.unique == 2
+    assert stats.attached == 2
+    assert stats.missing == 0
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+
+
+def test_attach_parent_molecule_ids_fetch_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "load_parent_catalog",
+        lambda **__: {},
+    )
+
+    def failing_fetch(
+        ids: list[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        raise requests.RequestException("boom")
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        failing_fetch,
+    )
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    parent_values = result[catalog_cfg.parent_field].tolist()
+    assert parent_values == [pd.NA]
+    assert stats.unique == 1
+    assert stats.attached == 0
+    assert stats.missing == 1
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_REMOTE
+
+
+def test_attach_parent_molecule_ids_uses_cache_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "load_parent_catalog",
+        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+    )
+
+    def unexpected_fetch(
+        ids: list[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: float | None,
+    ) -> dict[str, str]:
+        raise AssertionError("fetch_parent_catalog_for should not be called")
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        unexpected_fetch,
+    )
+
+    result, stats = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
+    assert stats.missing == 0
+    assert stats.attached == 1
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+

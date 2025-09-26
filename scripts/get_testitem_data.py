@@ -155,6 +155,27 @@ def attach_parent_molecule_ids(
     unique_children = normalised_child[normalised_child != ""].unique()
 
     parent_map = {key: catalog[key] for key in unique_children if key in catalog}
+    missing_ids = [key for key in unique_children if key not in parent_map]
+    fetched_remote = False
+
+    if missing_ids:
+        try:
+            fetched = molecule_catalog.fetch_parent_catalog_for(
+                missing_ids,
+                client=client,
+                api_cfg=api_cfg,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
+            fetched = {}
+        else:
+            if fetched:
+                fetched_remote = True
+        if fetched:
+            catalog.update(fetched)
+            parent_map.update(fetched)
+
     parent_series = normalised_child.map(parent_map)
     missing_mask = parent_series.isna()
     parent_series = parent_series.astype("string")
@@ -164,7 +185,7 @@ def attach_parent_molecule_ids(
     attached = len(result) - missing
 
     stats = ParentLookupStats(
-        source=source,
+        source=PARENT_LOOKUP_SOURCE_REMOTE if fetched_remote else source,
         missing=missing,
         unique=int(len(unique_children)),
         attached=int(attached),
