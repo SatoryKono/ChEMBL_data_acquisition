@@ -451,7 +451,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
     try:
-        key_cols = [c for c in ["salt_chembl_id"] if c in df.columns]
+        key_cols = ["molecule_chembl_id"]
         csv_path = io.write_csv(
             df,
             output,
