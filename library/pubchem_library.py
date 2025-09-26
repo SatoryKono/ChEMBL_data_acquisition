@@ -392,12 +392,12 @@ def get_standard_name(cid: str, cfg: PubChemCfg) -> str | None:
 class Properties:
     """Chemical properties for a PubChem compound."""
 
-    IUPACName: str
-    MolecularFormula: str
-    iSMILES: str
-    cSMILES: str
-    InChI: str
-    InChIKey: str
+    IUPACName: str | None
+    MolecularFormula: str | None
+    iSMILES: str | None
+    cSMILES: str | None
+    InChI: str | None
+    InChIKey: str | None
 
 
 def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
@@ -413,13 +413,11 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     Returns
     -------
     Properties
-        Chemical property record. Missing values are returned as ``"Not Found"``.
+        Chemical property record. Missing values are returned as ``None``.
     """
     validated = validate_cid(cid)
     if not validated:
-        return Properties(
-            "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
-        )
+        return Properties(None, None, None, None, None, None)
     base = cfg.base.rstrip("/")
     url = (
         f"{base}/compound/cid/{validated}/property/MolecularFormula,IUPACName,IsomericSMILES,"
@@ -427,26 +425,22 @@ def get_properties(cid: str, cfg: PubChemCfg) -> Properties:
     )
     response = make_request(url, cfg)
     if not response:
-        return Properties(
-            "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
-        )
+        return Properties(None, None, None, None, None, None)
     props = response.get("PropertyTable", {}).get("Properties", [])
     if not props:
-        return Properties(
-            "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
-        )
+        return Properties(None, None, None, None, None, None)
     item = props[0]
     return Properties(
-        item.get("IUPACName", "Not Found"),
-        item.get("MolecularFormula", "Not Found"),
-        item.get("IsomericSMILES", "Not Found"),
-        item.get("CanonicalSMILES", "Not Found"),
-        item.get("InChI", "Not Found"),
-        item.get("InChIKey", "Not Found"),
+        cast(str | None, item.get("IUPACName")),
+        cast(str | None, item.get("MolecularFormula")),
+        cast(str | None, item.get("IsomericSMILES")),
+        cast(str | None, item.get("CanonicalSMILES")),
+        cast(str | None, item.get("InChI")),
+        cast(str | None, item.get("InChIKey")),
     )
 
 
-def process_compound(compound_name: str, cfg: PubChemCfg) -> dict[str, str]:
+def process_compound(compound_name: str, cfg: PubChemCfg) -> dict[str, str | None]:
     """Process *compound_name* into a structured record.
 
     Parameters
@@ -464,17 +458,11 @@ def process_compound(compound_name: str, cfg: PubChemCfg) -> dict[str, str]:
     """
     cid = get_cid(compound_name, cfg)
     standard = get_standard_name(cid, cfg) if cid else None
-    props = (
-        get_properties(cid, cfg)
-        if cid
-        else Properties(
-            "Not Found", "Not Found", "Not Found", "Not Found", "Not Found", "Not Found"
-        )
-    )
+    props = get_properties(cid, cfg) if cid else Properties(None, None, None, None, None, None)
     return {
         "Name": compound_name,
-        "CID": cid or "Not Found",
-        "Standard Name": standard or "Not Found",
+        "CID": cid,
+        "Standard Name": standard,
         "IUPACName": props.IUPACName,
         "MolecularFormula": props.MolecularFormula,
         "iSMILES": props.iSMILES,

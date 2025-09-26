@@ -1013,6 +1013,12 @@
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
+        },
+        "prefer_local_smiles": {
+          "default": false,
+          "description": "Skip PubChem lookups when local pubchem_* columns are populated",
+          "title": "Prefer Local Smiles",
+          "type": "boolean"
         }
       },
       "title": "PubChemCfg",

@@ -73,6 +73,17 @@ PARENT_LOOKUP_SOURCE_REMOTE = "remote"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
 
 
+PUBCHEM_COLUMNS = [
+    "pubchem_cid",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+    "pubchem_isomeric_smiles",
+    "pubchem_canonical_smiles",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+]
+
+
 @dataclass(frozen=True)
 class ParentLookupStats:
     """Summary information about parent molecule enrichment."""
@@ -298,20 +309,42 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     if df.empty or "canonical_smiles" not in df.columns:
         return df
 
-    smiles_list = df["canonical_smiles"].fillna("").tolist()
+    result = df.reset_index(drop=True).copy()
+
+    smiles_list = result["canonical_smiles"].fillna("").tolist()
     # ``dict.fromkeys`` preserves the order of first occurrence while
     # removing duplicates. This allows progress output to reflect the
     # deterministic iteration order of SMILES strings.
     unique_smiles = [s for s in dict.fromkeys(smiles_list) if s]
 
-    total = len(unique_smiles)
+    prefer_local = getattr(cfg, "prefer_local_smiles", False)
+    skip_smiles: set[str] = set()
+    if prefer_local:
+        existing_cols = [col for col in PUBCHEM_COLUMNS if col in result.columns]
+        if existing_cols:
+            normalised = pd.DataFrame(
+                {col: result[col].astype("string").replace("", pd.NA) for col in existing_cols}
+            )
+            complete_mask = normalised.notna().all(axis=1)
+            canonical = result.loc[complete_mask, "canonical_smiles"].astype("string")
+            skip_smiles = {
+                str(smi)
+                for smi in canonical[canonical.notna() & canonical.ne("")].tolist()
+            }
+
+    fetch_smiles = [s for s in unique_smiles if s not in skip_smiles]
+
+    total = len(fetch_smiles)
     if total:
         logger.info("pubchem_start", total=total)
     else:
         logger.info("pubchem_no_smiles")
 
-    records: dict[str, dict[str, str]] = {}
-    for idx, smi in enumerate(unique_smiles, start=1):
+    def _value_or_na(value: str | None) -> object:
+        return value if value not in (None, "") else pd.NA
+
+    records: dict[str, dict[str, object]] = {}
+    for idx, smi in enumerate(fetch_smiles, start=1):
         logger.info("pubchem_progress", current=idx, total=total)
         cid = pl.get_cid_from_smiles(smi, cfg) or ""
         first_cid = cid.split("|")[0] if cid else ""
@@ -319,36 +352,36 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
             props = pl.get_properties(first_cid, cfg)
             records[smi] = {
                 "pubchem_cid": first_cid,
-                "pubchem_iupac_name": props.IUPACName,
-                "pubchem_molecular_formula": props.MolecularFormula,
-                "pubchem_isomeric_smiles": props.iSMILES,
-                "pubchem_canonical_smiles": props.cSMILES,
-                "pubchem_inchi": props.InChI,
-                "pubchem_inchikey": props.InChIKey,
+                "pubchem_iupac_name": _value_or_na(props.IUPACName),
+                "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
+                "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
+                "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
+                "pubchem_inchi": _value_or_na(props.InChI),
+                "pubchem_inchikey": _value_or_na(props.InChIKey),
             }
         else:
-            records[smi] = {
-                "pubchem_cid": "",
-                "pubchem_iupac_name": "",
-                "pubchem_molecular_formula": "",
-                "pubchem_isomeric_smiles": "",
-                "pubchem_canonical_smiles": "",
-                "pubchem_inchi": "",
-                "pubchem_inchikey": "",
-            }
+            records[smi] = {col: pd.NA for col in PUBCHEM_COLUMNS}
 
-    empty = {
-        "pubchem_cid": "",
-        "pubchem_iupac_name": "",
-        "pubchem_molecular_formula": "",
-        "pubchem_isomeric_smiles": "",
-        "pubchem_canonical_smiles": "",
-        "pubchem_inchi": "",
-        "pubchem_inchikey": "",
-    }
-    pubchem_rows = [records.get(smi, empty) for smi in smiles_list]
-    pubchem_df = pd.DataFrame(pubchem_rows)
-    return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
+    empty = {col: pd.NA for col in PUBCHEM_COLUMNS}
+    pubchem_rows = [records.get(smi, empty.copy()) for smi in smiles_list]
+    pubchem_df = pd.DataFrame(pubchem_rows, index=result.index).convert_dtypes()
+
+    for col in PUBCHEM_COLUMNS:
+        if col not in pubchem_df.columns:
+            continue
+        new_series = pubchem_df[col].astype("string")
+        if col in result.columns:
+            result[col] = result[col].astype("string")
+            if prefer_local:
+                existing = result[col]
+                missing_mask = existing.isna() | existing.eq("")
+                result.loc[missing_mask, col] = new_series[missing_mask]
+            else:
+                result[col] = new_series
+        else:
+            result[col] = new_series
+
+    return result
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
