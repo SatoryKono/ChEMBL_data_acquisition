@@ -104,12 +104,12 @@ pre-commit run --all-files
    and ``--encoding`` for file encoding. For end-to-end exports that create
    files, run one of the data pipelines, for example:
 
-   ```bash
-   python mapper_main.py --input tests/data/assays.csv \
-       --output out/mapped.csv --log-level DEBUG
-   python table_quality_main.py --input tests/data/assays.csv \
-       --output out/report.csv --log-level INFO
-   ```
+  ```bash
+  python scripts/mapper_main.py --input tests/data/assays.csv \
+      --output out/mapped.csv --log-level DEBUG
+  python scripts/table_quality_main.py --input tests/data/assays.csv \
+      --output out/report.csv --log-level INFO
+  ```
 
 4. **Run the tests** – see [Тесты](#тесты).
 
@@ -491,7 +491,7 @@ An overview of the output directory layout and metadata sidecars is available in
 
 ### Table quality analysis
 
-``table_quality_main.py`` profiles arbitrary CSV files and reports column
+``scripts/table_quality_main.py`` profiles arbitrary CSV files and reports column
 statistics along with correlations between numeric fields. Example usage:
 
 ```python
@@ -505,7 +505,7 @@ quality, corr = analyze_table_quality(df, table_name="data")
 Running the CLI saves ``data_quality_report_table.csv`` and
 ``data_data_correlation_report_table.csv`` in the current working directory::
 
-    python table_quality_main.py --input data.csv --table-name data
+    python scripts/table_quality_main.py --input data.csv --table-name data
 
 All scripts share a common set of flags:
 
@@ -619,9 +619,9 @@ workbook paths are exposed as :class:`pathlib.Path` objects. String values in
 ``config.yaml`` or overrides from the environment and command line are
 automatically converted.
  
-
+```bash
 # профилирование качества таблицы
-python table_quality_main.py \
+python scripts/table_quality_main.py \
     --input tests/data/activity.csv \
     --table-name activity
 ```

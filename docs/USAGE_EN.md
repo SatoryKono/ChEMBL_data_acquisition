@@ -187,10 +187,10 @@ python scripts/get_input_initialisation.py \
 * Produces entity-specific slices (`activity_*`, `assay_*`, `document_*`, `target_*`, `testitem_*`, `system_*`).
 * Creates a `data_validity_report/` folder with quality reports for each exported table.
 
-## Table quality profiler (`table_quality_main.py`)
+## Table quality profiler (`scripts/table_quality_main.py`)
 
 ```bash
-python table_quality_main.py \
+python scripts/table_quality_main.py \
   --input data/input-smoke/activity.csv \
   --table-name activity
 ```
