@@ -86,7 +86,6 @@ sources:
           family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           chunk_size: 5
           timeout: 30.0
-          organism_csv: "dictionary/_target/targets_type.csv"
           uniprot_column: "uniprot_id"
           chembl_out: null
           uniprot_out: null
@@ -171,8 +170,7 @@ local:
     iuphar_target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
     iuphar_family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
     uniprot_data_dir: "dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
-    organism_csv: "dictionary/_target/targets_type.csv"  # Organism taxonomy mapping file
-    targets_type_csv: "dictionary/_target/targets_type.csv"  # Target type mapping table
+    targets_type_csv: "dictionary/_Target/targets_type.csv"  # Target type mapping table
   io:
     output_dir: "data/output"  # Directory for generated datasets
     cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
