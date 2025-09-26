@@ -173,8 +173,42 @@ activity_enrichment:
     column: "action_type"
     log_missing: true
     log_distribution: true
+    metrics:
+      ic50: "inhibition"
+      ec50: "activation"
+      ac50: "activation"
+      ki: "binding"
+      kd: "binding"
+    triages: {}
+    functionality:
+      agonist: "activation"
+      partial agonist: "activation"
+      antagonist: "inhibition"
+      inhibitor: "inhibition"
+      activator: "activation"
+    mechanism: {}
+    triage_fields:
+      - "data_validity_description"
+      - "data_validity_comment"
+    functionality_fields:
+      - "functional_activity"
+      - "action_type"
+    mechanism_fields:
+      - "mechanism_of_action"
+      - "mechanism_comment"
+    allowlist:
+      - "activation"
+      - "inhibition"
+      - "binding"
+      - "pam"
+      - "nam"
+      - "triaged"
+      - "unknown"
+    positive_label: "PAM"
+    negative_label: "NAM"
+    fallback: "unknown"
   activity_properties:
-    enabled: false
+    enabled: true
     column: "activity_properties"
     summary_column: "activity_property_summary"
     name_field: "type"
@@ -185,6 +219,15 @@ activity_enrichment:
     drop_source_column: true
     log_missing: false
     log_distribution: false
+    allowlist:
+      - "measurement"
+      - "assay"
+      - "comments"
+      - "effect_features"
+      - "triage"
+      - "mechanism"
+      - "functionality"
+    hash_column: "properties_hash"
 
 activity_bounds:
   enable_from_relation: true      # Derive bounds from relation/value pairs when explicit bounds are absent

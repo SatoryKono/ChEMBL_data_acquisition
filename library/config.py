@@ -392,8 +392,65 @@ class ActivityActionTypeCfg(_BoolModel):
     column: str = "action_type"
     log_missing: bool = True
     log_distribution: bool = True
+    metrics: dict[str, str] = Field(
+        default_factory=lambda: {
+            "ic50": "inhibition",
+            "ec50": "activation",
+            "ac50": "activation",
+            "ki": "binding",
+            "kd": "binding",
+        }
+    )
+    triages: dict[str, str] = Field(default_factory=dict)
+    functionality: dict[str, str] = Field(
+        default_factory=lambda: {
+            "agonist": "activation",
+            "partial agonist": "activation",
+            "antagonist": "inhibition",
+            "inhibitor": "inhibition",
+            "activator": "activation",
+        }
+    )
+    mechanism: dict[str, str] = Field(default_factory=dict)
+    triage_fields: list[str] = Field(
+        default_factory=lambda: [
+            "data_validity_description",
+            "data_validity_comment",
+        ]
+    )
+    functionality_fields: list[str] = Field(
+        default_factory=lambda: [
+            "functional_activity",
+            "action_type",
+        ]
+    )
+    mechanism_fields: list[str] = Field(
+        default_factory=lambda: [
+            "mechanism_of_action",
+            "mechanism_comment",
+        ]
+    )
+    allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "activation",
+            "inhibition",
+            "binding",
+            "pam",
+            "nam",
+            "triaged",
+            "unknown",
+        ]
+    )
+    positive_label: str = "PAM"
+    negative_label: str = "NAM"
+    fallback: str | None = "unknown"
 
-    @field_validator("enabled", "log_missing", "log_distribution", mode="before")
+    @field_validator(
+        "enabled",
+        "log_missing",
+        "log_distribution",
+        mode="before",
+    )
     @classmethod
     def _bools(cls, v: Any) -> bool:
         return cls._parse_bool(v)
@@ -405,9 +462,26 @@ class ActivityActionTypeCfg(_BoolModel):
             raise ValueError("activity_enrichment.action_type.column must be non-empty")
         return v
 
+    @field_validator(
+        "triage_fields",
+        "functionality_fields",
+        "mechanism_fields",
+        mode="before",
+    )
+    @classmethod
+    def _list(cls, value: Any) -> list[str]:
+        if isinstance(value, str):
+            items = [value]
+        else:
+            items = list(value)
+        cleaned = [str(item).strip() for item in items if str(item).strip()]
+        if not cleaned:
+            raise ValueError("activity_enrichment.action_type field lists must be non-empty")
+        return cleaned
+
 
 class ActivityPropertiesCfg(_BoolModel):
-    enabled: bool = False
+    enabled: bool = True
     column: str = "activity_properties"
     summary_column: str = "activity_property_summary"
     name_field: str = "type"
@@ -418,6 +492,18 @@ class ActivityPropertiesCfg(_BoolModel):
     drop_source_column: bool = True
     log_missing: bool = False
     log_distribution: bool = False
+    allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "measurement",
+            "assay",
+            "comments",
+            "effect_features",
+            "triage",
+            "mechanism",
+            "functionality",
+        ]
+    )
+    hash_column: str | None = "properties_hash"
 
     @field_validator(
         "enabled",
