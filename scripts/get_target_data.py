@@ -22,6 +22,10 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from library import chembl_library as cl
 from library import cli
 from library import io
