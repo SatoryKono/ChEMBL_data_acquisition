@@ -378,26 +378,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("identifiers_retrieved", count=len(ids))
         logger.info("chembl_fetch_start", batch_size=cfg.testitem.batch_size)
 
-        cache_before = _cache_state(cfg.molecule_catalog.cache_path)
-
-        try:
-            parent_catalog = load_parent_catalog(
-                client=client,
-                api_cfg=cfg.api,
-                catalog_cfg=cfg.molecule_catalog,
-                timeout=cfg.testitem.timeout,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "parent_catalog_invalid",
-                error=str(exc),
-                path=str(cfg.molecule_catalog.cache_path),
-            )
-            return 1
-
-        cache_after = _cache_state(cfg.molecule_catalog.cache_path)
-        parent_catalog_source = _resolve_parent_source(cache_before, cache_after)
-
         try:
             df = cl.get_testitem(
                 ids,
@@ -416,8 +396,65 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         logger.info("chembl_fetch_done", rows=len(df))
         parent_column = cfg.molecule_catalog.parent_field
-        if parent_catalog and "molecule_chembl_id" in df.columns:
-            normalised_ids = _normalise_chembl_ids(df["molecule_chembl_id"])
+        child_column = cfg.molecule_catalog.child_field
+
+        if child_column in df.columns:
+            normalised_ids = _normalise_chembl_ids(df[child_column])
+        else:
+            normalised_ids = pd.Series("", index=df.index, dtype="string")
+
+        if parent_column in df.columns:
+            existing_parent = _normalise_chembl_ids(df[parent_column])
+        else:
+            existing_parent = pd.Series("", index=df.index, dtype="string")
+
+        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
+        need_lookup = set(normalised_ids[need_lookup_mask])
+
+        cache_before = _cache_state(cfg.molecule_catalog.cache_path)
+        cache_after = cache_before
+        parent_catalog: dict[str, str] = {}
+        parent_catalog_source = PARENT_LOOKUP_SOURCE_SKIPPED
+
+        if need_lookup and cache_before[0]:
+            try:
+                parent_catalog = load_parent_catalog(
+                    client=client,
+                    api_cfg=cfg.api,
+                    catalog_cfg=cfg.molecule_catalog,
+                    timeout=cfg.testitem.timeout,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.error(
+                    "parent_catalog_invalid",
+                    error=str(exc),
+                    path=str(cfg.molecule_catalog.cache_path),
+                )
+                return 1
+            cache_after = _cache_state(cfg.molecule_catalog.cache_path)
+            parent_catalog_source = _resolve_parent_source(cache_before, cache_after)
+            if parent_catalog:
+                need_lookup -= set(parent_catalog)
+
+        fetched_remote = False
+        if need_lookup:
+            try:
+                fetched = molecule_catalog.fetch_parent_catalog_for(
+                    need_lookup,
+                    client=client,
+                    api_cfg=cfg.api,
+                    timeout=cfg.testitem.timeout,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
+                return 1
+            if fetched:
+                parent_catalog.update(fetched)
+                fetched_remote = True
+        if fetched_remote:
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
+
+        if parent_catalog and child_column in df.columns:
             mapped = normalised_ids.map(parent_catalog)
             if parent_column in df.columns:
                 df[parent_column] = df[parent_column].fillna(mapped)
