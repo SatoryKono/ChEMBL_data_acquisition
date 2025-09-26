@@ -255,6 +255,10 @@ class PubChemCfg(_BaseModel):
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(3.0, ge=0)
+    resolve_order: list[str] = Field(
+        default_factory=lambda: ["cache", "inchikey", "name", "smiles"],
+        description="Order of PubChem CID resolvers",
+    )
     cache_ttl: int = Field(
         3600,
         ge=0,
