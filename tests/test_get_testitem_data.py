@@ -100,6 +100,7 @@ def test_run_chembl_initialises_pubchem_session(
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg: frame)
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
 
     monkeypatch.setattr(
         gtd,
