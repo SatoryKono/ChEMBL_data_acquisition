@@ -228,6 +228,11 @@ def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
     )
 
     monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
 
     result, stats = gtd.attach_parent_molecule_ids(
         source,
@@ -243,8 +248,74 @@ def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
     pd.testing.assert_series_equal(
         result[parent_field], expected, check_names=False
     )
-    assert stats.missing == 2
-    assert stats.attached == 0
+    assert stats.missing == 1
+    assert stats.attached == 1
+
+
+def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
+    source = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                cfg.molecule_catalog.parent_field: "CHEMBL1_EXISTING",
+            }
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+
+    captured_df: pd.DataFrame | None = None
+
+    def fake_write_csv(
+        df: pd.DataFrame,
+        output: Path,
+        *,
+        cfg: Config,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        **__: object,
+    ) -> Path:
+        nonlocal captured_df
+        captured_df = df.copy()
+        return output
+
+    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+
+    rc = gtd.run_chembl(cfg, args)
+    assert rc == 0
+    assert captured_df is not None
+    assert captured_df[cfg.molecule_catalog.parent_field].tolist() == [
+        "CHEMBL1_EXISTING",
+    ]
 
 
 def test_run_chembl_parent_catalog_error(
@@ -360,7 +431,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
     catalog_cfg.cache_path = tmp_path / "catalog.json"
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        gtd,
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
@@ -411,11 +482,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
 
-    monkeypatch.setattr(
-        gtd.molecule_catalog,
-        "load_parent_catalog",
-        lambda **__: {},
-    )
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
 
     def failing_fetch(
         ids: list[str],
@@ -458,7 +525,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        gtd,
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
