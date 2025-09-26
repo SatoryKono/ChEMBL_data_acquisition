@@ -59,6 +59,80 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     pd.testing.assert_frame_equal(result, expected)
 
 
+def test_resolve_pubchem_cid_prefers_inchikey(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = pd.Series(
+        {
+            "molecule_chembl_id": "chembl1",
+            "standard_inchi_key": "abc-key",
+            "standard_inchi": "ignored",
+            "pref_name": "ignored",
+            "canonical_smiles": "C",
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    cache: dict[str, str | None] = {}
+    calls: list[str] = []
+
+    def record_call(name: str) -> None:  # pragma: no cover - helper
+        calls.append(name)
+
+    monkeypatch.setattr(
+        pl,
+        "get_cid_from_inchikey",
+        lambda value, cfg: (record_call("inchikey"), "10|20")[1],
+    )
+
+    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("unexpected resolver invocation")
+
+    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
+    monkeypatch.setattr(pl, "get_cid", fail)
+    monkeypatch.setattr(pl, "get_all_cid", fail)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+
+    cid = gtd.resolve_pubchem_cid(row, cache, cfg)
+
+    assert cid == "10"
+    assert cache["CHEMBL1"] == "10"
+    assert calls == ["inchikey"]
+
+
+def test_add_pubchem_data_uses_disk_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_path = tmp_path / "cid_cache.json"
+    cache_path.write_text(json.dumps({"CHEMBL1": "321"}))
+
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "canonical_smiles": ["C"],
+        }
+    )
+
+    cfg = pl.PubChemCfg(delay=0, cid_cache_path=cache_path)
+
+    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("PubChem lookup should not be called")
+
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", fail)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
+    monkeypatch.setattr(pl, "get_cid", fail)
+    monkeypatch.setattr(pl, "get_all_cid", fail)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+
+    props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
+
+    result = gtd.add_pubchem_data(df, cfg)
+
+    assert result.loc[0, "pubchem_cid"] == "321"
+    assert result.loc[0, "pubchem_iupac_name"] == "name"
+    assert json.loads(cache_path.read_text()) == {"CHEMBL1": "321"}
+
+
 def test_run_chembl_column_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
