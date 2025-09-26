@@ -80,6 +80,17 @@ python scripts/get_testitem_data.py \
 
 Выгружает дополнительную информацию о соединениях.
 
+### Требования к каталогу родительских молекул
+
+Чтобы получить `parent_molecule_chembl_id` для агрегаций, выгрузку необходимо объединить с каталогом
+родителей ChEMBL. Путь к локальному JSON задаётся через `sources.chembl.molecule_catalog.cache_path`; убедитесь,
+что файл доступен исполнителю, либо переопределите расположение параметрами CLI (`--sources.chembl.molecule_catalog.cache-path`)
+или переменными окружения (`CHEMBL_DA_MOLECULE_CATALOG_CACHE`).【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+
+Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
+`library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
+подкачивает свежие связи ребёнок→родитель из API ChEMBL.【F:library/molecule_catalog.py†L43-L136】
+
 ## Инициализация входных данных (`get_input_initialisation.py`)
 
 ```bash
