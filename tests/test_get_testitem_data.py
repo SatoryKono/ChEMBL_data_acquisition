@@ -161,16 +161,30 @@ def test_run_chembl_merges_parent_catalog(
     )
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
-    monkeypatch.setattr(
-        gtd,
-        "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"},
-    )
+    cache_path = tmp_path / "parent_catalog.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+
+    parent_catalog = {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"}
+    load_calls = 0
+
+    def fake_load_parent_catalog(**_: object) -> dict[str, str]:
+        nonlocal load_calls
+        load_calls += 1
+        return parent_catalog
+
+    monkeypatch.setattr(gtd, "load_parent_catalog", fake_load_parent_catalog)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
-    monkeypatch.setattr(
-        gtd,
-        "attach_parent_molecule_ids",
-        lambda frame, **kwargs: (
+    captured_catalog: dict[str, str] | None = None
+    captured_source: str | None = None
+
+    def fake_attach_parent_molecule_ids(
+        frame: pd.DataFrame, **kwargs: object
+    ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
+        nonlocal captured_catalog, captured_source
+        captured_catalog = kwargs.get("catalog")
+        captured_source = kwargs.get("catalog_source")
+        return (
             frame,
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
@@ -178,8 +192,9 @@ def test_run_chembl_merges_parent_catalog(
                 unique=0,
                 attached=0,
             ),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
@@ -208,6 +223,9 @@ def test_run_chembl_merges_parent_catalog(
         "CHEMBL1_PARENT",
         "CHEMBL2_EXISTING",
     ]
+    assert load_calls == 1
+    assert captured_catalog is parent_catalog
+    assert captured_source == gtd.PARENT_LOOKUP_SOURCE_CACHE
 
 
 def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
@@ -482,7 +500,12 @@ def test_attach_parent_molecule_ids_fetch_failure(
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
 
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(
+        gtd,
+        "load_parent_catalog",
+        lambda **__: {},
+    )
+
 
     def failing_fetch(
         ids: list[str],
@@ -524,11 +547,12 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     catalog_cfg.cache_path = tmp_path / "catalog.json"
     catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
 
-    monkeypatch.setattr(
-        gtd,
-        "load_parent_catalog",
-        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
-    )
+
+    def unexpected_load_parent_catalog(**_: object) -> dict[str, str]:
+        raise AssertionError("load_parent_catalog should not be called")
+
+    monkeypatch.setattr(gtd, "load_parent_catalog", unexpected_load_parent_catalog)
+
 
     def unexpected_fetch(
         ids: list[str],
@@ -551,6 +575,8 @@ def test_attach_parent_molecule_ids_uses_cache_only(
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
+        catalog={"CHEMBL1": "CHEMBL1_PARENT"},
+        catalog_source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
     )
 
     assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
