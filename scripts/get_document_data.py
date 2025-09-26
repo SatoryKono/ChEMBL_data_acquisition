@@ -625,17 +625,28 @@ def _write_export_chunks(
 ) -> Path:
     """Stream ``chunks`` to ``path`` using the deterministic CSV writer."""
 
-    kwargs: dict[str, object] = {
-        "col_order": list(_EXPORT_COLUMNS),
-        "key_cols": list(key_cols),
-        "sep": cfg.io.csv_sep,
-        "encoding": cfg.io.csv_encoding,
-        "cfg": cfg,
-    }
     if chunk_size:
-        kwargs["chunksize"] = chunk_size
-        kwargs["merge_chunksize"] = chunk_size
-    return write_csv_chunks_deterministic(chunks, path, **kwargs)
+        return write_csv_chunks_deterministic(
+            chunks,
+            path,
+            col_order=list(_EXPORT_COLUMNS),
+            key_cols=list(key_cols),
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+            chunksize=chunk_size,
+            merge_chunksize=chunk_size,
+        )
+
+    return write_csv_chunks_deterministic(
+        chunks,
+        path,
+        col_order=list(_EXPORT_COLUMNS),
+        key_cols=list(key_cols),
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        cfg=cfg,
+    )
 
 
 def _finalise_export(
