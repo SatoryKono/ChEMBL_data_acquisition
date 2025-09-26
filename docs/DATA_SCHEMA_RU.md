@@ -68,7 +68,7 @@
 | type | строка | ChEMBL `/activity` | Тип исходного измерения (как в API).|
 | units | строка | ChEMBL `/activity` | Единицы исходного значения `value`.|
 | value | строка/число | ChEMBL `/activity` | Первичное численное значение, как возвращает API.|
-| standard_type | строка | ChEMBL `/activity` | Нормализованный тип (ограничен значениями `IC50` или `Ki`).|
+| standard_type | строка | ChEMBL `/activity` | Нормализованный тип, ограниченный конфигурацией (например, `IC50`, `EC50`, `Ki`, `KD`).|
 | standard_value | число (float) | ChEMBL `/activity` | Нормализованное числовое значение (молярные единицы), гарантированно неотрицательное.|
 | standard_lower_value | строка/число | ChEMBL `/activity` | Нижняя граница диапазона, если ChEMBL возвращает интервал.|
 | standard_upper_value | строка/число | ChEMBL `/activity` | Верхняя граница диапазона, если она указана.|
