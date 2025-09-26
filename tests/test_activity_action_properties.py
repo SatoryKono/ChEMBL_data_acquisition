@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from library.config import ActivityActionTypeCfg, ActivityPropertiesCfg
+from library.activity_action_properties import annotate_action_properties
 from scripts.get_activity_data import (
     _extract_effect_features,
     _normalise_mapping,
@@ -138,3 +139,45 @@ def test_apply_activity_annotations_adds_columns() -> None:
     payload = json.loads(annotated.loc[0, properties_cfg.column])
     assert annotated.loc[0, action_cfg.column] == "PAM"
     assert pytest.approx(payload["measurement"]["value"], rel=1e-6) == 1.5
+
+
+def test_annotate_action_properties_streams_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_to_dict = pd.DataFrame.to_dict
+    original_itertuples = pd.DataFrame.itertuples
+
+    def fail_on_records(self: pd.DataFrame, orient: str = "dict", *args: object, **kwargs: object):
+        if orient == "records":
+            raise AssertionError("to_dict with orient='records' should not be used")
+        return original_to_dict(self, orient=orient, *args, **kwargs)
+
+    def tracking_itertuples(self: pd.DataFrame, index: bool = False, name: str | None = None):
+        call_count[0] += 1
+        iterator = original_itertuples(self, index=index, name=name)
+
+        def generator():
+            for row in iterator:
+                yielded_rows[0] += 1
+                yield row
+
+        return generator()
+
+    call_count = [0]
+    yielded_rows = [0]
+    monkeypatch.setattr(pd.DataFrame, "to_dict", fail_on_records)
+    monkeypatch.setattr(pd.DataFrame, "itertuples", tracking_itertuples)
+
+    large_frame = pd.DataFrame([
+        _record(
+            activity_comment="positive allosteric modulator",
+            standard_value=index,
+        )
+        for index in range(1000)
+    ])
+
+    annotated = annotate_action_properties(large_frame)
+
+    assert call_count[0] == 1
+    assert yielded_rows[0] == len(large_frame)
+    assert annotated.shape[0] == len(large_frame)
+    assert "activity_properties" in annotated
+    assert "action_type" in annotated
