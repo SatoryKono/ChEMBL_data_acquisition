@@ -101,8 +101,18 @@ def test_cli_success(
     assert exit_code == 0
     assert output_csv.exists()
     result = pd.read_csv(output_csv)
-    expected_columns = set(df.columns) | {"pipeline_version", "timestamp_utc"}
-    assert set(result.columns) == expected_columns
+    base_columns = set(df.columns) | {
+        "pipeline_version",
+        "timestamp_utc",
+        "lower_value",
+        "upper_value",
+        "action_type",
+        "activity_properties",
+    }
+    optional_columns = {"properties_hash"}
+    result_columns = set(result.columns)
+    assert base_columns.issubset(result_columns)
+    assert result_columns <= base_columns | optional_columns
     assert result["activity_id"].tolist() == ["A1", "A2"]
 
 

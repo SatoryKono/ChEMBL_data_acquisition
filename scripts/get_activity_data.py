@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sys
 
@@ -32,7 +34,9 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import (
+    ActivityActionCfg,
     ActivityBoundsCfg,
+    ActivityPropertiesCfg,
     Config,
     _serialize_paths,
     ensure_dirs,
@@ -353,6 +357,215 @@ def compute_activity_bounds(
     return result
 
 
+def _normalize_token(value: object) -> str | None:
+    """Return a case-folded representation of *value* suitable for lookups."""
+
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return normalized or None
+    return None
+
+
+def _clean_value(value: object) -> object | None:
+    """Return a cleaned representation of *value* or ``None`` for blanks."""
+
+    if value is None:
+        return None
+    if isinstance(value, float) and np.isnan(value):
+        return None
+    if pd.isna(value):
+        return None
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return trimmed or None
+    return value
+
+
+def infer_action_type(
+    df: pd.DataFrame, action_cfg: ActivityActionCfg
+) -> pd.Series:
+    """Return the inferred ``action_type`` series using configuration mappings."""
+
+    if df.empty:
+        return pd.Series(dtype="object", index=df.index)
+
+    normalized_maps = {
+        "metrics": {
+            key: value
+            for raw_key, value in action_cfg.metrics.items()
+            if (key := _normalize_token(raw_key))
+        },
+        "allosteric": {
+            key: value
+            for raw_key, value in action_cfg.allosteric.items()
+            if (key := _normalize_token(raw_key))
+        },
+        "functionality": {
+            key: value
+            for raw_key, value in action_cfg.functionality.items()
+            if (key := _normalize_token(raw_key))
+        },
+        "mechanism": {
+            key: value
+            for raw_key, value in action_cfg.mechanism.items()
+            if (key := _normalize_token(raw_key))
+        },
+    }
+
+    categories: list[tuple[str, dict[str, str], tuple[str, ...]]] = [
+        ("metrics", normalized_maps["metrics"], ("standard_type", "type")),
+        (
+            "allosteric",
+            normalized_maps["allosteric"],
+            ("activity_comment", "bao_label", "bao_format"),
+        ),
+        (
+            "functionality",
+            normalized_maps["functionality"],
+            ("bao_label", "activity_comment"),
+        ),
+        (
+            "mechanism",
+            normalized_maps["mechanism"],
+            ("mechanism_of_action", "mechanism_comment", "activity_comment"),
+        ),
+    ]
+
+    unmatched: dict[str, set[str]] = {
+        name: set() for name, mapping, _ in categories if mapping
+    }
+    results: list[str | None] = []
+
+    for _, row in df.iterrows():
+        resolved: str | None = None
+        for name, mapping, columns in categories:
+            if not mapping:
+                continue
+            for column in columns:
+                if column not in row.index:
+                    continue
+                candidate = row[column]
+                token = _normalize_token(candidate)
+                if token is None:
+                    continue
+                mapped = mapping.get(token)
+                if mapped is not None:
+                    resolved = mapped
+                    break
+                unmatched[name].add(token)
+            if resolved is not None:
+                break
+        if resolved is None:
+            resolved = action_cfg.fallback
+        results.append(resolved)
+
+    for name, mapping, _ in categories:
+        values = unmatched.get(name)
+        if mapping and values:
+            logger.warning(
+                "action_type_unmapped",
+                category=name,
+                values=sorted(values),
+            )
+
+    return pd.Series(results, index=df.index, dtype="object")
+
+
+def build_activity_properties(
+    df: pd.DataFrame, properties_cfg: ActivityPropertiesCfg
+) -> tuple[pd.Series, pd.Series | None]:
+    """Return serialised ``activity_properties`` and optional ``properties_hash``."""
+
+    if df.empty:
+        empty = pd.Series(dtype="object", index=df.index)
+        hash_series = (
+            pd.Series(dtype="object", index=df.index)
+            if properties_cfg.hash_fields
+            else None
+        )
+        return empty, hash_series
+
+    allowlist = [col for col in properties_cfg.allowlist if col in df.columns]
+    triage_maps: dict[str, dict[str, str]] = {
+        column: {
+            key: value
+            for raw_key, value in mapping.items()
+            if (key := _normalize_token(raw_key))
+        }
+        for column, mapping in properties_cfg.triage.items()
+        if column in df.columns
+    }
+    triage_unmapped: dict[str, set[str]] = {col: set() for col in triage_maps}
+
+    properties_values: list[str | None] = []
+    hash_values: list[str | None] | None = (
+        [] if properties_cfg.hash_fields else None
+    )
+
+    for _, row in df.iterrows():
+        collected: dict[str, object] = {}
+        for column in allowlist:
+            raw_value = row.get(column)
+            cleaned = _clean_value(raw_value)
+            if cleaned is None:
+                continue
+            stored = cleaned
+            if column in triage_maps and isinstance(raw_value, str):
+                token = _normalize_token(raw_value)
+                if token is not None:
+                    mapped = triage_maps[column].get(token)
+                    if mapped is not None:
+                        stored = mapped
+                    else:
+                        triage_unmapped[column].add(token)
+            collected[column] = stored
+
+        ordered = dict(sorted(collected.items()))
+        if ordered:
+            serialised = json.dumps(ordered, ensure_ascii=False, separators=(",", ":"))
+        else:
+            serialised = None
+        properties_values.append(serialised)
+
+        if hash_values is not None:
+            if not ordered:
+                hash_values.append(None)
+            else:
+                subset_keys = [
+                    key for key in properties_cfg.hash_fields if key in ordered
+                ]
+                subset = (
+                    {key: ordered[key] for key in subset_keys}
+                    if subset_keys
+                    else ordered
+                )
+                if subset:
+                    payload = json.dumps(
+                        dict(sorted(subset.items())),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    hash_values.append(hashlib.sha256(payload).hexdigest())
+                else:
+                    hash_values.append(None)
+
+    for column, values in triage_unmapped.items():
+        if values:
+            logger.warning(
+                "activity_properties_unmapped_triage",
+                column=column,
+                values=sorted(values),
+            )
+
+    properties_series = pd.Series(properties_values, index=df.index, dtype="object")
+    hash_series = (
+        pd.Series(hash_values, index=df.index, dtype="object")
+        if hash_values is not None
+        else None
+    )
+    return properties_series, hash_series
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
@@ -429,6 +642,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = normalize_activities(df)
         df = add_pipeline_metadata(df)
         df = compute_activity_bounds(df, cfg.activity_bounds)
+        df["action_type"] = infer_action_type(df, cfg.activity.action)
+        properties, properties_hash = build_activity_properties(
+            df, cfg.activity.properties
+        )
+        df["activity_properties"] = properties
+        if properties_hash is not None:
+            df["properties_hash"] = properties_hash
         # Determine final column order: schema-defined columns first in their
         # declared sequence, followed by any additional columns sorted
         # alphabetically to provide deterministic output.

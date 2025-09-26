@@ -37,9 +37,96 @@
           "default": false,
           "title": "Dry Run",
           "type": "boolean"
+        },
+        "action": {
+          "$ref": "#/$defs/ActivityActionCfg"
+        },
+        "properties": {
+          "$ref": "#/$defs/ActivityPropertiesCfg"
         }
       },
       "title": "ActivityCfg",
+      "type": "object"
+    },
+    "ActivityActionCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "default": {},
+          "title": "Metrics",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "allosteric": {
+          "default": {},
+          "title": "Allosteric",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "functionality": {
+          "default": {},
+          "title": "Functionality",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "mechanism": {
+          "default": {},
+          "title": "Mechanism",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "fallback": {
+          "default": null,
+          "title": "Fallback",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "ActivityActionCfg",
+      "type": "object"
+    },
+    "ActivityPropertiesCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "allowlist": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowlist",
+          "type": "array"
+        },
+        "triage": {
+          "default": {},
+          "title": "Triage",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "hash_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Hash Fields",
+          "type": "array"
+        }
+      },
+      "title": "ActivityPropertiesCfg",
       "type": "object"
     },
     "ActivityBoundsCfg": {

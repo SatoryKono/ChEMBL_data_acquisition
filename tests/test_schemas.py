@@ -47,6 +47,27 @@ def test_activities_schema_validation() -> None:
         ActivitiesSchema.validate(invalid)
 
 
+def test_activities_schema_action_type_enforcement() -> None:
+    """``action_type`` accepts only configured values."""
+
+    df = pd.DataFrame(
+        {
+            "activity_id": ["1"],
+            "molecule_chembl_id": ["CHEMBL1"],
+            "assay_chembl_id": ["CHEMBL0"],
+            "standard_value": [1.0],
+            "standard_type": ["IC50"],
+            "action_type": ["unknown"],
+        }
+    )
+    ActivitiesSchema.validate(df)
+
+    invalid = df.copy()
+    invalid.loc[0, "action_type"] = "unsupported"
+    with pytest.raises(SchemaErrors):
+        ActivitiesSchema.validate(invalid, lazy=True)
+
+
 def test_activities_schema_accepts_object_dtypes() -> None:
     """``standard_value`` validates with object dtype."""
 

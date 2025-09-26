@@ -13,6 +13,17 @@ from pandera.dtypes import DataType
 
 PA_ANY = cast(DataType, None)
 
+_ACTION_TYPE_VALUES = [
+    "activation",
+    "agonist",
+    "antagonist",
+    "binding",
+    "inhibition",
+    "modulation_negative",
+    "modulation_positive",
+    "unknown",
+]
+
 # Definition of the schema describing the activities table.
 ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
@@ -51,6 +62,16 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         ),
         "lower_value": pa.Column(float, required=False, nullable=True, coerce=True),
         "upper_value": pa.Column(float, required=False, nullable=True, coerce=True),
+        "action_type": pa.Column(
+            str,
+            pa.Check.isin(_ACTION_TYPE_VALUES),
+            required=False,
+            nullable=True,
+        ),
+        "activity_properties": pa.Column(
+            str, required=False, nullable=True
+        ),
+        "properties_hash": pa.Column(str, required=False, nullable=True),
         "pipeline_version": pa.Column(str, required=False, nullable=True),
         "timestamp_utc": pa.Column(str, required=False, nullable=True),
         #    "pA_value": pa.Column(float, pa.Check.in_range(-14, 14), required=False),
