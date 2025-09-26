@@ -185,13 +185,16 @@ def _select_primary_cid(
     return primary
 
 
-def resolve_pubchem_cid(
-    row: pd.Series, cache: MutableMapping[str, str | None], cfg: PubChemCfg
+def _resolve_cid_from_row(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    chembl_id: str | None,
 ) -> str | None:
-    """Resolve PubChem CID for a ChEMBL record."""
+    """Return a CID for ``row`` using its structure fields."""
 
-    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    if chembl_id and chembl_id in cache:
+    if chembl_id and chembl_id in cache and cache[chembl_id]:
         return cache[chembl_id]
 
     def _store(value: str | None) -> str | None:
@@ -237,6 +240,68 @@ def resolve_pubchem_cid(
     if cid:
         return _store(cid)
 
+    return None
+
+
+def resolve_pubchem_cid(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    parent_loader: Callable[[str], pd.Series | None] | None = None,
+) -> str | None:
+    """Resolve PubChem CID for a ChEMBL record."""
+
+    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
+    cid = _resolve_cid_from_row(row, cache, cfg, chembl_id=chembl_id)
+    if cid is not None:
+        return cid
+
+    if not cfg.use_parent_for_salts:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_id = _normalise_identifier(
+        row.get("parent_molecule_chembl_id"), uppercase=True
+    )
+    if not parent_id:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    if parent_loader is None:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_row = parent_loader(parent_id)
+    if parent_row is None:
+        logger.info(
+            "pubchem_parent_structure_missing",
+            child=chembl_id,
+            parent=parent_id,
+            reason="parent_unavailable",
+        )
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_cid = _resolve_cid_from_row(parent_row, cache, cfg, chembl_id=parent_id)
+    if parent_cid:
+        cache[parent_id] = parent_cid
+        if chembl_id:
+            cache[chembl_id] = parent_cid
+        return parent_cid
+
+    logger.info(
+        "pubchem_parent_structure_missing",
+        child=chembl_id,
+        parent=parent_id,
+        reason="structure_unresolved",
+    )
+    if parent_id and parent_id not in cache:
+        cache[parent_id] = None
     if chembl_id and chembl_id not in cache:
         cache[chembl_id] = None
     return None
@@ -472,7 +537,14 @@ def attach_parent_molecule_ids(
     return result, stats
 
 
-def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
+def add_pubchem_data(
+    df: pd.DataFrame,
+    cfg: PubChemCfg,
+    *,
+    client: ChemblClient | None = None,
+    api_cfg: ApiCfg | None = None,
+    timeout: float | None = None,
+) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
     For each canonical SMILES string in ``df``, the function looks up the
@@ -486,6 +558,12 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         Data frame returned by :func:`library.chembl_library.get_testitem`.
     cfg:
         PubChem configuration options.
+    client:
+        Optional ChEMBL client reused to fetch parent structures.
+    api_cfg:
+        Optional API configuration required when ``client`` is supplied.
+    timeout:
+        Optional timeout for parent lookups via :func:`cl.get_testitem`.
 
     Returns
     -------
@@ -510,6 +588,51 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
     cache_path = getattr(cfg, "cid_cache_path", None)
     cid_cache = _load_pubchem_cid_cache(cache_path)
     cache_dirty = False
+
+    local_records: dict[str, pd.Series] = {}
+    if "molecule_chembl_id" in result.columns:
+        for index, value in result["molecule_chembl_id"].items():
+            chembl_norm = _normalise_identifier(value, uppercase=True)
+            if chembl_norm and chembl_norm not in local_records:
+                local_records[chembl_norm] = result.loc[index]
+
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    def load_parent_record(parent_id: str) -> pd.Series | None:
+        parent_norm = _normalise_identifier(parent_id, uppercase=True)
+        if not parent_norm:
+            return None
+        if parent_norm in parent_record_cache:
+            return parent_record_cache[parent_norm]
+        if parent_norm in local_records:
+            parent_record_cache[parent_norm] = local_records[parent_norm]
+            return parent_record_cache[parent_norm]
+        if client is None or api_cfg is None:
+            parent_record_cache[parent_norm] = None
+            return None
+        try:
+            parent_df = cl.get_testitem(
+                [parent_norm],
+                cfg=api_cfg,
+                client=client,
+                chunk_size=1,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "pubchem_parent_load_failed",
+                parent=parent_norm,
+                error=str(exc),
+            )
+            parent_record_cache[parent_norm] = None
+            return None
+        if parent_df.empty:
+            parent_record_cache[parent_norm] = None
+            return None
+        parent_row = parent_df.iloc[0]
+        local_records[parent_norm] = parent_row
+        parent_record_cache[parent_norm] = parent_row
+        return parent_row
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
@@ -556,7 +679,12 @@ def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
         if lookup_required and total:
             progress += 1
             logger.info("pubchem_progress", current=progress, total=total)
-        cid = resolve_pubchem_cid(row, cid_cache, cfg)
+        cid = resolve_pubchem_cid(
+            row,
+            cid_cache,
+            cfg,
+            parent_loader=load_parent_record,
+        )
         cid_by_index[idx] = cid
         if chembl_id:
             after_present = chembl_id in cid_cache
@@ -767,10 +895,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 parent_catalog.update(fetched)
                 update_parent_catalog_cache(fetched, cfg.molecule_catalog)
                 parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
-        logger.info("pubchem_augment_start")
-        df = add_pubchem_data(df, cfg.pubchem)
-        logger.info("pubchem_augment_done")
- 
         try:
             ensure_no_parant_column(df)
         except ValueError as exc:
@@ -805,6 +929,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             attached=parent_stats.attached,
             missing=parent_stats.missing,
         )
+
+        logger.info("pubchem_augment_start")
+        df = add_pubchem_data(
+            df,
+            cfg.pubchem,
+            client=client,
+            api_cfg=cfg.api,
+            timeout=cfg.testitem.timeout,
+        )
+        logger.info("pubchem_augment_done")
 
         enrichment_cfg = cfg.testitem_molecule_enrichment
         if enrichment_cfg.enable:
