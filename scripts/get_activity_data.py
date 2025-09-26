@@ -12,7 +12,8 @@ if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
-from collections.abc import Iterable, Sequence
+from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from itertools import islice
 
 import numpy as np
@@ -32,7 +33,9 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import (
+    ActivityActionTypeCfg,
     ActivityBoundsCfg,
+    ActivityPropertiesCfg,
     Config,
     _serialize_paths,
     ensure_dirs,
@@ -353,6 +356,135 @@ def compute_activity_bounds(
     return result
 
 
+def _normalise_text(value: object) -> str | None:
+    """Return a stripped string representation or ``None`` for blanks."""
+
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except TypeError:
+        pass
+    text = str(value).strip()
+    return text or None
+
+
+def enrich_action_type(
+    df: pd.DataFrame, cfg: ActivityActionTypeCfg
+) -> pd.DataFrame:
+    """Normalise and optionally retain ``action_type`` values."""
+
+    needs_column = cfg.enabled or cfg.log_missing or cfg.log_distribution
+    column = cfg.column
+    if column not in df.columns:
+        if needs_column:
+            logger.info("activity_action_type_column_missing", column=column)
+        return df
+
+    series = df[column].astype("string").str.strip().replace({"": pd.NA})
+    result = df.copy()
+    if cfg.enabled:
+        result[column] = series
+    else:
+        result = result.drop(columns=[column])
+
+    if cfg.log_missing:
+        missing = int(series.isna().sum())
+        if missing:
+            logger.warning("activity_action_type_missing", rows=missing)
+
+    if cfg.log_distribution:
+        counts = series.dropna().value_counts()
+        if not counts.empty:
+            logger.info(
+                "activity_action_type_distribution",
+                counts={str(key): int(value) for key, value in sorted(counts.items())},
+            )
+
+    return result
+
+
+def enrich_activity_properties(
+    df: pd.DataFrame, cfg: ActivityPropertiesCfg
+) -> pd.DataFrame:
+    """Summarise nested ``activity_properties`` entries."""
+
+    needs_column = cfg.enabled or cfg.log_missing or cfg.log_distribution
+    if not needs_column:
+        return df
+
+    column = cfg.column
+    if column not in df.columns:
+        logger.info("activity_properties_column_missing", column=column)
+        return df
+
+    result = df.copy()
+    series = result[column]
+    summaries: list[object] = []
+    name_counts: Counter[str] = Counter()
+
+    for value in series:
+        if value is None:
+            summaries.append(pd.NA)
+            continue
+        if value is pd.NA:  # pragma: no cover - pandas-specific sentinel
+            summaries.append(pd.NA)
+            continue
+        if isinstance(value, Mapping):
+            items = [value]
+        elif isinstance(value, (list, tuple)):
+            items = list(value)
+        else:
+            summaries.append(pd.NA)
+            continue
+
+        entries: list[str] = []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            name = _normalise_text(item.get(cfg.name_field))
+            if not name:
+                continue
+            name_counts[name] += 1
+            value_text = _normalise_text(item.get(cfg.value_field))
+            if value_text is None:
+                continue
+            pair = f"{name}{cfg.pair_separator}{value_text}"
+            if cfg.units_field:
+                units_text = _normalise_text(item.get(cfg.units_field))
+                if units_text:
+                    pair = f"{pair} ({units_text})"
+            entries.append(pair)
+
+        if entries:
+            summaries.append(cfg.separator.join(entries))
+        else:
+            summaries.append(pd.NA)
+
+    summary_series = pd.Series(summaries, index=result.index, dtype="string")
+
+    if cfg.enabled:
+        result[cfg.summary_column] = summary_series
+        if cfg.drop_source_column and column in result:
+            result = result.drop(columns=[column])
+    elif cfg.drop_source_column and column in result:
+        result = result.drop(columns=[column])
+
+    if cfg.log_missing:
+        missing_rows = int(summary_series.isna().sum())
+        if missing_rows:
+            logger.warning("activity_properties_missing", rows=missing_rows)
+
+    if cfg.log_distribution and name_counts:
+        logger.info(
+            "activity_properties_distribution",
+            counts={name: int(count) for name, count in sorted(name_counts.items())},
+        )
+
+    return result
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
@@ -408,6 +540,24 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             ids = limited
             logger.info("process_limit", limit=len(limited))
 
+        enrichment_cfg = cfg.activity_enrichment
+        extra_columns: list[str] = []
+        action_cfg = enrichment_cfg.action_type
+        if (
+            action_cfg.enabled
+            or action_cfg.log_missing
+            or action_cfg.log_distribution
+        ):
+            extra_columns.append(action_cfg.column)
+        properties_cfg = enrichment_cfg.activity_properties
+        if (
+            properties_cfg.enabled
+            or properties_cfg.log_missing
+            or properties_cfg.log_distribution
+        ):
+            extra_columns.append(properties_cfg.column)
+        extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
+
         try:
             df = cl.get_activities(
                 ids,
@@ -415,6 +565,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 client=client,
                 chunk_size=cfg.activity.batch_size,
                 timeout=cfg.activity.timeout,
+                **extra_kwargs,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error(
@@ -429,6 +580,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = normalize_activities(df)
         df = add_pipeline_metadata(df)
         df = compute_activity_bounds(df, cfg.activity_bounds)
+        df = enrich_action_type(df, enrichment_cfg.action_type)
+        df = enrich_activity_properties(df, enrichment_cfg.activity_properties)
         # Determine final column order: schema-defined columns first in their
         # declared sequence, followed by any additional columns sorted
         # alphabetically to provide deterministic output.

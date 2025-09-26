@@ -56,9 +56,11 @@ def _run(
         client: Any,
         chunk_size: int,
         timeout: float,
+        **kwargs: object,
     ) -> pd.DataFrame:
         data = list(ids)
         called["batch_size"] = chunk_size
+        called["extra_columns"] = kwargs.get("extra_columns")
         return pd.DataFrame({"activity_id": data})
 
     def fake_write(
