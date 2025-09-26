@@ -16,12 +16,36 @@ from pathlib import Path
 import pandas as pd
 from pytest import MonkeyPatch
 
-from library import target_postprocessing as tp
 from library import protein_classification as pc
 from library.config import Config
 from schemas.targets import TARGETS_COLUMN_ORDER
 from schemas import TargetsSchema
 from scripts import get_target_data as gtd
+
+
+class DummyRecord:
+    """Lightweight classification record for deterministic predictions."""
+
+    def __init__(self, status: str = "target_id") -> None:
+        self.STATUS = status
+        self.IUPHAR_class = "ClassA"
+        self.IUPHAR_subclass = "SubclassA"
+        self.IUPHAR_type = "TypeA"
+
+
+class DummyClassifier:
+    """Minimal classifier returning deterministic values for tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def get(self, target_id: str, family_id: str, ec_number: str, name: str) -> DummyRecord:
+        self.calls.append(("get", (target_id, family_id, ec_number, name)))
+        return DummyRecord()
+
+    def by_molecular_function(self, molecular_function: str) -> DummyRecord:
+        self.calls.append(("by_molecular_function", (molecular_function,)))
+        return DummyRecord(status="molecular_function")
 
 
 def test_prepare_targets_for_schema_adds_missing_columns() -> None:
@@ -73,11 +97,17 @@ def test_run_all_uses_local_inputs(
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         recorded["chunk_size"] = cfg.target.chembl.chunk_size
-        shutil.copy(chembl_data, args.output_csv)
+        df = pd.read_csv(chembl_data)
+        df["type"] = "Legacy"
+        df.to_csv(args.output_csv, index=False)
         return 0
 
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
-        shutil.copy(uniprot_data, args.output_csv)
+        df = pd.read_csv(uniprot_data)
+        df["lineage_superkingdom"] = "Eukaryota"
+        df["lineage_phylum"] = "Chordata"
+        df["lineage_class"] = "Mammalia"
+        df.to_csv(args.output_csv, index=False)
         return 0
 
     def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
@@ -88,19 +118,16 @@ def test_run_all_uses_local_inputs(
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *a, **k: None)
-    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
-    monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
+    classifier = DummyClassifier()
+    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: classifier)
 
-    # ``finalise_targets`` expects to derive the cellularity column from taxonomy
-    # fields. The wrapper removes any pre-existing ``type`` column to mimic
-    # production behaviour and keeps the original logic otherwise.
-    orig_finalise = tp.finalise_targets
+    orig_finalise = gtd.tp.finalise_targets
 
-    def patched_finalise(df: pd.DataFrame, **kw: object) -> pd.DataFrame:
-        df = df.drop(columns=["type"], errors="ignore")
-        return orig_finalise(df, **kw)
+    def patched_finalise(df: pd.DataFrame, **kwargs: object) -> pd.DataFrame:
+        df = df.drop(columns=[col for col in ("type", "target_type") if col in df.columns])
+        return orig_finalise(df, **kwargs)
 
-    monkeypatch.setattr(tp, "finalise_targets", patched_finalise)
+    monkeypatch.setattr(gtd.tp, "finalise_targets", patched_finalise)
 
     # Skip strict schema validation; the goal is to exercise orchestration.
     monkeypatch.setattr(
@@ -137,6 +164,9 @@ def test_run_all_uses_local_inputs(
     assert row["uniprot_id_primary"] == "P12345"
     assert row["gene_symbol"] == "GENEA"
     assert row["target_type"] == "Multicellular organism"
+    assert row["protein_class_pred_L1"] == "ClassA"
+    assert row["protein_class_pred_rule_id"] == "target_id"
+    assert classifier.calls
     assert (
         row["protein_synonym_list"]
         == "gene1|genea|sec1|alpha component|alt|recommended|name1|name2|alpha"

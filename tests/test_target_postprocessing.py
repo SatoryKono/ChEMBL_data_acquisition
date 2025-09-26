@@ -109,6 +109,7 @@ def test_finalise_targets_filters_duplicates_and_classifies() -> None:
             "synonyms": ["SynA", "SynB", "SynC"],
             "SUPFAM": ["s1", "s2", "s3"],
             "transmembrane": ["True", "True", "False"],
+            "type": ["LegacyA", "LegacyB", "LegacyC"],
         }
     )
 
@@ -196,6 +197,29 @@ def test_finalise_targets_no_downcast_warning() -> None:
             uniprot_col="uniprot",
             genus_col="organism",
         )
+
+
+def test_finalise_targets_overrides_existing_type() -> None:
+    """Existing ``type`` values are ignored when inferring cellularity."""
+
+    df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL3"],
+            "uniprotkb_Id": ["P99999"],
+            "genus": ["Influenza"],
+            "lineage_superkingdom": ["Viruses"],
+            "lineage_phylum": ["-"],
+            "lineage_class": ["-"],
+            "synonyms": ["SynV"],
+            "SUPFAM": ["s4"],
+            "transmembrane": ["False"],
+            "type": ["Legacy"],
+        }
+    )
+
+    out = tp.finalise_targets(df)
+
+    assert out.loc[0, "target_type"] == "Viruses"
 
 
 def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
