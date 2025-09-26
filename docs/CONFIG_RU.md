@@ -210,12 +210,14 @@ CLI-параметры имеют приоритет над YAML и окруже
 |  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
-|  | `organism_csv` | `dictionary/_target/targets_type.csv` | Классификация организмов и типов таргетов. |
+
 |  | `uniprot_column` | `uniprot_id` | Колонка для соединения с UniProt. |
 |  | `chembl_out` | `null` | Индивидуальный путь для объединённых данных ChEMBL. |
 |  | `uniprot_out` | `null` | Индивидуальный путь для объединённых данных UniProt. |
 |  | `iuphar_out` | `null` | Индивидуальный путь для объединённых данных IUPHAR. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
+
+> При финализации `finalise_targets` вызывает встроенный классификатор таксономии: он использует поля UniProt с родословной (`genus`, `lineage_*`, `taxon_id`, `species_group_flag`) для расчёта итоговой колонки `type` и вспомогательных флагов, поэтому отдельный CSV для `organism` больше не нужен.
 
 ## Другие источники (`sources.*`)
 
@@ -239,11 +241,13 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Корневая папка словарей. |
-| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
-| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
-| `organism_csv` | `dictionary/_target/targets_type.csv` | Классификация организмов. |
-| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
+| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
+| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `uniprot_data_dir` | `dictionary/uniprot` | Кэшированные ответы UniProt. |
+| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Классификация типов таргетов. |
+
+
+> Таксономическая классификация таргетов теперь вычисляется по данным UniProt в коде пайплайна; отдельный файл `organism.csv` не требуется.
 
 ### Настройки ввода-вывода (`local.io`)
 
@@ -317,7 +321,6 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |
 | `CHEMBL_DA_IUPHAR_FAMILY_CSV` | `local.resources.iuphar_family_csv` |
-| `CHEMBL_DA_ORGANISM_CSV` | `local.resources.organism_csv` |
 | `CHEMBL_DA_TARGETS_TYPE_CSV` | `local.resources.targets_type_csv` |
 | `CHEMBL_DA_OPENALEX_BASE` | `sources.openalex.base` |
 | `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `sources.openalex.timeout_connect` |
