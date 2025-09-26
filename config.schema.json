@@ -1013,6 +1013,21 @@
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
+        },
+        "prefer_local_smiles": {
+          "default": false,
+          "description": "Skip PubChem lookups when local pubchem_* columns are populated",
+          "title": "Prefer Local Smiles",
+          "type": "boolean"
+        },
+        "cid_cache_path": {
+          "default": null,
+          "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
+          "title": "Cid Cache Path",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "title": "PubChemCfg",
@@ -1554,7 +1569,7 @@
       "additionalProperties": false,
       "properties": {
         "enable": {
-          "default": true,
+          "default": false,
           "title": "Enable",
           "type": "boolean"
         },

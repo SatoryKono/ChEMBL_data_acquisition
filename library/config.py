@@ -260,6 +260,14 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Time-to-live for PubChem request cache in seconds",
     )
+    prefer_local_smiles: bool = Field(
+        False,
+        description="Skip PubChem lookups when local pubchem_* columns are populated",
+    )
+    cid_cache_path: Path | None = Field(
+        default=None,
+        description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
+    )
 
     @field_validator("base")
     @classmethod
@@ -603,7 +611,7 @@ class TestitemMoleculeEnrichmentLoggingCfg(_BoolModel):
 
 
 class TestitemMoleculeEnrichmentCfg(_BoolModel):
-    enable: bool = True
+    enable: bool = False
     sources: TestitemMoleculeEnrichmentSourcesCfg = Field(
         default_factory=lambda: TestitemMoleculeEnrichmentSourcesCfg()
     )

@@ -918,12 +918,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ):
             extra_columns.append(action_cfg.column)
         properties_cfg = enrichment_cfg.activity_properties
-        if (
-            properties_cfg.enabled
-            or properties_cfg.log_missing
-            or properties_cfg.log_distribution
-        ):
-            extra_columns.append(properties_cfg.column)
         extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
 
         try:
