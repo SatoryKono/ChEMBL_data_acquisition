@@ -62,7 +62,6 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
         )
 
 
-PARENT_LOOKUP_PLACEHOLDER = "-"
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
 PARENT_LOOKUP_SOURCE_REMOTE = "remote"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
@@ -109,7 +108,9 @@ def attach_parent_molecule_ids(
 
     if result.empty:
         if catalog_cfg.parent_field not in result.columns:
-            result[catalog_cfg.parent_field] = PARENT_LOOKUP_PLACEHOLDER
+            result[catalog_cfg.parent_field] = pd.Series(
+                pd.NA, index=result.index, dtype="string"
+            )
         stats = ParentLookupStats(
             source=PARENT_LOOKUP_SOURCE_SKIPPED,
             missing=0,
@@ -123,7 +124,7 @@ def attach_parent_molecule_ids(
 
     if child_column not in result.columns:
         logger.warning("parent_lookup_missing_child_column", column=child_column)
-        result[parent_column] = PARENT_LOOKUP_PLACEHOLDER
+        result[parent_column] = pd.Series(pd.NA, index=result.index, dtype="string")
         stats = ParentLookupStats(
             source=PARENT_LOOKUP_SOURCE_SKIPPED,
             missing=len(result),
@@ -154,10 +155,12 @@ def attach_parent_molecule_ids(
     unique_children = normalised_child[normalised_child != ""].unique()
 
     parent_map = {key: catalog[key] for key in unique_children if key in catalog}
-    parent_series = normalised_child.map(parent_map).fillna(PARENT_LOOKUP_PLACEHOLDER)
+    parent_series = normalised_child.map(parent_map)
+    missing_mask = parent_series.isna()
+    parent_series = parent_series.astype("string")
     result[parent_column] = parent_series
 
-    missing = int((result[parent_column] == PARENT_LOOKUP_PLACEHOLDER).sum())
+    missing = int(missing_mask.sum())
     attached = len(result) - missing
 
     stats = ParentLookupStats(
