@@ -225,7 +225,7 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 > Target taxonomy (`type` column and classifier flags) is computed by a built-in
 > module that uses UniProt lineage fields (`genus`, `lineage_superkingdom`,
 > `lineage_phylum`, `lineage_class`), the `taxon_id`, and ChEMBL's
-> `species_group_flag`. No external `organism.csv` lookup is required.
+> `species_group_flag`. No external organism lookup CSV is required.
 
 ## Other external sources (`sources.*`)
 
