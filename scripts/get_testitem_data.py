@@ -11,7 +11,8 @@ if __package__ is None:  # running as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
-from collections.abc import Mapping, Sequence
+from collections import ChainMap
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from itertools import islice
 
@@ -172,9 +173,19 @@ def attach_parent_molecule_ids(
         return result, stats
 
     source_resolved = source
-    catalog_data = dict(catalog) if catalog is not None else None
     normalised_child = _normalise_chembl_ids(result[child_column])
     unique_children = normalised_child[normalised_child != ""].unique()
+    catalog_data: MutableMapping[str, str] | None
+
+    if catalog is not None:
+        base_view = {
+            key: catalog[key]
+            for key in unique_children
+            if key in catalog
+        }
+        catalog_data = ChainMap({}, base_view)
+    else:
+        catalog_data = None
     used_partial_cache = False
 
     if catalog_data is None:
