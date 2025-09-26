@@ -12,7 +12,11 @@ PA_ANY = cast(DataType, None)
 TestitemsSchema: pa.DataFrameSchema = pa.DataFrameSchema(
     {
         "molecule_chembl_id": pa.Column(str, required=True, nullable=True),
-        "parent_molecule_id": pa.Column(str, required=False, nullable=True),
+
+        "parent_molecule_chembl_id": pa.Column(
+            str, required=False, nullable=True
+        ),
+
         "black_box_warning": pa.Column(PA_ANY, required=False, nullable=True),
         "first_approval": pa.Column(PA_ANY, required=False, nullable=True),
         "max_phase": pa.Column(str, required=False, nullable=True),

@@ -77,6 +77,33 @@ def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCf
     assert result == {"CHEMBL10": "CHEMBL99"}
 
 
+def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
+    cache = tmp_path / "catalog.csv"
+    cache.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nchembl1,chembl42\n",
+        encoding="utf-8",
+    )
+    cfg = MoleculeCatalogCfg(cache_path=cache)
+
+    result = load_parent_catalog(
+        client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL42"}
+
+
+def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg) -> None:
+    cache = tmp_path / "catalog.csv"
+    cache.write_text(
+        "molecule_chembl_id,parant_molecule_id\nchembl1,chembl42\n",
+        encoding="utf-8",
+    )
+    cfg = MoleculeCatalogCfg(cache_path=cache)
+
+    with pytest.raises(ValueError):
+        load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
+
+
 def test_load_parent_catalog_fetches_and_persists(
     tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
