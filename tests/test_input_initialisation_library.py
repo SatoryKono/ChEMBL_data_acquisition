@@ -528,7 +528,8 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
                 "genus",
                 "superkingdom",
                 "phylum",
-                "lineage_class",
+                "taxon_id",
+
             ]
         )
         + "\n"
@@ -543,8 +544,9 @@ def test_process_activity_table_basic(tmp_path: Path) -> None:
                 "True",
                 "Escherichia",
                 "Bacteria",
-                "Proteobacteria",
-                "Gammaproteobacteria",
+                "Pseudomonadota",
+                "511145",
+
             ]
         )
         + "\n"
@@ -644,16 +646,11 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
                 "genus",
                 "superkingdom",
                 "phylum",
-                "lineage_class",
+                "taxon_id",
             ]
         )
-        + "\n"
-        + "\n".join(
-            [
-                "T1,,,,,, ,Homo,Eukaryota,Chordata,Mammalia",
-                "",
-            ]
-        )
+        + "\nT1,,,,,, ,Homo,Eukaryota,Chordata,9606\n"
+
     )
 
     res = process_activity_table(df, tmp_path)
@@ -717,10 +714,11 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
                 "genus",
                 "superkingdom",
                 "phylum",
-                "lineage_class",
+                "taxon_id",
             ]
         )
-        + "\nT1,ClassB,, , , ,False,,Viruses,,\n"
+        + "\nT1,ClassB,, , , ,False,,Viruses,,11676\n"
+
     )
 
     res = process_activity_table(df, tmp_path)
