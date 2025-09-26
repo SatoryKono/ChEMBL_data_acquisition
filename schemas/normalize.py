@@ -19,6 +19,8 @@ def _apply_if_string(series: pd.Series, func: Callable[[str], str]) -> pd.Series
 
     Non-string values are returned unchanged.
     """
+    if pd.api.types.is_bool_dtype(series):
+        return series
     return series.map(lambda x: func(x) if isinstance(x, str) else x)
 
 

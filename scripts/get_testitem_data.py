@@ -22,6 +22,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io
 from library import molecule_catalog
+from library import testitem_enrichment
 from library import pubchem_library as pl
 from library.molecule_catalog import load_parent_catalog, write_parent_catalog_cache
 from library.chembl_client import ChemblClient
@@ -500,7 +501,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             attached=parent_stats.attached,
             missing=parent_stats.missing,
         )
- 
+
+        enrichment_cfg = cfg.testitem_molecule_enrichment
+        if enrichment_cfg.enable:
+            logger.info("testitem_enrichment_start")
+            try:
+                df = testitem_enrichment.enrich(
+                    df,
+                    cfg=enrichment_cfg,
+                    io_cfg=cfg.io,
+                )
+            except ValueError as exc:
+                logger.error("testitem_enrichment_failed", error=str(exc))
+                return 1
+            logger.info("testitem_enrichment_done")
+
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         df = normalize_testitems(df)
         df = add_pipeline_metadata(df)

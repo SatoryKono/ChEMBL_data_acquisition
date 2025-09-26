@@ -1340,6 +1340,95 @@
       "title": "TestitemCfg",
       "type": "object"
     },
+    "TestitemMoleculeEnrichmentSourcesCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "molecule_catalog_path": {
+          "default": "dictionary/molecule_catalog.csv",
+          "format": "path",
+          "title": "Molecule Catalog Path",
+          "type": "string"
+        },
+        "molecule_hierarchy_path": {
+          "default": "dictionary/molecule_hierarchy.csv",
+          "format": "path",
+          "title": "Molecule Hierarchy Path",
+          "type": "string"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentSourcesCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentOutputCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "salt_as_null_when_absent": {
+          "default": true,
+          "title": "Salt As Null When Absent",
+          "type": "boolean"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentOutputCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentFlagsCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "coerce_to_bool": {
+          "default": true,
+          "title": "Coerce To Bool",
+          "type": "boolean"
+        },
+        "parent_fallback": {
+          "default": true,
+          "title": "Parent Fallback",
+          "type": "boolean"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentFlagsCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentLoggingCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "warn_missing_molecule": {
+          "default": true,
+          "title": "Warn Missing Molecule",
+          "type": "boolean"
+        },
+        "warn_inconsistent_flags": {
+          "default": true,
+          "title": "Warn Inconsistent Flags",
+          "type": "boolean"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentLoggingCfg",
+      "type": "object"
+    },
+    "TestitemMoleculeEnrichmentCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "sources": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentSourcesCfg"
+        },
+        "output": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentOutputCfg"
+        },
+        "flags": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentFlagsCfg"
+        },
+        "logging": {
+          "$ref": "#/$defs/TestitemMoleculeEnrichmentLoggingCfg"
+        }
+      },
+      "title": "TestitemMoleculeEnrichmentCfg",
+      "type": "object"
+    },
     "UniprotCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1447,6 +1536,9 @@
     },
     "activity_enrichment": {
       "$ref": "#/$defs/ActivityEnrichmentCfg"
+    },
+    "testitem_molecule_enrichment": {
+      "$ref": "#/$defs/TestitemMoleculeEnrichmentCfg"
     },
     "system": {
       "$ref": "#/$defs/SystemCfg"

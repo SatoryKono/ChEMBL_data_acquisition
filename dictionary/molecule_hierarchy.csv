@@ -1,0 +1,3 @@
+molecule_chembl_id,parent_molecule_chembl_id
+CHEMBL1903,CHEMBL19
+CHEMBL19,CHEMBL19

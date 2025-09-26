@@ -186,6 +186,20 @@ activity_enrichment:
     log_missing: false
     log_distribution: false
 
+testitem_molecule_enrichment:
+  enable: true
+  sources:
+    molecule_catalog_path: "dictionary/molecule_catalog.csv"
+    molecule_hierarchy_path: "dictionary/molecule_hierarchy.csv"
+  output:
+    salt_as_null_when_absent: true
+  flags:
+    coerce_to_bool: true
+    parent_fallback: true
+  logging:
+    warn_missing_molecule: true
+    warn_inconsistent_flags: true
+
 activity_bounds:
   enable_from_relation: true      # Derive bounds from relation/value pairs when explicit bounds are absent
   enable_from_uncertainty: false  # Parse ± expressions when available
