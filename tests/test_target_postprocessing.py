@@ -191,15 +191,13 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
             "SUPFAM": ["s1", "s2", "s3"],
         }
     )
-    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
-
     input_path = tmp_path / "in.csv"
     df.to_csv(input_path, index=False)
-    organism_path = tmp_path / "org.csv"
-    organism.to_csv(organism_path, index=False)
     output_path = tmp_path / "out.csv"
 
+    organism_path = Path("tests/data/organism_min.csv")
     cfg.resources.organism_csv = organism_path
+    organism = pd.read_csv(organism_path)
     tp.finalise_file(
         input_path,
         output_path,
@@ -233,6 +231,25 @@ def test_finalise_targets_no_downcast_warning() -> None:
             uniprot_col="uniprot",
             genus_col="organism",
         )
+
+
+def test_finalise_targets_with_existing_type() -> None:
+    """Existing ``type`` column is retained as ``target_type``."""
+
+    df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprotkb_Id": ["P12345"],
+            "genus": ["Homo"],
+            "type": ["original"],
+        }
+    )
+    organism = pd.DataFrame({"genus": ["Homo"], "type": ["Mammal"]})
+
+    result = tp.finalise_targets(df, organism)
+
+    assert result.loc[0, "target_type"] == "original"
+    assert "type" not in result.columns
 
 
 def test_finalise_targets_uses_target_chembl_id_by_default() -> None:
