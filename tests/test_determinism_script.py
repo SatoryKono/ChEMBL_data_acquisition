@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
+
+import pandas as pd
+import pytest
 
 
 def test_determinism_script_returns_zero() -> None:
@@ -19,3 +23,33 @@ def test_determinism_script_returns_zero() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_determinism_script_reports_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The script should exit with ``1`` when hashes differ."""
+
+    from scripts import check_determinism as script
+    from library.utils.cli_tools import check_determinism as impl
+
+    def fake_write_csv_deterministic(
+        df: pd.DataFrame,
+        path: Path,
+        **_: object,
+    ) -> Path:
+        target = Path(path)
+        content = "first" if "first" in target.name else "second"
+        target.write_text(content, encoding="utf-8")
+        return target
+
+    monkeypatch.setattr(impl, "write_csv_deterministic", fake_write_csv_deterministic)
+    monkeypatch.setattr(
+        impl,
+        "sha256_file",
+        lambda p: "hash1" if "first" in str(p) else "hash2",
+    )
+    monkeypatch.setattr(sys, "argv", ["check_determinism", "--log-level", "DEBUG"])
+
+    rc = script.main()
+    assert rc == 1

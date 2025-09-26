@@ -36,7 +36,7 @@ _VALID_ENV_PATHS: dict[str, list[str]] = {
 
 @given(
     item=st.sampled_from(list(_VALID_ENV_PATHS.items())),
-    value=st.text(alphabet=string.ascii_letters + string.digits),
+    value=st.integers(min_value=1, max_value=10_000).map(str),
 )
 def test_apply_env_overrides_valid(item: tuple[str, list[str]], value: str) -> None:
     """Valid environment variables override configuration values."""
@@ -45,9 +45,10 @@ def test_apply_env_overrides_valid(item: tuple[str, list[str]], value: str) -> N
     data: dict[str, Any] = {}
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setenv(env_key, value)
-        config._apply_env_overrides(data)
+        overrides = config._apply_env_overrides(data)
 
-    assert _get_by_path(data, path) == value
+    assert _get_by_path(data, path) == int(value)
+    assert overrides[tuple(path)] == env_key
 
 
 @given(
@@ -75,7 +76,8 @@ def test_apply_env_overrides_invalid(parts: list[str], value: str) -> None:
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setenv(env_key, value)
         monkeypatch.setattr(logger, "warning", fake_warning)
-        config._apply_env_overrides(data)
+        overrides = config._apply_env_overrides(data)
 
     assert data == {}
+    assert overrides == {}
     assert any(env_key in msg for msg in warnings)

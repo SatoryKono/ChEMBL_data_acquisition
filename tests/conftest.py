@@ -11,6 +11,7 @@ from library.config import ApiCfg, Config
 
 
 @pytest.fixture(autouse=True)
+ 
 def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disallow outbound HTTP requests during tests."""
 
@@ -20,6 +21,24 @@ def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("External network access is disabled during tests")
 
     monkeypatch.setattr(requests.sessions.Session, "request", deny)
+ 
+def _disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prevent external HTTP requests during tests for determinism."""
+
+    try:
+        import requests
+    except ModuleNotFoundError:  # pragma: no cover - requests optional in env
+        return
+
+    def _deny_request(self, method, url, *args, **kwargs):  # type: ignore[override]
+        msg = (
+            "External HTTP requests are disabled during tests; "
+            f"attempted {method} {url}"
+        )
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr("requests.sessions.Session.request", _deny_request)
+ 
 
 
 @pytest.fixture()

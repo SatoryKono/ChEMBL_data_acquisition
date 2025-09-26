@@ -7,17 +7,17 @@ utilities, their structure, shared services and supporting workflows.
 
 * `scripts/` – command-line entry points for the activity, assay, document,
   target and test-item pipelines, plus the cached target harness used for
-  offline smoke tests.【F:scripts/get_activity_data.py†L1-L1160】【F:scripts/pipeline_targets_main.py†L1-L141】
+  offline smoke tests.
 * `library/` – reusable modules covering API clients, rate limiting,
   normalisation, enrichment, validation, deterministic I/O, logging and
-  metadata helpers.【F:library/__init__.py†L1-L50】【F:library/io.py†L1-L236】
+  metadata helpers.
 * `schemas/` – `pandera` validation schemas and normalisers that keep column
-  ordering, data types and canonical values consistent across exports.【F:schemas/__init__.py†L1-L16】
+  ordering, data types and canonical values consistent across exports.
 * `dictionary/` & `data/` – local lookup tables, cached API responses and input
-  workbooks consumed by the pipelines.【F:config.yaml†L96-L154】
+  workbooks consumed by the pipelines.
 * `docs/` – the reference documentation you are reading.
 * `tests/` – unit and integration coverage for configuration overrides,
-  enrichment logic, deterministic exports and CLI wiring.【F:tests/test_activity_pipeline.py†L1-L220】
+  enrichment logic, deterministic exports and CLI wiring.
 
 ## Data flow overview
 
@@ -36,16 +36,16 @@ add_pipeline_metadata → write_csv_deterministic →
 ```
 
 * `io.read_ids` streams identifiers while filtering empty values and enforcing
-  the required column names.【F:library/io.py†L87-L160】
+  the required column names.
 * API access is centralised in `ChemblClient` and companion clients that obey
   rate limits, retries and timeouts declared in `config.yaml`.
 * Normalisation and enrichment happen inside the scripts, relying on helper
   modules such as `document_pipeline`, `target_postprocessing`,
   `testitem_enrichment` and `activity_bounds`. Validation failures are captured
-  by `SidecarErrors` and saved next to the export for troubleshooting.【F:library/sidecar.py†L1-L154】
+  by `SidecarErrors` and saved next to the export for troubleshooting.
 * Deterministic CSV writing plus metadata sidecars are handled by
   `write_csv_deterministic`, `write_meta_yaml`, `add_pipeline_metadata` and the
-  table-quality analyser.【F:library/csv_utils.py†L451-L603】【F:library/metadata.py†L29-L133】
+  table-quality analyser.
 
 ## Configuration
 
@@ -54,15 +54,15 @@ add_pipeline_metadata → write_csv_deterministic →
 * Key sections:
   * `sources.*` – base URLs, retry policy, rate limiting and pipeline defaults
     for ChEMBL, UniProt, IUPHAR, PubMed, Semantic Scholar, OpenAlex, CrossRef
-    and PubChem.【F:config.yaml†L11-L258】
+    and PubChem.
   * `local.*` – filesystem layout, CSV formatting defaults and reference
-    workbooks.【F:config.yaml†L108-L154】
+    workbooks.
   * `activity_enrichment` / `activity_bounds` – enrichment and bound-derivation
-    toggles for the activity pipeline.【F:config.yaml†L155-L238】
+    toggles for the activity pipeline.
   * `testitem_molecule_enrichment` – optional salt/catalogue augmentation for
-    test-item exports.【F:config.yaml†L239-L269】
+    test-item exports.
   * `system.*` – logging, global rate limiting, retry configuration and document
-    classification weights.【F:config.yaml†L270-L315】
+    classification weights.
 * Overrides follow the precedence `config.yaml` < environment variables < CLI
   arguments. Short aliases such as `CHEMBL_DA_RPS` (`sources.chembl.api.rps`)
   and `CHEMBL_DA_OUTDIR` (`local.io.output_dir`) are exposed for convenience.
@@ -72,14 +72,14 @@ add_pipeline_metadata → write_csv_deterministic →
 
 * **ChEMBL REST API** supplies activities, assays, targets, documents and
   molecule metadata. Requests are chunked and retried according to the pipeline
-  configuration.【F:library/chembl_client.py†L1-L286】
+  configuration.
 * **PubMed, Semantic Scholar, OpenAlex, CrossRef** enrich document exports with
-  bibliographic data and DOI coverage.【F:scripts/get_document_data.py†L242-L533】
+  bibliographic data and DOI coverage.
 * **UniProt** provides protein annotations and ID mapping for the target
-  pipeline.【F:library/uniprot_library.py†L1-L357】
-* **IUPHAR** contributes receptor classifications from local CSV snapshots.【F:library/target_postprocessing.py†L1-L599】
+  pipeline.
+* **IUPHAR** contributes receptor classifications from local CSV snapshots.
 * **PubChem** augments test items with canonical identifiers and chemical
-  descriptors.【F:library/testitem_enrichment.py†L17-L216】
+  descriptors.
 
 ## Installation & tooling
 
@@ -102,7 +102,7 @@ Dependency versions and optional tooling are declared in `pyproject.toml` and
 * Pipelines expose additional switches (for example, `--timeout`, `--limit`,
   `--dry-run`, sub-commands for documents and targets). CLI options are merged
   back into the configuration via `apply_config_overrides` before execution so
-  downstream helpers receive consistent settings.【F:library/cli.py†L1-L322】
+  downstream helpers receive consistent settings.
 * Deterministic logging uses JSON lines with `run_id`, `event`, `stage` and
   per-pipeline counters, allowing easy monitoring with `jq` or log collectors.
 
@@ -115,7 +115,7 @@ Detailed command walkthroughs live in `docs/USAGE_EN.md` and
 * Every run writes a `<name>.csv.meta.yaml` sidecar with configuration, command
   line, row counts and SHA-256 digests. Validation errors go into
   `<name>_failure_cases.csv`, and table-quality reports are produced for each
-  dataset.【F:library/metadata.py†L29-L133】【F:library/table_quality.py†L1-L192】
+  dataset.
 * Pipeline-specific extras include document quality JSON files and intermediate
   target exports for the `all` workflow.
 
@@ -126,11 +126,11 @@ examples.
 
 * Deterministic CSV writers and metadata hashing are verified by dedicated unit
   tests and utility CLIs (for example,
-  `library.utils.cli_tools.check_determinism`).【F:library/utils/cli_tools/check_determinism.py†L1-L145】
+  `library.utils.cli_tools.check_determinism`).
 * Smoke fixtures under `tests/data/` cover activities, targets, documents and
   test items for offline experimentation.
 * `python -m library.utils.cli_tools.table_quality_main` and related tools aid
-  validation of third-party datasets before ingestion.【F:library/utils/cli_tools/table_quality_main.py†L1-L171】
+  validation of third-party datasets before ingestion.
 
 This summary should orient newcomers and serve as the high-level entry point to
 more detailed reference material in the `docs/` directory.
