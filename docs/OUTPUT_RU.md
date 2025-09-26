@@ -1,12 +1,13 @@
-# Структура выходных данных
+# Выходные артефакты
 
-## Базовый каталог
+Документ описывает состав файлов, которые формируют пайплайны ChEMBL Data
+Acquisition, а также вспомогательные модули, отвечающие за их создание.
 
-Все наборы сохраняются в `local.io.output_dir` (по умолчанию `data/output`). Если аргумент `--output` не задан, функции
-используют `library.io.default_output_path` и формируют имя `output_<stem входного файла>_<YYYYMMDD>.csv` в указанном каталоге.
-При `local.io.exist_ok=true` необходимые папки создаются автоматически.
+## Структура каталогов
 
-Пример:
+Экспорты сохраняются в `local.io.output_dir` (по умолчанию `data/output`).
+Запись автоматически создаёт родительские каталоги, если `local.io.exist_ok`
+равно `true`.
 
 ```
 data/output/
@@ -20,118 +21,127 @@ data/output/
         └── ...
 ```
 
-## Метаданные sidecar
+Промежуточные файлы таргет-пайплайна в режиме `all`
+(`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) сохраняются в той же
+директории, если CLI-аргументы не задают другие пути.【F:scripts/get_target_data.py†L1064-L1108】
 
-Каждый CSV сопровождается `<name>.csv.meta.yaml`, который записывает `library.metadata.write_meta_yaml`. Файл включает:
+## Sidecar с метаданными (`*.csv.meta.yaml`)
+
+Каждый CSV сопровождается `<name>.csv.meta.yaml`, который создаёт
+`library.metadata.write_meta_yaml`. Файл содержит:
 
 * `generated_at` — отметку времени в формате ISO 8601 (UTC).
-* `git_sha` — хэш коммита репозитория на момент запуска.
+* `git_sha` — хэш коммита на момент запуска.
 * `python_version`, `platform` — сведения о среде выполнения.
-* `command` — точную команду запуска.
-* `config` — релевантные настройки (секреты маскируются).
-* `inputs` — описание исходных файлов и аргументов.
-* `stats` — показатели `rows_total`, `rows_kept`, `rows_dropped`, а также контрольную сумму `output_sha256`.
-* `schema` — имя схемы валидации, применённой к данным.
+* `command` — точную команду CLI.
+* `config` — применённые настройки (секреты автоматически маскируются).
+* `inputs` — описание входных файлов и аргументов.
+* `stats` — `rows_total`, `rows_kept`, `rows_dropped` и контрольную сумму
+  `output_sha256`.
+* `schema` — имя схемы валидации.
 
-Если sidecar уже существует, новый набор полей аккуратно объединяется с текущим содержимым.
+Если sidecar уже существует, содержимое аккуратно объединяется, чтобы сохранить
+ручные пометки.【F:library/metadata.py†L29-L133】
 
 ## Артефакты валидации
 
-* При ошибках проверки Pandera проблемные строки сохраняются в `<stem>_failure_cases.csv` рядом с основным файлом.
-* `library.table_quality.analyze_table_quality` создаёт отчёты `<stem>_quality_report_table.csv` и
-  `<stem>_data_correlation_report_table.csv`. CLI-утилиты размещают их рядом с экспортом, а
-  `library.utils.cli_tools.get_input_initialisation` — в подкаталоге `<output>/data_validity_report/`.
+* При ошибках Pandera строки попадают в `<stem>_failure_cases.csv` через
+  `SidecarErrors`, что позволяет изучить проблемы без остановки основного
+  пайплайна.【F:library/sidecar.py†L1-L154】
+* `library.table_quality.analyze_table_quality` формирует
+  `<stem>_quality_report_table.csv` и
+  `<stem>_data_correlation_report_table.csv`. CLI-утилиты сохраняют отчёты рядом с
+  выгрузкой, а `library.utils.cli_tools.get_input_initialisation` использует
+  подкаталог `<output>/data_validity_report/`.
 
-Все отчёты записываются в кодировке UTF-8 и наследуют детерминированный порядок строк и колонок.
+Все файлы пишутся в UTF-8 и соблюдают детерминированный порядок строк и колонок,
+что упрощает сравнение версий.【F:library/table_quality.py†L1-L192】
 
-## Детерминированный экспорт
+## Детерминированная запись CSV
 
-`library.io.write_csv` вызывает `library.csv_utils.write_csv_deterministic`, сортируя колонки и строки по ключевым столбцам.
-Поведение следует настройкам `cfg.io.csv_sep`, `cfg.io.csv_encoding` и учитывает аргументы `key_cols`/`col_order`.
+`library.io.write_csv` вызывает `library.csv_utils.write_csv_deterministic`,
+который сортирует строки и колонки по явным ключам и учитывает параметры
+`cfg.io.csv_sep`, `cfg.io.csv_encoding`, а также опциональные `key_cols` и
+`col_order`, переданные пайплайном.【F:library/csv_utils.py†L451-L603】
 
-## Метаданные пайплайна
+## Технические колонки пайплайна
 
-Все выгрузки дополняются двумя служебными колонками, которые добавляет `library.pipeline_metadata.add_pipeline_metadata` до валидации и записи CSV: `pipeline_version` фиксирует версию установленного пакета (или значение из `pyproject.toml`), а `timestamp_utc` содержит время запуска в формате ISO 8601.【F:library/pipeline_metadata.py†L24-L84】 Колонки описаны в схемах валидации для активностей, документов, тест-объектов и других сущностей, поэтому они присутствуют даже при пустом наборе данных.【F:schemas/activities.py†L52-L55】【F:schemas/documents.py†L111-L112】【F:schemas/testitems.py†L41-L42】
+Перед валидацией в таблицы добавляются `pipeline_version` и `timestamp_utc`
+(функция `library.pipeline_metadata.add_pipeline_metadata`). Колонки описаны в
+схемах активностей, документов, тест-объектов и других сущностей, поэтому они
+присутствуют даже при пустой выгрузке.【F:library/pipeline_metadata.py†L24-L84】【F:schemas/activities.py†L52-L55】【F:schemas/documents.py†L111-L112】【F:schemas/testitems.py†L41-L42】
 
-`pipeline_version` неизменен в пределах одного запуска и подходит для соединений между таблицами, полученными в той же сессии. `timestamp_utc` отражает время оркестратора, поэтому его следует трактовать как служебный маркер, а не временную метку строк.
+* `pipeline_version` — версия установленного пакета или значение из
+  `pyproject.toml`; единое для всех таблиц в рамках запуска.
+* `timestamp_utc` — время старта пайплайна (ISO 8601). Используйте как
+  служебный маркер, а не временную метку строк.
 
-## Колонки классификации публикаций
+## Классификация публикаций
 
-`scripts/get_document_data.py` дополняет объединённые метаданные детерминированными баллами и метками, которые возвращает `library.document_pipeline.merge_metadata`.【F:scripts/get_document_data.py†L607-L676】【F:library/document_pipeline.py†L160-L208】 В итоговом `document.csv` и схеме валидации присутствуют следующие поля:
+`scripts/get_document_data.py` обогащает документные выгрузки баллами и метками,
+которые рассчитывает `library.document_pipeline.merge_metadata`.
+В таблице и схеме появляются поля:【F:scripts/get_document_data.py†L607-L676】【F:library/document_pipeline.py†L160-L208】
 
 | Колонка | Описание |
 | --- | --- |
-| `publication_types_normalised` | Список уникальных типов публикаций, собранных из ChEMBL, PubMed, Semantic Scholar, OpenAlex и CrossRef. Значения сортируются и разделяются точкой с запятой для устойчивых диффов. |
-| `publication_type_score_review` | Целочисленный вес, накопленный при голосовании за обзоры. Баллы неотрицательны и растут при подтверждении из нескольких источников. |
-| `publication_type_score_experimental` | Целочисленный вес для экспериментальных материалов; вычисляется тем же алгоритмом, что и для обзоров. |
-| `publication_type_score_unknown` | Целочисленный вес, отражающий неявные или явно неизвестные типы. |
-| `publication_class` | Итоговая метка (`review`, `experimental` или `unknown`), выбранная по результатам сравнения весов с порогами классификатора.【F:library/document_type_classifier.py†L7-L74】 |
+| `publication_types_normalised` | Упорядоченный через точку с запятой список типов публикаций из ChEMBL, PubMed, Semantic Scholar, OpenAlex и CrossRef. |
+| `publication_type_score_review` | Целочисленный вес признаков обзора. |
+| `publication_type_score_experimental` | Вес экспериментальных признаков. |
+| `publication_type_score_unknown` | Вес неоднозначных или неизвестных типов. |
+| `publication_class` | Итоговая метка (`review`, `experimental`, `unknown`), вычисленная классификатором с учётом порогов.【F:library/document_type_classifier.py†L7-L74】 |
 
-При отсутствии известных терминов все баллы равны `0`. Классификатор выбирает максимальный балл, превышающий минимальные пороги, и возвращает `unknown`, если сигнал неоднозначен — не стоит трактовать колонку как показатель качества ручной модерации.
+При отсутствии известных токенов баллы равны нулю, а итоговая метка — `unknown`.
 
 ## Границы активности (`lower_value`, `upper_value`)
 
-В `activity.csv` появились поля `lower_value` и `upper_value`, вычисляемые после нормализации в `scripts/get_activity_data.py`. Алгоритм использует только канонические поля `standard_*`, уже приведённые ChEMBL к общим единицам. Очерёдность источников для каждой строки:
+`activity.csv` включает диапазоны значений, рассчитанные из канонических полей
+ChEMBL `standard_*`. Приоритет действий:【F:scripts/get_activity_data.py†L212-L353】【F:config.yaml†L260-L315】【F:library/config.py†L358-L420】
 
-1. Явные границы `standard_lower_value` и `standard_upper_value`.
-2. Пары `standard_value` + `standard_upper_value`: минимальное значение заполняет `lower_value`, максимальное — `upper_value`, если соответствующая граница ещё пуста.
-3. Интерпретация отношений при `activity_bounds.enable_from_relation = true`: `=`/`≈`/`~` задают обе границы, `>=` — только `lower_value`, `<=` — только `upper_value`, `between`/`range` требуют второго нормализованного числа. Неизвестные маркеры оставляют поля пустыми и логируются. Если доступно только исходное `value` без нормализованного аналога, выводится предупреждение `activity_bounds_missing_standard_value`.
-4. При включённом `activity_bounds.enable_from_uncertainty` разбираются записи вида `значение ± дельта` из `standard_text_value` при наличии канонического значения.
+1. Использовать `standard_lower_value` и `standard_upper_value`, если оба
+   присутствуют.
+2. Дополнить отсутствующую границу из пары `standard_value` + явная нижняя/верхняя граница.
+3. При `activity_bounds.enable_from_relation = true` интерпретировать символы
+   отношений (`=`, `≈`, `>=`, `<=`, `between`, `range`).
+4. При включённом `activity_bounds.enable_from_uncertainty` разобрать записи вида
+   `значение ± дельта` из `standard_text_value`.
 
-Результат округляется до `activity_bounds.rounding_digits` знаков (по умолчанию `3`) и обрезается до нуля для концентрационных метрик, когда `activity_bounds.clamp_nonnegative = true`. Определение таких метрик опирается на эвристики по `standard_type` и `standard_units`. Остальные столбцы не меняются, порядок колонок остаётся детерминированным согласно схеме.【F:scripts/get_activity_data.py†L1-L234】【F:config.yaml†L108-L147】【F:library/config.py†L358-L420】【F:schemas/activities.py†L32-L64】
+Результаты округляются до `activity_bounds.rounding_digits` знаков (по умолчанию
+`3`) и обрезаются до нуля для концентрационных метрик, если
+`activity_bounds.clamp_nonnegative = true`.
 
 ## JSON-отчёт о качестве документов
 
-`scripts/get_document_data.py` дополнительно формирует файл `<stem>.quality.json`. Хелпер
-`library.document_pipeline.build_quality_report` собирает общую численность строк, долю заполненных DOI, распределение классов
-публикаций и счётчики ошибок по источникам; `save_quality_report` записывает структуру в UTF-8 JSON со стабильным форматированием для удобства сравнения.【F:scripts/get_document_data.py†L636-L674】【F:library.document_pipeline.py†L300-L356】 Отчёт позволяет контролировать полноту метаданных без чтения основного CSV, например отслеживать падение покрытия DOI.
-
-JSON-файл содержит:
+Документный пайплайн записывает `<stem>.quality.json`. `library.document_pipeline.build_quality_report`
+формирует сводку, а `save_quality_report` сохраняет её в стабильном формате для
+сравнения между запусками. Структура отчёта:【F:scripts/get_document_data.py†L636-L674】【F:library/document_pipeline.py†L300-L356】
 
 | Ключ | Тип | Описание |
 | --- | --- | --- |
-| `rows_total` | Целое | Общее число строк в выгрузке. |
-| `doi_coverage` | Число с плавающей точкой | Доля документов с заполненным DOI (в диапазоне 0.0–1.0). |
-| `publication_class_counts` | Объект | Словарь с количествами по меткам `review` / `experimental` / `unknown`; при отсутствии значения используется `unknown`. |
-| `error_counts` | Объект | Словарь с числом ошибок обогащения по источникам (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
+| `rows_total` | Целое | Количество строк в выгрузке. |
+| `doi_coverage` | Число | Доля документов с DOI (0.0–1.0). |
+| `publication_class_counts` | Объект | Количество строк по меткам `review`, `experimental`, `unknown`; отсутствующие категории представляются нулём. |
+| `error_counts` | Объект | Число ошибок по источникам (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
 
-Все ключи присутствуют всегда, отсутствующие категории представлены нулевыми счётчиками, поэтому мониторинги могут опираться на стабильную схему между запусками.
+## Экспорт тест-объектов
 
-## Рекомендации по ведению архива
+`scripts/get_testitem_data.py` формирует `testitem.csv` с метаданными и отчётами
+качества. Каждая строка объединяет данные ChEMBL, обогащение PubChem и служебные
+колонки, обеспечивая опорное измерение соединений. Для работы требуется каталог
+родительских молекул (`sources.chembl.molecule_catalog.cache_path`) и, по
+возможности, CSV-словари с иерархией и признаками солей.【F:scripts/get_testitem_data.py†L36-L299】【F:library/molecule_catalog.py†L43-L136】【F:library/testitem_enrichment.py†L17-L216】【F:config.yaml†L25-L33】
 
-* Выделяйте под каждый запуск отдельную папку с датой (`YYYYMMDD/`) для удобного сравнения.
-* Архивируйте устаревшие результаты — метаданные сохраняют достаточно информации для воспроизводимости.
-* Следите за свободным местом при длительных или параллельных выгрузках.
+## Кешированный таргет-пайплайн (`pipeline_targets_main.py`)
 
-## Экспорт тест-айтемов
+Утилита `pipeline_targets_main.py` повторяет аргументы боевого таргет-пайплайна,
+но работает только с кешированными чанками ChEMBL. Идентификаторы читаются через
+`read_ids`, далее вызывается `library.pipeline_targets.run_pipeline`, добавляются
+метаданные и выполняется детерминированная запись CSV/sidecar. Инструмент полезен
+для проверки конфигурации и параметров батчирования без обращений к внешним
+сервисам.【F:scripts/pipeline_targets_main.py†L43-L141】
 
-`scripts/get_testitem_data.py` формирует `testitem.csv`, дополняя его стандартными `*.meta.yaml`,
-опциональными `*_failure_cases.csv` и отчётами качества с детерминированным порядком, описанным выше.【F:scripts/get_testitem_data.py†L151-L299】
-Каждая строка объединяет поля ChEMBL (`molecule_chembl_id`, структурные дескрипторы, статусные признаки),
-обогащение PubChem и метаданные запуска, превращая выгрузку в опорное измерение соединений.【F:scripts/get_testitem_data.py†L36-L193】【F:schemas/testitems.py†L12-L31】
+## Рекомендации по сопровождению
 
-Перед распространением данных выполните объединение с каталогом родительских молекул, чтобы добавить
-`parent_molecule_chembl_id` для агрегаций. Отображение хранится в JSON по пути
-`sources.chembl.molecule_catalog.cache_path` и загружается функцией
-`library.molecule_catalog.load_parent_catalog`, которая при необходимости обновляет кэш через API ChEMBL.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L43-L136】
-
-Дополнительный этап обогащения использует `dictionary/_testitem/molecule_hierarchy.csv` и
-`dictionary/_testitem/molecule_catalog.csv`, чтобы до валидации заполнить `salt_chembl_id`
-и булевы признаки `natural_product`, `prodrug`, `polymer_flag`. Соль
-распознаётся, когда `parent_molecule_chembl_id` отличается от
-`molecule_chembl_id`, после чего в `salt_chembl_id` попадает идентификатор
-дочерней молекулы. Флаги нормализуются в nullable-тип pandas `boolean`, а
-пропуски у дочерних записей при необходимости подтягиваются из родителя. Если
-молекула отсутствует в словарях, лог пишется с предупреждением для диагностики.【F:scripts/get_testitem_data.py†L205-L233】【F:library/testitem_enrichment.py†L17-L216】
-
-## Кэшированный таргет-пайплайн (`pipeline_targets_main.py`)
-
-`scripts/pipeline_targets_main.py` формирует ChemBL-срез таргет-пайплайна с теми
-же аргументами CLI, но без сетевых вызовов. Утилита читает идентификаторы через
-`read_ids`, передаёт их в `library.pipeline_targets.run_pipeline` с
-детерминированным загрузчиком ChemBL, затем добавляет технические колонки с
-помощью `add_pipeline_metadata` и записывает результат через `write_csv`.
-Полученные CSV и sidecar наследуют порядок колонок, метаданные и события
-логирования `get_target_data.py`, поэтому инструмент удобен для «сухих»
-прогонов, проверки переопределений и настроек батчирования без обращения к
-внешним API.【F:scripts/pipeline_targets_main.py†L43-L141】
+* Храните результаты в папках с датой (`YYYYMMDD/`) — это облегчает сравнение.
+* Архивируйте устаревшие выгрузки: sidecar сохраняет достаточно информации для
+  воспроизводимости.
+* Контролируйте свободное место при длительных или параллельных запусках.
