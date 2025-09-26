@@ -487,7 +487,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 return 1
             if fetched:
                 parent_catalog.update(fetched)
+                update_parent_catalog_cache(fetched, cfg.molecule_catalog)
                 fetched_remote = True
+                parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
         if fetched_remote:
             parent_catalog_source = PARENT_LOOKUP_SOURCE_REMOTE
         logger.info("pubchem_augment_start")
