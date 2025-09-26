@@ -374,7 +374,6 @@ class ResourcesCfg(_BaseModel):
     iuphar_target_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_target.csv")
     iuphar_family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
     uniprot_data_dir: Path = Path("dictionary/uniprot")
-    organism_csv: Path = Path("dictionary/_Target/targets_type.csv")
     targets_type_csv: Path = Path("dictionary/_Target/targets_type.csv")
 
 
@@ -748,7 +747,6 @@ class TargetAllCfg(_BaseModel):
     family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
-    organism_csv: Path = Path("dictionary/_Target/organism.csv")
     uniprot_column: str = "uniprot_id"
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
@@ -1271,7 +1269,6 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_IUPHAR_TARGET_CSV": ["local", "resources", "iuphar_target_csv"],
     "CHEMBL_DA_LIMITER_CACHE_MAXSIZE": ["system", "rate", "limiter_cache_maxsize"],
     "CHEMBL_DA_LIMITER_CACHE_TTL": ["system", "rate", "limiter_cache_ttl"],
-    "CHEMBL_DA_ORGANISM_CSV": ["local", "resources", "organism_csv"],
     "CHEMBL_DA_OUTDIR": ["local", "io", "output_dir"],
     "CHEMBL_DA_RPS": ["sources", "chembl", "api", "rps"],
     "CHEMBL_DA_TARGETS_TYPE_CSV": ["local", "resources", "targets_type_csv"],

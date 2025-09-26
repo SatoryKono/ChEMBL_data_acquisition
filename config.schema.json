@@ -1215,12 +1215,6 @@
           "title": "Uniprot Data Dir",
           "type": "string"
         },
-        "organism_csv": {
-          "default": "dictionary/_Target/targets_type.csv",
-          "format": "path",
-          "title": "Organism Csv",
-          "type": "string"
-        },
         "targets_type_csv": {
           "default": "dictionary/_Target/targets_type.csv",
           "format": "path",
@@ -1369,12 +1363,6 @@
           "minimum": 0,
           "title": "Timeout",
           "type": "number"
-        },
-        "organism_csv": {
-          "default": "dictionary/_Target/organism.csv",
-          "format": "path",
-          "title": "Organism Csv",
-          "type": "string"
         },
         "uniprot_column": {
           "default": "uniprot_id",
