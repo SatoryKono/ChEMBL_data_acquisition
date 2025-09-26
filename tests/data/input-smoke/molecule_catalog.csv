@@ -1,0 +1,3 @@
+molecule_chembl_id,parent_molecule_chembl_id
+CHEMBL1,CHEMBL9001
+CHEMBL2,CHEMBL9002

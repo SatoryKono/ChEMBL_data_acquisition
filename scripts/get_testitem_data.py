@@ -21,6 +21,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io
 from library import pubchem_library as pl
+from library.molecule_catalog import load_parent_catalog
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -173,6 +174,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("chembl_fetch_start", batch_size=cfg.testitem.batch_size)
 
         try:
+            parent_catalog = load_parent_catalog(
+                client=client,
+                api_cfg=cfg.api,
+                catalog_cfg=cfg.molecule_catalog,
+                timeout=cfg.testitem.timeout,
+            )
+        except ValueError as exc:
+            logger.error(
+                "parent_catalog_invalid",
+                error=str(exc),
+                path=str(cfg.molecule_catalog.cache_path),
+            )
+            return 1
+
+        try:
             df = cl.get_testitem(
                 ids,
                 cfg=cfg.api,
@@ -189,6 +205,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
         logger.info("chembl_fetch_done", rows=len(df))
+        if parent_catalog and "molecule_chembl_id" in df.columns:
+            mapped = df["molecule_chembl_id"].map(parent_catalog)
+            if "parent_molecule_chembl_id" in df.columns:
+                df["parent_molecule_chembl_id"] = df[
+                    "parent_molecule_chembl_id"
+                ].fillna(mapped)
+            else:
+                df["parent_molecule_chembl_id"] = mapped
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Mapping
@@ -86,9 +87,37 @@ def fetch_parent_catalog(
     return result
 
 
-def _read_cache(path: Path) -> dict[str, str]:
+def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
     if not path.is_file():
         return {}
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        try:
+            with path.open("r", encoding="utf-8", newline="") as fh:
+                reader = csv.DictReader(fh)
+                required = {catalog_cfg.child_field, catalog_cfg.parent_field}
+                headers = set(reader.fieldnames or ())
+                missing = required - headers
+                if missing:
+                    raise ValueError(
+                        "missing columns in parent catalog: "
+                        + ", ".join(sorted(missing))
+                    )
+                result: dict[str, str] = {}
+                for row in reader:
+                    child = row.get(catalog_cfg.child_field)
+                    parent = row.get(catalog_cfg.parent_field)
+                    if not child or not parent:
+                        continue
+                    try:
+                        child_id = _normalise_chembl_id(str(child))
+                        parent_id = _normalise_chembl_id(str(parent))
+                    except ValueError:
+                        continue
+                    result[child_id] = parent_id
+                return result
+        except csv.Error as exc:  # pragma: no cover - defensive
+            raise ValueError(f"invalid CSV catalog: {path}: {exc}") from exc
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
@@ -122,7 +151,7 @@ def load_parent_catalog(
 
     cache_path = catalog_cfg.cache_path
     if not force_refresh:
-        cached = _read_cache(cache_path)
+        cached = _read_cache(cache_path, catalog_cfg)
         if cached:
             return cached
 
