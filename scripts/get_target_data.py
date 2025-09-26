@@ -28,6 +28,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io
 from library import iuphar_library as ii
+from library import organism_classification
 from library import target_postprocessing as tp
 from library import protein_classification as pc
 from library import uniprot_library as uu
@@ -1004,7 +1005,44 @@ def merge_results(
         classifier = pc.classifier_from_config(cfg)
     merged = pc.append_protein_class_predictions(merged, classifier)
     processed = tp.postprocess_targets(merged)
-    final_df = tp.finalise_targets(processed)
+
+    taxonomy_kwargs = {
+        "genus_col": "genus" if "genus" in processed.columns else "organism",
+        "superkingdom_col": (
+            "lineage_superkingdom"
+            if "lineage_superkingdom" in processed.columns
+            else "superkingdom"
+        ),
+        "phylum_col": (
+            "lineage_phylum" if "lineage_phylum" in processed.columns else "phylum"
+        ),
+        "class_col": "lineage_class"
+        if "lineage_class" in processed.columns
+        else "class",
+    }
+
+    for column in taxonomy_kwargs.values():
+        if column not in processed.columns and column in merged.columns:
+            processed[column] = merged[column]
+        elif column not in processed.columns:
+            processed[column] = "-"
+
+    processed = organism_classification.add_cellularity_smart(
+        processed,
+        genus_col=taxonomy_kwargs["genus_col"],
+        superkingdom_col=taxonomy_kwargs["superkingdom_col"],
+        phylum_col=taxonomy_kwargs["phylum_col"],
+        class_col=taxonomy_kwargs["class_col"],
+        output_col="target_type",
+    )
+
+    final_df = tp.finalise_targets(
+        processed,
+        genus_col=taxonomy_kwargs["genus_col"],
+        superkingdom_col=taxonomy_kwargs["superkingdom_col"],
+        phylum_col=taxonomy_kwargs["phylum_col"],
+        class_col=taxonomy_kwargs["class_col"],
+    )
     logger.info("merge_results_done", rows=len(final_df))
     return final_df
 
