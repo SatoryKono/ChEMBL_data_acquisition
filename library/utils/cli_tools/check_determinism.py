@@ -11,13 +11,9 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
-import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
-
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 try:
     import pandas as pd

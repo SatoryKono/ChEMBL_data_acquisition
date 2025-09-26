@@ -18,9 +18,6 @@ from itertools import islice
 from pathlib import Path
 from typing import cast
 
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
