@@ -35,7 +35,6 @@ dev = [
   "psutil==7.0.0",
   "pytest==8.4.2",
   "pytest-cov==6.0.0",
-  "hypothesis==6.138.15",
   "responses==0.25.8",
   "ruff==0.13.0",
   "types-cachetools==6.2.0.20250827",
