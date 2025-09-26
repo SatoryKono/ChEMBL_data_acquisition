@@ -10,6 +10,7 @@ import requests
 from library.chembl_client import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
 from library.molecule_catalog import (
+    _read_cache,
     fetch_parent_catalog,
     fetch_parent_catalog_for,
     fetch_parent_for_id,
@@ -434,3 +435,26 @@ def test_update_parent_catalog_cache_appends(tmp_path: Path, api_cfg: ApiCfg) ->
 
     assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
     assert json.loads(cache.read_text(encoding="utf-8")) == result
+
+
+def test_read_cache_invalid_json_returns_empty(tmp_path: Path) -> None:
+    """Gracefully ignore cache files containing malformed JSON."""
+
+    cache_path = tmp_path / "cache.json"
+    cache_path.write_text("[1, 2, 3]", encoding="utf-8")
+    cfg = MoleculeCatalogCfg(cache_path=cache_path)
+
+    assert _read_cache(cache_path, cfg) == {}
+
+
+def test_read_cache_missing_csv_columns_raises(tmp_path: Path) -> None:
+    """CSV caches missing required headers should raise an explicit error."""
+
+    cache_path = tmp_path / "cache.csv"
+    cache_path.write_text("child\nCHEMBL1\n", encoding="utf-8")
+    cfg = MoleculeCatalogCfg(
+        cache_path=cache_path, child_field="child", parent_field="parent"
+    )
+
+    with pytest.raises(ValueError, match="missing columns"):
+        _read_cache(cache_path, cfg)

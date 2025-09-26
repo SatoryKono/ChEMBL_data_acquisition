@@ -11,6 +11,17 @@ from library.config import Config
 
 
 @pytest.fixture(autouse=True)
+ 
+def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disallow outbound HTTP requests during tests."""
+
+    import requests
+
+    def deny(*args: object, **kwargs: object) -> None:
+        raise AssertionError("External network access is disabled during tests")
+
+    monkeypatch.setattr(requests.sessions.Session, "request", deny)
+ 
 def _disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent external HTTP requests during tests for determinism."""
 
@@ -27,6 +38,7 @@ def _disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
         raise RuntimeError(msg)
 
     monkeypatch.setattr("requests.sessions.Session.request", _deny_request)
+ 
 
 
 @pytest.fixture()
