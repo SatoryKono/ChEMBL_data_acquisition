@@ -142,7 +142,8 @@ write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (опц.) failure_ca
 3. Запустить `pre-commit install` и (при необходимости) `pre-commit run --all-files` для первичной проверки качества.
 
 
-4. Подготовить входной CSV с колонкой идентификаторов (по умолчанию `input.csv`/`activity_id`).
+4. Подготовить входной CSV с колонкой идентификаторов (по умолчанию `input.csv`/`activity_chembl_id`).
+   - Название колонки берётся из `sources.chembl.pipelines.activity.column` в конфигурации (дефолт `activity_chembl_id`) и может быть переопределено флагом `--column` или через `config.yaml`.
 
 
 5. Выполнить нужный CLI-скрипт, например `python -m scripts.get_activities --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`.
