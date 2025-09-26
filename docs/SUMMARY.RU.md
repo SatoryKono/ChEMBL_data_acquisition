@@ -339,3 +339,7 @@ python -m venv .venv && source .venv/bin/activate && pip install .[dev] && pytho
 
 
 
+## Примечания к релизу
+- Таксономическая классификация таргетов выполняется полностью в коде. При обновлении
+  удалите ссылки на `dictionary/_Target/organism.csv`: lookup-файл больше не поставляется.
+

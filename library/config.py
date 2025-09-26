@@ -747,7 +747,6 @@ class TargetAllCfg(_BaseModel):
     family_csv: Path = Path("dictionary/_IUPHAR/_IUPHAR_family.csv")
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
-    organism_csv: Path = Path("dictionary/_Target/organism.csv")
     uniprot_column: str = "uniprot_id"
     chembl_out: Path | None = None
     uniprot_out: Path | None = None
