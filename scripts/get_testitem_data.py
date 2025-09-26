@@ -191,19 +191,25 @@ def resolve_pubchem_cid(
     """Resolve PubChem CID for a ChEMBL record."""
 
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    if chembl_id and chembl_id in cache:
-        return cache[chembl_id]
-
-    def _store(value: str | None) -> str | None:
-        if chembl_id:
-            cache[chembl_id] = value
-        return value
+    candidates: dict[str, str | None] = {
+        "standard_inchi_key": _normalise_identifier(
+            row.get("standard_inchi_key"), uppercase=True
+        ),
+        "pubchem_inchikey": _normalise_identifier(
+            row.get("pubchem_inchikey"), uppercase=True
+        ),
+        "standard_inchi": _normalise_identifier(row.get("standard_inchi")),
+        "pubchem_inchi": _normalise_identifier(row.get("pubchem_inchi")),
+        "pref_name": _normalise_identifier(row.get("pref_name")),
+        "canonical_smiles": _normalise_identifier(row.get("canonical_smiles")),
+    }
 
     def _attempt(
         identifier: str,
-        value: str | None,
+        candidate_key: str,
         resolver: Callable[[str, PubChemCfg], str | None],
     ) -> str | None:
+        value = candidates.get(candidate_key)
         if not value:
             return None
         resolved = resolver(value, cfg)
@@ -214,28 +220,33 @@ def resolve_pubchem_cid(
             value=value,
         )
 
-    inchikey = _normalise_identifier(row.get("standard_inchi_key"), uppercase=True)
-    cid = _attempt("standard_inchi_key", inchikey, pl.get_cid_from_inchikey)
-    if cid:
-        return _store(cid)
+    pipeline: dict[str, list[tuple[str, str, Callable[[str, PubChemCfg], str | None]]]] = {
+        "inchikey": [
+            ("standard_inchi_key", "standard_inchi_key", pl.get_cid_from_inchikey),
+            ("pubchem_inchikey", "pubchem_inchikey", pl.get_cid_from_inchikey),
+            ("standard_inchi", "standard_inchi", pl.get_cid_from_inchi),
+            ("pubchem_inchi", "pubchem_inchi", pl.get_cid_from_inchi),
+        ],
+        "name": [
+            ("pref_name", "pref_name", pl.get_cid),
+            ("pref_name_partial", "pref_name", pl.get_all_cid),
+        ],
+        "smiles": [
+            ("canonical_smiles", "canonical_smiles", pl.get_cid_from_smiles),
+        ],
+    }
 
-    inchi = _normalise_identifier(row.get("standard_inchi"))
-    cid = _attempt("standard_inchi", inchi, pl.get_cid_from_inchi)
-    if cid:
-        return _store(cid)
-
-    pref_name = _normalise_identifier(row.get("pref_name"))
-    cid = _attempt("pref_name", pref_name, pl.get_cid)
-    if cid:
-        return _store(cid)
-    cid = _attempt("pref_name_partial", pref_name, pl.get_all_cid)
-    if cid:
-        return _store(cid)
-
-    smiles = _normalise_identifier(row.get("canonical_smiles"))
-    cid = _attempt("canonical_smiles", smiles, pl.get_cid_from_smiles)
-    if cid:
-        return _store(cid)
+    for step in getattr(cfg, "resolve_order", ["cache", "inchikey", "name", "smiles"]):
+        if step == "cache":
+            if chembl_id and chembl_id in cache:
+                return cache[chembl_id]
+            continue
+        for identifier, candidate_key, resolver in pipeline.get(step, []):
+            cid = _attempt(identifier, candidate_key, resolver)
+            if cid:
+                if chembl_id:
+                    cache[chembl_id] = cid
+                return cid
 
     if chembl_id and chembl_id not in cache:
         cache[chembl_id] = None

@@ -255,6 +255,10 @@ class PubChemCfg(_BaseModel):
     rps: int = Field(3, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(3.0, ge=0)
+    resolve_order: list[str] = Field(
+        default_factory=lambda: ["cache", "inchikey", "name", "smiles"],
+        description="Resolution order for PubChem CID lookups",
+    )
     cache_ttl: int = Field(
         3600,
         ge=0,
@@ -275,6 +279,15 @@ class PubChemCfg(_BaseModel):
         if not _valid_url(v):
             raise ValueError("invalid URL")
         return v
+
+    @field_validator("resolve_order")
+    @classmethod
+    def _validate_resolve_order(cls, value: list[str]) -> list[str]:
+        allowed = {"cache", "inchikey", "name", "smiles"}
+        invalid = [item for item in value if item not in allowed]
+        if invalid:
+            raise ValueError(f"invalid resolve order entries: {invalid}")
+        return value
 
 
 class PubMedCfg(_BaseModel):

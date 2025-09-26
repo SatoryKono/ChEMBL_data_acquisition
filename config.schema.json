@@ -1007,6 +1007,26 @@
           "title": "Delay",
           "type": "number"
         },
+        "resolve_order": {
+          "default": [
+            "cache",
+            "inchikey",
+            "name",
+            "smiles"
+          ],
+          "description": "Resolution order for PubChem CID lookups",
+          "items": {
+            "enum": [
+              "cache",
+              "inchikey",
+              "name",
+              "smiles"
+            ],
+            "type": "string"
+          },
+          "title": "Resolve Order",
+          "type": "array"
+        },
         "cache_ttl": {
           "default": 3600,
           "description": "Time-to-live for PubChem request cache in seconds",

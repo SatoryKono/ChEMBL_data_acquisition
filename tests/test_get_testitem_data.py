@@ -99,6 +99,40 @@ def test_resolve_pubchem_cid_prefers_inchikey(
     assert calls == ["inchikey"]
 
 
+def test_resolve_pubchem_cid_uses_pubchem_inchikey_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = pd.Series(
+        {
+            "molecule_chembl_id": "chembl1",
+            "pubchem_inchikey": "pubchem-key",
+            "pref_name": "should-not-trigger",
+            "canonical_smiles": "C",
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    cache: dict[str, str | None] = {}
+
+    monkeypatch.setattr(
+        pl,
+        "get_cid_from_inchikey",
+        lambda value, cfg: "42" if value == "PUBCHEM-KEY" else None,
+    )
+
+    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+        raise AssertionError("unexpected resolver invocation")
+
+    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
+    monkeypatch.setattr(pl, "get_cid", fail)
+    monkeypatch.setattr(pl, "get_all_cid", fail)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
+
+    cid = gtd.resolve_pubchem_cid(row, cache, cfg)
+
+    assert cid == "42"
+    assert cache["CHEMBL1"] == "42"
+
+
 def test_add_pubchem_data_uses_disk_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
