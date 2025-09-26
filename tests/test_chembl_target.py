@@ -1,0 +1,35 @@
+"""Tests for helpers defined in ``library.chembl_target``."""
+
+from library.chembl_target import _collect_reaction_ec_numbers
+
+
+def test_collect_reaction_ec_numbers_excludes_reactome_like_xrefs() -> None:
+    """Ensure excluded xref sources are ignored while valid ones remain."""
+
+    components = [
+        {
+            "target_component_synonyms": {
+                "target_component_synonym": [
+                    {
+                        "syn_type": "REACTION",
+                        "component_synonym": "1.1.1.1",
+                    },
+                    {
+                        "syn_type": "REACTION_NUMBER",
+                        "component_synonym": "2.2.2.2",
+                    },
+                ]
+            },
+            "target_component_xrefs": {
+                "target": [
+                    {"xref_src_db": "Reactome", "xref_id": "R-HSA-111111"},
+                    {"xref_src_db": "RHEA", "xref_id": "RHEA:12345"},
+                    {"xref_src_db": "MetaCyc", "xref_id": "META:999"},
+                    {"xref_src_db": "EC_REACTION", "xref_id": "EC:9.9.9.9"},
+                    {"xref_src_db": "SABIO-RK", "xref_id": "SABIO:555"},
+                ]
+            },
+        }
+    ]
+
+    assert _collect_reaction_ec_numbers(components) == "1.1.1.1|2.2.2.2|SABIO:555"

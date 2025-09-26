@@ -39,6 +39,13 @@ EMPTY_TARGET: dict[str, str] = {field: "" for field in TARGET_FIELDS}
 
 TARGET_INCLUDE_PARAMS = "protein_classifications,cross_references"
 
+REACTION_EC_EXCLUDED_XREFS = {
+    "REACTOME",
+    "RHEA",
+    "METACYC",
+    "EC_REACTION",
+}
+
 
 def _parse_gene_synonyms(synonyms: list[dict[str, str]]) -> str:
     """Return a sorted, pipe separated list of gene synonyms."""
@@ -139,11 +146,12 @@ def _collect_reaction_ec_numbers(components: list[dict[str, Any]]) -> str:
         xrefs = _get_items(component.get("target_component_xrefs"), "target")
         for xref in xrefs:
             src = (xref.get("xref_src_db") or "").upper()
-            if src in {"REACTOME", "RHEA", "METACYC", "EC_REACTION"}:
-                value = xref.get("xref_id")
-                if isinstance(value, str) and value and value not in seen:
-                    seen.add(value)
-                    numbers.append(value)
+            if src in REACTION_EC_EXCLUDED_XREFS:
+                continue
+            value = xref.get("xref_id")
+            if isinstance(value, str) and value and value not in seen:
+                seen.add(value)
+                numbers.append(value)
     return "|".join(numbers)
 
 
