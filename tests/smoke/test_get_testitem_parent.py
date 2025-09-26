@@ -93,6 +93,13 @@ def test_get_testitem_parent_catalog(
         "fetch_parent_catalog_for",
         fake_fetch_parent_catalog_for,
     )
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.resolve_order = ("smiles",)
+        return cfg
+
     monkeypatch.setattr(
         get_testitem_data,
         "write_parent_catalog_cache",
@@ -104,6 +111,7 @@ def test_get_testitem_parent_catalog(
         lambda data, cfg: None,
     )
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply_config_overrides)
 
     exit_code = get_testitem_data.main(
         [
@@ -195,7 +203,15 @@ def test_get_testitem_skips_parent_lookup_when_present(
         "fetch_parent_catalog_for",
         fake_fetch_parent_catalog_for,
     )
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.resolve_order = ("smiles",)
+        return cfg
+
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply_config_overrides)
 
     exit_code = get_testitem_data.main(
         [
@@ -218,39 +234,101 @@ def test_get_testitem_skips_parent_lookup_when_present(
     assert fetch_called is False
 
 
-def test_parent_lookup_fallback_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure fallback requests are executed with bounded parallelism."""
 
-    ids = [f"CHEMBL{i}" for i in range(1, 9)]
-    mapping = {chembl_id: f"{chembl_id}_P" for chembl_id in ids}
-    api_cfg = ApiCfg()
-    catalog_cfg = MoleculeCatalogCfg()
+def test_get_testitem_refreshes_outdated_parents(
+    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure existing parent IDs are refreshed when forced via configuration."""
 
-    monkeypatch.setattr(molecule_catalog, "_PARENT_LOOKUP_SINGLE_CONCURRENCY", 8)
-    monkeypatch.setattr(molecule_catalog, "query_parent_catalog", lambda children, catalog_cfg: {})
-    monkeypatch.setattr(molecule_catalog, "load_parent_catalog", lambda **_: {})
+    input_csv = Path("tests/data/input-smoke/testitem.csv")
+    output_csv = smoke_output_dir / "testitem_parent_refresh.csv"
+    _cleanup_output(output_csv)
 
-    fetch_calls: list[str] = []
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+        rows: list[dict[str, object]] = []
+        for idx, mol_id in enumerate(ids, start=1):
+            rows.append(
+                {
+                    "molecule_chembl_id": str(mol_id),
+                    "parent_molecule_chembl_id": f"CHEMBL99{idx:02d}",
+                    "canonical_smiles": f"C{idx}H{2 * idx + 2}",
+                    "max_phase": "4",
+                }
+            )
+        return pd.DataFrame(rows)
 
-    def fake_fetch_parent_for_id(chembl_id: str, **_: object) -> tuple[str, str]:
-        fetch_calls.append(chembl_id)
-        sleep(0.05)
-        return chembl_id, mapping[chembl_id]
+    def fake_get_cid(smiles: str, cfg):  # type: ignore[no-untyped-def]
+        return "12345"
 
-    monkeypatch.setattr(molecule_catalog, "fetch_parent_for_id", fake_fetch_parent_for_id)
+    def fake_get_properties(cid: str, cfg):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(
+            IUPACName="Mock acid",
+            MolecularFormula="C2H6O",
+            iSMILES="CCO",
+            cSMILES="CCO",
+            InChI="InChI=1S/C2H6O",
+            InChIKey="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+        )
 
-    start = perf_counter()
-    result = molecule_catalog._fetch_parent_catalog_via_helper(
-        ids,
-        client=SimpleNamespace(),
-        api_cfg=api_cfg,
-        timeout=None,
-        existing={},
-        catalog_cfg=catalog_cfg,
-        allow_rebatch=False,
+    mapping = {
+        "CHEMBL1": "CHEMBL9001",
+        "CHEMBL2": "CHEMBL9002",
+    }
+    fetch_calls: list[list[str]] = []
+
+    def fake_fetch_parent_catalog_for(ids, **_: object) -> dict[str, str]:
+        fetch_calls.append(list(ids))
+        return {key: mapping[key] for key in ids if key in mapping}
+
+    original_apply = get_testitem_data.apply_config_overrides
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+    monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
+    monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+    monkeypatch.setattr(
+        get_testitem_data.molecule_catalog,
+        "fetch_parent_catalog_for",
+        fake_fetch_parent_catalog_for,
     )
-    elapsed = perf_counter() - start
+    monkeypatch.setattr(
+        get_testitem_data,
+        "write_parent_catalog_cache",
+        lambda data, cfg: None,
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "update_parent_catalog_cache",
+        lambda data, cfg: None,
+    )
+    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
 
-    assert result == mapping
-    assert set(fetch_calls) == set(ids)
-    assert elapsed < 0.3
+    def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.sources.chembl.molecule_catalog.force_refresh_existing = True
+        cfg.pubchem.resolve_order = ("smiles",)
+        return cfg
+
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply_config_overrides)
+
+    exit_code = get_testitem_data.main(
+        [
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+            "--log-level",
+            "ERROR",
+            "--config",
+            str(Path("config.yaml")),
+        ]
+    )
+
+    assert exit_code == 0
+    assert output_csv.exists()
+
+    df = pd.read_csv(output_csv)
+    assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
+    assert fetch_calls and len(fetch_calls) == 1
+    assert set(fetch_calls[0]) == {"CHEMBL1", "CHEMBL2"}

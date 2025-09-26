@@ -127,6 +127,7 @@ class MoleculeCatalogCfg(_BaseModel):
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
+    force_refresh_existing: bool = False
     fields: tuple[str, ...] = (
         "molecule_chembl_id",
         "parent_molecule_chembl_id",
