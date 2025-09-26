@@ -360,6 +360,11 @@ def test_get_testitem_data_smoke(
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+    monkeypatch.setattr(
+        get_testitem_data,
+        "load_parent_catalog",
+        lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
+    )
     monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
 
     exit_code = get_testitem_data.main(
@@ -383,6 +388,7 @@ def test_get_testitem_data_smoke(
         df,
         [
             "molecule_chembl_id",
+            "parent_molecule_chembl_id",
             "canonical_smiles",
             "pubchem_cid",
             "pubchem_inchi",
@@ -394,6 +400,10 @@ def test_get_testitem_data_smoke(
         df,
         {
             "molecule_chembl_id": ptypes.is_object_dtype,
+            "parent_molecule_chembl_id": (
+                ptypes.is_object_dtype,
+                ptypes.is_float_dtype,
+            ),
             "canonical_smiles": ptypes.is_object_dtype,
             "pubchem_cid": (ptypes.is_object_dtype, ptypes.is_numeric_dtype),
             "pubchem_inchi": ptypes.is_object_dtype,
