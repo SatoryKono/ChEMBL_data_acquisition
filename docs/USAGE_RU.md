@@ -94,7 +94,7 @@ python scripts/get_document_data.py all \
 
 ```bash
 CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
-  python scripts/get_document_data.py \
+  python scripts/get_document_data.py all \
     --input path/to/documents.csv \
     --column document_chembl_id
 ```
@@ -109,7 +109,7 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```bash
 python scripts/get_document_data.py pubmed \
   --input path/to/documents.csv \
-  --column document_chembl_id \
+  --column PMID \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -118,7 +118,7 @@ python scripts/get_document_data.py pubmed \
 ```
 
 Флаги `--openalex-rps` и `--crossref-rps` позволяют временно изменить лимиты без правки YAML, а параметры `--fallback-doi-*`
-подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column`; если не задавать их явно, CLI ожидает заголовки `PMID` и `DOI`, а в примере выше показано переименование через явные параметры.【F:scripts/get_document_data.py†L989-L1041】
+подключают лёгкий CSV с соответствиями PMID→DOI до обращения к внешним сервисам. Подготовьте файл с колонками из аргументов `--fallback-doi-pmid-column` и `--fallback-doi-value-column`; если не задавать их явно, CLI ожидает заголовки `PMID` и `DOI`, а в примере выше показано переименование через явные параметры. Подкоманда PubMed по умолчанию ожидает колонку `PMID`, поэтому флаг `--column` можно опустить, если CSV уже использует это имя.【F:scripts/get_document_data.py†L989-L1041】
 
 
 ## Агрегация таргетов (`get_target_data.py`)

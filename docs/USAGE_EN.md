@@ -90,7 +90,7 @@ example:
 
 ```bash
 CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
-  python scripts/get_document_data.py \
+  python scripts/get_document_data.py all \
     --input path/to/documents.csv \
     --column document_chembl_id
 ```
@@ -104,7 +104,7 @@ allowed switches (for example, `--batch-size` for PubMed batching).
 ```bash
 python scripts/get_document_data.py pubmed \
   --input path/to/documents.csv \
-  --column document_chembl_id \
+  --column PMID \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -113,7 +113,7 @@ python scripts/get_document_data.py pubmed \
 ```
 
 Use the on-demand rate limit switches to try faster OpenAlex or CrossRef lookups without touching the YAML file; the fallback
-CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column`; when left unspecified the CLI expects `PMID` and `DOI`, while the example above demonstrates custom headers via explicit overrides.【F:scripts/get_document_data.py†L989-L1041】
+CSV parameters plug in a minimal PMID→DOI mapping before the remote services are queried. Provide a CSV with the columns referenced by `--fallback-doi-pmid-column` and `--fallback-doi-value-column`; when left unspecified the CLI expects `PMID` and `DOI`, while the example above demonstrates custom headers via explicit overrides. The PubMed sub-command defaults to the `PMID` identifier column, so omit `--column` when the source CSV already uses that header.【F:scripts/get_document_data.py†L989-L1041】
  
 ## Target aggregation (`get_target_data.py`)
 
