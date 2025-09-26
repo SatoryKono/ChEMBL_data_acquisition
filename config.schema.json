@@ -1020,6 +1020,12 @@
           "title": "Prefer Local Smiles",
           "type": "boolean"
         },
+        "use_parent_for_salts": {
+          "default": false,
+          "description": "Resolve PubChem CIDs via parent structures when child lookups fail",
+          "title": "Use Parent For Salts",
+          "type": "boolean"
+        },
         "cid_cache_path": {
           "default": null,
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
