@@ -13,6 +13,7 @@ import pandas as pd
 
 from schemas.targets import TARGETS_COLUMN_ORDER
 
+from . import organism_classification
 from .config import Config, IoCfg
 from .log import logger
 
@@ -484,32 +485,34 @@ def postprocess_file(
 
 def finalise_targets(
     df: pd.DataFrame,
-    organism: pd.DataFrame,
     *,
     chembl_col: str = "target_chembl_id",
     uniprot_col: str = "uniprotkb_Id",
     genus_col: str = "genus",
+    superkingdom_col: str = "lineage_superkingdom",
+    phylum_col: str = "lineage_phylum",
+    class_col: str = "lineage_class",
 ) -> pd.DataFrame:
-    """Apply final cleaning steps and organism merge.
+    """Apply final cleaning steps and derive organism cellularity.
 
-    This function mirrors a Power Query script that was previously used to
-    prepare the exportable target table. It filters rows with missing
-    identifiers, enforces data types, joins the organism classification and
-    normalises selected text fields.
+    The function mirrors the original Power Query pipeline but now infers the
+    organism ``type`` directly from UniProt taxonomy columns using
+    :func:`organism_classification.add_cellularity_smart`. It filters rows with
+    missing identifiers, enforces data types and normalises selected text
+    fields before aligning the output schema.
 
     Parameters
     ----------
     df:
         DataFrame produced by :func:`postprocess_targets`.
-    organism:
-        Lookup table with at least ``genus`` and ``type`` columns.
     chembl_col:
         Column containing ChEMBL target identifiers.
     uniprot_col:
         Column containing UniProt identifiers.
     genus_col:
-        Column containing the organism genus used for merging with
-        ``organism``.
+        Column containing the organism genus used for cellularity inference.
+    superkingdom_col, phylum_col, class_col:
+        Taxonomy lineage columns required by the cellularity classifier.
 
     Returns
     -------
@@ -519,79 +522,78 @@ def finalise_targets(
     Notes
     -----
     If ``df`` already contains a ``type`` column, it will be renamed to
-    ``target_type`` before merging with the organism classification to avoid
-    column name clashes. The final ``type`` column in the result always
-    originates from the organism lookup.
-
+    ``target_type`` before the new classification is appended to avoid
+    conflicting suffixes.
     """
-    df = df.copy()
-    organism = organism.copy()
 
+    df = df.copy()
     internal_mapping = {
         chembl_col: "target_chembl_id",
         uniprot_col: "uniprotkb_Id",
         genus_col: "genus",
+        superkingdom_col: "lineage_superkingdom",
+        phylum_col: "lineage_phylum",
+        class_col: "lineage_class",
     }
     df = df.rename(columns={k: v for k, v in internal_mapping.items() if k != v})
-    organism = organism.rename(
-        columns={genus_col: "genus"} if genus_col != "genus" else {}
-    )
 
-    _validate_columns(df, ["target_chembl_id", "uniprotkb_Id", "genus"])
-    _validate_columns(organism, ["genus", "type"])
+    if "lineage_superkingdom" not in df.columns and "superkingdom" in df.columns:
+        df["lineage_superkingdom"] = df["superkingdom"]
+    if "lineage_phylum" not in df.columns and "phylum" in df.columns:
+        df["lineage_phylum"] = df["phylum"]
+    if "lineage_class" not in df.columns and "class" in df.columns:
+        df["lineage_class"] = df["class"]
 
-    # Drop rows where uniprotkb_Id is the string "nan"
+    required_columns = [
+        "target_chembl_id",
+        "uniprotkb_Id",
+        "genus",
+        "lineage_superkingdom",
+        "lineage_phylum",
+        "lineage_class",
+    ]
+    _validate_columns(df, required_columns)
+
     mask_nan = df["uniprotkb_Id"].astype(str) == "nan"
     if mask_nan.any():
         logger.debug("Dropping %d rows with missing UniProt IDs", mask_nan.sum())
     df = df[~mask_nan]
 
-    # Remove duplicate chembl_id entries
     before = len(df)
     df = df.drop_duplicates(subset="target_chembl_id", keep="first")
     logger.debug("Removed %d duplicate %s rows", before - len(df), chembl_col)
 
-    # Enforce column types
     for col in TEXT_COLUMNS:
         if col in df.columns:
             df[col] = df[col].astype("string")
-  #  for col in INT_COLUMNS:
-  #      if col in df.columns:
-  #          df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-  #  for col in BOOL_COLUMNS:
-  #      if col in df.columns:
-  #          df[col] = (
-  #              df[col]
-  #              .astype("string")  # normalise mixed inputs
-  #              .str.lower()
-  #              .map({"true": True, "false": False})
-  #              .astype("boolean")
-  #          )
+    # for col in INT_COLUMNS:
+    #     if col in df.columns:
+    #         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+    # for col in BOOL_COLUMNS:
+    #     if col in df.columns:
+    #         df[col] = (
+    #             df[col]
+    #             .astype("string")
+    #             .str.lower()
+    #             .map({"true": True, "false": False})
+    #             .astype("boolean")
+    #         )
 
-    # Merge organism classification and add type column
-    #
-    # ``df`` may already contain a ``type`` column from upstream sources. To
-    # avoid creating ``type_x``/``type_y`` suffixes during the merge, rename the
-    # existing column beforehand and restore the organism classification as the
-    # canonical ``type`` field afterwards.
     if "type" in df.columns:
         logger.debug("Renaming existing 'type' column to 'target_type'")
         df = df.rename(columns={"type": "target_type"})
 
-    organism_types = organism[["genus", "type"]].rename(
-        columns={"type": "organism_type"}
+    df = organism_classification.add_cellularity_smart(
+        df,
+        genus_col="genus",
+        superkingdom_col="lineage_superkingdom",
+        phylum_col="lineage_phylum",
+        class_col="lineage_class",
+        output_col="target_type",
     )
-    df = df.merge(organism_types, on="genus", how="left")
 
-    # ``organism_type`` is guaranteed to exist after the merge; cast to string
-    # and rename to the exported ``type`` column. ``pop`` avoids keeping the
-    # intermediate column around.
-    df["type"] = df.pop("organism_type").astype("string")
-
-    # Remove unwanted columns
     df = df.drop(columns=[c for c in REMOVE_COLUMNS if c in df.columns])
 
-    # Lowercase selected text columns
     for col in LOWERCASE_COLUMNS:
         if col in df.columns:
             df[col] = df[col].astype("string").str.lower()
@@ -599,7 +601,6 @@ def finalise_targets(
     df = align_target_columns(df)
 
     return df
-
 
 def finalise_file(
     input_path: Path | str,
@@ -609,7 +610,9 @@ def finalise_file(
     chembl_col: str = "target_chembl_id",
     uniprot_col: str = "uniprotkb_Id",
     genus_col: str = "genus",
-    organism_path: Path | str | None = None,
+    superkingdom_col: str = "lineage_superkingdom",
+    phylum_col: str = "lineage_phylum",
+    class_col: str = "lineage_class",
     sep: str | None = None,
     encoding: str | None = None,
 ) -> None:
@@ -629,9 +632,8 @@ def finalise_file(
         Column containing UniProt identifiers.
     genus_col:
         Column containing the organism genus used for merging.
-    organism_path:
-        Optional path to a CSV containing organism ``genus`` and ``type`` columns.
-        Defaults to ``cfg.resources.organism_csv``.
+    superkingdom_col, phylum_col, class_col:
+        Taxonomy lineage columns required by the cellularity classifier.
     sep:
         Field delimiter of the CSV files. Defaults to ``cfg.io.csv_sep``.
     encoding:
@@ -640,14 +642,14 @@ def finalise_file(
     """
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    organism_path = organism_path or cfg.resources.organism_csv
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
-    organism = pd.read_csv(organism_path, sep=sep, encoding=encoding, dtype=str)
     processed = finalise_targets(
         df,
-        organism,
         chembl_col=chembl_col,
         uniprot_col=uniprot_col,
         genus_col=genus_col,
+        superkingdom_col=superkingdom_col,
+        phylum_col=phylum_col,
+        class_col=class_col,
     )
     processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)

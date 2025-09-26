@@ -10,6 +10,7 @@ import pandas as pd
 import yaml
 from pytest import MonkeyPatch
 
+from library import protein_classification as pc
 from library.config import Config
 from scripts import get_target_data as gtd
 from schemas import TargetsSchema
@@ -224,9 +225,6 @@ def test_run_all_preserves_reaction_ec_numbers(
     chembl_data = Path("tests/data/chembl_targets_min.csv")
     uniprot_data = Path("tests/data/uniprot_targets_min.csv")
     iuphar_data = Path("tests/data/iuphar_targets_min.csv")
-    organism_csv = Path("tests/data/organism_min.csv")
-
-    cfg.target.all.organism_csv = organism_csv
     cfg.target.all.chembl_out = tmp_path / "chembl_out.csv"
     cfg.target.all.uniprot_out = tmp_path / "uniprot_out.csv"
     cfg.target.all.iuphar_out = tmp_path / "iuphar_out.csv"
@@ -248,14 +246,14 @@ def test_run_all_preserves_reaction_ec_numbers(
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
+    monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
 
     original_finalise = gtd.tp.finalise_targets
 
-    def patched_finalise(
-        df: pd.DataFrame, organism: pd.DataFrame, **kwargs: object
-    ) -> pd.DataFrame:
+    def patched_finalise(df: pd.DataFrame, **kwargs: object) -> pd.DataFrame:
         df = df.drop(columns=["type"], errors="ignore")
-        return original_finalise(df, organism, **kwargs)
+        return original_finalise(df, **kwargs)
 
     monkeypatch.setattr(gtd.tp, "finalise_targets", patched_finalise)
     monkeypatch.setattr(
