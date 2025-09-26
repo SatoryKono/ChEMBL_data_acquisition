@@ -51,6 +51,32 @@ All reports are written using UTF-8 encoding and share the same deterministic or
 ensure identical results on repeated runs. The helper honours `cfg.io.csv_sep`, `cfg.io.csv_encoding` and optional
 `key_cols`/`col_order` arguments supplied by the pipeline.
 
+## Pipeline metadata columns
+
+All entity exports append two bookkeeping columns produced by `library.pipeline_metadata.add_pipeline_metadata` before schema
+validation and CSV writing: `pipeline_version` captures the installed package version (or the value discovered in
+`pyproject.toml`), while `timestamp_utc` stores the run start time as an ISO 8601 string.【F:library/pipeline_metadata.py†L24-L84】
+The columns are declared in the validation schemas for activities, documents, test items and other tables, ensuring the values
+are present even when the payload is empty.【F:schemas/activities.py†L52-L55】【F:schemas/documents.py†L111-L112】【F:schemas/testitems.py†L41-L42】
+
+`pipeline_version` remains constant within a single run and is safe for equality joins across different tables exported during
+the same execution. `timestamp_utc` reflects the orchestrator’s clock; downstream consumers should treat it as metadata rather
+than a surrogate for record-level timestamps.
+
+## Document classification columns
+
+`scripts/get_document_data.py` enriches the merged metadata with deterministic publication scores and labels emitted by `library.document_pipeline.merge_metadata`.【F:scripts/get_document_data.py†L607-L676】【F:library/document_pipeline.py†L160-L208】 The following fields appear in `document.csv` and the associated validation schema:
+
+| Column | Description |
+| --- | --- |
+| `publication_types_normalised` | Semicolon-separated list of distinct publication type tokens collected from ChEMBL, PubMed, Semantic Scholar, OpenAlex and CrossRef payloads. The sequence is sorted to guarantee reproducible diffs. |
+| `publication_type_score_review` | Integer weight derived from the weighted voting of review-specific terms. The score is non-negative and grows with corroborating evidence. |
+| `publication_type_score_experimental` | Integer weight summarising experimental evidence terms; follows the same deterministic weighting scheme as the review score. |
+| `publication_type_score_unknown` | Integer weight associated with ambiguous or explicitly unknown labels. |
+| `publication_class` | Final class selected from `review`, `experimental` or `unknown` once the weighted tallies are compared against the configured thresholds.【F:library/document_type_classifier.py†L7-L74】 |
+
+Scores default to `0` for rows without recognised tokens. The classifier prefers the highest score that also clears the minimum thresholds, falling back to `unknown` when the signal is inconclusive, so dashboards must not treat the label as an indicator of curation quality.
+
 ## Activity bounds (`lower_value`, `upper_value`)
 
 `activity.csv` now exposes canonical value ranges via the `lower_value` and `upper_value` columns produced after normalisation in `scripts/get_activity_data.py`. The pipeline works exclusively with ChEMBL `standard_*` fields so that all limits remain in the canonical units already validated by the schema. Priority is applied row-wise in the following order:
@@ -61,6 +87,26 @@ ensure identical results on repeated runs. The helper honours `cfg.io.csv_sep`, 
 4. Optional parsing of `±` expressions from `standard_text_value` when `activity_bounds.enable_from_uncertainty` is enabled, guarded by the same canonical-unit requirement.
 
 Derived bounds are rounded to `activity_bounds.rounding_digits` decimal places (default `3`) and clamped to zero for concentration-like metrics when `activity_bounds.clamp_nonnegative` is `true`, using heuristics based on `standard_type`/`standard_units`. All operations preserve existing columns and honour the deterministic column ordering enforced by the schema.【F:scripts/get_activity_data.py†L1-L234】【F:config.yaml†L108-L147】【F:library/config.py†L358-L420】【F:schemas/activities.py†L32-L64】
+
+## Document quality JSON report
+
+`scripts/get_document_data.py` writes an additional `<stem>.quality.json` file after the CSV export. The helper
+`library.document_pipeline.build_quality_report` emits a structured payload with the total row count, DOI coverage ratio,
+publication class distribution and per-source error counters; `save_quality_report` serialises the mapping as UTF-8 JSON with
+stable formatting for diffs.【F:scripts/get_document_data.py†L636-L674】【F:library/document_pipeline.py†L300-L356】 Use the JSON
+artefact to monitor metadata completeness without loading the full CSV, e.g. alert when DOI coverage drops below an agreed
+threshold.
+
+The JSON document contains:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `rows_total` | Integer | Number of rows in the exported dataframe. |
+| `doi_coverage` | Float | Fraction of documents with a populated DOI (0.0–1.0 range). |
+| `publication_class_counts` | Object | Mapping of `review` / `experimental` / `unknown` to row counts, defaulting to `unknown` when the label is absent. |
+| `error_counts` | Object | Dictionary with counts of failed enrichments per upstream (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
+
+All keys are always present; missing categories are represented by zero counters so that monitoring dashboards can rely on stable schemas across runs.
 
 ## Housekeeping recommendations
 
