@@ -184,6 +184,7 @@ def test_testitems_schema_validation() -> None:
     valid = pd.DataFrame(
         {
             "molecule_chembl_id": ["CHEMBL1"],
+            "parent_molecule_id": ["CHEMBL0"],
             "first_approval": [1950],
             "black_box_warning": [0],
             "oral": [True],
