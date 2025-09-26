@@ -144,11 +144,8 @@ Test item exports must be reconciled with the ChEMBL parent catalogue to expose 
 used by downstream aggregations. The cache path is configured via
 `sources.chembl.molecule_catalog.cache_path`; keep the JSON file accessible to the runner or adjust the
 location by setting `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
-`CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
- 
-[`sources.chembl.molecule_catalog`](./CONFIG_EN.md#sources-chembl-molecule-catalog) (`cache_path`); keep the JSON file accessible to the runner or override the
-location through CLI/environment aliases such as `--sources.chembl.molecule_catalog.cache-path` or
-`CHEMBL_DA_MOLECULE_CATALOG_CACHE`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
+`CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing `config.yaml`. Refer to
+[`sources.chembl.molecule_catalog`](./CONFIG_EN.md#sources-chembl-molecule-catalog) for the full option list.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
  
 
 Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
