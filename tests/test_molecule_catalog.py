@@ -12,6 +12,9 @@ from library.molecule_catalog import (
     fetch_parent_catalog,
     fetch_parent_catalog_for,
     load_parent_catalog,
+    query_parent_catalog,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
 )
 
 
@@ -134,7 +137,9 @@ def test_fetch_parent_catalog_for_chunks_requests(
 def test_load_parent_catalog_reads_existing_cache(tmp_path: Path, api_cfg: ApiCfg) -> None:
     cache = tmp_path / "catalog.json"
     cache.write_text(json.dumps({"chembl10": "chembl99"}), encoding="utf-8")
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    cfg = MoleculeCatalogCfg(
+        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
+    )
 
     result = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
@@ -149,7 +154,9 @@ def test_load_parent_catalog_reads_csv_cache(tmp_path: Path, api_cfg: ApiCfg) ->
         "molecule_chembl_id,parent_molecule_chembl_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    cfg = MoleculeCatalogCfg(
+        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
+    )
 
     result = load_parent_catalog(
         client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
@@ -164,7 +171,9 @@ def test_load_parent_catalog_invalid_csv_columns(tmp_path: Path, api_cfg: ApiCfg
         "molecule_chembl_id,parant_molecule_id\nchembl1,chembl42\n",
         encoding="utf-8",
     )
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    cfg = MoleculeCatalogCfg(
+        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
+    )
 
     with pytest.raises(ValueError):
         load_parent_catalog(client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg)
@@ -174,7 +183,9 @@ def test_load_parent_catalog_fetches_and_persists(
     tmp_path: Path, api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache = tmp_path / "catalog.json"
-    cfg = MoleculeCatalogCfg(cache_path=cache)
+    cfg = MoleculeCatalogCfg(
+        cache_path=cache, sqlite_path=tmp_path / "catalog.sqlite"
+    )
     data = {"CHEMBL50": "CHEMBL60"}
 
     def fake_fetch(
@@ -197,3 +208,32 @@ def test_load_parent_catalog_fetches_and_persists(
 
     assert result == data
     assert json.loads(cache.read_text(encoding="utf-8")) == data
+    assert cfg.sqlite_path.is_file()
+
+
+def test_query_parent_catalog_reads_sqlite(tmp_path: Path) -> None:
+    cache = tmp_path / "catalog.json"
+    sqlite_path = tmp_path / "catalog.sqlite"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
+    write_parent_catalog_cache({"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}, cfg)
+
+    result = query_parent_catalog(["chembl1", "chembl3"], cfg)
+
+    assert result == {"CHEMBL1": "CHEMBL10"}
+    assert sqlite_path.is_file()
+
+
+def test_update_parent_catalog_cache_appends(tmp_path: Path, api_cfg: ApiCfg) -> None:
+    cache = tmp_path / "catalog.json"
+    sqlite_path = tmp_path / "catalog.sqlite"
+    cfg = MoleculeCatalogCfg(cache_path=cache, sqlite_path=sqlite_path)
+    write_parent_catalog_cache({"CHEMBL1": "CHEMBL10"}, cfg)
+
+    update_parent_catalog_cache({"CHEMBL2": "CHEMBL20"}, cfg)
+
+    result = load_parent_catalog(
+        client=DummyClient([]), api_cfg=api_cfg, catalog_cfg=cfg
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
+    assert json.loads(cache.read_text(encoding="utf-8")) == result

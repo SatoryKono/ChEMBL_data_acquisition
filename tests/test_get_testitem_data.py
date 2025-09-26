@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Iterable
 
 import pandas as pd
 import pytest
@@ -165,16 +166,19 @@ def test_run_chembl_merges_parent_catalog(
     cache_path = tmp_path / "parent_catalog.json"
     cache_path.write_text("{}", encoding="utf-8")
     cfg.molecule_catalog.cache_path = cache_path
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
 
     parent_catalog = {"CHEMBL1": "CHEMBL1_PARENT", "CHEMBL2": "CHEMBL2_PARENT"}
-    load_calls = 0
+    query_calls = 0
 
-    def fake_load_parent_catalog(**_: object) -> dict[str, str]:
-        nonlocal load_calls
-        load_calls += 1
+    def fake_query_parent_catalog(
+        ids: Iterable[str], *, catalog_cfg: object
+    ) -> dict[str, str]:
+        nonlocal query_calls
+        query_calls += 1
         return parent_catalog
 
-    monkeypatch.setattr(gtd, "load_parent_catalog", fake_load_parent_catalog)
+    monkeypatch.setattr(gtd, "query_parent_catalog", fake_query_parent_catalog)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
     captured_catalog: dict[str, str] | None = None
     captured_source: str | None = None
@@ -224,7 +228,7 @@ def test_run_chembl_merges_parent_catalog(
         "CHEMBL1_PARENT",
         "CHEMBL2_EXISTING",
     ]
-    assert load_calls == 1
+    assert query_calls == 1
     assert captured_catalog is parent_catalog
     assert captured_source == gtd.PARENT_LOOKUP_SOURCE_CACHE
 
@@ -348,7 +352,23 @@ def test_run_chembl_parent_catalog_error(
 
     monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: pd.DataFrame())
+    cache_path = tmp_path / "parent_catalog.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
+
+    monkeypatch.setattr(
+        cl,
+        "get_testitem",
+        lambda *_, **__: pd.DataFrame(
+            [
+                {
+                    cfg.molecule_catalog.child_field: "CHEMBL1",
+                    cfg.molecule_catalog.parent_field: pd.NA,
+                }
+            ]
+        ),
+    )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
@@ -356,8 +376,8 @@ def test_run_chembl_parent_catalog_error(
 
     monkeypatch.setattr(
         gtd,
-        "load_parent_catalog",
-        lambda **__: (_ for _ in ()).throw(
+        "query_parent_catalog",
+        lambda *_, **__: (_ for _ in ()).throw(
             ValueError("missing columns: parant_molecule_id")
         ),
     )
@@ -388,7 +408,23 @@ def test_run_chembl_parent_catalog_request_error(
 
     monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: pd.DataFrame())
+    cache_path = tmp_path / "parent_catalog.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
+
+    monkeypatch.setattr(
+        cl,
+        "get_testitem",
+        lambda *_, **__: pd.DataFrame(
+            [
+                {
+                    cfg.molecule_catalog.child_field: "CHEMBL1",
+                    cfg.molecule_catalog.parent_field: pd.NA,
+                }
+            ]
+        ),
+    )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
@@ -396,8 +432,8 @@ def test_run_chembl_parent_catalog_request_error(
 
     monkeypatch.setattr(
         gtd,
-        "load_parent_catalog",
-        lambda **__: (_ for _ in ()).throw(requests.RequestException("boom")),
+        "query_parent_catalog",
+        lambda *_, **__: (_ for _ in ()).throw(requests.RequestException("boom")),
     )
 
     monkeypatch.setattr(
@@ -448,6 +484,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
 
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
     monkeypatch.setattr(
         gtd,
@@ -505,6 +542,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         json.dumps({"CHEMBL1": "CHEMBL1_PARENT"}, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
     fetch_calls: list[list[str]] = []
 
@@ -561,6 +599,53 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
     assert second_stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
 
 
+def test_attach_parent_molecule_ids_uses_sqlite_after_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+    catalog_cfg.cache_path.write_text(
+        json.dumps({"CHEMBL1": "CHEMBL1_PARENT"}, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    original_loads = gtd.molecule_catalog.json.loads
+    calls = {"loads": 0}
+
+    def counting_loads(data: str, *args: object, **kwargs: object) -> object:
+        calls["loads"] += 1
+        return original_loads(data, *args, **kwargs)
+
+    monkeypatch.setattr(gtd.molecule_catalog.json, "loads", counting_loads)
+
+    first_result, _ = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert calls["loads"] == 1
+    assert first_result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
+
+    calls["loads"] = 0
+
+    second_result, _ = gtd.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+    )
+
+    assert calls["loads"] == 0
+    assert second_result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
+
+
 def test_attach_parent_molecule_ids_fetch_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -568,6 +653,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
 
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
     monkeypatch.setattr(
         gtd,
@@ -614,6 +700,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
 
     catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
     catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
     catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
 
 
