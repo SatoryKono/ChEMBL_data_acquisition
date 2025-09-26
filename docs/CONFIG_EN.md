@@ -174,12 +174,16 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 |  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
-|  | `organism_csv` | `dictionary/_Target/targets_type.csv` | Taxonomy and target type mapping. |
 |  | `uniprot_column` | `uniprot_id` | Column used to join UniProt data. |
 |  | `chembl_out` | `null` | Optional override for the combined ChEMBL output path. |
 |  | `uniprot_out` | `null` | Optional override for the combined UniProt output path. |
 |  | `iuphar_out` | `null` | Optional override for the combined IUPHAR output path. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
+
+> Target taxonomy (`type` column and classifier flags) is computed by a built-in
+> module that uses UniProt lineage fields (`genus`, `lineage_superkingdom`,
+> `lineage_phylum`, `lineage_class`), the `taxon_id`, and ChEMBL's
+> `species_group_flag`. No external `organism.csv` lookup is required.
 
 ## Other external sources (`sources.*`)
 
@@ -206,7 +210,6 @@ All URLs must comply with the respective service usage policies, including rate 
 | `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
 | `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
 | `uniprot_data_dir` | `dictionary/uniprot` | Cached UniProt JSON responses. |
-| `organism_csv` | `dictionary/_Target/targets_type.csv` | Organism and taxonomy mapping. |
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
 
 ### I/O defaults (`local.io`)
@@ -281,7 +284,6 @@ Common short aliases:
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |
 | `CHEMBL_DA_IUPHAR_FAMILY_CSV` | `local.resources.iuphar_family_csv` |
-| `CHEMBL_DA_ORGANISM_CSV` | `local.resources.organism_csv` |
 | `CHEMBL_DA_TARGETS_TYPE_CSV` | `local.resources.targets_type_csv` |
 | `CHEMBL_DA_OPENALEX_BASE` | `sources.openalex.base` |
 | `CHEMBL_DA_OPENALEX_TIMEOUT_CONNECT` | `sources.openalex.timeout_connect` |

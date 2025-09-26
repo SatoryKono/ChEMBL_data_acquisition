@@ -218,6 +218,7 @@
 | gtop_natural_ligands_n | строка | Guide to PHARMACOLOGY | Количество естественных лигандов (как в источнике).|
 | gtop_interactions_n | строка | Guide to PHARMACOLOGY | Количество взаимодействий (как в источнике).|
 | gtop_function_text_short | строка | Guide to PHARMACOLOGY | Краткое описание функции.|
+| type | строка | Классификатор таксономии | Итоговый класс организма от встроенного классификатора (например, `Multicellular organism`).|
 | uniprot_last_update | строка | UniProt | Дата последнего обновления записи.|
 | uniprot_version | строка | UniProt | Версия UniProt записи.|
 | pipeline_version | строка | Пайплайн | Версия пакета `chembl-data-acquisition`.|
@@ -259,6 +260,11 @@
 | target_type | строка | ChEMBL | Тип мишени по ChEMBL (`SINGLE PROTEIN`, `PROTEIN FAMILY` и т. п.).|
 | tax_id | строка | ChEMBL | Значение `tax_id` из ChEMBL (строковое представление).|
 | species_group_flag | строка | ChEMBL | Флаг группировки видов.|
+| target_sort_order | строка | Классификатор таксономии | Сортировочный ключ для аналитических витрин, рассчитанный классификатором.|
+| gene_index | строка | Классификатор таксономии | Индекс гена, выдаваемый классификатором для курируемых таблиц.|
+| taxon_index | строка | Классификатор таксономии | Порядковый индекс таксона для отчётности.|
+| multifunctional_enzyme | булево/строка | Классификатор таксономии | Флаг, выставляемый при определении мишени как многофункционального фермента.|
+| unicellular_organism | булево/строка | Классификатор таксономии | Признак одноклеточного или вирусного организма от классификатора.|
 | target_components | строка (JSON) | ChEMBL | Сериализованное описание компонент мишени.|
 | protein_classifications | строка (JSON) | ChEMBL | Иерархия белковых классов.|
 | cross_references | строка (JSON) | ChEMBL | Внешние ссылки из записи ChEMBL.|
@@ -281,6 +287,10 @@
 | iuphar_name | строка | IUPHAR | Официальное название в IUPHAR.|
 | iuphar_full_id_path | строка | IUPHAR | Полный путь идентификаторов в иерархии.|
 | iuphar_full_name_path | строка | IUPHAR | Полный путь названий в иерархии.|
+
+> Классификатор использует поля `genus`, `lineage_superkingdom`, `lineage_phylum`,
+> `lineage_class`, `taxon_id` и `species_group_flag`, чтобы заполнить колонку `type`
+> и производные флаги из таблицы выше.
 
 ### testitem.csv (обработанный экспорт)
 - **Назначение:** описание лекарственных веществ/соединений из ChEMBL, дополненное структурными полями и обогащением из PubChem, нормализованное и снабжённое метаданными пайплайна.【F:scripts/get_testitem_data.py†L36-L114】【F:library/chembl_assay.py†L91-L111】【F:schemas/testitems.py†L12-L37】【F:library/pipeline_metadata.py†L60-L84】

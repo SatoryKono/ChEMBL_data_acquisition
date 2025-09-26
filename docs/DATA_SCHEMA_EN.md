@@ -218,6 +218,7 @@
 | gtop_natural_ligands_n | string | Guide to PHARMACOLOGY | Number of natural ligands as reported by GToP.|
 | gtop_interactions_n | string | Guide to PHARMACOLOGY | Number of recorded interactions.|
 | gtop_function_text_short | string | Guide to PHARMACOLOGY | Short functional description.|
+| type | string | Taxonomy classifier | Final organism class assigned by the taxonomy module (e.g., `Multicellular organism`).|
 | uniprot_last_update | string | UniProt | Last update timestamp of the UniProt record.|
 | uniprot_version | string | UniProt | UniProt record version.|
 | pipeline_version | string | Pipeline metadata | `chembl-data-acquisition` package version.|
@@ -259,6 +260,11 @@
 | target_type | string | ChEMBL | Target type reported by ChEMBL (`SINGLE PROTEIN`, `PROTEIN FAMILY`, etc.).|
 | tax_id | string | ChEMBL | Taxonomy identifier as stored in ChEMBL.|
 | species_group_flag | string | ChEMBL | Species group flag from ChEMBL.|
+| target_sort_order | string | Taxonomy classifier | Deterministic sort key derived from the classifier for analytics pivots.|
+| gene_index | string | Taxonomy classifier | Classifier-provided gene ordering indicator for curation worksheets.|
+| taxon_index | string | Taxonomy classifier | Derived taxonomy ordering indicator used by downstream reports.|
+| multifunctional_enzyme | boolean/string | Taxonomy classifier | Flag raised when taxonomy rules classify the target as multifunctional.|
+| unicellular_organism | boolean/string | Taxonomy classifier | Classifier flag indicating unicellular or viral organisms.|
 | target_components | JSON string | ChEMBL | Serialized representation of target components.|
 | protein_classifications | JSON string | ChEMBL | Serialized protein classification hierarchy.|
 | cross_references | JSON string | ChEMBL | Serialized list of external cross references.|
@@ -281,6 +287,10 @@
 | iuphar_name | string | IUPHAR | Official IUPHAR name.|
 | iuphar_full_id_path | string | IUPHAR | Full identifier path within the IUPHAR hierarchy.|
 | iuphar_full_name_path | string | IUPHAR | Full name path within the IUPHAR hierarchy.|
+
+> The taxonomy classifier consumes `genus`, `lineage_superkingdom`, `lineage_phylum`,
+> `lineage_class`, `taxon_id`, and `species_group_flag` to populate `type` and the
+> derived flags listed above.
 
 ### testitem.csv (processed export)
 - **Purpose:** enriched description of ChEMBL compounds combining structural attributes and PubChem augmentation plus pipeline metadata.【F:scripts/get_testitem_data.py†L36-L114】【F:library/chembl_assay.py†L91-L111】【F:schemas/testitems.py†L12-L37】【F:library/pipeline_metadata.py†L60-L84】
