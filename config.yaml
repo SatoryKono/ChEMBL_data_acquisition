@@ -136,6 +136,7 @@ sources:
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
     cache_ttl: 3600  # Request cache time-to-live in seconds
+    use_parent_for_salts: false  # Attempt parent structures when salt lookups fail
   pubmed:
     base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__SOURCES__PUBMED__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
