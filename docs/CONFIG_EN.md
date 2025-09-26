@@ -237,11 +237,44 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | `uniprot.api` | `https://rest.uniprot.org` | `timeout_connect=5`, `timeout_read=30`, `rps=25`, `burst=25`, `delay=0.25` seconds. |
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5` seconds, `timeout=300.0` seconds, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
-| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | `timeout_connect=5`, `timeout_read=60`, `retries=3`, `rps=5`, `burst=5`, `delay=0.2`, `cache_ttl=3600`, `prefer_local_values=true`, `cache_ttl_hours=null`. |
+| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | See [detailed PubChem options](#pubchem-lookups-sourcespubchem). |
 | `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 | `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 
 All URLs must comply with the respective service usage policies, including rate limits and contact information requirements.
+
+### PubChem lookups (`sources.pubchem`)
+
+PubChem augmentation is primarily used by the test item pipeline. Every key below mirrors [`config.yaml`](../config.yaml) and
+can be overridden through environment variables (see [Environment variables](#environment-variables)). The table lists both the
+auto-generated `CHEMBL_DA_SOURCES_PUBCHEM_*` aliases and the generic `CHEMBL_DA__SOURCES__PUBCHEM__*` form. The base URL also
+supports the short alias documented in the [Environment variable aliases](#environment-variables) table.
+
+| Key | Default | Description | Environment override(s) |
+| --- | --- | --- | --- |
+| `enable` | `true` | Master switch enabling PubChem enrichment for test item records. | `CHEMBL_DA_SOURCES_PUBCHEM_ENABLE`, `CHEMBL_DA__SOURCES__PUBCHEM__ENABLE` |
+| `base` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | PubChem PUG REST endpoint queried for metadata. | `CHEMBL_DA_PUBCHEM_BASE`, `CHEMBL_DA_SOURCES_PUBCHEM_BASE`, `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `timeout_connect` | `5` | Connection timeout (seconds) for establishing new HTTP sessions. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_CONNECT`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_CONNECT` |
+| `timeout_read` | `60` | Read timeout (seconds) waiting for server responses. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_READ`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_READ` |
+| `timeout_seconds` | `30.0` | Upper bound for a single CID resolution attempt, including retries. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_SECONDS` |
+| `retries` | `3` | Number of automatic retries after transient failures. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
+| `rps` | `5` | Per-service request-per-second budget used by the rate limiter. | `CHEMBL_DA_SOURCES_PUBCHEM_RPS`, `CHEMBL_DA__SOURCES__PUBCHEM__RPS` |
+| `burst` | `5` | Token bucket size paired with the `rps` limit. | `CHEMBL_DA_SOURCES_PUBCHEM_BURST`, `CHEMBL_DA__SOURCES__PUBCHEM__BURST` |
+| `delay` | `0.2` | Fixed pause (seconds) inserted between retry attempts. | `CHEMBL_DA_SOURCES_PUBCHEM_DELAY`, `CHEMBL_DA__SOURCES__PUBCHEM__DELAY` |
+| `backoff_initial_seconds` | `0.5` | Initial exponential backoff applied after 429/5xx responses. | `CHEMBL_DA_SOURCES_PUBCHEM_BACKOFF_INITIAL_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__BACKOFF_INITIAL_SECONDS` |
+| `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Order in which lookup strategies are attempted when resolving PubChem CIDs. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
+| `cache_ttl` | `3600` | Lifespan (seconds) of the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
+| `cache_ttl_hours` | `null` | Optional expiry (hours) for the persisted CID cache; `null` keeps entries indefinitely. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
+| `cid_cache_path` | `null` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `batch_size` | `50` | Number of rows processed per PubChem batch request. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
+| `prefer_local_smiles` | `false` | Skip remote lookups when local SMILES/InChIKey columns are already populated. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
+| `prefer_local_values` | `true` | Preserve existing `pubchem_*` columns when lookups return empty payloads. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
+| `use_parent_for_salts` | `true` | Escalate to parent structures when salt-specific lookups fail. | `CHEMBL_DA_SOURCES_PUBCHEM_USE_PARENT_FOR_SALTS`, `CHEMBL_DA__SOURCES__PUBCHEM__USE_PARENT_FOR_SALTS` |
+| `allow_polymer` | `false` | Permit lookups that resolve to polymer or mixture entries. | `CHEMBL_DA_SOURCES_PUBCHEM_ALLOW_POLYMER`, `CHEMBL_DA__SOURCES__PUBCHEM__ALLOW_POLYMER` |
+| `write_not_found_literal` | `false` | Write the literal `Not Found` when PubChem fails to return a CID. | `CHEMBL_DA_SOURCES_PUBCHEM_WRITE_NOT_FOUND_LITERAL`, `CHEMBL_DA__SOURCES__PUBCHEM__WRITE_NOT_FOUND_LITERAL` |
+
+> Tip: `resolve_order` accepts any combination of supported strategies—adjust the list to prioritise cached values or specific
+> identifiers while keeping `cache` first to honour warm CID lookups.
 
 ## Local resources (`local`)
 
