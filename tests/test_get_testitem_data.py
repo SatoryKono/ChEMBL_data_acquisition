@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 import pandas as pd
 import pytest
@@ -189,8 +189,16 @@ def test_run_chembl_merges_parent_catalog(
         nonlocal captured_catalog, captured_source
         captured_catalog = kwargs.get("catalog")
         captured_source = kwargs.get("source")
+        result = frame.copy()
+        parent_col = cfg.molecule_catalog.parent_field
+        child_col = cfg.molecule_catalog.child_field
+        if captured_catalog:
+            mapped = result[child_col].map(captured_catalog)
+            result[parent_col] = result[parent_col].mask(
+                result[parent_col].isna(), mapped
+            )
         return (
-            frame,
+            result,
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
@@ -231,6 +239,95 @@ def test_run_chembl_merges_parent_catalog(
     assert query_calls == 1
     assert captured_catalog is parent_catalog
     assert captured_source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+
+
+def test_run_chembl_updates_parent_cache_and_reuses_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding)
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    source = pd.DataFrame([{child_field: "CHEMBL1", parent_field: pd.NA}])
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _: frame)
+
+    cache_path = tmp_path / "parent_catalog.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
+
+    fetch_calls: list[list[str]] = []
+
+    def fake_fetch(
+        ids: Iterable[str], *, client: object, api_cfg: object, timeout: float | None
+    ) -> dict[str, str]:
+        normalised = sorted(ids)
+        fetch_calls.append(normalised)
+        if len(fetch_calls) > 1:
+            raise AssertionError("fetch_parent_catalog_for should not be called twice")
+        return {item: f"{item}_PARENT" for item in normalised}
+
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        fake_fetch,
+    )
+
+    update_calls: list[dict[str, str]] = []
+    original_update = gtd.update_parent_catalog_cache
+
+    def tracking_update(catalog: Mapping[str, str], catalog_cfg: object) -> None:
+        update_calls.append(dict(catalog))
+        original_update(catalog, catalog_cfg)
+
+    monkeypatch.setattr(gtd, "update_parent_catalog_cache", tracking_update)
+
+    attach_calls: list[tuple[dict[str, str], str | None]] = []
+
+    def fake_attach(
+        frame: pd.DataFrame, **kwargs: object
+    ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
+        catalog = dict(kwargs.get("catalog", {}))
+        source_name = kwargs.get("source")
+        attach_calls.append((catalog, source_name))
+        stats_source = source_name or gtd.PARENT_LOOKUP_SOURCE_SKIPPED
+        stats = gtd.ParentLookupStats(
+            source=stats_source,
+            missing=0,
+            unique=len(catalog),
+            attached=len(frame),
+        )
+        return frame, stats
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+
+    rc_first = gtd.run_chembl(cfg, args)
+    rc_second = gtd.run_chembl(cfg, args)
+
+    assert rc_first == 0
+    assert rc_second == 0
+    assert fetch_calls == [["CHEMBL1"]]
+    assert update_calls == [{"CHEMBL1": "CHEMBL1_PARENT"}]
+    assert [source for _, source in attach_calls] == [
+        gtd.PARENT_LOOKUP_SOURCE_REMOTE,
+        gtd.PARENT_LOOKUP_SOURCE_CACHE,
+    ]
 
 
 def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
