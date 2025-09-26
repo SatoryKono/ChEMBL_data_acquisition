@@ -16,6 +16,31 @@ from scripts import get_target_data as gtd
 from schemas import TargetsSchema
 
 
+class DummyRecord:
+    """Lightweight classification record for deterministic predictions."""
+
+    def __init__(self, status: str = "target_id") -> None:
+        self.STATUS = status
+        self.IUPHAR_class = "ClassA"
+        self.IUPHAR_subclass = "SubclassA"
+        self.IUPHAR_type = "TypeA"
+
+
+class DummyClassifier:
+    """Minimal classifier returning deterministic values for tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def get(self, target_id: str, family_id: str, ec_number: str, name: str) -> DummyRecord:
+        self.calls.append(("get", (target_id, family_id, ec_number, name)))
+        return DummyRecord()
+
+    def by_molecular_function(self, molecular_function: str) -> DummyRecord:
+        self.calls.append(("by_molecular_function", (molecular_function,)))
+        return DummyRecord(status="molecular_function")
+
+
 def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
     out = tmp_path / "chembl.csv"
     inp = tmp_path / "in.csv"
@@ -231,11 +256,17 @@ def test_run_all_preserves_reaction_ec_numbers(
     cfg.target.all.uniprot_column = "uniprot_id"
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-        shutil.copy(chembl_data, args.output_csv)
+        df = pd.read_csv(chembl_data)
+        df["type"] = "Legacy"
+        df.to_csv(args.output_csv, index=False)
         return 0
 
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
-        shutil.copy(uniprot_data, args.output_csv)
+        df = pd.read_csv(uniprot_data)
+        df["lineage_superkingdom"] = "Eukaryota"
+        df["lineage_phylum"] = "Chordata"
+        df["lineage_class"] = "Mammalia"
+        df.to_csv(args.output_csv, index=False)
         return 0
 
     def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
@@ -246,14 +277,14 @@ def test_run_all_preserves_reaction_ec_numbers(
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
-    monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
+    classifier = DummyClassifier()
+    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: classifier)
 
-    original_finalise = gtd.tp.finalise_targets
+    orig_finalise = gtd.tp.finalise_targets
 
     def patched_finalise(df: pd.DataFrame, **kwargs: object) -> pd.DataFrame:
-        df = df.drop(columns=["type"], errors="ignore")
-        return original_finalise(df, **kwargs)
+        df = df.drop(columns=[col for col in ("type", "target_type") if col in df.columns])
+        return orig_finalise(df, **kwargs)
 
     monkeypatch.setattr(gtd.tp, "finalise_targets", patched_finalise)
     monkeypatch.setattr(
@@ -272,3 +303,7 @@ def test_run_all_preserves_reaction_ec_numbers(
 
     result = pd.read_csv(output_csv, dtype=str)
     assert result.loc[0, "reaction_ec_numbers"] == "2.2.2.2|4.4.4.4"
+    assert result.loc[0, "target_type"] == "Multicellular organism"
+    assert result.loc[0, "protein_class_pred_L1"] == "ClassA"
+    assert result.loc[0, "protein_class_pred_rule_id"] == "target_id"
+    assert classifier.calls

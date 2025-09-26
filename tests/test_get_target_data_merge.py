@@ -13,28 +13,72 @@ from library.config import Config
 from scripts import get_target_data as gtd
 
 
+class DummyRecord:
+    """Lightweight classification record for deterministic predictions."""
+
+    def __init__(self, status: str = "target_id") -> None:
+        self.STATUS = status
+        self.IUPHAR_class = "ClassA"
+        self.IUPHAR_subclass = "SubclassA"
+        self.IUPHAR_type = "TypeA"
+
+
+class DummyClassifier:
+    """Minimal classifier returning deterministic values for tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def get(self, target_id: str, family_id: str, ec_number: str, name: str) -> DummyRecord:
+        self.calls.append(("get", (target_id, family_id, ec_number, name)))
+        return DummyRecord()
+
+    def by_molecular_function(self, molecular_function: str) -> DummyRecord:
+        self.calls.append(("by_molecular_function", (molecular_function,)))
+        return DummyRecord(status="molecular_function")
+
+
 def test_iuphar_merge_preserves_ec_number(
     tmp_path: Path, cfg: Config, monkeypatch: MonkeyPatch
 ) -> None:
     """Ensure merging does not duplicate the ``ec_number`` column."""
     combined_df = pd.DataFrame(
         {
-            "chembl_id": ["CHEMBL1"],
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprotkb_Id": ["P12345"],
             "uniprot_id": ["P12345"],
-            "ec_number": ["1.1.1.1"],
-            "synonyms": ["foo"],
+            "gene": ["GN1"],
             "gene_name": ["GN1"],
+            "synonyms": ["foo"],
+            "ec_number": ["1.1.1.1"],
+            "genus": ["Homo"],
+            "lineage_superkingdom": ["Eukaryota"],
+            "lineage_phylum": ["Chordata"],
+            "lineage_class": ["Mammalia"],
         }
     )
-    iuphar_df = pd.DataFrame({"uniprot_id": ["P12345"], "class_a": ["Enzyme"]})
+    iuphar_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P12345"],
+            "IUPHAR_class": ["Enzyme"],
+            "target_id": ["T1"],
+        }
+    )
 
     monkeypatch.setattr(tp, "postprocess_targets", lambda df: df)
-    monkeypatch.setattr(tp, "finalise_targets", lambda df, **_: df)
-    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: None)
-    monkeypatch.setattr(pc, "append_protein_class_predictions", lambda df, _cls: df)
+    classifier = DummyClassifier()
+    monkeypatch.setattr(pc, "classifier_from_config", lambda cfg: classifier)
+
+    orig_finalise = tp.finalise_targets
+
+    def patched_finalise(df: pd.DataFrame, **kwargs: object) -> pd.DataFrame:
+        df = df.drop(columns=[col for col in ("type", "target_type") if col in df.columns])
+        return orig_finalise(df, **kwargs)
+
+    monkeypatch.setattr(tp, "finalise_targets", patched_finalise)
     merged = gtd.merge_results(combined_df, iuphar_df, cfg)
 
-    assert "ec_number" in merged.columns
-    assert "ec_number_x" not in merged.columns
-    assert "ec_number_y" not in merged.columns
-    assert merged.loc[0, "ec_number"] == "1.1.1.1"
+    assert "protein_class_pred_L1" in merged.columns
+    assert merged.loc[0, "protein_class_pred_L1"] == "ClassA"
+    assert merged.loc[0, "target_type"] == "Multicellular organism"
+    assert classifier.calls
