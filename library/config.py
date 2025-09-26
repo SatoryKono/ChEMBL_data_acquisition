@@ -383,6 +383,7 @@ class IoCfg(_BoolModel):
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
     na_markers: Sequence[str] | None = ("#N/A",)
+    csv_chunksize: int = Field(10000, ge=1)
     exist_ok: bool = True
 
     @field_validator("exist_ok", mode="before")
