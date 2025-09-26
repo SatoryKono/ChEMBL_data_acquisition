@@ -25,7 +25,7 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `chembl_base` | `https://www.ebi.ac.uk/chembl/api/data` | Base URL for the ChEMBL REST API. |
 | `timeout_connect` | `5` | Connection timeout in seconds. |
 | `timeout_read` | `30` | Read timeout in seconds. |
-| `retries` | `3` | HTTP retry attempts handled by `requests`. |
+| `retries` | `3` | Maximum number of attempts performed by higher-level clients; the shared HTTP adapter does not retry automatically. |
 | `backoff_factor` | `0.5` | Multiplier for exponential backoff between retries. |
 | `rps` | `20` | Allowed requests per second for the rate limiter. |
 | `burst` | `20` | Bucket size used by the token bucket limiter. |
@@ -257,7 +257,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | `timeout_connect` | `5` | Connection timeout (seconds) for establishing new HTTP sessions. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_CONNECT`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_CONNECT` |
 | `timeout_read` | `60` | Read timeout (seconds) waiting for server responses. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_READ`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_READ` |
 | `timeout_seconds` | `30.0` | Upper bound for a single CID resolution attempt, including retries. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_SECONDS` |
-| `retries` | `3` | Number of automatic retries after transient failures. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
+| `retries` | `3` | Number of attempts executed by the PubChem retry loop before giving up. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
 | `rps` | `5` | Per-service request-per-second budget used by the rate limiter. | `CHEMBL_DA_SOURCES_PUBCHEM_RPS`, `CHEMBL_DA__SOURCES__PUBCHEM__RPS` |
 | `burst` | `5` | Token bucket size paired with the `rps` limit. | `CHEMBL_DA_SOURCES_PUBCHEM_BURST`, `CHEMBL_DA__SOURCES__PUBCHEM__BURST` |
 | `delay` | `0.2` | Fixed pause (seconds) inserted between retry attempts. | `CHEMBL_DA_SOURCES_PUBCHEM_DELAY`, `CHEMBL_DA__SOURCES__PUBCHEM__DELAY` |

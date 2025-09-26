@@ -954,7 +954,9 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
 
     session = Session()
     retry_cfg = Retry(
-        total=retry.max_attempts,
+        # Automatic retries are disabled to avoid double retry loops; HTTP
+        # clients implement their own attempt counters using ``retry``.
+        total=0,
         backoff_factor=retry.backoff_factor,
         status_forcelist=retry.status_forcelist,
         # ``None`` disables method filtering and retries all HTTP methods.
