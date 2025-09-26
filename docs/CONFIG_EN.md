@@ -126,8 +126,8 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | Key | Default | Description |
 | --- | --- | --- |
 | `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
-| `sources.molecule_catalog_path` | `dictionary/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
-| `sources.molecule_hierarchy_path` | `dictionary/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `sources.molecule_catalog_path` | `dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
+| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
 | `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
 | `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
 | `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
@@ -160,21 +160,21 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Column with UniProt identifiers. |
-|  | `data_dir` | `dictionary/uniprot` | Directory holding cached UniProt JSON files. |
+|  | `data_dir` | `dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 | `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `iuphar` | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `all` | `data_dir` | `dictionary/uniprot` | Directory containing cached UniProt data. |
-|  | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+| `all` | `data_dir` | `dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
+|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
-|  | `organism_csv` | `dictionary/_Target/targets_type.csv` | Taxonomy and target type mapping. |
+|  | `organism_csv` | `dictionary/_target/targets_type.csv` | Taxonomy and target type mapping. |
 |  | `uniprot_column` | `uniprot_id` | Column used to join UniProt data. |
 |  | `chembl_out` | `null` | Optional override for the combined ChEMBL output path. |
 |  | `uniprot_out` | `null` | Optional override for the combined UniProt output path. |
@@ -203,11 +203,11 @@ All URLs must comply with the respective service usage policies, including rate 
 | Key | Default | Description |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
-| `uniprot_data_dir` | `dictionary/uniprot` | Cached UniProt JSON responses. |
-| `organism_csv` | `dictionary/_Target/targets_type.csv` | Organism and taxonomy mapping. |
-| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
+| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
+| `organism_csv` | `dictionary/_target/targets_type.csv` | Organism and taxonomy mapping. |
+| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Target type classification table. |
 
 ### I/O defaults (`local.io`)
 

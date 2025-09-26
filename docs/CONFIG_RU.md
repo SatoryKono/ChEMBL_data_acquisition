@@ -126,8 +126,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
-| `sources.molecule_catalog_path` | `dictionary/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
-| `sources.molecule_hierarchy_path` | `dictionary/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `sources.molecule_catalog_path` | `dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
+| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
 | `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
 | `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
 | `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |
@@ -160,21 +160,21 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Колонка с UniProt ID. |
-|  | `data_dir` | `dictionary/uniprot` | Каталог с кэшированными JSON UniProt. |
+|  | `data_dir` | `dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
 | `chembl` | `column` | `target_chembl_id` | Колонка с таргетами ChEMBL. |
 |  | `chunk_size` | `5` | Размер батча запросов. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `iuphar` | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `all` | `data_dir` | `dictionary/uniprot` | Каталог с данными UniProt. |
-|  | `target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
-|  | `family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
+| `all` | `data_dir` | `dictionary/_target/_uniprot` | Каталог с данными UniProt. |
+|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
+|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
-|  | `organism_csv` | `dictionary/_Target/targets_type.csv` | Классификация организмов и типов таргетов. |
+|  | `organism_csv` | `dictionary/_target/targets_type.csv` | Классификация организмов и типов таргетов. |
 |  | `uniprot_column` | `uniprot_id` | Колонка для соединения с UniProt. |
 |  | `chembl_out` | `null` | Индивидуальный путь для объединённых данных ChEMBL. |
 |  | `uniprot_out` | `null` | Индивидуальный путь для объединённых данных UniProt. |
@@ -203,11 +203,11 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Корневая папка словарей. |
-| `iuphar_target_csv` | `dictionary/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
-| `iuphar_family_csv` | `dictionary/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-| `uniprot_data_dir` | `dictionary/uniprot` | Кэшированные ответы UniProt. |
-| `organism_csv` | `dictionary/_Target/targets_type.csv` | Классификация организмов. |
-| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Классификация типов таргетов. |
+| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
+| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
+| `organism_csv` | `dictionary/_target/targets_type.csv` | Классификация организмов. |
+| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
 
 ### Настройки ввода-вывода (`local.io`)
 

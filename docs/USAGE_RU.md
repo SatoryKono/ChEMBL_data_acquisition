@@ -143,15 +143,11 @@ PubChem-дополнение добавляет детерминированны
 ### Требования к каталогу родительских молекул
 
 Чтобы получить `parent_molecule_chembl_id` для агрегаций, выгрузку необходимо объединить с каталогом
-родителей ChEMBL. Путь к локальному JSON задаётся через `sources.chembl.molecule_catalog.cache_path`; убедитесь,
+родителей ChEMBL. Путь к локальному JSON задаётся через
+[`sources.chembl.molecule_catalog.cache_path`](./CONFIG_RU.md#sources-chembl-molecule-catalog); убедитесь,
 что файл доступен исполнителю, либо задайте новое расположение переменной окружения
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
 `config.yaml`.【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
-
-родителей ChEMBL. Путь к локальному JSON задаётся через
-[`sources.chembl.molecule_catalog`](./CONFIG_RU.md#sources-chembl-molecule-catalog) (`cache_path`); убедитесь,
-что файл доступен исполнителю, либо переопределите расположение параметрами CLI (`--sources.chembl.molecule_catalog.cache-path`)
-или переменными окружения (`CHEMBL_DA_MOLECULE_CATALOG_CACHE`).【F:config.yaml†L25-L33】【F:library/config.py†L487-L551】
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
 `library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
@@ -163,9 +159,9 @@ PubChem-дополнение добавляет детерминированны
 столбцы `salt_chembl_id`, `natural_product`, `prodrug`, `polymer_flag` на
 основе двух CSV-словарей:
 
-* `dictionary/molecule_hierarchy.csv` со столбцами `molecule_chembl_id`,
+* `dictionary/_testitem/molecule_hierarchy.csv` со столбцами `molecule_chembl_id`,
   `parent_molecule_chembl_id` описывает связи соли и родителя.
-* `dictionary/molecule_catalog.csv` со столбцами `molecule_chembl_id`,
+* `dictionary/_testitem/molecule_catalog.csv` со столбцами `molecule_chembl_id`,
   `natural_product`, `prodrug`, `polymer_flag` содержит булевы признаки.
 
 Если молекулы нет в словарях, в лог попадают предупреждения

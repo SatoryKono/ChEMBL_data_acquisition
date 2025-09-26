@@ -115,8 +115,8 @@ JSON-файл содержит:
 `sources.chembl.molecule_catalog.cache_path` и загружается функцией
 `library.molecule_catalog.load_parent_catalog`, которая при необходимости обновляет кэш через API ChEMBL.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L43-L136】
 
-Дополнительный этап обогащения использует `dictionary/molecule_hierarchy.csv` и
-`dictionary/molecule_catalog.csv`, чтобы до валидации заполнить `salt_chembl_id`
+Дополнительный этап обогащения использует `dictionary/_testitem/molecule_hierarchy.csv` и
+`dictionary/_testitem/molecule_catalog.csv`, чтобы до валидации заполнить `salt_chembl_id`
 и булевы признаки `natural_product`, `prodrug`, `polymer_flag`. Соль
 распознаётся, когда `parent_molecule_chembl_id` отличается от
 `molecule_chembl_id`, после чего в `salt_chembl_id` попадает идентификатор
