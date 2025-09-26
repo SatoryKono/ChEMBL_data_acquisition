@@ -260,6 +260,10 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Time-to-live for PubChem request cache in seconds",
     )
+    cid_cache_path: Path | None = Field(
+        default=None,
+        description="Optional path to persist resolved PubChem CIDs",
+    )
 
     @field_validator("base")
     @classmethod

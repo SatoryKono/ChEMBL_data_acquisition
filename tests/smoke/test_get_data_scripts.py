@@ -360,6 +360,10 @@ def test_get_testitem_data_smoke(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchikey", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_cid", lambda *_, **__: None)
+    monkeypatch.setattr(pl, "get_all_cid", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
     monkeypatch.setattr(

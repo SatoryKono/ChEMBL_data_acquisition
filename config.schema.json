@@ -1013,6 +1013,20 @@
           "minimum": 0,
           "title": "Cache Ttl",
           "type": "integer"
+        },
+        "cid_cache_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional path to persist resolved PubChem CIDs",
+          "title": "Cid Cache Path"
         }
       },
       "title": "PubChemCfg",

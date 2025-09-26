@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 # ruff: noqa: E402
@@ -119,6 +120,156 @@ def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
         .str.upper()
     )
     return normalised
+
+
+def _load_pubchem_cid_cache(path: Path | None) -> dict[str, str | None]:
+    """Load PubChem CID cache from *path* if available."""
+
+    if path is None:
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        logger.warning("pubchem_cache_load_failed", path=str(path), error=str(exc))
+        return {}
+    if not isinstance(payload, dict):
+        logger.warning("pubchem_cache_invalid", path=str(path), type=type(payload).__name__)
+        return {}
+    cache: dict[str, str | None] = {}
+    for key, value in payload.items():
+        if not isinstance(key, str):
+            continue
+        normalised_key = key.strip().upper()
+        if not normalised_key:
+            continue
+        cache[normalised_key] = value if isinstance(value, str) or value is None else None
+    return cache
+
+
+def _store_pubchem_cid_cache(cache: Mapping[str, str | None], path: Path | None) -> None:
+    """Persist PubChem CID cache to *path* when configured."""
+
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        serialisable = {key: value for key, value in cache.items() if key}
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(serialisable, fh, indent=2, sort_keys=True)
+    except OSError as exc:
+        logger.warning("pubchem_cache_write_failed", path=str(path), error=str(exc))
+
+
+def _normalise_identifier(value: object, *, upper: bool = False) -> str:
+    """Normalise identifier values by stripping whitespace and adjusting case."""
+
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    if isinstance(value, pd.Series):  # pragma: no cover - defensive
+        raise TypeError("expected scalar, got Series")
+    if pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    return text.upper() if upper else text
+
+
+def _extract_primary_cid(
+    raw: str | None,
+    *,
+    chembl_id: str | None,
+    source: str,
+    identifier: str,
+) -> str | None:
+    """Return the primary CID from a pipe-separated string and log alternatives."""
+
+    if not raw:
+        return None
+    candidates = [item.strip() for item in raw.split("|") if item.strip()]
+    if not candidates:
+        return None
+    primary = candidates[0]
+    extras = candidates[1:]
+    if extras:
+        logger.info(
+            "pubchem_multiple_cid",
+            chembl_id=chembl_id,
+            source=source,
+            identifier=identifier,
+            primary=primary,
+            alternatives="|".join(extras),
+        )
+    return primary
+
+
+def resolve_pubchem_cid(
+    row: pd.Series,
+    cache: MutableMapping[str, str | None],
+    cfg: PubChemCfg,
+) -> str | None:
+    """Resolve PubChem CID for *row* using cached values and PubChem lookups."""
+
+    chembl_id_raw = row.get("molecule_chembl_id")
+    chembl_id = _normalise_identifier(chembl_id_raw, upper=True)
+    if chembl_id and chembl_id in cache:
+        return cache[chembl_id]
+
+    cid: str | None = None
+
+    inchikey = _normalise_identifier(row.get("standard_inchi_key"), upper=True)
+    if inchikey:
+        cid = _extract_primary_cid(
+            pl.get_cid_from_inchikey(inchikey, cfg),
+            chembl_id=chembl_id or None,
+            source="standard_inchi_key",
+            identifier=inchikey,
+        )
+
+    if cid is None:
+        inchi = _normalise_identifier(row.get("standard_inchi"))
+        if inchi:
+            cid = _extract_primary_cid(
+                pl.get_cid_from_inchi(inchi, cfg),
+                chembl_id=chembl_id or None,
+                source="standard_inchi",
+                identifier=inchi,
+            )
+
+    if cid is None:
+        pref_name = _normalise_identifier(row.get("pref_name"))
+        if pref_name:
+            cid = _extract_primary_cid(
+                pl.get_cid(pref_name, cfg),
+                chembl_id=chembl_id or None,
+                source="pref_name_exact",
+                identifier=pref_name,
+            )
+            if cid is None:
+                cid = _extract_primary_cid(
+                    pl.get_all_cid(pref_name, cfg),
+                    chembl_id=chembl_id or None,
+                    source="pref_name_partial",
+                    identifier=pref_name,
+                )
+
+    if cid is None:
+        smiles = _normalise_identifier(row.get("canonical_smiles"))
+        if smiles:
+            cid = _extract_primary_cid(
+                pl.get_cid_from_smiles(smiles, cfg),
+                chembl_id=chembl_id or None,
+                source="canonical_smiles",
+                identifier=smiles,
+            )
+
+    if chembl_id:
+        cache[chembl_id] = cid
+
+    return cid
 
 
 def attach_parent_molecule_ids(
@@ -286,79 +437,52 @@ def attach_parent_molecule_ids(
 
 
 def add_pubchem_data(df: pd.DataFrame, cfg: PubChemCfg) -> pd.DataFrame:
-    """Augment ChEMBL records with PubChem information.
+    """Augment ChEMBL records with PubChem information."""
 
-    For each canonical SMILES string in ``df``, the function looks up the
-    corresponding PubChem CID and basic chemical properties. The PubChem
-    fields are appended to the input frame. If a SMILES string cannot be
-    resolved, empty values are inserted.
-
-    Parameters
-    ----------
-    df:
-        Data frame returned by :func:`library.chembl_library.get_testitem`.
-    cfg:
-        PubChem configuration options.
-
-    Returns
-    -------
-    pandas.DataFrame
-        ``df`` with additional PubChem columns.
-
-    """
-    if df.empty or "canonical_smiles" not in df.columns:
+    if df.empty:
         return df
 
-    smiles_list = df["canonical_smiles"].fillna("").tolist()
-    # ``dict.fromkeys`` preserves the order of first occurrence while
-    # removing duplicates. This allows progress output to reflect the
-    # deterministic iteration order of SMILES strings.
-    unique_smiles = [s for s in dict.fromkeys(smiles_list) if s]
+    cache_path = getattr(cfg, "cid_cache_path", None)
+    cid_cache = _load_pubchem_cid_cache(cache_path)
 
-    total = len(unique_smiles)
+    total = len(df)
     if total:
         logger.info("pubchem_start", total=total)
     else:
-        logger.info("pubchem_no_smiles")
+        logger.info("pubchem_no_records")
 
-    records: dict[str, dict[str, str]] = {}
-    for idx, smi in enumerate(unique_smiles, start=1):
-        logger.info("pubchem_progress", current=idx, total=total)
-        cid = pl.get_cid_from_smiles(smi, cfg) or ""
-        first_cid = cid.split("|")[0] if cid else ""
-        if first_cid:
-            props = pl.get_properties(first_cid, cfg)
-            records[smi] = {
-                "pubchem_cid": first_cid,
-                "pubchem_iupac_name": props.IUPACName,
-                "pubchem_molecular_formula": props.MolecularFormula,
-                "pubchem_isomeric_smiles": props.iSMILES,
-                "pubchem_canonical_smiles": props.cSMILES,
-                "pubchem_inchi": props.InChI,
-                "pubchem_inchikey": props.InChIKey,
-            }
+    property_cache: dict[str, dict[str, str | None]] = {}
+    results: list[dict[str, str | None]] = []
+
+    for _, row in df.iterrows():
+        cid = resolve_pubchem_cid(row, cid_cache, cfg)
+        if cid:
+            if cid not in property_cache:
+                props = pl.get_properties(cid, cfg)
+                property_cache[cid] = {
+                    "pubchem_cid": cid,
+                    "pubchem_iupac_name": props.IUPACName,
+                    "pubchem_molecular_formula": props.MolecularFormula,
+                    "pubchem_isomeric_smiles": props.iSMILES,
+                    "pubchem_canonical_smiles": props.cSMILES,
+                    "pubchem_inchi": props.InChI,
+                    "pubchem_inchikey": props.InChIKey,
+                }
+            result = property_cache[cid].copy()
         else:
-            records[smi] = {
-                "pubchem_cid": "",
-                "pubchem_iupac_name": "",
-                "pubchem_molecular_formula": "",
-                "pubchem_isomeric_smiles": "",
-                "pubchem_canonical_smiles": "",
-                "pubchem_inchi": "",
-                "pubchem_inchikey": "",
+            result = {
+                "pubchem_cid": None,
+                "pubchem_iupac_name": None,
+                "pubchem_molecular_formula": None,
+                "pubchem_isomeric_smiles": None,
+                "pubchem_canonical_smiles": None,
+                "pubchem_inchi": None,
+                "pubchem_inchikey": None,
             }
+        results.append(result)
 
-    empty = {
-        "pubchem_cid": "",
-        "pubchem_iupac_name": "",
-        "pubchem_molecular_formula": "",
-        "pubchem_isomeric_smiles": "",
-        "pubchem_canonical_smiles": "",
-        "pubchem_inchi": "",
-        "pubchem_inchikey": "",
-    }
-    pubchem_rows = [records.get(smi, empty) for smi in smiles_list]
-    pubchem_df = pd.DataFrame(pubchem_rows)
+    pubchem_df = pd.DataFrame(results)
+    _store_pubchem_cid_cache(cid_cache, cache_path)
     return pd.concat([df.reset_index(drop=True), pubchem_df], axis=1)
 
 
