@@ -17,13 +17,22 @@ from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
 
-def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_add_pubchem_data_missing_uses_na() -> None:
     df = pd.DataFrame({"canonical_smiles": ["C"]})
     cfg = pl.PubChemCfg(delay=0)
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
+    def resolver_stub(
+        identifiers: Mapping[str, str | None], cfg: pl.PubChemCfg
+    ) -> pl.PubChemResolution:
+        return pl.PubChemResolution(
+            cid=None,
+            source="smiles",
+            status="not_found",
+            status_code=404,
+            attempts=("smiles",),
+        )
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = gtd.add_pubchem_data(df, cfg, resolver=resolver_stub)
     pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
     assert pubchem_cols
     assert result[pubchem_cols].isna().all().all()
@@ -45,13 +54,12 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     )
     cfg = pl.PubChemCfg(delay=0, prefer_local_smiles=True)
 
-    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+    def fail_resolver(*_: object, **__: object) -> pl.PubChemResolution:  # pragma: no cover
         raise AssertionError("PubChem lookup should not be called")
 
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
-    monkeypatch.setattr(pl, "get_properties", fail)
+    monkeypatch.setattr(pl, "get_properties", lambda *_: None)
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = gtd.add_pubchem_data(df, cfg, resolver=fail_resolver)
 
     expected = df.copy()
     for column in gtd.PUBCHEM_COLUMNS:
@@ -59,9 +67,55 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     pd.testing.assert_frame_equal(result, expected)
 
 
-def test_resolve_pubchem_cid_prefers_inchikey(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_add_pubchem_data_writes_not_found_literal() -> None:
+    df = pd.DataFrame({"canonical_smiles": ["C"]})
+    cfg = pl.PubChemCfg(delay=0, write_not_found_literal=True)
+
+    def resolver_stub(
+        identifiers: Mapping[str, str | None], cfg: pl.PubChemCfg
+    ) -> pl.PubChemResolution:
+        return pl.PubChemResolution(
+            cid=None,
+            source="smiles",
+            status="not_found",
+            status_code=404,
+            attempts=("smiles",),
+        )
+
+    result = gtd.add_pubchem_data(df, cfg, resolver=resolver_stub)
+
+    for column in gtd.PUBCHEM_COLUMNS:
+        assert (result[column] == "Not Found").all()
+
+
+def test_add_pubchem_data_reuses_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame({"canonical_smiles": ["C", "C"]})
+    cfg = pl.PubChemCfg(delay=0)
+
+    calls = {"count": 0}
+
+    def resolver_stub(
+        identifiers: Mapping[str, str | None], cfg: pl.PubChemCfg
+    ) -> pl.PubChemResolution:
+        calls["count"] += 1
+        return pl.PubChemResolution(
+            cid="10",
+            source="smiles",
+            status="resolved",
+            status_code=200,
+            attempts=("smiles",),
+        )
+
+    props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
+
+    result = gtd.add_pubchem_data(df, cfg, resolver=resolver_stub)
+
+    assert calls["count"] == 1
+    assert (result["pubchem_cid"] == "10").all()
+
+
+def test_resolve_pubchem_cid_prefers_inchikey() -> None:
     row = pd.Series(
         {
             "molecule_chembl_id": "chembl1",
@@ -73,35 +127,30 @@ def test_resolve_pubchem_cid_prefers_inchikey(
     )
     cfg = pl.PubChemCfg(delay=0)
     cache: dict[str, str | None] = {}
-    calls: list[str] = []
+    calls: list[Mapping[str, str | None]] = []
 
-    def record_call(name: str) -> None:  # pragma: no cover - helper
-        calls.append(name)
+    def resolver_stub(
+        identifiers: Mapping[str, str | None], _: pl.PubChemCfg
+    ) -> pl.PubChemResolution:
+        calls.append(identifiers)
+        assert identifiers["inchikey"] == "ABC-KEY"
+        return pl.PubChemResolution(
+            cid="10",
+            source="inchikey",
+            status="resolved",
+            status_code=200,
+            attempts=("inchikey",),
+        )
 
-    monkeypatch.setattr(
-        pl,
-        "get_cid_from_inchikey",
-        lambda value, cfg: (record_call("inchikey"), "10|20")[1],
-    )
+    resolution = gtd.resolve_pubchem_cid(row, cache, cfg, resolver=resolver_stub)
 
-    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
-        raise AssertionError("unexpected resolver invocation")
-
-    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
-    monkeypatch.setattr(pl, "get_cid", fail)
-    monkeypatch.setattr(pl, "get_all_cid", fail)
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
-
-    cid = gtd.resolve_pubchem_cid(row, cache, cfg)
-
-    assert cid == "10"
+    assert resolution.cid == "10"
+    assert resolution.source == "inchikey"
     assert cache["CHEMBL1"] == "10"
-    assert calls == ["inchikey"]
+    assert len(calls) == 1
 
 
-def test_resolve_pubchem_cid_uses_parent_when_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_resolve_pubchem_cid_uses_parent_when_enabled() -> None:
     child_row = pd.Series(
         {
             "molecule_chembl_id": "CHEMBL2",
@@ -121,29 +170,41 @@ def test_resolve_pubchem_cid_uses_parent_when_enabled(
     cache: dict[str, str | None] = {}
     cfg = pl.PubChemCfg(delay=0, use_parent_for_salts=True)
 
-    calls: list[str] = []
+    calls: list[Mapping[str, str | None]] = []
 
-    def record_inchikey(value: str, _: pl.PubChemCfg) -> str:
-        calls.append(value)
-        return "42"
+    def resolver_stub(
+        identifiers: Mapping[str, str | None], _: pl.PubChemCfg
+    ) -> pl.PubChemResolution:
+        calls.append(identifiers)
+        if identifiers.get("inchikey") == "PARENT-KEY":
+            return pl.PubChemResolution(
+                cid="42",
+                source="inchikey",
+                status="resolved",
+                status_code=200,
+                attempts=("inchikey",),
+            )
+        return pl.PubChemResolution(
+            cid=None,
+            source="inchikey",
+            status="not_found",
+            status_code=404,
+            attempts=("inchikey",),
+        )
 
-    monkeypatch.setattr(pl, "get_cid_from_inchikey", record_inchikey)
-    monkeypatch.setattr(pl, "get_cid_from_inchi", lambda *_: None)
-    monkeypatch.setattr(pl, "get_cid", lambda *_: None)
-    monkeypatch.setattr(pl, "get_all_cid", lambda *_: None)
-    monkeypatch.setattr(pl, "get_cid_from_smiles", lambda *_: None)
-
-    cid = gtd.resolve_pubchem_cid(
+    resolution = gtd.resolve_pubchem_cid(
         child_row,
         cache,
         cfg,
         parent_loader=lambda _: parent_row,
+        resolver=resolver_stub,
     )
 
-    assert cid == "42"
+    assert resolution.cid == "42"
+    assert resolution.source == "inchikey"
     assert cache["CHEMBL1"] == "42"
     assert cache["CHEMBL2"] == "42"
-    assert calls == ["PARENT-KEY"]
+    assert any(call.get("inchikey") == "PARENT-KEY" for call in calls)
 
 
 def test_resolve_pubchem_cid_logs_when_parent_missing(
@@ -165,14 +226,26 @@ def test_resolve_pubchem_cid_logs_when_parent_missing(
 
     monkeypatch.setattr(gtd.logger, "info", capture)
 
-    cid = gtd.resolve_pubchem_cid(
+    def resolver_stub(
+        identifiers: Mapping[str, str | None], _: pl.PubChemCfg
+    ) -> pl.PubChemResolution:
+        return pl.PubChemResolution(
+            cid=None,
+            source="smiles",
+            status="not_found",
+            status_code=404,
+            attempts=("smiles",),
+        )
+
+    resolution = gtd.resolve_pubchem_cid(
         row,
         cache,
         cfg,
         parent_loader=lambda _: None,
+        resolver=resolver_stub,
     )
 
-    assert cid is None
+    assert resolution.cid is None
     assert cache["CHEMBL2"] is None
     assert any(event == "pubchem_parent_structure_missing" for event, _ in events)
 
@@ -192,19 +265,13 @@ def test_add_pubchem_data_uses_disk_cache(
 
     cfg = pl.PubChemCfg(delay=0, cid_cache_path=cache_path)
 
-    def fail(*_: object, **__: object) -> None:  # pragma: no cover - defensive
+    def fail_resolver(*_: object, **__: object) -> pl.PubChemResolution:  # pragma: no cover
         raise AssertionError("PubChem lookup should not be called")
-
-    monkeypatch.setattr(pl, "get_cid_from_inchikey", fail)
-    monkeypatch.setattr(pl, "get_cid_from_inchi", fail)
-    monkeypatch.setattr(pl, "get_cid", fail)
-    monkeypatch.setattr(pl, "get_all_cid", fail)
-    monkeypatch.setattr(pl, "get_cid_from_smiles", fail)
 
     props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
     monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = gtd.add_pubchem_data(df, cfg, resolver=fail_resolver)
 
     assert result.loc[0, "pubchem_cid"] == "321"
     assert result.loc[0, "pubchem_iupac_name"] == "name"

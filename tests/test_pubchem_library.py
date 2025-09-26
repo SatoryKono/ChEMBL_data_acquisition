@@ -161,6 +161,97 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
 
 
 @responses.activate
+def test_resolve_pubchem_record_respects_order() -> None:
+    """Resolution follows configured identifier order."""
+
+    cfg = pl.PubChemCfg(delay=0, backoff_initial_seconds=0, timeout_seconds=1.0)
+    identifiers = {
+        "cache": None,
+        "smiles": "C",
+        "inchikey": "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+        "inchi": None,
+        "pref_name": "methane",
+    }
+
+    smiles_url = f"{cfg.base.rstrip('/')}/compound/smiles/C/cids/JSON"
+    inchikey_url = (
+        f"{cfg.base.rstrip('/')}/compound/inchikey/"
+        "VNWKTOKETHGBQD-UHFFFAOYSA-N/cids/JSON"
+    )
+    responses.add(responses.GET, smiles_url, status=404)
+    responses.add(
+        responses.GET,
+        inchikey_url,
+        json={"IdentifierList": {"CID": [123]}},
+        status=200,
+    )
+
+    resolution = pl.resolve_pubchem_record(identifiers, cfg)
+
+    assert resolution.cid == "123"
+    assert resolution.source == "inchikey"
+    assert resolution.status == "resolved"
+    assert [call.request.url for call in responses.calls] == [smiles_url, inchikey_url]
+
+
+@responses.activate
+def test_resolve_pubchem_record_applies_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP 429/5xx statuses trigger exponential backoff."""
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(pl, "sleep", lambda delay: sleeps.append(delay))
+
+    cfg = pl.PubChemCfg(
+        delay=0,
+        backoff_initial_seconds=0.5,
+        timeout_seconds=1.0,
+        retries=3,
+        resolve_order=("smiles",),
+    )
+    url = f"{cfg.base.rstrip('/')}/compound/smiles/C/cids/JSON"
+    responses.add(responses.GET, url, status=429)
+    responses.add(responses.GET, url, status=500)
+    responses.add(responses.GET, url, json={"IdentifierList": {"CID": [77]}}, status=200)
+
+    identifiers = {
+        "cache": None,
+        "smiles": "C",
+        "inchikey": None,
+        "inchi": None,
+        "pref_name": None,
+    }
+
+    resolution = pl.resolve_pubchem_record(identifiers, cfg)
+
+    assert resolution.cid == "77"
+    assert resolution.status == "resolved"
+    assert sleeps == [0.5, 1.0]
+
+
+@responses.activate
+def test_resolve_pubchem_record_reports_not_found() -> None:
+    """404 responses should surface as ``not_found`` status."""
+
+    cfg = pl.PubChemCfg(delay=0, backoff_initial_seconds=0, timeout_seconds=1.0)
+    url = f"{cfg.base.rstrip('/')}/compound/smiles/C/cids/JSON"
+    responses.add(responses.GET, url, status=404)
+
+    identifiers = {
+        "cache": None,
+        "smiles": "C",
+        "inchikey": None,
+        "inchi": None,
+        "pref_name": None,
+    }
+
+    resolution = pl.resolve_pubchem_record(identifiers, cfg)
+
+    assert resolution.cid is None
+    assert resolution.status == "not_found"
+    assert resolution.status_code == 404
+
+
+@responses.activate
 def test_get_properties_returns_none_for_missing() -> None:
     """Missing PubChem fields should be returned as ``None``."""
 

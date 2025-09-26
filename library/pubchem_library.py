@@ -7,7 +7,7 @@ The implementation is a Python translation of a PowerQuery script.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Mapping, cast, Literal
 from urllib.parse import quote
 
 import requests
@@ -27,6 +27,19 @@ _CACHE: TTLCache[str, dict[str, Any]] | None = None
 _session: Session = session_with_retry(
     ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
 )
+
+_RESOLVE_KEYS: frozenset[str] = frozenset({"cache", "smiles", "inchikey", "inchi", "pref_name"})
+
+
+@dataclass(frozen=True)
+class PubChemResolution:
+    """Result of :func:`resolve_pubchem_record`."""
+
+    cid: str | None
+    source: str | None
+    status: Literal["resolved", "not_found", "error", "skipped"]
+    status_code: int | None
+    attempts: tuple[str, ...]
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
@@ -64,6 +77,182 @@ def url_encode(text: str) -> str:
 def _cids_from_identifier_list(data: dict[str, Any]) -> list[str]:
     """Extract CIDs from a JSON ``IdentifierList`` structure."""
     return [str(cid) for cid in data.get("IdentifierList", {}).get("CID", [])]
+
+
+def _primary_cid(value: str | None) -> str | None:
+    """Return the first CID from a pipe-separated string."""
+
+    if not value:
+        return None
+    cids = [part.strip() for part in str(value).split("|") if part.strip()]
+    return cids[0] if cids else None
+
+
+def _request_json(url: str, cfg: PubChemCfg, session: Session) -> tuple[dict[str, Any] | None, int | None]:
+    """Perform a JSON request handling retryable PubChem status codes."""
+
+    attempts = max(1, cfg.retries)
+    backoff = cfg.backoff_initial_seconds
+    status_code: int | None = None
+    for attempt in range(1, attempts + 1):
+        get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
+        try:
+            response = session.get(url, timeout=cfg.timeout_seconds)
+        except requests.RequestException as exc:
+            logger.warning(
+                "pubchem_request_error",
+                url=url,
+                attempt=attempt,
+                error=str(exc),
+            )
+            status_code = None
+        else:
+            status_code = response.status_code
+            if status_code == 200:
+                try:
+                    return cast(dict[str, Any], response.json()), status_code
+                except ValueError:
+                    logger.warning(
+                        "pubchem_response_not_json",
+                        url=url,
+                        status=status_code,
+                    )
+                    return None, status_code
+            if status_code == 404:
+                logger.info("pubchem_not_found", url=url, status=status_code)
+                return None, status_code
+            if status_code == 429 or 500 <= status_code < 600:
+                logger.warning(
+                    "pubchem_retryable_status",
+                    url=url,
+                    status=status_code,
+                    attempt=attempt,
+                )
+            elif 400 <= status_code < 500:
+                logger.warning(
+                    "pubchem_client_error",
+                    url=url,
+                    status=status_code,
+                )
+                return None, status_code
+            else:
+                logger.warning(
+                    "pubchem_unexpected_status",
+                    url=url,
+                    status=status_code,
+                )
+                return None, status_code
+
+        if attempt >= attempts:
+            break
+        if status_code in (429,) or (status_code is not None and status_code >= 500) or status_code is None:
+            delay = backoff if backoff > 0 else cfg.delay
+            if delay > 0:
+                sleep(delay)
+            if backoff > 0:
+                backoff *= 2
+            continue
+        break
+    return None, status_code
+
+
+def _resolve_identifier(
+    kind: str,
+    value: str,
+    cfg: PubChemCfg,
+    session: Session,
+) -> tuple[list[str], int | None]:
+    """Resolve *value* of type *kind* into PubChem CIDs."""
+
+    base = cfg.base.rstrip("/")
+    if kind == "smiles":
+        url = f"{base}/compound/smiles/{url_encode(value)}/cids/JSON"
+    elif kind == "inchikey":
+        url = f"{base}/compound/inchikey/{url_encode(value)}/cids/JSON"
+    elif kind == "inchi":
+        url = f"{base}/compound/inchi/{url_encode(value)}/cids/JSON"
+    else:  # pragma: no cover - defensive programming
+        raise ValueError(f"Unsupported identifier kind: {kind}")
+    data, status = _request_json(url, cfg, session)
+    if not data:
+        return [], status
+    cids = sorted(set(_cids_from_identifier_list(data)))
+    return cids, status
+
+
+def _resolve_pref_name(
+    value: str,
+    cfg: PubChemCfg,
+    session: Session,
+) -> tuple[list[str], int | None]:
+    """Resolve preferred names using exact and partial synonym searches."""
+
+    rdf_base = cfg.base.rstrip("/").rsplit("/", 1)[0] + "/rdf"
+    encoded = url_encode(value)
+    urls = [
+        f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={encoded}",
+        f"{rdf_base}/query?graph=synonym&return=cid&format=json&name={encoded}&contain=true",
+    ]
+    last_status: int | None = None
+    for index, url in enumerate(urls):
+        data, status = _request_json(url, cfg, session)
+        last_status = status
+        if data:
+            bindings = data.get("results", {}).get("bindings", [])
+            cids = sorted(set(_extract_cids(bindings)))
+            if cids:
+                return cids, status
+        if status not in (404, 200):
+            return [], status
+        if index == 0 and status in (200, 404):
+            continue
+        break
+    return [], last_status
+
+
+def resolve_pubchem_record(
+    identifiers: Mapping[str, str | None],
+    cfg: PubChemCfg,
+    *,
+    session: Session | None = None,
+) -> PubChemResolution:
+    """Resolve a PubChem record using configured fallbacks."""
+
+    if not cfg.enable:
+        return PubChemResolution(None, None, "skipped", None, tuple())
+
+    molecule_type = (identifiers.get("molecule_type") or "").strip().lower()
+    if molecule_type == "polymer" and not cfg.allow_polymer:
+        return PubChemResolution(None, None, "skipped", None, tuple())
+
+    session = session or _session
+    attempts: list[str] = []
+    last_status: int | None = None
+    for source in cfg.resolve_order:
+        if source not in _RESOLVE_KEYS:
+            raise ValueError(f"Unsupported resolve step: {source}")
+        attempts.append(source)
+        if source == "cache":
+            cached = identifiers.get("cache")
+            cid = _primary_cid(cached) if cached is not None else None
+            if cid:
+                return PubChemResolution(cid, source, "resolved", None, tuple(attempts))
+            continue
+        value = identifiers.get(source)
+        if not value:
+            continue
+        if source == "pref_name":
+            cids, status = _resolve_pref_name(value, cfg, session)
+        else:
+            cids, status = _resolve_identifier(source, value, cfg, session)
+        last_status = status
+        if cids:
+            return PubChemResolution(cids[0], source, "resolved", status, tuple(attempts))
+        if status in (404, 200):
+            continue
+        return PubChemResolution(None, source, "error", status, tuple(attempts))
+
+    return PubChemResolution(None, None, "not_found", last_status, tuple(attempts))
 
 
 def get_cid_from_smiles(smiles: str, cfg: PubChemCfg) -> str | None:
@@ -482,5 +671,7 @@ __all__ = [
     "get_standard_name",
     "get_properties",
     "process_compound",
+    "resolve_pubchem_record",
+    "PubChemResolution",
     "Properties",
 ]

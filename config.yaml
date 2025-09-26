@@ -129,14 +129,25 @@ sources:
     burst: 5  # (env: CHEMBL_DA_IUPHAR_BURST)
   pubchem:
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
+    enable: true  # Toggle PubChem lookups entirely (env: CHEMBL_DA_PUBCHEM_ENABLE)
+    resolve_order:
+      - cache
+      - smiles
+      - inchikey
+      - inchi
+      - pref_name
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
+    timeout_seconds: 30.0  # Overall timeout for resolve_pubchem_record (env: CHEMBL_DA_PUBCHEM_TIMEOUT_SECONDS)
     retries: 3
     rps: 5  # (env: CHEMBL_DA_PUBCHEM_RPS)
     burst: 5  # (env: CHEMBL_DA_PUBCHEM_BURST)
     delay: 0.2  # Delay between requests in seconds; must be a float for strict type validation
+    backoff_initial_seconds: 1.0  # Initial exponential backoff for resolve_pubchem_record (env: CHEMBL_DA_PUBCHEM_BACKOFF_INITIAL_SECONDS)
     cache_ttl: 3600  # Request cache time-to-live in seconds
     use_parent_for_salts: false  # Attempt parent structures when salt lookups fail
+    allow_polymer: false  # Include polymer molecule types when resolving PubChem data
+    write_not_found_literal: false  # Emit "Not Found" for explicit 404 responses
   pubmed:
     base: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"  # PubMed API root (env: CHEMBL_DA__SOURCES__PUBMED__BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBMED_TIMEOUT_CONNECT)
