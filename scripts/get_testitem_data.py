@@ -592,9 +592,23 @@ def attach_parent_molecule_ids(
             .astype("string")
             .copy()
         )
+        existing_parent = (
+            precomputed.existing_parent_ids.reindex(result.index)
+            .astype("string")
+            .copy()
+        )
+        lookup_mask = normalised_child.isin(precomputed.need_lookup)
     else:
         normalised_child = _normalise_chembl_ids(result[child_column])
-    unique_children = normalised_child[normalised_child != ""].unique()
+        if parent_column in result.columns:
+            existing_parent = result[parent_column].astype("string").copy()
+        else:
+            existing_parent = pd.Series(pd.NA, index=result.index, dtype="string")
+        lookup_mask = (normalised_child != "") & (
+            existing_parent.isna() | existing_parent.eq("")
+        )
+
+    unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
     catalog_data: MutableMapping[str, str]
     used_partial_cache = False
     needs_full_sync = False
@@ -684,17 +698,6 @@ def attach_parent_molecule_ids(
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")
 
-    if precomputed is not None:
-        existing_parent = (
-            precomputed.existing_parent_ids.reindex(result.index)
-            .astype("string")
-            .copy()
-        )
-    elif parent_column in result.columns:
-        existing_parent = result[parent_column].astype("string")
-    else:
-        existing_parent = pd.Series(pd.NA, index=result.index, dtype="string")
-
     combined_parent = existing_parent.copy()
     update_mask = combined_parent.isna() | combined_parent.eq("")
     combined_parent.loc[update_mask] = refreshed_parent.loc[update_mask]
@@ -708,7 +711,7 @@ def attach_parent_molecule_ids(
     result[parent_column] = combined_parent.astype("string")
 
     missing = int(combined_parent.isna().sum())
-    attached = len(result) - missing
+    attached = int(combined_parent.notna().sum())
 
     final_source = source_resolved
     if full_sync_used:

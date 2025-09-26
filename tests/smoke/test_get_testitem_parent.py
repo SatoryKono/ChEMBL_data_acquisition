@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter, sleep
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from library import chembl_library as cl
+from library import molecule_catalog
 from library import pubchem_library as pl
+from library.config import ApiCfg, MoleculeCatalogCfg
 from scripts import get_testitem_data
 
 
@@ -61,6 +64,14 @@ def test_get_testitem_parent_catalog(
     def fail_load_parent_catalog(**_: object) -> dict[str, str]:  # pragma: no cover
         pytest.fail("load_parent_catalog should not be triggered for partial coverage")
 
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.resolve_order = ("cache", "smiles")
+        return cfg
+
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -174,6 +185,14 @@ def test_get_testitem_skips_parent_lookup_when_present(
         fetch_called = True
         return {}
 
+    original_apply = get_testitem_data.apply_config_overrides
+
+    def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
+        cfg = original_apply(*args, **kwargs)
+        cfg.pubchem.resolve_order = ("cache", "smiles")
+        return cfg
+
+    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -213,6 +232,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
     df = pd.read_csv(output_csv)
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
     assert fetch_called is False
+
 
 
 def test_get_testitem_refreshes_outdated_parents(
