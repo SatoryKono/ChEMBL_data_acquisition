@@ -207,6 +207,7 @@ def test_testitem_timeout_override(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         ),
     )

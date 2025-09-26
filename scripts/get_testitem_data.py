@@ -250,6 +250,7 @@ class ParentLookupStats:
     missing: int
     unique: int
     attached: int
+    uncovered: int
 
 
 def _cache_state(path: Path) -> tuple[bool, float | None]:
@@ -325,6 +326,7 @@ def attach_parent_molecule_ids(
             missing=0,
             unique=0,
             attached=0,
+            uncovered=0,
         )
         return result, stats
 
@@ -339,6 +341,7 @@ def attach_parent_molecule_ids(
             missing=len(result),
             unique=0,
             attached=0,
+            uncovered=len(result),
         )
         return result, stats
 
@@ -350,6 +353,7 @@ def attach_parent_molecule_ids(
     needs_full_sync = False
     partial_fetch_used = False
     full_sync_used = False
+    uncovered_children = 0
 
     if catalog is not None:
         base_view = {
@@ -372,8 +376,6 @@ def attach_parent_molecule_ids(
             if sqlite_exists:
                 if source_resolved is None:
                     source_resolved = PARENT_LOOKUP_SOURCE_CACHE
-            else:
-                needs_full_sync = True
 
     parent_map = {
         key: catalog_data[key]
@@ -381,6 +383,7 @@ def attach_parent_molecule_ids(
         if key in catalog_data
     }
     missing_ids = [key for key in unique_children if key not in parent_map]
+    uncovered_children = len(missing_ids)
 
     fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
@@ -399,11 +402,14 @@ def attach_parent_molecule_ids(
             catalog_data.update(fetched)
             parent_map.update(fetched)
             missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
             if used_partial_cache:
                 update_parent_catalog_cache(fetched, catalog_cfg)
             else:
                 write_parent_catalog_cache(catalog_data, catalog_cfg)
                 used_partial_cache = True
+
+    needs_full_sync = catalog is None and uncovered_children > 0
 
     if missing_ids and catalog is None and needs_full_sync:
         cache_before_load = _cache_state(catalog_cfg.cache_path)
@@ -426,6 +432,7 @@ def attach_parent_molecule_ids(
             if key in catalog_data or key in parent_map
         }
         missing_ids = [key for key in unique_children if key not in parent_map]
+        uncovered_children = len(missing_ids)
 
     parent_series = normalised_child.map(parent_map).astype("string")
 
@@ -459,6 +466,7 @@ def attach_parent_molecule_ids(
         missing=missing,
         unique=int(len(unique_children)),
         attached=int(attached),
+        uncovered=int(uncovered_children),
     )
 
     logger.info(
@@ -467,6 +475,7 @@ def attach_parent_molecule_ids(
         unique=stats.unique,
         attached=stats.attached,
         missing=stats.missing,
+        uncovered=stats.uncovered,
     )
 
     return result, stats
@@ -654,6 +663,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         missing=0,
         unique=0,
         attached=0,
+        uncovered=0,
     )
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
@@ -736,22 +746,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             if parent_catalog:
                 need_lookup -= set(parent_catalog)
 
-        fetched_remote = False
-        if need_lookup and not parent_catalog:
-            try:
-                fallback_catalog = load_parent_catalog(
-                    client=client,
-                    api_cfg=cfg.api,
-                    catalog_cfg=cfg.molecule_catalog,
-                    timeout=cfg.testitem.timeout,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error("parent_catalog_invalid", error=str(exc))
-                return 1
-            if fallback_catalog:
-                parent_catalog.update(fallback_catalog)
-                parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
-                need_lookup -= set(fallback_catalog)
         if need_lookup:
             try:
                 fetched = molecule_catalog.fetch_parent_catalog_for(
@@ -767,6 +761,24 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 parent_catalog.update(fetched)
                 update_parent_catalog_cache(fetched, cfg.molecule_catalog)
                 parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
+                need_lookup -= set(fetched)
+
+        if need_lookup:
+            try:
+                fallback_catalog = load_parent_catalog(
+                    client=client,
+                    api_cfg=cfg.api,
+                    catalog_cfg=cfg.molecule_catalog,
+                    timeout=cfg.testitem.timeout,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.error("parent_catalog_invalid", error=str(exc))
+                return 1
+            if fallback_catalog:
+                parent_catalog.update(fallback_catalog)
+                parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
+                need_lookup -= set(fallback_catalog)
+
         logger.info("pubchem_augment_start")
         df = add_pubchem_data(df, cfg.pubchem)
         logger.info("pubchem_augment_done")
@@ -804,6 +816,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             unique=parent_stats.unique,
             attached=parent_stats.attached,
             missing=parent_stats.missing,
+            uncovered=parent_stats.uncovered,
         )
 
         enrichment_cfg = cfg.testitem_molecule_enrichment

@@ -178,6 +178,7 @@ def test_run_chembl_column_order(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         ),
     )
@@ -238,6 +239,7 @@ def test_run_chembl_initialises_pubchem_session(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         ),
     )
@@ -335,6 +337,7 @@ def test_run_chembl_merges_parent_catalog(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         )
 
@@ -434,6 +437,7 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
             missing=0,
             unique=len(catalog),
             attached=len(frame),
+            uncovered=0,
         )
         return frame, stats
 
@@ -537,6 +541,7 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         ),
     )
@@ -674,6 +679,7 @@ def test_run_chembl_parent_catalog_request_error(
                 missing=0,
                 unique=0,
                 attached=0,
+                uncovered=0,
             ),
         ),
     )
