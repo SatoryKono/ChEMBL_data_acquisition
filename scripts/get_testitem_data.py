@@ -778,11 +778,27 @@ def add_pubchem_data(
             if before is _CID_CACHE_MISSING or before != cid_value:
                 cache_dirty = True
 
+    if "pubchem_cid" in result.columns:
+        cid_series = result["pubchem_cid"].astype("string").copy()
+    else:
+        cid_series = pd.Series(pd.NA, index=result.index, dtype="string")
+
+    skip_mask = pd.Series(False, index=result.index)
+    if skip_indexes:
+        skip_mask.loc[list(skip_indexes)] = True
+
+    prefer_local_mask = (
+        complete_mask.astype(bool)
+        if prefer_local
+        else pd.Series(False, index=result.index)
+    )
+
+    lookup_mask = ~(skip_mask | prefer_local_mask)
+
     total = sum(
         1
-        for idx, row in result.iterrows()
-        if idx not in skip_indexes
-        and not (
+        for _, row in result[lookup_mask].iterrows()
+        if not (
             (
                 chembl_id := _normalise_identifier(
                     row.get("molecule_chembl_id"), uppercase=True
@@ -797,14 +813,11 @@ def add_pubchem_data(
     else:
         logger.info("pubchem_no_smiles")
 
-    cid_by_index: dict[int, str | None] = {}
+    cid_series = cid_series.astype("string")
+    lookup_cids: set[str] = set()
     progress = 0
     for idx, row in result.iterrows():
-        if idx in skip_indexes:
-            cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
-            continue
-        if prefer_local and bool(complete_mask.loc[idx]):
-            cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
+        if not bool(lookup_mask.loc[idx]):
             continue
 
         chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
@@ -823,7 +836,13 @@ def add_pubchem_data(
             parent_loader=load_parent_record,
             resolution_cache=resolution_cache,
         )
-        cid_by_index[idx] = cid
+        if cid:
+            cid_series.loc[idx] = cid
+            lookup_cids.add(cid)
+        elif getattr(cfg, "write_not_found_literal", False):
+            cid_series.loc[idx] = "Not Found"
+        else:
+            cid_series.loc[idx] = pd.NA
         if chembl_id:
             after_present = chembl_id in cid_cache
             after_value = cid_cache[chembl_id] if after_present else _CID_CACHE_MISSING
@@ -833,57 +852,45 @@ def add_pubchem_data(
     if cache_dirty:
         _write_pubchem_cid_cache(cache_path, cid_cache)
 
-    cid_list = [cid_by_index.get(idx) for idx in result.index]
-
     def _value_or_na(value: str | None) -> object:
         return value if value not in (None, "") else pd.NA
-
-    lookup_cids: set[str] = set()
-    for idx, cid in zip(result.index, cid_list, strict=False):
-        if not cid:
-            continue
-        if idx in skip_indexes:
-            continue
-        if prefer_local and bool(complete_mask.loc[idx]):
-            continue
-        lookup_cids.add(cid)
 
     properties: dict[str, pl.Properties] = {}
     for cid in sorted(lookup_cids):
         properties[cid] = pl.get_properties(cid, cfg)
 
-    pubchem_rows: list[dict[str, object]] = []
-    for idx, cid in zip(result.index, cid_list, strict=False):
-        row_data: dict[str, object] = {col: pd.NA for col in PUBCHEM_COLUMNS}
-        if idx in skip_indexes:
-            for column in PUBCHEM_COLUMNS:
-                if column in result.columns:
-                    row_data[column] = result.loc[idx, column]
-            pubchem_rows.append(row_data)
-            continue
-        if cid:
-            row_data["pubchem_cid"] = cid
-            props = properties.get(cid)
-            if props:
-                row_data["pubchem_iupac_name"] = _value_or_na(props.IUPACName)
-                row_data["pubchem_molecular_formula"] = _value_or_na(
-                    props.MolecularFormula
-                )
-                row_data["pubchem_isomeric_smiles"] = _value_or_na(props.iSMILES)
-                row_data["pubchem_canonical_smiles"] = _value_or_na(props.cSMILES)
-                row_data["pubchem_inchi"] = _value_or_na(props.InChI)
-                row_data["pubchem_inchikey"] = _value_or_na(props.InChIKey)
-        elif getattr(cfg, "write_not_found_literal", False):
-            row_data["pubchem_cid"] = "Not Found"
-        pubchem_rows.append(row_data)
+    properties_records: dict[str, dict[str, object]] = {}
+    for cid, props in properties.items():
+        properties_records[cid] = {
+            "pubchem_iupac_name": _value_or_na(props.IUPACName),
+            "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
+            "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
+            "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
+            "pubchem_inchi": _value_or_na(props.InChI),
+            "pubchem_inchikey": _value_or_na(props.InChIKey),
+        }
 
-    pubchem_df = pd.DataFrame(pubchem_rows, index=result.index).convert_dtypes()
+    properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
+    pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
+    pubchem_df = pubchem_df.reindex(result.index)
+    pubchem_df = pubchem_df.convert_dtypes()
+
+    preserve_mask = skip_mask | prefer_local_mask
+    if preserve_mask.any():
+        for column in [col for col in PUBCHEM_COLUMNS if col in result.columns]:
+            original_series = result[column].astype("string")
+            if column in pubchem_df.columns:
+                pubchem_df[column] = pubchem_df[column].astype("string").where(
+                    ~preserve_mask, original_series
+                )
+            else:
+                pubchem_df[column] = original_series
 
     prefer_values = getattr(cfg, "prefer_local_values", False)
 
     for col in PUBCHEM_COLUMNS:
         if col not in pubchem_df.columns:
-            continue
+            pubchem_df[col] = pd.Series(pd.NA, index=result.index, dtype="string")
         new_series = pubchem_df[col].astype("string")
         if col in result.columns:
             existing = result[col].astype("string")
