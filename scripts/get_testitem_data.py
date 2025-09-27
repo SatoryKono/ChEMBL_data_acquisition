@@ -717,12 +717,18 @@ def add_pubchem_data(
     if resolution_cache is None:
         resolution_cache = {}
 
+    if "molecule_chembl_id" in result.columns:
+        chembl_norm = result["molecule_chembl_id"].map(
+            lambda value: _normalise_identifier(value, uppercase=True)
+        )
+    else:
+        chembl_norm = pd.Series([None] * len(result), index=result.index, dtype="object")
+
     local_records: dict[str, pd.Series] = {}
     if "molecule_chembl_id" in result.columns:
-        for index, value in result["molecule_chembl_id"].items():
-            chembl_norm = _normalise_identifier(value, uppercase=True)
-            if chembl_norm and chembl_norm not in local_records:
-                local_records[chembl_norm] = result.loc[index]
+        for index, chembl_value in chembl_norm.items():
+            if chembl_value and chembl_value not in local_records:
+                local_records[chembl_value] = result.loc[index]
 
     if parent_record_cache is None:
         parent_record_cache = {}
@@ -764,10 +770,7 @@ def add_pubchem_data(
         return parent_row
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
-        for chembl_raw, cid_raw in zip(
-            result["molecule_chembl_id"], result["pubchem_cid"], strict=False
-        ):
-            chembl_id = _normalise_identifier(chembl_raw, uppercase=True)
+        for chembl_id, cid_raw in zip(chembl_norm, result["pubchem_cid"], strict=False):
             if not chembl_id:
                 continue
             cid_value = _normalise_identifier(cid_raw)
@@ -778,44 +781,47 @@ def add_pubchem_data(
             if before is _CID_CACHE_MISSING or before != cid_value:
                 cache_dirty = True
 
-    total = sum(
-        1
-        for idx, row in result.iterrows()
-        if idx not in skip_indexes
-        and not (
-            (
-                chembl_id := _normalise_identifier(
-                    row.get("molecule_chembl_id"), uppercase=True
-                )
-            )
-            and chembl_id in cid_cache
-            and cid_cache[chembl_id]
-        )
+    skip_mask = pd.Series(result.index.isin(skip_indexes), index=result.index)
+    prefer_local_mask = complete_mask.copy() if prefer_local else pd.Series(
+        False, index=result.index
     )
+    cached_mask = chembl_norm.map(
+        lambda chembl_id: bool(chembl_id and cid_cache.get(chembl_id))
+    )
+    needs_lookup_mask = (~skip_mask) & (~prefer_local_mask) & (~cached_mask)
+    total = int(needs_lookup_mask.sum())
     if total:
         logger.info("pubchem_start", total=total)
     else:
         logger.info("pubchem_no_smiles")
 
-    cid_by_index: dict[int, str | None] = {}
-    progress = 0
-    for idx, row in result.iterrows():
-        if idx in skip_indexes:
-            cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
-            continue
-        if prefer_local and bool(complete_mask.loc[idx]):
-            cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
-            continue
+    if "pubchem_cid" in result.columns:
+        cid_existing = result["pubchem_cid"].map(_normalise_identifier)
+    else:
+        cid_existing = pd.Series([None] * len(result), index=result.index, dtype="object")
 
-        chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-        lookup_required = not (
-            chembl_id and chembl_id in cid_cache and cid_cache[chembl_id]
-        )
+    cid_by_index: dict[int, str | None] = dict(cid_existing.items())
+
+    cached_indexes = (
+        cached_mask[cached_mask & ~skip_mask & ~prefer_local_mask].index
+    )
+    for idx in cached_indexes:
+        chembl_id = chembl_norm.loc[idx]
+        if not chembl_id:
+            continue
+        cached_value = cid_cache.get(chembl_id)
+        if cached_value:
+            cid_by_index[idx] = cached_value
+
+    lookup_rows = result.loc[needs_lookup_mask]
+
+    for progress, row_tuple in enumerate(lookup_rows.itertuples(index=True), start=1):
+        logger.info("pubchem_progress", current=progress, total=total)
+        idx = row_tuple.Index
+        row = result.loc[idx]
+        chembl_id = chembl_norm.loc[idx]
         before_present = chembl_id in cid_cache if chembl_id else False
         before_value = cid_cache[chembl_id] if before_present else _CID_CACHE_MISSING
-        if lookup_required and total:
-            progress += 1
-            logger.info("pubchem_progress", current=progress, total=total)
         cid = resolve_pubchem_cid(
             row,
             cid_cache,
