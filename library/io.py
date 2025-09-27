@@ -22,6 +22,7 @@ Examples
 from __future__ import annotations
 
 import csv
+import locale
 import sys
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
@@ -123,16 +124,35 @@ def read_ids(
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
     marker_set = set(na_markers or cfg.na_markers or ())
+
+    def _append_candidate(values: Sequence[str] | str | None, seen: set[str], out: list[str]) -> None:
+        if values is None:
+            return
+        if isinstance(values, str):
+            iterable: Sequence[str] = (values,)
+        else:
+            iterable = values
+        for value in iterable:
+            if not value:
+                continue
+            key = value.lower()
+            if key in seen:
+                continue
+            out.append(value)
+            seen.add(key)
+
     candidates: list[str] = []
-    if encoding:
-        candidates.append(encoding)
-    fallbacks = list(getattr(cfg, "csv_fallback_encodings", ()) or ())
-    for candidate in fallbacks:
-        if candidate and candidate not in candidates:
-            candidates.append(candidate)
+    seen_candidates: set[str] = set()
+    _append_candidate((encoding,) if encoding else None, seen_candidates, candidates)
+    fallbacks = getattr(cfg, "csv_fallback_encodings", ()) or ()
+    _append_candidate(fallbacks, seen_candidates, candidates)
+
+    locale_encoding = locale.getpreferredencoding(False)
+    _append_candidate(locale_encoding, seen_candidates, candidates)
 
     if not candidates:
         candidates.append("utf-8")
+        seen_candidates.add("utf-8")
 
     path_obj = Path(path)
 
@@ -155,6 +175,14 @@ def read_ids(
                     path=str(path_obj),
                     encoding=exc.encoding,
                     error=str(exc.error),
+                )
+                continue
+            except LookupError as exc:
+                logger.warning(
+                    "csv_encoding_lookup_failed",
+                    path=str(path_obj),
+                    encoding=candidate,
+                    error=str(exc),
                 )
                 continue
         attempted = ", ".join(candidates)
