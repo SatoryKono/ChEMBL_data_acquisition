@@ -676,7 +676,7 @@ def add_pubchem_data(
         )
         complete_mask = normalised.notna().all(axis=1)
     else:
-        complete_mask = pd.Series(False, index=result.index)
+        complete_mask = pd.Series(False, index=result.index, dtype=bool)
 
     def _mask_for(series: pd.Series | None, keyword: str) -> pd.Series:
         if series is None:
@@ -718,14 +718,86 @@ def add_pubchem_data(
         resolution_cache = {}
 
     local_records: dict[str, pd.Series] = {}
+    normalised_children: dict[int, str] = {}
     if "molecule_chembl_id" in result.columns:
         for index, value in result["molecule_chembl_id"].items():
             chembl_norm = _normalise_identifier(value, uppercase=True)
-            if chembl_norm and chembl_norm not in local_records:
-                local_records[chembl_norm] = result.loc[index]
+            if chembl_norm:
+                normalised_children[index] = chembl_norm
+                if chembl_norm not in local_records:
+                    local_records[chembl_norm] = result.loc[index]
 
     if parent_record_cache is None:
         parent_record_cache = {}
+
+    needs_lookup_mask = pd.Series(False, index=result.index, dtype=bool)
+    for idx in result.index:
+        if idx in skip_indexes:
+            continue
+        if prefer_local and bool(complete_mask.loc[idx]):
+            continue
+        chembl_id = normalised_children.get(idx)
+        if not chembl_id:
+            needs_lookup_mask.loc[idx] = True
+            continue
+        cache_entry = cid_cache.get(chembl_id)
+        if cache_entry:
+            continue
+        needs_lookup_mask.loc[idx] = True
+
+    fallback_parent_ids: set[str] = set()
+    if cfg.use_parent_for_salts and "parent_molecule_chembl_id" in result.columns:
+        for idx in needs_lookup_mask[needs_lookup_mask].index:
+            parent_norm = _normalise_identifier(
+                result.at[idx, "parent_molecule_chembl_id"], uppercase=True
+            )
+            if not parent_norm:
+                continue
+            if parent_norm in parent_record_cache:
+                continue
+            if parent_norm in local_records:
+                parent_record_cache[parent_norm] = local_records[parent_norm]
+                continue
+            fallback_parent_ids.add(parent_norm)
+
+    if (
+        fallback_parent_ids
+        and client is not None
+        and api_cfg is not None
+    ):
+        kwdefaults = getattr(cl.get_testitem, "__kwdefaults__", {}) or {}
+        prefetch_chunk_size = kwdefaults.get("chunk_size", 5)
+        try:
+            parent_df = cl.get_testitem(
+                sorted(fallback_parent_ids),
+                cfg=api_cfg,
+                client=client,
+                chunk_size=prefetch_chunk_size,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "pubchem_parent_preload_failed",
+                count=len(fallback_parent_ids),
+                error=str(exc),
+            )
+        else:
+            if not parent_df.empty:
+                for _, parent_row in parent_df.iterrows():
+                    parent_norm = _normalise_identifier(
+                        parent_row.get("molecule_chembl_id"), uppercase=True
+                    )
+                    if not parent_norm:
+                        continue
+                    local_records[parent_norm] = parent_row
+                    parent_record_cache[parent_norm] = parent_row
+            missing_prefetch = {
+                parent_id
+                for parent_id in fallback_parent_ids
+                if parent_id not in parent_record_cache
+            }
+            for parent_id in missing_prefetch:
+                parent_record_cache[parent_id] = None
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
@@ -734,8 +806,9 @@ def add_pubchem_data(
         if parent_norm in parent_record_cache:
             return parent_record_cache[parent_norm]
         if parent_norm in local_records:
-            parent_record_cache[parent_norm] = local_records[parent_norm]
-            return parent_record_cache[parent_norm]
+            record = local_records[parent_norm]
+            parent_record_cache[parent_norm] = record
+            return record
         if client is None or api_cfg is None:
             parent_record_cache[parent_norm] = None
             return None
@@ -764,13 +837,11 @@ def add_pubchem_data(
         return parent_row
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
-        for chembl_raw, cid_raw in zip(
-            result["molecule_chembl_id"], result["pubchem_cid"], strict=False
-        ):
-            chembl_id = _normalise_identifier(chembl_raw, uppercase=True)
+        for idx in result.index:
+            chembl_id = normalised_children.get(idx)
             if not chembl_id:
                 continue
-            cid_value = _normalise_identifier(cid_raw)
+            cid_value = _normalise_identifier(result.at[idx, "pubchem_cid"])
             if not cid_value:
                 continue
             before = cid_cache.get(chembl_id, _CID_CACHE_MISSING)
@@ -778,20 +849,7 @@ def add_pubchem_data(
             if before is _CID_CACHE_MISSING or before != cid_value:
                 cache_dirty = True
 
-    total = sum(
-        1
-        for idx, row in result.iterrows()
-        if idx not in skip_indexes
-        and not (
-            (
-                chembl_id := _normalise_identifier(
-                    row.get("molecule_chembl_id"), uppercase=True
-                )
-            )
-            and chembl_id in cid_cache
-            and cid_cache[chembl_id]
-        )
-    )
+    total = int(needs_lookup_mask.sum())
     if total:
         logger.info("pubchem_start", total=total)
     else:
@@ -807,10 +865,8 @@ def add_pubchem_data(
             cid_by_index[idx] = _normalise_identifier(row.get("pubchem_cid"))
             continue
 
-        chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-        lookup_required = not (
-            chembl_id and chembl_id in cid_cache and cid_cache[chembl_id]
-        )
+        chembl_id = normalised_children.get(idx)
+        lookup_required = bool(needs_lookup_mask.loc[idx])
         before_present = chembl_id in cid_cache if chembl_id else False
         before_value = cid_cache[chembl_id] if before_present else _CID_CACHE_MISSING
         if lookup_required and total:
