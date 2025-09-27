@@ -16,9 +16,12 @@ from dataclasses import dataclass
 from itertools import islice, tee
 from typing import Any, NamedTuple
 
+import bootstrap
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
+
+bootstrap.ensure_project_root()
 
 from library import chembl_library as cl
 from library import cli
