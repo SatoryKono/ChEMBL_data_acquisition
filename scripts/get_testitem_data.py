@@ -717,15 +717,38 @@ def add_pubchem_data(
     if resolution_cache is None:
         resolution_cache = {}
 
-    local_records: dict[str, pd.Series] = {}
-    if "molecule_chembl_id" in result.columns:
-        for index, value in result["molecule_chembl_id"].items():
-            chembl_norm = _normalise_identifier(value, uppercase=True)
-            if chembl_norm and chembl_norm not in local_records:
-                local_records[chembl_norm] = result.loc[index]
-
     if parent_record_cache is None:
         parent_record_cache = {}
+
+    local_records: dict[str, pd.Series] = {}
+    if "molecule_chembl_id" in result.columns:
+        local_record_data = (
+            result.loc[:, ["molecule_chembl_id"]]
+            .assign(__row=lambda df: df.index)
+            .dropna()
+            .astype({"molecule_chembl_id": "string"})
+            .assign(
+                molecule_chembl_id=lambda df: df[
+                    "molecule_chembl_id"
+                ].str.strip().str.upper()
+            )
+            .drop_duplicates("molecule_chembl_id")
+            .set_index("molecule_chembl_id")["__row"]
+            .map(result.to_dict("index"))
+        )
+        for chembl_id, row_data in local_record_data.items():
+            chembl_norm = _normalise_identifier(chembl_id, uppercase=True)
+            if not chembl_norm or chembl_norm in local_records:
+                continue
+            if isinstance(row_data, pd.Series):
+                record = row_data
+            elif isinstance(row_data, Mapping):
+                record = pd.Series(row_data).reindex(result.columns, copy=False)
+            else:
+                continue
+            local_records[chembl_norm] = record
+            parent_record_cache.setdefault(chembl_norm, record)
+
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
@@ -733,9 +756,10 @@ def add_pubchem_data(
             return None
         if parent_norm in parent_record_cache:
             return parent_record_cache[parent_norm]
-        if parent_norm in local_records:
-            parent_record_cache[parent_norm] = local_records[parent_norm]
-            return parent_record_cache[parent_norm]
+        local_record = local_records.get(parent_norm)
+        if local_record is not None:
+            parent_record_cache[parent_norm] = local_record
+            return local_record
         if client is None or api_cfg is None:
             parent_record_cache[parent_norm] = None
             return None
