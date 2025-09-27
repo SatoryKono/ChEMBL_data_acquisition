@@ -817,8 +817,6 @@ def add_pubchem_data(
         else pd.Series(False, index=result.index)
     )
 
-    lookup_mask = ~(skip_mask | prefer_local_mask)
-
     if "molecule_chembl_id" in result.columns:
         chembl_norm = result["molecule_chembl_id"].map(
             lambda value: _normalise_identifier(value, uppercase=True)
@@ -832,7 +830,12 @@ def add_pubchem_data(
         return bool(chembl_id and cid_cache.get(chembl_id))
 
     cached_mask = chembl_norm.map(_is_cached)
-    needs_lookup_mask = lookup_mask & ~cached_mask
+    needs_lookup_mask = (
+        chembl_norm.notna()
+        & ~skip_mask
+        & ~prefer_local_mask
+        & ~cached_mask
+    )
 
     total = int(needs_lookup_mask.sum())
     if total:
@@ -848,9 +851,9 @@ def add_pubchem_data(
             cid_series.loc[idx] = cached_value
             lookup_cids.add(cached_value)
 
-    rows_to_lookup = result.loc[needs_lookup_mask]
-
-    for progress, row in enumerate(rows_to_lookup.itertuples(), start=1):
+    for progress, row in enumerate(
+        result.loc[needs_lookup_mask].itertuples(), start=1
+    ):
         logger.info("pubchem_progress", current=progress, total=total)
         idx = row.Index
         chembl_id = chembl_norm.loc[idx]
