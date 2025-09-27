@@ -13,6 +13,7 @@ import hashlib
 import heapq
 import os
 import tempfile
+from contextlib import ExitStack, closing
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
@@ -456,80 +457,84 @@ def write_csv_chunks_deterministic(
                 drop_unexpected_cols=drop_unexpected_cols,
             )
 
-        import csv
-        import heapq
-
-        readers = [
-            pd.read_csv(p, sep=sep, encoding=encoding, chunksize=merge_chunksize)
-            for p in tmp_paths
-        ]
-        current: list[pd.DataFrame | None] = []
-        for r in readers:
-            try:
-                current.append(next(r))
-            except StopIteration:
-                current.append(None)
-
-        first = next((c for c in current if c is not None), pd.DataFrame())
-        columns = list(first.columns)
-        dtypes = {col: first.dtypes[col].name for col in columns}
-        resolved_sort_cols = _resolve_sort_columns(
-            first, key_cols_list, emit_warning=False
-        )
-
-        def _fmt(value: Any) -> Any:
-            if pd.isna(value):
-                return ""
-            if isinstance(value, float):
-                return f"{value:.6g}"
-            if isinstance(value, bool | np.bool_):
-                return "true" if bool(value) else "false"
-            return value
-
-        heap: list[tuple[tuple[Any, ...], int, int]] = []
-        for idx, frame in enumerate(current):
-            if frame is not None and not frame.empty:
-                row = frame.iloc[0]
-                key = (
-                    tuple(row[k] for k in resolved_sort_cols)
-                    if resolved_sort_cols
-                    else tuple()
+        with ExitStack() as stack:
+            readers = [
+                stack.enter_context(
+                    closing(
+                        pd.read_csv(
+                            p, sep=sep, encoding=encoding, chunksize=merge_chunksize
+                        )
+                    )
                 )
-                heapq.heappush(heap, (key, idx, 0))
+                for p in tmp_paths
+            ]
+            current: list[pd.DataFrame | None] = []
+            for r in readers:
+                try:
+                    current.append(next(r))
+                except StopIteration:
+                    current.append(None)
 
-        with out_path.open("w", encoding=encoding, newline="") as fh:
-            writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
-            writer.writerow(columns)
-            while heap:
-                _, file_idx, row_idx = heapq.heappop(heap)
-                chunk = current[file_idx]
-                assert chunk is not None
-                row = chunk.iloc[row_idx]
-                writer.writerow([_fmt(row[c]) for c in columns])
-                row_idx += 1
-                if row_idx < len(chunk):
-                    next_row = chunk.iloc[row_idx]
+            first = next((c for c in current if c is not None), pd.DataFrame())
+            columns = list(first.columns)
+            dtypes = {col: first.dtypes[col].name for col in columns}
+            resolved_sort_cols = _resolve_sort_columns(
+                first, key_cols_list, emit_warning=False
+            )
+
+            def _fmt(value: Any) -> Any:
+                if pd.isna(value):
+                    return ""
+                if isinstance(value, float):
+                    return f"{value:.6g}"
+                if isinstance(value, bool | np.bool_):
+                    return "true" if bool(value) else "false"
+                return value
+
+            heap: list[tuple[tuple[Any, ...], int, int]] = []
+            for idx, frame in enumerate(current):
+                if frame is not None and not frame.empty:
+                    row = frame.iloc[0]
                     key = (
-                        tuple(next_row[k] for k in resolved_sort_cols)
+                        tuple(row[k] for k in resolved_sort_cols)
                         if resolved_sort_cols
                         else tuple()
                     )
-                    heapq.heappush(heap, (key, file_idx, row_idx))
-                else:
-                    try:
-                        next_chunk = next(readers[file_idx])
-                    except StopIteration:
-                        current[file_idx] = None
+                    heapq.heappush(heap, (key, idx, 0))
+
+            with out_path.open("w", encoding=encoding, newline="") as fh:
+                writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
+                writer.writerow(columns)
+                while heap:
+                    _, file_idx, row_idx = heapq.heappop(heap)
+                    chunk = current[file_idx]
+                    assert chunk is not None
+                    row = chunk.iloc[row_idx]
+                    writer.writerow([_fmt(row[c]) for c in columns])
+                    row_idx += 1
+                    if row_idx < len(chunk):
+                        next_row = chunk.iloc[row_idx]
+                        key = (
+                            tuple(next_row[k] for k in resolved_sort_cols)
+                            if resolved_sort_cols
+                            else tuple()
+                        )
+                        heapq.heappush(heap, (key, file_idx, row_idx))
                     else:
-                        current[file_idx] = next_chunk
-                        if not next_chunk.empty:
-                            next_row = next_chunk.iloc[0]
-                            key = (
-                                tuple(next_row[k] for k in resolved_sort_cols)
-                                if resolved_sort_cols
-                                else tuple()
-                            )
-                            heapq.heappush(heap, (key, file_idx, 0))
+                        try:
+                            next_chunk = next(readers[file_idx])
+                        except StopIteration:
+                            current[file_idx] = None
+                        else:
+                            current[file_idx] = next_chunk
+                            if not next_chunk.empty:
+                                next_row = next_chunk.iloc[0]
+                                key = (
+                                    tuple(next_row[k] for k in resolved_sort_cols)
+                                    if resolved_sort_cols
+                                    else tuple()
+                                )
+                                heapq.heappush(heap, (key, file_idx, 0))
 
     write_meta_yaml(out_path, cfg, columns=columns, dtypes=dtypes)
     return out_path
