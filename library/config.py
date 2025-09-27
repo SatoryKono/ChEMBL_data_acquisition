@@ -383,6 +383,9 @@ class IoCfg(_BoolModel):
     cache_dir: Path = Path(".cache")
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
+    csv_fallback_encodings: Sequence[str] | None = Field(
+        default_factory=lambda: ("utf-8", "cp1252", "windows-1251", "latin-1")
+    )
     na_markers: Sequence[str] | None = ("#N/A",)
     csv_chunksize: int = Field(10000, ge=1)
     exist_ok: bool = True
