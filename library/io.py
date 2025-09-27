@@ -37,6 +37,40 @@ from .config import Config, IoCfg, _serialize_paths
 from .git_utils import _git_sha
 from .log import logger
 
+
+class _EncodingDecodeError(Exception):
+    """Wrap :class:`UnicodeDecodeError` with the attempted encoding."""
+
+    def __init__(self, encoding: str, error: UnicodeDecodeError) -> None:
+        super().__init__(str(error))
+        self.encoding = encoding
+        self.error = error
+
+
+def _stream_ids_with_encoding(
+    path: Path,
+    *,
+    column: str,
+    sep: str,
+    encoding: str,
+    marker_set: set[str],
+) -> Iterator[str]:
+    """Yield identifier values using a specific ``encoding``."""
+
+    try:
+        with path.open("r", encoding=encoding, newline="") as fh:
+            reader = csv.DictReader(fh, delimiter=sep)
+            if reader.fieldnames is None or column not in reader.fieldnames:
+                raise ValueError(
+                    f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
+                )
+            for row in reader:
+                value = (row.get(column) or "").strip()
+                if value and value not in marker_set:
+                    yield value
+    except UnicodeDecodeError as exc:  # pragma: no cover - exercised via fallback tests
+        raise _EncodingDecodeError(encoding, exc) from exc
+
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     import pandera as pa
 else:  # pragma: no cover - exercised in tests via monkeypatch
@@ -89,17 +123,49 @@ def read_ids(
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
     marker_set = set(na_markers or cfg.na_markers or ())
-    try:
-        with Path(path).open("r", encoding=encoding, newline="") as fh:
-            reader = csv.DictReader(fh, delimiter=sep)
-            if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(
-                    f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
+    candidates: list[str] = []
+    if encoding:
+        candidates.append(encoding)
+    fallbacks = list(getattr(cfg, "csv_fallback_encodings", ()) or ())
+    for candidate in fallbacks:
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    if not candidates:
+        candidates.append("utf-8")
+
+    path_obj = Path(path)
+
+    def _iter_candidates() -> Iterator[str]:
+        last_error: UnicodeDecodeError | None = None
+        for candidate in candidates:
+            try:
+                yield from _stream_ids_with_encoding(
+                    path_obj,
+                    column=column,
+                    sep=sep,
+                    encoding=candidate,
+                    marker_set=marker_set,
                 )
-            for row in reader:
-                value = (row.get(column) or "").strip()
-                if value and value not in marker_set:
-                    yield value
+                return
+            except _EncodingDecodeError as exc:
+                last_error = exc.error
+                logger.warning(
+                    "csv_decode_failed",
+                    path=str(path_obj),
+                    encoding=exc.encoding,
+                    error=str(exc.error),
+                )
+                continue
+        attempted = ", ".join(candidates)
+        message = (
+            f"failed to decode CSV {path_obj} with encodings: {attempted}. "
+            "Update 'io.csv_encoding' or 'io.csv_fallback_encodings' in the configuration."
+        )
+        raise ValueError(message) from last_error
+
+    try:
+        yield from _iter_candidates()
     except FileNotFoundError:
         raise
     except csv.Error as exc:
