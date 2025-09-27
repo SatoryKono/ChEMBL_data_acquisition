@@ -164,6 +164,22 @@ def test_read_ids_falls_back_to_alternative_encoding(tmp_path: Path) -> None:
     assert ids == ["CHEMBL±1"]
 
 
+def test_read_ids_uses_locale_encoding_when_config_lacks_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Locale preferred encoding is appended when custom fallbacks are absent."""
+
+    path = tmp_path / "ids.csv"
+    path.write_bytes("id\nЖ\n".encode("windows-1251"))
+
+    cfg = IoCfg(csv_encoding="utf-8", csv_fallback_encodings=())
+
+    monkeypatch.setattr(io.locale, "getpreferredencoding", lambda _=False: "windows-1251")
+
+    ids = list(io.read_ids(path, column="id", cfg=cfg))
+    assert ids == ["Ж"]
+
+
 def test_read_ids_raises_when_all_encodings_fail(tmp_path: Path) -> None:
     """``read_ids`` surfaces decoding errors after exhausting fallbacks."""
 
