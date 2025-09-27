@@ -13,7 +13,7 @@ import hashlib
 import heapq
 import os
 import tempfile
-from contextlib import ExitStack, closing
+from contextlib import ExitStack
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
@@ -458,16 +458,18 @@ def write_csv_chunks_deterministic(
             )
 
         with ExitStack() as stack:
-            readers = [
-                stack.enter_context(
-                    closing(
-                        pd.read_csv(
-                            p, sep=sep, encoding=encoding, chunksize=merge_chunksize
-                        )
-                    )
+            readers = []
+            for tmp_path in tmp_paths:
+                handle = stack.enter_context(
+                    tmp_path.open("r", encoding=encoding, newline="")
                 )
-                for p in tmp_paths
-            ]
+                reader = pd.read_csv(
+                    handle,
+                    sep=sep,
+                    chunksize=merge_chunksize,
+                )
+                stack.callback(reader.close)
+                readers.append(reader)
             current: list[pd.DataFrame | None] = []
             for r in readers:
                 try:
