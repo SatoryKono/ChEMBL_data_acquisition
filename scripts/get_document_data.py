@@ -37,6 +37,10 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
+import bootstrap
+
+bootstrap.ensure_project_root()
+
 from library import chembl_library as cl
 from library import cli
 from library import document_postprocessing as dp
