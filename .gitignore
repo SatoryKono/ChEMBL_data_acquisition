@@ -11,6 +11,7 @@ data/output/ChEMBL/processed/pairs_same_document.csv
 .cache/
 data/output/
 data/output-smoke/
+data/cache/pubchem_cid_cache.json
 uniprot/
 **/__pycache__/
 .hypothesis/
