@@ -116,8 +116,8 @@
 
 ##### Границы активности (`activity_bounds`)
 
-Пайплайн активностей дополняет выгрузку нормализованными границами с помощью `compute_activity_bounds` в
-`scripts/get_activity_data.py`. Настройки собраны в отдельном блоке `activity_bounds` (вне `activity_enrichment`) и управляют
+Пайплайн активностей дополняет выгрузку нормализованными границами с помощью `compute_activity_bounds` из
+`library.processing.activity`. Настройки собраны в отдельном блоке `activity_bounds` (вне `activity_enrichment`) и управляют
 последовательностью детерминированных шагов, которые выполняются для каждой строки в следующем порядке：
 
 1. Использовать готовые `standard_lower_value`/`standard_upper_value`, если обе границы заданы.

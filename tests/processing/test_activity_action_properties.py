@@ -5,12 +5,12 @@ import pytest
 
 from library.activity_action_properties import annotate_action_properties
 from library.config import ActivityActionTypeCfg, ActivityPropertiesCfg
-from scripts.get_activity_data import (
-    _extract_effect_features,
-    _normalise_mapping,
+from library.processing.activity import (
     apply_activity_annotations,
     build_activity_properties,
+    extract_effect_features,
     infer_action_type,
+    normalise_mapping,
 )
 
 
@@ -43,15 +43,15 @@ def _tracker() -> dict[str, set[str]]:
 def test_infer_action_type_metric_precedence() -> None:
     cfg = ActivityActionTypeCfg()
     record = _record(activity_comment="positive allosteric modulator")
-    features = _extract_effect_features(record)
+    features = extract_effect_features(record)
     allowlist = {token for value in cfg.allowlist if (token := value.strip().lower())}
     result = infer_action_type(
         record,
         cfg,
         features=features,
-        metrics_map=_normalise_mapping(cfg.metrics),
-        functionality_map=_normalise_mapping(cfg.functionality),
-        mechanism_map=_normalise_mapping(cfg.mechanism),
+        metrics_map=normalise_mapping(cfg.metrics),
+        functionality_map=normalise_mapping(cfg.functionality),
+        mechanism_map=normalise_mapping(cfg.mechanism),
         allowlist=allowlist,
         trackers=_tracker(),
         positive_label=cfg.positive_label,
@@ -66,16 +66,16 @@ def test_infer_action_type_allosteric_fallback() -> None:
     record = _record(
         standard_type="TGI50", activity_comment="positive allosteric modulator"
     )
-    features = _extract_effect_features(record)
+    features = extract_effect_features(record)
     allowlist = {token for value in cfg.allowlist if (token := value.strip().lower())}
     trackers = _tracker()
     result = infer_action_type(
         record,
         cfg,
         features=features,
-        metrics_map=_normalise_mapping(cfg.metrics),
-        functionality_map=_normalise_mapping(cfg.functionality),
-        mechanism_map=_normalise_mapping(cfg.mechanism),
+        metrics_map=normalise_mapping(cfg.metrics),
+        functionality_map=normalise_mapping(cfg.functionality),
+        mechanism_map=normalise_mapping(cfg.mechanism),
         allowlist=allowlist,
         trackers=trackers,
         positive_label=cfg.positive_label,
@@ -98,9 +98,9 @@ def test_build_activity_properties_generates_hash() -> None:
     json_text, hash_value = build_activity_properties(
         record,
         cfg,
-        features=_extract_effect_features(record),
-        metrics_map=_normalise_mapping(ActivityActionTypeCfg().metrics),
-        triage_map=_normalise_mapping({"triaged": "triaged"}),
+        features=extract_effect_features(record),
+        metrics_map=normalise_mapping(ActivityActionTypeCfg().metrics),
+        triage_map=normalise_mapping({"triaged": "triaged"}),
         triage_fields=["data_validity_comment"],
         functionality_fields=["functional_activity"],
         mechanism_fields=["mechanism_of_action"],

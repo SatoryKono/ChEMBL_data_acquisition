@@ -120,7 +120,7 @@ This block controls derived annotations appended to every activity row. It works
 ##### Activity bounds (`activity_bounds`)
 
 The activity pipeline enriches raw ChEMBL payloads with canonical lower/upper bounds using the rules implemented by
-`compute_activity_bounds` in `scripts/get_activity_data.py`. Configuration for this feature is stored in the
+`compute_activity_bounds` in `library.processing.activity`. Configuration for this feature is stored in the
 `activity_bounds` block (separate from `activity_enrichment`) and controls the following deterministic stages (executed
 in order for every row):
 

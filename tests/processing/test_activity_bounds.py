@@ -4,9 +4,9 @@ import pandas as pd
 import pytest
 
 from library.config import ActivityBoundsCfg
+from library.log import logger as activity_logger
+from library.processing.activity import compute_activity_bounds
 from schemas import normalize_activities
-from scripts.get_activity_data import compute_activity_bounds
-from scripts.get_activity_data import logger as activity_logger
 
 
 def _compute_frame(
