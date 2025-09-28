@@ -1,4 +1,4 @@
-"""Structured logging tests for :mod:`library.logging_setup`.
+"""Structured logging tests for :mod:`library.utils.logging_setup`.
 
 Example
 -------
@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from library.logging_setup import LoggerConfig, configure_logger
+from library.utils.logging_setup import LoggerConfig, configure_logger
 
 
 def _parse(out: str) -> list[dict[str, Any]]:

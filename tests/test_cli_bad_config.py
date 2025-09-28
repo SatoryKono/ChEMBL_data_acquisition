@@ -8,7 +8,7 @@ import pytest
 from pytest import LogCaptureFixture, MonkeyPatch
 
 from library.cli import LoggerConfig, configure_logger
-from library.logging_setup import Logger
+from library.utils.logging_setup import Logger
 from library.utils.cli_tools import get_document_type as gdoctype
 from library.utils.cli_tools import get_input_initialisation as gii
 from library.utils.cli_tools import mapper_main as mapper

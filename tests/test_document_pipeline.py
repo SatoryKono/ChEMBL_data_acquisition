@@ -1,6 +1,6 @@
 import pandas as pd
 
-from library.document_pipeline import (
+from library.processing.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
     build_quality_report,

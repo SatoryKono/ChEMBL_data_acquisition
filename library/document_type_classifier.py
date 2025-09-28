@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from .document_type_terms import EXPERIMENTAL_TERMS, REVIEW_TERMS, UNKNOWN_TERMS
+from .constants.document_type_terms import (
+    EXPERIMENTAL_TERMS,
+    REVIEW_TERMS,
+    UNKNOWN_TERMS,
+)
 
 # Default source weights used in weighted voting
 SOURCE_WEIGHTS: Mapping[str, int] = {

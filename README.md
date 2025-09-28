@@ -368,9 +368,9 @@ api:
 
 ## Logging / Логирование
 
-**EN.** CLI helpers configure structured JSON logging via ``library.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity and format.
+**EN.** CLI helpers configure structured JSON logging via ``library.utils.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity and format.
 
-**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.logging_setup.configure_logger``. Управляйте форматом и уровнем логов переменными окружения или ключами CLI.
+**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.utils.logging_setup.configure_logger``. Управляйте форматом и уровнем логов переменными окружения или ключами CLI.
 
 Пример включения JSON‑формата через переменную окружения:
 

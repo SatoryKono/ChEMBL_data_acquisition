@@ -1,4 +1,4 @@
-"""Thread-safety tests for :mod:`library.chembl_client`."""
+"""Thread-safety tests for :mod:`library.clients.chembl_client`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from library.chembl_client import ChemblClient
+from library.clients.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg
 
 USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
@@ -120,7 +120,7 @@ def test_single_session_created(monkeypatch) -> None:
         return dummy
 
     monkeypatch.setattr(
-        "library.chembl_client.session_with_retry", fake_session_with_retry
+        "library.clients.chembl_client.session_with_retry", fake_session_with_retry
     )
     client = ChemblClient(api_cfg(), RetryCfg())
 

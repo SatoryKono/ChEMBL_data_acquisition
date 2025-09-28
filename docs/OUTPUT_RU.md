@@ -79,7 +79,7 @@ data/output/
 ## Классификация публикаций
 
 `scripts/get_document_data.py` обогащает документные выгрузки баллами и метками,
-которые рассчитывает `library.document_pipeline.merge_metadata`.
+которые рассчитывает `library.processing.document_pipeline.merge_metadata`.
 В таблице и схеме появляются поля:
 
 | Колонка | Описание |
@@ -111,7 +111,7 @@ ChEMBL `standard_*`. Приоритет действий:
 
 ## JSON-отчёт о качестве документов
 
-Документный пайплайн записывает `<stem>.quality.json`. `library.document_pipeline.build_quality_report`
+Документный пайплайн записывает `<stem>.quality.json`. `library.processing.document_pipeline.build_quality_report`
 формирует сводку, а `save_quality_report` сохраняет её в стабильном формате для
 сравнения между запусками. Структура отчёта:
 

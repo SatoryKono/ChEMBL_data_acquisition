@@ -1,7 +1,7 @@
-"""Tests for :mod:`library.target_postprocessing`.
+"""Tests for :mod:`library.processing.target_postprocessing`.
 
-The suite covers :func:`library.target_postprocessing.postprocess_targets` and
-its convenience wrapper :func:`library.target_postprocessing.postprocess_file`.
+The suite covers :func:`library.processing.target_postprocessing.postprocess_targets` and
+its convenience wrapper :func:`library.processing.target_postprocessing.postprocess_file`.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from library import target_postprocessing as tp
+from library.processing import target_postprocessing as tp
 from library.config import Config
 from schemas.targets import TARGETS_COLUMN_ORDER
 

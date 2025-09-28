@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from library import rate_limiter as rl
-from library.chembl_client import ChemblClient
+from library.clients.chembl_client import ChemblClient
 from library.config import ApiCfg, RetryCfg
 
 cachetools = pytest.importorskip("cachetools")
@@ -175,7 +175,7 @@ def test_request_json_reuses_session(monkeypatch) -> None:
         return dummy
 
     monkeypatch.setattr(
-        "library.chembl_client.session_with_retry", fake_session_with_retry
+        "library.clients.chembl_client.session_with_retry", fake_session_with_retry
     )
     client = ChemblClient(api_cfg(), RetryCfg())
     client.clear_cache()
@@ -236,8 +236,8 @@ def test_request_json_uses_cache_lock(monkeypatch: pytest.MonkeyPatch) -> None:
             self.calls += 1
 
     limiter = DummyLimiter()
-    monkeypatch.setattr("library.chembl_client.get_limiter", lambda *a, **k: limiter)
-    monkeypatch.setattr("library.chembl_client.sleep", lambda delay: None)
+    monkeypatch.setattr("library.clients.chembl_client.get_limiter", lambda *a, **k: limiter)
+    monkeypatch.setattr("library.clients.chembl_client.sleep", lambda delay: None)
 
     result = client.request_json("http://example.com", cfg=api_cfg(retries=1))
 

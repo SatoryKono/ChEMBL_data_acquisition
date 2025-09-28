@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import requests
 
-from . import pubmed_library as _pl
-from .config import SemanticScholarCfg
+from .. import pubmed_library as _pl
+from ..config import SemanticScholarCfg
 
 
 def fetch_semantic_scholar(

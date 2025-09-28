@@ -13,7 +13,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from library import cli
-from library.chembl_client import _chunked
+from library.clients.chembl_client import _chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,

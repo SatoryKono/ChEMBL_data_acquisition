@@ -15,7 +15,7 @@ import yaml
 import library.git_utils as git_utils
 from library import io
 from library.config import Config, IoCfg
-from library.logging_setup import LoggerConfig, configure_logger
+from library.utils.logging_setup import LoggerConfig, configure_logger
 
 
 def test_read_csv_validates_columns(tmp_path: Path) -> None:

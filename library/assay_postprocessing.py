@@ -16,8 +16,8 @@ import pandas as pd
 from schemas import AssayPostprocessSchema
 
 from .config import IoCfg
+from .io.pandas_utils import read_csv_pyarrow
 from .log import logger
-from .pandas_utils import read_csv_pyarrow
 
 
 def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
@@ -30,7 +30,7 @@ def postprocess_assays(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df:
-        DataFrame produced by :func:`library.chembl_library.get_assays`.
+        DataFrame produced by :func:`library.processing.chembl_library.get_assays`.
 
     Returns
     -------

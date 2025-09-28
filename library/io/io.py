@@ -33,10 +33,10 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import yaml
 
-from . import validation
-from .config import Config, IoCfg, _serialize_paths
-from .git_utils import _git_sha
-from .log import logger
+from .. import validation
+from ..config import Config, IoCfg, _serialize_paths
+from ..git_utils import _git_sha
+from ..log import logger
 
 
 class _EncodingDecodeError(Exception):
@@ -337,7 +337,7 @@ def write_csv(
         )
         raise ValueError(f"Missing key columns: {missing_keys}")
     col_order_list = list(col_order) if col_order is not None else None
-    from .csv_utils import write_csv_deterministic
+    from ..csv_utils import write_csv_deterministic
 
     return write_csv_deterministic(
         df,
