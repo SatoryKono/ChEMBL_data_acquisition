@@ -375,12 +375,29 @@ def resolve_pubchem_cid(
     parent_loader: Callable[[str], pd.Series | None] | None = None,
     resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
     | None = None,
+    visited: set[str] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
 
     chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
     identifiers = _pubchem_identifiers(row)
     resolution_key = _pubchem_resolution_key(row)
+
+    if visited is None:
+        visited = set()
+
+    if chembl_id:
+        if chembl_id in visited:
+            logger.info(
+                "pubchem_parent_structure_missing",
+                child=chembl_id,
+                parent=chembl_id,
+                reason="parent_cycle_detected",
+            )
+            if chembl_id not in cache:
+                cache[chembl_id] = None
+            return None
+        visited.add(chembl_id)
 
     resolution = pl.resolve_pubchem_record(
         identifiers,
@@ -412,6 +429,19 @@ def resolve_pubchem_cid(
             cache[chembl_id] = None
         return None
 
+    if parent_id in visited:
+        logger.info(
+            "pubchem_parent_structure_missing",
+            child=chembl_id,
+            parent=parent_id,
+            reason="parent_cycle_detected",
+        )
+        if parent_id not in cache:
+            cache[parent_id] = None
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
     parent_row = parent_loader(parent_id)
     if parent_row is None:
         logger.info(
@@ -430,6 +460,7 @@ def resolve_pubchem_cid(
         cfg,
         parent_loader=parent_loader,
         resolution_cache=resolution_cache,
+        visited=visited,
     )
     if parent_cid:
         cache[parent_id] = parent_cid
