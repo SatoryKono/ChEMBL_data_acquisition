@@ -903,18 +903,30 @@ def add_pubchem_data(
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
     pubchem_df = pubchem_df.reindex(result.index)
-    pubchem_df = pubchem_df.convert_dtypes()
 
     preserve_mask = skip_mask | prefer_local_mask
     if preserve_mask.any():
-        for column in [col for col in PUBCHEM_COLUMNS if col in result.columns]:
-            original_series = result[column].astype("string")
-            if column in pubchem_df.columns:
-                pubchem_df[column] = pubchem_df[column].astype("string").where(
-                    ~preserve_mask, original_series
+        existing_columns = [
+            column for column in PUBCHEM_COLUMNS if column in result.columns
+        ]
+        if existing_columns:
+            original_existing = result[existing_columns].astype("string")
+            intersecting_columns = [
+                column for column in existing_columns if column in pubchem_df.columns
+            ]
+            if intersecting_columns:
+                pubchem_df[intersecting_columns] = (
+                    pubchem_df[intersecting_columns]
+                    .astype("string")
+                    .mask(preserve_mask, original_existing[intersecting_columns])
                 )
-            else:
-                pubchem_df[column] = original_series
+            missing_columns = [
+                column for column in existing_columns if column not in pubchem_df.columns
+            ]
+            if missing_columns:
+                pubchem_df[missing_columns] = original_existing[missing_columns]
+
+    pubchem_df = pubchem_df.convert_dtypes()
 
     prefer_values = getattr(cfg, "prefer_local_values", False)
 
