@@ -16,7 +16,7 @@ def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
         [
             sys.executable,
             "-m",
-            "scripts.csv_utils_main",
+            "library.utils.cli_tools.csv_utils_main",
             "--input",
             str(input_csv),
             "--output",

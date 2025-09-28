@@ -6,7 +6,7 @@ from . import _run
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.check_determinism.
+    """Run :mod:`library.utils.cli_tools.check_determinism`.
 
     Parameters
     ----------

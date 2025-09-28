@@ -138,9 +138,9 @@ The enrichment stage relies on the molecule catalogue configured at
 `sources.chembl.molecule_catalog.cache_path` and optional CSV dictionaries for
 salt resolution and boolean flags.
 
-## Cached target pipeline (`pipeline_targets_main.py`)
+## Cached target pipeline (`library.utils.cli_tools.pipeline_targets_main`)
 
-`pipeline_targets_main.py` mirrors the production target CLI but operates on
+`library.utils.cli_tools.pipeline_targets_main` mirrors the production target CLI but operates on
 cached ChemBL chunks only. It reads identifiers with `read_ids`, forwards them to
 `library.pipeline_targets.run_pipeline`, adds metadata and writes deterministic
 CSV/sidecar pairs. Use it to validate configuration overrides and batching logic

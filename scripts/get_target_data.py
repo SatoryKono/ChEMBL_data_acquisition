@@ -22,9 +22,15 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+from library.utils import bootstrap
+
+bootstrap.ensure_project_root()
 
 from library import chembl_library as cl
 from library import cli

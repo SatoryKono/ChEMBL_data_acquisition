@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.get_document_type` utilities."""
+"""Tests for :mod:`library.utils.cli_tools.get_document_type` utilities."""
 
 from __future__ import annotations
 

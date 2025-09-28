@@ -130,9 +130,9 @@ ChEMBL `standard_*`. Приоритет действий:
 родительских молекул (`sources.chembl.molecule_catalog.cache_path`) и, по
 возможности, CSV-словари с иерархией и признаками солей.
 
-## Кешированный таргет-пайплайн (`pipeline_targets_main.py`)
+## Кешированный таргет-пайплайн (`library.utils.cli_tools.pipeline_targets_main`)
 
-Утилита `pipeline_targets_main.py` повторяет аргументы боевого таргет-пайплайна,
+Утилита `library.utils.cli_tools.pipeline_targets_main` повторяет аргументы боевого таргет-пайплайна,
 но работает только с кешированными чанками ChEMBL. Идентификаторы читаются через
 `read_ids`, далее вызывается `library.pipeline_targets.run_pipeline`, добавляются
 метаданные и выполняется детерминированная запись CSV/sidecar. Инструмент полезен

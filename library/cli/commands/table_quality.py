@@ -6,7 +6,7 @@ from . import _run
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.table_quality.
+    """Run :mod:`library.utils.cli_tools.table_quality`.
 
     Parameters
     ----------

@@ -6,7 +6,7 @@ from . import _run
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.chunk_io.
+    """Run :mod:`library.utils.cli_tools.chunk_io`.
 
     Parameters
     ----------
