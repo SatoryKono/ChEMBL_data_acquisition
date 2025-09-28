@@ -13,6 +13,7 @@ import argparse
 from collections import ChainMap
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import islice, tee
 from typing import Any, NamedTuple
 
@@ -58,6 +59,20 @@ from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 from schemas import TestitemsSchema, normalize_testitems
 
+
+# ===== Parameters =====
+
+ENCODING_UTF8 = "utf-8"
+MOLECULE_HIERARCHY_DELIMITER = ","
+DEFAULT_MOLECULE_HIERARCHY_PATH = Path(
+    "dictionary/_testitem/molecule_hierarchy.csv"
+)
+PUBCHEM_CID_CACHE_ENCODING = ENCODING_UTF8
+
+
+# ===== Helpers =====
+
+UTC = timezone.utc  # noqa: UP017
 _TYPO_PARENT_COLUMN = "parant_molecule_id"
 
 
@@ -87,7 +102,6 @@ PUBCHEM_COLUMNS = [
 ]
 
 
-_PUBCHEM_CID_CACHE_ENCODING = "utf-8"
 _CID_CACHE_MISSING = object()
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
@@ -112,6 +126,78 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 
+@lru_cache(maxsize=None)
+def _load_molecule_hierarchy_lookup_cached(
+    path: str,
+    encoding: str,
+    delimiter: str,
+) -> dict[str, dict[str, str | None]]:
+    """Load molecule hierarchy data from ``path`` with normalised identifiers."""
+
+    csv_path = Path(path)
+    if not csv_path.exists():
+        raise FileNotFoundError(
+            f"Molecule hierarchy dictionary not found: {csv_path}"
+        )
+
+    try:
+        frame = pd.read_csv(
+            csv_path,
+            sep=delimiter,
+            encoding=encoding,
+            dtype="string",
+        )
+    except ValueError as exc:  # pragma: no cover - pandas raises on missing columns
+        raise ValueError(
+            "Unable to read molecule hierarchy dictionary; verify the CSV format."
+        ) from exc
+
+    expected_columns = ["molecule_chembl_id", "parent_molecule_chembl_id"]
+    missing_columns = [col for col in expected_columns if col not in frame.columns]
+    if missing_columns:
+        raise ValueError(
+            "Molecule hierarchy dictionary missing required columns: "
+            + ", ".join(missing_columns)
+        )
+
+    subset = frame.loc[:, expected_columns].fillna("")
+    for column in expected_columns:
+        subset[column] = (
+            subset[column]
+            .astype("string")
+            .str.strip()
+            .str.upper()
+        )
+
+    lookup: dict[str, dict[str, str | None]] = {}
+    for molecule_id, parent_id in subset.itertuples(index=False, name=None):
+        if not molecule_id:
+            continue
+        lookup[molecule_id] = {
+            "molecule_chembl_id": molecule_id,
+            "parent_molecule_chembl_id": parent_id or None,
+        }
+
+    return lookup
+
+
+def LoadMoleculeHierarchyLookup(
+    path: Path | str = DEFAULT_MOLECULE_HIERARCHY_PATH,
+    *,
+    encoding: str = ENCODING_UTF8,
+    delimiter: str = MOLECULE_HIERARCHY_DELIMITER,
+) -> dict[str, dict[str, str | None]]:
+    """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
+
+    resolved_path = Path(path)
+    cached = _load_molecule_hierarchy_lookup_cached(
+        str(resolved_path),
+        encoding,
+        delimiter,
+    )
+    return {key: value.copy() for key, value in cached.items()}
+
+
 def _load_pubchem_cid_cache(
     path: Path | None, *, ttl_hours: float | None = None
 ) -> dict[str, str | None]:
@@ -120,7 +206,7 @@ def _load_pubchem_cid_cache(
     if path is None:
         return {}
     try:
-        with path.open("r", encoding=_PUBCHEM_CID_CACHE_ENCODING) as handle:
+        with path.open("r", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             data = json.load(handle)
     except FileNotFoundError:
         return {}
@@ -195,7 +281,7 @@ def _write_pubchem_cid_cache(
             continue
         serialisable[key] = value
     try:
-        with path.open("w", encoding=_PUBCHEM_CID_CACHE_ENCODING) as handle:
+        with path.open("w", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             payload = {
                 "metadata": {
                     "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
