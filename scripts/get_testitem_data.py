@@ -87,6 +87,7 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 
 
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
+PARENT_LOOKUP_SOURCE_LOOKUP = "lookup"
 PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
 PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
@@ -729,6 +730,9 @@ def attach_parent_molecule_ids(
     attached = int(combined_parent.notna().sum())
 
     final_source = source_resolved
+    if catalog is not None and not missing_ids:
+        if final_source in (None, PARENT_LOOKUP_SOURCE_CACHE, PARENT_LOOKUP_SOURCE_SKIPPED):
+            final_source = PARENT_LOOKUP_SOURCE_LOOKUP
     if full_sync_used:
         final_source = PARENT_LOOKUP_SOURCE_SYNC
     elif partial_fetch_used:
@@ -1221,13 +1225,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             need_lookup_mask = normalised_ids != ""
         else:
             need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
-        need_lookup = set(normalised_ids[need_lookup_mask])
-        prepared_need_lookup = set(need_lookup)
-        parent_lookup_data = ParentLookupPreparedData(
-            child_ids=normalised_ids,
-            existing_parent_ids=existing_parent,
-            need_lookup=prepared_need_lookup,
-        )
+        initial_need_lookup = set(normalised_ids[need_lookup_mask])
+        need_lookup = set(initial_need_lookup)
 
         cache_before = _cache_state(cfg.molecule_catalog.cache_path)
         cache_after = cache_before
@@ -1290,6 +1289,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 parent_catalog.update(fallback_catalog)
                 parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
                 need_lookup -= set(fallback_catalog)
+
+        lookup_resolved = initial_need_lookup - need_lookup
+        parent_lookup_data = ParentLookupPreparedData(
+            child_ids=normalised_ids,
+            existing_parent_ids=existing_parent,
+            need_lookup=set(need_lookup),
+        )
+        if (
+            lookup_resolved
+            and not need_lookup
+            and parent_catalog_source
+            not in (PARENT_LOOKUP_SOURCE_PARTIAL, PARENT_LOOKUP_SOURCE_SYNC)
+        ):
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_LOOKUP
 
         try:
             ensure_no_parant_column(df)

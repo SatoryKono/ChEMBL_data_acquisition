@@ -636,6 +636,74 @@ def test_run_chembl_column_order(
     assert captured["col_order"] == expected_head + expected_tail
 
 
+def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\nCHEMBL2\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(
+        io, "read_ids", lambda *_, **__: iter(["CHEMBL1", "CHEMBL2"])
+    )
+
+    df = pd.DataFrame(
+        [
+            {"molecule_chembl_id": "CHEMBL1", "parent_molecule_id": pd.NA},
+            {"molecule_chembl_id": "CHEMBL2", "parent_molecule_id": pd.NA},
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+
+    cache_path = tmp_path / "parent_catalog.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
+
+    parent_catalog = {"CHEMBL1": "CHEMBL1_PARENT"}
+
+    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: parent_catalog)
+    monkeypatch.setattr(
+        gtd.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+    )
+
+    captured_precomputed: dict[str, object] = {}
+
+    def fake_attach(frame: pd.DataFrame, **kwargs: object):
+        captured_precomputed["data"] = kwargs.get("precomputed")
+        return (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+                missing=0,
+                unique=0,
+                attached=len(frame),
+                uncovered=0,
+            ),
+        )
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+
+    rc = gtd.run_chembl(cfg, args)
+    assert rc == 0
+
+    prepared = captured_precomputed.get("data")
+    assert isinstance(prepared, gtd.ParentLookupPreparedData)
+    assert prepared.need_lookup == {"CHEMBL2"}
+
+
 def test_run_chembl_initialises_pubchem_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -1057,7 +1125,7 @@ def test_run_chembl_merges_parent_catalog(
     ]
     assert query_calls == 1
     assert captured_catalog is parent_catalog
-    assert captured_source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert captured_source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
 
 
 def test_run_chembl_updates_parent_cache_and_reuses_results(
@@ -1152,7 +1220,7 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     assert update_calls == [{"CHEMBL1": "CHEMBL1_PARENT"}]
     assert [source for _, source in attach_calls] == [
         gtd.PARENT_LOOKUP_SOURCE_PARTIAL,
-        gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        gtd.PARENT_LOOKUP_SOURCE_LOOKUP,
     ]
 
 
@@ -1655,7 +1723,7 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
     assert stats.unique == 3
     assert stats.attached == 3
     assert stats.missing == 0
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
     assert tracking_catalog.iterations == 0
     assert set(tracking_catalog.lookups) == {"CHEMBL1", "CHEMBL2", "CHEMBL3"}
 
@@ -1956,4 +2024,4 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
     assert stats.missing == 0
     assert stats.attached == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
