@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     -------
     argparse.ArgumentParser
         Parser pre-configured with common command-line flags used by
-        :mod:`scripts.csv_utils_main`.
+        :mod:`library.utils.cli_tools.csv_utils_main`.
     """
     parser = argparse.ArgumentParser(
         description=(

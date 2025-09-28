@@ -8,7 +8,13 @@ import sys
 def test_csv_determinism_integration() -> None:
     """Run the check_determinism script and verify hashes match."""
     proc = subprocess.run(
-        [sys.executable, "-m", "scripts.check_determinism", "--log-level", "DEBUG"],
+        [
+            sys.executable,
+            "-m",
+            "library.utils.cli_tools.check_determinism",
+            "--log-level",
+            "DEBUG",
+        ],
         capture_output=True,
         text=True,
         check=True,

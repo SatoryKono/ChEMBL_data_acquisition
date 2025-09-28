@@ -23,9 +23,8 @@ if __package__ in {None, ""}:
     project_root_str = str(project_root)
     if project_root_str not in sys.path:
         sys.path.insert(0, project_root_str)
-    import bootstrap  # type: ignore[import-not-found]
-else:
-    from . import bootstrap  # type: ignore[import-not-found]
+
+from library.utils import bootstrap
 
 bootstrap.ensure_project_root()
 

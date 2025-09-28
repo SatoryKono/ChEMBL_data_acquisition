@@ -131,10 +131,10 @@ python scripts/get_target_data.py \
 
 Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`. Соберите CSV с колонкой `target_chembl_id` (по одной записи в строке); готовый smoke-набор отсутствует.
 
-## Обвязка таргет-пайплайна (`pipeline_targets_main.py`)
+## Обвязка таргет-пайплайна (`library.utils.cli_tools.pipeline_targets_main`)
 
 ```bash
-python scripts/pipeline_targets_main.py \
+python -m library.utils.cli_tools.pipeline_targets_main \
   --input tests/data/chembl_targets_min.csv \
   --output out/targets_cached.csv \
   --chunk-size 50 \

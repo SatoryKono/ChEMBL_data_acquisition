@@ -6,7 +6,7 @@ from . import _run
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run scripts.get_activities.
+    """Run :mod:`library.utils.cli_tools.get_activities`.
 
     Parameters
     ----------

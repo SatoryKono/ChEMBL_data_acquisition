@@ -9,9 +9,16 @@ import argparse
 from collections.abc import Sequence
 from itertools import islice
 
-import bootstrap
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
 import requests
 from pandera.errors import SchemaErrors
+
+from library.utils import bootstrap
 
 bootstrap.ensure_project_root()
 

@@ -17,7 +17,13 @@ def test_determinism_script_returns_zero() -> None:
     """
 
     result = subprocess.run(
-        [sys.executable, "-m", "scripts.check_determinism", "--log-level", "DEBUG"],
+        [
+            sys.executable,
+            "-m",
+            "library.utils.cli_tools.check_determinism",
+            "--log-level",
+            "DEBUG",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -30,8 +36,8 @@ def test_determinism_script_reports_mismatch(
 ) -> None:
     """The script should exit with ``1`` when hashes differ."""
 
-    from scripts import check_determinism as script
     from library.utils.cli_tools import check_determinism as impl
+    script = impl
 
     def fake_write_csv_deterministic(
         df: pd.DataFrame,

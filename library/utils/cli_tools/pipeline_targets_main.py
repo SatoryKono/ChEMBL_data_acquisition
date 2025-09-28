@@ -9,6 +9,16 @@ from collections.abc import Iterable, Iterator, Sequence
 from itertools import islice
 from pathlib import Path
 
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[3]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+from library.utils import bootstrap
+
+bootstrap.ensure_project_root()
+
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 

@@ -1,4 +1,4 @@
-"""CLI tests for :mod:`scripts.pipeline_targets_main`."""
+"""CLI tests for :mod:`library.utils.cli_tools.pipeline_targets_main`."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 from library.config import Config
 from library.pipeline_targets import PipelineResult
-from scripts import pipeline_targets_main as cli
+from library.utils.cli_tools import pipeline_targets_main as cli
 
 
 class _DummyLogger:

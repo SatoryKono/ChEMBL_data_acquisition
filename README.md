@@ -140,7 +140,7 @@ Before running the smoke command, create a `chembl_ids.csv` file with a header `
   и IUPHAR.
 * `get_testitem_data.py` — обогащает соединения структурными атрибутами и
   данными PubChem.
-* `pipeline_targets_main.py` — лёгкая обвязка для
+* `library.utils.cli_tools.pipeline_targets_main` — лёгкая обвязка для
   `library.pipeline_targets.run_pipeline`, использующая те же параметры CLI,
   что и боевой таргет-пайплайн, но работающая только с локальными файлами и
   подготовленными чанками идентификаторов без сетевых вызовов.
@@ -213,13 +213,13 @@ column.
 The input and output both use ``target_chembl_id`` to align with
 validation schemas.
 
-### scripts/pipeline_targets_main.py
+### library.utils.cli_tools.pipeline_targets_main
 
 Exercise the chunking and batch configuration used by the production
 target pipeline without contacting remote services:
 
 ```bash
-python scripts/pipeline_targets_main.py \
+python -m library.utils.cli_tools.pipeline_targets_main \
     --input tests/data/chembl_targets_min.csv \
     --output out/targets_cached.csv \
     --chunk-size 25 \
