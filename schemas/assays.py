@@ -67,7 +67,7 @@ AssaysSchema: pa.DataFrameSchema = pa.DataFrameSchema(
         "higly_correlated_cit": pa.Column(
             FLEXIBLE_DTYPE, required=False, nullable=True
         ),
-        "isoform": pa.Column(str, required=False, nullable=True),
+        "isoform": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "month": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),
         "mutation": pa.Column(str, required=False, nullable=True),
         "shuffled_cit": pa.Column(FLEXIBLE_DTYPE, required=False, nullable=True),

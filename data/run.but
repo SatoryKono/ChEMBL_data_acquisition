@@ -1,3 +1,10 @@
-python scripts\get_activity_data.py --input data\input\activity.csv --output data\output\activity\output.activity_20250923.csv --limit 100
+python scripts\get_activity_data.py --output data\output\activity\output.activity_20250928.csv --input data\input\full\activity3.csv
 
-python scripts\get_assay_data.py --input data\input\assay.csv --output data\output\assay\output.assay.csv
+python scripts\get_assay_data.py --output data\output\assay\output.assay_20250928.csv --input data\input\full\assay.csv
+
+python scripts\get_document_data.py --output data\output\document\output.document_20250928.csv --input data\input\full\document.csv
+
+python scripts\get_target_data.py --output data\output\target\output.target_20250928.csv --input data\input\full\target.csv
+
+python scripts\get_testitem_data.py --output data\output\testitem\output.testitem_20250928.csv --input data\input\full\testitem.csv
+
