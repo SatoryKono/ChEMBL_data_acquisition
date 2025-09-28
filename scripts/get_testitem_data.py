@@ -830,8 +830,12 @@ def add_pubchem_data(
         return bool(chembl_id and cid_cache.get(chembl_id))
 
     cached_mask = chembl_norm.map(_is_cached)
-    has_chembl_id_mask = chembl_norm.notna()
-    needs_lookup_mask = has_chembl_id_mask & ~skip_mask & ~prefer_local_mask & ~cached_mask
+    needs_lookup_mask = (
+        chembl_norm.notna()
+        & ~skip_mask
+        & ~prefer_local_mask
+        & ~cached_mask
+    )
 
     total = int(needs_lookup_mask.sum())
     if total:
@@ -847,9 +851,7 @@ def add_pubchem_data(
             cid_series.loc[idx] = cached_value
             lookup_cids.add(cached_value)
 
-    progress = 0
-    for row in result.loc[needs_lookup_mask].itertuples():
-        progress += 1
+    for progress, row in enumerate(result.loc[needs_lookup_mask].itertuples(), start=1):
         logger.info("pubchem_progress", current=progress, total=total)
         idx = row.Index
         chembl_id = chembl_norm.loc[idx]
