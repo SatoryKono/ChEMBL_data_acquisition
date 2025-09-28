@@ -38,6 +38,7 @@ from library.cli import (
 from library.config import (
     ApiCfg,
     Config,
+    IoCfg,
     MoleculeCatalogCfg,
     PubChemCfg,
     _serialize_paths,
@@ -403,6 +404,60 @@ def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
 
     normalised = series.fillna("").astype("string").str.strip().str.upper()
     return normalised
+
+
+def load_molecule_hierarchy_lookup(
+    path: Path | None, *, io_cfg: IoCfg
+) -> dict[str, str]:
+    """Return child → parent mapping loaded from a local hierarchy file."""
+
+    if path is None:
+        return {}
+
+    required = ("molecule_chembl_id", "parent_molecule_chembl_id")
+    try:
+        hierarchy_df = io.read_csv(
+            path,
+            cfg=io_cfg,
+            required_columns=required,
+            dtype="string",
+        )
+    except FileNotFoundError:
+        logger.info("molecule_hierarchy_lookup_missing", path=str(path))
+        return {}
+    except ValueError as exc:
+        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
+
+    if hierarchy_df.empty:
+        return {}
+
+    trimmed = hierarchy_df.loc[:, required].copy()
+    trimmed["molecule_chembl_id"] = (
+        trimmed["molecule_chembl_id"].fillna("").astype("string").str.strip().str.upper()
+    )
+    trimmed["parent_molecule_chembl_id"] = (
+        trimmed["parent_molecule_chembl_id"]
+        .fillna("")
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    filtered = trimmed[
+        (trimmed["molecule_chembl_id"] != "")
+        & (trimmed["parent_molecule_chembl_id"] != "")
+    ].drop_duplicates(subset=["molecule_chembl_id"], keep="first")
+
+    if filtered.empty:
+        return {}
+
+    lookup = filtered.set_index("molecule_chembl_id")["parent_molecule_chembl_id"].to_dict()
+    logger.info(
+        "molecule_hierarchy_lookup_loaded",
+        path=str(path),
+        rows=len(lookup),
+    )
+    return lookup
 
 
 class ParentLookupPreparedData(NamedTuple):
@@ -1041,6 +1096,40 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             existing_parent = _normalise_chembl_ids(df[parent_column])
         else:
             existing_parent = pd.Series("", index=df.index, dtype="string")
+
+        hierarchy_lookup_path = getattr(
+            cfg.testitem_molecule_enrichment.sources,
+            "molecule_hierarchy_path",
+            None,
+        )
+        try:
+            hierarchy_lookup = load_molecule_hierarchy_lookup(
+                hierarchy_lookup_path,
+                io_cfg=cfg.io,
+            )
+        except ValueError as exc:
+            logger.error(
+                "molecule_hierarchy_lookup_invalid",
+                error=str(exc),
+                path=str(hierarchy_lookup_path),
+            )
+            return 1
+
+        if hierarchy_lookup:
+            hierarchy_series = normalised_ids.map(
+                lambda value: hierarchy_lookup.get(value) if value else None
+            )
+            hierarchy_mask = hierarchy_series.notna()
+            if hierarchy_mask.any():
+                resolved = hierarchy_series[hierarchy_mask].astype("string")
+                if parent_column in df.columns:
+                    df[parent_column] = df[parent_column].astype("string")
+                else:
+                    df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
+                df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
+                existing_parent.loc[hierarchy_mask] = (
+                    resolved.fillna("").astype("string")
+                )
 
         if getattr(cfg.molecule_catalog, "force_refresh_existing", False):
             need_lookup_mask = normalised_ids != ""
