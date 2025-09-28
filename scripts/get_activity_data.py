@@ -18,44 +18,32 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-if __package__ in {None, ""}:
-    project_root = Path(__file__).resolve().parents[1]
-    project_root_str = str(project_root)
-    if project_root_str not in sys.path:
-        sys.path.insert(0, project_root_str)
-    import bootstrap  # type: ignore[import-not-found]
-else:
-    from . import bootstrap  # type: ignore[import-not-found]
-
-bootstrap.ensure_project_root()
-
-from library import chembl_library as cl
-from library import cli
-from library import io
-from library.chembl_client import ChemblClient
-from library.cli import (
-    LoggerConfig,
-    configure_logger,
-)
-from library.cli import (
-    build_parser as base_parser,
-)
-from library.config import (
+from library.processing.activity import (
+    ActivitiesSchema,
     ActivityActionTypeCfg,
     ActivityBoundsCfg,
     ActivityPropertiesCfg,
+    ChemblClient,
     Config,
-    _serialize_paths,
+    LoggerConfig,
+    SidecarErrors,
+    Stats,
+    add_pipeline_metadata,
+    analyze_table_quality,
+    cli,
+    configure_logger,
     ensure_dirs,
+    file_sha256,
+    io,
+    logger,
+    normalize_activities,
     print_config,
+    validate_activities,
+    write_meta_yaml,
+    _serialize_paths,
 )
-from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.pipeline_metadata import add_pipeline_metadata
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
-from library.validation import validate_activities
-from schemas import ActivitiesSchema, normalize_activities
+from library.processing.activity import build_parser as base_parser
+from library.processing.activity import chembl_library as cl
 
 _UNCERTAINTY_PATTERN = re.compile(
     r"^\s*(?P<value>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*(?:±|\+/-|\+-)\s*(?P<delta>\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*$"
