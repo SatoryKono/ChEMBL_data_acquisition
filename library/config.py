@@ -1,6 +1,6 @@
 """Application configuration using Pydantic models.
 
-This module provides a typed wrapper around ``config.yaml``. Configuration
+This module provides a typed wrapper around ``config/config.yaml``. Configuration
 values are loaded from a YAML file and can be overridden by environment
 variables or command line options. The order of precedence is::
 
@@ -29,6 +29,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .log import logger
+from .utils.config import ConfigLoaderError, load_yaml_config
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
@@ -1152,7 +1153,7 @@ def _collect_unknown_keys(
 
 
 def load_config(
-    path: str | Path = "config.yaml",
+    path: str | Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
     *,
     strict: bool = True,
@@ -1160,25 +1161,17 @@ def load_config(
     """Load configuration from *path* applying overrides."""
 
     try:
-        with Path(path).open("r", encoding="utf8") as fh:
-            data = yaml.safe_load(fh) or {}
-    except FileNotFoundError as exc:  # pragma: no cover - defensive
-        raise ConfigError(f"configuration file not found: {path}") from exc
-    except yaml.YAMLError as exc:
-        raise ConfigError(
-            f"failed to parse YAML configuration at {path}: {exc}"
-        ) from exc
-
-    if not isinstance(data, dict):
-        raise TypeError("top-level structure in config file must be a mapping")
+        data, resolved_path = load_yaml_config(path)
+    except ConfigLoaderError as exc:
+        raise ConfigError(str(exc)) from exc
 
     # Guard against accidentally passing the JSON schema instead of a runtime
     # configuration file. The schema contains the ``$defs`` key at the top
     # level which is not present in actual application settings.
     if "$defs" in data:
         raise ConfigError(
-            f"{path} appears to be a configuration schema; "
-            "provide an application config file such as config.yaml."
+            f"{resolved_path} appears to be a configuration schema; "
+            "provide an application config file such as config/config.yaml."
         )
 
     env_overrides = _apply_env_overrides(data)
@@ -1190,7 +1183,10 @@ def load_config(
 
     unknown = _collect_unknown_keys(data, Config)
     if unknown:
-        msg = f"Unknown configuration key(s) in {path}: {', '.join(sorted(unknown))}"
+        msg = (
+            "Unknown configuration key(s) in "
+            f"{resolved_path}: {', '.join(sorted(unknown))}"
+        )
         if strict:
             raise ValueError(msg)
         logger.warning(msg)

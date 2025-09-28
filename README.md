@@ -12,7 +12,7 @@
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
 * Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
-* Конфигурация через `config.yaml`, переменные окружения и ключи CLI.
+* Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
 * Логирование через стандартный модуль `logging` с настраиваемым уровнем.
 * Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование
   `black`, проверка типов `mypy`, юнит‑тесты `pytest`.
@@ -307,13 +307,13 @@ api:
   user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
 ```
 
-Параметр можно переопределить в `config.yaml`, через переменную окружения
+Параметр можно переопределить в `config/config.yaml`, через переменную окружения
 `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` или флаг CLI
 `--sources.chembl.api.user_agent`.
 
 ## Валидация конфигурации
 
-`library.config.load_config` проверяет корректность значений в `config.yaml`.
+`library.config.load_config` проверяет корректность значений в `config/config.yaml`.
 Некорректный URL приводит к `ValueError` при загрузке:
 
 ```yaml
@@ -334,7 +334,7 @@ api:
 
 ## Ошибки конфигурации
 
-Некорректные значения в `config.yaml` вызывают `ValidationError`. Пример:
+Некорректные значения в `config/config.yaml` вызывают `ValidationError`. Пример:
 
 ```yaml
 api:
@@ -345,7 +345,7 @@ api:
 
 ```python
 from library.config import load_config
-load_config("config.yaml")
+load_config("config/config.yaml")
 ```
 
 Вывод:
@@ -521,7 +521,7 @@ All scripts share a common set of flags:
 ## Configuration
 
 
-Default settings live in ``config.yaml`` and are grouped into three top-level
+Default settings live in ``config/config.yaml`` and are grouped into three top-level
 sections:
 
 * ``sources`` – external services such as ChEMBL, OpenAlex, Crossref, UniProt,
@@ -624,7 +624,7 @@ permits it.
 
 Path values such as ``local.io.output_dir``, ``local.io.cache_dir`` and the ``local.init``
 workbook paths are exposed as :class:`pathlib.Path` objects. String values in
-``config.yaml`` or overrides from the environment and command line are
+``config/config.yaml`` or overrides from the environment and command line are
 automatically converted.
  
 ```bash
@@ -642,7 +642,7 @@ python -m library.utils.cli_tools.table_quality_main \
 
 ```
 ChEMBL_data_acquisition/
-├── config.yaml
+├── config/config.yaml
 ├── dictionary/
 ├── library/
 │   ├── __init__.py
@@ -664,7 +664,7 @@ ChEMBL_data_acquisition/
 
 ## Конфигурация
 
-Параметры читаются из `config.yaml`, переменных окружения
+Параметры читаются из `config/config.yaml`, переменных окружения
 (`CHEMBL_DA__...`) и ключей CLI.
 Подробности в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md).
 

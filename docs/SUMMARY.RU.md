@@ -38,7 +38,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * `io.read_ids` построчно считывает идентификаторы, отбрасывает пустые значения
   и проверяет наличие нужной колонки.
 * Доступ к API централизован в `ChemblClient` и смежных клиентах, которые
-  учитывают лимиты, ретраи и таймауты из `config.yaml`.
+  учитывают лимиты, ретраи и таймауты из `config/config.yaml`.
 * Нормализация и обогащение выполняются в скриптах с использованием модулей
   `document_pipeline`, `target_postprocessing`, `testitem_enrichment`,
   `activity_bounds`. Ошибочные строки собирает `SidecarErrors` и записывает
@@ -50,7 +50,7 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Конфигурация
 
-* Базовые значения задаются в [`config.yaml`](../config.yaml) и проверяются по
+* Базовые значения задаются в [`config/config.yaml`](../config/config.yaml) и проверяются по
   [`config.schema.json`](../config.schema.json).
 * Ключевые разделы:
   * `sources.*` — базовые URL, политика ретраев, лимиты и настройки пайплайнов
@@ -64,7 +64,7 @@ add_pipeline_metadata → write_csv_deterministic →
     каталога тест-объектов.
   * `system.*` — логирование, глобальные лимиты, ретраи и веса классификатора
     публикаций.
-* Приоритет переопределений: `config.yaml` < переменные окружения < аргументы
+* Приоритет переопределений: `config/config.yaml` < переменные окружения < аргументы
   CLI. Доступны короткие алиасы (например, `CHEMBL_DA_RPS` и `CHEMBL_DA_OUTDIR`).
   Полный список приведён в `docs/CONFIG_RU.md`.
 

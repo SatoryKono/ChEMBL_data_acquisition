@@ -2,7 +2,7 @@
 
 ## ETL Overview
 
-The pipeline is orchestrated through the shared configuration file `config.yaml`, which defines base URLs for external APIs, retry parameters, RPS limits, logging settings, and directories for inputs and outputs. Command scripts in `scripts/` are organized by entity and rely on shared utilities for I/O, normalization, validation, and logging from the `library/` package, while auxiliary helpers live under `library.utils.cli_tools`, ensuring repeatable execution for documents, assays, activities, test items, and targets.
+The pipeline is orchestrated through the shared configuration file `config/config.yaml`, which defines base URLs for external APIs, retry parameters, RPS limits, logging settings, and directories for inputs and outputs. Command scripts in `scripts/` are organized by entity and rely on shared utilities for I/O, normalization, validation, and logging from the `library/` package, while auxiliary helpers live under `library.utils.cli_tools`, ensuring repeatable execution for documents, assays, activities, test items, and targets.
 
 ## Data Sources
 
@@ -69,7 +69,7 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 
 ## Project Structure
 
-* **`config.yaml`** — Central configuration for APIs, limits, paths, reference data, and parameters of each subsystem.
+* **`config/config.yaml`** — Central configuration for APIs, limits, paths, reference data, and parameters of each subsystem.
 * **`scripts/`** — CLI wrappers for entity loading, quality reporting, and dictionary maintenance; every command covers input reading, client calls, normalization, validation, and export.
 * **`library/`** — Core business logic: API clients, post-processing (documents, targets, assays), normalization, validation, logging, CSV operations, and sidecar handling.
 * **`schemas/`** — `pandera` schemas and normalization routines for every entity.

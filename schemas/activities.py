@@ -30,7 +30,7 @@ _ALLOWED_ACTION_TYPES = {
 def _load_standard_type_values() -> tuple[str, ...]:
     """Return configured standard type values if available."""
 
-    config_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    config_path = Path(__file__).resolve().parents[1] / "config" / "config.yaml"
     try:
         with config_path.open("r", encoding="utf8") as handle:
             config = yaml.safe_load(handle) or {}

@@ -20,6 +20,7 @@ from ..config import Config, ConfigError, load_config
 from ..logging_setup import Logger, LoggerConfig
 from ..logging_setup import configure_logger as _configure_logger
 from ..version import require_python_version
+from ..utils.config import DEFAULT_CONFIG_RELATIVE
 
 require_python_version()
 
@@ -202,7 +203,7 @@ def build_parser(
         "--config",
         dest="config",
         type=path_argument,
-        default=Path("config.yaml"),
+        default=DEFAULT_CONFIG_RELATIVE,
         help="YAML configuration file",
     )
     parser.add_argument(
@@ -242,7 +243,7 @@ def build_root_parser() -> tuple[
         "--config",
         dest="config",
         type=path_argument,
-        default=Path("config.yaml"),
+        default=DEFAULT_CONFIG_RELATIVE,
         help="YAML configuration file",
     )
     root.add_argument(
