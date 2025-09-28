@@ -147,7 +147,6 @@
 | PubMed.Issue | число/строка | PubMed API | Номер выпуска из PubMed.|
 | PubMed.StartPage | число/строка | PubMed API | Стартовая страница.|
 | PubMed.EndPage | число/строка | PubMed API | Конечная страница.|
-| PubMed.PublicationType | строка | PubMed API | Сырые термины типов публикаций.|
 | PubMed.MeSH_Descriptors | строка | PubMed API | Перечень MeSH-дескрипторов.|
 | PubMed.MeSH_Qualifiers | строка | PubMed API | Перечень MeSH-квалификаторов.|
 | PubMed.ChemicalList | строка | PubMed API | Перечень химических сущностей.|
@@ -161,12 +160,10 @@
 | PubMed.ISSN | строка | PubMed API | ISSN журнала.|
 | scholar.PMID | число/строка | Semantic Scholar | Привязанный PubMed ID.|
 | scholar.Venue | строка | Semantic Scholar | Площадка/журнал в Semantic Scholar.|
-| scholar.PublicationTypes | строка | Semantic Scholar | Типы публикаций.|
 | scholar.SemanticScholarId | строка | Semantic Scholar | Внутренний ID Semantic Scholar.|
 | scholar.ExternalIds | строка | Semantic Scholar | Внешние идентификаторы (JSON).|
 | scholar.DOI | строка | Semantic Scholar | DOI из Semantic Scholar.|
 | scholar.Error | строка | Semantic Scholar | Диагностика ошибок вызова.|
-| OpenAlex.PublicationTypes | строка | OpenAlex | Типы публикаций (список).|
 | OpenAlex.TypeCrossref | строка | OpenAlex/Crossref | Классификация Crossref, возвращаемая OpenAlex.|
 | OpenAlex.Genre | строка | OpenAlex | Жанр публикации.|
 | OpenAlex.Id | строка | OpenAlex | Идентификатор записи OpenAlex.|
@@ -187,6 +184,8 @@
 | OpenAlex.is_review | булево/строка | Постобработка | Флаг «обзор» по данным OpenAlex.|
 | pipeline_version | строка | Пайплайн | Версия пакета `chembl-data-acquisition`.|
 | timestamp_utc | строка (ISO 8601) | Пайплайн | Время формирования выгрузки.|
+
+> **Примечание:** Сырые списки типов публикаций нормализуются в булевые поля `*.is_review`, которые дают каноничный признак обзора для всех источников.
 
 ### target.csv (финализированный экспорт)
 - **Назначение:** унифицированная таблица белковых мишеней с объединением атрибутов ChEMBL, UniProt и IUPHAR, приведённая к детерминированному порядку колонок и форматам, совместимым с исходной BI-процессингом.
