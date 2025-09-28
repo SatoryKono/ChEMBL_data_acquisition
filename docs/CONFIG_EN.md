@@ -25,7 +25,7 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `chembl_base` | `https://www.ebi.ac.uk/chembl/api/data` | Base URL for the ChEMBL REST API. |
 | `timeout_connect` | `5` | Connection timeout in seconds. |
 | `timeout_read` | `30` | Read timeout in seconds. |
-| `retries` | `3` | HTTP retry attempts handled by `requests`. |
+| `retries` | `3` | Maximum number of attempts performed by higher-level clients; the shared HTTP adapter does not retry automatically. |
 | `backoff_factor` | `0.5` | Multiplier for exponential backoff between retries. |
 | `rps` | `20` | Allowed requests per second for the rate limiter. |
 | `burst` | `20` | Bucket size used by the token bucket limiter. |
@@ -43,12 +43,16 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs. |
-| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. |
+| `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
 | `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
 | `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
 | `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
+| `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
+| `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
+| `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
+| `fallback_single_limit` | `null` | Caps the number of single-molecule fallback requests performed after bulk fetching fails; `null` keeps the fallback unlimited. |
 
 ### Pipelines (`sources.chembl.pipelines`)
 
@@ -82,43 +86,43 @@ This block controls derived annotations appended to every activity row. It works
 
 ##### Action type labelling (`activity_enrichment.action_type`)
 
-* `enabled` — master switch (`true` by default).【F:config.yaml†L192-L193】
-* `column` — name of the output column that stores the resolved label (`action_type`).【F:config.yaml†L194-L194】
+* `enabled` — master switch (`true` by default).
+* `column` — name of the output column that stores the resolved label (`action_type`).
 * Logging flags control diagnostics when the source data does not produce a value:
-  * `log_missing` emits a warning when the label cannot be determined (`true`).【F:config.yaml†L195-L195】
-  * `log_distribution` prints summary statistics after enrichment (`true`).【F:config.yaml†L196-L196】
+  * `log_missing` emits a warning when the label cannot be determined (`true`).
+  * `log_distribution` prints summary statistics after enrichment (`true`).
 * `metrics` maps activity measurements (IC50, EC50, etc.) to default labels such as `inhibition` or `activation`. Extend the
-  mapping to support additional metrics.【F:config.yaml†L197-L202】
+  mapping to support additional metrics.
 * `triages`, `functionality` and `mechanism` are optional overrides for explicit text matches. The defaults keep `triages` and
-  `mechanism` empty while normalising common functional annotations (agonist, antagonist, etc.).【F:config.yaml†L203-L210】
+  `mechanism` empty while normalising common functional annotations (agonist, antagonist, etc.).
 * The helper field lists (`triage_fields`, `functionality_fields`, `mechanism_fields`) decide which columns are scanned for
-  keywords or manual labels before applying metric defaults.【F:config.yaml†L211-L219】
+  keywords or manual labels before applying metric defaults.
 * `allowlist` enumerates labels allowed in the output. Values not present in the list fall back to `fallback` after logging the
-  anomaly.【F:config.yaml†L220-L227】
+  anomaly.
 * `positive_label` and `negative_label` define human-readable aliases used when the data represents positive/negative modulators
-  (`PAM`/`NAM`). The neutral fallback is `unknown`.【F:config.yaml†L228-L230】
+  (`PAM`/`NAM`). The neutral fallback is `unknown`.
 
 ##### Activity properties flattening (`activity_enrichment.activity_properties`)
 
-* `enabled` — feature switch (`true`).【F:config.yaml†L231-L233】
-* `column` — name of the raw JSON-like source column (`activity_properties`).【F:config.yaml†L233-L233】
-* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).【F:config.yaml†L234-L234】
-* `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).【F:config.yaml†L235-L237】
+* `enabled` — feature switch (`true`).
+* `column` — name of the raw JSON-like source column (`activity_properties`).
+* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).
+* `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).
 * `separator` and `pair_separator` control formatting when properties are concatenated (`"; "` between pairs,
-  `"="` between name and value).【F:config.yaml†L238-L239】
-* `drop_source_column` removes the original structured column after summarisation (`true`).【F:config.yaml†L240-L240】
-* Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.【F:config.yaml†L241-L242】
+  `"="` between name and value).
+* `drop_source_column` removes the original structured column after summarisation (`true`).
+* Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.
 * `allowlist` restricts which property groups are retained (measurement, assay, comments, effect_features, triage, mechanism,
-  functionality).【F:config.yaml†L243-L250】
+  functionality).
 * `hash_column` stores a deterministic fingerprint of the preserved properties (`properties_hash`), enabling change detection in
-  downstream jobs.【F:config.yaml†L251-L251】
+  downstream jobs.
 
 ##### Activity bounds (`activity_bounds`)
 
 The activity pipeline enriches raw ChEMBL payloads with canonical lower/upper bounds using the rules implemented by
 `compute_activity_bounds` in `scripts/get_activity_data.py`. Configuration for this feature is stored in the
 `activity_bounds` block (separate from `activity_enrichment`) and controls the following deterministic stages (executed
-in order for every row):【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+in order for every row):
 
 1. Use `standard_lower_value`/`standard_upper_value` when both are populated.
 2. Combine `standard_value` with the opposite explicit limit (for example `standard_upper_value`) and fill the missing bound.
@@ -143,7 +147,7 @@ export CHEMBL_DA__ACTIVITY_BOUNDS__ENABLE_FROM_RELATION=false
 export CHEMBL_DA__ACTIVITY_BOUNDS__ROUNDING_DIGITS=2
 ```
 
-The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; enrichment-specific options must be changed in the configuration file or via the corresponding `CHEMBL_DA__ACTIVITY_BOUNDS__*` variables. CLI values still win over file/env defaults for overlapping keys declared on the parser (column, batch size, limits).【F:scripts/get_activity_data.py†L536-L603】
+The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; enrichment-specific options must be changed in the configuration file or via the corresponding `CHEMBL_DA__ACTIVITY_BOUNDS__*` variables. CLI values still win over file/env defaults for overlapping keys declared on the parser (column, batch size, limits).
 
 #### Assay pipeline (`assay`)
 
@@ -237,11 +241,44 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | `uniprot.api` | `https://rest.uniprot.org` | `timeout_connect=5`, `timeout_read=30`, `rps=25`, `burst=25`, `delay=0.25` seconds. |
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5` seconds, `timeout=300.0` seconds, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
-| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | `timeout_connect=5`, `timeout_read=60`, `retries=3`, `rps=5`, `burst=5`, `delay=0.2`, `cache_ttl=3600`, `prefer_local_values=true`, `cache_ttl_hours=null`. |
+| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | See [detailed PubChem options](#pubchem-lookups-sourcespubchem). |
 | `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 | `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 
 All URLs must comply with the respective service usage policies, including rate limits and contact information requirements.
+
+### PubChem lookups (`sources.pubchem`)
+
+PubChem augmentation is primarily used by the test item pipeline. Every key below mirrors [`config.yaml`](../config.yaml) and
+can be overridden through environment variables (see [Environment variables](#environment-variables)). The table lists both the
+auto-generated `CHEMBL_DA_SOURCES_PUBCHEM_*` aliases and the generic `CHEMBL_DA__SOURCES__PUBCHEM__*` form. The base URL also
+supports the short alias documented in the [Environment variable aliases](#environment-variables) table.
+
+| Key | Default | Description | Environment override(s) |
+| --- | --- | --- | --- |
+| `enable` | `true` | Master switch enabling PubChem enrichment for test item records. | `CHEMBL_DA_SOURCES_PUBCHEM_ENABLE`, `CHEMBL_DA__SOURCES__PUBCHEM__ENABLE` |
+| `base` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | PubChem PUG REST endpoint queried for metadata. | `CHEMBL_DA_PUBCHEM_BASE`, `CHEMBL_DA_SOURCES_PUBCHEM_BASE`, `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `timeout_connect` | `5` | Connection timeout (seconds) for establishing new HTTP sessions. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_CONNECT`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_CONNECT` |
+| `timeout_read` | `60` | Read timeout (seconds) waiting for server responses. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_READ`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_READ` |
+| `timeout_seconds` | `30.0` | Upper bound for a single CID resolution attempt, including retries. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_SECONDS` |
+| `retries` | `3` | Number of attempts executed by the PubChem retry loop before giving up. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
+| `rps` | `5` | Per-service request-per-second budget used by the rate limiter. | `CHEMBL_DA_SOURCES_PUBCHEM_RPS`, `CHEMBL_DA__SOURCES__PUBCHEM__RPS` |
+| `burst` | `5` | Token bucket size paired with the `rps` limit. | `CHEMBL_DA_SOURCES_PUBCHEM_BURST`, `CHEMBL_DA__SOURCES__PUBCHEM__BURST` |
+| `delay` | `0.2` | Fixed pause (seconds) inserted between retry attempts. | `CHEMBL_DA_SOURCES_PUBCHEM_DELAY`, `CHEMBL_DA__SOURCES__PUBCHEM__DELAY` |
+| `backoff_initial_seconds` | `0.5` | Initial exponential backoff applied after 429/5xx responses. | `CHEMBL_DA_SOURCES_PUBCHEM_BACKOFF_INITIAL_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__BACKOFF_INITIAL_SECONDS` |
+| `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Order in which lookup strategies are attempted when resolving PubChem CIDs. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
+| `cache_ttl` | `3600` | Lifespan (seconds) of the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
+| `cache_ttl_hours` | `null` | Optional expiry (hours) for the persisted CID cache; `null` keeps entries indefinitely. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
+| `cid_cache_path` | `null` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `batch_size` | `50` | Number of rows processed per PubChem batch request. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
+| `prefer_local_smiles` | `false` | Skip remote lookups when local SMILES/InChIKey columns are already populated. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
+| `prefer_local_values` | `true` | Preserve existing `pubchem_*` columns when lookups return empty payloads. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
+| `use_parent_for_salts` | `true` | Escalate to parent structures when salt-specific lookups fail. | `CHEMBL_DA_SOURCES_PUBCHEM_USE_PARENT_FOR_SALTS`, `CHEMBL_DA__SOURCES__PUBCHEM__USE_PARENT_FOR_SALTS` |
+| `allow_polymer` | `false` | Permit lookups that resolve to polymer or mixture entries. | `CHEMBL_DA_SOURCES_PUBCHEM_ALLOW_POLYMER`, `CHEMBL_DA__SOURCES__PUBCHEM__ALLOW_POLYMER` |
+| `write_not_found_literal` | `false` | Write the literal `Not Found` when PubChem fails to return a CID. | `CHEMBL_DA_SOURCES_PUBCHEM_WRITE_NOT_FOUND_LITERAL`, `CHEMBL_DA__SOURCES__PUBCHEM__WRITE_NOT_FOUND_LITERAL` |
+
+> Tip: `resolve_order` accepts any combination of supported strategies—adjust the list to prioritise cached values or specific
+> identifiers while keeping `cache` first to honour warm CID lookups.
 
 ## Local resources (`local`)
 
@@ -254,6 +291,10 @@ All URLs must comply with the respective service usage policies, including rate 
 | `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
 | `uniprot_data_dir` | `dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
+
+
+The `dictionary/_target` folder mirrors the current repository layout; all
+IUPHAR and UniProt lookups are stored there by default.
 
 
 ### I/O defaults (`local.io`)

@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from .cli import LoggerConfig, apply_config_overrides, configure_logger
+from . import cli
+from .cli import LoggerConfig, configure_logger
 from .cli import build_parser as base_parser
 from .config import Config, ensure_dirs, print_config, session_with_retry
 from .csv_utils import write_csv_deterministic
@@ -87,7 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
-        cfg = apply_config_overrides(
+        cfg = cli.apply_config_overrides(
             args,
             parser,
             args.config,

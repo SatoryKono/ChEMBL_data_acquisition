@@ -1,4 +1,3 @@
-
 """Utilities for classifying organism cellularity.
 
 This module provides helpers to derive a ``unicellular_organism`` flag
@@ -7,9 +6,8 @@ from basic taxonomic annotations available in ChEMBL dictionaries.
 
 from __future__ import annotations
 
-
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -36,6 +34,7 @@ DEFAULT_SUPERKINGDOM_COLUMN = "lineage_superkingdom"
 DEFAULT_PHYLUM_COLUMN = "lineage_phylum"
 DEFAULT_CLASS_COLUMN = "lineage_class"
 DEFAULT_OUTPUT_COLUMN = "type"
+DEFAULT_TAXON_ID_COLUMN = "taxon_id"
 
 DEFAULT_NULL_LITERALS: frozenset[str] = frozenset({"nan", "none", "-", "na"})
 TAXONOMY_SEPARATORS: Sequence[str] = ("|", ";")
@@ -114,7 +113,9 @@ class OrganismClassificationRules:
 DEFAULT_RULES = OrganismClassificationRules()
 
 
-def normalize(value: object | None, *, rules: OrganismClassificationRules = DEFAULT_RULES) -> str:
+def normalize(
+    value: object | None, *, rules: OrganismClassificationRules = DEFAULT_RULES
+) -> str:
     """Return a lowercase normalised taxonomy token."""
 
     if isinstance(value, pd.Series):
@@ -161,7 +162,6 @@ def classify_by_lineage(
     if superkingdom in rules.unicellular_superkingdoms:
         return rules.label_unicellular()
 
-
     if any(token in rules.unicellular_phyla for token in _split_taxonomy(phylum)):
         return rules.label_unicellular()
     if any(token in rules.unicellular_classes for token in _split_taxonomy(klass)):
@@ -199,7 +199,6 @@ def classify_record(
 def add_cellularity(
     df: pd.DataFrame,
     *,
-
     genus_column: str = DEFAULT_GENUS_COLUMN,
     superkingdom_column: str = DEFAULT_SUPERKINGDOM_COLUMN,
     phylum_column: str = DEFAULT_PHYLUM_COLUMN,
@@ -236,9 +235,29 @@ def add_cellularity_smart(
     phylum_col: str = DEFAULT_PHYLUM_COLUMN,
     class_col: str = DEFAULT_CLASS_COLUMN,
     output_col: str = DEFAULT_OUTPUT_COLUMN,
+    taxon_id_col: str = DEFAULT_TAXON_ID_COLUMN,
     rules: OrganismClassificationRules = DEFAULT_RULES,
 ) -> pd.DataFrame:
-    """Backward-compatible wrapper around :func:`add_cellularity`."""
+    """Backward-compatible wrapper around :func:`add_cellularity`.
+
+    Parameters
+    ----------
+    df:
+        Input frame expected to contain the lineage columns used for
+        classification.
+    genus_col, superkingdom_col, phylum_col, class_col:
+        Column names storing taxonomy annotations.
+    output_col:
+        Column receiving the inferred cellularity labels.
+    taxon_id_col:
+        Retained for backwards compatibility with legacy call sites. The
+        identifier is not required for lineage-based inference and therefore
+        ignored.
+    rules:
+        Rule set controlling the inference heuristics.
+    """
+
+    _ = taxon_id_col  # Intentionally ignored; maintained for compatibility.
 
     return add_cellularity(
         df,

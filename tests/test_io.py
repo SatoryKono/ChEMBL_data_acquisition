@@ -153,6 +153,45 @@ def test_read_ids_custom_na_marker(tmp_path: Path) -> None:
     assert ids == ["1", "2"]
 
 
+def test_read_ids_falls_back_to_alternative_encoding(tmp_path: Path) -> None:
+    """``read_ids`` retries with configured fallback encodings."""
+
+    path = tmp_path / "ids.csv"
+    path.write_bytes("id\nCHEMBL±1\n".encode("windows-1251"))
+
+    cfg = IoCfg(csv_encoding="utf-8-sig")
+    ids = list(io.read_ids(path, column="id", cfg=cfg))
+    assert ids == ["CHEMBL±1"]
+
+
+def test_read_ids_uses_locale_encoding_when_config_lacks_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Locale preferred encoding is appended when custom fallbacks are absent."""
+
+    path = tmp_path / "ids.csv"
+    path.write_bytes("id\nЖ\n".encode("windows-1251"))
+
+    cfg = IoCfg(csv_encoding="utf-8", csv_fallback_encodings=())
+
+    monkeypatch.setattr(io.locale, "getpreferredencoding", lambda _=False: "windows-1251")
+
+    ids = list(io.read_ids(path, column="id", cfg=cfg))
+    assert ids == ["Ж"]
+
+
+def test_read_ids_raises_when_all_encodings_fail(tmp_path: Path) -> None:
+    """``read_ids`` surfaces decoding errors after exhausting fallbacks."""
+
+    path = tmp_path / "ids.csv"
+    path.write_bytes("id\n1\n".encode("utf-16"))
+
+    cfg = IoCfg(csv_encoding="utf-8", csv_fallback_encodings=())
+    with pytest.raises(ValueError) as exc:
+        list(io.read_ids(path, column="id", cfg=cfg))
+    assert "failed to decode CSV" in str(exc.value)
+
+
 def test_write_csv_missing_key_column(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"a": [1], "b": [2]})
     path = tmp_path / "out.csv"

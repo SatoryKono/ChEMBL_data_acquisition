@@ -47,6 +47,22 @@ def test_activities_schema_validation() -> None:
         ActivitiesSchema.validate(invalid)
 
 
+def test_activities_schema_accepts_configured_standard_types() -> None:
+    """Configured standard types are permitted by the schema."""
+
+    df = pd.DataFrame(
+        {
+            "activity_id": ["1", "2", "3"],
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
+            "assay_chembl_id": ["CHEMBL0", "CHEMBL0", "CHEMBL1"],
+            "standard_value": [1.0, 2.0, 3.0],
+            "standard_type": ["IC50", "EC50", "KD"],
+        }
+    )
+
+    ActivitiesSchema.validate(df)
+
+
 def test_activities_schema_accepts_object_dtypes() -> None:
     """``standard_value`` validates with object dtype."""
 

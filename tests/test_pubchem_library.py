@@ -158,6 +158,58 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
     pl.make_request("https://example.org", cfg)
 
     assert sleeps == [1]
+    assert attempts["n"] == 2
+
+
+def test_make_request_aborts_when_timeout_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``make_request`` stops retrying when the overall timeout is exceeded."""
+
+    class FakeMonotonic:
+        def __init__(self) -> None:
+            self.values = iter([0.0, 0.0, 6.0])
+
+        def __call__(self) -> float:
+            try:
+                return next(self.values)
+            except StopIteration:
+                return 6.0
+
+    class Limiter:
+        def acquire(self) -> None:  # pragma: no cover - simple stub
+            return None
+
+    attempts = {"n": 0}
+    warnings: list[str] = []
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> None:
+        attempts["n"] += 1
+        raise requests.Timeout("hanging request")
+
+    monkeypatch.setattr(pl, "monotonic", FakeMonotonic())
+    monkeypatch.setattr(pl, "get_limiter", lambda *args, **kwargs: Limiter())
+    monkeypatch.setattr(pl._session, "get", fake_get)
+    monkeypatch.setattr(pl, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        pl.logger,
+        "warning",
+        lambda event, *args, **kwargs: warnings.append(event),
+    )
+    pl._CACHE = None
+
+    cfg = pl.PubChemCfg(
+        retries=5,
+        delay=0,
+        backoff_initial_seconds=0,
+        timeout_seconds=5,
+    )
+
+    result = pl.make_request("https://example.org", cfg)
+
+    assert result is None
+    assert attempts["n"] == 1
+    assert "request_timeout" in warnings
 
 
 @responses.activate
@@ -237,7 +289,9 @@ def test_get_properties_returns_none_for_missing() -> None:
         f"{cfg.base.rstrip('/')}/compound/cid/{cid}/property/"
         "MolecularFormula,IUPACName,IsomericSMILES,CanonicalSMILES,InChI,InChIKey/JSON"
     )
-    responses.add(responses.GET, url, json={"PropertyTable": {"Properties": [{}]}}, status=200)
+    responses.add(
+        responses.GET, url, json={"PropertyTable": {"Properties": [{}]}}, status=200
+    )
 
     props = pl.get_properties(cid, cfg)
 

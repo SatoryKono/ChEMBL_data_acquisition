@@ -3,7 +3,7 @@ import requests
 
 from library import openalex_crossref_library as ocl
 from library import rate_limiter as rl
-from library.config import ApiCfg, Config, CrossRefCfg, OpenAlexCfg
+from library.config import Config
 
 
 def test_fetch_openalex_uses_cfg(monkeypatch) -> None:

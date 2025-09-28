@@ -12,10 +12,7 @@ import requests
 
 from library import rate_limiter as rl
 from library.config import (
-    ApiCfg,
     Config,
-    CrossRefCfg,
-    OpenAlexCfg,
     PubMedCfg,
     SemanticScholarCfg,
 )
@@ -101,6 +98,36 @@ def test_do_request_404() -> None:
     )
     assert data is None
     assert err == "PMID not found"
+
+
+def test_do_request_attempt_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retry loop performs ``retries + 1`` total attempts."""
+
+    statuses = [500, 500, 200]
+    calls: list[int] = []
+
+    def fake_make_request(*args: Any, **kwargs: Any) -> tuple[int, str, Any, str]:
+        idx = len(calls)
+        calls.append(idx)
+        status = statuses[idx]
+        if status >= 500:
+            return status, "error", None, ""
+        return status, "{}", {"ok": True}, ""
+
+    monkeypatch.setattr(pq, "_make_request", fake_make_request)
+
+    data, err = pq._do_request(
+        cast(
+            requests.Session, DummySession(DummyResponse(200, text="{}", json_data={}))
+        ),
+        "http://example.org",
+        delay=0,
+        retries=2,
+    )
+
+    assert data == {"ok": True}
+    assert err == ""
+    assert len(calls) == 3
 
 
 def test_handle_response_retryable() -> None:

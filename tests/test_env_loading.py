@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from library.config import load_config
+import pytest
+
+from library.config import ConfigError, load_config
 
 
 def test_env_file_overrides(tmp_path, monkeypatch) -> None:
@@ -13,9 +15,7 @@ def test_env_file_overrides(tmp_path, monkeypatch) -> None:
     )
 
     env_path = tmp_path / ".env"
-    env_path.write_text(
-        "CHEMBL_DA__SOURCES__CHEMBL__API__RPS=7\n", encoding="utf8"
-    )
+    env_path.write_text("CHEMBL_DA__SOURCES__CHEMBL__API__RPS=7\n", encoding="utf8")
 
     for line in env_path.read_text(encoding="utf8").splitlines():
         key, value = line.split("=", 1)
@@ -27,3 +27,29 @@ def test_env_file_overrides(tmp_path, monkeypatch) -> None:
 
     cfg = load_config(cfg_path)
     assert cfg.api.rps == 7
+
+
+def test_env_override_invalid_value(tmp_path, monkeypatch) -> None:
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("", encoding="utf8")
+
+    monkeypatch.setenv("CHEMBL_DA_RPS", "0")
+
+    with pytest.raises(
+        ConfigError,
+        match=r"CHEMBL_DA_RPS \(sources\.chembl\.api\.rps\) must be ≥1",
+    ):
+        load_config(cfg_path)
+
+
+def test_env_override_invalid_yaml(tmp_path, monkeypatch) -> None:
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("", encoding="utf8")
+
+    monkeypatch.setenv("CHEMBL_DA_RPS", "[1, 2")
+
+    with pytest.raises(
+        ConfigError,
+        match=r"CHEMBL_DA_RPS \(sources\.chembl\.api\.rps\) must be an integer",
+    ):
+        load_config(cfg_path)

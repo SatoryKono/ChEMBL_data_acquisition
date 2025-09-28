@@ -25,7 +25,7 @@
 | `chembl_base` | `https://www.ebi.ac.uk/chembl/api/data` | Базовый URL ChEMBL REST API. |
 | `timeout_connect` | `5` | Таймаут установки соединения (сек.). |
 | `timeout_read` | `30` | Таймаут ожидания ответа (сек.). |
-| `retries` | `3` | Количество HTTP-повторов. |
+| `retries` | `3` | Максимум попыток, выполняемых клиентскими обёртками; общий HTTP-адаптер повторы не делает. |
 | `backoff_factor` | `0.5` | Множитель экспоненциального backoff между повторами. |
 | `rps` | `20` | Лимит запросов в секунду для rate limiter. |
 | `burst` | `20` | Размер «ведра» токенов. |
@@ -43,12 +43,16 @@
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами. |
-| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; переопределяется переменной `CHEMBL_DA_MOLECULE_CATALOG_SQLITE`. |
+| `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами; переопределяется через `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; используйте `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` или каноничную форму `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`. |
 | `endpoint` | `molecule` | Ресурс REST API ChEMBL, из которого подкачиваются данные при обновлении кэша. |
 | `child_field` | `molecule_chembl_id` | Поле ответа API с идентификатором дочерней молекулы. |
 | `parent_field` | `parent_molecule_chembl_id` | Поле ответа API с идентификатором родительской молекулы. |
+| `force_refresh_existing` | `false` | При `true` пересобирает связи родитель→потомок даже для записей с уже заполненным родителем, заставляя использовать данные из кэша/ChEMBL. |
+| `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | Список полей, которые запрашиваются у ChEMBL при построении или обновлении каталога; расширяйте его для дополнительных атрибутов. |
+| `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Набор фильтров, добавляемых ко всем запросам; по умолчанию выбирает только записи с заполненным родителем в ChEMBL. |
 | `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
+| `fallback_single_limit` | `null` | Ограничение на число одиночных fallback-запросов после неудачных батчей; `null` оставляет fallback без лимита. |
 
 ### Пайплайны (`sources.chembl.pipelines`)
 
@@ -82,39 +86,39 @@
 
 ##### Маркировка типа действия (`activity_enrichment.action_type`)
 
-* `enabled` — главный переключатель (по умолчанию `true`).【F:config.yaml†L192-L193】
-* `column` — название выходной колонки с итоговой меткой (`action_type`).【F:config.yaml†L194-L194】
+* `enabled` — главный переключатель (по умолчанию `true`).
+* `column` — название выходной колонки с итоговой меткой (`action_type`).
 * Флаги логирования помогают отслеживать диагностические случаи:
-  * `log_missing` выводит предупреждение, если метка не определена (`true`).【F:config.yaml†L195-L195】
-  * `log_distribution` печатает итоговую статистику распределения (`true`).【F:config.yaml†L196-L196】
+  * `log_missing` выводит предупреждение, если метка не определена (`true`).
+  * `log_distribution` печатает итоговую статистику распределения (`true`).
 * `metrics` сопоставляет типы измерений (IC50, EC50 и т.д.) с базовыми метками (`inhibition`, `activation`, `binding`). Список
-  расширяется при необходимости.【F:config.yaml†L197-L202】
+  расширяется при необходимости.
 * `triages`, `functionality`, `mechanism` — словари переопределений для текстовых совпадений. По умолчанию заполнены только
-  типичные функциональные роли (agonist, antagonist и пр.).【F:config.yaml†L203-L210】
+  типичные функциональные роли (agonist, antagonist и пр.).
 * Списки `triage_fields`, `functionality_fields`, `mechanism_fields` задают, какие исходные колонки просматриваются перед применением
-  значений по метрикам.【F:config.yaml†L211-L219】
-* `allowlist` ограничивает допустимые метки; значения вне списка заменяются на `fallback` после логирования отклонения.【F:config.yaml†L220-L227】
+  значений по метрикам.
+* `allowlist` ограничивает допустимые метки; значения вне списка заменяются на `fallback` после логирования отклонения.
 * `positive_label` и `negative_label` задают читаемые ярлыки для положительных/отрицательных модуляторов (`PAM`/`NAM`), а
-  `fallback` равен `unknown`.【F:config.yaml†L228-L230】
+  `fallback` равен `unknown`.
 
 ##### Сводка свойств активности (`activity_enrichment.activity_properties`)
 
-* `enabled` — флаг включения (`true`).【F:config.yaml†L231-L233】
-* `column` — исходная колонка со структурированными свойствами (`activity_properties`).【F:config.yaml†L233-L233】
-* `summary_column` — колонка для текстового резюме (`activity_property_summary`).【F:config.yaml†L234-L234】
-* `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).【F:config.yaml†L235-L237】
-* `separator` и `pair_separator` управляют форматированием списка свойств (`"; "` между парами и `"="` между названием и значением).【F:config.yaml†L238-L239】
-* `drop_source_column` удаляет исходную структурированную колонку после агрегации (`true`).【F:config.yaml†L240-L240】
-* Флаги логирования по умолчанию выключены (`log_missing=false`, `log_distribution=false`).【F:config.yaml†L241-L242】
+* `enabled` — флаг включения (`true`).
+* `column` — исходная колонка со структурированными свойствами (`activity_properties`).
+* `summary_column` — колонка для текстового резюме (`activity_property_summary`).
+* `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).
+* `separator` и `pair_separator` управляют форматированием списка свойств (`"; "` между парами и `"="` между названием и значением).
+* `drop_source_column` удаляет исходную структурированную колонку после агрегации (`true`).
+* Флаги логирования по умолчанию выключены (`log_missing=false`, `log_distribution=false`).
 * `allowlist` ограничивает перечень сохраняемых групп (measurement, assay, comments, effect_features, triage, mechanism,
-  functionality).【F:config.yaml†L243-L250】
-* `hash_column` хранит детерминированный отпечаток итоговых свойств (`properties_hash`) для отслеживания изменений далее по цепочке.【F:config.yaml†L251-L251】
+  functionality).
+* `hash_column` хранит детерминированный отпечаток итоговых свойств (`properties_hash`) для отслеживания изменений далее по цепочке.
 
 ##### Границы активности (`activity_bounds`)
 
 Пайплайн активностей дополняет выгрузку нормализованными границами с помощью `compute_activity_bounds` в
 `scripts/get_activity_data.py`. Настройки собраны в отдельном блоке `activity_bounds` (вне `activity_enrichment`) и управляют
-последовательностью детерминированных шагов, которые выполняются для каждой строки в следующем порядке：【F:scripts/get_activity_data.py†L212-L353】【F:library/config.py†L371-L388】
+последовательностью детерминированных шагов, которые выполняются для каждой строки в следующем порядке：
 
 1. Использовать готовые `standard_lower_value`/`standard_upper_value`, если обе границы заданы.
 2. Скомбинировать `standard_value` с противоположной границей и заполнить пропущенное значение.
@@ -138,7 +142,7 @@ export CHEMBL_DA__ACTIVITY_BOUNDS__ENABLE_FROM_RELATION=false
 export CHEMBL_DA__ACTIVITY_BOUNDS__ROUNDING_DIGITS=2
 ```
 
-CLI-параметры имеют приоритет над YAML и окружением только для ключей, которые явно прокинуты в парсер (колонка, размер батча, лимит, `--dry-run`). Остальные изменения выполняются через файл настроек или переменные окружения `CHEMBL_DA__ACTIVITY_BOUNDS__*`.【F:scripts/get_activity_data.py†L536-L603】
+CLI-параметры имеют приоритет над YAML и окружением только для ключей, которые явно прокинуты в парсер (колонка, размер батча, лимит, `--dry-run`). Остальные изменения выполняются через файл настроек или переменные окружения `CHEMBL_DA__ACTIVITY_BOUNDS__*`.
 
 #### Пайплайн ассайев (`assay`)
 
@@ -229,11 +233,44 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `uniprot.api` | `https://rest.uniprot.org` | `timeout_connect=5`, `timeout_read=30`, `rps=25`, `burst=25`, `delay=0.25`. |
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5`, `timeout=300.0`, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
-| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | `timeout_connect=5`, `timeout_read=60`, `retries=3`, `rps=5`, `burst=5`, `delay=0.2`, `cache_ttl=3600`, `prefer_local_values=true`, `cache_ttl_hours=null`. |
+| `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | См. [детальные настройки PubChem](#pubchem-sourcespubchem). |
 | `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 | `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
 
 Соблюдайте требования сервисов по rate limit и указанию контактной информации.
+
+### PubChem (`sources.pubchem`)
+
+Параметры PubChem применяются прежде всего в пайплайне `testitem`. Каждый ключ отражает содержимое [`config.yaml`](../config.yaml)
+и может быть переопределён переменными окружения (см. [Переменные окружения](#переменные-окружения)). В таблице указаны и
+автогенерируемые алиасы `CHEMBL_DA_SOURCES_PUBCHEM_*`, и универсальный формат `CHEMBL_DA__SOURCES__PUBCHEM__*`. Для базового URL
+доступен короткий алиас из таблицы в разделе «Переменные окружения».
+
+| Ключ | Значение по умолчанию | Описание | Переменные окружения |
+| --- | --- | --- | --- |
+| `enable` | `true` | Главный переключатель обогащения данными PubChem. | `CHEMBL_DA_SOURCES_PUBCHEM_ENABLE`, `CHEMBL_DA__SOURCES__PUBCHEM__ENABLE` |
+| `base` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | REST‑эндпоинт PUG, к которому выполняются запросы. | `CHEMBL_DA_PUBCHEM_BASE`, `CHEMBL_DA_SOURCES_PUBCHEM_BASE`, `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `timeout_connect` | `5` | Таймаут установления соединения (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_CONNECT`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_CONNECT` |
+| `timeout_read` | `60` | Таймаут ожидания ответа (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_READ`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_READ` |
+| `timeout_seconds` | `30.0` | Максимальная длительность одной попытки разрешения CID с учётом повторов. | `CHEMBL_DA_SOURCES_PUBCHEM_TIMEOUT_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__TIMEOUT_SECONDS` |
+| `retries` | `3` | Число попыток, которое выполнит цикл повторов PubChem, прежде чем сдаться. | `CHEMBL_DA_SOURCES_PUBCHEM_RETRIES`, `CHEMBL_DA__SOURCES__PUBCHEM__RETRIES` |
+| `rps` | `5` | Локальный лимит запросов в секунду. | `CHEMBL_DA_SOURCES_PUBCHEM_RPS`, `CHEMBL_DA__SOURCES__PUBCHEM__RPS` |
+| `burst` | `5` | Ёмкость токен-бакета, связанного с `rps`. | `CHEMBL_DA_SOURCES_PUBCHEM_BURST`, `CHEMBL_DA__SOURCES__PUBCHEM__BURST` |
+| `delay` | `0.2` | Пауза между повторами (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_DELAY`, `CHEMBL_DA__SOURCES__PUBCHEM__DELAY` |
+| `backoff_initial_seconds` | `0.5` | Начальная задержка экспоненциального backoff после 429/5xx. | `CHEMBL_DA_SOURCES_PUBCHEM_BACKOFF_INITIAL_SECONDS`, `CHEMBL_DA__SOURCES__PUBCHEM__BACKOFF_INITIAL_SECONDS` |
+| `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Очерёдность стратегий при поиске PubChem CID. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
+| `cache_ttl` | `3600` | Время жизни in-memory кэша HTTP (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
+| `cache_ttl_hours` | `null` | TTL (часы) для постоянного CID-кэша; `null` отключает истечение. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
+| `cid_cache_path` | `null` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `batch_size` | `50` | Размер батча для обработчика PubChem. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
+| `prefer_local_smiles` | `false` | Пропускать запросы, если локальные SMILES/InChIKey уже заполнены. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
+| `prefer_local_values` | `true` | Сохранять существующие колонки `pubchem_*`, если ответ пуст. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
+| `use_parent_for_salts` | `true` | Переходить к родительским структурам, если соль не найдена. | `CHEMBL_DA_SOURCES_PUBCHEM_USE_PARENT_FOR_SALTS`, `CHEMBL_DA__SOURCES__PUBCHEM__USE_PARENT_FOR_SALTS` |
+| `allow_polymer` | `false` | Разрешать обработку полимеров и смесей. | `CHEMBL_DA_SOURCES_PUBCHEM_ALLOW_POLYMER`, `CHEMBL_DA__SOURCES__PUBCHEM__ALLOW_POLYMER` |
+| `write_not_found_literal` | `false` | Записывать литерал `Not Found`, если CID не найден. | `CHEMBL_DA_SOURCES_PUBCHEM_WRITE_NOT_FOUND_LITERAL`, `CHEMBL_DA__SOURCES__PUBCHEM__WRITE_NOT_FOUND_LITERAL` |
+
+> Совет: поле `resolve_order` принимает любую последовательность поддерживаемых стратегий; чаще всего полезно оставлять `cache`
+> первым, чтобы использовать прогретый кэш CID.
 
 ## Локальные ресурсы (`local`)
 
@@ -246,6 +283,9 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 | `uniprot_data_dir` | `dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
 | `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Классификация типов таргетов. |
+
+
+Каталог `dictionary/_target` отражает текущую структуру репозитория; в нём по умолчанию лежат справочники IUPHAR и выгрузки UniProt.
 
 
 > Таксономическая классификация таргетов вычисляется по данным UniProt в коде пайплайна; отдельный CSV-справочник организмов больше не требуется.

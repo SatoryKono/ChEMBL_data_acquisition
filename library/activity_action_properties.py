@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import json
+from collections.abc import Mapping
 from typing import Any
 
 import pandas as pd
@@ -46,7 +46,7 @@ def _has_value(value: Any) -> bool:
         return False
     if isinstance(value, str):
         return bool(value.strip())
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return any(_has_value(item) for item in value)
     if isinstance(value, Mapping):
         return any(_has_value(item) for item in value.values())
@@ -67,7 +67,9 @@ def _clean_structure(data: Any) -> Any:
         }
         return cleaned if cleaned else None
     if isinstance(data, list):
-        cleaned_list = [item for item in (_clean_structure(v) for v in data) if _has_value(item)]
+        cleaned_list = [
+            item for item in (_clean_structure(v) for v in data) if _has_value(item)
+        ]
         return cleaned_list if cleaned_list else None
     if isinstance(data, tuple):
         cleaned_tuple = tuple(
@@ -110,7 +112,9 @@ def _extract_effect_features(record: Mapping[str, Any]) -> dict[str, Any]:
     text = _collect_text(record)
     positive_hits = sorted({kw for kw in _POSITIVE_KEYWORDS if kw in text})
     negative_hits = sorted({kw for kw in _NEGATIVE_KEYWORDS if kw in text})
-    is_allosteric = bool(positive_hits or negative_hits or any(kw in text for kw in _ALLOSTERIC_KEYWORDS))
+    is_allosteric = bool(
+        positive_hits or negative_hits or any(kw in text for kw in _ALLOSTERIC_KEYWORDS)
+    )
     return {
         "allosteric": is_allosteric,
         "positive": bool(positive_hits),
@@ -213,7 +217,13 @@ def annotate_action_properties(df: pd.DataFrame) -> pd.DataFrame:
 
     properties: list[str] = []
     action_types: list[str | None] = []
-    for record in df.to_dict(orient="records"):
+    column_names = tuple(df.columns)
+    records_iter = (
+        dict(zip(column_names, row, strict=False))
+        for row in df.itertuples(index=False, name=None)
+    )
+
+    for record in records_iter:
         payload = build_activity_properties(record)
         features = payload.get("effect_features", {})
         action_types.append(infer_action_type(features))
@@ -230,4 +240,3 @@ __all__ = [
     "build_activity_properties",
     "infer_action_type",
 ]
-

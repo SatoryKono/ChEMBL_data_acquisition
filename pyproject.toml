@@ -18,7 +18,7 @@ dependencies = [
   "requests==2.32.5",
   "PyYAML==6.0.2",
   "openpyxl==3.1.5",
-  "pyarrow==21.0.0",
+  "pyarrow==17.0.0",
   "jsonschema==4.25.1",
   "pandera==0.26.1",
   "cachetools==5.3.2",
@@ -35,7 +35,6 @@ dev = [
   "psutil==7.0.0",
   "pytest==8.4.2",
   "pytest-cov==6.0.0",
-  "hypothesis==6.138.15",
   "responses==0.25.8",
   "ruff==0.13.0",
   "types-cachetools==6.2.0.20250827",
@@ -65,11 +64,26 @@ check-determinism = "library.utils.cli_tools.check_determinism:main"
 
 [tool.setuptools]
 py-modules = [
+  "scripts.check_determinism",
+  "scripts.chunk_io",
+  "scripts.chunk_io_main",
+  "scripts.csv_utils",
+  "scripts.csv_utils_main",
+  "scripts.dtype_inspector",
+  "scripts.dtype_inspector_main",
+  "scripts.get_activities",
   "scripts.get_activity_data",
   "scripts.get_assay_data",
-  "scripts.get_target_data",
   "scripts.get_document_data",
+  "scripts.get_document_type",
+  "scripts.get_input_initialisation",
+  "scripts.get_target_data",
   "scripts.get_testitem_data",
+  "scripts.mapper",
+  "scripts.mapper_batch_main",
+  "scripts.mapper_main",
+  "scripts.table_quality",
+  "scripts.table_quality_main",
 ]
 
 [tool.setuptools.packages.find]

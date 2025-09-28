@@ -5,11 +5,10 @@ from __future__ import annotations
 import csv
 import json
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from time import perf_counter
-from typing import Mapping
 from urllib.parse import urlencode, urljoin
 
 from .chembl_client import ChemblClient, _chunked
@@ -27,6 +26,7 @@ _PARENT_LOOKUP_PARENT_FIELD = _DEFAULT_CATALOG_CFG.parent_field
 _PARENT_LOOKUP_CHUNK_SIZE = _DEFAULT_CATALOG_CFG.page_size
 _PARENT_LOOKUP_SINGLE_LIMIT = _DEFAULT_CATALOG_CFG.fallback_single_limit
 _PARENT_LOOKUP_FALLBACK_THRESHOLD = 1
+_PARENT_LOOKUP_RETRY_THRESHOLD = 10
 _PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN = 1
 _SQLITE_VARIABLE_LIMIT = 900
 _PARENT_LOOKUP_SINGLE_CONCURRENCY = 4
@@ -211,7 +211,7 @@ def _fetch_parent_catalog_via_helper(
     if not pending:
         return {}
 
-    attempts = max(_PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN, api_cfg.retries)
+    attempts = max(_PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN, api_cfg.retries + 1)
     delay = api_cfg.backoff_factor
     single_limit = cfg.fallback_single_limit
     result: dict[str, str] = {}
@@ -221,7 +221,7 @@ def _fetch_parent_catalog_via_helper(
 
     try:
         retry_chunk_size = 0
-        if allow_rebatch:
+        if allow_rebatch and len(pending) >= _PARENT_LOOKUP_RETRY_THRESHOLD:
             base_chunk_size = max(1, cfg.page_size)
             retry_chunk_size = base_chunk_size // 2
             if retry_chunk_size < 2:
@@ -252,13 +252,23 @@ def _fetch_parent_catalog_via_helper(
                 if missing:
                     remaining.extend(missing)
         else:
-            remaining = list(pending)
+            remaining = [
+                chembl_id for chembl_id in pending if chembl_id not in existing
+            ]
 
-        outstanding = [
-            chembl_id
-            for chembl_id in remaining
-            if chembl_id not in existing and chembl_id not in result
-        ]
+        outstanding_pool = {
+            chembl_id for chembl_id in remaining if chembl_id not in existing
+        }
+        outstanding: list[str] = []
+        if outstanding_pool:
+            seen_outstanding: set[str] = set()
+            for chembl_id in pending:
+                if chembl_id not in outstanding_pool:
+                    continue
+                if chembl_id in result or chembl_id in seen_outstanding:
+                    continue
+                seen_outstanding.add(chembl_id)
+                outstanding.append(chembl_id)
         if outstanding and not _PARENT_CATALOG_LOADING:
             try:
                 load_parent_catalog(
@@ -277,7 +287,9 @@ def _fetch_parent_catalog_via_helper(
             if cache_hits:
                 result.update(cache_hits)
                 outstanding = [
-                    chembl_id for chembl_id in outstanding if chembl_id not in cache_hits
+                    chembl_id
+                    for chembl_id in outstanding
+                    if chembl_id not in cache_hits
                 ]
 
         if outstanding:
@@ -292,8 +304,13 @@ def _fetch_parent_catalog_via_helper(
                 outstanding = outstanding[:single_limit]
 
         if outstanding:
-            max_workers = max(1, min(len(outstanding), _PARENT_LOOKUP_SINGLE_CONCURRENCY))
             single_requests = len(outstanding)
+            if retry_chunk_size:
+                max_workers = max(
+                    1, min(len(outstanding), _PARENT_LOOKUP_SINGLE_CONCURRENCY)
+                )
+            else:
+                max_workers = 1
 
             def _fetch_with_retry(chembl_id: str) -> tuple[str, str] | None:
                 for attempt in range(1, attempts + 1):
@@ -418,12 +435,16 @@ def fetch_parent_catalog_for(
             continue
         result.update(chunk_result)
         if len(chunk_result) != len(chunk):
-            missing = [chembl_id for chembl_id in chunk if chembl_id not in chunk_result]
+            missing = [
+                chembl_id for chembl_id in chunk if chembl_id not in chunk_result
+            ]
             if missing:
                 fallback_candidates.extend(missing)
 
     if fallback_candidates:
-        ordered = [item for item in dict.fromkeys(fallback_candidates) if item not in result]
+        ordered = [
+            item for item in dict.fromkeys(fallback_candidates) if item not in result
+        ]
         if ordered:
             fallback_result = _fetch_parent_catalog_via_helper(
                 ordered,
@@ -500,7 +521,7 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
                         "missing columns in parent catalog: "
                         + ", ".join(sorted(missing))
                     )
-                result: dict[str, str] = {}
+                parsed: dict[str, str] = {}
                 for row in reader:
                     child = row.get(catalog_cfg.child_field)
                     parent = row.get(catalog_cfg.parent_field)
@@ -511,8 +532,8 @@ def _read_cache(path: Path, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
                         parent_id = _normalise_chembl_id(str(parent))
                     except ValueError:
                         continue
-                    result[child_id] = parent_id
-                return result
+                    parsed[child_id] = parent_id
+                return parsed
         except csv.Error as exc:  # pragma: no cover - defensive
             raise ValueError(f"invalid CSV catalog: {path}: {exc}") from exc
     try:

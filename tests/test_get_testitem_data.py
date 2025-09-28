@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Callable, Iterable, Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
-from typing import Callable, Iterable, Mapping
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -110,7 +111,8 @@ def test_add_pubchem_data_reuses_resolution_cache(
         identifiers: Mapping[str, str | None],
         cfg: pl.PubChemCfg,
         *,
-        resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] | None = None,
+        resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution]
+        | None = None,
         resolution_key: tuple[str | None, ...] | None = None,
         **kwargs: object,
     ) -> pl.PubChemResolution:
@@ -155,7 +157,9 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
         return pl.PubChemResolution(cid="321", source="cache")
 
     def fail(*_: object, **__: object) -> None:
-        raise AssertionError("get_properties should not be called when prefer_local_smiles is enabled")
+        raise AssertionError(
+            "get_properties should not be called when prefer_local_smiles is enabled"
+        )
 
     monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
     monkeypatch.setattr(pl, "get_properties", fail)
@@ -168,14 +172,11 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     pd.testing.assert_frame_equal(result, expected)
 
 
-
 def test_add_pubchem_data_preserves_existing_values(
-
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     df = pd.DataFrame(
         {
-
             "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
             "canonical_smiles": ["", "C", "CC"],
             "molecule_type": ["Polymer", "Mixture", "Small molecule"],
@@ -199,7 +200,8 @@ def test_add_pubchem_data_preserves_existing_values(
         cfg: pl.PubChemCfg,
         *,
         parent_loader: Callable[[str], pd.Series | None] | None = None,
-        resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] | None = None,
+        resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution]
+        | None = None,
     ) -> str:
         calls.append(row["molecule_chembl_id"])
         return "333"
@@ -229,7 +231,6 @@ def test_add_pubchem_data_preserves_existing_values(
     assert result.loc[1, "pubchem_cid"] == "222"
     assert result.loc[1, "pubchem_iupac_name"] == "mixture"
     assert result.loc[2, "pubchem_cid"] == "333"
- 
 
 
 def test_resolve_pubchem_cid_prefers_inchikey(
@@ -444,9 +445,22 @@ def test_add_pubchem_data_uses_disk_cache(
         assert cache_data == {"CHEMBL1": "321"}
 
 
+def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
+    cache_path = tmp_path / "nested" / "cid_cache.json"
+
+    assert not cache_path.parent.exists()
+
+    gtd._write_pubchem_cid_cache(cache_path, {"CHEMBL1": "321"})
+
+    assert cache_path.exists()
+    payload = json.loads(cache_path.read_text())
+    assert payload["values"] == {"CHEMBL1": "321"}
+    assert payload["metadata"]["version"] == gtd._PUBCHEM_CACHE_SCHEMA_VERSION
+
+
 def test_load_pubchem_cid_cache_expires(tmp_path: Path) -> None:
     cache_path = tmp_path / "cid_cache.json"
-    expired_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    expired_at = datetime.now(UTC) - timedelta(hours=2)
     payload = {
         "metadata": {
             "version": gtd._PUBCHEM_CACHE_SCHEMA_VERSION,
@@ -507,7 +521,6 @@ def test_run_chembl_column_order(
         captured_precomputed["data"] = kwargs.get("precomputed")
         captured_precomputed["frame"] = frame.copy()
         return (
-
             frame,
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
@@ -518,7 +531,9 @@ def test_run_chembl_column_order(
             ),
         )
 
-    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids)
+    monkeypatch.setattr(
+        gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
+    )
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
@@ -547,9 +562,7 @@ def test_run_chembl_column_order(
     assert isinstance(prepared, gtd.ParentLookupPreparedData)
     captured_frame = captured_precomputed["frame"]
     assert isinstance(captured_frame, pd.DataFrame)
-    expected_prepared = prepare_parent_lookup_data(
-        captured_frame, cfg.molecule_catalog
-    )
+    expected_prepared = prepare_parent_lookup_data(captured_frame, cfg.molecule_catalog)
     pd.testing.assert_series_equal(
         prepared.child_ids, expected_prepared.child_ids, check_names=False
     )
@@ -558,7 +571,10 @@ def test_run_chembl_column_order(
         expected_prepared.existing_parent_ids,
         check_names=False,
     )
-    assert prepared.existing_parent_ids.tolist() == expected_prepared.existing_parent_ids.tolist()
+    assert (
+        prepared.existing_parent_ids.tolist()
+        == expected_prepared.existing_parent_ids.tolist()
+    )
     expected_need_lookup = set(
         expected_prepared.child_ids[
             (expected_prepared.child_ids != "")
@@ -610,7 +626,6 @@ def test_run_chembl_initialises_pubchem_session(
         ),
     )
 
-
     captured: dict[str, object] = {}
 
     def fake_init_session(api: object, retry: object) -> None:
@@ -631,6 +646,177 @@ def test_run_chembl_initialises_pubchem_session(
     assert rc == 0
     assert captured["init"] == (cfg.api, cfg.retry)
 
+
+def test_run_chembl_uses_lazy_identifier_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text(
+        "molecule_chembl_id\nCHEMBL1\nCHEMBL2\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    class SingleUseIterable:
+        def __init__(self, values: list[str]) -> None:
+            self._values = values
+            self.iterations = 0
+
+        def __iter__(self):
+            if self.iterations:
+                raise AssertionError("identifiers iterator consumed multiple times")
+            self.iterations += 1
+            yield from self._values
+
+    ids_source = SingleUseIterable(["CHEMBL1", "CHEMBL2"])
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: ids_source)
+
+    received_ids: object | None = None
+
+    def fake_get_testitem(ids, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal received_ids
+        received_ids = ids
+        values = list(ids)
+        return pd.DataFrame(
+            [
+                {
+                    cfg.molecule_catalog.child_field: value,
+                    cfg.molecule_catalog.parent_field: pd.NA,
+                }
+                for value in values
+            ]
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+    monkeypatch.setattr(gtd.pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *args, **__: frame)
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+                uncovered=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(gtd, "normalize_testitems", lambda frame: frame)
+    monkeypatch.setattr(gtd, "add_pipeline_metadata", lambda frame: frame)
+    monkeypatch.setattr(
+        gtd,
+        "validate_testitems",
+        lambda frame, return_result=True: SimpleNamespace(
+            data=frame,
+            failure_cases=pd.DataFrame(),
+        ),
+    )
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
+
+    rc = gtd.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert ids_source.iterations == 1
+    assert received_ids is not None
+    assert not isinstance(received_ids, list)
+    assert received_ids.__class__.__name__ == "_tee"
+
+
+def test_run_chembl_calls_pubchem_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding)
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1"]))
+
+    df = pd.DataFrame(
+        [
+            {
+                "molecule_chembl_id": "CHEMBL1",
+                "canonical_smiles": "C",
+                "molecule_type": "Small molecule",
+                "parent_molecule_chembl_id": pd.NA,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(
+        gtd.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+
+    monkeypatch.setattr(
+        gtd,
+        "attach_parent_molecule_ids",
+        lambda frame, **kwargs: (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+                uncovered=0,
+            ),
+        ),
+    )
+
+    cfg.pubchem.cid_cache_path = tmp_path / "pubchem_cache.json"
+    cfg.pubchem.delay = 0
+
+    resolve_calls: list[Mapping[str, str | None]] = []
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        pubchem_cfg: pl.PubChemCfg,
+        **kwargs: object,
+    ) -> pl.PubChemResolution:
+        resolve_calls.append(identifiers)
+        return pl.PubChemResolution(cid="321", source="resolver")
+
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
+
+    props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
+    monkeypatch.setattr(gtd.pl, "init_session", lambda api, retry: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+
+    rc = gtd.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert len(resolve_calls) == 1
 
 
 def test_run_chembl_merges_parent_catalog(
@@ -684,7 +870,9 @@ def test_run_chembl_merges_parent_catalog(
         catalog_cfg = kwargs.get("catalog_cfg")
         mapping = captured_catalog or {}
         parent_field = (
-            catalog_cfg.parent_field if catalog_cfg is not None else "parent_molecule_chembl_id"
+            catalog_cfg.parent_field
+            if catalog_cfg is not None
+            else "parent_molecule_chembl_id"
         )
         child_field = (
             catalog_cfg.child_field if catalog_cfg is not None else "molecule_chembl_id"
@@ -697,7 +885,6 @@ def test_run_chembl_merges_parent_catalog(
         )
         return (
             updated,
-
             gtd.ParentLookupStats(
                 source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
@@ -707,7 +894,9 @@ def test_run_chembl_merges_parent_catalog(
             ),
         )
 
-    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids)
+    monkeypatch.setattr(
+        gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
+    )
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
@@ -871,9 +1060,7 @@ def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
     expected = pd.Series(
         ["CHEMBL1_EXISTING", pd.NA], index=result.index, dtype="string"
     )
-    pd.testing.assert_series_equal(
-        result[parent_field], expected, check_names=False
-    )
+    pd.testing.assert_series_equal(result[parent_field], expected, check_names=False)
     assert stats.missing == 1
     assert stats.attached == 1
 
@@ -948,7 +1135,6 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
 def test_run_chembl_parent_catalog_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
-
     input_csv = tmp_path / "testitems.csv"
     input_csv.write_text("molecule_chembl_id\nCHEMBL1\n")
 
@@ -1292,10 +1478,7 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
     catalog_cfg.cache_path = tmp_path / "catalog.json"
     catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
-    base_catalog = {
-        f"CHEMBL{i}": f"CHEMBL{i}_PARENT"
-        for i in range(1, 5000)
-    }
+    base_catalog = {f"CHEMBL{i}": f"CHEMBL{i}_PARENT" for i in range(1, 5000)}
 
     class TrackingMapping(Mapping[str, str]):
         def __init__(self, data: Mapping[str, str]) -> None:
@@ -1552,7 +1735,6 @@ def test_attach_parent_molecule_ids_fetch_failure(
         lambda **__: {},
     )
 
-
     def failing_fetch(
         ids: list[str],
         *,
@@ -1603,12 +1785,10 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
     catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
 
-
     def unexpected_load_parent_catalog(**_: object) -> dict[str, str]:
         raise AssertionError("load_parent_catalog should not be called")
 
     monkeypatch.setattr(gtd, "load_parent_catalog", unexpected_load_parent_catalog)
-
 
     def unexpected_fetch(
         ids: list[str],
@@ -1643,4 +1823,3 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     assert stats.missing == 0
     assert stats.attached == 1
     assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
-

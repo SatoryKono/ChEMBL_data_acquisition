@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from time import perf_counter, sleep
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from library import chembl_library as cl
-from library import molecule_catalog
+from library import cli as base_cli
 from library import pubchem_library as pl
-from library.config import ApiCfg, MoleculeCatalogCfg
+
+_ORIGINAL_APPLY = base_cli.apply_config_overrides
 from scripts import get_testitem_data
 
 
@@ -64,19 +64,23 @@ def test_get_testitem_parent_catalog(
     def fail_load_parent_catalog(**_: object) -> dict[str, str]:  # pragma: no cover
         pytest.fail("load_parent_catalog should not be triggered for partial coverage")
 
-    original_apply = get_testitem_data.apply_config_overrides
+    original_apply = _ORIGINAL_APPLY
 
     def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
         cfg = original_apply(*args, **kwargs)
         cfg.pubchem.resolve_order = ("cache", "smiles")
         return cfg
 
-    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
+    monkeypatch.setattr(
+        get_testitem_data.cli, "apply_config_overrides", patched_apply
+    )
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
-    monkeypatch.setattr(get_testitem_data, "load_parent_catalog", fail_load_parent_catalog)
+    monkeypatch.setattr(
+        get_testitem_data, "load_parent_catalog", fail_load_parent_catalog
+    )
     monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
     fetch_calls: list[list[str]] = []
     mapping = {
@@ -93,7 +97,7 @@ def test_get_testitem_parent_catalog(
         "fetch_parent_catalog_for",
         fake_fetch_parent_catalog_for,
     )
-    original_apply = get_testitem_data.apply_config_overrides
+    original_apply = _ORIGINAL_APPLY
 
     def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
         cfg = original_apply(*args, **kwargs)
@@ -110,8 +114,14 @@ def test_get_testitem_parent_catalog(
         "update_parent_catalog_cache",
         lambda data, cfg: None,
     )
-    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply_config_overrides)
+    monkeypatch.setattr(
+        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
+    )
+    monkeypatch.setattr(
+        get_testitem_data.cli,
+        "apply_config_overrides",
+        patched_apply_config_overrides,
+    )
 
     exit_code = get_testitem_data.main(
         [
@@ -185,33 +195,43 @@ def test_get_testitem_skips_parent_lookup_when_present(
         fetch_called = True
         return {}
 
-    original_apply = get_testitem_data.apply_config_overrides
+    original_apply = _ORIGINAL_APPLY
 
     def patched_apply(*args, **kwargs):  # type: ignore[no-untyped-def]
         cfg = original_apply(*args, **kwargs)
         cfg.pubchem.resolve_order = ("cache", "smiles")
         return cfg
 
-    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply)
+    monkeypatch.setattr(
+        get_testitem_data.cli, "apply_config_overrides", patched_apply
+    )
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
-    monkeypatch.setattr(get_testitem_data, "load_parent_catalog", fail_load_parent_catalog)
+    monkeypatch.setattr(
+        get_testitem_data, "load_parent_catalog", fail_load_parent_catalog
+    )
     monkeypatch.setattr(
         get_testitem_data.molecule_catalog,
         "fetch_parent_catalog_for",
         fake_fetch_parent_catalog_for,
     )
-    original_apply = get_testitem_data.apply_config_overrides
+    original_apply = _ORIGINAL_APPLY
 
     def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
         cfg = original_apply(*args, **kwargs)
         cfg.pubchem.resolve_order = ("smiles",)
         return cfg
 
-    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply_config_overrides)
+    monkeypatch.setattr(
+        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
+    )
+    monkeypatch.setattr(
+        get_testitem_data.cli,
+        "apply_config_overrides",
+        patched_apply_config_overrides,
+    )
 
     exit_code = get_testitem_data.main(
         [
@@ -232,7 +252,6 @@ def test_get_testitem_skips_parent_lookup_when_present(
     df = pd.read_csv(output_csv)
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
     assert fetch_called is False
-
 
 
 def test_get_testitem_refreshes_outdated_parents(
@@ -280,7 +299,7 @@ def test_get_testitem_refreshes_outdated_parents(
         fetch_calls.append(list(ids))
         return {key: mapping[key] for key in ids if key in mapping}
 
-    original_apply = get_testitem_data.apply_config_overrides
+    original_apply = _ORIGINAL_APPLY
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
@@ -301,7 +320,9 @@ def test_get_testitem_refreshes_outdated_parents(
         "update_parent_catalog_cache",
         lambda data, cfg: None,
     )
-    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
+    )
     monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
 
     def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
@@ -310,7 +331,11 @@ def test_get_testitem_refreshes_outdated_parents(
         cfg.pubchem.resolve_order = ("smiles",)
         return cfg
 
-    monkeypatch.setattr(get_testitem_data, "apply_config_overrides", patched_apply_config_overrides)
+    monkeypatch.setattr(
+        get_testitem_data.cli,
+        "apply_config_overrides",
+        patched_apply_config_overrides,
+    )
 
     exit_code = get_testitem_data.main(
         [

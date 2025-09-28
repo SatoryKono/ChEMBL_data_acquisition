@@ -1,7 +1,8 @@
 import argparse
 from pathlib import Path
 
-from library.cli import add_common_arguments, apply_config_overrides
+from library import cli
+from library.cli import add_common_arguments
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -19,7 +20,7 @@ def test_config_defaults_applied(tmp_path: Path) -> None:
     add_common_arguments(parser)
     parser.add_argument("--config", default=cfg_path, type=Path)
     args = parser.parse_args(["--config", str(cfg_path)])
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg = cli.apply_config_overrides(args, parser, args.config)
     assert args.sep == "|"
     assert args.encoding == "latin1"
     assert cfg.io.csv_sep == "|"
@@ -43,7 +44,7 @@ def test_cli_overrides_config(tmp_path: Path) -> None:
             "DEBUG",
         ]
     )
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg = cli.apply_config_overrides(args, parser, args.config)
     assert cfg.io.csv_sep == ";"
     assert cfg.io.csv_encoding == "utf16"
     assert cfg.log.level == "DEBUG"

@@ -7,10 +7,10 @@ from collections.abc import Callable, Sequence
 
 import pandas as pd
 
+from library import cli
 from library import io
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     configure_logger,
 )
 from library.cli import build_parser as base_parser
@@ -113,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg = cli.apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     print_config(cfg)
     func: Callable[[Config, argparse.Namespace], int] = args.func

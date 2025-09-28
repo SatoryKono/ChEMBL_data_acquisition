@@ -25,33 +25,33 @@ The input file must contain a ``PMID`` column.
 from __future__ import annotations
 
 import sys
-
-# ruff: noqa: E402
 from pathlib import Path
-
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
 from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from itertools import islice
+from itertools import chain, islice
 from typing import cast
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
+import bootstrap
+
+bootstrap.ensure_project_root()
+
 from library import chembl_library as cl
+from library import cli
 from library import document_postprocessing as dp
 from library import io
+from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
 from library.chembl_client import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     build_root_parser,
     configure_logger,
     positive_int,
@@ -65,6 +65,7 @@ from library.config import (
     _serialize_paths,
     ensure_dirs,
     print_config,
+    session_with_retry,
 )
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -99,13 +100,12 @@ def _build_fallback_doi_map(
             for column in (pmid_column, doi_column)
             if column not in frame.columns
         ]
-        raise ValueError(
-            "missing columns in fallback DOI file: "
-            f"{', '.join(missing)}"
-        )
+        raise ValueError(f"missing columns in fallback DOI file: {', '.join(missing)}")
 
     mapping: dict[str, str] = {}
-    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(index=False):
+    for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(
+        index=False
+    ):
         if pd.isna(pmid_value):
             pmid = ""
         else:
@@ -251,6 +251,7 @@ def fetch_pubmed_records(
     rate_cfg = settings.rate
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
+    pubmed_limiter = get_limiter("pubmed", rate_cfg.global_rps, rate_cfg.global_burst)
     semantic_limiter = get_limiter(
         "semantic_scholar", rate_cfg.global_rps, rate_cfg.global_burst
     )
@@ -280,8 +281,13 @@ def fetch_pubmed_records(
             f" {tuple(type(c).__name__ for c in candidates)}"
         )
 
+    session_cfg = settings
+
     def _fetch_batch(
-        first: object, *rest: object, **__: object
+        first: object,
+        *rest: object,
+        __cfg: Config = session_cfg,
+        **__: object,
     ) -> list[dict[str, str]]:
         """Fetch metadata for a batch of PMIDs.
 
@@ -295,7 +301,8 @@ def fetch_pubmed_records(
         batch_list = _coerce_batch_argument(first, *rest)
 
         try:
-            with requests.Session() as session:
+            with session_with_retry(__cfg.api, __cfg.retry) as session:
+                pubmed_limiter.acquire()
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
                 )
@@ -313,7 +320,9 @@ def fetch_pubmed_records(
 
                     # Create a map for easy lookup
                     semsch_map = {
-                        s.get("scholar.PMID"): s for s in semsch_list if s.get("scholar.PMID")
+                        s.get("scholar.PMID"): s
+                        for s in semsch_list
+                        if s.get("scholar.PMID")
                     }
 
                     # Fallback to the single-record endpoint when the batch request fails
@@ -421,7 +430,6 @@ _NUMERIC_EXPORT_COLUMNS = {
 
 
 _EXPORT_COLUMNS = [
-
     "PubMed.PMID",
     "PubMed.DOI",
     "PubMed.ArticleTitle",
@@ -522,6 +530,31 @@ _EXPORT_SORT_FALLBACK = [
 ]
 
 
+_EXPORT_STREAM_CHUNK_SIZE = 10_000
+
+
+def _iter_export_chunks(df: pd.DataFrame, *, chunk_size: int) -> Iterable[pd.DataFrame]:
+    """Yield export-ready DataFrame chunks from ``df``."""
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if df.empty:
+        yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False)
+        return
+
+    total = len(df)
+    for start in range(0, total, chunk_size):
+        stop = start + chunk_size
+        chunk = df.iloc[start:stop]
+        export_chunk = build_dataframe(
+            chunk, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+        )
+        export_chunk = dataframe_to_strings(
+            export_chunk, skip=_NUMERIC_EXPORT_COLUMNS
+        )
+        yield _prepare_export_frame(export_chunk)
+
+
 def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     """Return the first non-empty value across ``columns`` for each row."""
 
@@ -554,6 +587,72 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     return frame[_EXPORT_COLUMNS]
 
 
+def _iter_export_chunks(
+    df: pd.DataFrame,
+    *,
+    chunk_size: int | None,
+) -> Iterable[pd.DataFrame]:
+    """Yield export-ready chunks with deterministic column ordering."""
+
+    total_rows = len(df)
+    if total_rows == 0:
+        empty = dataframe_to_strings(df.copy(), skip=_NUMERIC_EXPORT_COLUMNS)
+        yield _prepare_export_frame(empty)
+        return
+
+    effective_size = chunk_size if chunk_size and chunk_size > 0 else total_rows
+    for start in range(0, total_rows, effective_size):
+        stop = start + effective_size
+        chunk = df.iloc[start:stop].copy()
+        chunk = dataframe_to_strings(chunk, skip=_NUMERIC_EXPORT_COLUMNS)
+        yield _prepare_export_frame(chunk)
+
+
+def _resolve_chunk_size(value: int | None) -> int | None:
+    """Return ``value`` when positive, otherwise ``None``."""
+
+    if value is None:
+        return None
+    if value <= 0:
+        logger.warning("invalid_csv_chunksize", value=value)
+        return None
+    return value
+
+
+def _write_export_chunks(
+    chunks: Iterable[pd.DataFrame],
+    path: Path,
+    *,
+    cfg: Config,
+    key_cols: Sequence[str],
+    chunk_size: int | None,
+) -> Path:
+    """Stream ``chunks`` to ``path`` using the deterministic CSV writer."""
+
+    if chunk_size:
+        return write_csv_chunks_deterministic(
+            chunks,
+            path,
+            col_order=list(_EXPORT_COLUMNS),
+            key_cols=list(key_cols),
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+            chunksize=chunk_size,
+            merge_chunksize=chunk_size,
+        )
+
+    return write_csv_chunks_deterministic(
+        chunks,
+        path,
+        col_order=list(_EXPORT_COLUMNS),
+        key_cols=list(key_cols),
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        cfg=cfg,
+    )
+
+
 def _finalise_export(
     df: pd.DataFrame,
     output: Path,
@@ -561,11 +660,14 @@ def _finalise_export(
     *,
     input_csv: Path,
     key_columns: Sequence[str] | None = None,
+    chunk_size: int | None = None,
 ) -> int:
     """Validate ``df`` and write CSV/metadata artefacts."""
 
-    df = add_pipeline_metadata(df)
-    ordered = build_dataframe(df, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False)
+    df_with_metadata = add_pipeline_metadata(df)
+    ordered = build_dataframe(
+        df_with_metadata, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+    )
     rows_total = len(ordered)
     exit_code = 0
     required_cols = {
@@ -607,34 +709,49 @@ def _finalise_export(
     rows_kept = len(validated)
     rows_dropped = rows_total - rows_kept
 
-    export_df = build_dataframe(
+
+    export_ready = build_dataframe(
         validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
     )
-    export_df = dataframe_to_strings(export_df, skip=_NUMERIC_EXPORT_COLUMNS)
-    export_df = _prepare_export_frame(export_df)
+
+    renamed_columns = {
+        column: _EXPORT_COLUMN_RENAMES.get(column, column)
+        for column in export_ready.columns
+    }
+    final_column_names = set(renamed_columns.values())
+
 
     key_cols: list[str] = []
     if key_columns:
         for column in key_columns:
             mapped = _EXPORT_COLUMN_RENAMES.get(column, column)
-            if mapped in export_df.columns and mapped not in key_cols:
+            if mapped in _EXPORT_COLUMNS and mapped not in key_cols:
                 key_cols.append(mapped)
     if not key_cols:
         for candidate in _EXPORT_SORT_FALLBACK:
-            if candidate in export_df.columns:
+            if candidate in _EXPORT_COLUMNS:
+
                 key_cols = [candidate]
                 break
     if not key_cols:
         key_cols = [_EXPORT_COLUMNS[0]]
 
+
     col_order = list(_EXPORT_COLUMNS)
+    stream_chunk = max(1, int(chunk_size or _EXPORT_STREAM_CHUNK_SIZE))
+    export_chunks = _iter_export_chunks(validated, chunk_size=stream_chunk)
     try:
-        csv_path = io.write_csv(
-            export_df,
+        csv_path = write_csv_chunks_deterministic(
+            export_chunks,
             output,
             cfg=cfg,
             key_cols=key_cols,
             col_order=col_order,
+            chunksize=stream_chunk,
+            merge_chunksize=stream_chunk,
+            sort_chunksize=stream_chunk,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
         )
     except OSError as exc:
         logger.error("csv_write_failed", error=str(exc), path=str(output))
@@ -658,7 +775,7 @@ def _finalise_export(
 
     quality_path = csv_path.with_suffix(".quality.json")
     try:
-        report = build_quality_report(validated)
+        report = build_quality_report(export_ready)
         save_quality_report(report, quality_path)
     except (OSError, TypeError, ValueError) as exc:
         logger.error(
@@ -669,7 +786,7 @@ def _finalise_export(
         return 1
 
     try:
-        analyze_table_quality(validated, table_name=str(csv_path.with_suffix("")))
+        analyze_table_quality(export_ready, table_name=str(csv_path.with_suffix("")))
     except ValueError as exc:
         logger.error("quality_report_generation_failed", error=str(exc))
         return 1
@@ -692,7 +809,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    limit = cfg.document.pubmed.limit
+    limit = args.limit
     if limit is not None and limit < 0:
         logger.error(
             "invalid_limit",
@@ -702,7 +819,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     try:
         pmids_iter = io.read_ids(
-            args.input_csv, column=cfg.document.pubmed.column, cfg=cfg.io
+            args.input_csv, column=args.column, cfg=cfg.io
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
@@ -748,13 +865,13 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         df = fetch_pubmed_records(
             pmids,
             cfg,
-            sleep=cfg.document.pubmed.sleep,
+            sleep=args.sleep,
             pubmed_cfg=cfg.pubmed,
             semantic_scholar_cfg=cfg.semantic_scholar,
             openalex_cfg=cfg.openalex,
             crossref_cfg=cfg.crossref,
-            max_workers=cfg.document.pubmed.workers,
-            batch_size=cfg.document.pubmed.batch_size,
+            max_workers=args.workers,
+            batch_size=args.batch_size,
             fallback_doi_map=fallback_doi_map,
         )
         output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
@@ -765,6 +882,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
+            chunk_size=args.batch_size,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("pubmed_pipeline_failed", error=str(exc))
@@ -788,7 +906,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    limit = cfg.document.chembl.limit
+    limit = args.limit
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.chembl", limit=limit)
         return 1
@@ -797,7 +915,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
             ids_iter = io.read_ids(
-                args.input_csv, column=cfg.document.chembl.column, cfg=cfg.io
+                args.input_csv, column=args.column, cfg=cfg.io
             )
         except (FileNotFoundError, ValueError) as exc:
             logger.error(
@@ -818,14 +936,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 ids,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=cfg.document.chembl.chunk_size,
-                timeout=cfg.document.chembl.timeout,
+                chunk_size=args.chunk_size,
+                timeout=args.timeout,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_documents_fetch_failed",
                 error=str(exc),
-                chunk_size=cfg.document.chembl.chunk_size,
+                chunk_size=args.chunk_size,
             )
             return 1
         if "doi" in df.columns:
@@ -838,6 +956,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
+            chunk_size=args.chunk_size,
         )
         return exit_code
 
@@ -858,7 +977,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    limit = cfg.document.all.limit
+    limit = args.limit
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.all", limit=limit)
         return 1
@@ -866,7 +985,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     # Prepare shared session before performing any API calls
     try:
         ids_iter = io.read_ids(
-            args.input_csv, column=cfg.document.all.column, cfg=cfg.io
+            args.input_csv, column=args.column, cfg=cfg.io
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
@@ -882,23 +1001,25 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         ids_source = limited_ids
         logger.info("process_limit", limit=len(limited_ids))
 
-    chunk_ids: list[str] = []
+    iterator = iter(ids_source)
+    sample_size = args.chunk_size
+    sample_ids = list(islice(iterator, sample_size))
+    ids_for_fetch = chain(sample_ids, iterator)
     try:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            chunk_ids = list(ids_source)  # capture IDs for logging on failure
             doc_df = cl.get_documents(
-                chunk_ids,
+                ids_for_fetch,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=cfg.document.all.chunk_size,
-                timeout=cfg.document.all.timeout,
+                chunk_size=args.chunk_size,
+                timeout=args.timeout,
             )
     except (requests.RequestException, ValueError) as exc:
         logger.error(
             "chembl_documents_fetch_failed",
-            ids=chunk_ids,
+            ids=sample_ids,
             error=str(exc),
-            chunk_size=cfg.document.all.chunk_size,
+            chunk_size=args.chunk_size,
         )
         return 1
     output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
@@ -920,6 +1041,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
+            chunk_size=args.chunk_size,
         )
         return exit_code
 
@@ -941,12 +1063,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        cfg.document.all.sleep,
+        args.sleep,
         cfg.semantic_scholar,
         cfg.openalex,
         cfg.crossref,
-        cfg.document.all.workers,
-        cfg.document.all.batch_size,
+        args.workers,
+        args.batch_size,
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
     )
@@ -967,6 +1089,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg,
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
+        chunk_size=args.chunk_size,
     )
     return exit_code
 
@@ -1174,7 +1297,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         )
     try:
-        cfg: Config = apply_config_overrides(
+        cfg: Config = cli.apply_config_overrides(
             args,
             subparser,
             args.config,

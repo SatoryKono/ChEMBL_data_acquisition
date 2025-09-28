@@ -4,7 +4,7 @@ import argparse
 import io
 import json
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +21,6 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
 )
-from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
-from schemas import DocumentsSchema
 from scripts import get_document_data as gdd
 
 
@@ -76,20 +74,22 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(cl, "get_documents", fake_get_documents)
     monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
 
-    def fake_write_csv(
-        df: pd.DataFrame,
+
+    def fake_write_csv_chunks(
+
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        **_: Any,
+        key_cols: Sequence[str],
+        chunk_size: int | None,
     ) -> Path:
+        list(chunks)
         return path
 
-    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(gdd, "_write_export_chunks", fake_write_export_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
@@ -116,8 +116,12 @@ def test_run_all_logs_failing_ids(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Log message should include IDs when document retrieval fails."""
+
+    cfg = Config()
+    chunk_size = cfg.document.all.chunk_size
+    ids = [f"CHEMBL{i}" for i in range(1, chunk_size + 3)]
     input_csv = tmp_path / "docs.csv"
-    input_csv.write_text("document_chembl_id\nCHEMBL1\nCHEMBL2\n")
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids) + "\n")
 
     class DummyClient:
         def __enter__(self) -> DummyClient:
@@ -141,7 +145,6 @@ def test_run_all_logs_failing_ids(
 
     buffer = io.StringIO()
     configure_logger(LoggerConfig(level="ERROR", stream=buffer))
-    cfg = Config()
     args = argparse.Namespace(
         input_csv=input_csv,
         output_csv=tmp_path / "out.csv",
@@ -156,9 +159,70 @@ def test_run_all_logs_failing_ids(
     records = [json.loads(line) for line in log_output.splitlines() if line.strip()]
     assert any(
         record.get("event") == "chembl_documents_fetch_failed"
-        and record.get("ids") == ["CHEMBL1", "CHEMBL2"]
+        and record.get("ids") == ids[:chunk_size]
         for record in records
     )
+
+
+def test_run_all_passes_generator_to_get_documents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``run_all`` should pass a generator into ``get_documents``."""
+
+    cfg = Config()
+    ids = [f"CHEMBL{i}" for i in range(1, 4)]
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids) + "\n")
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    captured: dict[str, object] = {}
+
+    def fake_get_documents(
+        ids_iter: Iterable[str],
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        assert not isinstance(ids_iter, list)
+        assert isinstance(ids_iter, Iterator)
+        values = list(ids_iter)
+        captured["values"] = values
+        return pd.DataFrame({"document_chembl_id": values})
+
+    monkeypatch.setattr(cl, "get_documents", fake_get_documents)
+    monkeypatch.setattr(gdd.dp, "postprocess_documents", lambda df: df)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+
+    def fake_finalise_export(*args: Any, **kwargs: Any) -> int:
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+    monkeypatch.setattr(
+        gdd,
+        "fetch_pubmed_records",
+        lambda *args, **kwargs: pytest.fail("unexpected call"),
+    )
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+    )
+
+    rc = gdd.run_all(cfg, args)
+    assert rc == 0
+    assert captured["values"] == ids
 
 
 def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:
@@ -258,7 +322,7 @@ def test_run_pubmed_uses_keyword_arguments(
     monkeypatch.setattr(
         gdd,
         "_finalise_export",
-        lambda df, output, cfg, input_csv, key_columns: 0,
+        lambda df, output, cfg, input_csv, key_columns, **kwargs: 0,
     )
 
     cfg = Config()
@@ -313,7 +377,7 @@ def test_run_pubmed_uses_fallback_csv(
     monkeypatch.setattr(
         gdd,
         "_finalise_export",
-        lambda df, output, cfg, input_csv, key_columns: 0,
+        lambda df, output, cfg, input_csv, key_columns, **kwargs: 0,
     )
 
     captured: dict[str, Any] = {}
@@ -382,23 +446,23 @@ def test_write_csv_column_order(
 
     captured: dict[str, Any] = {}
 
-    def fake_write_csv(
-        frame: pd.DataFrame,
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
         key_cols: list[str] | None = None,
         col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        **_: Any,
     ) -> Path:
+        frames = list(chunks)
         captured["col_order"] = list(col_order or [])
-        captured["columns"] = list(frame.columns)
+        captured["columns"] = list(frames[0].columns) if frames else []
         captured["key_cols"] = list(key_cols or [])
         return path
 
-    monkeypatch.setattr(lib_io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
@@ -412,10 +476,8 @@ def test_write_csv_column_order(
     )
     rc = gdd.run_chembl(cfg, args)
     assert rc == 0
-    assert captured["col_order"] == gdd._EXPORT_COLUMNS
     assert captured["columns"] == gdd._EXPORT_COLUMNS
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
-
 
 
 def test_fetch_pubmed_records_handles_generic_error(
@@ -460,17 +522,21 @@ def test_fetch_pubmed_records_accepts_config(
     expected_sleep = config.document.pubmed.sleep
     semantic_cfg = config.semantic_scholar
 
-    def fake_session() -> Any:
-        class DummySession:
-            def __enter__(self) -> DummySession:
-                return self
+    factory_calls: dict[str, Any] = {}
 
-            def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
-                return None
+    class DummySession:
+        def __enter__(self) -> DummySession:
+            return self
 
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    def fake_session_factory(api_cfg: Any, retry_cfg: Any) -> DummySession:
+        factory_calls["api"] = api_cfg
+        factory_calls["retry"] = retry_cfg
         return DummySession()
 
-    monkeypatch.setattr(gdd.requests, "Session", fake_session)
+    monkeypatch.setattr(gdd, "session_with_retry", fake_session_factory)
 
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
@@ -525,9 +591,81 @@ def test_fetch_pubmed_records_accepts_config(
     monkeypatch.setattr(gdd, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
     df = gdd.fetch_pubmed_records(["1"], config)
+    assert factory_calls["api"] is config.api
+    assert factory_calls["retry"] is config.retry
     assert "PubMed.PMID" in df.columns
     assert "publication_class" in df.columns
     assert df.loc[0, "PubMed.PMID"] == "1"
+
+
+def test_fetch_pubmed_records_acquires_pubmed_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PubMed batch requests should acquire the shared rate limiter."""
+
+    class TrackingLimiter:
+        def __init__(self) -> None:
+            self.acquisitions = 0
+            self.history: list[int] = []
+
+        def acquire(self) -> None:
+            self.acquisitions += 1
+            self.history.append(self.acquisitions)
+
+    tracking_limiter = TrackingLimiter()
+    batches_seen: list[list[str]] = []
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+    ) -> list[dict[str, str]]:
+        acquisition_count = tracking_limiter.acquisitions
+        batches_seen.append(list(batch))
+        assert acquisition_count == len(batches_seen)
+        return [{"PubMed.PMID": pmid} for pmid in batch]
+
+    def fake_semantic_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [{"scholar.PMID": pmid} for pmid in pmids]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+
+    def fake_get_limiter(name: str, *_, **__) -> Any:
+        if name == "pubmed":
+            return tracking_limiter
+        return DummyLimiter()
+
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+
+    df = gdd.fetch_pubmed_records(
+        ["1", "2"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert batches_seen == [["1"], ["2"]]
+    assert tracking_limiter.acquisitions == len(batches_seen)
+    assert tracking_limiter.history == [1, 2]
+    assert list(df["PubMed.PMID"]) == ["1", "2"]
 
 
 def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
@@ -544,7 +682,7 @@ def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     seen_cfg: dict[str, PubMedCfg | None] = {"value": None}
 
@@ -589,7 +727,7 @@ def test_fetch_pubmed_records_uses_fallback_doi(
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
@@ -653,7 +791,7 @@ def test_fetch_pubmed_records_falls_back_to_single_semantic_call(
         def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     def fake_pubmed_batch(
         session: Any, batch: list[str], sleep: float, cfg: Any | None = None
@@ -719,21 +857,19 @@ def test_finalise_export_falls_back_to_default_key(
     output = tmp_path / "documents.csv"
     captured: dict[str, Any] = {}
 
-    def fake_write_csv(
-        frame: pd.DataFrame,
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
         cfg: Any,
-        sep: str | None = None,
-        encoding: str | None = None,
         key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        chunksize: int | None = None,
+        **_: Any,
     ) -> Path:
+        list(chunks)
         captured["key_cols"] = list(key_cols) if key_cols is not None else None
         return path
 
-    monkeypatch.setattr(gdd.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "hash")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
@@ -838,7 +974,7 @@ def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
     monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
-    monkeypatch.setattr(gdd.requests, "Session", DummySession)
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     df = gdd.fetch_pubmed_records(
         pmids,

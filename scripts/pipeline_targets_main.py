@@ -9,24 +9,21 @@ from collections.abc import Iterable, Iterator, Sequence
 from itertools import islice
 from pathlib import Path
 
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from library import cli
 from library.chembl_client import _chunked
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     build_root_parser,
     configure_logger,
 )
 from library.config import Config, ensure_dirs, print_config
 from library.io import default_output_path, read_ids, write_csv
 from library.log import logger
-from library.pipeline_targets import PipelineResult, run_pipeline
 from library.pipeline_metadata import add_pipeline_metadata
+from library.pipeline_targets import PipelineResult, run_pipeline
 
 
 class PipelineConfig(BaseModel):
@@ -173,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger_inst = configure_logger(log_cfg)
     pipeline_logger = logger_inst.bind(stage="pipeline")
     pipeline_logger.info("pipeline_start")
-    cfg = apply_config_overrides(args, parser, args.config)
+    cfg = cli.apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
     print_config(cfg)
     if args.print_config:

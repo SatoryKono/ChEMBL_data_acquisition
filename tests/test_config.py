@@ -63,12 +63,7 @@ def test_schema_file_rejected(tmp_path: Path) -> None:
 def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text(
-        "sources:\n"
-        "  chembl:\n"
-        "    api:\n"
-        "      rps: 1\n"
-        "  openalex:\n"
-        "    rps: 1\n"
+        "sources:\n  chembl:\n    api:\n      rps: 1\n  openalex:\n    rps: 1\n"
     )
     monkeypatch.setenv("CHEMBL_DA__SOURCES__CHEMBL__API__RPS", "3")
     monkeypatch.setenv("CHEMBL_DA__SOURCES__OPENALEX__RPS", "6")
@@ -150,9 +145,7 @@ def test_chembl_cache_maxsize_from_yaml(tmp_path: Path) -> None:
     """Custom ``chembl.cache_maxsize`` should override the default."""
 
     path = tmp_path / "cfg.yaml"
-    path.write_text(
-        "sources:\n  chembl:\n    cache:\n      cache_maxsize: 42\n"
-    )
+    path.write_text("sources:\n  chembl:\n    cache:\n      cache_maxsize: 42\n")
 
     cfg = load_config(path)
 
@@ -256,9 +249,7 @@ def test_schema_negative_value(tmp_path: Path) -> None:
 
 def test_schema_list_item_type(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
-    path.write_text(
-        "system:\n  retry:\n    status_forcelist: [429, '500']\n"
-    )
+    path.write_text("system:\n  retry:\n    status_forcelist: [429, '500']\n")
     with pytest.raises(ValidationError):
         load_config(path)
 
@@ -296,17 +287,9 @@ def test_ensure_dirs_creates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert out.is_dir() and cache.is_dir()
 
 
-
 def test_unknown_key_warning_non_strict(tmp_path: Path) -> None:
-
     path = tmp_path / "cfg.yaml"
-    path.write_text(
-        "unknown: 1\n"
-        "sources:\n"
-        "  chembl:\n"
-        "    api:\n"
-        "      rps: 1\n"
-    )
+    path.write_text("unknown: 1\nsources:\n  chembl:\n    api:\n      rps: 1\n")
     buf = io.StringIO()
     configure_logger(LoggerConfig(stream=buf))
     load_config(path, strict=False)
@@ -345,7 +328,6 @@ def test_default_resource_paths_exist() -> None:
         "iuphar_family_csv",
         "uniprot_data_dir",
         "targets_type_csv",
-
     ):
         resource_path = getattr(resources, field)
         full_path = (
@@ -354,6 +336,30 @@ def test_default_resource_paths_exist() -> None:
             else project_root / resource_path
         )
         assert full_path.exists(), f"Missing default resource: {full_path}"
+
+
+def test_config_class_default_resources_exist() -> None:
+    """Direct ``Config`` instantiation should point to real resources."""
+
+    cfg = Config()
+    resources = cfg.resources
+    project_root = Path(__file__).resolve().parents[1]
+    for field in (
+        "dictionary_dir",
+        "iuphar_target_csv",
+        "iuphar_family_csv",
+        "uniprot_data_dir",
+        "targets_type_csv",
+    ):
+        resource_path = getattr(resources, field)
+        resolved = (
+            resource_path
+            if resource_path.is_absolute()
+            else project_root / resource_path
+        )
+        assert resolved.exists(), f"Missing default resource: {resolved}"
+
+
 def test_yaml_error_includes_path(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("sources:\n  chembl:\n    api: [\n")  # malformed YAML
@@ -380,9 +386,7 @@ def test_user_agent_must_include_contact(
     )
     # Ensure the invalid YAML value is used rather than the environment
     # override provided by the autouse fixture.
-    monkeypatch.delenv(
-        "CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False
-    )
+    monkeypatch.delenv("CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False)
     with pytest.raises(ValidationError, match="user_agent"):
         load_config(path)
 
@@ -400,9 +404,7 @@ def test_user_agent_default_and_overrides(
         "  crossref:\n"
         "    mailto: info@example.org\n"
     )
-    monkeypatch.delenv(
-        "CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False
-    )
+    monkeypatch.delenv("CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False)
     cfg = load_config(path)
     assert cfg.api.user_agent == "chembl-da/0.1 (mailto:contact@example.org)"
 
@@ -413,9 +415,7 @@ def test_user_agent_default_and_overrides(
     cfg = load_config(path)
     assert cfg.api.user_agent == "cli-agent/1.0 (mailto:test@example.org)"
 
-    monkeypatch.delenv(
-        "CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False
-    )
+    monkeypatch.delenv("CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False)
     cfg = load_config(
         path,
         cli_overrides={
@@ -440,9 +440,7 @@ def test_openalex_mailto_required(tmp_path: Path) -> None:
 
 def test_crossref_mailto_format(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
-    path.write_text(
-        "sources:\n  crossref:\n    mailto: not-an-email\n"
-    )
+    path.write_text("sources:\n  crossref:\n    mailto: not-an-email\n")
     with pytest.raises(ValidationError, match="crossref.mailto"):
         load_config(path)
 
@@ -563,9 +561,7 @@ def test_target_chembl_defaults_match_cli(
         cfg: object,
         client: object,
         mapping_cfg: object,
-
         chunk_size: object | None = None,
-
         timeout: object,
     ) -> pd.DataFrame:
         return pd.DataFrame({"target_chembl_id": list(ids)})

@@ -3,27 +3,25 @@
 from __future__ import annotations
 
 import sys
-
-# ruff: noqa: E402
 from pathlib import Path
-
-if __package__ is None:  # running as a script
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import argparse
 from collections.abc import Sequence
 from itertools import islice
 
+import bootstrap
 import requests
 from pandera.errors import SchemaErrors
 
+bootstrap.ensure_project_root()
+
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
+from library import cli
 from library import io
 from library.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
-    apply_config_overrides,
     configure_logger,
 )
 from library.cli import build_parser as base_parser
@@ -248,7 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
-        cfg: Config = apply_config_overrides(
+        cfg: Config = cli.apply_config_overrides(
             args,
             parser,
             args.config,

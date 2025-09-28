@@ -1,12 +1,13 @@
-# Output Directory Structure
+# Output Artefacts
 
-## Base location
+This guide describes the files emitted by the ChEMBL data acquisition
+pipelines, how they are structured and which helpers are responsible for their
+creation.
 
-Generated datasets are written beneath `local.io.output_dir` (default: `data/output`). When `--output` is omitted the tools call
-`library.io.default_output_path`, producing files named `output_<input-stem>_<YYYYMMDD>.csv` inside the configured output
-directory. The writer automatically creates parent directories when `local.io.exist_ok` is `true`.
+## Directory layout
 
-Example layout:
+Exports are written to `local.io.output_dir` (default `data/output`). The writer
+creates parent directories automatically when `local.io.exist_ok` is `true`.
 
 ```
 data/output/
@@ -20,117 +21,135 @@ data/output/
         └── ...
 ```
 
-## Metadata sidecars
+Intermediate artefacts produced by the target `all` pipeline (`*_chembl.csv`,
+`*_uniprot.csv`, `*_iuphar.csv`) reside in the same folder unless the CLI
+arguments specify custom paths.
 
-Each CSV export is accompanied by `<name>.csv.meta.yaml` created via `library.metadata.write_meta_yaml`. The metadata contains:
+## Metadata sidecars (`*.csv.meta.yaml`)
 
-* `generated_at` — ISO 8601 timestamp in UTC.
-* `git_sha` — commit hash of the repository at runtime.
-* `python_version` and `platform` — runtime details.
-* `command` — exact CLI invocation.
-* `config` — relevant configuration values with secrets masked.
-* `inputs` — description of the source files and parameters.
-* `stats` — counters for `rows_total`, `rows_kept`, `rows_dropped` and the `output_sha256` digest.
-* `schema` — name of the validation schema applied to the dataset.
+Each CSV export is accompanied by `<name>.csv.meta.yaml` created via
+`library.metadata.write_meta_yaml`. The metadata captures the following keys:
 
-If the sidecar already exists the new metadata is merged, preserving manually added annotations.
+* `generated_at` – ISO 8601 timestamp (UTC) when the file was produced.
+* `git_sha` – commit hash at runtime.
+* `python_version`, `platform` – environment details.
+* `command` – the exact CLI invocation.
+* `config` – effective configuration values with secrets masked.
+* `inputs` – descriptions of source files and parameters.
+* `stats` – `rows_total`, `rows_kept`, `rows_dropped` and the `output_sha256`
+  digest.
+* `schema` – name of the validation schema applied to the dataset.
+
+When a sidecar already exists its contents are merged so that manual additions
+are preserved.
 
 ## Validation artefacts
 
-* When Pandera validation discovers inconsistent rows the failing records are saved to `<stem>_failure_cases.csv` next to the main
-  CSV.
-* `library.table_quality.analyze_table_quality` generates `<stem>_quality_report_table.csv` and
-  `<stem>_data_correlation_report_table.csv`. CLI utilities place these files alongside the dataset, while
-  `library.utils.cli_tools.get_input_initialisation` stores them under `<output>/data_validity_report/`.
+* Pandera validation errors are written to `<stem>_failure_cases.csv` via
+  `SidecarErrors`, keeping problematic rows available for inspection without
+  interrupting the main export.
+* `library.table_quality.analyze_table_quality` generates
+  `<stem>_quality_report_table.csv` and
+  `<stem>_data_correlation_report_table.csv`. CLI utilities write these reports
+  next to the dataset, while `library.utils.cli_tools.get_input_initialisation`
+  stores them under `<output>/data_validity_report/`.
 
-All reports are written using UTF-8 encoding and share the same deterministic ordering rules as the main exports.
+All files are saved with UTF-8 encoding and deterministic row/column ordering to
+simplify diffing across runs.
 
-## Deterministic exports
+## Deterministic CSV exports
 
-`library.io.write_csv` forwards to `library.csv_utils.write_csv_deterministic`, which sorts columns and rows by key columns to
-ensure identical results on repeated runs. The helper honours `cfg.io.csv_sep`, `cfg.io.csv_encoding` and optional
-`key_cols`/`col_order` arguments supplied by the pipeline.
+`library.io.write_csv` delegates to
+`library.csv_utils.write_csv_deterministic`, which sorts rows and columns using
+explicit keys to ensure repeatable output. CSV formatting honours
+`cfg.io.csv_sep`, `cfg.io.csv_encoding` and optional `key_cols` / `col_order`
+arguments supplied by the pipeline.
 
 ## Pipeline metadata columns
 
-All entity exports append two bookkeeping columns produced by `library.pipeline_metadata.add_pipeline_metadata` before schema
-validation and CSV writing: `pipeline_version` captures the installed package version (or the value discovered in
-`pyproject.toml`), while `timestamp_utc` stores the run start time as an ISO 8601 string.【F:library/pipeline_metadata.py†L24-L84】
-The columns are declared in the validation schemas for activities, documents, test items and other tables, ensuring the values
-are present even when the payload is empty.【F:schemas/activities.py†L52-L55】【F:schemas/documents.py†L111-L112】【F:schemas/testitems.py†L41-L42】
+Before validation each pipeline injects `pipeline_version` and `timestamp_utc`
+using `library.pipeline_metadata.add_pipeline_metadata`. The values are part of
+the schemas for activities, documents, test items and other tables, so the
+columns remain present even for empty exports.
 
-`pipeline_version` remains constant within a single run and is safe for equality joins across different tables exported during
-the same execution. `timestamp_utc` reflects the orchestrator’s clock; downstream consumers should treat it as metadata rather
-than a surrogate for record-level timestamps.
+* `pipeline_version` – package version (from the installed distribution or
+  `pyproject.toml`) shared across all datasets produced in the same run.
+* `timestamp_utc` – run start time in ISO 8601 format. Treat it as execution
+  metadata rather than a record-level timestamp.
 
 ## Document classification columns
 
-`scripts/get_document_data.py` enriches the merged metadata with deterministic publication scores and labels emitted by `library.document_pipeline.merge_metadata`.【F:scripts/get_document_data.py†L607-L676】【F:library/document_pipeline.py†L160-L208】 The following fields appear in `document.csv` and the associated validation schema:
+`scripts/get_document_data.py` enriches document exports with deterministic
+publication scores and labels generated by
+`library.document_pipeline.merge_metadata`. The following fields appear in the
+CSV and schema:
 
 | Column | Description |
 | --- | --- |
-| `publication_types_normalised` | Semicolon-separated list of distinct publication type tokens collected from ChEMBL, PubMed, Semantic Scholar, OpenAlex and CrossRef payloads. The sequence is sorted to guarantee reproducible diffs. |
-| `publication_type_score_review` | Integer weight derived from the weighted voting of review-specific terms. The score is non-negative and grows with corroborating evidence. |
-| `publication_type_score_experimental` | Integer weight summarising experimental evidence terms; follows the same deterministic weighting scheme as the review score. |
-| `publication_type_score_unknown` | Integer weight associated with ambiguous or explicitly unknown labels. |
-| `publication_class` | Final class selected from `review`, `experimental` or `unknown` once the weighted tallies are compared against the configured thresholds.【F:library/document_type_classifier.py†L7-L74】 |
+| `publication_types_normalised` | Semicolon-separated list of distinct publication type tokens from ChEMBL, PubMed, Semantic Scholar, OpenAlex and CrossRef. Values are sorted to keep diffs stable. |
+| `publication_type_score_review` | Non-negative integer score reflecting the strength of review-specific evidence. |
+| `publication_type_score_experimental` | Non-negative integer score summarising experimental evidence. |
+| `publication_type_score_unknown` | Weight capturing ambiguous or unknown type hints. |
+| `publication_class` | Final label (`review`, `experimental`, `unknown`) chosen by the classifier after comparing weighted tallies against the configured thresholds. |
 
-Scores default to `0` for rows without recognised tokens. The classifier prefers the highest score that also clears the minimum thresholds, falling back to `unknown` when the signal is inconclusive, so dashboards must not treat the label as an indicator of curation quality.
+Scores default to zero when no recognised tokens are found. The classifier
+selects the highest score that clears the threshold and falls back to `unknown`
+when the signal is inconclusive.
 
 ## Activity bounds (`lower_value`, `upper_value`)
 
-`activity.csv` now exposes canonical value ranges via the `lower_value` and `upper_value` columns produced after normalisation in `scripts/get_activity_data.py`. The pipeline works exclusively with ChEMBL `standard_*` fields so that all limits remain in the canonical units already validated by the schema. Priority is applied row-wise in the following order:
+`activity.csv` exposes canonical value ranges derived from ChEMBL `standard_*`
+columns in `scripts/get_activity_data.py`. Bounds are resolved in the following
+priority order:
 
-1. Explicit bounds from `standard_lower_value` and `standard_upper_value` when provided by the API.
-2. Paired values such as `standard_value` + `standard_upper_value`, using the minimum as the lower bound and the maximum as the upper bound if one side was previously missing.
-3. Relation-driven inference when `activity_bounds.enable_from_relation` is `true`: `=`/`≈`/`~` set both bounds, `>=` fills only `lower_value`, `<=` fills only `upper_value`, while `between`/`range` expects a second canonical number. Unknown relation markers are left empty and logged for diagnosis. Missing canonical values despite the presence of a raw `value` trigger an `activity_bounds_missing_standard_value` warning so that data issues can be addressed upstream.
-4. Optional parsing of `±` expressions from `standard_text_value` when `activity_bounds.enable_from_uncertainty` is enabled, guarded by the same canonical-unit requirement.
+1. Use explicit `standard_lower_value` / `standard_upper_value` when both are
+   present.
+2. Combine `standard_value` with an explicit bound (for example
+   `standard_upper_value`) to fill the missing side.
+3. When `activity_bounds.enable_from_relation` is `true`, map relation tokens
+   (`=`, `≈`, `>=`, `<=`, `between`, `range`) to canonical bounds.
+4. If `activity_bounds.enable_from_uncertainty` is enabled, parse `±` expressions
+   from `standard_text_value`.
 
-Derived bounds are rounded to `activity_bounds.rounding_digits` decimal places (default `3`) and clamped to zero for concentration-like metrics when `activity_bounds.clamp_nonnegative` is `true`, using heuristics based on `standard_type`/`standard_units`. All operations preserve existing columns and honour the deterministic column ordering enforced by the schema.【F:scripts/get_activity_data.py†L1-L234】【F:config.yaml†L108-L147】【F:library/config.py†L358-L420】【F:schemas/activities.py†L32-L64】
+Derived values are rounded to `activity_bounds.rounding_digits` decimal places
+(default `3`) and clamped to zero for concentration-like metrics when
+`activity_bounds.clamp_nonnegative` is `true`.
 
 ## Document quality JSON report
 
-`scripts/get_document_data.py` writes an additional `<stem>.quality.json` file after the CSV export. The helper
-`library.document_pipeline.build_quality_report` emits a structured payload with the total row count, DOI coverage ratio,
-publication class distribution and per-source error counters; `save_quality_report` serialises the mapping as UTF-8 JSON with
-stable formatting for diffs.【F:scripts/get_document_data.py†L636-L674】【F:library/document_pipeline.py†L300-L356】 Use the JSON
-artefact to monitor metadata completeness without loading the full CSV, e.g. alert when DOI coverage drops below an agreed
-threshold.
-
-The JSON document contains:
+Document pipelines emit `<stem>.quality.json` alongside the CSV. The report is
+built by `library.document_pipeline.build_quality_report` and serialised via
+`save_quality_report` with stable formatting for diff-friendly monitoring. It
+contains:
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `rows_total` | Integer | Number of rows in the exported dataframe. |
-| `doi_coverage` | Float | Fraction of documents with a populated DOI (0.0–1.0 range). |
-| `publication_class_counts` | Object | Mapping of `review` / `experimental` / `unknown` to row counts, defaulting to `unknown` when the label is absent. |
-| `error_counts` | Object | Dictionary with counts of failed enrichments per upstream (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
+| `rows_total` | Integer | Number of rows in the export. |
+| `doi_coverage` | Float | Fraction of documents with a DOI (0.0–1.0). |
+| `publication_class_counts` | Object | Counts of `review`, `experimental`, `unknown`; missing categories are reported as zero. |
+| `error_counts` | Object | Failure counters per upstream service (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
 
-All keys are always present; missing categories are represented by zero counters so that monitoring dashboards can rely on stable schemas across runs.
+## Test item enrichment
 
-## Housekeeping recommendations
+`scripts/get_testitem_data.py` produces `testitem.csv` plus the standard
+sidecars and quality reports. Each row merges ChEMBL molecule metadata, PubChem
+properties and pipeline bookkeeping, forming the canonical compound dimension.
+The enrichment stage relies on the molecule catalogue configured at
+`sources.chembl.molecule_catalog.cache_path` and optional CSV dictionaries for
+salt resolution and boolean flags.
 
-* Keep historical runs in dated subdirectories (`YYYYMMDD/`) to simplify comparisons.
-* Archive or compress obsolete artefacts to reclaim disk space; metadata sidecars retain sufficient provenance information.
-* Monitor free space before long-running extractions, especially when running multiple pipelines in parallel.
+## Cached target pipeline (`pipeline_targets_main.py`)
 
-## Test item exports
+`pipeline_targets_main.py` mirrors the production target CLI but operates on
+cached ChemBL chunks only. It reads identifiers with `read_ids`, forwards them to
+`library.pipeline_targets.run_pipeline`, adds metadata and writes deterministic
+CSV/sidecar pairs. Use it to validate configuration overrides and batching logic
+without hitting external services.
 
-`scripts/get_testitem_data.py` produces `testitem.csv` plus the standard `*.meta.yaml`, optional
-`*_failure_cases.csv`, and quality reports following the deterministic ordering rules described above.【F:scripts/get_testitem_data.py†L151-L299】
-Each row combines ChEMBL fields (`molecule_chembl_id`, structure descriptors, lifecycle flags), PubChem
-augmentation, and pipeline metadata, allowing the dataset to serve as the canonical compound dimension.【F:scripts/get_testitem_data.py†L36-L193】【F:schemas/testitems.py†L12-L31】
+## Housekeeping tips
 
-Before distributing the export, join it with the parent molecule catalogue to expose
-`parent_molecule_chembl_id` for roll-ups. The mapping is stored in the JSON file configured at
-`sources.chembl.molecule_catalog.cache_path` and loaded via
-`library.molecule_catalog.load_parent_catalog`, which refreshes the cache from the ChEMBL API when needed.【F:config.yaml†L25-L33】【F:library/molecule_catalog.py†L43-L136】
-
-An additional enrichment stage reads `dictionary/_testitem/molecule_hierarchy.csv` and
-`dictionary/_testitem/molecule_catalog.csv` to populate the salt identifier and the
-`natural_product`, `prodrug`, `polymer_flag` booleans before validation. The
-pipeline detects salts when `parent_molecule_chembl_id` differs from
-`molecule_chembl_id`, fills `salt_chembl_id` with the child identifier, and
-normalises catalogue flags to the pandas nullable boolean dtype. Missing child
-flags fall back to the parent entry when available, while absent parent/child
-records are surfaced via warning events for troubleshooting.【F:scripts/get_testitem_data.py†L205-L233】【F:library/testitem_enrichment.py†L17-L216】
+* Store outputs in dated subdirectories (`YYYYMMDD/`) for easier comparisons.
+* Compress or archive obsolete artefacts; metadata sidecars preserve provenance
+  for reproducibility.
+* Monitor disk space during long-running exports, especially when multiple
+  pipelines run in parallel.

@@ -36,6 +36,4 @@ def require_python_version(min_version: tuple[int, int] = (3, 12)) -> None:
             required=needed,
             found=current_str,
         )
-        raise RuntimeError(
-            f"Python {needed} or later is required; found {current_str}"
-        )
+        raise RuntimeError(f"Python {needed} or later is required; found {current_str}")

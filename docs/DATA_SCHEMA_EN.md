@@ -3,35 +3,35 @@
 ## Input Tables
 
 ### activity.csv
-- **Purpose:** seed list of ChEMBL activity identifiers consumed by the `get_activity_data` CLI before querying the API.【F:config.yaml†L25-L31】【356235†L1-L5】
+- **Purpose:** seed list of ChEMBL activity identifiers consumed by the `get_activity_data` CLI before querying the API.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
 | activity_chembl_id | string | External CSV of identifiers | Activity identifier in ChEMBL; used to request `/activity` records.|
 
 ### assay.csv
-- **Purpose:** list of ChEMBL assay identifiers processed by the `get_assay_data` pipeline.【F:config.yaml†L32-L36】【29bb29†L1-L5】
+- **Purpose:** list of ChEMBL assay identifiers processed by the `get_assay_data` pipeline.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
 | assay_chembl_id | string | External CSV of identifiers | ChEMBL assay ID used to call `/assay`.|
 
 ### documents.csv
-- **Purpose:** collection of ChEMBL document identifiers that feeds the `get_document_data` CLI (`chembl`/`all` modes).【F:config.yaml†L49-L56】【fca225†L1-L5】
+- **Purpose:** collection of ChEMBL document identifiers that feeds the `get_document_data` CLI (`chembl`/`all` modes).
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
 | document_chembl_id | string | External CSV of identifiers | Primary publication identifier in ChEMBL.|
 
 ### targets.csv
-- **Purpose:** set of ChEMBL target identifiers used by the `get_target_data` pipeline.【F:config.yaml†L62-L80】【086d4d†L1-L5】
+- **Purpose:** set of ChEMBL target identifiers used by the `get_target_data` pipeline.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
 | target_chembl_id | string | External CSV of identifiers | ChEMBL target ID passed to the `/target` endpoint.|
 
 ### testitem.csv
-- **Purpose:** list of ChEMBL molecule identifiers that `get_testitem_data` enriches with structural and PubChem attributes.【F:config.yaml†L37-L41】【85074e†L1-L5】
+- **Purpose:** list of ChEMBL molecule identifiers that `get_testitem_data` enriches with structural and PubChem attributes.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@
 ## Output Tables
 
 ### activity.csv (processed export)
-- **Purpose:** normalized set of experimental activity measurements retrieved from the ChEMBL API, extended with derived bounds, structured annotations, and pipeline metadata.【F:scripts/get_activity_data.py†L63-L357】【F:library/chembl_assay.py†L62-L111】【F:schemas/activities.py†L16-L78】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** normalized set of experimental activity measurements retrieved from the ChEMBL API, extended with derived bounds, structured annotations, and pipeline metadata.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
@@ -68,7 +68,7 @@
 | type | string | ChEMBL `/activity` | Original measurement type returned by the API.|
 | units | string | ChEMBL `/activity` | Original units associated with `value`.|
 | value | string/number | ChEMBL `/activity` | Raw measurement reported by the API.|
-| standard_type | string | ChEMBL `/activity` | Normalized measurement type (restricted to `IC50` or `Ki`).|
+| standard_type | string | ChEMBL `/activity` | Normalized measurement type constrained by configuration (e.g., `IC50`, `EC50`, `Ki`, `KD`).|
 | standard_value | number (float) | ChEMBL `/activity` | Normalized numeric value in molar units; guaranteed non-negative.|
 | standard_lower_value | string/number | ChEMBL `/activity` | Lower bound supplied by ChEMBL when the measurement is a range.|
 | standard_upper_value | string/number | ChEMBL `/activity` | Upper bound supplied by ChEMBL when available.|
@@ -81,7 +81,7 @@
 | timestamp_utc | ISO 8601 string | Pipeline metadata | UTC timestamp indicating when the export was created.|
 
 ### assay.csv (processed export)
-- **Purpose:** aggregated assay descriptions with a per-target count of co-occurring assays and pipeline metadata.【F:scripts/get_assay_data.py†L47-L167】【F:library/chembl_assay.py†L22-L59】【F:library/assay_postprocessing.py†L1-L41】【F:schemas/assays.py†L1-L85】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** aggregated assay descriptions with a per-target count of co-occurring assays and pipeline metadata.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
@@ -114,7 +114,7 @@
 | timestamp_utc | ISO 8601 string | Pipeline metadata | Export timestamp in UTC.|
 
 ### documents.csv (processed export)
-- **Purpose:** consolidated bibliographic metadata combining ChEMBL, PubMed, Semantic Scholar, OpenAlex and Crossref outputs with computed publication classes.【F:scripts/get_document_data.py†L18-L884】【F:library/document_pipeline.py†L20-L119】【F:schemas/documents.py†L14-L119】【F:library/document_postprocessing.py†L18-L154】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** consolidated bibliographic metadata combining ChEMBL, PubMed, Semantic Scholar, OpenAlex and Crossref outputs with computed publication classes.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
@@ -189,7 +189,7 @@
 | timestamp_utc | ISO 8601 string | Pipeline metadata | Export timestamp in UTC.|
 
 ### target.csv (final export)
-- **Purpose:** unified target table combining ChEMBL, UniProt and IUPHAR attributes while preserving the deterministic column order expected by downstream BI processes.【F:scripts/get_target_data.py†L31-L1148】【F:library/chembl_target.py†L185-L315】【F:library/target_postprocessing.py†L181-L442】【F:schemas/targets.py†L17-L214】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** unified target table combining ChEMBL, UniProt and IUPHAR attributes while preserving the deterministic column order expected by downstream BI processes.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |
@@ -300,7 +300,7 @@
 > derived flags listed above.
 
 ### testitem.csv (processed export)
-- **Purpose:** enriched description of ChEMBL compounds combining parent hierarchy, structural attributes, PubChem augmentation, catalog flags, and pipeline metadata.【F:scripts/get_testitem_data.py†L36-L356】【F:library/testitem_enrichment.py†L151-L239】【F:schemas/testitems.py†L14-L47】【F:library/pipeline_metadata.py†L60-L84】
+- **Purpose:** enriched description of ChEMBL compounds combining parent hierarchy, structural attributes, PubChem augmentation, catalog flags, and pipeline metadata.
 
 | Column | Data type | Source | Description |
 | --- | --- | --- | --- |

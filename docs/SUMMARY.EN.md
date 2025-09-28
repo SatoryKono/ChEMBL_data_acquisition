@@ -1,346 +1,136 @@
-# Project Overview
-- ChEMBL Data Acquisition is a suite of Python 3.12 CLI scripts and libraries for downloading, normalizing, and exporting biodata from the ChEMBL, PubChem, UniProt, PubMed, and related APIs with deterministic CSV/Parquet outputs.
+# Project Summary
 
+This document provides an at-a-glance description of the ChEMBL data acquisition
+utilities, their structure, shared services and supporting workflows.
 
-- The project ships unified launch flags, streaming CSV handling, validation schemas, reference lookups, and an execution metadata/logging stack.
+## Repository layout
 
+* `scripts/` – command-line entry points for the activity, assay, document,
+  target and test-item pipelines, plus the cached target harness used for
+  offline smoke tests.
+* `library/` – reusable modules covering API clients, rate limiting,
+  normalisation, enrichment, validation, deterministic I/O, logging and
+  metadata helpers.
+* `schemas/` – `pandera` validation schemas and normalisers that keep column
+  ordering, data types and canonical values consistent across exports.
+* `dictionary/` & `data/` – local lookup tables, cached API responses and input
+  workbooks consumed by the pipelines.
+* `docs/` – the reference documentation you are reading.
+* `tests/` – unit and integration coverage for configuration overrides,
+  enrichment logic, deterministic exports and CLI wiring.
 
-- Documentation covers installation, pre-commit usage, smoke commands, and tests to guarantee a reproducible pipeline for new data team members.
+## Data flow overview
 
-
-- Configuration is managed via a YAML file with overrides through environment variables and CLI flags; the layout is documented in CONFIG_EN.md (Russian translation: CONFIG_RU.md).
-
-
-- Output tables are accompanied by sidecar files with hashes, configuration, and statistics, simplifying data quality audit and monitoring.
-
-
-
-- The codebase emphasizes strict typing, pandera-based schemas, and a comprehensive QA toolchain (black, ruff, mypy, pytest, deterministic CSV).
-
-
-
-- Current docs omit a roadmap or known issues — the README focuses on execution, testing, and data generation without referencing future work.
-
-
-
-## Architecture and Modules
-- **scripts/** — CLI wrappers for individual pipelines (activities, assays, targets, etc.) handling errors, normalization, pandera validation, and sidecar generation.
-
-
-- **library/** — core logic:
-  - `io.py` — reads identifiers/CSVs and writes deterministic CSVs while creating metadata and directory structures automatically.
-
-
-  - `chembl_client.py` — HTTP client with caching, RPS throttling, and exponential backoff for the ChEMBL API.
-
-
-  - `document_pipeline.py`, `target_postprocessing.py`, `input_initialisation_library.py` — aggregation and post-processing modules mirroring the production Power Query flow with metric calculations, dictionary mapping, and filtering statistics.
-
-
-
-  - `cli/` — centralized parser assembly, configuration loading, logger setup, and shared arguments (input/output/encoding/chunk-size, etc.).
-
-
-  - `logging_setup.py`, `log.py` — structured JSON logging with secret redaction and a global logger tracking status and RPS.
-
-
-
-  - `metadata.py`, `sidecar.py`, `pipeline_metadata.py` — generate sidecar YAML, compute SHA-256, and append pipeline version and timestamp fields.
-
-
-
-
-- **schemas/** — pandera schemas and normalizers (activities, targets, documents, testitems) enforcing value and type checks.
-
-
-- **docs/** — reference guides for execution, configuration, and output artifacts.
-
-
-
-- **tests/** — extensive coverage across CLI, config, validation, post-processing, and determinism; includes activity smoke tests and target pipeline/config checks.
-
-
-
-
-## Data Flow (Diagram)
 ```
-[Identifier CSV]
-        │ read_ids()
+[Identifier CSV] --read_ids--> [Iterator] --chunk/limit--> [Batches]
+        │                                       │
+        ▼                                       ▼
+  ChemblClient / external services      Normalise & enrich
+        │                                       │
+        ▼                                       ▼
+    Pandera validation  ──►  SidecarErrors (optional failure CSV)
+        │
         ▼
-[ID iterator] --limit--> [ID batches]
-        │ ChemblClient/request_json() + rate limiting
-        ▼
-[Raw API payloads] --normalize_*/postprocess--> [DataFrame]
-        │ Pandera validation + SidecarErrors
-        ▼
-[Cleaning and aggregation]
-        │ add_pipeline_metadata()
-        ▼
-write_csv() ──► <table>.csv + <table>.csv.meta.yaml + (opt.) failure_cases.csv
+add_pipeline_metadata → write_csv_deterministic →
+  <table>.csv + <table>.csv.meta.yaml + quality reports
 ```
-- Identifier ingestion with empty-value handling and column checks is performed via `read_ids`.
 
-
-- API retrieval uses `ChemblClient` with cache, RPS throttling, and exponential backoff.
-
-
-- Normalization, validation, and sidecar error capture live in CLI scripts leveraging pandera and `SidecarErrors`.
-
-
-
-- CSV writing and metadata serialization rely on `write_csv`, `write_meta_yaml`, and injecting version/timestamp columns.
-
-
-
+* `io.read_ids` streams identifiers while filtering empty values and enforcing
+  the required column names.
+* API access is centralised in `ChemblClient` and companion clients that obey
+  rate limits, retries and timeouts declared in `config.yaml`.
+* Normalisation and enrichment happen inside the scripts, relying on helper
+  modules such as `document_pipeline`, `target_postprocessing`,
+  `testitem_enrichment` and `activity_bounds`. Validation failures are captured
+  by `SidecarErrors` and saved next to the export for troubleshooting.
+* Deterministic CSV writing plus metadata sidecars are handled by
+  `write_csv_deterministic`, `write_meta_yaml`, `add_pipeline_metadata` and the
+  table-quality analyser.
 
 ## Configuration
-- The top-level structure of `config.yaml` is split into `sources`, `local`, `activity_bounds`, and `system`.
 
-
-- `sources` enumerates every remote dependency: `sources.chembl.api` tunes base URLs, retries, throttling, and headers; `sources.chembl.cache` and `sources.chembl.molecule_catalog` manage on-disk caches; `sources.chembl.pipelines.*` defines identifier columns, batching, and per-pipeline limits; sibling blocks (`sources.openalex`, `sources.crossref`, `sources.uniprot.api`/`mapping`, `sources.iuphar`, `sources.pubchem`, `sources.pubmed`, `sources.semantic_scholar`) provide analogous network and rate-limit settings.
-
-
-- `local` collects filesystem expectations: `local.resources` resolves dictionary folders and reference CSV paths, `local.io` standardises output/cache directories and CSV formatting, while `local.init` lists Excel inputs and destinations for the initialisation workflow.
-
-
-- `activity_bounds` toggles how relation strings are converted into numeric ranges, including rounding digits, clamping, and logging of unknown relations.
-
-
-- `system` centralises application-wide behaviour via `system.log`, `system.rate`, `system.retry`, and `system.doc_type` weighting tables.
-
-
-- Pydantic models enforce typing, URL validation, and a mandatory `user_agent` with an email; precedence order: YAML < environment < CLI.
-
-
-- Documentation explains overrides through `CHEMBL_DA__SECTION__KEY` variables, short aliases, and `--section.key=value` flags.
-
-
-- Tests confirm that empty YAML applies default RPS settings, environment variables and aliases override values correctly, and missing files raise `ConfigError`.
-
-
-
-## Dictionaries and Reference Data
-- Configuration points to the root `dictionary` directory, IUPHAR and UniProt references, plus `targets_type.csv` and related CSVs for target classification.
-
-
-- `input_initialisation_library` consumes dictionaries from `dictionary/_Target` (classification tables such as `targets_type.csv`), `dictionary/_target` (IUPHAR and UniProt JSON/CSV metadata), and `dictionary/_testitem` (molecule catalog, hierarchy, and test item listings) to compute citation metrics, target types, and other attributes; missing files trigger explicit errors with expected paths.
-
-
-- Enrichment stages read local UniProt JSON and classification CSVs to reconcile external references with the ChEMBL export.
-
-
-
-
-## Dependencies and Installation
-- Minimum versions: Python 3.12, pandas 2.1, requests 2.31, PyYAML 6.0; the complete list of runtime and dev tools (black, ruff, mypy, pytest, responses, hypothesis, etc.) is declared in pyproject.toml.
-
-
-
-- Install via `pip install .[dev]` or `pip install -e .[dev]`; use a virtual environment and upgrade pip/setuptools/wheel.
-
-
-
-- Enable `pre-commit install` afterward to run formatting, linting, and static checks automatically before commits.
-
-
-
-## How to Run (Steps)
-1. Clone the repository, create a Python 3.12 virtual environment, and activate it.
-
-
-2. Install project and dev dependencies with `pip install .[dev]`.
-
-
-3. Run `pre-commit install` and optionally `pre-commit run --all-files` for an initial quality sweep.
-
-
-4. Prepare an input CSV with the required identifier column (defaults: `input.csv`/`activity_chembl_id`).
-   - The column name is loaded from `sources.chembl.pipelines.activity.column` in the configuration (default `activity_chembl_id`) and can be overridden via `--column` or `config.yaml`.
-
-
-5. Execute the desired CLI script, e.g. `python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output out/activities.csv --limit 10 --log-level INFO`, which downloads data and writes the CSV/metadata files.
-
-
-6. Alternative pipelines: `get_assay_data`, `get_target_data`, `get_document_data`, `get_testitem_data`, `library.utils.cli_tools.get_input_initialisation`, `library.utils.cli_tools.table_quality_main`.
-
-
-7. Inspect the generated CSV and `.meta.yaml` files under `data/output` (or the configured directory).
-
-
-
-## Tests and Verification
-- Core quality checks: `pre-commit run --all-files`, `pytest`, `library.utils.cli_tools.check_determinism --log-level DEBUG`; these commands cover formatting, linting, typing, unit tests, and deterministic output.
-
-
-- CLI smoke tests validate successful CSV generation with API stubs and file hashing.
-
-
-- Config tests cover aliasing, environment overrides, and missing-file scenarios, helping diagnose setup issues before pipeline execution.
-
-
-- Pipeline-oriented tests verify batch size propagation, optional-stage handling, and DataFrame column expectations.
-
-
-- Deterministic CSV writing is enforced via a standalone script and unit tests comparing SHA-256 hashes across reruns.
-
-
-
-
-## Output Artifacts (Tables/Files, Fields, Examples)
-- Primary results are CSV files under `io.output_dir` (`data/output` by default) with optional subfolders reflecting source or processing stage.
-
-
-- Each CSV is paired with `<name>.csv.meta.yaml` containing the git SHA, command line, configuration, row/column statistics, and SHA-256 hash of the main file.
-
-
-- Validation failures yield dedicated `*_failure_cases.csv` via `SidecarErrors`, easing debugging of problematic records.
-
-
-
-- `library.utils.cli_tools.table_quality_main` and `library.utils.cli_tools.get_input_initialisation` also emit quality reports (`<table>_quality_report_table.csv`, `<table>_data_correlation_report_table.csv`).
-
-
-- Data outputs automatically receive `pipeline_version` and `timestamp_utc` columns for release traceability.
-
-
-
-
-## Logging and Diagnostics
-- Logging relies on a custom JSON logger with secret redaction and global context; level and run_id are configurable via CLI/config.
-
-
-
-
-- CLI scripts log key events: input reads, limits, requests, API errors, validation outcomes, and file writes, streamlining incident investigation.
-
-
-- Metadata is emitted into sidecar YAML alongside hashes and configuration, providing an additional diagnostic trail for run history.
-
-
-
-
-## Constraints and Assumptions
-- Requires Python 3.12, outbound network access (port 443), and a valid API `user_agent` containing an email; otherwise Pydantic validation fails.
-
-
-
-- Default RPS, timeout, and backoff values may need adjustment under stricter API limits; throttling is enforced via `ChemblClient` and its rate limiter.
-
-
-
-- Reference data must follow the `dictionary/…` layout; missing key CSVs raise exceptions, so synchronize dictionaries beforehand.
-
-
-
-- README does not list roadmap or known issues — clarify additional constraints or plans separately.
-
-
-
-## Common Errors and Fixes
-- **Missing input column/file** — `read_ids` and CLI emit `read_fail`; check the column name (`--column`) and CSV path.
-
-
-- **Invalid limits/parameters** — negative `activity.limit` logs `invalid_limit`; update the value in `config.yaml` or CLI.
-
-
-- **API failure** — `ChemblClient` logs `request_fail` and retries; persistent issues require network, timeout, and user-agent checks.
-
-
-- **Missing dictionaries** — absence of `targets_type.csv` or `citation_fraction.csv` raises FileNotFoundError with path hints; sync `dictionary` or pass `--dictionary`.
-
-
-- **Missing config** — loading a nonexistent YAML raises `ConfigError`; create the file or rely on the default path.
-
-
-- **Data validation issues** — schema mismatches create `*_failure_cases.csv`; review the file, adjust dictionaries or cleaning, and rerun.
-
-
-
-## Glossary (ChEMBL/ETL)
-- **ActivitiesSchema** — pandera schema for activity tables (columns, range checks).
-
-
-- **Sidecar** — auxiliary CSV with validation errors or YAML with run metadata, generated automatically during output writes.
-
-
-
-- **Pipeline metadata** — `pipeline_version` and `timestamp_utc` columns appended to all outputs for version/time tracking.
-
-
-- **Deterministic CSV** — approach combining row/column ordering and SHA-256 checks to ensure identical outputs across reruns.
-
-
-
-- **Input initialisation** — process combining raw Excel/CSV inputs, filtering, and distributing across entities (activity, assay, target, document, testitem) with metric calculations.
-
-
-
-## Quality Requirements
-- Run formatting, linting, static typing, and pytest through pre-commit or directly before release.
-
-
-- Data must pass pandera validation; recorded errors in sidecars are blocking until resolved.
-
-
-- CSV determinism must be preserved (validated via unit tests and the standalone script).
-
-
-
-- Each output must include metadata with hashes and configuration; missing sidecar files violate reproducibility requirements.
-
-
-
-
-## Launch Checklist
-1. Python 3.12 installed; outbound port 443 confirmed.
-
-
-2. Virtual environment created/activated; pip/setuptools/wheel upgraded.
-
-
-3. `pip install .[dev]` completed without dependency errors.
-
-
-4. `pre-commit install` executed; optionally `pre-commit run --all-files`.
-
-
-5. Input CSV prepared with the expected identifier column (or supplied via `--column`).
-
-
-6. Confirmed presence of `dictionary/…` assets or supplied `--dictionary` path.
-
-
-
-7. Target command (`python -m scripts.get_activity_data ...`, etc.) executed with required flags and log level.
-
-
-
-8. Verified CSV and `.meta.yaml` creation under `data/output` (or configured directory).
-
-
-9. Reviewed JSON logs for errors and presence of run_id.
-
-
-10. If needed, ran `pytest` and `library.utils.cli_tools.check_determinism --log-level DEBUG`.
-
-
-11. Investigated any `*_failure_cases.csv` to remediate data issues.
-
-
-12. Documented CLI/env configuration overrides alongside run artifacts.
-
-
-
-
-## One-liner Setup & Run
-```
-python -m venv .venv && source .venv/bin/activate && pip install .[dev] && python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv --output data/output/activities.csv --limit 10 --log-level INFO
-```
-
-
-
-## Release Notes
-- Target taxonomy classification now runs entirely in code; the legacy organism lookup
-  CSV and `--organism-csv` CLI flag have been removed. Update custom packaging or
-  deployment scripts that referenced them.
-
+* Defaults live in [`config.yaml`](../config.yaml) and are validated against
+  [`config.schema.json`](../config.schema.json).
+* Key sections:
+  * `sources.*` – base URLs, retry policy, rate limiting and pipeline defaults
+    for ChEMBL, UniProt, IUPHAR, PubMed, Semantic Scholar, OpenAlex, CrossRef
+    and PubChem.
+  * `local.*` – filesystem layout, CSV formatting defaults and reference
+    workbooks.
+  * `activity_enrichment` / `activity_bounds` – enrichment and bound-derivation
+    toggles for the activity pipeline.
+  * `testitem_molecule_enrichment` – optional salt/catalogue augmentation for
+    test-item exports.
+  * `system.*` – logging, global rate limiting, retry configuration and document
+    classification weights.
+* Overrides follow the precedence `config.yaml` < environment variables < CLI
+  arguments. Short aliases such as `CHEMBL_DA_RPS` (`sources.chembl.api.rps`)
+  and `CHEMBL_DA_OUTDIR` (`local.io.output_dir`) are exposed for convenience.
+  The full matrix is documented in `docs/CONFIG_EN.md`.
+
+## External services
+
+* **ChEMBL REST API** supplies activities, assays, targets, documents and
+  molecule metadata. Requests are chunked and retried according to the pipeline
+  configuration.
+* **PubMed, Semantic Scholar, OpenAlex, CrossRef** enrich document exports with
+  bibliographic data and DOI coverage.
+* **UniProt** provides protein annotations and ID mapping for the target
+  pipeline.
+* **IUPHAR** contributes receptor classifications from local CSV snapshots.
+* **PubChem** augments test items with canonical identifiers and chemical
+  descriptors.
+
+## Installation & tooling
+
+1. Create and activate a Python ≥3.12 virtual environment.
+2. Install the project with development extras: `pip install .[dev]`.
+3. Enable the quality gate: `pre-commit install`.
+4. Recommended ad-hoc checks:
+   * `pre-commit run --all-files`
+   * `pytest` / `pytest --cov=library --cov=scripts`
+   * `ruff check`, `black --check .`, `mypy`
+
+Dependency versions and optional tooling are declared in `pyproject.toml` and
+`requirements-dev.txt`.
+
+## Usage highlights
+
+* Every `scripts/get_*_data.py` command accepts standard flags such as
+  `--config`, `--print-config`, `--input`, `--output`, `--log-level`, `--sep`,
+  `--encoding`, `--column` and either `--batch-size` or `--chunk-size`.
+* Pipelines expose additional switches (for example, `--timeout`, `--limit`,
+  `--dry-run`, sub-commands for documents and targets). CLI options are merged
+  back into the configuration via `apply_config_overrides` before execution so
+  downstream helpers receive consistent settings.
+* Deterministic logging uses JSON lines with `run_id`, `event`, `stage` and
+  per-pipeline counters, allowing easy monitoring with `jq` or log collectors.
+
+Detailed command walkthroughs live in `docs/USAGE_EN.md` and
+`docs/USAGE_RU.md`.
+
+## Outputs
+
+* Primary CSV exports live under `local.io.output_dir` (default `data/output`).
+* Every run writes a `<name>.csv.meta.yaml` sidecar with configuration, command
+  line, row counts and SHA-256 digests. Validation errors go into
+  `<name>_failure_cases.csv`, and table-quality reports are produced for each
+  dataset.
+* Pipeline-specific extras include document quality JSON files and intermediate
+  target exports for the `all` workflow.
+
+Refer to `docs/OUTPUT_EN.md` / `docs/OUTPUT_RU.md` for field-level details and
+examples.
+
+## Testing and determinism
+
+* Deterministic CSV writers and metadata hashing are verified by dedicated unit
+  tests and utility CLIs (for example,
+  `library.utils.cli_tools.check_determinism`).
+* Smoke fixtures under `tests/data/` cover activities, targets, documents and
+  test items for offline experimentation.
+* `python -m library.utils.cli_tools.table_quality_main` and related tools aid
+  validation of third-party datasets before ingestion.
+
+This summary should orient newcomers and serve as the high-level entry point to
+more detailed reference material in the `docs/` directory.

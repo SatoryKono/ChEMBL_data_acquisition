@@ -36,7 +36,7 @@ def test_target_input_before_subcommand(
         captured["input_csv"] = Path(args.input_csv)
         return 0
 
-    monkeypatch.setattr(gtd, "apply_config_overrides", fake_apply)
+    monkeypatch.setattr(gtd.cli, "apply_config_overrides", fake_apply)
     monkeypatch.setattr(gtd, "run_all", fake_run_all)
 
     rc = gtd.main(["--config", str(config_yaml), "--input", str(input_csv), "all"])
@@ -68,7 +68,7 @@ def test_document_input_before_subcommand(
         captured["input_csv"] = Path(args.input_csv)
         return 0
 
-    monkeypatch.setattr(gdd, "apply_config_overrides", fake_apply)
+    monkeypatch.setattr(gdd.cli, "apply_config_overrides", fake_apply)
     monkeypatch.setattr(gdd, "run_chembl", fake_run)
 
     rc = gdd.main(["--config", str(config_yaml), "--input", str(input_csv), "chembl"])
