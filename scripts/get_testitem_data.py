@@ -60,6 +60,8 @@ from schemas import TestitemsSchema, normalize_testitems
 
 _TYPO_PARENT_COLUMN = "parant_molecule_id"
 
+UTC = timezone.utc
+
 
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
     """Raise a :class:`ValueError` if the legacy typo column is present."""

@@ -299,7 +299,7 @@ class PubChemCfg(_BaseModel):
         description="Optional TTL for the persisted CID cache in hours",
     )
     cid_cache_path: Path | None = Field(
-        default=None,
+        default=Path("data/cache/pubchem_cid_cache.json"),
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
     )
     batch_size: int = Field(50, ge=1)
