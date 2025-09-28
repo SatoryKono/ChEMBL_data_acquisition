@@ -9,6 +9,7 @@ import pytest
 from library import chembl_library as cl
 from library import io
 from library.config import Config
+from library.processing import activity as activity_processing
 from schemas import ActivitiesSchema
 from scripts import get_activity_data as gad
 
@@ -46,9 +47,9 @@ def test_run_chembl_respects_limit(
         "write_csv",
         lambda df, output, *, cfg, sep=None, encoding=None, **__: output,
     )
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(activity_processing, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(activity_processing, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(activity_processing, "file_sha256", lambda p: "deadbeef")
 
     rc = gad.run_chembl(cfg, args)
     assert rc == 0
@@ -107,9 +108,9 @@ def test_run_chembl_column_order(
     )
 
     monkeypatch.setattr(cl, "get_activities", lambda *_, **__: df)
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(activity_processing, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(activity_processing, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(activity_processing, "file_sha256", lambda p: "deadbeef")
 
     captured: dict[str, list[str]] = {}
 
@@ -135,3 +136,71 @@ def test_run_chembl_column_order(
     expected_head = [c for c in schema_cols if c in available]
     expected_tail = sorted(available - set(schema_cols))
     assert captured["col_order"] == expected_head + expected_tail
+
+
+def test_main_delegates_to_processing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+    output_csv = tmp_path / "out.csv"
+
+    cfg_copy = cfg.model_copy(deep=True)
+    cfg_copy.activity.dry_run = False
+    cfg_copy.activity.limit = None
+
+    monkeypatch.setattr(gad.cli, "apply_config_overrides", lambda *_, **__: cfg_copy)
+    monkeypatch.setattr(gad, "ensure_dirs", lambda _cfg: None)
+
+    called: dict[str, object] = {}
+
+    def fake_fetch(cfg_arg, path, *, limit):
+        called["fetch"] = {
+            "cfg": cfg_arg,
+            "path": path,
+            "limit": limit,
+        }
+        frame_df = pd.DataFrame({"activity_id": ["1"]})
+        return activity_processing.ActivityFrameResult(
+            data=frame_df,
+            column_order=["activity_id"],
+            rows_total=1,
+        )
+
+    monkeypatch.setattr(activity_processing, "fetch_activity_frame", fake_fetch)
+    monkeypatch.setattr(gad, "fetch_activity_frame", fake_fetch)
+
+    def fake_write(frame, output, cfg_arg, *, command, input_csv):
+        called["write"] = {
+            "frame": frame,
+            "output": output,
+            "cfg": cfg_arg,
+            "command": command,
+            "input_csv": input_csv,
+        }
+        return activity_processing.ActivityWriteResult(
+            csv_path=output,
+            rows_kept=1,
+            rows_dropped=0,
+            exit_code=0,
+        )
+
+    monkeypatch.setattr(activity_processing, "write_activity_outputs", fake_write)
+    monkeypatch.setattr(gad, "write_activity_outputs", fake_write)
+
+    exit_code = gad.main(
+        [
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+            "--config",
+            "ignored.yaml",
+        ]
+    )
+
+    assert exit_code == 0
+    assert called["fetch"]["path"] == input_csv
+    assert called["fetch"]["cfg"] is cfg_copy
+    assert called["write"]["output"] == output_csv
+    assert called["write"]["cfg"] is cfg_copy
