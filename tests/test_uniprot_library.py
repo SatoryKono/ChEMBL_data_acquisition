@@ -12,7 +12,7 @@ requests = pytest.importorskip("requests")
 responses = pytest.importorskip("responses")
 
 from library import uniprot_library as ul  # noqa: E402
-from library.config import IupharCfg, UniprotCfg  # noqa: E402
+from library.config import IupharCfg, RetryCfg, UniprotCfg  # noqa: E402
 
 
 def test_extract_names() -> None:
@@ -28,8 +28,9 @@ def test_extract_names() -> None:
 
 
 @responses.activate
-def test_fetch_uniprot_network_error() -> None:
+def test_fetch_uniprot_network_error(monkeypatch) -> None:
     cfg = UniprotCfg(base="https://example.org", delay=0)
+    monkeypatch.setattr(ul, "_retry_cfg", RetryCfg(max_attempts=1))
     responses.add(
         responses.GET,
         "https://example.org/uniprotkb/P12345.json",
@@ -79,6 +80,46 @@ def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
     assert called["url"] == "https://example.org/api/uniprotkb/P12345.json"
     assert called["timeout"] == (1, 2)
     assert sleeps and sleeps[0] == pytest.approx(0.5)
+
+
+@responses.activate
+def test_fetch_uniprot_retries_transient_error(monkeypatch) -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0)
+    monkeypatch.setattr(
+        ul,
+        "_retry_cfg",
+        RetryCfg(max_attempts=3, backoff_factor=0.5, status_forcelist=[500]),
+    )
+    url = "https://example.org/uniprotkb/P12345.json"
+
+    responses.add(responses.GET, url, status=500)
+    responses.add(responses.GET, url, json={"status": "ok"})
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(ul, "sleep", lambda delay: sleeps.append(delay))
+    monkeypatch.setattr(ul.random, "uniform", lambda _a, b: b)
+
+    records: list[tuple[str, dict[str, object]]] = []
+
+    def capture(event: str, **payload: object) -> None:
+        records.append((event, payload))
+
+    monkeypatch.setattr(ul.logger, "warning", capture)
+
+    result = ul.fetch_uniprot("P12345", cfg=cfg)
+
+    assert result == {"status": "ok"}
+    assert len(responses.calls) == 2
+    assert sleeps == [pytest.approx(1.0)]
+    assert len(records) == 1
+    event, payload = records[0]
+    assert event == "uniprot_request_retry"
+    assert payload["url"] == url
+    assert payload["attempt"] == 1
+    assert payload["max_attempts"] == 3
+    assert payload["status"] == 500
+    assert payload["rps"] == cfg.rps
+    assert "500" in str(payload["error"])
 
 
 @responses.activate
