@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from library import pubmed_library as pl
+from library.pubmed import aggregation as pa
 
 
 def test_pubmed_library_main_smoke(
@@ -55,11 +56,13 @@ def test_pubmed_library_main_smoke(
     monkeypatch.setattr(pl, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
     levels: list[str] = []
+    dumps: list[str] = []
 
-    def fake_print_results(records, *, level: str = "DEBUG") -> None:
-        levels.extend([level] * len(records))
+    def fake_emit_output(log, level: str, output: str) -> None:
+        levels.append(level)
+        dumps.append(output)
 
-    monkeypatch.setattr(pl, "print_results", fake_print_results)
+    monkeypatch.setattr(pa, "_emit_output", fake_emit_output)
 
     exit_code = pl.main(
         [
@@ -73,12 +76,17 @@ def test_pubmed_library_main_smoke(
     )
     assert exit_code == 0
     assert levels
-    assert all(level == "DEBUG" for level in levels)
+    default_levels = levels.copy()
+    default_dumps = dumps.copy()
+    assert all(level == "DEBUG" for level in default_levels)
+    assert default_dumps
+    assert all(len(dump) < 200 for dump in default_dumps)
     assert output_csv.exists()
     df = pd.read_csv(output_csv)
     assert not df.empty
 
     start_idx = len(levels)
+    start_dump_idx = len(dumps)
     exit_code_verbose = pl.main(
         [
             "--input-csv",
@@ -87,10 +95,18 @@ def test_pubmed_library_main_smoke(
             str(verbose_output_csv),
             "--log-level",
             "INFO",
-            "--keep-verbose-dumps",
+            "--verbose",
         ]
     )
     assert exit_code_verbose == 0
     verbose_levels = levels[start_idx:]
+    verbose_dumps = dumps[start_dump_idx:]
     assert verbose_levels
     assert all(level == "INFO" for level in verbose_levels)
+    assert verbose_dumps
+    for dump in verbose_dumps:
+        assert "PMID" in dump
+        assert "DOI" in dump
+        assert "Title" in dump
+        assert "PubMed.PMID" not in dump
+        assert len(dump) < 200
