@@ -9,6 +9,7 @@ import pytest
 from library import chembl_library as cl
 from library import cli as base_cli
 from library import pubchem_library as pl
+from library.utils.config import DEFAULT_CONFIG_RELATIVE
 
 _ORIGINAL_APPLY = base_cli.apply_config_overrides
 from scripts import get_testitem_data
@@ -132,7 +133,7 @@ def test_get_testitem_parent_catalog(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
 
@@ -242,7 +243,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
 
@@ -346,7 +347,7 @@ def test_get_testitem_refreshes_outdated_parents(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
 
@@ -357,3 +358,5 @@ def test_get_testitem_refreshes_outdated_parents(
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
     assert fetch_calls and len(fetch_calls) == 1
     assert set(fetch_calls[0]) == {"CHEMBL1", "CHEMBL2"}
+CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
+

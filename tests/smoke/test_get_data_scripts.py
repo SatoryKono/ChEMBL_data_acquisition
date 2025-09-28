@@ -10,6 +10,7 @@ from pandas.api import types as ptypes
 
 from library import chembl_library as cl
 from library import pubchem_library as pl
+from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -19,6 +20,8 @@ from scripts import (
 )
 
 TypeCheck = Callable[[pd.Series], bool]
+
+CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
 
 
 def _cleanup_output(path: Path) -> None:
@@ -94,7 +97,7 @@ def test_get_activity_data_smoke(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
     assert exit_code == 0
@@ -163,7 +166,7 @@ def test_get_assay_data_smoke(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
     assert exit_code == 0
@@ -235,7 +238,7 @@ def test_get_document_data_smoke(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
     assert exit_code == 0
@@ -299,7 +302,7 @@ def test_get_target_data_smoke(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
     assert exit_code == 0
@@ -433,7 +436,7 @@ def test_get_testitem_data_smoke(
             "--log-level",
             "ERROR",
             "--config",
-            str(Path("config.yaml")),
+            CONFIG_CLI_PATH,
         ]
     )
     assert exit_code == 0

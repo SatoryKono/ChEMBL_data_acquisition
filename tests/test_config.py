@@ -16,6 +16,7 @@ from library.config import (
     ensure_dirs,
     load_config,
 )
+from library.utils.config import DEFAULT_CONFIG_PATH
 from scripts import get_target_data as target_cli
 
 
@@ -265,12 +266,12 @@ def test_missing_dirs_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_invalid_bool_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure unknown boolean strings raise :class:`ValueError`."""
+    """Ensure unknown boolean strings raise :class:`ConfigError`."""
 
     path = tmp_path / "cfg.yaml"
     path.write_text("")
     monkeypatch.setenv("CHEMBL_DA__LOCAL__IO__EXIST_OK", "maybe")
-    with pytest.raises(ValidationError, match="Invalid boolean value"):
+    with pytest.raises(ConfigError, match="Invalid boolean value"):
         load_config(path)
 
 
@@ -310,7 +311,7 @@ def test_unknown_key_error(tmp_path: Path) -> None:
 def test_config_type_coercion() -> None:
     """The default configuration should load without type errors in strict mode."""
 
-    path = Path(__file__).resolve().parents[1] / "config.yaml"
+    path = DEFAULT_CONFIG_PATH
     cfg = load_config(path, strict=True)
     assert isinstance(cfg.pubchem.delay, float)
 
@@ -318,10 +319,10 @@ def test_config_type_coercion() -> None:
 def test_default_resource_paths_exist() -> None:
     """Default resource paths should exist on disk."""
 
-    cfg_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    cfg_path = DEFAULT_CONFIG_PATH
     cfg = load_config(cfg_path)
     resources = cfg.resources
-    project_root = cfg_path.parent
+    project_root = cfg_path.parents[1]
     for field in (
         "dictionary_dir",
         "iuphar_target_csv",
@@ -533,7 +534,7 @@ def test_target_chembl_defaults_match_cli(
 ) -> None:
     """Default target configuration should work with the CLI helpers."""
 
-    cfg = load_config(Path("config.yaml"))
+    cfg = load_config(DEFAULT_CONFIG_PATH)
     assert cfg.target.chembl.column == "target_chembl_id"
 
     input_csv = tmp_path / "targets.csv"

@@ -16,7 +16,7 @@ Example
 -------
 Fetch PubMed metadata for identifiers listed in ``pmids.csv``::
 
-    python scripts/get_document_data.py pubmed --config config.yaml --input pmids.csv --output output.csv
+    python scripts/get_document_data.py pubmed --config config/config.yaml --input pmids.csv --output output.csv
 
 The input file must contain a ``PMID`` column.
 
