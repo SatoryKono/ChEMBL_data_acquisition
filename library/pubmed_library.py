@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import cli
-from .cli import LoggerConfig, configure_logger
+from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
 from .config import Config, ensure_dirs, print_config, session_with_retry
 from .csv_utils import write_csv_deterministic
@@ -73,7 +73,7 @@ def parse_args(
     parser.add_argument(
         "--input-csv",
         dest="input_csv",
-        type=Path,
+        type=path_argument,
         default=argparse.SUPPRESS,
         help="Input CSV path with PMID column",
     )
