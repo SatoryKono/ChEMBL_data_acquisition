@@ -14,6 +14,7 @@ def test_pubmed_library_main_smoke(
     """Run the CLI with stubbed network calls."""
     input_csv = Path("tests/data/pmids.csv")
     output_csv = tmp_path / "out.csv"
+    verbose_output_csv = tmp_path / "out_verbose.csv"
 
     def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None):
         return [
@@ -53,6 +54,13 @@ def test_pubmed_library_main_smoke(
     monkeypatch.setattr(pl, "fetch_crossref", fake_fetch_crossref)
     monkeypatch.setattr(pl, "get_limiter", lambda *args, **kwargs: DummyLimiter())
 
+    levels: list[str] = []
+
+    def fake_print_results(records, *, level: str = "DEBUG") -> None:
+        levels.extend([level] * len(records))
+
+    monkeypatch.setattr(pl, "print_results", fake_print_results)
+
     exit_code = pl.main(
         [
             "--input-csv",
@@ -60,10 +68,29 @@ def test_pubmed_library_main_smoke(
             "--output",
             str(output_csv),
             "--log-level",
-            "ERROR",
+            "INFO",
         ]
     )
     assert exit_code == 0
+    assert levels
+    assert all(level == "DEBUG" for level in levels)
     assert output_csv.exists()
     df = pd.read_csv(output_csv)
     assert not df.empty
+
+    start_idx = len(levels)
+    exit_code_verbose = pl.main(
+        [
+            "--input-csv",
+            str(input_csv),
+            "--output",
+            str(verbose_output_csv),
+            "--log-level",
+            "INFO",
+            "--keep-verbose-dumps",
+        ]
+    )
+    assert exit_code_verbose == 0
+    verbose_levels = levels[start_idx:]
+    assert verbose_levels
+    assert all(level == "INFO" for level in verbose_levels)

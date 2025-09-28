@@ -54,6 +54,7 @@ from library.cli import (
     LoggerConfig,
     build_root_parser,
     configure_logger,
+    path_argument,
     positive_int,
 )
 from library.config import (
@@ -1147,7 +1148,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     pubmed.add_argument(
         "--fallback-doi-csv",
-        type=Path,
+        type=path_argument,
         default=None,
         help="Optional CSV file providing PMID to DOI overrides",
     )

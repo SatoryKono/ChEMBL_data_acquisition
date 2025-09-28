@@ -39,6 +39,7 @@ from library.cli import (
     LoggerConfig,
     build_root_parser,
     configure_logger,
+    path_argument,
     positive_int,
 )
 from library.config import (
@@ -208,7 +209,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     uniprot.add_argument(
         "--data-dir",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Directory containing '<uniprot_id>.json' files "
@@ -266,7 +267,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     iuphar.add_argument(
         "--target-csv",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Path to the _IUPHAR_target.csv file "
@@ -275,7 +276,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     iuphar.add_argument(
         "--family-csv",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Path to the _IUPHAR_family.csv file "
@@ -301,24 +302,24 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     all_cmd.add_argument(
         "--chembl-out",
         dest="chembl_out",
-        type=Path,
+        type=path_argument,
         help="Optional path to save intermediate ChEMBL data",
     )
     all_cmd.add_argument(
         "--uniprot-out",
         dest="uniprot_out",
-        type=Path,
+        type=path_argument,
         help="Optional path to save intermediate UniProt data",
     )
     all_cmd.add_argument(
         "--iuphar-out",
         dest="iuphar_out",
-        type=Path,
+        type=path_argument,
         help="Optional path to save intermediate IUPHAR data",
     )
     all_cmd.add_argument(
         "--data-dir",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Directory containing '<uniprot_id>.json' files "
@@ -327,7 +328,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.add_argument(
         "--target-csv",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Path to the _IUPHAR_target.csv file "
@@ -336,7 +337,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     all_cmd.add_argument(
         "--family-csv",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Path to the _IUPHAR_family.csv file "

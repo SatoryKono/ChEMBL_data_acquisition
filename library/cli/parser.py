@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import argparse
 import uuid
-from pathlib import Path
+import os
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from pydantic import ValidationError
@@ -74,6 +75,30 @@ def positive_int(value: str) -> int:
     return _positive_int(value)
 
 
+def _path_argument(value: str) -> Path:
+    """Convert CLI ``value`` into a :class:`~pathlib.Path` instance.
+
+    On non-Windows platforms command line inputs may still use Windows path
+    separators (a backslash). This helper normalises such inputs by
+    interpreting them as Windows paths and returning a POSIX-compatible
+    ``Path``. The
+    behaviour preserves regular POSIX paths and defers to :class:`Path` on
+    Windows.
+    """
+
+    stripped = value.strip()
+    if os.name != "nt" and "\\" in stripped:
+        windows_path = PureWindowsPath(stripped)
+        return Path(windows_path.as_posix())
+    return Path(stripped)
+
+
+def path_argument(value: str) -> Path:
+    """Public wrapper around :func:`_path_argument` for CLI validators."""
+
+    return _path_argument(value)
+
+
 def add_common_arguments(
     parser: argparse.ArgumentParser, *, defaults: bool = True
 ) -> argparse.ArgumentParser:
@@ -111,14 +136,14 @@ def add_common_arguments(
     parser.add_argument(
         "--input",
         dest="input_csv",
-        type=Path,
+        type=path_argument,
         default=input_default,
         help="Input CSV file",
     )
     parser.add_argument(
         "--output",
         dest="output_csv",
-        type=Path,
+        type=path_argument,
         default=output_default,
         help="Destination CSV file (default: output_<stem>_<YYYYMMDD>.csv)",
     )
@@ -176,7 +201,7 @@ def build_parser(
     parser.add_argument(
         "--config",
         dest="config",
-        type=Path,
+        type=path_argument,
         default=Path("config.yaml"),
         help="YAML configuration file",
     )
@@ -216,7 +241,7 @@ def build_root_parser() -> tuple[
     root.add_argument(
         "--config",
         dest="config",
-        type=Path,
+        type=path_argument,
         default=Path("config.yaml"),
         help="YAML configuration file",
     )
@@ -231,7 +256,7 @@ def build_root_parser() -> tuple[
     shared.add_argument(
         "--config",
         dest="config",
-        type=Path,
+        type=path_argument,
         default=argparse.SUPPRESS,
         help="YAML configuration file",
     )

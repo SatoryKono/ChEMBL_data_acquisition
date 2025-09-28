@@ -147,7 +147,6 @@
 | PubMed.Issue | number/string | PubMed API | Issue reported by PubMed.|
 | PubMed.StartPage | number/string | PubMed API | First page according to PubMed.|
 | PubMed.EndPage | number/string | PubMed API | Last page according to PubMed.|
-| PubMed.PublicationType | string | PubMed API | Raw publication-type terms.|
 | PubMed.MeSH_Descriptors | string | PubMed API | MeSH descriptors linked to the record.|
 | PubMed.MeSH_Qualifiers | string | PubMed API | MeSH qualifiers associated with the record.|
 | PubMed.ChemicalList | string | PubMed API | List of chemical entities mentioned.|
@@ -161,12 +160,10 @@
 | PubMed.ISSN | string | PubMed API | Journal ISSN as reported by PubMed.|
 | scholar.PMID | number/string | Semantic Scholar | PubMed ID linked by Semantic Scholar.|
 | scholar.Venue | string | Semantic Scholar | Publication venue recorded by Semantic Scholar.|
-| scholar.PublicationTypes | string | Semantic Scholar | Publication-type terms from Semantic Scholar.|
 | scholar.SemanticScholarId | string | Semantic Scholar | Semantic Scholar internal identifier.|
 | scholar.ExternalIds | string | Semantic Scholar | External identifiers serialized as JSON.|
 | scholar.DOI | string | Semantic Scholar | DOI value returned by Semantic Scholar.|
 | scholar.Error | string | Semantic Scholar | Error diagnostics from the Semantic Scholar API.|
-| OpenAlex.PublicationTypes | string | OpenAlex | Publication-type list returned by OpenAlex.|
 | OpenAlex.TypeCrossref | string | OpenAlex/Crossref | Crossref type relayed by OpenAlex.|
 | OpenAlex.Genre | string | OpenAlex | OpenAlex genre classification.|
 | OpenAlex.Id | string | OpenAlex | OpenAlex record identifier.|
@@ -187,6 +184,8 @@
 | OpenAlex.is_review | boolean/string | Post-processing | Review flag derived from OpenAlex metadata.|
 | pipeline_version | string | Pipeline metadata | `chembl-data-acquisition` package version.|
 | timestamp_utc | ISO 8601 string | Pipeline metadata | Export timestamp in UTC.|
+
+> **Note:** Raw publication-type arrays are normalized into the boolean `*.is_review` flags, which provide the canonical review detection signal across sources.
 
 ### target.csv (final export)
 - **Purpose:** unified target table combining ChEMBL, UniProt and IUPHAR attributes while preserving the deterministic column order expected by downstream BI processes.

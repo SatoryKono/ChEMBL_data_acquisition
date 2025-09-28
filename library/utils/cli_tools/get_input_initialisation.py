@@ -16,16 +16,16 @@ matching suffixes, for example ``activity_independent.csv`` or
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 
 from library import cli
 from library import input_initialisation_library as lib
 from library.cli import (
     LoggerConfig,
     configure_logger,
+    path_argument,
 )
 from library.cli import (
     build_parser as base_parser,
@@ -122,17 +122,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     parser, log_cfg = base_parser(__doc__ or "Input initialisation", column="chembl_id")
     parser.add_argument(
         "--same-doc",
-        type=Path,
+        type=path_argument,
         help="Path to same document workbook (default: config init.same_doc)",
     )
     parser.add_argument(
         "--all-doc",
-        type=Path,
+        type=path_argument,
         help="Path to all document workbook (default: config init.all_doc)",
     )
     parser.add_argument(
         "--dictionary-dir",
-        type=Path,
+        type=path_argument,
         default=None,
         help=(
             "Directory with _Target/targets_type.csv and _Curation/citation_fraction.csv "
@@ -141,7 +141,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     parser.add_argument(
         "--out-dir",
-        type=Path,
+        type=path_argument,
         help="Output directory (default: config init.output_dir)",
     )
     parser.add_argument(

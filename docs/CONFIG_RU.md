@@ -261,7 +261,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Очерёдность стратегий при поиске PubChem CID. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
 | `cache_ttl` | `3600` | Время жизни in-memory кэша HTTP (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_ttl_hours` | `null` | TTL (часы) для постоянного CID-кэша; `null` отключает истечение. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
-| `cid_cache_path` | `null` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `cid_cache_path` | `"data/cache/pubchem_cid_cache.json"` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
 | `batch_size` | `50` | Размер батча для обработчика PubChem. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Пропускать запросы, если локальные SMILES/InChIKey уже заполнены. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Сохранять существующие колонки `pubchem_*`, если ответ пуст. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
@@ -298,6 +298,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `cache_dir` | `.cache` | Каталог HTTP-кэша. |
 | `csv_sep` | `,` | Разделитель CSV по умолчанию. |
 | `csv_encoding` | `utf-8-sig` | Кодировка экспорта CSV. |
+| `csv_chunksize` | `10000` | Размер чанка (строк) при детерминированной записи CSV; значение задано в [`config.yaml`](../config.yaml). |
 | `na_markers` | `["#N/A"]` | Дополнительные маркеры пропусков при чтении CSV. |
 | `exist_ok` | `true` | Создавать каталоги автоматически. |
 

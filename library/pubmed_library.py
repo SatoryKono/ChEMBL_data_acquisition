@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import cli
-from .cli import LoggerConfig, configure_logger
+from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
 from .config import Config, ensure_dirs, print_config, session_with_retry
 from .csv_utils import write_csv_deterministic
@@ -73,9 +73,14 @@ def parse_args(
     parser.add_argument(
         "--input-csv",
         dest="input_csv",
-        type=Path,
+        type=path_argument,
         default=argparse.SUPPRESS,
         help="Input CSV path with PMID column",
+    )
+    parser.add_argument(
+        "--keep-verbose-dumps",
+        action="store_true",
+        help="Log combined metadata dumps at INFO level for troubleshooting",
     )
     args = parser.parse_args(argv)
     return args, parser, log_cfg
@@ -131,6 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     records: list[dict[str, str]] = []
     batch_size = cfg.document.pubmed.batch_size
+    dump_level = "INFO" if args.keep_verbose_dumps else "DEBUG"
     with session_with_retry(cfg.api, cfg.retry) as session:
         for i in range(0, len(pmids), batch_size):
             batch_pmids = pmids[i : i + batch_size]
@@ -156,7 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
 
                 combined = merge_records(pubmed, semsch, openalex, crossref)
-                print_results([combined])
+                print_results([combined], level=dump_level)
                 records.append(combined)
 
     df = pd.DataFrame.from_records(records)

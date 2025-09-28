@@ -45,6 +45,52 @@ def prepare_parent_lookup_data(
     )
 
 
+def test_load_molecule_hierarchy_lookup_missing(tmp_path: Path, cfg: Config) -> None:
+    path = tmp_path / "missing.csv"
+
+    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+
+    assert result == {}
+
+
+def test_load_molecule_hierarchy_lookup_filters_empty_rows(
+    tmp_path: Path, cfg: Config
+) -> None:
+    path = tmp_path / "hierarchy.csv"
+    path.write_text(
+        "\n".join(
+            [
+                "molecule_chembl_id,parent_molecule_chembl_id",
+                "CHEMBL1,CHEMBL2",
+                "CHEMBL3,",
+                ",CHEMBL4",
+                " chembl5 , chembl6 ",
+                "CHEMBL1,CHEMBL7",
+            ]
+        ),
+        encoding=cfg.io.csv_encoding,
+    )
+
+    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+
+    assert result == {"CHEMBL1": "CHEMBL2", "CHEMBL5": "CHEMBL6"}
+
+
+def test_load_molecule_hierarchy_lookup_missing_columns(
+    tmp_path: Path, cfg: Config
+) -> None:
+    path = tmp_path / "hierarchy_invalid.csv"
+    path.write_text(
+        "molecule_chembl_id,parent_id\nCHEMBL1,CHEMBL2\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+
+    assert "invalid hierarchy lookup" in str(excinfo.value)
+
+
 def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> None:
     df = pd.DataFrame({"canonical_smiles": ["C"]})
     cfg = pl.PubChemCfg(delay=0)
@@ -509,6 +555,7 @@ def test_run_chembl_column_order(
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     monkeypatch.setattr(
         gtd,
@@ -589,6 +636,74 @@ def test_run_chembl_column_order(
     assert captured["col_order"] == expected_head + expected_tail
 
 
+def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\nCHEMBL2\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(
+        io, "read_ids", lambda *_, **__: iter(["CHEMBL1", "CHEMBL2"])
+    )
+
+    df = pd.DataFrame(
+        [
+            {"molecule_chembl_id": "CHEMBL1", "parent_molecule_id": pd.NA},
+            {"molecule_chembl_id": "CHEMBL2", "parent_molecule_id": pd.NA},
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+
+    cache_path = tmp_path / "parent_catalog.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    cfg.molecule_catalog.cache_path = cache_path
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
+
+    parent_catalog = {"CHEMBL1": "CHEMBL1_PARENT"}
+
+    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: parent_catalog)
+    monkeypatch.setattr(
+        gtd.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+    )
+
+    captured_precomputed: dict[str, object] = {}
+
+    def fake_attach(frame: pd.DataFrame, **kwargs: object):
+        captured_precomputed["data"] = kwargs.get("precomputed")
+        return (
+            frame,
+            gtd.ParentLookupStats(
+                source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+                missing=0,
+                unique=0,
+                attached=len(frame),
+                uncovered=0,
+            ),
+        )
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+
+    rc = gtd.run_chembl(cfg, args)
+    assert rc == 0
+
+    prepared = captured_precomputed.get("data")
+    assert isinstance(prepared, gtd.ParentLookupPreparedData)
+    assert prepared.need_lookup == {"CHEMBL2"}
+
+
 def test_run_chembl_initialises_pubchem_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -610,6 +725,7 @@ def test_run_chembl_initialises_pubchem_session(
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     monkeypatch.setattr(
         gtd,
@@ -699,6 +815,7 @@ def test_run_chembl_uses_lazy_identifier_stream(
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(
         gtd,
         "attach_parent_molecule_ids",
@@ -770,6 +887,7 @@ def test_run_chembl_calls_pubchem_once(
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     monkeypatch.setattr(
         gtd,
@@ -819,6 +937,85 @@ def test_run_chembl_calls_pubchem_once(
     assert len(resolve_calls) == 1
 
 
+def test_run_chembl_prefills_parent_from_hierarchy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text("molecule_chembl_id\nCHEMBL1\nCHEMBL2\n", encoding=cfg.io.csv_encoding)
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["CHEMBL1", "CHEMBL2"]))
+
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    source = pd.DataFrame(
+        [
+            {child_field: "CHEMBL1", parent_field: pd.NA},
+            {child_field: "CHEMBL2", parent_field: "CHEMBL2_EXISTING"},
+        ]
+    )
+
+    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    monkeypatch.setattr(gtd.pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **_: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(gtd, "write_parent_catalog_cache", lambda *_, **__: None)
+
+    cfg.molecule_catalog.cache_path = tmp_path / "parent_catalog.json"
+    cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
+    hierarchy_path = tmp_path / "hierarchy.csv"
+    cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = hierarchy_path
+
+    captured_path: Path | None = None
+
+    def fake_lookup(path: Path | None, *, io_cfg: object) -> dict[str, str]:
+        nonlocal captured_path
+        captured_path = path
+        return {"CHEMBL1": "CHEMBL1_PARENT"}
+
+    def fail_query(*_: object, **__: object) -> dict[str, str]:
+        raise AssertionError("query_parent_catalog should not be called")
+
+    def fail_fetch(*_: object, **__: object) -> dict[str, str]:
+        raise AssertionError("fetch_parent_catalog_for should not be called")
+
+    def fail_load(**_: object) -> dict[str, str]:
+        raise AssertionError("load_parent_catalog should not be called")
+
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", fake_lookup)
+    monkeypatch.setattr(gtd, "query_parent_catalog", fail_query)
+    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fail_fetch)
+    monkeypatch.setattr(gtd, "load_parent_catalog", fail_load)
+
+    captured_df: pd.DataFrame | None = None
+
+    def fake_write_csv(
+        df: pd.DataFrame,
+        output: Path,
+        *,
+        cfg: Config,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        **__: object,
+    ) -> Path:
+        nonlocal captured_df
+        captured_df = df.copy()
+        return output
+
+    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+
+    rc = gtd.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert captured_path == hierarchy_path
+    assert captured_df is not None
+    assert captured_df[parent_field].tolist() == ["CHEMBL1_PARENT", "CHEMBL2_EXISTING"]
+
+
 def test_run_chembl_merges_parent_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -857,6 +1054,7 @@ def test_run_chembl_merges_parent_catalog(
 
     monkeypatch.setattr(gtd, "query_parent_catalog", fake_query_parent_catalog)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     captured_catalog: dict[str, str] | None = None
     captured_source: str | None = None
 
@@ -927,7 +1125,7 @@ def test_run_chembl_merges_parent_catalog(
     ]
     assert query_calls == 1
     assert captured_catalog is parent_catalog
-    assert captured_source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert captured_source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
 
 
 def test_run_chembl_updates_parent_cache_and_reuses_results(
@@ -946,6 +1144,7 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     cache_path = tmp_path / "parent_catalog.json"
     cache_path.write_text("{}", encoding="utf-8")
@@ -1021,7 +1220,7 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     assert update_calls == [{"CHEMBL1": "CHEMBL1_PARENT"}]
     assert [source for _, source in attach_calls] == [
         gtd.PARENT_LOOKUP_SOURCE_PARTIAL,
-        gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        gtd.PARENT_LOOKUP_SOURCE_LOOKUP,
     ]
 
 
@@ -1089,6 +1288,7 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
     monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(
         gtd,
         "attach_parent_molecule_ids",
@@ -1160,6 +1360,7 @@ def test_run_chembl_parent_catalog_error(
         ),
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
@@ -1216,6 +1417,7 @@ def test_run_chembl_parent_catalog_request_error(
         ),
     )
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
@@ -1521,7 +1723,7 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
     assert stats.unique == 3
     assert stats.attached == 3
     assert stats.missing == 0
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
     assert tracking_catalog.iterations == 0
     assert set(tracking_catalog.lookups) == {"CHEMBL1", "CHEMBL2", "CHEMBL3"}
 
@@ -1822,4 +2024,4 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
     assert stats.missing == 0
     assert stats.attached == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP

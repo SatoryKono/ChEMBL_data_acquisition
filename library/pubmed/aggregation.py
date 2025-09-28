@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
@@ -30,8 +31,30 @@ def merge_records(*records: Mapping[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def print_results(records: list[dict[str, str]]) -> None:
+def _emit_output(log: Any, level: str, output: str) -> None:
+    """Send ``output`` to ``log`` using ``level`` when possible."""
+
+    method = getattr(log, level.lower(), None)
+    if callable(method):
+        try:
+            method("pubmed_record_dump", dump=output)
+        except TypeError:
+            method(output)
+        return
+
+    log_method = getattr(log, "log", None)
+    if callable(log_method):
+        level_name = level.upper()
+        try:
+            log_method(level_name, "pubmed_record_dump", dump=output)
+        except TypeError:
+            level_no = getattr(logging, level_name, logging.INFO)
+            log_method(level_no, output)
+
+
+def print_results(records: list[dict[str, str]], *, level: str = "DEBUG") -> None:
     """Log result records instead of printing to ``stdout``."""
+
     log = logger
     try:
         from tabulate import tabulate
@@ -60,7 +83,7 @@ def print_results(records: list[dict[str, str]]) -> None:
         output = json.dumps(display_records, ensure_ascii=False, indent=2)
 
     try:
-        log.info(output)
+        _emit_output(log, level, output)
     except UnicodeEncodeError:
         import sys
 

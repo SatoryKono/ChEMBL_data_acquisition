@@ -9,6 +9,7 @@ from .parser import (
     build_root_parser,
     configure_logger,
     create_logger_config,
+    path_argument,
     positive_int,
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "build_root_parser",
     "configure_logger",
     "create_logger_config",
+    "path_argument",
     "positive_int",
 ]

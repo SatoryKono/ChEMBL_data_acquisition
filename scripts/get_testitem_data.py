@@ -13,6 +13,7 @@ import argparse
 from collections import ChainMap
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import islice, tee
 from typing import Any, NamedTuple
 
@@ -38,6 +39,7 @@ from library.cli import (
 from library.config import (
     ApiCfg,
     Config,
+    IoCfg,
     MoleculeCatalogCfg,
     PubChemCfg,
     _serialize_paths,
@@ -58,7 +60,23 @@ from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 from schemas import TestitemsSchema, normalize_testitems
 
+
+# ===== Parameters =====
+
+ENCODING_UTF8 = "utf-8"
+MOLECULE_HIERARCHY_DELIMITER = ","
+DEFAULT_MOLECULE_HIERARCHY_PATH = Path(
+    "dictionary/_testitem/molecule_hierarchy.csv"
+)
+PUBCHEM_CID_CACHE_ENCODING = ENCODING_UTF8
+
+
+# ===== Helpers =====
+
+UTC = timezone.utc  # noqa: UP017
 _TYPO_PARENT_COLUMN = "parant_molecule_id"
+
+UTC = timezone.utc
 
 
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
@@ -71,6 +89,7 @@ def ensure_no_parant_column(df: pd.DataFrame) -> None:
 
 
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
+PARENT_LOOKUP_SOURCE_LOOKUP = "lookup"
 PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
 PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
@@ -87,7 +106,6 @@ PUBCHEM_COLUMNS = [
 ]
 
 
-_PUBCHEM_CID_CACHE_ENCODING = "utf-8"
 _CID_CACHE_MISSING = object()
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
@@ -112,6 +130,78 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 
+@lru_cache(maxsize=None)
+def _load_molecule_hierarchy_lookup_cached(
+    path: str,
+    encoding: str,
+    delimiter: str,
+) -> dict[str, dict[str, str | None]]:
+    """Load molecule hierarchy data from ``path`` with normalised identifiers."""
+
+    csv_path = Path(path)
+    if not csv_path.exists():
+        raise FileNotFoundError(
+            f"Molecule hierarchy dictionary not found: {csv_path}"
+        )
+
+    try:
+        frame = pd.read_csv(
+            csv_path,
+            sep=delimiter,
+            encoding=encoding,
+            dtype="string",
+        )
+    except ValueError as exc:  # pragma: no cover - pandas raises on missing columns
+        raise ValueError(
+            "Unable to read molecule hierarchy dictionary; verify the CSV format."
+        ) from exc
+
+    expected_columns = ["molecule_chembl_id", "parent_molecule_chembl_id"]
+    missing_columns = [col for col in expected_columns if col not in frame.columns]
+    if missing_columns:
+        raise ValueError(
+            "Molecule hierarchy dictionary missing required columns: "
+            + ", ".join(missing_columns)
+        )
+
+    subset = frame.loc[:, expected_columns].fillna("")
+    for column in expected_columns:
+        subset[column] = (
+            subset[column]
+            .astype("string")
+            .str.strip()
+            .str.upper()
+        )
+
+    lookup: dict[str, dict[str, str | None]] = {}
+    for molecule_id, parent_id in subset.itertuples(index=False, name=None):
+        if not molecule_id:
+            continue
+        lookup[molecule_id] = {
+            "molecule_chembl_id": molecule_id,
+            "parent_molecule_chembl_id": parent_id or None,
+        }
+
+    return lookup
+
+
+def LoadMoleculeHierarchyLookup(
+    path: Path | str = DEFAULT_MOLECULE_HIERARCHY_PATH,
+    *,
+    encoding: str = ENCODING_UTF8,
+    delimiter: str = MOLECULE_HIERARCHY_DELIMITER,
+) -> dict[str, dict[str, str | None]]:
+    """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
+
+    resolved_path = Path(path)
+    cached = _load_molecule_hierarchy_lookup_cached(
+        str(resolved_path),
+        encoding,
+        delimiter,
+    )
+    return {key: value.copy() for key, value in cached.items()}
+
+
 def _load_pubchem_cid_cache(
     path: Path | None, *, ttl_hours: float | None = None
 ) -> dict[str, str | None]:
@@ -120,7 +210,7 @@ def _load_pubchem_cid_cache(
     if path is None:
         return {}
     try:
-        with path.open("r", encoding=_PUBCHEM_CID_CACHE_ENCODING) as handle:
+        with path.open("r", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             data = json.load(handle)
     except FileNotFoundError:
         return {}
@@ -195,7 +285,7 @@ def _write_pubchem_cid_cache(
             continue
         serialisable[key] = value
     try:
-        with path.open("w", encoding=_PUBCHEM_CID_CACHE_ENCODING) as handle:
+        with path.open("w", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             payload = {
                 "metadata": {
                     "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
@@ -405,6 +495,60 @@ def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
     return normalised
 
 
+def load_molecule_hierarchy_lookup(
+    path: Path | None, *, io_cfg: IoCfg
+) -> dict[str, str]:
+    """Return child → parent mapping loaded from a local hierarchy file."""
+
+    if path is None:
+        return {}
+
+    required = ("molecule_chembl_id", "parent_molecule_chembl_id")
+    try:
+        hierarchy_df = io.read_csv(
+            path,
+            cfg=io_cfg,
+            required_columns=required,
+            dtype="string",
+        )
+    except FileNotFoundError:
+        logger.info("molecule_hierarchy_lookup_missing", path=str(path))
+        return {}
+    except ValueError as exc:
+        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
+
+    if hierarchy_df.empty:
+        return {}
+
+    trimmed = hierarchy_df.loc[:, required].copy()
+    trimmed["molecule_chembl_id"] = (
+        trimmed["molecule_chembl_id"].fillna("").astype("string").str.strip().str.upper()
+    )
+    trimmed["parent_molecule_chembl_id"] = (
+        trimmed["parent_molecule_chembl_id"]
+        .fillna("")
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    filtered = trimmed[
+        (trimmed["molecule_chembl_id"] != "")
+        & (trimmed["parent_molecule_chembl_id"] != "")
+    ].drop_duplicates(subset=["molecule_chembl_id"], keep="first")
+
+    if filtered.empty:
+        return {}
+
+    lookup = filtered.set_index("molecule_chembl_id")["parent_molecule_chembl_id"].to_dict()
+    logger.info(
+        "molecule_hierarchy_lookup_loaded",
+        path=str(path),
+        rows=len(lookup),
+    )
+    return lookup
+
+
 class ParentLookupPreparedData(NamedTuple):
     """Container for precomputed parent lookup data."""
 
@@ -588,6 +732,9 @@ def attach_parent_molecule_ids(
     attached = int(combined_parent.notna().sum())
 
     final_source = source_resolved
+    if catalog is not None and not missing_ids:
+        if final_source in (None, PARENT_LOOKUP_SOURCE_CACHE, PARENT_LOOKUP_SOURCE_SKIPPED):
+            final_source = PARENT_LOOKUP_SOURCE_LOOKUP
     if full_sync_used:
         final_source = PARENT_LOOKUP_SOURCE_SYNC
     elif partial_fetch_used:
@@ -747,7 +894,7 @@ def add_pubchem_data(
             else:
                 continue
             local_records[chembl_norm] = record
-            parent_record_cache.setdefault(chembl_norm, record)
+            parent_record_cache[chembl_norm] = record
 
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
@@ -851,9 +998,7 @@ def add_pubchem_data(
             cid_series.loc[idx] = cached_value
             lookup_cids.add(cached_value)
 
-    for progress, row in enumerate(
-        result.loc[needs_lookup_mask].itertuples(), start=1
-    ):
+    for progress, row in enumerate(result.loc[needs_lookup_mask].itertuples(), start=1):
         logger.info("pubchem_progress", current=progress, total=total)
         idx = row.Index
         chembl_id = chembl_norm.loc[idx]
@@ -903,18 +1048,30 @@ def add_pubchem_data(
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
     pubchem_df = pubchem_df.reindex(result.index)
-    pubchem_df = pubchem_df.convert_dtypes()
 
     preserve_mask = skip_mask | prefer_local_mask
     if preserve_mask.any():
-        for column in [col for col in PUBCHEM_COLUMNS if col in result.columns]:
-            original_series = result[column].astype("string")
-            if column in pubchem_df.columns:
-                pubchem_df[column] = pubchem_df[column].astype("string").where(
-                    ~preserve_mask, original_series
+        existing_columns = [
+            column for column in PUBCHEM_COLUMNS if column in result.columns
+        ]
+        if existing_columns:
+            original_existing = result[existing_columns].astype("string")
+            intersecting_columns = [
+                column for column in existing_columns if column in pubchem_df.columns
+            ]
+            if intersecting_columns:
+                pubchem_df[intersecting_columns] = (
+                    pubchem_df[intersecting_columns]
+                    .astype("string")
+                    .mask(preserve_mask, original_existing[intersecting_columns])
                 )
-            else:
-                pubchem_df[column] = original_series
+            missing_columns = [
+                column for column in existing_columns if column not in pubchem_df.columns
+            ]
+            if missing_columns:
+                pubchem_df[missing_columns] = original_existing[missing_columns]
+
+    pubchem_df = pubchem_df.convert_dtypes()
 
     prefer_values = getattr(cfg, "prefer_local_values", False)
 
@@ -1032,17 +1189,46 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         else:
             existing_parent = pd.Series("", index=df.index, dtype="string")
 
+        hierarchy_lookup_path = getattr(
+            cfg.testitem_molecule_enrichment.sources,
+            "molecule_hierarchy_path",
+            None,
+        )
+        try:
+            hierarchy_lookup = load_molecule_hierarchy_lookup(
+                hierarchy_lookup_path,
+                io_cfg=cfg.io,
+            )
+        except ValueError as exc:
+            logger.error(
+                "molecule_hierarchy_lookup_invalid",
+                error=str(exc),
+                path=str(hierarchy_lookup_path),
+            )
+            return 1
+
+        if hierarchy_lookup:
+            hierarchy_series = normalised_ids.map(
+                lambda value: hierarchy_lookup.get(value) if value else None
+            )
+            hierarchy_mask = hierarchy_series.notna()
+            if hierarchy_mask.any():
+                resolved = hierarchy_series[hierarchy_mask].astype("string")
+                if parent_column in df.columns:
+                    df[parent_column] = df[parent_column].astype("string")
+                else:
+                    df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
+                df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
+                existing_parent.loc[hierarchy_mask] = (
+                    resolved.fillna("").astype("string")
+                )
+
         if getattr(cfg.molecule_catalog, "force_refresh_existing", False):
             need_lookup_mask = normalised_ids != ""
         else:
             need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
-        need_lookup = set(normalised_ids[need_lookup_mask])
-        prepared_need_lookup = set(need_lookup)
-        parent_lookup_data = ParentLookupPreparedData(
-            child_ids=normalised_ids,
-            existing_parent_ids=existing_parent,
-            need_lookup=prepared_need_lookup,
-        )
+        initial_need_lookup = set(normalised_ids[need_lookup_mask])
+        need_lookup = set(initial_need_lookup)
 
         cache_before = _cache_state(cfg.molecule_catalog.cache_path)
         cache_after = cache_before
@@ -1105,6 +1291,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 parent_catalog.update(fallback_catalog)
                 parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
                 need_lookup -= set(fallback_catalog)
+
+        lookup_resolved = initial_need_lookup - need_lookup
+        parent_lookup_data = ParentLookupPreparedData(
+            child_ids=normalised_ids,
+            existing_parent_ids=existing_parent,
+            need_lookup=set(need_lookup),
+        )
+        if (
+            lookup_resolved
+            and not need_lookup
+            and parent_catalog_source
+            not in (PARENT_LOOKUP_SOURCE_PARTIAL, PARENT_LOOKUP_SOURCE_SYNC)
+        ):
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_LOOKUP
 
         try:
             ensure_no_parant_column(df)

@@ -1085,7 +1085,7 @@
           ]
         },
         "cid_cache_path": {
-          "default": null,
+          "default": "data/cache/pubchem_cid_cache.json",
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
           "title": "Cid Cache Path",
           "type": [
