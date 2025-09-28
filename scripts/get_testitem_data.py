@@ -747,7 +747,7 @@ def add_pubchem_data(
             else:
                 continue
             local_records[chembl_norm] = record
-            parent_record_cache.setdefault(chembl_norm, record)
+            parent_record_cache[chembl_norm] = record
 
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
