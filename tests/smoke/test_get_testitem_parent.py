@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from library import chembl_library as cl
+from library.processing import chembl_library as cl
 from library import cli as base_cli
-from library import pubchem_library as pl
+from library.clients import pubchem_library as pl
 
 _ORIGINAL_APPLY = base_cli.apply_config_overrides
 from scripts import get_testitem_data

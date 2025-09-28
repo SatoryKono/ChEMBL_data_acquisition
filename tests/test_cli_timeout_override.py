@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 from pytest import MonkeyPatch
 
-from library import chembl_library as cl
+from library.processing import chembl_library as cl
 from library import io
 from library.config import Config
 from scripts import get_assay_data as gas

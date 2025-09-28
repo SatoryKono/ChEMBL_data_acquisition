@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 import pandera.pandas as pa
 
-from library.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
+from library.processing.document_pipeline import DOCUMENT_SCHEMA_COLUMNS
 
 # ``pa.Any`` is not available in the current pandera version; ``object`` with
 # ``coerce=True`` permits arbitrary dtypes.

@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.pubchem_library`."""
+"""Tests for :mod:`library.clients.pubchem_library`."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import requests
 responses = pytest.importorskip("responses")
 
 
-from library import pubchem_library as pl  # noqa: E402
+from library.clients import pubchem_library as pl  # noqa: E402
 from library import rate_limiter as rl  # noqa: E402
 
 

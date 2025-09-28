@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from library import chembl_library as cl
-from library import pubchem_library as pl
+from library.processing import chembl_library as cl
+from library.clients import pubchem_library as pl
 from library import testitem_enrichment
 from scripts import get_testitem_data
 

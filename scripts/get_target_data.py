@@ -26,14 +26,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from library import chembl_library as cl
+from library.processing import chembl_library as cl
 from library import cli
 from library import io
 from library import iuphar_library as ii
 from library import protein_classification as pc
-from library import target_postprocessing as tp
+from library.processing import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.chembl_client import ChemblClient
+from library.clients.chembl_client import ChemblClient
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,

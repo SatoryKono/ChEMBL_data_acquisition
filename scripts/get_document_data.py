@@ -1,7 +1,7 @@
 """Command line interface for retrieving document metadata from external sources.
 
 The tool integrates :mod:`library.pubmed_library` and
-:mod:`library.chembl_library` to collect information about publications from
+:mod:`library.processing.chembl_library` to collect information about publications from
 several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and
 provides three sub-commands:
 
@@ -41,7 +41,7 @@ import bootstrap
 
 bootstrap.ensure_project_root()
 
-from library import chembl_library as cl
+from library.processing import chembl_library as cl
 from library import cli
 from library import document_postprocessing as dp
 from library import io
@@ -49,7 +49,7 @@ from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
-from library.chembl_client import ChemblClient, _chunked
+from library.clients.chembl_client import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,
@@ -68,7 +68,7 @@ from library.config import (
     print_config,
     session_with_retry,
 )
-from library.document_pipeline import (
+from library.processing.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
     build_quality_report,

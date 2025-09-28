@@ -16,9 +16,9 @@ import requests
 from cachetools import TTLCache
 from requests import Session
 
-from .config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
-from .log import logger
-from .rate_limiter import get_limiter, sleep
+from ..config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
+from ..log import logger
+from ..rate_limiter import get_limiter, sleep
 
 # Cache is initialised lazily to allow configuration of the TTL via
 # :class:`PubChemCfg`. The cache is recreated when the TTL changes.

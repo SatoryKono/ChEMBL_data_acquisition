@@ -11,7 +11,7 @@ from pathlib import Path
 from time import perf_counter
 from urllib.parse import urlencode, urljoin
 
-from .chembl_client import ChemblClient, _chunked
+from .clients.chembl_client import ChemblClient, _chunked
 from .config import ApiCfg, MoleculeCatalogCfg
 from .log import logger
 from .rate_limiter import sleep

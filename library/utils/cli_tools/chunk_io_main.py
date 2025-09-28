@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from library.chunk_io import process_csv_chunks
+from library.io.chunk_io import process_csv_chunks
 from library.cli import (
     LoggerConfig,
     add_common_arguments,

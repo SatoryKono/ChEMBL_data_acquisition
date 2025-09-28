@@ -24,11 +24,11 @@ from pandera.errors import SchemaErrors
 
 bootstrap.ensure_project_root()
 
-from library import chembl_library as cl
+from library.processing import chembl_library as cl
 from library import cli
 from library import io, molecule_catalog, testitem_enrichment
-from library import pubchem_library as pl
-from library.chembl_client import ChemblClient
+from library.clients import pubchem_library as pl
+from library.clients.chembl_client import ChemblClient
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -819,7 +819,7 @@ def add_pubchem_data(
     Parameters
     ----------
     df:
-        Data frame returned by :func:`library.chembl_library.get_testitem`.
+        Data frame returned by :func:`library.processing.chembl_library.get_testitem`.
     cfg:
         PubChem configuration options.
     client:

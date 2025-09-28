@@ -11,9 +11,9 @@ import pandas as pd
 import pytest
 import requests
 
-from library import chembl_library as cl
+from library.processing import chembl_library as cl
 from library import io
-from library import pubchem_library as pl
+from library.clients import pubchem_library as pl
 from library.config import Config
 from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd

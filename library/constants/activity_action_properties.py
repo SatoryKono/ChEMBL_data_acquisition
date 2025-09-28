@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from .log import logger
+from ..log import logger
 
 # Keywords describing allosteric modulation effects.  The lists intentionally
 # focus on clear-cut textual cues that commonly appear in ChEMBL annotations.

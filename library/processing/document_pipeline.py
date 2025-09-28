@@ -17,9 +17,9 @@ from typing import Any
 
 import pandas as pd
 
-from .chembl_document import DOCUMENT_COLUMNS as _CHEMBL_COLUMNS
-from .document_type_classifier import compute_scores, decide_label
-from .document_type_terms import parse_terms
+from ..chembl_document import DOCUMENT_COLUMNS as _CHEMBL_COLUMNS
+from ..document_type_classifier import compute_scores, decide_label
+from ..constants.document_type_terms import parse_terms
 
 # ---------------------------------------------------------------------------
 # Column declarations

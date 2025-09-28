@@ -14,8 +14,8 @@ from typing import Literal
 
 import pandas as pd
 
-from .config import IoCfg
-from .log import logger
+from ..config import IoCfg
+from ..log import logger
 
 
 def _read_checkpoint(path: Path) -> int:

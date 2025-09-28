@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from pytest import MonkeyPatch
 
-import library.target_postprocessing as tp
+import library.processing.target_postprocessing as tp
 from library import protein_classification as pc
 from library.config import Config
 from scripts import get_target_data as gtd

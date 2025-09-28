@@ -3,8 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library import chembl_library as cl
-from library.chembl_client import ChemblClient
+from library.processing import chembl_library as cl
+from library.clients.chembl_client import ChemblClient
 from library.dtype_inspector import inspect_dtypes, logger
 
 

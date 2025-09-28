@@ -27,7 +27,7 @@ def test_warnings_are_logged() -> None:
 
     code = (
         "import sys, warnings, io; "
-        "from library.logging_setup import LoggerConfig, configure_logger; "
+        "from library.utils.logging_setup import LoggerConfig, configure_logger; "
         "buf = io.StringIO(); "
         "configure_logger(LoggerConfig(level='WARNING', run_id='rid', stream=buf)); "
         "warnings.warn('problem occurred'); "

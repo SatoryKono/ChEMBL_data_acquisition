@@ -17,13 +17,13 @@ from .csv_utils import (
     write_csv_deterministic,
 )
 from .document_type_classifier import compute_scores, decide_label
-from .document_type_terms import (
+from .constants.document_type_terms import (
     EXPERIMENTAL_TERMS,
     REVIEW_TERMS,
     UNKNOWN_TERMS,
     parse_terms,
 )
-from .logging_setup import Logger, LoggerConfig, configure_logger
+from .utils.logging_setup import Logger, LoggerConfig, configure_logger
 from .organism_classification import (
     TYPE_MULTICELLULAR,
     TYPE_UNICELLULAR,

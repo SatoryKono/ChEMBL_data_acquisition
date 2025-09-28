@@ -8,8 +8,8 @@ import pandas as pd
 import pytest
 from pandas.api import types as ptypes
 
-from library import chembl_library as cl
-from library import pubchem_library as pl
+from library.processing import chembl_library as cl
+from library.clients import pubchem_library as pl
 from scripts import (
     get_activity_data,
     get_assay_data,

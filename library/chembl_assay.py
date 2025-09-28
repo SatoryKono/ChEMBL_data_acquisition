@@ -7,10 +7,10 @@ from urllib.parse import urljoin
 
 import pandas as pd
 
-from .chembl_client import ChemblClient, _chunked
+from .clients.chembl_client import ChemblClient, _chunked
 from .config import ApiCfg
 from .log import logger
-from .pandas_utils import json_normalize_pyarrow
+from .io.pandas_utils import json_normalize_pyarrow
 
 ASSAY_VARIANT_COLUMN_ALIASES = {
     "variant_sequence.isoform": "isoform",
