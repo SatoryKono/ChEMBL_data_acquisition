@@ -1,6 +1,6 @@
-"""Tests for helpers defined in ``library.chembl_target``."""
+"""Tests for helpers defined in ``library.processing.target``."""
 
-from library.chembl_target import _collect_reaction_ec_numbers
+from library.processing.target import _collect_reaction_ec_numbers
 
 
 def test_collect_reaction_ec_numbers_excludes_reactome_like_xrefs() -> None:

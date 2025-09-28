@@ -11,11 +11,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.constants import TARGETS_COLUMN_ORDER
 
 from . import organism_classification
 from .config import Config, IoCfg
-from .log import logger
+from .utils.logging import logger
 
 # Columns removed in the final export
 REMOVE_COLUMNS: list[str] = []

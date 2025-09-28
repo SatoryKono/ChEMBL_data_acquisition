@@ -9,7 +9,7 @@ import pytest
 from library import chembl_library as cl
 from library import io
 from library.config import Config
-from schemas import ActivitiesSchema
+from library.constants import ActivitiesSchema
 from scripts import get_activity_data as gad
 
 

@@ -59,7 +59,7 @@ data/output/
 
 ## Детерминированная запись CSV
 
-`library.io.write_csv` вызывает `library.csv_utils.write_csv_deterministic`,
+`library.io.write_csv` вызывает `library.io.writers.write_csv_deterministic`,
 который сортирует строки и колонки по явным ключам и учитывает параметры
 `cfg.io.csv_sep`, `cfg.io.csv_encoding`, а также опциональные `key_cols` и
 `col_order`, переданные пайплайном.
@@ -79,7 +79,7 @@ data/output/
 ## Классификация публикаций
 
 `scripts/get_document_data.py` обогащает документные выгрузки баллами и метками,
-которые рассчитывает `library.document_pipeline.merge_metadata`.
+которые рассчитывает `library.processing.document.merge_metadata`.
 В таблице и схеме появляются поля:
 
 | Колонка | Описание |
@@ -111,7 +111,7 @@ ChEMBL `standard_*`. Приоритет действий:
 
 ## JSON-отчёт о качестве документов
 
-Документный пайплайн записывает `<stem>.quality.json`. `library.document_pipeline.build_quality_report`
+Документный пайплайн записывает `<stem>.quality.json`. `library.processing.document.build_quality_report`
 формирует сводку, а `save_quality_report` сохраняет её в стабильном формате для
 сравнения между запусками. Структура отчёта:
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from time import perf_counter
 
-from .log import logger
+from .utils.logging import logger
 
 
 def log_duration(start: float) -> float:

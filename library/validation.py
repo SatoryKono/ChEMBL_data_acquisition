@@ -9,7 +9,7 @@ from typing import Any, Protocol
 import pandas as pd
 from pandera.errors import SchemaErrors
 
-from .log import logger
+from .utils.logging import logger
 
 __all__ = [
     "ValidationResult",
@@ -167,9 +167,9 @@ def validate_columns(df: pd.DataFrame, required: Iterable[str]) -> None:
 def validate_activities(
     df: pd.DataFrame, *, return_result: bool = False
 ) -> ValidationResult | pd.DataFrame:
-    """Validate activities dataframe using :data:`schemas.ActivitiesSchema`."""
+    """Validate activities dataframe using :data:`library.constants.ActivitiesSchema`."""
 
-    from schemas import ActivitiesSchema
+    from library.constants import ActivitiesSchema
 
     return _validate_with_schema(
         df,
@@ -182,9 +182,9 @@ def validate_activities(
 def validate_assays(
     df: pd.DataFrame, *, return_result: bool = False
 ) -> ValidationResult | pd.DataFrame:
-    """Validate assay dataframe using :data:`schemas.AssaysSchema`."""
+    """Validate assay dataframe using :data:`library.constants.AssaysSchema`."""
 
-    from schemas import AssaysSchema
+    from library.constants import AssaysSchema
 
     return _validate_with_schema(
         df,
@@ -197,9 +197,9 @@ def validate_assays(
 def validate_testitems(
     df: pd.DataFrame, *, return_result: bool = False
 ) -> ValidationResult | pd.DataFrame:
-    """Validate test item dataframe using :data:`schemas.TestitemsSchema`."""
+    """Validate test item dataframe using :data:`library.constants.TestitemsSchema`."""
 
-    from schemas import TestitemsSchema
+    from library.constants import TestitemsSchema
 
     return _validate_with_schema(
         df,

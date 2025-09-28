@@ -9,10 +9,10 @@ from typing import Any
 
 import pandas as pd
 
-from .chembl_client import ChemblClient, _chunked
-from .config import ApiCfg, UniprotMappingCfg
-from .log import logger
-from .mapper_library import map_chembl_to_uniprot
+from ..clients import ChemblClient, chunked
+from ..clients.mapper import map_chembl_to_uniprot
+from ..config import ApiCfg, UniprotMappingCfg
+from ..utils.logging import logger
 
 TARGET_FIELDS = [
     "pref_name",
@@ -353,7 +353,7 @@ def get_targets(
         f"&include={TARGET_INCLUDE_PARAMS}"
     )
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in chunked(valid, chunk_size):
         url = f"{base}&target_chembl_id__in={','.join(chunk)}"
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("targets") or data.get("target") or []

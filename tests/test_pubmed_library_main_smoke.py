@@ -5,10 +5,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import pubmed_library as pl
+import library.clients.pubmed as pl
 
 
-def test_pubmed_library_main_smoke(
+def test_pubmed_main_smoke(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Run the CLI with stubbed network calls."""

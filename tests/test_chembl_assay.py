@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.chembl_assay`."""
+"""Tests for :mod:`library.processing.assay`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pandas as pd
 
-from library.chembl_assay import get_assays
+from library.processing.assay import get_assays
 from library.config import ApiCfg
 
 

@@ -18,7 +18,7 @@ import pandas as pd
 import requests
 
 from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
-from ..log import logger
+from ..utils.logging import logger
 from ..rate_limiter import get_limiter, sleep
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
 

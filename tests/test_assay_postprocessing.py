@@ -10,7 +10,7 @@ import pytest
 
 from library import assay_postprocessing as ap
 from library.config import IoCfg
-from schemas import AssayPostprocessSchema
+from library.constants import AssayPostprocessSchema
 
 
 def test_postprocess_assays_counts() -> None:

@@ -1,6 +1,6 @@
 """OpenAlex and CrossRef query helpers.
 
-These functions proxy to implementations in :mod:`library.pubmed_library` but
+These functions proxy to implementations in :mod:`library.clients.pubmed` but
 are exposed in a separate module to provide a clear separation of concerns.
 """
 
@@ -10,10 +10,10 @@ from urllib.parse import quote
 
 import requests
 
-from . import pubmed_library as _pl
-from .config import CrossRefCfg, OpenAlexCfg
-from .log import logger
-from .rate_limiter import RateLimiter
+from . import pubmed as _pubmed
+from ..config import CrossRefCfg, OpenAlexCfg
+from ..utils.logging import logger
+from ..rate_limiter import RateLimiter
 
 
 def fetch_openalex(
@@ -52,7 +52,7 @@ def fetch_openalex(
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     logger.info("request_start", extra={"stage": "request_start", "url": url})
     try:
-        data = _pl.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
+        data = _pubmed.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
     except requests.RequestException:
         logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
         raise
@@ -96,7 +96,7 @@ def fetch_crossref(
     url = f"{base}/works/{quote(doi)}"
     logger.info("request_start", extra={"stage": "request_start", "url": url})
     try:
-        data = _pl.fetch_crossref(session, doi, cfg=cfg, limiter=limiter)
+        data = _pubmed.fetch_crossref(session, doi, cfg=cfg, limiter=limiter)
     except requests.RequestException:
         logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
         raise

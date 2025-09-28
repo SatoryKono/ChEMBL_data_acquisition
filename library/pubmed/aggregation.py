@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from ..log import logger
+from ..utils.logging import logger
 
 __all__ = ["merge_records", "print_results"]
 

@@ -26,7 +26,7 @@ from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import cli
 from library import io
-from library.chembl_client import ChemblClient
+from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -38,13 +38,13 @@ from library.config import (
     ensure_dirs,
     print_config,
 )
-from library.log import logger
+from library.utils.logging import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
-from schemas import AssaysSchema, normalize_assays
+from library.constants import AssaysSchema, normalize_assays
 
 __all__ = ["ap", "main"]
 
@@ -53,7 +53,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute assay retrieval from the ChEMBL API.
 
     The output CSV arranges columns so that fields defined in
-    :class:`~schemas.assays.AssaysSchema` appear first.  Any additional columns
+    :class:`~library.constants.assays.AssaysSchema` appear first.  Any additional columns
     are appended alphabetically.
 
     Parameters

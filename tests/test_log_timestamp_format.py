@@ -7,15 +7,15 @@ import json
 import re
 import sys
 
-from library import log
 from library.cli import LoggerConfig, configure_logger
+from library.utils.logging import logger
 
 
 def test_timestamp_has_iso_format() -> None:
     """Logger emits ISO 8601 timestamps with timezone."""
     buffer = io.StringIO()
     configure_logger(LoggerConfig(level="INFO", run_id="rid", stream=buffer))
-    log.logger.info("sample_event")
+    logger.info("sample_event")
     record = json.loads(buffer.getvalue().splitlines()[0])
     configure_logger(LoggerConfig(stream=sys.stdout))
     assert re.match(

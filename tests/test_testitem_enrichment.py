@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import testitem_enrichment
+from library.processing import testitem as testitem_enrichment
 from library.config import Config
 
 
@@ -78,7 +78,7 @@ def test_enrich_adds_flags_and_salt(tmp_path: Path, cfg: Config) -> None:
     cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = hierarchy_path
     cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = catalog_path
 
-    result = testitem_enrichment.enrich(
+    result = testitem.enrich(
         df,
         cfg=cfg.testitem_molecule_enrichment,
         io_cfg=cfg.io,
@@ -153,9 +153,9 @@ def test_enrich_logs_missing_and_inconsistent(
     def capture(event: str, *args: object, **kwargs: object) -> None:
         events.append((event, kwargs))
 
-    monkeypatch.setattr(testitem_enrichment.logger, "warning", capture)
+    monkeypatch.setattr(testitem.logger, "warning", capture)
 
-    testitem_enrichment.enrich(
+    testitem.enrich(
         df,
         cfg=cfg.testitem_molecule_enrichment,
         io_cfg=cfg.io,
@@ -231,7 +231,7 @@ def test_enrich_respects_configuration_options(tmp_path: Path, cfg: Config) -> N
     cfg.testitem_molecule_enrichment.sources.molecule_hierarchy_path = hierarchy_path
     cfg.testitem_molecule_enrichment.sources.molecule_catalog_path = catalog_path
 
-    result = testitem_enrichment.enrich(
+    result = testitem.enrich(
         df,
         cfg=cfg.testitem_molecule_enrichment,
         io_cfg=cfg.io,

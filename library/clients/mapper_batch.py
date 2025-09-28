@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .config import UniprotMappingCfg
-from .log import logger
-from .mapper_library import map_chembl_to_uniprot
-from .rate_limiter import get_limiter
+from ..config import UniprotMappingCfg
+from ..utils.logging import logger
+from .mapper import map_chembl_to_uniprot
+from ..rate_limiter import get_limiter
 
 
 def batch_iterable[T](iterable: Iterable[T], batch_size: int) -> Iterator[list[T]]:

@@ -9,7 +9,7 @@ import yaml
 from library.config import Config
 from library.io import write_csv
 from library.sidecar import SidecarErrors
-from schemas import CsvMetaSchema
+from library.constants import CsvMetaSchema
 
 
 def test_write_csv_creates_meta(tmp_path: Path) -> None:

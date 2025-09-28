@@ -21,7 +21,7 @@ from library.cli import (
 )
 from library.config import Config, ensure_dirs, print_config
 from library.document_type_classifier import compute_scores, decide_label
-from library.log import logger
+from library.utils.logging import logger
 
 
 def _split_terms(value: object) -> Iterable[str]:

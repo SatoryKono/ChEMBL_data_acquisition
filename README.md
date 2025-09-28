@@ -10,7 +10,7 @@
   выборки задаётся параметрами `--chunk-size` или `--batch-size` в
   зависимости от конкретного пайплайна.
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
-* Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
+* Валидаторы схем (`library/constants/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
 * Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
 * Логирование через стандартный модуль `logging` с настраиваемым уровнем.
@@ -189,7 +189,7 @@ experimentation.
 You can also run the PubMed pipeline directly using the library module:
 
 ```bash
-python -m library.pubmed_library \
+python -m library.clients.pubmed \
     --input-csv tests/data/pmids.csv \
     --output out/documents.csv \
     --log-level INFO
@@ -211,7 +211,7 @@ Replace ``path/to/targets.csv`` with a CSV containing a ``target_chembl_id``
 column.
 
 The input and output both use ``target_chembl_id`` to align with
-validation schemas.
+validation library.constants.
 
 ### library.utils.cli_tools.pipeline_targets_main
 
@@ -434,7 +434,7 @@ Typical log entries look like:
 
 **RU.** Детерминированные CSV-выгрузки из ``library.io`` обеспечивают повторяемость данных и метаданных между запусками.
 
-The function ``library.csv_utils.write_csv_deterministic`` normalises column
+The function ``library.io.writers.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
 files. Every CSV must be stored alongside a ``<name>.meta.yaml`` file capturing
 the Git commit, command-line arguments and relevant configuration to allow
@@ -458,7 +458,7 @@ For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
 argument which streams the CSV in smaller pieces to reduce memory usage:
 
 ```python
-from library.csv_utils import write_csv_deterministic
+from library.io.writers import write_csv_deterministic
 import pandas as pd
 
 df = pd.read_csv("large.csv")

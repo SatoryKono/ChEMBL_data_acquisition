@@ -23,7 +23,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from library import cli
-from library.chembl_client import _chunked
+from library.clients import chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,
@@ -31,7 +31,7 @@ from library.cli import (
 )
 from library.config import Config, ensure_dirs, print_config
 from library.io import default_output_path, read_ids, write_csv
-from library.log import logger
+from library.utils.logging import logger
 from library.pipeline_metadata import add_pipeline_metadata
 from library.pipeline_targets import PipelineResult, run_pipeline
 
@@ -118,7 +118,7 @@ def _chunk_iterator(cfg: Config, options: PipelineConfig) -> Iterator[Iterable[s
     )
     if options.limit is not None:
         ids = islice(ids, options.limit)
-    yield from _chunked(ids, options.chunk_size)
+    yield from chunked(ids, options.chunk_size)
 
 
 def _cached_chembl_fetch(

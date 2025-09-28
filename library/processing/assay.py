@@ -7,10 +7,10 @@ from urllib.parse import urljoin
 
 import pandas as pd
 
-from .chembl_client import ChemblClient, _chunked
-from .config import ApiCfg
-from .log import logger
-from .pandas_utils import json_normalize_pyarrow
+from ..clients import ChemblClient, chunked
+from ..config import ApiCfg
+from ..utils.logging import logger
+from ..utils.dataframe import json_normalize_pyarrow
 
 ASSAY_VARIANT_COLUMN_ALIASES = {
     "variant_sequence.isoform": "isoform",
@@ -196,7 +196,7 @@ def get_assays(
     if require_variant_sequence:
         base += "&variant_sequence__isnull=false"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
@@ -267,7 +267,7 @@ def get_activities(
     records: list[pd.DataFrame] = []
     base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
@@ -335,7 +335,7 @@ def get_testitem(
     records: list[pd.DataFrame] = []
     base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}

@@ -1,7 +1,7 @@
 """CLI wrapper for :func:`write_csv_deterministic`.
 
 This script reads an input CSV file and re-serialises it deterministically
-using :func:`library.csv_utils.write_csv_deterministic`.
+using :func:`library.io.writers.write_csv_deterministic`.
 
 If ``--output`` is omitted, a file named
 ``output_<input-stem>_<YYYYMMDD>.csv`` is created next to the input.
@@ -19,8 +19,8 @@ import pandas as pd
 
 from library.cli import LoggerConfig, configure_logger
 from library.cli_utils import build_parser
-from library.csv_utils import write_csv_chunks_deterministic
-from library.log import logger
+from library.io.writers import write_csv_chunks_deterministic
+from library.utils.logging import logger
 from library.parser_schema import CSVExportArgs
 
 

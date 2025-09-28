@@ -6,7 +6,7 @@ import pandas as pd
 from pandera.errors import SchemaErrors
 
 from library.sidecar import SidecarErrors
-from schemas import ActivitiesSchema
+from library.constants import ActivitiesSchema
 
 
 def _validate(df: pd.DataFrame, out_csv: Path, failure_csv: Path) -> pd.DataFrame:

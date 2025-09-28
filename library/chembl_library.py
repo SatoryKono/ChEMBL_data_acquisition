@@ -8,15 +8,15 @@ keep linters happy.
 
 from __future__ import annotations
 
-from .chembl_assay import (
+from .processing.assay import (
     get_activities,
     get_assay,
     get_assays,
     get_testitem,
 )
-from .chembl_client import _chunked
+from .clients import chunked
 from .chembl_document import get_documents
-from .chembl_target import (
+from .processing.target import (
     extend_target,
     get_target,
     get_targets,
@@ -31,5 +31,5 @@ __all__ = [
     "get_target",
     "get_targets",
     "extend_target",
-    "_chunked",
+    "chunked",
 ]

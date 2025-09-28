@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .. import log
+from ..utils import logging as log
 from ..config import Config, ConfigError, load_config
 from ..logging_setup import Logger, LoggerConfig
 from ..logging_setup import configure_logger as _configure_logger

@@ -22,7 +22,7 @@ import pandas as pd
 from . import organism_classification
 from .config import Config
 from .io import write_csv
-from .log import logger
+from .utils.logging import logger
 
 EntityName = Literal[
     "activity",

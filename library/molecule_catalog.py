@@ -11,9 +11,9 @@ from pathlib import Path
 from time import perf_counter
 from urllib.parse import urlencode, urljoin
 
-from .chembl_client import ChemblClient, _chunked
+from .clients import ChemblClient, chunked
 from .config import ApiCfg, MoleculeCatalogCfg
-from .log import logger
+from .utils.logging import logger
 from .rate_limiter import sleep
 
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
@@ -232,7 +232,7 @@ def _fetch_parent_catalog_via_helper(
 
         remaining: list[str] = []
         if retry_chunk_size and len(pending) > 1:
-            for chunk in _chunked(pending, retry_chunk_size):
+            for chunk in chunked(pending, retry_chunk_size):
                 batch_attempts += 1
                 try:
                     chunk_result = _fetch_parent_catalog_chunk(
@@ -421,7 +421,7 @@ def fetch_parent_catalog_for(
     fallback_candidates: list[str] = []
 
     chunk_size = max(1, cfg.page_size)
-    for chunk in _chunked(unique_ids, chunk_size):
+    for chunk in chunked(unique_ids, chunk_size):
         try:
             chunk_result = _fetch_parent_catalog_chunk(
                 chunk, client=client, api_cfg=api_cfg, timeout=effective_timeout
@@ -680,7 +680,7 @@ def query_parent_catalog(
     try:
         with sqlite3.connect(sqlite_path) as conn:
             _ensure_sqlite_schema(conn)
-            for chunk in _chunked(unique, _SQLITE_VARIABLE_LIMIT):
+            for chunk in chunked(unique, _SQLITE_VARIABLE_LIMIT):
                 if not chunk:
                     continue
                 placeholders = ",".join("?" for _ in chunk)

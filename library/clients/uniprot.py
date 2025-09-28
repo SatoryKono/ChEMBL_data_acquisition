@@ -43,9 +43,9 @@ from typing import Any, cast
 import requests
 from requests import Session
 
-from .config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg, session_with_retry
-from .log import logger
-from .rate_limiter import get_limiter, sleep
+from ..config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg, session_with_retry
+from ..utils.logging import logger
+from ..rate_limiter import get_limiter, sleep
 
 _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 

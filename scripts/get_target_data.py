@@ -35,12 +35,12 @@ bootstrap.ensure_project_root()
 from library import chembl_library as cl
 from library import cli
 from library import io
-from library import iuphar_library as ii
+import library.clients.iuphar as ii
 from library import protein_classification as pc
 from library import target_postprocessing as tp
-from library import uniprot_library as uu
-from library.chembl_client import ChemblClient
-from library.chembl_target import normalize_reaction_ec_numbers
+import library.clients.uniprot as uu
+from library.clients import ChemblClient
+from library.processing.target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
     build_root_parser,
@@ -54,13 +54,13 @@ from library.config import (
     ensure_dirs,
     print_config,
 )
-from library.log import logger
+from library.utils.logging import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
-from schemas import TargetsSchema, normalize_targets
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.constants import TargetsSchema, normalize_targets
+from library.constants import TARGETS_COLUMN_ORDER
 
 TARGETS_REQUIRED_COLUMNS: set[str] = {
     name for name, column in TargetsSchema.columns.items() if column.required

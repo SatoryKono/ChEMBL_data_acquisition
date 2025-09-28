@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-import library.git_utils as git_utils
+import library.utils.git as git_utils
 
 
 def _prepare_head(git_dir: Path, commit: str, ref: str = "refs/heads/main") -> None:

@@ -12,7 +12,7 @@ from pytest import MonkeyPatch
 
 from library import protein_classification as pc
 from library.config import Config
-from schemas import TargetsSchema
+from library.constants import TargetsSchema
 from scripts import get_target_data as gtd
 
 

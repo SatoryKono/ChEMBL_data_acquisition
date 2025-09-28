@@ -23,7 +23,7 @@ bootstrap.ensure_project_root()
 from library import chembl_library as cl
 from library import cli
 from library import io
-from library.chembl_client import ChemblClient
+from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -40,7 +40,7 @@ from library.config import (
     ensure_dirs,
     print_config,
 )
-from library.log import logger
+from library.utils.logging import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
@@ -50,7 +50,7 @@ from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from schemas import ActivitiesSchema, normalize_activities
+from library.constants import ActivitiesSchema, normalize_activities
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:

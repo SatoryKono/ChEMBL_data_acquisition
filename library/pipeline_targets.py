@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from .log import logger
+from .utils.logging import logger
 from .pipeline_metadata import add_pipeline_metadata
 
 OptionalFetcher = Callable[..., pd.DataFrame]

@@ -160,7 +160,7 @@ Downloads compound-centric annotations for the supplied identifiers. The command
 PubChem enrichment adds deterministic property columns (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
 `pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`). To
 monitor changes across releases, export just these columns to a temporary file and compute a SHA-256 digest via
-`library.metadata.file_sha256` or `library.csv_utils.sha256_file`. Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
+`library.metadata.file_sha256` or `library.io.writers.sha256_file`. Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
 row count stays constant.
 
 ### Parent molecule catalogue requirements

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import csv_utils
+import library.io.writers as csv_utils
 
 
 def test_drop_unexpected_columns(
