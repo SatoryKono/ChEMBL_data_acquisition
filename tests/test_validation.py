@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from library import validation
+from schemas import normalize_testitems
 
 
 def test_validate_columns_ok() -> None:
@@ -109,3 +110,22 @@ def test_validate_testitems_all_valid() -> None:
     assert isinstance(result, validation.ValidationResult)
     assert result.has_failures is False
     pd.testing.assert_frame_equal(result.data.reset_index(drop=True), df)
+
+
+def test_validate_testitems_numeric_ids_preserved() -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": [123456],
+            "pref_name": ["Name"],
+        }
+    )
+
+    normalized = normalize_testitems(df)
+
+    assert normalized["molecule_chembl_id"].dtype == pd.StringDtype()
+
+    result = validation.validate_testitems(normalized, return_result=True)
+
+    assert isinstance(result, validation.ValidationResult)
+    assert result.has_failures is False
+    assert result.data["molecule_chembl_id"].tolist() == ["123456"]

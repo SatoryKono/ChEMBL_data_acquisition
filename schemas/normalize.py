@@ -40,7 +40,10 @@ def _normalize_common(df: pd.DataFrame) -> pd.DataFrame:
                 series, lambda s: _RELATION_MAP.get(s.strip(), s.strip())
             )
         if "id" in col.lower():
+            # Ensure identifier columns are consistently treated as strings
+            series = series.astype(pd.StringDtype())
             series = _apply_if_string(series, str.strip)
+            series = series.astype(pd.StringDtype())
         result[col] = series
     return result
 
