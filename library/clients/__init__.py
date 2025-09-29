@@ -20,11 +20,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
+from .crossref import fetch_crossref
+from .openalex import fetch_openalex
+
 __all__ = [
     "ClientConfig",
     "ClientError",
     "ClientPayload",
     "ClientProtocol",
+    "fetch_crossref",
+    "fetch_openalex",
 ]
 
 
