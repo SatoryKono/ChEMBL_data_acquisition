@@ -1,13 +1,11 @@
 """HTTP queries for publication metadata.
 
 This module provides functions for retrieving metadata from PubMed,
-Semantic Scholar, OpenAlex and Crossref.  It also contains helpers for
+OpenAlex and Crossref.  It also contains helpers for
 issuing robust HTTP requests.
 """
 
 from __future__ import annotations
-
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,7 +15,7 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import requests
 
-from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
+from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg
 from ..log import logger
 from ..rate_limiter import get_limiter, sleep
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
@@ -33,15 +31,11 @@ __all__ = [
     "_do_request",
     "fetch_pubmed_batch",
     "fetch_pubmed",
-    "fetch_semantic_scholar",
-    "fetch_semantic_scholar_batch",
     "fetch_openalex",
     "fetch_crossref",
 ]
 
 
-_SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
-_SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
 _PUBMED_FALLBACK_ENCODINGS: tuple[str, ...] = (
     "utf-8-sig",
     "cp1251",
@@ -268,177 +262,6 @@ def fetch_pubmed(
     """Fetch metadata for a single PMID."""
 
     return fetch_pubmed_batch(session, [pmid], sleep, cfg=cfg)[0]
-
-
-def fetch_semantic_scholar(
-    session: requests.Session,
-    pmid: str,
-    sleep: float,
-    cfg: SemanticScholarCfg | None = None,
-) -> dict[str, str]:
-    """Retrieve Semantic Scholar metadata for ``pmid``."""
-    cfg = cfg or SemanticScholarCfg()
-    base = cfg.base.rstrip("/")
-    url = f"{base}/paper/PMID:{pmid}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = _do_request(
-        session,
-        url,
-        sleep * 5,
-        headers=_SEMANTIC_SCHOLAR_HEADERS,
-        params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
-        retries=cfg.retries,
-        timeout=timeout,
-    )
-    if error or not isinstance(data, dict):
-        return {
-            "scholar.PMID": pmid,
-            "scholar.Venue": "",
-            "scholar.PublicationTypes": "",
-            "scholar.SemanticScholarId": "",
-            "scholar.ExternalIds": "",
-            "scholar.DOI": "",
-            "scholar.Error": error or "Invalid response",
-        }
-    external_ids = data.get("externalIds") or {}
-    doi = external_ids.get("DOI") or ""
-    pubtypes = data.get("publicationTypes") or []
-    return {
-        "scholar.PMID": pmid,
-        "scholar.Venue": data.get("venue", ""),
-        "scholar.PublicationTypes": "; ".join(pubtypes) if pubtypes else "",
-        "scholar.SemanticScholarId": data.get("paperId", ""),
-        "scholar.ExternalIds": json.dumps(external_ids, ensure_ascii=False),
-        "scholar.DOI": doi,
-        "scholar.Error": "",
-    }
-
-
-def fetch_semantic_scholar_batch(
-    session: requests.Session,
-    pmids: list[str],
-    sleep: float,
-    cfg: SemanticScholarCfg | None = None,
-) -> list[dict[str, str]]:
-    """Retrieve Semantic Scholar metadata for multiple PMIDs."""
-
-    if not pmids:
-        return []
-
-    cfg = cfg or SemanticScholarCfg()
-    base = cfg.base.rstrip("/")
-    url = f"{base}/paper/batch"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = _do_request(
-        session,
-        url,
-        sleep,
-        headers=_SEMANTIC_SCHOLAR_HEADERS,
-        json={"ids": [f"PMID:{pmid}" for pmid in pmids]},
-        method="POST",
-        params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
-        retries=cfg.retries,
-        timeout=timeout,
-    )
-    if error:
-        return [
-            {
-                "scholar.PMID": pmid,
-                "scholar.Venue": "",
-                "scholar.PublicationTypes": "",
-                "scholar.SemanticScholarId": "",
-                "scholar.ExternalIds": "",
-                "scholar.DOI": "",
-                "scholar.Error": error,
-            }
-            for pmid in pmids
-        ]
-
-    if not isinstance(data, list):
-        return [
-            {
-                "scholar.PMID": pmid,
-                "scholar.Venue": "",
-                "scholar.PublicationTypes": "",
-                "scholar.SemanticScholarId": "",
-                "scholar.ExternalIds": "",
-                "scholar.DOI": "",
-                "scholar.Error": "Invalid batch response format",
-            }
-            for pmid in pmids
-        ]
-
-    def _resolve_pmid(item: dict[str, Any]) -> str | None:
-        external_ids = item.get("externalIds")
-        if isinstance(external_ids, dict):
-            for key in ("PubMed", "PMID", "pubmed", "pubMed"):
-                value = external_ids.get(key)
-                if isinstance(value, str):
-                    candidate = value.strip()
-                    if candidate:
-                        return candidate
-                elif isinstance(value, list | tuple | set):
-                    for entry in value:
-                        if isinstance(entry, str):
-                            candidate = entry.strip()
-                            if candidate:
-                                return candidate
-                        elif entry is not None:
-                            return str(entry)
-                elif value is not None:
-                    return str(value)
-        for key in ("pmid", "PMID"):
-            value = item.get(key)
-            if isinstance(value, str):
-                candidate = value.strip()
-                if candidate:
-                    return candidate
-            elif value is not None:
-                return str(value)
-        return None
-
-    lookup: dict[str, dict[str, Any]] = {}
-    for entry in data:
-        if not isinstance(entry, dict):
-            continue
-        pmid_value = _resolve_pmid(entry)
-        if pmid_value:
-            lookup.setdefault(pmid_value, entry)
-
-    results: list[dict[str, str]] = []
-    for pmid in pmids:
-        item = lookup.get(pmid)
-        if item is None:
-            results.append(
-                {
-                    "scholar.PMID": pmid,
-                    "scholar.Venue": "",
-                    "scholar.PublicationTypes": "",
-                    "scholar.SemanticScholarId": "",
-                    "scholar.ExternalIds": "",
-                    "scholar.DOI": "",
-                    "scholar.Error": "Not found",
-                }
-            )
-            continue
-
-        external_ids = item.get("externalIds") or {}
-        doi = external_ids.get("DOI") or ""
-        pubtypes = item.get("publicationTypes") or []
-
-        results.append(
-            {
-                "scholar.PMID": pmid,
-                "scholar.Venue": item.get("venue", ""),
-                "scholar.PublicationTypes": "; ".join(pubtypes) if pubtypes else "",
-                "scholar.SemanticScholarId": item.get("paperId", ""),
-                "scholar.ExternalIds": json.dumps(external_ids, ensure_ascii=False),
-                "scholar.DOI": doi,
-                "scholar.Error": "",
-            }
-        )
-
-    return results
 
 
 def fetch_openalex(
