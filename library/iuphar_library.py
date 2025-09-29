@@ -29,6 +29,7 @@ from .clients.iuphar import (
     query_gene_symbol,
 )
 from .config import IupharCfg, RetryCfg
+from .log import logger
 
 @dataclass
 class IUPHARData:
