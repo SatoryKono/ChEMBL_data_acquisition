@@ -14,6 +14,31 @@ from library import pubchem_library as pl  # noqa: E402
 from library import rate_limiter as rl  # noqa: E402
 
 
+class ResponseStub:
+    """Simple context-managed response stub."""
+
+    def __init__(self, json_data: dict[str, object] | None = None, *, status: int = 200) -> None:
+        self.status_code = status
+        self._json_data = {} if json_data is None else json_data
+        self.closed = False
+
+    def json(self) -> dict[str, object]:
+        return self._json_data
+
+    def raise_for_status(self) -> None:  # pragma: no cover - simple stub
+        return None
+
+    def close(self) -> None:
+        self.closed = True
+
+    def __enter__(self) -> "ResponseStub":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - simple stub
+        self.close()
+        return False
+
+
 @responses.activate
 def test_get_cid_from_smiles_uses_base() -> None:
     """Ensure the configured base URL is used for PubChem requests."""
@@ -38,18 +63,9 @@ def test_make_request_uses_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     """`make_request` passes configured timeouts to the session."""
     called: dict[str, tuple[int, int]] = {}
 
-    class Resp:
-        status_code = 200
-
-        def json(self) -> dict[str, object]:
-            return {}
-
-        def raise_for_status(self) -> None:  # pragma: no cover - no error
-            return None
-
-    def capture(url: str, timeout: tuple[int, int]) -> Resp:
+    def capture(url: str, timeout: tuple[int, int]) -> ResponseStub:
         called["timeout"] = timeout
-        return Resp()
+        return ResponseStub()
 
     monkeypatch.setattr(pl._session, "get", capture)
     monkeypatch.setattr(
@@ -64,6 +80,35 @@ def test_make_request_uses_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     responses.add(responses.GET, "https://example.org", json={}, status=200)
     pl.make_request("https://example.org", cfg)
     assert called["timeout"] == (1, 2)
+
+
+def test_make_request_closes_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`make_request` should close responses returned by the session."""
+
+    closed = {"value": False}
+
+    class ClosingStub(ResponseStub):
+        def close(self) -> None:
+            super().close()
+            closed["value"] = True
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> ClosingStub:
+        return ClosingStub()
+
+    monkeypatch.setattr(pl._session, "get", fake_get)
+    monkeypatch.setattr(
+        pl,
+        "get_limiter",
+        lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
+    )
+    pl._CACHE = None
+
+    cfg = pl.PubChemCfg(retries=1, delay=0)
+
+    result = pl.make_request("https://example.org", cfg)
+
+    assert result == {}
+    assert closed["value"] is True
 
 
 def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -87,16 +132,7 @@ def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
     with rl._limiters_lock:
         rl._limiters.clear()
 
-    class Resp:
-        status_code = 200
-
-        def json(self) -> dict[str, object]:
-            return {}
-
-        def raise_for_status(self) -> None:  # pragma: no cover - no error
-            return None
-
-    monkeypatch.setattr(pl._session, "get", lambda url, timeout: Resp())
+    monkeypatch.setattr(pl._session, "get", lambda url, timeout: ResponseStub())
     pl._CACHE = None
 
     cfg = pl.PubChemCfg(rps=1, burst=1, retries=1)
@@ -105,9 +141,9 @@ def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
 
     called: dict[str, tuple[int, int]] = {}
 
-    def capture(url: str, timeout: tuple[int, int]) -> Resp:
+    def capture(url: str, timeout: tuple[int, int]) -> ResponseStub:
         called["timeout"] = timeout
-        return Resp()
+        return ResponseStub()
 
     monkeypatch.setattr(pl._session, "get", capture)
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, delay=0, retries=1)
@@ -127,22 +163,13 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
     def fake_sleep(delay: float) -> None:
         sleeps.append(delay)
 
-    class Resp:
-        status_code = 200
-
-        def json(self) -> dict[str, object]:
-            return {}
-
-        def raise_for_status(self) -> None:  # pragma: no cover - no error
-            return None
-
     attempts = {"n": 0}
 
-    def fake_get(url: str, timeout: tuple[int, int]) -> Resp:
+    def fake_get(url: str, timeout: tuple[int, int]) -> ResponseStub:
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise requests.RequestException("boom")
-        return Resp()
+        return ResponseStub()
 
     monkeypatch.setattr(pl, "sleep", fake_sleep)
     monkeypatch.setattr(pl._session, "get", fake_get)
@@ -306,20 +333,11 @@ def test_get_properties_returns_none_for_missing() -> None:
 def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cache entries should be evicted after the configured TTL."""
 
-    class Resp:
-        status_code = 200
-
-        def json(self) -> dict[str, object]:
-            return {}
-
-        def raise_for_status(self) -> None:  # pragma: no cover - no error
-            return None
-
     calls = {"n": 0}
 
-    def capture(url: str, timeout: tuple[int, int]) -> Resp:
+    def capture(url: str, timeout: tuple[int, int]) -> ResponseStub:
         calls["n"] += 1
-        return Resp()
+        return ResponseStub()
 
     monkeypatch.setattr(pl._session, "get", capture)
     monkeypatch.setattr(
