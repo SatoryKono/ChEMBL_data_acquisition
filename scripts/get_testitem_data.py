@@ -927,43 +927,73 @@ def add_pubchem_data(
             local_records[chembl_norm] = record
             parent_record_cache[chembl_norm] = record
 
+    pending_parent_ids: list[str] = []
+    seen_parent_ids: set[str] = set()
+    if "parent_molecule_chembl_id" in result.columns:
+        for parent_value in result["parent_molecule_chembl_id"]:
+            parent_norm = _normalise_identifier(parent_value, uppercase=True)
+            if not parent_norm:
+                continue
+            if parent_norm in parent_record_cache or parent_norm in local_records:
+                continue
+            if parent_norm in seen_parent_ids:
+                continue
+            seen_parent_ids.add(parent_norm)
+            pending_parent_ids.append(parent_norm)
+
+    if pending_parent_ids and client is not None and api_cfg is not None:
+        chunk_size = getattr(cfg, "batch_size", 1)
+        try:
+            parent_df = cl.get_testitem(
+                pending_parent_ids,
+                cfg=api_cfg,
+                client=client,
+                chunk_size=chunk_size,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "pubchem_parent_bulk_fetch_failed",
+                error=str(exc),
+                count=len(pending_parent_ids),
+            )
+            for parent_id in pending_parent_ids:
+                parent_record_cache.setdefault(parent_id, None)
+        else:
+            if not parent_df.empty:
+                parent_df = parent_df.copy()
+                parent_df = parent_df.assign(
+                    molecule_chembl_id=lambda frame: frame[
+                        "molecule_chembl_id"
+                    ]
+                    .astype("string")
+                    .str.strip()
+                    .str.upper()
+                )
+                parent_df = parent_df.dropna(subset=["molecule_chembl_id"])
+                parent_df = parent_df.drop_duplicates("molecule_chembl_id")
+                parent_df = parent_df.reindex(columns=result.columns, fill_value=pd.NA)
+                for _, parent_row in parent_df.iterrows():
+                    parent_id = _normalise_identifier(
+                        parent_row.get("molecule_chembl_id"), uppercase=True
+                    )
+                    if not parent_id:
+                        continue
+                    parent_series = parent_row.reindex(result.columns).copy()
+                    parent_record_cache[parent_id] = parent_series
+            for parent_id in pending_parent_ids:
+                if parent_id not in parent_record_cache:
+                    parent_record_cache[parent_id] = None
+
+    if pending_parent_ids and (client is None or api_cfg is None):
+        for parent_id in pending_parent_ids:
+            parent_record_cache.setdefault(parent_id, None)
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
         if not parent_norm:
             return None
-        if parent_norm in parent_record_cache:
-            return parent_record_cache[parent_norm]
-        local_record = local_records.get(parent_norm)
-        if local_record is not None:
-            parent_record_cache[parent_norm] = local_record
-            return local_record
-        if client is None or api_cfg is None:
-            parent_record_cache[parent_norm] = None
-            return None
-        try:
-            parent_df = cl.get_testitem(
-                [parent_norm],
-                cfg=api_cfg,
-                client=client,
-                chunk_size=1,
-                timeout=timeout,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.warning(
-                "pubchem_parent_load_failed",
-                parent=parent_norm,
-                error=str(exc),
-            )
-            parent_record_cache[parent_norm] = None
-            return None
-        if parent_df.empty:
-            parent_record_cache[parent_norm] = None
-            return None
-        parent_row = parent_df.iloc[0]
-        local_records[parent_norm] = parent_row
-        parent_record_cache[parent_norm] = parent_row
-        return parent_row
+        return parent_record_cache.get(parent_norm)
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
