@@ -36,6 +36,10 @@ from .iuphar import (
  
 from .crossref import fetch_crossref
 from .openalex import fetch_openalex
+from .semantic_scholar import (
+    fetch_semantic_scholar,
+    fetch_semantic_scholar_batch,
+)
  
 from .chembl import ChemblClient, _chunked
  
@@ -57,6 +61,8 @@ __all__ = [
     "query_iuphar_gene_symbol",
     "fetch_crossref",
     "fetch_openalex",
+    "fetch_semantic_scholar",
+    "fetch_semantic_scholar_batch",
     "_chunked",
  
 ]
