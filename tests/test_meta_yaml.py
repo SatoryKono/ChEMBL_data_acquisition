@@ -7,7 +7,7 @@ import pandas as pd
 import yaml
 
 from library.config import Config
-from library.io import write_csv
+from library.io.writers import write_csv
 from library.sidecar import SidecarErrors
 from schemas import CsvMetaSchema
 

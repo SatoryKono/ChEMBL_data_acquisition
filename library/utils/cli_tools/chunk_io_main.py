@@ -14,7 +14,7 @@ from library.cli import (
     path_argument,
 )
 from library.config import Config, ensure_dirs
-from library.io import default_output_path
+from library.io.paths import default_output_path
 from library.log import logger
 
 

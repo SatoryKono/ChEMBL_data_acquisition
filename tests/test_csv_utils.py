@@ -184,7 +184,7 @@ def test_write_csv_deterministic_hash_stable(
 
     # Freeze timestamp to keep metadata deterministic across runs
     fixed_now = datetime(2024, 1, 1)
-    monkeypatch.setattr("library.io.datetime", SimpleNamespace(now=lambda: fixed_now))
+    monkeypatch.setattr("library.io.metadata.datetime", SimpleNamespace(now=lambda: fixed_now))
 
     write_csv_deterministic(df.copy(), path, key_cols=sorted(df.columns))
     first_hash = sha256_file(path)

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config
-from .io import write_meta_yaml
+from .io.metadata import write_meta_yaml
 
 
 class SidecarErrors:

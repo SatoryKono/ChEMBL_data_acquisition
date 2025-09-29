@@ -21,7 +21,7 @@ import pandas as pd
 
 from . import organism_classification
 from .config import Config
-from .io import write_csv
+from .io.writers import write_csv
 from .log import logger
 
 EntityName = Literal[
