@@ -9,6 +9,7 @@ import pytest
 from library import chembl_library as cl
 from library import cli as base_cli
 from library import pubchem_library as pl
+from library.clients import pubchem as pc
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 
 _ORIGINAL_APPLY = base_cli.apply_config_overrides
@@ -76,7 +77,7 @@ def test_get_testitem_parent_catalog(
         get_testitem_data.cli, "apply_config_overrides", patched_apply
     )
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
-    monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
     monkeypatch.setattr(
@@ -207,7 +208,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
         get_testitem_data.cli, "apply_config_overrides", patched_apply
     )
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
-    monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
     monkeypatch.setattr(
@@ -303,7 +304,7 @@ def test_get_testitem_refreshes_outdated_parents(
     original_apply = _ORIGINAL_APPLY
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
-    monkeypatch.setattr(pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
     monkeypatch.setattr(

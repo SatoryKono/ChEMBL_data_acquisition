@@ -14,6 +14,10 @@ from pathlib import Path
 import pandas as pd
 
 from . import cli
+from .clients.semantic_scholar import (
+    fetch_semantic_scholar,
+    fetch_semantic_scholar_batch,
+)
 from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
 from .config import Config, ensure_dirs, print_config, session_with_retry
@@ -26,8 +30,6 @@ from .pubmed import (
     fetch_openalex,
     fetch_pubmed,
     fetch_pubmed_batch,
-    fetch_semantic_scholar,
-    fetch_semantic_scholar_batch,
     find_all,
     find_one,
     merge_records,

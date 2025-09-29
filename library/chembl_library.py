@@ -14,7 +14,7 @@ from .chembl_assay import (
     get_assays,
     get_testitem,
 )
-from .chembl_client import _chunked
+from library.clients import _chunked
 from .chembl_document import get_documents
 from .chembl_target import (
     extend_target,

@@ -1,0 +1,48 @@
+"""OpenAlex API client."""
+
+from __future__ import annotations
+
+from typing import Any
+from urllib.parse import quote
+
+import requests
+
+from ..config import OpenAlexCfg
+from ..log import logger
+from ..rate_limiter import RateLimiter, get_limiter
+from ..pubmed.query import _do_request
+
+__all__ = ["fetch_openalex"]
+
+
+def fetch_openalex(
+    session: requests.Session,
+    pmid: str,
+    *,
+    cfg: OpenAlexCfg,
+    limiter: RateLimiter | None = None,
+) -> tuple[dict[str, Any] | str | None, str]:
+    """Request OpenAlex metadata for ``pmid``."""
+
+    if limiter is None:
+        limiter = get_limiter("openalex", cfg.rps, cfg.burst)
+    limiter.acquire()
+
+    delay = 1 / cfg.rps if cfg.rps else 0
+    base = cfg.base.rstrip("/")
+    url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
+    timeout = (cfg.timeout_connect, cfg.timeout_read)
+
+    logger.info("request_start", extra={"stage": "request_start", "url": url})
+    data, error = _do_request(
+        session,
+        url,
+        delay,
+        retries=cfg.retries,
+        timeout=timeout,
+    )
+    if error:
+        logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+    else:
+        logger.info("request_ok", extra={"stage": "request_ok", "url": url})
+    return data, error

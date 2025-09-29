@@ -11,6 +11,7 @@ responses = pytest.importorskip("responses")
 
 
 from library import pubchem_library as pl  # noqa: E402
+from library.clients import pubchem as pc  # noqa: E402
 from library import rate_limiter as rl  # noqa: E402
 
 
@@ -51,13 +52,13 @@ def test_make_request_uses_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         called["timeout"] = timeout
         return Resp()
 
-    monkeypatch.setattr(pl._session, "get", capture)
+    monkeypatch.setattr(pc._session, "get", capture)
     monkeypatch.setattr(
-        pl,
+        pc,
         "get_limiter",
         lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
     )
-    pl._CACHE = None
+    pc._CACHE = None
 
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, retries=1, rps=1)
 
@@ -96,8 +97,8 @@ def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
         def raise_for_status(self) -> None:  # pragma: no cover - no error
             return None
 
-    monkeypatch.setattr(pl._session, "get", lambda url, timeout: Resp())
-    pl._CACHE = None
+    monkeypatch.setattr(pc._session, "get", lambda url, timeout: Resp())
+    pc._CACHE = None
 
     cfg = pl.PubChemCfg(rps=1, burst=1, retries=1)
     pl.make_request("https://example.org/a", cfg)
@@ -109,7 +110,7 @@ def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
         called["timeout"] = timeout
         return Resp()
 
-    monkeypatch.setattr(pl._session, "get", capture)
+    monkeypatch.setattr(pc._session, "get", capture)
     cfg = pl.PubChemCfg(timeout_connect=1, timeout_read=2, delay=0, retries=1)
 
     pl.make_request("https://example.org", cfg)
@@ -144,15 +145,15 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
             raise requests.RequestException("boom")
         return Resp()
 
-    monkeypatch.setattr(pl, "sleep", fake_sleep)
-    monkeypatch.setattr(pl._session, "get", fake_get)
+    monkeypatch.setattr(pc, "sleep", fake_sleep)
+    monkeypatch.setattr(pc._session, "get", fake_get)
 
     class Limiter:
         def acquire(self) -> None:  # pragma: no cover - simple stub
             return None
 
-    monkeypatch.setattr(pl, "get_limiter", lambda *a, **k: Limiter())
-    pl._CACHE = None
+    monkeypatch.setattr(pc, "get_limiter", lambda *a, **k: Limiter())
+    pc._CACHE = None
 
     cfg = pl.PubChemCfg(retries=2, delay=1)
     pl.make_request("https://example.org", cfg)
@@ -187,16 +188,16 @@ def test_make_request_aborts_when_timeout_exceeded(
         attempts["n"] += 1
         raise requests.Timeout("hanging request")
 
-    monkeypatch.setattr(pl, "monotonic", FakeMonotonic())
-    monkeypatch.setattr(pl, "get_limiter", lambda *args, **kwargs: Limiter())
-    monkeypatch.setattr(pl._session, "get", fake_get)
-    monkeypatch.setattr(pl, "sleep", lambda *_: None)
+    monkeypatch.setattr(pc, "monotonic", FakeMonotonic())
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: Limiter())
+    monkeypatch.setattr(pc._session, "get", fake_get)
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
     monkeypatch.setattr(
         pl.logger,
         "warning",
         lambda event, *args, **kwargs: warnings.append(event),
     )
-    pl._CACHE = None
+    pc._CACHE = None
 
     cfg = pl.PubChemCfg(
         retries=5,
@@ -321,13 +322,13 @@ def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
         calls["n"] += 1
         return Resp()
 
-    monkeypatch.setattr(pl._session, "get", capture)
+    monkeypatch.setattr(pc._session, "get", capture)
     monkeypatch.setattr(
-        pl,
+        pc,
         "get_limiter",
         lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
     )
-    pl._CACHE = None
+    pc._CACHE = None
 
     cfg = pl.PubChemCfg(cache_ttl=1, delay=0, retries=1)
     url = "https://example.org"

@@ -1,13 +1,17 @@
 """HTTP queries for publication metadata.
 
 This module provides functions for retrieving metadata from PubMed,
-Semantic Scholar, OpenAlex and Crossref.  It also contains helpers for
+OpenAlex and Crossref.  It also contains helpers for
 issuing robust HTTP requests.
 """
 
 from __future__ import annotations
+ 
 
 import json
+ 
+from collections.abc import Callable
+ 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -16,8 +20,10 @@ from xml.etree import ElementTree as ET
 import pandas as pd
 import requests
 
+ 
 from ..clients import pubmed as pubmed_client
 from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
+ 
 from ..log import logger
 from ..rate_limiter import get_limiter
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
@@ -30,15 +36,11 @@ __all__ = [
     "read_pmids",
     "fetch_pubmed_batch",
     "fetch_pubmed",
-    "fetch_semantic_scholar",
-    "fetch_semantic_scholar_batch",
     "fetch_openalex",
     "fetch_crossref",
 ]
 
 
-_SEMANTIC_SCHOLAR_FIELDS = "publicationTypes,externalIds,paperId,venue"
-_SEMANTIC_SCHOLAR_HEADERS = {"Accept": "application/json"}
 _PUBMED_FALLBACK_ENCODINGS: tuple[str, ...] = (
     "utf-8-sig",
     "cp1251",
@@ -165,6 +167,7 @@ def fetch_pubmed(
     )[0]
 
 
+ 
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
@@ -335,7 +338,7 @@ def fetch_semantic_scholar_batch(
 
     return results
 
-
+ 
 def fetch_openalex(
     session: requests.Session,
     pmid: str,

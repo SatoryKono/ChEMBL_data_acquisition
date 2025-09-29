@@ -29,7 +29,7 @@ from library import iuphar_library as ii
 from library import protein_classification as pc
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.chembl_client import ChemblClient
+from library.clients import ChemblClient
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,

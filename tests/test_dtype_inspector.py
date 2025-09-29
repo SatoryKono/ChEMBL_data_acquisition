@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from library import chembl_library as cl
-from library.chembl_client import ChemblClient
+from library.clients import ChemblClient
 from library.dtype_inspector import inspect_dtypes, logger
 
 
