@@ -21,6 +21,10 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from library import chembl_library as cl
 from library import cli
 from library import io, molecule_catalog, testitem_enrichment
