@@ -11,7 +11,7 @@ from pathlib import Path
 
 import argparse
 from collections import ChainMap
-from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import islice, tee
@@ -77,6 +77,32 @@ UTC = timezone.utc  # noqa: UP017
 _TYPO_PARENT_COLUMN = "parant_molecule_id"
 
 UTC = timezone.utc
+
+@dataclass
+class ReadInputIdsResult:
+    """Container holding the identifier iterator and a diagnostic sample."""
+
+    ids_iter: Iterator[str]
+    sample_ids: tuple[str, ...]
+
+
+@dataclass
+class ParentEnrichmentPreparation:
+    """Intermediate data required to attach parent identifiers."""
+
+    df: pd.DataFrame
+    lookup_data: "ParentLookupPreparedData"
+    parent_catalog: dict[str, str] | None
+    parent_catalog_source: str
+    parent_stats: "ParentLookupStats"
+
+
+@dataclass
+class ParentEnrichmentResult:
+    """Result returned after running the parent enrichment stage."""
+
+    df: pd.DataFrame
+    parent_stats: "ParentLookupStats"
 
 
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
@@ -1130,34 +1156,80 @@ def add_pubchem_data(
     return result
 
 
-def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-    """Execute compound retrieval from the ChEMBL API and augment with PubChem data.
+def read_input_ids(
+    input_csv: Path,
+    *,
+    column: str,
+    io_cfg: IoCfg,
+    limit: int | None,
+) -> tuple[int, ReadInputIdsResult | None]:
+    """Load identifiers from ``input_csv`` honouring ``limit`` when provided."""
 
-    Parameters
-    ----------
-    cfg : Config
-        Application configuration.
-    args : argparse.Namespace
-        Parsed command-line arguments.
-
-    Returns
-    -------
-    int
-        Zero on success, non-zero on failure.
-
-    """
-    limit = cfg.testitem.limit
-    if limit is not None and limit < 0:
+    try:
+        ids_iter = io.read_ids(input_csv, column=column, cfg=io_cfg)
+        if limit is not None:
+            ids_iter = islice(ids_iter, limit)
+        ids_iter, sample_iter = tee(ids_iter)
+        sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
+    except (FileNotFoundError, ValueError) as exc:
         logger.error(
-            "invalid_limit",
-            section="testitem.limit",
-            limit=limit,
+            "read_fail",
+            error=str(exc),
+            path=str(input_csv),
         )
-        return 1
+        return 1, None
 
-    # Initialise HTTP sessions for downstream HTTP calls
-    pl.init_session(cfg.api, cfg.retry)
-    # Initialise HTTP session for subsequent ChEMBL requests
+    return 0, ReadInputIdsResult(ids_iter=ids_iter, sample_ids=sample_ids)
+
+
+def fetch_testitems(
+    ids_iter: Iterable[str],
+    *,
+    api_cfg: ApiCfg,
+    batch_size: int,
+    timeout: float,
+    client: ChemblClient,
+    sample_ids: Sequence[str],
+) -> tuple[int, pd.DataFrame | None]:
+    """Retrieve ChEMBL test item records for ``ids_iter``."""
+
+    logger.info("chembl_fetch_start", batch_size=batch_size)
+    try:
+        df = cl.get_testitem(
+            ids_iter,
+            cfg=api_cfg,
+            client=client,
+            chunk_size=batch_size,
+            timeout=timeout,
+        )
+    except (requests.RequestException, ValueError) as exc:
+        logger.error(
+            "testitem_fetch_failed",
+            error=str(exc),
+            batch_size=batch_size,
+            timeout=timeout,
+            sample_ids=list(sample_ids),
+        )
+        return 1, None
+
+    rows = len(df)
+    logger.info("chembl_fetch_done", rows=rows)
+    logger.info("identifiers_retrieved", count=rows)
+    return 0, df
+
+
+def prepare_parent_enrichment(
+    df: pd.DataFrame,
+    *,
+    catalog_cfg: MoleculeCatalogCfg,
+    io_cfg: IoCfg,
+    api_cfg: ApiCfg,
+    timeout: float,
+    client: ChemblClient,
+    hierarchy_lookup_path: Path | None,
+) -> tuple[int, ParentEnrichmentPreparation | None]:
+    """Prepare DataFrame and catalog information prior to enrichment."""
+
     parent_stats = ParentLookupStats(
         source=PARENT_LOOKUP_SOURCE_SKIPPED,
         missing=0,
@@ -1165,271 +1237,285 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         attached=0,
         uncovered=0,
     )
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-        sample_ids: tuple[str, ...] = ()
-        try:
-            ids_iter = io.read_ids(
-                args.input_csv, column=cfg.testitem.column, cfg=cfg.io
-            )
-            if limit is not None:
-                ids_iter = islice(ids_iter, limit)
-            ids_iter, sample_iter = tee(ids_iter)
-            sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
-        except (FileNotFoundError, ValueError) as exc:
-            logger.error(
-                "read_fail",
-                error=str(exc),
-                path=str(args.input_csv),
-            )
-            return 1
 
-        logger.info("chembl_fetch_start", batch_size=cfg.testitem.batch_size)
+    parent_column = catalog_cfg.parent_field
+    child_column = catalog_cfg.child_field
 
-        try:
-            df = cl.get_testitem(
-                ids_iter,
-                cfg=cfg.api,
-                client=client,
-                chunk_size=cfg.testitem.batch_size,
-                timeout=cfg.testitem.timeout,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "testitem_fetch_failed",
-                error=str(exc),
-                batch_size=cfg.testitem.batch_size,
-                timeout=cfg.testitem.timeout,
-                sample_ids=list(sample_ids),
-            )
-            return 1
-        rows = len(df)
-        logger.info("chembl_fetch_done", rows=rows)
-        logger.info("identifiers_retrieved", count=rows)
-        if limit is not None:
-            logger.info("process_limit", limit=min(limit, rows))
-        parent_column = cfg.molecule_catalog.parent_field
-        child_column = cfg.molecule_catalog.child_field
+    if child_column in df.columns:
+        normalised_ids = _normalise_chembl_ids(df[child_column])
+    else:
+        normalised_ids = pd.Series("", index=df.index, dtype="string")
 
-        if child_column in df.columns:
-            normalised_ids = _normalise_chembl_ids(df[child_column])
-        else:
-            normalised_ids = pd.Series("", index=df.index, dtype="string")
+    if parent_column in df.columns:
+        existing_parent = _normalise_chembl_ids(df[parent_column])
+    else:
+        existing_parent = pd.Series("", index=df.index, dtype="string")
 
-        if parent_column in df.columns:
-            existing_parent = _normalise_chembl_ids(df[parent_column])
-        else:
-            existing_parent = pd.Series("", index=df.index, dtype="string")
-
-        hierarchy_lookup_path = getattr(
-            cfg.testitem_molecule_enrichment.sources,
-            "molecule_hierarchy_path",
-            None,
+    resolved_lookup_path = hierarchy_lookup_path
+    if resolved_lookup_path is None:
+        resolved_lookup_path = getattr(
+            catalog_cfg,
+            "hierarchy_lookup_path",
+            DEFAULT_MOLECULE_HIERARCHY_PATH,
         )
+    if resolved_lookup_path is None:
+        resolved_lookup_path = DEFAULT_MOLECULE_HIERARCHY_PATH
+    if resolved_lookup_path:
         try:
             hierarchy_lookup = load_molecule_hierarchy_lookup(
-                hierarchy_lookup_path,
-                io_cfg=cfg.io,
+                resolved_lookup_path,
+                io_cfg=io_cfg,
             )
         except ValueError as exc:
             logger.error(
                 "molecule_hierarchy_lookup_invalid",
                 error=str(exc),
-                path=str(hierarchy_lookup_path),
+                path=str(resolved_lookup_path),
             )
-            return 1
+            return 1, None
+    else:
+        hierarchy_lookup = {}
 
-        if hierarchy_lookup:
-            hierarchy_series = normalised_ids.map(
-                lambda value: hierarchy_lookup.get(value) if value else None
-            )
-            hierarchy_mask = hierarchy_series.notna()
-            if hierarchy_mask.any():
-                resolved = hierarchy_series[hierarchy_mask].astype("string")
-                if parent_column in df.columns:
-                    df[parent_column] = df[parent_column].astype("string")
-                else:
-                    df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
-                df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
-                existing_parent.loc[hierarchy_mask] = (
-                    resolved.fillna("").astype("string")
-                )
-
-        if getattr(cfg.molecule_catalog, "force_refresh_existing", False):
-            need_lookup_mask = normalised_ids != ""
-        else:
-            need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
-        initial_need_lookup = set(normalised_ids[need_lookup_mask])
-        need_lookup = set(initial_need_lookup)
-
-        cache_before = _cache_state(cfg.molecule_catalog.cache_path)
-        cache_after = cache_before
-        parent_catalog: dict[str, str] = {}
-        parent_catalog_source = PARENT_LOOKUP_SOURCE_SKIPPED
-
-        if need_lookup and cache_before[0]:
-            try:
-                parent_catalog = query_parent_catalog(
-                    need_lookup,
-                    catalog_cfg=cfg.molecule_catalog,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error(
-                    "parent_catalog_invalid",
-                    error=str(exc),
-                    path=str(cfg.molecule_catalog.cache_path),
-                )
-                return 1
-            cache_after = _cache_state(cfg.molecule_catalog.cache_path)
-            parent_catalog_source = (
-                PARENT_LOOKUP_SOURCE_CACHE
-                if cache_after == cache_before
-                else PARENT_LOOKUP_SOURCE_SYNC
-            )
-            if parent_catalog:
-                need_lookup -= set(parent_catalog)
-
-        if need_lookup:
-            try:
-                fetched = molecule_catalog.fetch_parent_catalog_for(
-                    need_lookup,
-                    client=client,
-                    api_cfg=cfg.api,
-                    timeout=cfg.testitem.timeout,
-                    catalog_cfg=cfg.molecule_catalog,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
-                return 1
-            if fetched:
-                parent_catalog.update(fetched)
-                update_parent_catalog_cache(fetched, cfg.molecule_catalog)
-                parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
-
-                need_lookup -= set(fetched)
-
-        if need_lookup:
-            try:
-                fallback_catalog = load_parent_catalog(
-                    client=client,
-                    api_cfg=cfg.api,
-                    catalog_cfg=cfg.molecule_catalog,
-                    timeout=cfg.testitem.timeout,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error("parent_catalog_invalid", error=str(exc))
-                return 1
-            if fallback_catalog:
-                parent_catalog.update(fallback_catalog)
-                parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
-                need_lookup -= set(fallback_catalog)
-
-        lookup_resolved = initial_need_lookup - need_lookup
-        parent_lookup_data = ParentLookupPreparedData(
-            child_ids=normalised_ids,
-            existing_parent_ids=existing_parent,
-            need_lookup=set(need_lookup),
+    if hierarchy_lookup:
+        hierarchy_series = normalised_ids.map(
+            lambda value: hierarchy_lookup.get(value) if value else None
         )
-        if (
-            lookup_resolved
-            and not need_lookup
-            and parent_catalog_source
-            not in (PARENT_LOOKUP_SOURCE_PARTIAL, PARENT_LOOKUP_SOURCE_SYNC)
-        ):
-            parent_catalog_source = PARENT_LOOKUP_SOURCE_LOOKUP
+        hierarchy_mask = hierarchy_series.notna()
+        if hierarchy_mask.any():
+            resolved = hierarchy_series[hierarchy_mask].astype("string")
+            if parent_column in df.columns:
+                df[parent_column] = df[parent_column].astype("string")
+            else:
+                df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
+            df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
+            existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
 
-        try:
-            ensure_no_parant_column(df)
-        except ValueError as exc:
-            logger.error(
-                "invalid_column",
-                column=_TYPO_PARENT_COLUMN,
-                error=str(exc),
-            )
-            return 1
+    if getattr(catalog_cfg, "force_refresh_existing", False):
+        need_lookup_mask = normalised_ids != ""
+    else:
+        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
+    initial_need_lookup = set(normalised_ids[need_lookup_mask])
+    need_lookup = set(initial_need_lookup)
 
-        logger.info("parent_lookup_start")
+    cache_before = _cache_state(catalog_cfg.cache_path)
+    cache_after = cache_before
+    parent_catalog: dict[str, str] = {}
+    parent_catalog_source = PARENT_LOOKUP_SOURCE_SKIPPED
+
+    if need_lookup and cache_before[0]:
         try:
-            catalog_arg = (
-                parent_catalog
-                if parent_catalog
-                else (None if need_lookup else parent_catalog)
-            )
-            df, parent_stats = attach_parent_molecule_ids(
-                df,
-                client=client,
-                api_cfg=cfg.api,
-                catalog_cfg=cfg.molecule_catalog,
-                timeout=cfg.testitem.timeout,
-                catalog=catalog_arg,
-                source=parent_catalog_source,
-                precomputed=parent_lookup_data,
+            parent_catalog = query_parent_catalog(
+                need_lookup,
+                catalog_cfg=catalog_cfg,
             )
         except (requests.RequestException, ValueError) as exc:
-            logger.error("parent_lookup_failed", error=str(exc))
-            return 1
-        logger.info(
-            "parent_lookup_done",
-            source=parent_stats.source,
-            unique=parent_stats.unique,
-            attached=parent_stats.attached,
-            missing=parent_stats.missing,
-            uncovered=parent_stats.uncovered,
-        )
-
-        pubchem_cid_cache: dict[str, str | None] | None = None
-        pubchem_resolution_cache: (
-            dict[tuple[str | None, ...], pl.PubChemResolution] | None
-        ) = None
-        pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
-        if getattr(cfg.pubchem, "enable", True):
-            pubchem_cid_cache = _load_pubchem_cid_cache(
-                getattr(cfg.pubchem, "cid_cache_path", None),
-                ttl_hours=getattr(cfg.pubchem, "cache_ttl_hours", None),
+            logger.error(
+                "parent_catalog_invalid",
+                error=str(exc),
+                path=str(catalog_cfg.cache_path),
             )
-            pubchem_resolution_cache = {}
-            pubchem_parent_record_cache = {}
-
-        logger.info("pubchem_augment_start")
-        df = add_pubchem_data(
-            df,
-            cfg.pubchem,
-            client=client,
-            api_cfg=cfg.api,
-            timeout=cfg.testitem.timeout,
-            cid_cache=pubchem_cid_cache,
-            resolution_cache=pubchem_resolution_cache,
-            parent_record_cache=pubchem_parent_record_cache,
+            return 1, None
+        cache_after = _cache_state(catalog_cfg.cache_path)
+        parent_catalog_source = (
+            PARENT_LOOKUP_SOURCE_CACHE
+            if cache_after == cache_before
+            else PARENT_LOOKUP_SOURCE_SYNC
         )
-        logger.info("pubchem_augment_done")
+        if parent_catalog:
+            need_lookup -= set(parent_catalog)
 
-        enrichment_cfg = cfg.testitem_molecule_enrichment
-        if enrichment_cfg.enable:
-            logger.info("testitem_enrichment_start")
-            try:
-                df = testitem_enrichment.enrich(
-                    df,
-                    cfg=enrichment_cfg,
-                    io_cfg=cfg.io,
-                )
-            except ValueError as exc:
-                logger.error("testitem_enrichment_failed", error=str(exc))
-                return 1
-            logger.info("testitem_enrichment_done")
+    if need_lookup:
+        try:
+            fetched = molecule_catalog.fetch_parent_catalog_for(
+                need_lookup,
+                client=client,
+                api_cfg=api_cfg,
+                timeout=timeout,
+                catalog_cfg=catalog_cfg,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
+            return 1, None
+        if fetched:
+            parent_catalog.update(fetched)
+            update_parent_catalog_cache(fetched, catalog_cfg)
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
+            need_lookup -= set(fetched)
 
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        df = normalize_testitems(df)
-        df = add_pipeline_metadata(df)
-        # Determine column order: schema columns first, followed by
-        # additional fields sorted alphabetically.
-        schema_cols = list(TestitemsSchema.columns)
-        head = [c for c in schema_cols if c in df.columns]
-        tail = sorted(c for c in df.columns if c not in schema_cols)
-        col_order = head + tail
-        rows_total = len(df)
-        exit_code = 0
-    required_cols = {
-        name for name, col in TestitemsSchema.columns.items() if col.required
-    }
+    if need_lookup:
+        try:
+            fallback_catalog = load_parent_catalog(
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error("parent_catalog_invalid", error=str(exc))
+            return 1, None
+        if fallback_catalog:
+            parent_catalog.update(fallback_catalog)
+            parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
+            need_lookup -= set(fallback_catalog)
+
+    lookup_resolved = initial_need_lookup - need_lookup
+    parent_lookup_data = ParentLookupPreparedData(
+        child_ids=normalised_ids,
+        existing_parent_ids=existing_parent,
+        need_lookup=set(need_lookup),
+    )
+    if (
+        lookup_resolved
+        and not need_lookup
+        and parent_catalog_source
+        not in (PARENT_LOOKUP_SOURCE_PARTIAL, PARENT_LOOKUP_SOURCE_SYNC)
+    ):
+        parent_catalog_source = PARENT_LOOKUP_SOURCE_LOOKUP
+
+    try:
+        ensure_no_parant_column(df)
+    except ValueError as exc:
+        logger.error(
+            "invalid_column",
+            column=_TYPO_PARENT_COLUMN,
+            error=str(exc),
+        )
+        return 1, None
+
+    return (
+        0,
+        ParentEnrichmentPreparation(
+            df=df,
+            lookup_data=parent_lookup_data,
+            parent_catalog=parent_catalog or None,
+            parent_catalog_source=parent_catalog_source,
+            parent_stats=parent_stats,
+        ),
+    )
+
+
+def run_parent_enrichment(
+    prep: ParentEnrichmentPreparation,
+    *,
+    client: ChemblClient,
+    api_cfg: ApiCfg,
+    catalog_cfg: MoleculeCatalogCfg,
+    timeout: float,
+) -> tuple[int, ParentEnrichmentResult | None]:
+    """Attach parent molecule identifiers using the prepared context."""
+
+    logger.info("parent_lookup_start")
+    try:
+        df, parent_stats = attach_parent_molecule_ids(
+            prep.df,
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+            catalog=prep.parent_catalog,
+            source=prep.parent_catalog_source,
+            precomputed=prep.lookup_data,
+        )
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("parent_lookup_failed", error=str(exc))
+        return 1, None
+
+    logger.info(
+        "parent_lookup_done",
+        source=parent_stats.source,
+        unique=parent_stats.unique,
+        attached=parent_stats.attached,
+        missing=parent_stats.missing,
+        uncovered=parent_stats.uncovered,
+    )
+
+    return 0, ParentEnrichmentResult(df=df, parent_stats=parent_stats)
+
+
+def augment_pubchem(
+    df: pd.DataFrame,
+    *,
+    pubchem_cfg: PubChemCfg,
+    api_cfg: ApiCfg,
+    timeout: float,
+    client: ChemblClient,
+) -> pd.DataFrame:
+    """Augment ``df`` with PubChem information if enabled."""
+
+    pubchem_cid_cache: dict[str, str | None] | None = None
+    pubchem_resolution_cache: (
+        dict[tuple[str | None, ...], pl.PubChemResolution] | None
+    ) = None
+    pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
+    if getattr(pubchem_cfg, "enable", True):
+        pubchem_cid_cache = _load_pubchem_cid_cache(
+            getattr(pubchem_cfg, "cid_cache_path", None),
+            ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),
+        )
+        pubchem_resolution_cache = {}
+        pubchem_parent_record_cache = {}
+
+    logger.info("pubchem_augment_start")
+    result = add_pubchem_data(
+        df,
+        pubchem_cfg,
+        client=client,
+        api_cfg=api_cfg,
+        timeout=timeout,
+        cid_cache=pubchem_cid_cache,
+        resolution_cache=pubchem_resolution_cache,
+        parent_record_cache=pubchem_parent_record_cache,
+    )
+    logger.info("pubchem_augment_done")
+    return result
+
+
+def apply_testitem_enrichment(
+    df: pd.DataFrame,
+    *,
+    enrichment_cfg,
+    io_cfg: IoCfg,
+) -> tuple[int, pd.DataFrame | None]:
+    """Apply optional test item enrichment if enabled."""
+
+    if not enrichment_cfg.enable:
+        return 0, df
+
+    logger.info("testitem_enrichment_start")
+    try:
+        enriched = testitem_enrichment.enrich(
+            df,
+            cfg=enrichment_cfg,
+            io_cfg=io_cfg,
+        )
+    except ValueError as exc:
+        logger.error("testitem_enrichment_failed", error=str(exc))
+        return 1, None
+    logger.info("testitem_enrichment_done")
+    return 0, enriched
+
+
+def finalize_output(
+    df: pd.DataFrame,
+    *,
+    cfg: Config,
+    output: Path,
+    parent_stats: ParentLookupStats,
+    input_csv: Path,
+    rows_total: int,
+) -> int:
+    """Normalise, validate, and persist the final dataset."""
+
+    df = normalize_testitems(df)
+    df = add_pipeline_metadata(df)
+
+    schema_cols = list(TestitemsSchema.columns)
+    head = [c for c in schema_cols if c in df.columns]
+    tail = sorted(c for c in df.columns if c not in schema_cols)
+    col_order = head + tail
+
+    exit_code = 0
+    required_cols = {name for name, col in TestitemsSchema.columns.items() if col.required}
     optional_cols = set(TestitemsSchema.columns) - required_cols
     missing_required = required_cols - set(df.columns)
     missing_optional = optional_cols - set(df.columns)
@@ -1471,14 +1557,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     failures=len(validation_result.failure_cases),
                     path=str(failure_path),
                 )
+                df = validation_result.data
                 exit_code = 1
     else:
         logger.warning(
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
+
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
+
     try:
         key_cols = ["molecule_chembl_id"]
         csv_path = io.write_csv(
@@ -1509,7 +1598,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         csv_path=csv_path,
         command=" ".join(sys.argv),
         config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
+        inputs={"input_csv": str(input_csv)},
         stats=stats,
         schema="TestitemsSchema",
     )
@@ -1522,6 +1611,115 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             path=str(output),
         )
         return 1
+
+    return exit_code
+
+
+
+def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute compound retrieval from the ChEMBL API and augment with PubChem data."""
+
+    limit = cfg.testitem.limit
+    if limit is not None and limit < 0:
+        logger.error(
+            "invalid_limit",
+            section="testitem.limit",
+            limit=limit,
+        )
+        return 1
+
+    pl.init_session(cfg.api, cfg.retry)
+
+    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        read_status, read_result = read_input_ids(
+            args.input_csv,
+            column=cfg.testitem.column,
+            io_cfg=cfg.io,
+            limit=limit,
+        )
+        if read_status != 0 or read_result is None:
+            return read_status
+
+        fetch_status, df = fetch_testitems(
+            read_result.ids_iter,
+            api_cfg=cfg.api,
+            batch_size=cfg.testitem.batch_size,
+            timeout=cfg.testitem.timeout,
+            client=client,
+            sample_ids=read_result.sample_ids,
+        )
+        if fetch_status != 0 or df is None:
+            return fetch_status
+
+        rows = len(df)
+        if limit is not None:
+            logger.info("process_limit", limit=min(limit, rows))
+
+        enrichment_sources = getattr(cfg.testitem_molecule_enrichment, "sources", None)
+        hierarchy_lookup_path = (
+            getattr(enrichment_sources, "molecule_hierarchy_path", None)
+            if enrichment_sources is not None
+            else None
+        )
+
+        prep_status, prep = prepare_parent_enrichment(
+            df,
+            catalog_cfg=cfg.molecule_catalog,
+            io_cfg=cfg.io,
+            api_cfg=cfg.api,
+            timeout=cfg.testitem.timeout,
+            client=client,
+            hierarchy_lookup_path=hierarchy_lookup_path,
+        )
+        if prep_status != 0 or prep is None:
+            return prep_status
+
+        parent_stats = prep.parent_stats
+        parent_status, parent_result = run_parent_enrichment(
+            prep,
+            client=client,
+            api_cfg=cfg.api,
+            catalog_cfg=cfg.molecule_catalog,
+            timeout=cfg.testitem.timeout,
+        )
+        if parent_status != 0 or parent_result is None:
+            return parent_status
+
+        df = parent_result.df
+        parent_stats = parent_result.parent_stats
+
+        df = augment_pubchem(
+            df,
+            pubchem_cfg=cfg.pubchem,
+            api_cfg=cfg.api,
+            timeout=cfg.testitem.timeout,
+            client=client,
+        )
+
+        enrichment_status, enriched_df = apply_testitem_enrichment(
+            df,
+            enrichment_cfg=cfg.testitem_molecule_enrichment,
+            io_cfg=cfg.io,
+        )
+        if enrichment_status != 0 or enriched_df is None:
+            return enrichment_status
+
+        df = enriched_df
+
+    output_path = (
+        Path(args.output_csv)
+        if args.output_csv
+        else io.default_output_path(args.input_csv, cfg.io)
+    )
+    rows_total = len(df)
+    exit_code = finalize_output(
+        df,
+        cfg=cfg,
+        output=output_path,
+        parent_stats=parent_stats,
+        input_csv=args.input_csv,
+        rows_total=rows_total,
+    )
     return exit_code
 
 
