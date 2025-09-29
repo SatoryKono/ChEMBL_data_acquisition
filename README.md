@@ -176,7 +176,7 @@ Retrieve document metadata for a list of PubMed IDs using the bundled
 sample file:
 
 ```bash
-python scripts/get_document_data.py pubmed \
+python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
     --output out/documents.csv \
     --limit 5 \
@@ -200,7 +200,7 @@ python -m library.pubmed_library \
 Fetch basic target information from ChEMBL:
 
 ```bash
-python scripts/get_target_data.py chembl \
+python -m scripts.get_target_data chembl \
     --input path/to/targets.csv \
     --output out/targets.csv \
     --limit 5 \
@@ -280,7 +280,7 @@ CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
 Запустить скрипт с автоматической подгрузкой настроек можно так:
 
 ```bash
-python -m dotenv run -- python scripts/get_assay_data.py --input assay_ids.csv \\
+python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \\
     --output out/assays.csv
 ```
 
@@ -375,7 +375,7 @@ api:
 Пример включения JSON‑формата через переменную окружения:
 
 ```bash
-LOG_FORMAT=json python scripts/get_assay_data.py --input assay_ids.csv \
+LOG_FORMAT=json python -m scripts.get_assay_data --input assay_ids.csv \
     --output out/assays.csv --log-level INFO
 ```
 
@@ -383,7 +383,7 @@ LOG_FORMAT=json python scripts/get_assay_data.py --input assay_ids.csv \
 `CHEMBL_DA_LOG_LEVEL`:
 
 ```bash
-CHEMBL_DA_LOG_LEVEL=DEBUG python scripts/get_assay_data.py --input assay_ids.csv \
+CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
     --output out/assays.csv
 ```
 
