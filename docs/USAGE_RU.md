@@ -5,7 +5,12 @@
 
 ## Общие параметры CLI
 
-Все команды `scripts/get_*_data.py` поддерживают единый набор аргументов:
+Все команды `scripts/get_*_data.py` поддерживают единый набор аргументов.
+Подкоманды для выбора источника (`chembl`, `uniprot`, `iuphar`, `all`)
+доступны только у `scripts/get_document_data.py` и
+`scripts/get_target_data.py`; остальные скрипты (`get_activity_data.py`,
+`get_assay_data.py`, `get_testitem_data.py`) представляют собой одиночные
+CLI без вложенных подкоманд.
 
 | Опция | Назначение |
 | --- | --- |
@@ -37,7 +42,8 @@
 | Событие | Когда появляется |
 | --- | --- |
 | `pipeline_start` | После настройки логирования и перед валидацией конфигурации. |
-| `documents_processed` / `activities_processed` | Периодические счётчики прогресса внутри рабочих циклов. |
+| `documents_processed` | Счётчик прогресса документного пайплайна после каждого обработанного батча. |
+| `process_limit` | Фиксируется при обрезке списка идентификаторов опцией `--limit` или её эквивалентами в конфигурации. |
 | `write_done` | Успешная запись CSV с указанием пути и числа строк. |
 | `pipeline_done` / `pipeline_fail` | Финальный статус перед выходом из программы. |
 
@@ -124,7 +130,7 @@ python scripts/get_document_data.py pubmed \
 ## Агрегация таргетов (`get_target_data.py`)
 
 ```bash
-python scripts/get_target_data.py \
+python scripts/get_target_data.py chembl \
   --input path/to/targets.csv \
   --column target_chembl_id
 ```
