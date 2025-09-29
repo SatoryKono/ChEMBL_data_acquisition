@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin
 
 import pandas as pd
 
@@ -113,6 +113,24 @@ TESTITEM_COLUMNS = [
     "standard_inchi",
     "standard_inchi_key",
 ]
+
+
+TESTITEM_QUERY_FIELDS = (
+    "molecule_chembl_id",
+    "parent_molecule_chembl_id",
+    "pref_name",
+    "max_phase",
+    "molecule_type",
+    "first_approval",
+    "oral",
+    "parenteral",
+    "topical",
+    "black_box_warning",
+    "structure_type",
+    "molecule_structures.canonical_smiles",
+    "molecule_structures.standard_inchi",
+    "molecule_structures.standard_inchi_key",
+)
 
 
 def get_assay(
@@ -333,7 +351,14 @@ def get_testitem(
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?format=json"
+    base_params: list[tuple[str, str]] = [("format", "json")]
+    per_request_limit = chunk_size
+    if per_request_limit:
+        base_params.append(("limit", str(per_request_limit)))
+    if TESTITEM_QUERY_FIELDS:
+        base_params.append(("fields", ",".join(TESTITEM_QUERY_FIELDS)))
+    query_string = urlencode(base_params)
+    base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?{query_string}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, chunk_size):
         chunk_key = ",".join(chunk)
