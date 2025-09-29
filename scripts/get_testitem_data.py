@@ -29,7 +29,10 @@ from library import chembl_library as cl
 from library import cli
 from library import io, molecule_catalog, testitem_enrichment
 from library import pubchem_library as pl
-from library.clients import ChemblClient
+
+from library.clients import pubchem as pc
+from library.chembl_client import ChemblClient
+
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -1687,7 +1690,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
-    pl.init_session(cfg.api, cfg.retry)
+    pc.init_session(cfg.api, cfg.retry)
 
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         read_status, read_result = read_input_ids(

@@ -1122,7 +1122,7 @@ def test_run_chembl_initialises_pubchem_session(
     def fake_init_session(api: object, retry: object) -> None:
         captured["init"] = (api, retry)
 
-    monkeypatch.setattr(gtd.pl, "init_session", fake_init_session)
+    monkeypatch.setattr(gtd.pc, "init_session", fake_init_session)
     monkeypatch.setattr(
         io,
         "write_csv",
@@ -1181,7 +1181,7 @@ def test_run_chembl_uses_lazy_identifier_stream(
         )
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
-    monkeypatch.setattr(gtd.pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(gtd.pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *args, **__: frame)
     monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: {})
@@ -1296,7 +1296,7 @@ def test_run_chembl_calls_pubchem_once(
 
     props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
     monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
-    monkeypatch.setattr(gtd.pl, "init_session", lambda api, retry: None)
+    monkeypatch.setattr(gtd.pc, "init_session", lambda api, retry: None)
     monkeypatch.setattr(
         io,
         "write_csv",
@@ -1332,7 +1332,7 @@ def test_run_chembl_prefills_parent_from_hierarchy(
     )
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
-    monkeypatch.setattr(gtd.pl, "init_session", lambda *_, **__: None)
+    monkeypatch.setattr(gtd.pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **_: None)
