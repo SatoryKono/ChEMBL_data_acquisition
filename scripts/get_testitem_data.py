@@ -924,46 +924,43 @@ def add_pubchem_data(
     if parent_record_cache is None:
         parent_record_cache = {}
 
-    local_records: dict[str, pd.Series] = {}
+    local_records: pd.DataFrame | None = None
     if "molecule_chembl_id" in result.columns:
-        local_record_data = (
-            result.loc[:, ["molecule_chembl_id"]]
-            .assign(__row=lambda df: df.index)
-            .dropna()
-            .astype({"molecule_chembl_id": "string"})
-            .assign(
-                molecule_chembl_id=lambda df: df[
-                    "molecule_chembl_id"
-                ].str.strip().str.upper()
+        chembl_ids = result["molecule_chembl_id"].astype("string")
+        normalised_ids = chembl_ids.str.strip().str.upper()
+        valid_mask = normalised_ids.notna() & normalised_ids.ne("")
+        if valid_mask.any():
+            local_records = (
+                result.loc[valid_mask]
+                .assign(_normalised_id=normalised_ids[valid_mask])
+                .drop_duplicates("_normalised_id")
+                .set_index("_normalised_id")
             )
-            .drop_duplicates("molecule_chembl_id")
-            .set_index("molecule_chembl_id")["__row"]
-            .map(result.to_dict("index"))
-        )
-        for chembl_id, row_data in local_record_data.items():
-            chembl_norm = _normalise_identifier(chembl_id, uppercase=True)
-            if not chembl_norm or chembl_norm in local_records:
-                continue
-            if isinstance(row_data, pd.Series):
-                record = row_data
-            elif isinstance(row_data, Mapping):
-                record = pd.Series(row_data).reindex(result.columns, copy=False)
-            else:
-                continue
-            local_records[chembl_norm] = record
-            parent_record_cache[chembl_norm] = record
+            local_records.index.name = "molecule_chembl_id"
+            for chembl_norm in pd.unique(normalised_ids[valid_mask]):
+                if chembl_norm in parent_record_cache:
+                    continue
+                try:
+                    parent_record_cache[chembl_norm] = local_records.loc[chembl_norm]
+                except KeyError:
+                    continue
 
 
     def load_parent_record(parent_id: str) -> pd.Series | None:
+        nonlocal local_records
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
         if not parent_norm:
             return None
         if parent_norm in parent_record_cache:
             return parent_record_cache[parent_norm]
-        local_record = local_records.get(parent_norm)
-        if local_record is not None:
-            parent_record_cache[parent_norm] = local_record
-            return local_record
+        if local_records is not None:
+            try:
+                local_record = local_records.loc[parent_norm]
+            except KeyError:
+                local_record = None
+            else:
+                parent_record_cache[parent_norm] = local_record
+                return local_record
         if client is None or api_cfg is None:
             parent_record_cache[parent_norm] = None
             return None
@@ -987,7 +984,11 @@ def add_pubchem_data(
             parent_record_cache[parent_norm] = None
             return None
         parent_row = parent_df.iloc[0]
-        local_records[parent_norm] = parent_row
+        if local_records is not None:
+            local_records.loc[parent_norm] = parent_row
+        else:
+            local_records = parent_row.to_frame().T
+            local_records.index = pd.Index([parent_norm], name="molecule_chembl_id")
         parent_record_cache[parent_norm] = parent_row
         return parent_row
 

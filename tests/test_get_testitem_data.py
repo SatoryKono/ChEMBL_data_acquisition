@@ -516,6 +516,46 @@ def test_add_pubchem_data_preserves_existing_values(
     assert result.loc[2, "pubchem_cid"] == "333"
 
 
+def test_add_pubchem_data_primes_parent_cache_with_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "canonical_smiles": ["C", "C", "CC"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+
+    monkeypatch.setattr(gtd, "resolve_pubchem_cid", lambda *_, **__: None)
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
+
+    parent_cache: dict[str, pd.Series | None] = {}
+
+    result = gtd.add_pubchem_data(
+        df,
+        cfg,
+        parent_record_cache=parent_cache,
+    )
+
+    assert "CHEMBL1" in parent_cache
+    assert isinstance(parent_cache["CHEMBL1"], pd.Series)
+    assert parent_cache["CHEMBL1"]["molecule_chembl_id"] == "CHEMBL1"
+    expected_first = df.loc[0].rename("CHEMBL1")
+    pd.testing.assert_series_equal(
+        parent_cache["CHEMBL1"], expected_first, check_dtype=False
+    )
+    assert "CHEMBL2" in parent_cache
+    expected_second = df.loc[2].rename("CHEMBL2")
+    pd.testing.assert_series_equal(
+        parent_cache["CHEMBL2"], expected_second, check_dtype=False
+    )
+
+
 def test_resolve_pubchem_cid_prefers_inchikey(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
