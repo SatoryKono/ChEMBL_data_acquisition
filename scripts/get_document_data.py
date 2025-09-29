@@ -45,7 +45,7 @@ from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
 from library import pubmed_library as pl
 from library import semantic_scholar_library as ssl
-from library.chembl_client import ChemblClient, _chunked
+from library.clients import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,
