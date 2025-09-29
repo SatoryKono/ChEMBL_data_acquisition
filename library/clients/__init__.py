@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
+ 
 from .iuphar import (
     download_gtp_to_hgnc_mapping,
     download_gtp_to_uniprot_mapping,
@@ -28,8 +29,17 @@ from .iuphar import (
     load_targets as load_iuphar_targets,
     query_gene_symbol as query_iuphar_gene_symbol,
 )
+ 
+ 
+from .crossref import fetch_crossref
+from .openalex import fetch_openalex
+ 
+from .chembl import ChemblClient, _chunked
+ 
+ 
 
 __all__ = [
+    "ChemblClient",
     "ClientConfig",
     "ClientError",
     "ClientPayload",
@@ -40,6 +50,9 @@ __all__ = [
     "load_iuphar_families",
     "load_iuphar_targets",
     "query_iuphar_gene_symbol",
+    "fetch_crossref",
+    "fetch_openalex",
+    "_chunked",
 ]
 
 

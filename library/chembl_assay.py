@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 import pandas as pd
 
-from .chembl_client import ChemblClient, _chunked
+from library.clients import ChemblClient, _chunked
 from .config import ApiCfg
 from .log import logger
 from .pandas_utils import json_normalize_pyarrow
