@@ -13,7 +13,7 @@ import requests
 
 from library import chembl_library as cl
 from library import io
-from library import pubchem_library as pl
+from library import molecule_catalog, pubchem_library as pl
 
 from library.config import ApiCfg, Config, IoCfg
 
@@ -159,6 +159,40 @@ def test_fetch_testitems_passes_fields_and_limit(
     assert df is not None
     assert captured["fields"] == ("a", "b")
     assert captured["page_limit"] == 500
+
+
+def test_fetch_parent_catalog_skips_single_when_parentless(
+    cfg: Config,
+) -> None:
+    captured_urls: list[str] = []
+
+    class DummyClient:
+        def request_json(
+            self,
+            url: str,
+            *,
+            cfg: ApiCfg,
+            timeout: float | None,
+        ) -> Mapping[str, object]:
+            captured_urls.append(url)
+            if "/molecule.json" in url:
+                return {"molecules": []}
+            raise AssertionError("single molecule fetch should be skipped")
+
+    client = DummyClient()
+    cfg.molecule_catalog.filters = {"parent_molecule_chembl_id__isnull": "false"}
+
+    result = molecule_catalog.fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"],
+        client=client,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        catalog_cfg=cfg.molecule_catalog,
+    )
+
+    assert result == {}
+    assert captured_urls
+    assert all("/molecule.json" in url for url in captured_urls)
 
 
 def test_prepare_parent_enrichment_uses_lookup_path(

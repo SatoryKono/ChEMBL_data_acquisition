@@ -53,6 +53,15 @@ def _normalise_chembl_id(value: str) -> str:
     return normalised
 
 
+def _filters_exclude_parentless(catalog_cfg: MoleculeCatalogCfg) -> bool:
+    flag = catalog_cfg.filters.get(f"{catalog_cfg.parent_field}__isnull")
+    if flag is None:
+        return False
+    if isinstance(flag, bool):
+        return flag is False
+    return str(flag).strip().lower() in {"false", "0"}
+
+
 def _build_initial_url(api_cfg: ApiCfg, catalog_cfg: MoleculeCatalogCfg) -> str:
     base = api_cfg.chembl_base.rstrip("/")
     resource = catalog_cfg.endpoint.lstrip("/")
@@ -198,6 +207,7 @@ def _fetch_parent_catalog_via_helper(
     existing: Mapping[str, str],
     catalog_cfg: MoleculeCatalogCfg | None = None,
     allow_rebatch: bool = True,
+    allow_single_lookup: bool = True,
 ) -> dict[str, str]:
     cfg = catalog_cfg or _DEFAULT_CATALOG_CFG
     pending: list[str] = []
@@ -220,6 +230,23 @@ def _fetch_parent_catalog_via_helper(
     fallback_start = perf_counter()
 
     try:
+        if not allow_single_lookup:
+            chunk_size = max(1, cfg.page_size)
+            for chunk in _chunked(pending, chunk_size):
+                batch_attempts += 1
+                try:
+                    chunk_result = _fetch_parent_catalog_chunk(
+                        chunk, client=client, api_cfg=api_cfg, timeout=timeout
+                    )
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.warning(
+                        "parent_lookup_rebatch_failed",
+                        extra={"count": len(chunk), "error": str(exc)},
+                    )
+                    continue
+                result.update(chunk_result)
+            return result
+
         retry_chunk_size = 0
         if allow_rebatch and len(pending) >= _PARENT_LOOKUP_RETRY_THRESHOLD:
             base_chunk_size = max(1, cfg.page_size)
@@ -404,6 +431,7 @@ def fetch_parent_catalog_for(
     cfg = catalog_cfg or _DEFAULT_CATALOG_CFG
     effective_timeout = timeout if timeout is not None else api_cfg.timeout_read
     result: dict[str, str] = {}
+    parentless_filtered = _filters_exclude_parentless(cfg)
 
     if len(unique_ids) <= _PARENT_LOOKUP_FALLBACK_THRESHOLD:
         fallback_result = _fetch_parent_catalog_via_helper(
@@ -414,6 +442,7 @@ def fetch_parent_catalog_for(
             existing=result,
             catalog_cfg=cfg,
             allow_rebatch=False,
+            allow_single_lookup=not parentless_filtered,
         )
         result.update(fallback_result)
         return result
@@ -441,7 +470,7 @@ def fetch_parent_catalog_for(
             if missing:
                 fallback_candidates.extend(missing)
 
-    if fallback_candidates:
+    if fallback_candidates and not parentless_filtered:
         ordered = [
             item for item in dict.fromkeys(fallback_candidates) if item not in result
         ]
@@ -453,6 +482,7 @@ def fetch_parent_catalog_for(
                 timeout=effective_timeout,
                 existing=result,
                 catalog_cfg=cfg,
+                allow_single_lookup=True,
             )
             result.update(fallback_result)
 
