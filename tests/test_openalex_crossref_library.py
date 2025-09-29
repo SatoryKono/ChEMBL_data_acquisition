@@ -1,6 +1,10 @@
 import pytest
 import requests
 
+import requests
+
+import pytest
+
 from library import openalex_crossref_library as ocl
 from library import rate_limiter as rl
 from library.config import Config
@@ -16,7 +20,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch) -> None:
         called["timeout"] = timeout
         return {}, ""
 
-    monkeypatch.setattr("library.pubmed.query._do_request", fake_do_request)
+    monkeypatch.setattr("library.clients.pubmed._do_request", fake_do_request)
 
     cfg = Config()
     cfg.api.user_agent = "test@example.com"
@@ -43,7 +47,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch) -> None:
         called["timeout"] = timeout
         return {}, ""
 
-    monkeypatch.setattr("library.pubmed.query._do_request", fake_do_request)
+    monkeypatch.setattr("library.clients.pubmed._do_request", fake_do_request)
 
     cfg = Config()
     cfg.api.user_agent = "test@example.com"
@@ -68,7 +72,7 @@ def test_rate_limiter_shared(monkeypatch) -> None:
         delays.append(delay)
 
     monkeypatch.setattr(rl, "sleep", fake_sleep)
-    monkeypatch.setattr("library.pubmed.query._do_request", lambda *a, **k: ({}, ""))
+    monkeypatch.setattr("library.clients.pubmed._do_request", lambda *a, **k: ({}, ""))
 
     cfg = Config()
     cfg.api.user_agent = "test@example.com"

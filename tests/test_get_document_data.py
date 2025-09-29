@@ -81,9 +81,20 @@ def test_cli_uses_custom_column(
         path: Path,
         *,
         cfg: Any,
-        **_: Any,
         key_cols: Sequence[str],
-        chunk_size: int | None,
+        chunk_size: int | None = None,
+        **_: Any,
+    ) -> Path:
+        list(chunks)
+        return path
+
+    def fake_write_export_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Any,
+        key_cols: Sequence[str],
+        chunk_size: int | None = None,
     ) -> Path:
         list(chunks)
         return path
@@ -539,7 +550,12 @@ def test_fetch_pubmed_records_accepts_config(
     monkeypatch.setattr(gdd, "session_with_retry", fake_session_factory)
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
     ) -> list[dict[str, str]]:
         assert sleep == expected_sleep
         assert batch == ["1"]
@@ -625,7 +641,12 @@ def test_fetch_pubmed_records_acquires_pubmed_limiter(
     monkeypatch.setattr(gdd.requests, "Session", lambda: DummySession())
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
     ) -> list[dict[str, str]]:
         acquisition_count = tracking_limiter.acquisitions
         batches_seen.append(list(batch))
@@ -687,7 +708,12 @@ def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
     seen_cfg: dict[str, PubMedCfg | None] = {"value": None}
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float, cfg: PubMedCfg | None = None
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: PubMedCfg | None = None,
+        *,
+        client: Any | None = None,
     ) -> list[dict[str, str]]:
         seen_cfg["value"] = cfg
         return [{"PubMed.PMID": pmid} for pmid in batch]
@@ -730,7 +756,12 @@ def test_fetch_pubmed_records_uses_fallback_doi(
     monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
     ) -> list[dict[str, str]]:
         assert batch == ["123"]
         return [{"PubMed.PMID": "123"}]
@@ -794,7 +825,12 @@ def test_fetch_pubmed_records_falls_back_to_single_semantic_call(
     monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
 
     def fake_pubmed_batch(
-        session: Any, batch: list[str], sleep: float, cfg: Any | None = None
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
     ) -> list[dict[str, str]]:
         assert batch == ["123"]
         return [{"PubMed.PMID": "123"}]
@@ -952,7 +988,7 @@ def test_fetch_pubmed_records_accepts_executor_context(
         return combined
 
     def fake_pubmed_batch(  # type: ignore[no-untyped-def]
-        session, batch, sleep, cfg=None
+        session, batch, sleep, cfg=None, *, client=None
     ):
         return [{"PubMed.PMID": pmid, "PubMed.DOI": pmid} for pmid in batch]
 

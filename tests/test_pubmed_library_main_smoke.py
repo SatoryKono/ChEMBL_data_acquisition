@@ -16,7 +16,7 @@ def test_pubmed_library_main_smoke(
     output_csv = tmp_path / "out.csv"
     verbose_output_csv = tmp_path / "out_verbose.csv"
 
-    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None):
+    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None, *, client=None):
         return [
             {
                 "PubMed.PMID": pid,

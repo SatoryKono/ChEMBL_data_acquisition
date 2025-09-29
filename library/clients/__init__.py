@@ -20,11 +20,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
+from .pubmed import PubMedClient
+
 __all__ = [
     "ClientConfig",
     "ClientError",
     "ClientPayload",
     "ClientProtocol",
+    "PubMedClient",
 ]
 
 

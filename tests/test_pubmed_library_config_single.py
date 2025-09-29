@@ -14,7 +14,7 @@ class DummyLimiter:
 
 
 def _stub_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None):
+    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None, *, client=None):
         return [
             {
                 "PubMed.PMID": pid,

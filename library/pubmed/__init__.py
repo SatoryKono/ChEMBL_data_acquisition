@@ -1,6 +1,7 @@
 """PubMed related helper modules."""
 
 from .aggregation import merge_records, print_results
+from ..clients.pubmed import PubMedClient
 from .parsing import (
     EMPTY_PUBMED,
     combine,
@@ -10,9 +11,6 @@ from .parsing import (
     text_or_none,
 )
 from .query import (
-    _do_request,
-    _handle_response,
-    _make_request,
     fetch_crossref,
     fetch_openalex,
     fetch_pubmed,
@@ -24,9 +22,6 @@ from .query import (
 
 __all__ = [
     "read_pmids",
-    "_make_request",
-    "_handle_response",
-    "_do_request",
     "fetch_pubmed_batch",
     "fetch_pubmed",
     "fetch_semantic_scholar",
@@ -41,4 +36,5 @@ __all__ = [
     "EMPTY_PUBMED",
     "merge_records",
     "print_results",
+    "PubMedClient",
 ]
