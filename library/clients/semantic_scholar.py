@@ -14,7 +14,7 @@ from typing import Any
 import requests
 
 from ..config import SemanticScholarCfg
-from ..pubmed.query import _do_request
+from .pubmed import _do_request
 
 __all__ = ["fetch_semantic_scholar", "fetch_semantic_scholar_batch"]
 
