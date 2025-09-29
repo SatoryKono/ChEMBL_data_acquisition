@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import csv
 import json
+import random
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
@@ -54,13 +55,15 @@ _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 _session: Session = session_with_retry(
     ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
 )
+_retry_cfg: RetryCfg = RetryCfg()
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session."""
 
-    global _session
+    global _session, _retry_cfg
     _session = session_with_retry(api, retry)
+    _retry_cfg = retry
 
 
 __all__ = [
@@ -145,6 +148,24 @@ class UniProtFetchError(RuntimeError):
     """Raised when a UniProt record cannot be retrieved or decoded."""
 
 
+def _should_retry(status: int | None) -> bool:
+    """Return ``True`` when ``status`` indicates a retryable condition."""
+
+    if status is None:
+        return True
+    return status in _retry_cfg.status_forcelist
+
+
+def _sleep_with_backoff(attempt: int) -> None:
+    """Sleep using exponential backoff with jitter for the given attempt."""
+
+    base_delay = _retry_cfg.backoff_factor * (2 ** (attempt - 1))
+    if base_delay <= 0:
+        return
+    jitter = random.uniform(0.0, base_delay)
+    sleep(base_delay + jitter)
+
+
 def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
     """Fetch a UniProt JSON record from the public REST API.
 
@@ -167,25 +188,62 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
 
     """
     limiter = get_limiter("uniprot", cfg.rps, cfg.burst)
-    if cfg.delay:
-        sleep(cfg.delay)
-    limiter.acquire()
     base = cfg.base.rstrip("/")
     url = f"{base}/uniprotkb/{uniprot_id}.json"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
-    try:
-        with _session.get(url, timeout=timeout) as resp:
-            resp.raise_for_status()
-            try:
-                return cast(dict[str, Any], resp.json())
-            except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
-                raise UniProtFetchError(
-                    f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
-                ) from exc
-    except requests.RequestException as exc:  # pragma: no cover - network
-        raise UniProtFetchError(
-            f"UniProt request failed for {uniprot_id}: {exc}"
-        ) from exc
+
+    for attempt in range(1, _retry_cfg.max_attempts + 1):
+        if cfg.delay:
+            sleep(cfg.delay)
+        limiter.acquire()
+        try:
+            with _session.get(url, timeout=timeout) as resp:
+                status = resp.status_code
+                try:
+                    resp.raise_for_status()
+                except requests.HTTPError as exc:
+                    if _should_retry(status) and attempt < _retry_cfg.max_attempts:
+                        logger.warning(
+                            "uniprot_request_retry",
+                            url=url,
+                            attempt=attempt,
+                            max_attempts=_retry_cfg.max_attempts,
+                            status=status,
+                            rps=cfg.rps,
+                            error=str(exc),
+                        )
+                        _sleep_with_backoff(attempt)
+                        continue
+                    raise UniProtFetchError(
+                        f"UniProt request failed for {uniprot_id}: {exc}"
+                    ) from exc
+                try:
+                    return cast(dict[str, Any], resp.json())
+                except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
+                    raise UniProtFetchError(
+                        f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
+                    ) from exc
+        except requests.RequestException as exc:  # pragma: no cover - network
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if _should_retry(status) and attempt < _retry_cfg.max_attempts:
+                logger.warning(
+                    "uniprot_request_retry",
+                    url=url,
+                    attempt=attempt,
+                    max_attempts=_retry_cfg.max_attempts,
+                    status=status,
+                    rps=cfg.rps,
+                    error=str(exc),
+                )
+                _sleep_with_backoff(attempt)
+                continue
+            raise UniProtFetchError(
+                f"UniProt request failed for {uniprot_id}: {exc}"
+            ) from exc
+
+    raise UniProtFetchError(
+        f"UniProt request failed for {uniprot_id}: exceeded retry attempts"
+    )
 
 
 def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
