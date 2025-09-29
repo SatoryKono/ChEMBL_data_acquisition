@@ -4,6 +4,8 @@
 
 All `scripts/get_*_data.py` commands share a common interface:
 
+Select the desired sub-command (`chembl`, `uniprot`, `iuphar`, or `all`) before supplying the shared options listed below.
+
 | Option | Description |
 | --- | --- |
 | `--config` | Path to the YAML configuration file (default: `config/config.yaml`). |
@@ -118,12 +120,12 @@ CSV parameters plug in a minimal PMID→DOI mapping before the remote services a
 ## Target aggregation (`get_target_data.py`)
 
 ```bash
-python scripts/get_target_data.py \
+python scripts/get_target_data.py chembl \
   --input path/to/targets.csv \
   --column target_chembl_id
 ```
 
-Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository.
+Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository. Swap `chembl` in the example for `uniprot`, `iuphar` or `all` to choose a different source mix.
 
 ## Target pipeline harness (`library.utils.cli_tools.pipeline_targets_main`)
 
