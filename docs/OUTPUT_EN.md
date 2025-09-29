@@ -6,29 +6,33 @@ creation.
 
 ## Directory layout
 
-Exports are written to `local.io.output_dir` (default `data/output`). The writer
+Exports are written to `local.io.output_dir` (default `data/output`). By
+default each CLI command derives the destination file as
+`output_<stem>_<date>.csv`, where `<stem>` is the input filename without
+extension and `<date>` is the current UTC date in `YYYYMMDD` format. The writer
 creates parent directories automatically when `local.io.exist_ok` is `true`.
 
 ```
 data/output/
-└── ChEMBL/
-    └── processed/
-        ├── activity.csv
-        ├── activity.csv.meta.yaml
-        ├── activity_failure_cases.csv
-        ├── activity_quality_report_table.csv
-        ├── activity_data_correlation_report_table.csv
-        └── ...
+├── output_activity_20240105.csv
+├── output_activity_20240105.csv.meta.yaml
+├── output_activity_20240105_failure_cases.csv
+├── output_activity_20240105_quality_report_table.csv
+├── output_activity_20240105_data_correlation_report_table.csv
+└── output_activity_20240105.quality.json
 ```
 
 Intermediate artefacts produced by the target `all` pipeline (`*_chembl.csv`,
-`*_uniprot.csv`, `*_iuphar.csv`) reside in the same folder unless the CLI
-arguments specify custom paths.
+`*_uniprot.csv`, `*_iuphar.csv`) follow the same pattern. Custom `--output`
+arguments remain supported when a different layout (for example,
+`data/output/ChEMBL/processed/activity.csv`) is required.
 
 ## Metadata sidecars (`*.csv.meta.yaml`)
 
-Each CSV export is accompanied by `<name>.csv.meta.yaml` created via
-`library.metadata.write_meta_yaml`. The metadata captures the following keys:
+Each CSV export is accompanied by `<base>.csv.meta.yaml` created via
+`library.metadata.write_meta_yaml`, where `<base>` matches the CSV filename
+without the extension (for example `output_activity_20240105`). The metadata
+captures the following keys:
 
 * `generated_at` – ISO 8601 timestamp (UTC) when the file was produced.
 * `git_sha` – commit hash at runtime.
@@ -45,12 +49,12 @@ are preserved.
 
 ## Validation artefacts
 
-* Pandera validation errors are written to `<stem>_failure_cases.csv` via
+* Pandera validation errors are written to `<base>_failure_cases.csv` via
   `SidecarErrors`, keeping problematic rows available for inspection without
   interrupting the main export.
 * `library.table_quality.analyze_table_quality` generates
-  `<stem>_quality_report_table.csv` and
-  `<stem>_data_correlation_report_table.csv`. CLI utilities write these reports
+  `<base>_quality_report_table.csv` and
+  `<base>_data_correlation_report_table.csv`. CLI utilities write these reports
   next to the dataset, while `library.utils.cli_tools.get_input_initialisation`
   stores them under `<output>/data_validity_report/`.
 
@@ -98,7 +102,8 @@ when the signal is inconclusive.
 
 ## Activity bounds (`lower_value`, `upper_value`)
 
-`activity.csv` exposes canonical value ranges derived from ChEMBL `standard_*`
+The activity export (`output_activity_<date>.csv` by default) exposes canonical
+value ranges derived from ChEMBL `standard_*`
 columns in `scripts/get_activity_data.py`. Bounds are resolved in the following
 priority order:
 
@@ -117,7 +122,7 @@ Derived values are rounded to `activity_bounds.rounding_digits` decimal places
 
 ## Document quality JSON report
 
-Document pipelines emit `<stem>.quality.json` alongside the CSV. The report is
+Document pipelines emit `<base>.quality.json` alongside the CSV. The report is
 built by `library.document_pipeline.build_quality_report` and serialised via
 `save_quality_report` with stable formatting for diff-friendly monitoring. It
 contains:
@@ -131,7 +136,7 @@ contains:
 
 ## Test item enrichment
 
-`scripts/get_testitem_data.py` produces `testitem.csv` plus the standard
+`scripts/get_testitem_data.py` produces `output_testitem_<date>.csv` plus the standard
 sidecars and quality reports. Each row merges ChEMBL molecule metadata, PubChem
 properties and pipeline bookkeeping, forming the canonical compound dimension.
 The enrichment stage relies on the molecule catalogue configured at

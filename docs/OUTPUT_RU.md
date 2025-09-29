@@ -5,30 +5,32 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Структура каталогов
 
-Экспорты сохраняются в `local.io.output_dir` (по умолчанию `data/output`).
+Экспорты сохраняются в `local.io.output_dir` (по умолчанию `data/output`). По
+умолчанию CLI формирует имя как `output_<stem>_<date>.csv`, где `<stem>` — имя
+входного файла без расширения, а `<date>` — текущая дата в формате `YYYYMMDD`.
 Запись автоматически создаёт родительские каталоги, если `local.io.exist_ok`
 равно `true`.
 
 ```
 data/output/
-└── ChEMBL/
-    └── processed/
-        ├── activity.csv
-        ├── activity.csv.meta.yaml
-        ├── activity_failure_cases.csv
-        ├── activity_quality_report_table.csv
-        ├── activity_data_correlation_report_table.csv
-        └── ...
+├── output_activity_20240105.csv
+├── output_activity_20240105.csv.meta.yaml
+├── output_activity_20240105_failure_cases.csv
+├── output_activity_20240105_quality_report_table.csv
+├── output_activity_20240105_data_correlation_report_table.csv
+└── output_activity_20240105.quality.json
 ```
 
 Промежуточные файлы таргет-пайплайна в режиме `all`
-(`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) сохраняются в той же
-директории, если CLI-аргументы не задают другие пути.
+(`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) используют тот же шаблон.
+Параметр `--output` по-прежнему позволяет задать альтернативную структуру,
+например `data/output/ChEMBL/processed/activity.csv`.
 
 ## Sidecar с метаданными (`*.csv.meta.yaml`)
 
-Каждый CSV сопровождается `<name>.csv.meta.yaml`, который создаёт
-`library.metadata.write_meta_yaml`. Файл содержит:
+Каждый CSV сопровождается `<base>.csv.meta.yaml`, который создаёт
+`library.metadata.write_meta_yaml`, где `<base>` совпадает с именем файла без
+расширения (например, `output_activity_20240105`). Файл содержит:
 
 * `generated_at` — отметку времени в формате ISO 8601 (UTC).
 * `git_sha` — хэш коммита на момент запуска.
@@ -45,12 +47,12 @@ data/output/
 
 ## Артефакты валидации
 
-* При ошибках Pandera строки попадают в `<stem>_failure_cases.csv` через
+* При ошибках Pandera строки попадают в `<base>_failure_cases.csv` через
   `SidecarErrors`, что позволяет изучить проблемы без остановки основного
   пайплайна.
 * `library.table_quality.analyze_table_quality` формирует
-  `<stem>_quality_report_table.csv` и
-  `<stem>_data_correlation_report_table.csv`. CLI-утилиты сохраняют отчёты рядом с
+  `<base>_quality_report_table.csv` и
+  `<base>_data_correlation_report_table.csv`. CLI-утилиты сохраняют отчёты рядом с
   выгрузкой, а `library.utils.cli_tools.get_input_initialisation` использует
   подкаталог `<output>/data_validity_report/`.
 
@@ -94,8 +96,9 @@ data/output/
 
 ## Границы активности (`lower_value`, `upper_value`)
 
-`activity.csv` включает диапазоны значений, рассчитанные из канонических полей
-ChEMBL `standard_*`. Приоритет действий:
+Выгрузка активностей (`output_activity_<date>.csv` по умолчанию) включает
+диапазоны значений, рассчитанные из канонических полей ChEMBL `standard_*`.
+Приоритет действий:
 
 1. Использовать `standard_lower_value` и `standard_upper_value`, если оба
    присутствуют.
@@ -111,7 +114,8 @@ ChEMBL `standard_*`. Приоритет действий:
 
 ## JSON-отчёт о качестве документов
 
-Документный пайплайн записывает `<stem>.quality.json`. `library.document_pipeline.build_quality_report`
+Документный пайплайн записывает `<base>.quality.json`.
+`library.document_pipeline.build_quality_report`
 формирует сводку, а `save_quality_report` сохраняет её в стабильном формате для
 сравнения между запусками. Структура отчёта:
 
@@ -124,8 +128,9 @@ ChEMBL `standard_*`. Приоритет действий:
 
 ## Экспорт тест-объектов
 
-`scripts/get_testitem_data.py` формирует `testitem.csv` с метаданными и отчётами
-качества. Каждая строка объединяет данные ChEMBL, обогащение PubChem и служебные
+`scripts/get_testitem_data.py` формирует `output_testitem_<date>.csv` с
+метаданными и отчётами качества. Каждая строка объединяет данные ChEMBL,
+обогащение PubChem и служебные
 колонки, обеспечивая опорное измерение соединений. Для работы требуется каталог
 родительских молекул (`sources.chembl.molecule_catalog.cache_path`) и, по
 возможности, CSV-словари с иерархией и признаками солей.
