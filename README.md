@@ -364,7 +364,7 @@ api:
   rps: 5  # или любое >= 1
 ```
 
-Диапазоны допустимых значений описаны в [`config.schema.json`](./config.schema.json), где для `api.rps` указан минимум `1`.
+Диапазоны допустимых значений описаны в [`config.schema.json`](./config.schema.json) — этот файл экспортирован из Pydantic-модели и служит справочным артефактом, где для `api.rps` указан минимум `1`.
 
 ## Logging / Логирование
 
@@ -603,9 +603,12 @@ See ``docs/CONFIG_EN.md`` for a complete overview of all configuration options
 
 ### Schema validation
 
-Configuration values are validated against a JSON Schema via the
-``jsonschema`` package. The schema mirrors the dataclass structure and checks
-types and value ranges, producing helpful error messages for nested fields.
+Configuration values are validated by :func:`library.config.load_config`, which
+calls :meth:`Config.model_validate <pydantic.BaseModel.model_validate>` from
+Pydantic. Validation follows the model definitions and produces detailed error
+messages for nested fields. The accompanying ``config.schema.json`` is generated
+from the same Pydantic model for IDE hints and documentation; it is not
+executed at runtime and should not be passed to ``jsonschema``.
 
 Command line flags have the highest priority. All utilities accept ``--config``
 to point at a configuration file and ``--print-config`` to show the effective

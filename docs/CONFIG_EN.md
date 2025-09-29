@@ -3,7 +3,7 @@
 ## Overview
 
 * All command-line tools load their defaults from [`config/config.yaml`](../config/config.yaml) in the project root.
-* Values are validated against [`config.schema.json`](../config.schema.json); unknown keys raise an error during start-up.
+* Values are validated by `library.config.load_config`, which calls `Config.model_validate` from Pydantic. [`config.schema.json`](../config.schema.json) documents the same structure for tooling but is not executed during start-up.
 * Settings can be overridden via environment variables and CLI flags. Precedence is: `config/config.yaml` < environment variables < CLI arguments.
 
 ## Layout of `config/config.yaml`
@@ -401,7 +401,7 @@ At start-up the configuration loader:
 
 1. Reads `config/config.yaml`.
 2. Applies environment overrides and CLI-derived overrides.
-3. Rejects unknown keys according to the JSON schema.
+3. Validates values via `Config.model_validate`, rejecting unknown keys and type mismatches.
 4. Ensures `output_dir` and `cache_dir` exist (creating them when `local.io.exist_ok` is `true`).
 
-Keep the schema and documentation in sync when adding new configuration options.
+Regenerate the reference `config.schema.json` and documentation when adding new configuration options.
