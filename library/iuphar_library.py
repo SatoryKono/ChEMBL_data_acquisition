@@ -13,193 +13,22 @@ comments to aid maintenance.
 
 from __future__ import annotations
 
-import io
-import random
-import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 
 import pandas as pd
-import requests
-from requests import Session
 
-from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
-from .log import logger
-from .rate_limiter import get_limiter, sleep
-
-# Default session with placeholder user agent; callers should override via
-# :func:`init_session` with a configuration that provides their own contact
-# information.
-_session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
+from .clients.iuphar import (
+    download_gtp_to_hgnc_mapping,
+    download_gtp_to_uniprot_mapping,
+    init_session,
+    load_families,
+    load_targets,
+    query_gene_symbol,
 )
-_session_lock = threading.Lock()
-
-
-def init_session(api: ApiCfg, retry: RetryCfg) -> None:
-    """Initialise the shared HTTP session."""
-
-    global _session
-    with _session_lock:
-        _session = session_with_retry(api, retry)
-
-
-EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (
-    "target_id",
-    "uniprot_id",
-    "hgnc_name",
-    "hgnc_id",
-    "gene_name",
-    "synonyms",
-    "family_id",
-    "target_name",
-)
-
-EXPECTED_FAMILY_COLUMNS: tuple[str, ...] = (
-    "family_id",
-    "family_name",
-    "parent_family_id",
-    "target_id",
-    "type",
-)
-
-
-def _validate_columns(df: pd.DataFrame, expected: Iterable[str]) -> None:
-    """Validate that *df* contains the *expected* columns.
-
-    Parameters
-    ----------
-    df:
-        DataFrame to validate.
-    expected:
-        Iterable of expected column names.
-
-    Raises
-    ------
-    ValueError
-        If any expected column is missing.
-
-    """
-    missing = [c for c in expected if c not in df.columns]
-    if missing:
-        raise ValueError(f"Missing columns: {', '.join(missing)}")
-
-
-def load_targets(path: str | Path, *, encoding: str = "utf-8") -> pd.DataFrame:
-    """Load the ``_IUPHAR_target.csv`` file.
-
-    The ``target_id`` and ``family_id`` columns in the official files are
-    zero-padded strings. Reading them as numeric values would drop the
-    padding and break lookups.  To avoid this, all columns are read as
-    strings and missing values are replaced with empty strings.  The
-    original data uses the column name ``swissprot`` for UniProt accession
-    numbers; this is normalised to ``uniprot_id`` for consistency with the
-    rest of the library.
-
-    Parameters
-    ----------
-    path:
-        Path to the target CSV file.
-    encoding:
-        File encoding. Defaults to UTF-8.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Loaded target data with string identifiers.
-
-    """
-    df = pd.read_csv(path, encoding=encoding, dtype=str).fillna("")
-    # Normalise legacy column names to the expected lowercase form
-    df = df.rename(
-        columns={
-            "GuidetoPHARMACOLOGY": "target_id",
-            "HGNC_NAME": "hgnc_name",
-            "HGNC_name": "hgnc_name",
-            "HGNC_ID": "hgnc_id",
-            "HGNC_id": "hgnc_id",
-            "swissprot": "uniprot_id",
-        }
-    )
-    _validate_columns(df, EXPECTED_TARGET_COLUMNS)
-    return df
-
-
-def load_families(path: str | Path, *, encoding: str = "utf-8") -> pd.DataFrame:
-    """Load the ``_IUPHAR_family.csv`` file.
-
-    Similar to :func:`load_targets`, family identifiers are stored as
-    zero-padded strings.  The file is therefore read with ``dtype=str`` and
-    missing values are normalised to empty strings to retain formatting.
-
-    Parameters
-    ----------
-    path:
-        Path to the family CSV file.
-    encoding:
-        File encoding. Defaults to UTF-8.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Loaded family data with string identifiers.
-
-    """
-    df = pd.read_csv(path, encoding=encoding, dtype=str).fillna("")
-    _validate_columns(df, EXPECTED_FAMILY_COLUMNS)
-    return df
-
-
-def _query_gene_symbol(
-    gene_name: str, cfg: IupharCfg, retry: RetryCfg
-) -> dict[str, Any]:
-    """Return the first IUPHAR result for *gene_name*.
-
-    Parameters
-    ----------
-    gene_name:
-        Gene symbol to search for.
-    cfg:
-        API configuration controlling base URL, timeouts and rate limits.
-    retry:
-        Retry configuration specifying backoff behaviour.
-
-    Returns
-    -------
-    dict
-        First result dictionary or an empty dict on failure.
-    """
-
-    base = cfg.base.rstrip("/")
-    url = f"{base}/targets/?geneSymbol={quote(gene_name)}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
-
-    for attempt in range(1, retry.max_attempts + 1):
-        limiter.acquire()
-        try:
-            with _session_lock:
-                with _session.get(url, timeout=timeout) as response:
-                    response.raise_for_status()
-                    data = cast(list[dict[str, Any]], response.json())
-                    return data[0] if data else {}
-        except requests.RequestException as exc:  # pragma: no cover - network errors
-            if attempt >= retry.max_attempts:
-                logger.error(
-                    "request_error",
-                    url=url,
-                    attempt=attempt,
-                    error=str(exc),
-                )
-                break
-            backoff = retry.backoff_factor * (2 ** (attempt - 1))
-            jitter = random.uniform(0, backoff)
-            sleep(backoff + jitter)
-    return {}
-
+from .config import IupharCfg, RetryCfg
 
 @dataclass
 class IUPHARData:
@@ -629,7 +458,7 @@ class IUPHARData:
         """
 
         retry_cfg = retry or RetryCfg()
-        return _query_gene_symbol(gene_name, cfg, retry_cfg)
+        return query_gene_symbol(gene_name, cfg, retry_cfg)
 
     # ------------------------------------------------------------------
     # IUPHAR upload processing
@@ -656,37 +485,8 @@ class IUPHARData:
         combines them with the local target and family tables.
         """
         retry_cfg = retry or RetryCfg()
-        base_root = cfg.base.rstrip("/")
-        if base_root.endswith("services"):
-            base_root = base_root.rsplit("/", 1)[0]
-        data_base = f"{base_root}/DATA"
-        limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
-        timeout = (cfg.timeout_connect, cfg.timeout_read)
-
-        def _download(url: str) -> pd.DataFrame:
-            for attempt in range(1, retry_cfg.max_attempts + 1):
-                limiter.acquire()
-                try:
-                    with _session_lock:
-                        with _session.get(url, timeout=timeout) as resp:
-                            resp.raise_for_status()
-                            return pd.read_csv(io.StringIO(resp.text))
-                except requests.RequestException as exc:  # pragma: no cover - network
-                    if attempt >= retry_cfg.max_attempts:
-                        logger.error(
-                            "request_error",
-                            url=url,
-                            attempt=attempt,
-                            error=str(exc),
-                        )
-                        raise
-                    backoff = retry_cfg.backoff_factor * (2 ** (attempt - 1))
-                    jitter = random.uniform(0, backoff)
-                    sleep(backoff + jitter)
-            raise RuntimeError("Failed to download mapping")
-
-        uni_df = _download(f"{data_base}/GtP_to_UniProt_mapping.csv")
-        hgnc_df = _download(f"{data_base}/GtP_to_HGNC_mapping.csv")
+        uni_df = download_gtp_to_uniprot_mapping(cfg, retry_cfg)
+        hgnc_df = download_gtp_to_hgnc_mapping(cfg, retry_cfg)
         hgnc_df = hgnc_df.rename(columns={"IUPHAR ID": "GtoPdb IUPHAR ID"})
         mapping = pd.merge(
             hgnc_df,

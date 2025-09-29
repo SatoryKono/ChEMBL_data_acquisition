@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from library import iuphar_library as ii
+from library.clients import iuphar as ci
 from library.config import IupharCfg
 
 
@@ -44,8 +45,8 @@ class DummyLimiter:
 def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
     dummy = DummySession()
-    monkeypatch.setattr(ii, "_session", dummy)
-    monkeypatch.setattr(ii, "get_limiter", lambda name, rps, burst=None: DummyLimiter())
+    monkeypatch.setattr(ci, "_session", dummy)
+    monkeypatch.setattr(ci, "get_limiter", lambda name, rps, burst=None: DummyLimiter())
 
     cfg = IupharCfg(base="https://example.org/services", rps=10, burst=10)
 
@@ -73,7 +74,7 @@ def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
         def acquire(self) -> None:  # pragma: no cover - trivial
             return None
 
-    monkeypatch.setattr(ii, "get_limiter", lambda *a, **k: DummyLimiter())
+    monkeypatch.setattr(ci, "get_limiter", lambda *a, **k: DummyLimiter())
 
     order: list[str] = []
     in_use = False
@@ -105,7 +106,7 @@ def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
 
         return Resp()
 
-    monkeypatch.setattr(ii._session, "get", fake_get)
+    monkeypatch.setattr(ci._session, "get", fake_get)
 
     threads = [
         threading.Thread(target=data.websearch_gene_to_id, args=("GENE", cfg))

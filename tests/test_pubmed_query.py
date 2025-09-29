@@ -11,11 +11,8 @@ import pytest
 import requests
 
 from library import rate_limiter as rl
-from library.config import (
-    Config,
-    PubMedCfg,
-    SemanticScholarCfg,
-)
+from library.clients import semantic_scholar as ss_client
+from library.config import Config, PubMedCfg, SemanticScholarCfg
 from library.pubmed import query as pq
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -363,18 +360,15 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> Non
         )
         return {"publicationTypes": [], "externalIds": {}}, ""
 
-    sleeps: list[float] = []
-    monkeypatch.setattr(pq, "_do_request", fake_do_request)
-    monkeypatch.setattr(pq, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ss_client, "_do_request", fake_do_request)
 
     session = requests.Session()
-    res = pq.fetch_semantic_scholar(session, "1", 0.2, cfg=cfg)
+    res = ss_client.fetch_semantic_scholar(session, "1", 0.2, cfg=cfg)
     assert res["scholar.Error"] == ""
     assert captured["url"] == "https://api.example.org/v1/paper/PMID:1"
     assert captured["timeout"] == (1, 2)
     assert captured["retries"] == 4
     assert captured["sleep"] == pytest.approx(1.0)
-    assert sleeps == []
 
 
 def test_fetch_semantic_scholar_batch_partial_response(
@@ -398,10 +392,10 @@ def test_fetch_semantic_scholar_batch_partial_response(
         },
     ]
 
-    monkeypatch.setattr(pq, "_do_request", lambda *_, **__: (payload, ""))
+    monkeypatch.setattr(ss_client, "_do_request", lambda *_, **__: (payload, ""))
 
     session = requests.Session()
-    results = pq.fetch_semantic_scholar_batch(session, ["1", "2", "3"], 0.0)
+    results = ss_client.fetch_semantic_scholar_batch(session, ["1", "2", "3"], 0.0)
 
     assert results[0]["scholar.Error"] == ""
     assert results[0]["scholar.PMID"] == "1"

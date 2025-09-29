@@ -6,13 +6,14 @@ are exposed in a separate module to provide a clear separation of concerns.
 
 from __future__ import annotations
 
-from urllib.parse import quote
+from typing import Any
 
 import requests
 
-from . import pubmed_library as _pl
+from .clients import crossref as crossref_client
+from .clients import openalex as openalex_client
 from .config import CrossRefCfg, OpenAlexCfg
-from .log import logger
+from .pubmed.query import combine
 from .rate_limiter import RateLimiter
 
 
@@ -39,25 +40,45 @@ def fetch_openalex(
     Returns
     -------
     dict
-        Metadata returned by the OpenAlex API.
-
-    Raises
-    ------
-    requests.RequestException
-        Propagated if the HTTP request fails.
+        Normalized metadata returned by the OpenAlex API.
 
     """
 
-    base = cfg.base.rstrip("/")
-    url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
-    logger.info("request_start", extra={"stage": "request_start", "url": url})
-    try:
-        data = _pl.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
-    except requests.RequestException:
-        logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
-        raise
-    logger.info("request_ok", extra={"stage": "request_ok", "url": url})
-    return data
+    raw, error = openalex_client.fetch_openalex(session, pmid, cfg=cfg, limiter=limiter)
+    if error or not isinstance(raw, dict):
+        return {
+            "OpenAlex.PublicationTypes": "",
+            "OpenAlex.TypeCrossref": "",
+            "OpenAlex.Genre": "",
+            "OpenAlex.Id": "",
+            "OpenAlex.Venue": "",
+            "OpenAlex.MeshDescriptors": "",
+            "OpenAlex.MeshQualifiers": "",
+            "OpenAlex.Error": error or "Invalid response",
+        }
+
+    mesh_entries = raw.get("mesh") or []
+    descriptors: list[str] = []
+    qualifiers: list[str] = []
+    for entry in mesh_entries:
+        descriptor = entry.get("descriptor_name")
+        if descriptor:
+            descriptors.append(descriptor)
+        for qualifier in entry.get("qualifiers") or []:
+            qualifier_name = qualifier.get("qualifier_name")
+            if qualifier_name:
+                qualifiers.append(qualifier_name)
+
+    return {
+        "OpenAlex.PublicationTypes": raw.get("type", ""),
+        "OpenAlex.TypeCrossref": raw.get("type_crossref", ""),
+        "OpenAlex.Genre": raw.get("genre", ""),
+        "OpenAlex.Id": raw.get("id", ""),
+        "OpenAlex.Venue": raw.get("host_venue", {}).get("display_name", ""),
+        "OpenAlex.MeshDescriptors": combine(descriptors),
+        "OpenAlex.MeshQualifiers": combine(qualifiers),
+        "OpenAlex.Error": "",
+    }
 
 
 def fetch_crossref(
@@ -83,22 +104,46 @@ def fetch_crossref(
     Returns
     -------
     dict
-        Metadata returned by the CrossRef API.
-
-    Raises
-    ------
-    requests.RequestException
-        Propagated if the HTTP request fails.
+        Normalized metadata returned by the CrossRef API.
 
     """
 
-    base = cfg.base.rstrip("/")
-    url = f"{base}/works/{quote(doi)}"
-    logger.info("request_start", extra={"stage": "request_start", "url": url})
-    try:
-        data = _pl.fetch_crossref(session, doi, cfg=cfg, limiter=limiter)
-    except requests.RequestException:
-        logger.exception("request_fail", extra={"stage": "request_fail", "url": url})
-        raise
-    logger.info("request_ok", extra={"stage": "request_ok", "url": url})
-    return data
+    if not doi:
+        return {
+            "crossref.Type": "",
+            "crossref.Subtype": "",
+            "crossref.Title": "",
+            "crossref.Subtitle": "",
+            "crossref.Subject": "",
+            "crossref.Error": "Missing DOI",
+        }
+
+    raw, error = crossref_client.fetch_crossref(
+        session,
+        doi,
+        cfg=cfg,
+        limiter=limiter,
+    )
+    if error or not isinstance(raw, dict):
+        return {
+            "crossref.Type": "",
+            "crossref.Subtype": "",
+            "crossref.Title": "",
+            "crossref.Subtitle": "",
+            "crossref.Subject": "",
+            "crossref.Error": error or "Invalid response",
+        }
+
+    message: dict[str, Any] = raw.get("message", {})
+    title = message.get("title") or [""]
+    subtitle = message.get("subtitle") or [""]
+    subject = "; ".join(message.get("subject") or [])
+
+    return {
+        "crossref.Type": message.get("type", ""),
+        "crossref.Subtype": message.get("subtype", ""),
+        "crossref.Title": title[0] if title else "",
+        "crossref.Subtitle": subtitle[0] if subtitle else "",
+        "crossref.Subject": subject,
+        "crossref.Error": "",
+    }

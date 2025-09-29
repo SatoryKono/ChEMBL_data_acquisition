@@ -16,7 +16,7 @@ from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import cli
 from library import io
-from library.chembl_client import ChemblClient
+from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
     configure_logger,

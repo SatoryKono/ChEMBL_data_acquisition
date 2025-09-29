@@ -12,6 +12,7 @@ requests = pytest.importorskip("requests")
 responses = pytest.importorskip("responses")
 
 from library import uniprot_library as ul  # noqa: E402
+from library.clients import uniprot as uniprot_client  # noqa: E402
 from library.config import IupharCfg, UniprotCfg  # noqa: E402
 
 
@@ -55,7 +56,8 @@ def test_fetch_uniprot_bad_json() -> None:
 @responses.activate
 def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
     called: dict[str, object] = {}
-    orig_get = ul._session.get
+    session = uniprot_client.get_session()
+    orig_get = session.get
 
     def capture(url: str, timeout: tuple[int, int]):
         called["url"] = url
@@ -64,7 +66,7 @@ def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
 
     sleeps: list[float] = []
 
-    monkeypatch.setattr(ul._session, "get", capture)
+    monkeypatch.setattr(session, "get", capture)
     monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
     cfg = UniprotCfg(
         base="https://example.org/api",
