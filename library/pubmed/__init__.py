@@ -17,8 +17,6 @@ from .query import (
     fetch_openalex,
     fetch_pubmed,
     fetch_pubmed_batch,
-    fetch_semantic_scholar,
-    fetch_semantic_scholar_batch,
     read_pmids,
 )
 
@@ -29,8 +27,6 @@ __all__ = [
     "_do_request",
     "fetch_pubmed_batch",
     "fetch_pubmed",
-    "fetch_semantic_scholar",
-    "fetch_semantic_scholar_batch",
     "fetch_openalex",
     "fetch_crossref",
     "text_or_none",
