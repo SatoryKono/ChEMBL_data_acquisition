@@ -2,9 +2,12 @@
 
 ## Shared CLI options
 
-All `scripts/get_*_data.py` commands share a common interface:
-
-Select the desired sub-command (`chembl`, `uniprot`, `iuphar`, or `all`) before supplying the shared options listed below.
+All `scripts/get_*_data.py` commands share a common interface. Only
+`scripts/get_document_data.py` and `scripts/get_target_data.py` expose
+source-selection sub-commands (`chembl`, `uniprot`, `iuphar`, or `all`);
+the remaining pipelines (`get_activity_data.py`, `get_assay_data.py`, and
+`get_testitem_data.py`) are single-command CLIs that accept options
+directly.
 
 | Option | Description |
 | --- | --- |
@@ -36,7 +39,8 @@ All entry points rely on `library.logging_setup.Logger` and emit JSON lines enri
 | Event | When it appears |
 | --- | --- |
 | `pipeline_start` | Immediately after the CLI configures logging and before validation begins. |
-| `documents_processed` / `activities_processed` | Periodic progress counters emitted inside the processing loops. |
+| `documents_processed` | Document pipeline progress counter emitted after each processed batch. |
+| `process_limit` | Recorded when `--limit` (or configuration equivalents) trims the identifier set. |
 | `write_done` | Successful CSV write including the path and retained row count. |
 | `pipeline_done` / `pipeline_fail` | Final outcome logged before exit. |
 
