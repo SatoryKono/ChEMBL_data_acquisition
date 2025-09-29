@@ -38,29 +38,24 @@ import csv
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import requests
-from requests import Session
 
-from .config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg, session_with_retry
+from .clients.uniprot import (
+    UniProtFetchError,
+    fetch_uniprot,
+    get_session as get_uniprot_session,
+    init_session as init_uniprot_session,
+)
+from .config import IupharCfg, UniprotCfg
 from .log import logger
-from .rate_limiter import get_limiter, sleep
+from .rate_limiter import get_limiter
 
 _DEFAULT_UNIPROT_DATA_DIR = Path("uniprot")
 
-# Default session using placeholder contact details. Call :func:`init_session`
-# with a proper configuration to set your own user agent.
-_session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
-)
 
-
-def init_session(api: ApiCfg, retry: RetryCfg) -> None:
-    """Initialise the shared HTTP session."""
-
-    global _session
-    _session = session_with_retry(api, retry)
+init_session = init_uniprot_session
 
 
 __all__ = [
@@ -139,55 +134,6 @@ UNIPROT_OUTPUT_COLUMNS: list[str] = [
     "geneName",
     "secondaryAccessionNames",
 ]
-
-
-class UniProtFetchError(RuntimeError):
-    """Raised when a UniProt record cannot be retrieved or decoded."""
-
-
-def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
-    """Fetch a UniProt JSON record from the public REST API.
-
-    Parameters
-    ----------
-    uniprot_id:
-        UniProt accession identifier to retrieve.
-    cfg:
-        UniProt configuration providing base URL, timeouts and rate limits.
-
-    Returns
-    -------
-    dict
-        JSON-decoded response.
-
-    Raises
-    ------
-    UniProtFetchError
-        If the request fails or the payload cannot be decoded as JSON.
-
-    """
-    limiter = get_limiter("uniprot", cfg.rps, cfg.burst)
-    if cfg.delay:
-        sleep(cfg.delay)
-    limiter.acquire()
-    base = cfg.base.rstrip("/")
-    url = f"{base}/uniprotkb/{uniprot_id}.json"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    try:
-        with _session.get(url, timeout=timeout) as resp:
-            resp.raise_for_status()
-            try:
-                return cast(dict[str, Any], resp.json())
-            except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
-                raise UniProtFetchError(
-                    f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
-                ) from exc
-    except requests.RequestException as exc:  # pragma: no cover - network
-        raise UniProtFetchError(
-            f"UniProt request failed for {uniprot_id}: {exc}"
-        ) from exc
-
-
 def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
     """Yield all full and short names from a UniProt name object."""
     if not isinstance(name_obj, dict):
@@ -882,7 +828,8 @@ def _fetch_gtop_endpoint(
     timeout = (cfg.timeout_connect, cfg.timeout_read)
     limiter.acquire()
     try:
-        with _session.get(url, timeout=timeout) as response:
+        session = get_uniprot_session()
+        with session.get(url, timeout=timeout) as response:
             response.raise_for_status()
             return response.json()
     except (json.JSONDecodeError, ValueError) as exc:
