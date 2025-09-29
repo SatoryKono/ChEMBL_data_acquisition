@@ -495,6 +495,66 @@ def test_add_pubchem_data_prefetches_parent_records(
     assert result.loc[0, "pubchem_cid"] == "321"
 
 
+def test_add_pubchem_data_primes_parent_cache_with_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "parent_molecule_chembl_id": [pd.NA, pd.NA, "CHEMBL1"],
+            "canonical_smiles": ["C", "N", "CN"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    api_cfg = ApiCfg()
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    def fail_fetch(*args: object, **kwargs: object) -> pd.DataFrame:  # pragma: no cover
+        raise AssertionError("parent records should not be fetched remotely")
+
+    monkeypatch.setattr(cl, "get_testitem", fail_fetch)
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache_key: str | None = None,
+        **_: object,
+    ) -> pl.PubChemResolution:
+        if cache_key == "CHEMBL1":
+            return pl.PubChemResolution(cid="111", source="local")
+        return pl.PubChemResolution(cid=None, source=None)
+
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
+
+    result = gtd.add_pubchem_data(
+        df,
+        cfg,
+        client=object(),
+        api_cfg=api_cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+    )
+
+    assert "CHEMBL1" in parent_record_cache
+    parent_series = parent_record_cache["CHEMBL1"]
+    assert isinstance(parent_series, pd.Series)
+    assert parent_series["canonical_smiles"] == "C"
+    assert (
+        result.loc[result["molecule_chembl_id"] == "CHEMBL2", "pubchem_cid"]
+        .iloc[0]
+        == "111"
+    )
+
+
 def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) -> None:
     df = pd.DataFrame(
         {

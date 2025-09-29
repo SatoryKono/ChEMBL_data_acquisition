@@ -924,34 +924,32 @@ def add_pubchem_data(
     if parent_record_cache is None:
         parent_record_cache = {}
 
-    local_records: dict[str, pd.Series] = {}
+    local_records: pd.DataFrame | None = None
     if "molecule_chembl_id" in result.columns:
-        local_record_data = (
-            result.loc[:, ["molecule_chembl_id"]]
-            .assign(__row=lambda df: df.index)
-            .dropna()
-            .astype({"molecule_chembl_id": "string"})
-            .assign(
-                molecule_chembl_id=lambda df: df[
+        prepared_local_records = (
+            result.assign(
+                __local_molecule=lambda frame: frame[
                     "molecule_chembl_id"
-                ].str.strip().str.upper()
+                ]
+                .astype("string")
+                .str.strip()
+                .str.upper()
             )
-            .drop_duplicates("molecule_chembl_id")
-            .set_index("molecule_chembl_id")["__row"]
-            .map(result.to_dict("index"))
+            .dropna(subset=["__local_molecule"])
         )
-        for chembl_id, row_data in local_record_data.items():
-            chembl_norm = _normalise_identifier(chembl_id, uppercase=True)
-            if not chembl_norm or chembl_norm in local_records:
-                continue
-            if isinstance(row_data, pd.Series):
-                record = row_data
-            elif isinstance(row_data, Mapping):
-                record = pd.Series(row_data).reindex(result.columns, copy=False)
-            else:
-                continue
-            local_records[chembl_norm] = record
-            parent_record_cache[chembl_norm] = record
+        if not prepared_local_records.empty:
+            local_records = (
+                prepared_local_records.drop_duplicates("__local_molecule")
+                .set_index("__local_molecule")
+                .rename_axis("molecule_chembl_id")
+                .reindex(columns=result.columns)
+            )
+            for chembl_norm in local_records.index:
+                try:
+                    record = local_records.loc[chembl_norm]
+                except KeyError:  # pragma: no cover - defensive
+                    continue
+                parent_record_cache[chembl_norm] = record.copy()
 
     pending_parent_ids: list[str] = []
     seen_parent_ids: set[str] = set()
@@ -960,7 +958,9 @@ def add_pubchem_data(
             parent_norm = _normalise_identifier(parent_value, uppercase=True)
             if not parent_norm:
                 continue
-            if parent_norm in parent_record_cache or parent_norm in local_records:
+            if parent_norm in parent_record_cache or (
+                local_records is not None and parent_norm in local_records.index
+            ):
                 continue
             if parent_norm in seen_parent_ids:
                 continue
@@ -1019,6 +1019,11 @@ def add_pubchem_data(
         parent_norm = _normalise_identifier(parent_id, uppercase=True)
         if not parent_norm:
             return None
+        if local_records is not None:
+            try:
+                return local_records.loc[parent_norm]
+            except KeyError:
+                pass
         return parent_record_cache.get(parent_norm)
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
