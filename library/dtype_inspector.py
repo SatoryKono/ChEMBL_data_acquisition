@@ -24,7 +24,7 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 
 from . import chembl_library as cl
-from .chembl_client import ChemblClient
+from library.clients import ChemblClient
 from .config import Config
 from .log import logger
 

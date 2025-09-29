@@ -20,16 +20,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
+ 
 from .crossref import fetch_crossref
 from .openalex import fetch_openalex
+ 
+from .chembl import ChemblClient, _chunked
+ 
 
 __all__ = [
+    "ChemblClient",
     "ClientConfig",
     "ClientError",
     "ClientPayload",
     "ClientProtocol",
     "fetch_crossref",
     "fetch_openalex",
+    "_chunked",
+ 
 ]
 
 

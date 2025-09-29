@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 import requests
 
-from library.chembl_client import ChemblClient
+from library.clients import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
 from library.molecule_catalog import (
     _read_cache,
