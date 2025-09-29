@@ -10,7 +10,7 @@ import requests
 from ..config import CrossRefCfg
 from ..log import logger
 from ..rate_limiter import RateLimiter, get_limiter
-from ..pubmed.query import _do_request
+from .pubmed import _do_request
 
 __all__ = ["fetch_crossref"]
 

@@ -268,7 +268,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
             "mesh": [],
         }, ""
 
-    monkeypatch.setattr(pc, "_do_request", fake_do_request)
+    monkeypatch.setattr("library.clients.openalex._do_request", fake_do_request)
 
     class DummyLimiter(rl.RateLimiter):
         def __init__(self) -> None:
@@ -318,7 +318,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         return {"message": {}}, ""
 
-    monkeypatch.setattr(pc, "_do_request", fake_do_request)
+    monkeypatch.setattr("library.clients.crossref._do_request", fake_do_request)
 
     class DummyLimiter(rl.RateLimiter):
         def __init__(self) -> None:
@@ -368,7 +368,7 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> Non
 
  
     sleeps: list[float] = []
-    monkeypatch.setattr(pc, "_do_request", fake_do_request)
+    monkeypatch.setattr("library.clients.semantic_scholar._do_request", fake_do_request)
     monkeypatch.setattr(pc, "sleep", lambda s: sleeps.append(s))
  
  
@@ -403,9 +403,6 @@ def test_fetch_semantic_scholar_batch_partial_response(
         },
     ]
 
- 
-    monkeypatch.setattr(pc, "_do_request", lambda *_, **__: (payload, ""))
- 
     monkeypatch.setattr(ss_client, "_do_request", lambda *_, **__: (payload, ""))
  
 

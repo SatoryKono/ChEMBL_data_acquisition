@@ -6,26 +6,24 @@ issuing robust HTTP requests.
 """
 
 from __future__ import annotations
- 
 
-import json
- 
-from collections.abc import Callable
- 
+
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-from urllib.parse import quote
+from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
 import pandas as pd
 import requests
 
- 
-from ..clients import pubmed as pubmed_client
+
+from ..clients import (
+    crossref as crossref_client,
+    openalex as openalex_client,
+    pubmed as pubmed_client,
+    semantic_scholar as semantic_client,
+)
 from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
  
-from ..log import logger
-from ..rate_limiter import get_limiter
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -36,6 +34,8 @@ __all__ = [
     "read_pmids",
     "fetch_pubmed_batch",
     "fetch_pubmed",
+    "fetch_semantic_scholar",
+    "fetch_semantic_scholar_batch",
     "fetch_openalex",
     "fetch_crossref",
 ]
@@ -175,41 +175,7 @@ def fetch_semantic_scholar(
     cfg: SemanticScholarCfg | None = None,
 ) -> dict[str, str]:
     """Retrieve Semantic Scholar metadata for ``pmid``."""
-    cfg = cfg or SemanticScholarCfg()
-    base = cfg.base.rstrip("/")
-    url = f"{base}/paper/PMID:{pmid}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = pubmed_client._do_request(
-        session,
-        url,
-        sleep * 5,
-        headers=_SEMANTIC_SCHOLAR_HEADERS,
-        params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
-        retries=cfg.retries,
-        timeout=timeout,
-    )
-    if error or not isinstance(data, dict):
-        return {
-            "scholar.PMID": pmid,
-            "scholar.Venue": "",
-            "scholar.PublicationTypes": "",
-            "scholar.SemanticScholarId": "",
-            "scholar.ExternalIds": "",
-            "scholar.DOI": "",
-            "scholar.Error": error or "Invalid response",
-        }
-    external_ids = data.get("externalIds") or {}
-    doi = external_ids.get("DOI") or ""
-    pubtypes = data.get("publicationTypes") or []
-    return {
-        "scholar.PMID": pmid,
-        "scholar.Venue": data.get("venue", ""),
-        "scholar.PublicationTypes": "; ".join(pubtypes) if pubtypes else "",
-        "scholar.SemanticScholarId": data.get("paperId", ""),
-        "scholar.ExternalIds": json.dumps(external_ids, ensure_ascii=False),
-        "scholar.DOI": doi,
-        "scholar.Error": "",
-    }
+    return semantic_client.fetch_semantic_scholar(session, pmid, sleep, cfg=cfg)
 
 
 def fetch_semantic_scholar_batch(
@@ -219,124 +185,7 @@ def fetch_semantic_scholar_batch(
     cfg: SemanticScholarCfg | None = None,
 ) -> list[dict[str, str]]:
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
-
-    if not pmids:
-        return []
-
-    cfg = cfg or SemanticScholarCfg()
-    base = cfg.base.rstrip("/")
-    url = f"{base}/paper/batch"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = pubmed_client._do_request(
-        session,
-        url,
-        sleep,
-        headers=_SEMANTIC_SCHOLAR_HEADERS,
-        json={"ids": [f"PMID:{pmid}" for pmid in pmids]},
-        method="POST",
-        params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
-        retries=cfg.retries,
-        timeout=timeout,
-    )
-    if error:
-        return [
-            {
-                "scholar.PMID": pmid,
-                "scholar.Venue": "",
-                "scholar.PublicationTypes": "",
-                "scholar.SemanticScholarId": "",
-                "scholar.ExternalIds": "",
-                "scholar.DOI": "",
-                "scholar.Error": error,
-            }
-            for pmid in pmids
-        ]
-
-    if not isinstance(data, list):
-        return [
-            {
-                "scholar.PMID": pmid,
-                "scholar.Venue": "",
-                "scholar.PublicationTypes": "",
-                "scholar.SemanticScholarId": "",
-                "scholar.ExternalIds": "",
-                "scholar.DOI": "",
-                "scholar.Error": "Invalid batch response format",
-            }
-            for pmid in pmids
-        ]
-
-    def _resolve_pmid(item: dict[str, Any]) -> str | None:
-        external_ids = item.get("externalIds")
-        if isinstance(external_ids, dict):
-            for key in ("PubMed", "PMID", "pubmed", "pubMed"):
-                value = external_ids.get(key)
-                if isinstance(value, str):
-                    candidate = value.strip()
-                    if candidate:
-                        return candidate
-                elif isinstance(value, list | tuple | set):
-                    for entry in value:
-                        if isinstance(entry, str):
-                            candidate = entry.strip()
-                            if candidate:
-                                return candidate
-                        elif entry is not None:
-                            return str(entry)
-                elif value is not None:
-                    return str(value)
-        for key in ("pmid", "PMID"):
-            value = item.get(key)
-            if isinstance(value, str):
-                candidate = value.strip()
-                if candidate:
-                    return candidate
-            elif value is not None:
-                return str(value)
-        return None
-
-    lookup: dict[str, dict[str, Any]] = {}
-    for entry in data:
-        if not isinstance(entry, dict):
-            continue
-        pmid_value = _resolve_pmid(entry)
-        if pmid_value:
-            lookup.setdefault(pmid_value, entry)
-
-    results: list[dict[str, str]] = []
-    for pmid in pmids:
-        item = lookup.get(pmid)
-        if item is None:
-            results.append(
-                {
-                    "scholar.PMID": pmid,
-                    "scholar.Venue": "",
-                    "scholar.PublicationTypes": "",
-                    "scholar.SemanticScholarId": "",
-                    "scholar.ExternalIds": "",
-                    "scholar.DOI": "",
-                    "scholar.Error": "Not found",
-                }
-            )
-            continue
-
-        external_ids = item.get("externalIds") or {}
-        doi = external_ids.get("DOI") or ""
-        pubtypes = item.get("publicationTypes") or []
-
-        results.append(
-            {
-                "scholar.PMID": pmid,
-                "scholar.Venue": item.get("venue", ""),
-                "scholar.PublicationTypes": "; ".join(pubtypes) if pubtypes else "",
-                "scholar.SemanticScholarId": item.get("paperId", ""),
-                "scholar.ExternalIds": json.dumps(external_ids, ensure_ascii=False),
-                "scholar.DOI": doi,
-                "scholar.Error": "",
-            }
-        )
-
-    return results
+    return semantic_client.fetch_semantic_scholar_batch(session, pmids, sleep, cfg=cfg)
 
  
 def fetch_openalex(
@@ -347,19 +196,14 @@ def fetch_openalex(
     limiter: RateLimiter | None = None,
 ) -> dict[str, str]:
     """Retrieve OpenAlex metadata for ``pmid``."""
-
-    if limiter is None:
-        limiter = get_limiter("openalex", cfg.rps, cfg.burst)
-    limiter.acquire()
-    delay = 1 / cfg.rps if cfg.rps else 0
-    base = cfg.base.rstrip("/")
-    url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = pubmed_client._do_request(
-        session, url, delay, retries=cfg.retries, timeout=timeout
+    raw, error = openalex_client.fetch_openalex(
+        session,
+        pmid,
+        cfg=cfg,
+        limiter=limiter,
     )
 
-    if error or not isinstance(data, dict):
+    if error or not isinstance(raw, dict):
         return {
             "OpenAlex.PublicationTypes": "",
             "OpenAlex.TypeCrossref": "",
@@ -370,7 +214,7 @@ def fetch_openalex(
             "OpenAlex.MeshQualifiers": "",
             "OpenAlex.Error": error or "Invalid response",
         }
-    mesh_entries = data.get("mesh") or []
+    mesh_entries = raw.get("mesh") or []
     descriptors: list[str] = []
     qualifiers: list[str] = []
     for entry in mesh_entries:
@@ -382,11 +226,11 @@ def fetch_openalex(
             if qn:
                 qualifiers.append(qn)
     return {
-        "OpenAlex.PublicationTypes": data.get("type", ""),
-        "OpenAlex.TypeCrossref": data.get("type_crossref", ""),
-        "OpenAlex.Genre": data.get("genre", ""),
-        "OpenAlex.Id": data.get("id", ""),
-        "OpenAlex.Venue": data.get("host_venue", {}).get("display_name", ""),
+        "OpenAlex.PublicationTypes": raw.get("type", ""),
+        "OpenAlex.TypeCrossref": raw.get("type_crossref", ""),
+        "OpenAlex.Genre": raw.get("genre", ""),
+        "OpenAlex.Id": raw.get("id", ""),
+        "OpenAlex.Venue": raw.get("host_venue", {}).get("display_name", ""),
         "OpenAlex.MeshDescriptors": combine(descriptors),
         "OpenAlex.MeshQualifiers": combine(qualifiers),
         "OpenAlex.Error": "",
@@ -412,18 +256,14 @@ def fetch_crossref(
             "crossref.Error": "Missing DOI",
         }
 
-    if limiter is None:
-        limiter = get_limiter("crossref", cfg.rps, cfg.burst)
-    limiter.acquire()
-    delay = 1 / cfg.rps if cfg.rps else 0
-    base = cfg.base.rstrip("/")
-    url = f"{base}/works/{quote(doi, safe='')}?mailto={quote(cfg.mailto)}"
-    timeout = (cfg.timeout_connect, cfg.timeout_read)
-    data, error = pubmed_client._do_request(
-        session, url, delay, retries=cfg.retries, timeout=timeout
+    raw, error = crossref_client.fetch_crossref(
+        session,
+        doi,
+        cfg=cfg,
+        limiter=limiter,
     )
 
-    if error or not isinstance(data, dict):
+    if error or not isinstance(raw, dict):
         return {
             "crossref.Type": "",
             "crossref.Subtype": "",
@@ -432,7 +272,7 @@ def fetch_crossref(
             "crossref.Subject": "",
             "crossref.Error": error or "Invalid response",
         }
-    message = data.get("message", {})
+    message = raw.get("message", {})
     title = message.get("title") or [""]
     subtitle = message.get("subtitle") or [""]
     subject = "; ".join(message.get("subject") or [])
