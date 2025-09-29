@@ -5,6 +5,7 @@ requests = pytest.importorskip("requests")
 responses = pytest.importorskip("responses")
 
 from library import iuphar_library as ii  # noqa: E402
+from library.clients import iuphar as ci  # noqa: E402
 from library.config import IupharCfg, RetryCfg  # noqa: E402
 
 
@@ -33,9 +34,9 @@ def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
         return Resp()
 
     sleeps: list[float] = []
-    monkeypatch.setattr(ii._session, "get", fake_get)
+    monkeypatch.setattr(ci._session, "get", fake_get)
 
-    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ci, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
         base="https://example.org/services",
@@ -60,17 +61,8 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
     )
     data = ii.IUPHARData(target_df=target_df, family_df=family_df)
     calls: list[tuple[str, tuple[int, int]]] = []
-    orig_get = ii.requests.get
-
     uni_csv = "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
     hgnc_csv = "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
-
-    def capture(url: str, timeout: tuple[int, int]):
-        calls.append((url, timeout))
-        return orig_get(url, timeout=timeout)
-
-    sleeps: list[float] = []
-    monkeypatch.setattr(ii.requests, "get", capture)
 
     def fake_get(url: str, timeout: tuple[int, int]) -> object:
         calls.append((url, timeout))
@@ -92,9 +84,9 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
         return Resp(text)
 
     sleeps: list[float] = []
-    monkeypatch.setattr(ii._session, "get", fake_get)
+    monkeypatch.setattr(ci._session, "get", fake_get)
 
-    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ci, "sleep", lambda s: sleeps.append(s))
 
     cfg = IupharCfg(
         base="https://example.org/services",
@@ -155,11 +147,11 @@ def test_query_gene_symbol_backoff(monkeypatch):
         return Resp()
 
     sleeps: list[float] = []
-    monkeypatch.setattr(ii._session, "get", fake_get)
-    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
-    monkeypatch.setattr(ii.random, "uniform", lambda a, b: 0)
+    monkeypatch.setattr(ci._session, "get", fake_get)
+    monkeypatch.setattr(ci, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ci.random, "uniform", lambda a, b: 0)
 
-    result = ii._query_gene_symbol("GENE", cfg, retry)
+    result = ci.query_gene_symbol("GENE", cfg, retry)
     assert result == {"id": 1}
     assert calls[0][0] == "https://example.org/services/targets/?geneSymbol=GENE"
     assert sleeps == [pytest.approx(1.0)]
@@ -184,8 +176,8 @@ def test_iuphar_upload_retries(monkeypatch) -> None:
     retry = RetryCfg(max_attempts=2, backoff_factor=1)
 
     sleeps: list[float] = []
-    monkeypatch.setattr(ii, "sleep", lambda s: sleeps.append(s))
-    monkeypatch.setattr(ii.random, "uniform", lambda a, b: 0)
+    monkeypatch.setattr(ci, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(ci.random, "uniform", lambda a, b: 0)
 
     calls = {"n": 0}
 
@@ -215,9 +207,9 @@ def test_iuphar_upload_retries(monkeypatch) -> None:
 
         return Resp(text)
 
-    monkeypatch.setattr(ii._session, "get", fake_get)
+    monkeypatch.setattr(ci._session, "get", fake_get)
     monkeypatch.setattr(
-        ii,
+        ci,
         "get_limiter",
         lambda *a, **k: type("L", (), {"acquire": lambda self: None})(),
     )
