@@ -38,6 +38,8 @@ class Stats(_StatsRequired, total=False):
 
     parent_lookup_source: str
     parent_lookup_missing: int
+    missing_molecule_ids: list[str]
+    missing_molecule_ids_count: int
 
 
 def file_sha256(path: Path | str) -> str:

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import argparse
-from collections import ChainMap
+from collections import ChainMap, OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -93,6 +93,7 @@ class ReadInputIdsResult:
 
     ids_iter: Iterator[str]
     sample_ids: tuple[str, ...]
+    requested_ids: tuple[str, ...]
 
 
 @dataclass
@@ -1241,8 +1242,9 @@ def read_input_ids(
             logger.info("process_offset", offset=offset)
         if limit is not None:
             ids_iter = islice(ids_iter, limit)
-        ids_iter, sample_iter = tee(ids_iter)
+        ids_iter, sample_iter, capture_iter = tee(ids_iter, 3)
         sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
+        requested_ids = tuple(capture_iter)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
@@ -1251,7 +1253,71 @@ def read_input_ids(
         )
         return 1, None
 
-    return 0, ReadInputIdsResult(ids_iter=ids_iter, sample_ids=sample_ids)
+    return 0, ReadInputIdsResult(
+        ids_iter=ids_iter,
+        sample_ids=sample_ids,
+        requested_ids=requested_ids,
+    )
+
+
+def _integrate_missing_identifiers(
+    df: pd.DataFrame,
+    *,
+    missing_ids: Sequence[str],
+    requested_ids: Sequence[str],
+) -> pd.DataFrame:
+    """Attach placeholder rows for ``missing_ids`` and restore input ordering."""
+
+    if missing_ids:
+        columns = list(df.columns)
+        if "molecule_chembl_id" not in columns:
+            columns.append("molecule_chembl_id")
+        missing_frame = pd.DataFrame(
+            pd.NA,
+            index=range(len(missing_ids)),
+            columns=columns,
+        )
+        missing_frame["molecule_chembl_id"] = list(missing_ids)
+        df = pd.concat([df, missing_frame], ignore_index=True, sort=False)
+    else:
+        df = df.reset_index(drop=True)
+
+    if not requested_ids or "molecule_chembl_id" not in df.columns:
+        return df
+
+    order_map: dict[str, deque[int]] = {}
+    for index, identifier in enumerate(requested_ids):
+        if identifier is None:
+            continue
+        key = str(identifier).strip()
+        if not key:
+            continue
+        upper_key = key.upper()
+        order_map.setdefault(upper_key, deque()).append(index)
+
+    if not order_map:
+        return df
+
+    fallback_index = len(requested_ids)
+
+    def _pop_order(value: Any) -> int:
+        if value is None or pd.isna(value):
+            return fallback_index
+        key = str(value).strip()
+        if not key:
+            return fallback_index
+        upper_key = key.upper()
+        queue = order_map.get(upper_key)
+        if queue:
+            return queue.popleft()
+        return fallback_index
+
+    order_series = df["molecule_chembl_id"].map(_pop_order)
+    ordered = df.assign(_input_order=order_series).sort_values(
+        "_input_order", kind="stable"
+    )
+    ordered = ordered.drop(columns="_input_order").reset_index(drop=True)
+    return ordered
 
 
 def fetch_testitems(
@@ -1585,6 +1651,7 @@ def finalize_output(
     parent_stats: ParentLookupStats,
     input_csv: Path,
     rows_total: int,
+    missing_ids: Sequence[str] | None = None,
 ) -> int:
     """Normalise, validate, and persist the final dataset."""
 
@@ -1668,6 +1735,8 @@ def finalize_output(
         )
         return 1
 
+    missing_ids = tuple(missing_ids or ())
+
     stats: Stats = {
         "rows_total": rows_total,
         "rows_kept": rows_kept,
@@ -1676,6 +1745,9 @@ def finalize_output(
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
     }
+    if missing_ids:
+        stats["missing_molecule_ids"] = list(missing_ids)
+        stats["missing_molecule_ids_count"] = len(missing_ids)
     write_meta_yaml(
         csv_path=csv_path,
         command=" ".join(sys.argv),
@@ -1719,6 +1791,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     pc.init_session(api_cfg, cfg.retry)
 
+    requested_ids: tuple[str, ...] = ()
+    missing_ids: list[str] = []
+
     with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
         read_status, read_result = read_input_ids(
             args.input_csv,
@@ -1730,6 +1805,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if read_status != 0 or read_result is None:
             return read_status
 
+        requested_ids = read_result.requested_ids
         fetch_status, df = fetch_testitems(
             read_result.ids_iter,
             api_cfg=api_cfg,
@@ -1742,6 +1818,28 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         if fetch_status != 0 or df is None:
             return fetch_status
+
+        requested_unique = OrderedDict()
+        for identifier in requested_ids:
+            key = identifier.strip()
+            if not key:
+                continue
+            upper_key = key.upper()
+            requested_unique.setdefault(upper_key, identifier)
+
+        fetched_ids: set[str] = set()
+        if "molecule_chembl_id" in df.columns:
+            fetched_series = df["molecule_chembl_id"].dropna().astype(str).str.strip()
+            fetched_ids = {value.upper() for value in fetched_series if value}
+
+        missing_keys = [key for key in requested_unique if key not in fetched_ids]
+        missing_ids = [requested_unique[key] for key in missing_keys]
+        if missing_ids:
+            logger.warning(
+                "chembl_missing_identifiers",
+                count=len(missing_ids),
+                identifiers=missing_ids,
+            )
 
         rows = len(df)
         if limit is not None:
@@ -1800,6 +1898,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         df = enriched_df
 
+    df = _integrate_missing_identifiers(
+        df,
+        missing_ids=missing_ids,
+        requested_ids=requested_ids,
+    )
+
     output_path = (
         Path(args.output_csv)
         if args.output_csv
@@ -1813,6 +1917,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         parent_stats=parent_stats,
         input_csv=args.input_csv,
         rows_total=rows_total,
+        missing_ids=missing_ids,
     )
     return exit_code
 
