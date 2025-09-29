@@ -14,7 +14,9 @@ import requests
 from library import chembl_library as cl
 from library import io
 from library import pubchem_library as pl
-from library.config import Config
+
+from library.config import ApiCfg, Config, IoCfg
+
 from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
@@ -45,6 +47,243 @@ def prepare_parent_lookup_data(
     )
 
 
+def test_read_input_ids_limit_and_sample(
+    tmp_path: Path, cfg: Config
+) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text(
+        "molecule_chembl_id\nCHEMBL1\nCHEMBL2\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    status, result = gtd.read_input_ids(
+        input_csv,
+        column=cfg.testitem.column,
+        io_cfg=cfg.io,
+        limit=1,
+    )
+
+    assert status == 0
+    assert result is not None
+    assert list(result.ids_iter) == ["CHEMBL1"]
+    assert result.sample_ids == ("CHEMBL1",)
+
+
+def test_read_input_ids_missing_file(tmp_path: Path, cfg: Config) -> None:
+    status, result = gtd.read_input_ids(
+        tmp_path / "missing.csv",
+        column=cfg.testitem.column,
+        io_cfg=cfg.io,
+        limit=None,
+    )
+
+    assert status == 1
+    assert result is None
+
+
+def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
+    def fail_fetch(*args: object, **kwargs: object) -> pd.DataFrame:
+        raise requests.RequestException("boom")
+
+    monkeypatch.setattr(cl, "get_testitem", fail_fetch)
+
+    status, df = gtd.fetch_testitems(
+        iter(["CHEMBL1"]),
+        api_cfg=cfg.api,
+        batch_size=1,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        sample_ids=("CHEMBL1",),
+    )
+
+    assert status == 1
+    assert df is None
+
+
+def test_prepare_parent_enrichment_uses_lookup_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+    hierarchy_path = tmp_path / "hierarchy.csv"
+
+    captured_path: Path | None = None
+
+    def fake_lookup(path: Path | None, *, io_cfg: IoCfg) -> dict[str, str]:
+        nonlocal captured_path
+        captured_path = path
+        return {"CHEMBL1": "CHEMBL999"}
+
+    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", fake_lookup)
+    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {})
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda *_, **__: {})
+
+    status, prep = gtd.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        hierarchy_lookup_path=hierarchy_path,
+    )
+
+    assert status == 0
+    assert prep is not None
+    assert captured_path == hierarchy_path
+    assert list(prep.lookup_data.child_ids) == ["CHEMBL1"]
+
+
+def test_run_parent_enrichment_failure(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({cfg.molecule_catalog.parent_field: [pd.NA]})
+    lookup = gtd.ParentLookupPreparedData(
+        child_ids=pd.Series(["CHEMBL1"], dtype="string"),
+        existing_parent_ids=pd.Series([""], dtype="string"),
+        need_lookup=set(),
+    )
+    prep = gtd.ParentEnrichmentPreparation(
+        df=df,
+        lookup_data=lookup,
+        parent_catalog=None,
+        parent_catalog_source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        parent_stats=gtd.ParentLookupStats(
+            source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+            missing=0,
+            unique=0,
+            attached=0,
+            uncovered=0,
+        ),
+    )
+
+    def fail_attach(*args: object, **kwargs: object) -> tuple[pd.DataFrame, object]:
+        raise ValueError("attach failed")
+
+    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fail_attach)
+
+    status, result = gtd.run_parent_enrichment(
+        prep,
+        client=SimpleNamespace(),
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=cfg.testitem.timeout,
+    )
+
+    assert status == 1
+    assert result is None
+
+
+def test_augment_pubchem_initialises_caches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    cfg.pubchem.enable = True
+    cfg.pubchem.cid_cache_path = tmp_path / "pubchem_cache.json"
+    cfg.pubchem.cache_ttl_hours = 24
+
+    captured: dict[str, object] = {}
+
+    def fake_load(path: Path | None, ttl_hours: float | None = None) -> dict[str, str | None]:
+        captured["load_args"] = (path, ttl_hours)
+        return {}
+
+    def fake_add(
+        frame: pd.DataFrame,
+        pubchem_cfg: pl.PubChemCfg,
+        **kwargs: object,
+    ) -> pd.DataFrame:
+        captured["add_kwargs"] = kwargs
+        return frame.assign(pubchem_cid="1")
+
+    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", fake_load)
+    monkeypatch.setattr(gtd, "add_pubchem_data", fake_add)
+
+    result = gtd.augment_pubchem(
+        df,
+        pubchem_cfg=cfg.pubchem,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+    )
+
+    assert captured["load_args"] == (cfg.pubchem.cid_cache_path, cfg.pubchem.cache_ttl_hours)
+    assert "cid_cache" in captured["add_kwargs"]
+    assert "pubchem_cid" in result.columns
+
+
+def test_apply_testitem_enrichment_disable(cfg: Config) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    status, result = gtd.apply_testitem_enrichment(
+        df,
+        enrichment_cfg=SimpleNamespace(enable=False),
+        io_cfg=cfg.io,
+    )
+
+    assert status == 0
+    assert result is df
+
+
+def test_apply_testitem_enrichment_failure(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+
+    def fail_enrich(*args: object, **kwargs: object) -> pd.DataFrame:
+        raise ValueError("enrich failed")
+
+    monkeypatch.setattr(gtd.testitem_enrichment, "enrich", fail_enrich)
+
+    status, result = gtd.apply_testitem_enrichment(
+        df,
+        enrichment_cfg=SimpleNamespace(enable=True),
+        io_cfg=cfg.io,
+    )
+
+    assert status == 1
+    assert result is None
+
+
+def test_finalize_output_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    parent_stats = gtd.ParentLookupStats(
+        source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        missing=0,
+        unique=1,
+        attached=1,
+        uncovered=0,
+    )
+
+    def fake_validate(frame: pd.DataFrame, *, return_result: bool) -> SimpleNamespace:
+        return SimpleNamespace(data=frame, failure_cases=pd.DataFrame())
+
+    monkeypatch.setattr(gtd, "validate_testitems", fake_validate)
+    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gtd, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        io,
+        "write_csv",
+        lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
+    )
+
+    exit_code = gtd.finalize_output(
+        df,
+        cfg=cfg,
+        output=tmp_path / "out.csv",
+        parent_stats=parent_stats,
+        input_csv=tmp_path / "in.csv",
+        rows_total=len(df),
+    )
+
+    assert exit_code == 0
+
 def test_load_molecule_hierarchy_lookup_missing(tmp_path: Path, cfg: Config) -> None:
     path = tmp_path / "missing.csv"
 
@@ -73,7 +312,11 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
 
     result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
-    assert result == {"CHEMBL1": "CHEMBL2", "CHEMBL5": "CHEMBL6"}
+    assert result == {
+        "CHEMBL1": "CHEMBL2",
+        "CHEMBL3": None,
+        "CHEMBL5": "CHEMBL6",
+    }
 
 
 def test_load_molecule_hierarchy_lookup_missing_columns(
@@ -182,6 +425,138 @@ def test_add_pubchem_data_reuses_resolution_cache(
 
     assert len(calls) == 1
     assert result["pubchem_cid"].tolist() == ["123", "123"]
+
+
+def test_add_pubchem_data_prefetches_parent_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "parent_molecule_chembl_id": ["CHEMBL2"],
+            "canonical_smiles": ["C"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, batch_size=7)
+    api_cfg = ApiCfg()
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    calls: list[tuple[tuple[str, ...], int, float | None]] = []
+
+    def fake_get_testitem(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+    ) -> pd.DataFrame:
+        calls.append((tuple(ids), chunk_size, timeout))
+        return pd.DataFrame(
+            {
+                "molecule_chembl_id": ["CHEMBL2"],
+                "parent_molecule_chembl_id": [None],
+                "canonical_smiles": ["CC"],
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache_key: str | None = None,
+        **_: object,
+    ) -> pl.PubChemResolution:
+        if cache_key == "CHEMBL2":
+            return pl.PubChemResolution(cid="321", source="parent")
+        return pl.PubChemResolution(cid=None, source=None)
+
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
+
+    timeout = 12.5
+    result = gtd.add_pubchem_data(
+        df,
+        cfg,
+        client=object(),
+        api_cfg=api_cfg,
+        timeout=timeout,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+    )
+
+    assert calls == [(("CHEMBL2",), 7, timeout)]
+    assert parent_record_cache["CHEMBL2"]["canonical_smiles"] == "CC"
+    assert result.loc[0, "pubchem_cid"] == "321"
+
+
+def test_add_pubchem_data_primes_parent_cache_with_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
+            "parent_molecule_chembl_id": [pd.NA, pd.NA, "CHEMBL1"],
+            "canonical_smiles": ["C", "N", "CN"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    api_cfg = ApiCfg()
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    def fail_fetch(*args: object, **kwargs: object) -> pd.DataFrame:  # pragma: no cover
+        raise AssertionError("parent records should not be fetched remotely")
+
+    monkeypatch.setattr(cl, "get_testitem", fail_fetch)
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache_key: str | None = None,
+        **_: object,
+    ) -> pl.PubChemResolution:
+        if cache_key == "CHEMBL1":
+            return pl.PubChemResolution(cid="111", source="local")
+        return pl.PubChemResolution(cid=None, source=None)
+
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
+
+    result = gtd.add_pubchem_data(
+        df,
+        cfg,
+        client=object(),
+        api_cfg=api_cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+    )
+
+    assert "CHEMBL1" in parent_record_cache
+    parent_series = parent_record_cache["CHEMBL1"]
+    assert isinstance(parent_series, pd.Series)
+    assert parent_series["canonical_smiles"] == "C"
+    assert (
+        result.loc[result["molecule_chembl_id"] == "CHEMBL2", "pubchem_cid"]
+        .iloc[0]
+        == "111"
+    )
 
 
 def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) -> None:
