@@ -89,6 +89,25 @@ class _BoolModel(_BaseModel):
         raise ValueError(f"Invalid boolean value: {value!r}")
 
 
+# ChEMBL test item fields requested by default when fetching molecule data.
+TESTITEM_FIELD_DEFAULTS: tuple[str, ...] = (
+    "molecule_chembl_id",
+    "parent_molecule_chembl_id",
+    "pref_name",
+    "max_phase",
+    "molecule_type",
+    "first_approval",
+    "oral",
+    "parenteral",
+    "topical",
+    "black_box_warning",
+    "structure_type",
+    "molecule_structures.canonical_smiles",
+    "molecule_structures.standard_inchi",
+    "molecule_structures.standard_inchi_key",
+)
+
+
 class ApiCfg(_BaseModel):
     """Settings for ChEMBL API access."""
 
@@ -640,9 +659,23 @@ class AssayCfg(_BaseModel):
 
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
-    batch_size: int = Field(5, ge=1)
+    batch_size: int = Field(1000, ge=1, le=1000)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
+    fields: tuple[str, ...] = Field(default=TESTITEM_FIELD_DEFAULTS)
+    request_limit: int = Field(1000, ge=1, le=1000)
+    retries: int | None = Field(default=None, ge=0)
+    backoff_factor: float | None = Field(default=None, ge=0)
+
+    @field_validator("fields", mode="before")
+    @classmethod
+    def _coerce_fields(cls, value: Any) -> tuple[str, ...]:
+        if value is None:
+            return TESTITEM_FIELD_DEFAULTS
+        if isinstance(value, (list, tuple)):
+            return tuple(str(item) for item in value)
+        raise TypeError("testitem.fields must be a list or tuple of strings")
 
 
 class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):

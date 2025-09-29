@@ -682,8 +682,9 @@
           "type": "integer"
         },
         "batch_size": {
-          "default": 5,
+          "default": 1000,
           "minimum": 1,
+          "maximum": 1000,
           "title": "Batch Size",
           "type": "integer"
         },
@@ -705,6 +706,68 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "fields": {
+          "default": [
+            "molecule_chembl_id",
+            "parent_molecule_chembl_id",
+            "pref_name",
+            "max_phase",
+            "molecule_type",
+            "first_approval",
+            "oral",
+            "parenteral",
+            "topical",
+            "black_box_warning",
+            "structure_type",
+            "molecule_structures.canonical_smiles",
+            "molecule_structures.standard_inchi",
+            "molecule_structures.standard_inchi_key"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "request_limit": {
+          "default": 1000,
+          "minimum": 1,
+          "maximum": 1000,
+          "title": "Request Limit",
+          "type": "integer"
+        },
+        "retries": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retries"
+        },
+        "backoff_factor": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backoff Factor"
         }
       },
       "title": "DocumentAllCfg",
@@ -1582,8 +1645,9 @@
           "type": "string"
         },
         "batch_size": {
-          "default": 5,
+          "default": 1000,
           "minimum": 1,
+          "maximum": 1000,
           "title": "Batch Size",
           "type": "integer"
         },
@@ -1605,6 +1669,68 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "fields": {
+          "default": [
+            "molecule_chembl_id",
+            "parent_molecule_chembl_id",
+            "pref_name",
+            "max_phase",
+            "molecule_type",
+            "first_approval",
+            "oral",
+            "parenteral",
+            "topical",
+            "black_box_warning",
+            "structure_type",
+            "molecule_structures.canonical_smiles",
+            "molecule_structures.standard_inchi",
+            "molecule_structures.standard_inchi_key"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "request_limit": {
+          "default": 1000,
+          "minimum": 1,
+          "maximum": 1000,
+          "title": "Request Limit",
+          "type": "integer"
+        },
+        "retries": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retries"
+        },
+        "backoff_factor": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backoff Factor"
         }
       },
       "title": "TestitemCfg",

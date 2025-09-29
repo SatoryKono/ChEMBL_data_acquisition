@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -69,6 +69,27 @@ def test_read_input_ids_limit_and_sample(
     assert result.sample_ids == ("CHEMBL1",)
 
 
+def test_read_input_ids_offset(tmp_path: Path, cfg: Config) -> None:
+    input_csv = tmp_path / "testitems.csv"
+    input_csv.write_text(
+        "molecule_chembl_id\nCHEMBL1\nCHEMBL2\nCHEMBL3\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    status, result = gtd.read_input_ids(
+        input_csv,
+        column=cfg.testitem.column,
+        io_cfg=cfg.io,
+        limit=None,
+        offset=2,
+    )
+
+    assert status == 0
+    assert result is not None
+    assert list(result.ids_iter) == ["CHEMBL3"]
+    assert result.sample_ids == ("CHEMBL3",)
+
+
 def test_read_input_ids_missing_file(tmp_path: Path, cfg: Config) -> None:
     status, result = gtd.read_input_ids(
         tmp_path / "missing.csv",
@@ -94,10 +115,50 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
         sample_ids=("CHEMBL1",),
+        fields=cfg.testitem.fields,
+        page_limit=cfg.testitem.request_limit,
     )
 
     assert status == 1
     assert df is None
+
+
+def test_fetch_testitems_passes_fields_and_limit(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_get_testitem(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+        fields: Sequence[str] | None = None,
+        page_limit: int = 0,
+    ) -> pd.DataFrame:
+        captured["fields"] = fields
+        captured["page_limit"] = page_limit
+        return pd.DataFrame(columns=["molecule_chembl_id"])
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+
+    status, df = gtd.fetch_testitems(
+        iter(["CHEMBL1", "CHEMBL2"]),
+        api_cfg=cfg.api,
+        batch_size=2,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        sample_ids=("CHEMBL1",),
+        fields=("a", "b"),
+        page_limit=500,
+    )
+
+    assert status == 0
+    assert df is not None
+    assert captured["fields"] == ("a", "b")
+    assert captured["page_limit"] == 500
 
 
 def test_prepare_parent_enrichment_uses_lookup_path(
@@ -112,7 +173,7 @@ def test_prepare_parent_enrichment_uses_lookup_path(
 
     captured_path: Path | None = None
 
-    def fake_lookup(path: Path | None, *, io_cfg: IoCfg) -> dict[str, str]:
+    def fake_lookup(path: Path | None, *, io_cfg: IoCfg, **_: object) -> dict[str, str]:
         nonlocal captured_path
         captured_path = path
         return {"CHEMBL1": "CHEMBL999"}
@@ -209,10 +270,14 @@ def test_augment_pubchem_initialises_caches(
         api_cfg=cfg.api,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
+        fields=cfg.testitem.fields,
+        request_limit=cfg.testitem.request_limit,
     )
 
     assert captured["load_args"] == (cfg.pubchem.cid_cache_path, cfg.pubchem.cache_ttl_hours)
     assert "cid_cache" in captured["add_kwargs"]
+    assert captured["add_kwargs"].get("testitem_fields") == cfg.testitem.fields
+    assert captured["add_kwargs"].get("request_limit") == cfg.testitem.request_limit
     assert "pubchem_cid" in result.columns
 
 
@@ -335,7 +400,10 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
 
 
 def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame({"canonical_smiles": ["C"]})
+    df = pd.DataFrame({
+        "molecule_chembl_id": ["CHEMBL1"],
+        "canonical_smiles": ["C"],
+    })
     cfg = pl.PubChemCfg(delay=0)
 
     monkeypatch.setattr(
@@ -343,12 +411,21 @@ def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> No
         "resolve_pubchem_record",
         lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
     )
+    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", lambda *_, **__: {})
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: calls.append(cid) or pl.Properties(None, None, None, None, None, None),
+    )
 
     result = gtd.add_pubchem_data(df, cfg)
     pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
     assert pubchem_cols
     assert result[pubchem_cols].isna().all().all()
     assert not (result[pubchem_cols] == "Not Found").any().any()
+    assert calls == []
 
 
 def test_add_pubchem_data_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -369,7 +446,9 @@ def test_add_pubchem_data_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_add_pubchem_data_not_found_literal(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame({"canonical_smiles": ["C"]})
+    df = pd.DataFrame(
+        {"molecule_chembl_id": ["CHEMBL1"], "canonical_smiles": ["C"]}
+    )
     cfg = pl.PubChemCfg(delay=0, write_not_found_literal=True)
 
     monkeypatch.setattr(
@@ -377,6 +456,12 @@ def test_add_pubchem_data_not_found_literal(monkeypatch: pytest.MonkeyPatch) -> 
         "resolve_pubchem_record",
         lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
     )
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
+    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", lambda *_, **__: {})
 
     result = gtd.add_pubchem_data(df, cfg)
 
@@ -420,6 +505,7 @@ def test_add_pubchem_data_reuses_resolution_cache(
         "get_properties",
         lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
     )
+    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", lambda *_, **__: {})
 
     result = gtd.add_pubchem_data(df, cfg)
 
@@ -452,6 +538,8 @@ def test_add_pubchem_data_prefetches_parent_records(
         client: object,
         chunk_size: int,
         timeout: float | None,
+        fields: Sequence[str] | None = None,
+        page_limit: int = 1000,
     ) -> pd.DataFrame:
         calls.append((tuple(ids), chunk_size, timeout))
         return pd.DataFrame(
@@ -628,7 +716,11 @@ def test_add_pubchem_data_preserves_existing_values(
         return "333"
 
     monkeypatch.setattr(gtd, "resolve_pubchem_cid", fake_resolve)
-    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: None)
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
     monkeypatch.setattr(
         gtd.logger,
         "warning",
@@ -922,9 +1014,8 @@ def test_run_chembl_column_order(
     )
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
-    monkeypatch.setattr(
-        gtd, "load_parent_catalog", lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"}
-    )
+    precomputed_catalog = {"CHEMBL1": "CHEMBL1_PARENT"}
+    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: precomputed_catalog)
     monkeypatch.setattr(
         gtd.molecule_catalog,
         "fetch_parent_catalog_for",
@@ -997,12 +1088,20 @@ def test_run_chembl_column_order(
         prepared.existing_parent_ids.tolist()
         == expected_prepared.existing_parent_ids.tolist()
     )
-    expected_need_lookup = set(
-        expected_prepared.child_ids[
-            (expected_prepared.child_ids != "")
-            & (expected_prepared.existing_parent_ids == "")
-        ]
+    parent_field = cfg.molecule_catalog.parent_field
+    child_field = cfg.molecule_catalog.child_field
+    existing_parent = (
+        captured_frame.get(parent_field)
+        if parent_field in captured_frame
+        else pd.Series([""], index=captured_frame.index, dtype="string")
     )
+    normalised_parent = existing_parent.astype("string").fillna("").str.strip()
+    child_ids = captured_frame.get(child_field, pd.Series([], dtype="string"))
+    if child_ids.empty:
+        child_ids = prepared.child_ids
+    normalised_child = child_ids.astype("string").fillna("").str.upper()
+    expected_need_lookup = set(normalised_child[normalised_parent == ""])
+    expected_need_lookup -= set(precomputed_catalog)
     assert prepared.need_lookup == expected_need_lookup
 
     available = set(captured.get("columns", []))
@@ -1347,7 +1446,7 @@ def test_run_chembl_prefills_parent_from_hierarchy(
 
     captured_path: Path | None = None
 
-    def fake_lookup(path: Path | None, *, io_cfg: object) -> dict[str, str]:
+    def fake_lookup(path: Path | None, *, io_cfg: object, **_: object) -> dict[str, str]:
         nonlocal captured_path
         captured_path = path
         return {"CHEMBL1": "CHEMBL1_PARENT"}

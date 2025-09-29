@@ -167,6 +167,31 @@ python scripts/get_testitem_data.py \
 
 Выгружает дополнительную информацию о соединениях. Можно использовать комплект `tests/data/input-smoke/testitem.csv` или собственный CSV с нужной колонкой идентификаторов.
 
+Параметры пагинации теперь берутся из секции `sources.chembl.pipelines.testitem` файла `config.yaml`. По умолчанию пайплайн запрашивает 1000 молекул за вызов (`batch_size`/`request_limit`) и ограничивает ответ полями из `testitem.fields`, чтобы не грузить лишние данные. При необходимости уменьшить батч или добавить дополнительные колонки достаточно изменить конфигурацию или задать переменные окружения:
+
+```yaml
+sources:
+  chembl:
+    pipelines:
+      testitem:
+        offset: 500        # пропустить первые 500 идентификаторов
+        request_limit: 750 # зафиксировать предел страницы ниже максимального значения API
+        fields:
+          - molecule_chembl_id
+          - pref_name
+          - structure_type
+```
+
+Пример запуска с кастомными настройками:
+
+```bash
+python scripts/get_testitem_data.py \
+  --config config/config.yaml \
+  --input data/input/testitem_ids.csv \
+  --batch-size 750 \
+  --offset 500
+```
+
 ### Контроль `properties_hash`
 
 PubChem-дополнение добавляет детерминированные свойства (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
