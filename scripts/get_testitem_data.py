@@ -64,17 +64,22 @@ from schemas import TestitemsSchema, normalize_testitems
 # ===== Parameters =====
 
 ENCODING_UTF8 = "utf-8"
-MOLECULE_HIERARCHY_DELIMITER = ","
-DEFAULT_MOLECULE_HIERARCHY_PATH = Path(
-    "dictionary/_testitem/molecule_hierarchy.csv"
-)
 PUBCHEM_CID_CACHE_ENCODING = ENCODING_UTF8
+
+
+# ===== Providers =====
+
+_DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
 
 
 # ===== Helpers =====
 
 UTC = timezone.utc  # noqa: UP017
 _TYPO_PARENT_COLUMN = "parant_molecule_id"
+_MOLECULE_HIERARCHY_COLUMNS = (
+    "molecule_chembl_id",
+    "parent_molecule_chembl_id",
+)
 
 UTC = timezone.utc
 
@@ -157,12 +162,12 @@ _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 
 @lru_cache(maxsize=None)
-def _load_molecule_hierarchy_lookup_cached(
+def _load_molecule_hierarchy_mapping(
     path: str,
     encoding: str,
     delimiter: str,
-) -> dict[str, dict[str, str | None]]:
-    """Load molecule hierarchy data from ``path`` with normalised identifiers."""
+) -> dict[str, str | None]:
+    """Return cached child → parent mapping with normalised identifiers."""
 
     csv_path = Path(path)
     if not csv_path.exists():
@@ -182,50 +187,67 @@ def _load_molecule_hierarchy_lookup_cached(
             "Unable to read molecule hierarchy dictionary; verify the CSV format."
         ) from exc
 
-    expected_columns = ["molecule_chembl_id", "parent_molecule_chembl_id"]
-    missing_columns = [col for col in expected_columns if col not in frame.columns]
+    missing_columns = [
+        column for column in _MOLECULE_HIERARCHY_COLUMNS if column not in frame.columns
+    ]
     if missing_columns:
         raise ValueError(
             "Molecule hierarchy dictionary missing required columns: "
             + ", ".join(missing_columns)
         )
 
-    subset = frame.loc[:, expected_columns].fillna("")
-    for column in expected_columns:
+    subset = frame.loc[:, list(_MOLECULE_HIERARCHY_COLUMNS)].copy()
+    for column in _MOLECULE_HIERARCHY_COLUMNS:
         subset[column] = (
             subset[column]
+            .fillna("")
             .astype("string")
             .str.strip()
             .str.upper()
         )
 
-    lookup: dict[str, dict[str, str | None]] = {}
+    subset = subset[subset["molecule_chembl_id"] != ""]
+    subset = subset.drop_duplicates(
+        subset=["molecule_chembl_id"],
+        keep="first",
+    )
+
+    lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        if not molecule_id:
-            continue
-        lookup[molecule_id] = {
-            "molecule_chembl_id": molecule_id,
-            "parent_molecule_chembl_id": parent_id or None,
-        }
+        lookup[molecule_id] = parent_id or None
 
     return lookup
 
 
 def LoadMoleculeHierarchyLookup(
-    path: Path | str = DEFAULT_MOLECULE_HIERARCHY_PATH,
+    path: Path | str | None = None,
     *,
-    encoding: str = ENCODING_UTF8,
-    delimiter: str = MOLECULE_HIERARCHY_DELIMITER,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
 ) -> dict[str, dict[str, str | None]]:
     """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
 
-    resolved_path = Path(path)
-    cached = _load_molecule_hierarchy_lookup_cached(
+    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
+    resolved_path_value = path or cfg_source.hierarchy_lookup_path
+    if resolved_path_value is None:
+        raise ValueError("hierarchy lookup path must be provided")
+    resolved_path = Path(resolved_path_value)
+    resolved_encoding = encoding or cfg_source.hierarchy_lookup_encoding
+    resolved_delimiter = delimiter or cfg_source.hierarchy_lookup_delimiter
+
+    cached = _load_molecule_hierarchy_mapping(
         str(resolved_path),
-        encoding,
-        delimiter,
+        resolved_encoding,
+        resolved_delimiter,
     )
-    return {key: value.copy() for key, value in cached.items()}
+    return {
+        key: {
+            "molecule_chembl_id": key,
+            "parent_molecule_chembl_id": value,
+        }
+        for key, value in cached.items()
+    }
 
 
 def _load_pubchem_cid_cache(
@@ -553,55 +575,54 @@ def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
 
 
 def load_molecule_hierarchy_lookup(
-    path: Path | None, *, io_cfg: IoCfg
+    path: Path | None,
+    *,
+    io_cfg: IoCfg,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
 ) -> dict[str, str]:
     """Return child → parent mapping loaded from a local hierarchy file."""
 
-    if path is None:
+    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
+    resolved_path_value = path or cfg_source.hierarchy_lookup_path
+    if resolved_path_value is None:
         return {}
 
-    required = ("molecule_chembl_id", "parent_molecule_chembl_id")
+    resolved_path = Path(resolved_path_value)
+    resolved_encoding = (
+        encoding
+        or getattr(cfg_source, "hierarchy_lookup_encoding", None)
+        or io_cfg.csv_encoding
+    )
+    resolved_delimiter = (
+        delimiter
+        or getattr(cfg_source, "hierarchy_lookup_delimiter", None)
+        or io_cfg.csv_sep
+    )
+
     try:
-        hierarchy_df = io.read_csv(
-            path,
-            cfg=io_cfg,
-            required_columns=required,
-            dtype="string",
+        raw_lookup = _load_molecule_hierarchy_mapping(
+            str(resolved_path),
+            resolved_encoding,
+            resolved_delimiter,
         )
     except FileNotFoundError:
-        logger.info("molecule_hierarchy_lookup_missing", path=str(path))
+        logger.info("molecule_hierarchy_lookup_missing", path=str(resolved_path))
         return {}
     except ValueError as exc:
         raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
 
-    if hierarchy_df.empty:
+    lookup = dict(raw_lookup)
+    if not lookup:
         return {}
 
-    trimmed = hierarchy_df.loc[:, required].copy()
-    trimmed["molecule_chembl_id"] = (
-        trimmed["molecule_chembl_id"].fillna("").astype("string").str.strip().str.upper()
-    )
-    trimmed["parent_molecule_chembl_id"] = (
-        trimmed["parent_molecule_chembl_id"]
-        .fillna("")
-        .astype("string")
-        .str.strip()
-        .str.upper()
-    )
+    attached_rows = sum(1 for value in lookup.values() if value is not None)
 
-    filtered = trimmed[
-        (trimmed["molecule_chembl_id"] != "")
-        & (trimmed["parent_molecule_chembl_id"] != "")
-    ].drop_duplicates(subset=["molecule_chembl_id"], keep="first")
-
-    if filtered.empty:
-        return {}
-
-    lookup = filtered.set_index("molecule_chembl_id")["parent_molecule_chembl_id"].to_dict()
     logger.info(
         "molecule_hierarchy_lookup_loaded",
-        path=str(path),
-        rows=len(lookup),
+        path=str(resolved_path),
+        rows=attached_rows,
     )
     return lookup
 
@@ -1281,20 +1302,15 @@ def prepare_parent_enrichment(
     else:
         existing_parent = pd.Series("", index=df.index, dtype="string")
 
-    resolved_lookup_path = hierarchy_lookup_path
-    if resolved_lookup_path is None:
-        resolved_lookup_path = getattr(
-            catalog_cfg,
-            "hierarchy_lookup_path",
-            DEFAULT_MOLECULE_HIERARCHY_PATH,
-        )
-    if resolved_lookup_path is None:
-        resolved_lookup_path = DEFAULT_MOLECULE_HIERARCHY_PATH
+    resolved_lookup_path = hierarchy_lookup_path or catalog_cfg.hierarchy_lookup_path
     if resolved_lookup_path:
         try:
             hierarchy_lookup = load_molecule_hierarchy_lookup(
                 resolved_lookup_path,
                 io_cfg=io_cfg,
+                encoding=catalog_cfg.hierarchy_lookup_encoding,
+                delimiter=catalog_cfg.hierarchy_lookup_delimiter,
+                catalog_cfg=catalog_cfg,
             )
         except ValueError as exc:
             logger.error(
@@ -1307,8 +1323,15 @@ def prepare_parent_enrichment(
         hierarchy_lookup = {}
 
     if hierarchy_lookup:
+        hierarchy_values = {
+            key: value for key, value in hierarchy_lookup.items() if value is not None
+        }
+    else:
+        hierarchy_values = {}
+
+    if hierarchy_values:
         hierarchy_series = normalised_ids.map(
-            lambda value: hierarchy_lookup.get(value) if value else None
+            lambda value: hierarchy_values.get(value) if value else None
         )
         hierarchy_mask = hierarchy_series.notna()
         if hierarchy_mask.any():
