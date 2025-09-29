@@ -231,7 +231,10 @@ def _fetch_parent_catalog_via_helper(
 
     try:
         if not allow_single_lookup:
-            chunk_size = max(1, cfg.page_size)
+            if allow_rebatch:
+                chunk_size = max(1, cfg.page_size)
+            else:
+                chunk_size = max(1, len(pending))
             for chunk in _chunked(pending, chunk_size):
                 batch_attempts += 1
                 try:
@@ -434,6 +437,15 @@ def fetch_parent_catalog_for(
     parentless_filtered = _filters_exclude_parentless(cfg)
 
     if len(unique_ids) <= _PARENT_LOOKUP_FALLBACK_THRESHOLD:
+        if parentless_filtered:
+            chunk_result = _fetch_parent_catalog_chunk(
+                unique_ids,
+                client=client,
+                api_cfg=api_cfg,
+                timeout=effective_timeout,
+            )
+            result.update(chunk_result)
+            return result
         fallback_result = _fetch_parent_catalog_via_helper(
             unique_ids,
             client=client,
@@ -442,7 +454,7 @@ def fetch_parent_catalog_for(
             existing=result,
             catalog_cfg=cfg,
             allow_rebatch=False,
-            allow_single_lookup=not parentless_filtered,
+            allow_single_lookup=True,
         )
         result.update(fallback_result)
         return result
