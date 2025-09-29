@@ -30,7 +30,9 @@ from library.cli import (
     configure_logger,
 )
 from library.config import Config, ensure_dirs, print_config
-from library.io import default_output_path, read_ids, write_csv
+from library.io.paths import default_output_path
+from library.io.readers import read_ids
+from library.io.writers import write_csv
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
 from library.pipeline_targets import PipelineResult, run_pipeline
