@@ -1236,7 +1236,12 @@ def read_input_ids(
     """Load identifiers from ``input_csv`` honouring ``limit`` when provided."""
 
     try:
-        ids_iter = io.read_ids(input_csv, column=column, cfg=io_cfg)
+        ids_iter = io.read_ids(
+            input_csv,
+            column=column,
+            cfg=io_cfg,
+            keep_na_markers=io_cfg.keep_na_markers,
+        )
         if offset:
             ids_iter = islice(ids_iter, offset, None)
             logger.info("process_offset", offset=offset)

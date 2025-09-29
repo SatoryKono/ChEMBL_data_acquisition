@@ -25,15 +25,16 @@ class _EncodingDecodeError(Exception):
         self.error = error
 
 
-def _stream_ids_with_encoding(
+def _collect_ids_with_encoding(
     path: Path,
     *,
     column: str,
     sep: str,
     encoding: str,
     marker_set: set[str],
-) -> Iterator[str]:
-    """Yield identifier values using a specific ``encoding``."""
+    keep_na_markers: bool,
+) -> tuple[list[str], list[str]]:
+    """Return identifiers and NA-marker hits using ``encoding``."""
 
     try:
         with path.open("r", encoding=encoding, newline="") as fh:
@@ -42,10 +43,19 @@ def _stream_ids_with_encoding(
                 raise ValueError(
                     f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
                 )
+            values: list[str] = []
+            dropped: list[str] = []
             for row in reader:
                 value = (row.get(column) or "").strip()
-                if value and value not in marker_set:
-                    yield value
+                if not value:
+                    continue
+                if value in marker_set:
+                    dropped.append(value)
+                    if keep_na_markers:
+                        values.append(value)
+                else:
+                    values.append(value)
+            return values, dropped
     except UnicodeDecodeError as exc:  # pragma: no cover - exercised via fallback tests
         raise _EncodingDecodeError(encoding, exc) from exc
 
@@ -67,12 +77,14 @@ def read_ids(
     sep: str | None = None,
     encoding: str | None = None,
     na_markers: Sequence[str] | None = None,
+    keep_na_markers: bool | None = None,
 ) -> Iterator[str]:
     """Yield identifier values from ``column`` in ``path``."""
 
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
     marker_set = set(na_markers or cfg.na_markers or ())
+    keep_markers = cfg.keep_na_markers if keep_na_markers is None else keep_na_markers
 
     def _append_candidate(values: Sequence[str] | str | None, seen: set[str], out: list[str]) -> None:
         if values is None:
@@ -105,18 +117,18 @@ def read_ids(
 
     path_obj = Path(path)
 
-    def _iter_candidates() -> Iterator[str]:
+    def _resolve_candidates() -> tuple[list[str], list[str]]:
         last_error: UnicodeDecodeError | None = None
         for candidate in candidates:
             try:
-                yield from _stream_ids_with_encoding(
+                return _collect_ids_with_encoding(
                     path_obj,
                     column=column,
                     sep=sep,
                     encoding=candidate,
                     marker_set=marker_set,
+                    keep_na_markers=keep_markers,
                 )
-                return
             except _EncodingDecodeError as exc:
                 last_error = exc.error
                 logger.warning(
@@ -142,11 +154,23 @@ def read_ids(
         raise ValueError(message) from last_error
 
     try:
-        yield from _iter_candidates()
+        values, dropped = _resolve_candidates()
     except FileNotFoundError:
         raise
     except csv.Error as exc:
         raise ValueError(f"malformed CSV in file: {path}: {exc}") from exc
+
+    if not keep_markers and dropped:
+        unique_dropped = sorted(set(dropped))
+        logger.warning(
+            "read_ids_dropped_na_markers",
+            path=str(path_obj),
+            column=column,
+            dropped_total=len(dropped),
+            dropped_ids=unique_dropped,
+        )
+
+    return iter(values)
 
 
 def read_csv(
