@@ -166,6 +166,31 @@ python scripts/get_testitem_data.py \
 
 Downloads compound-centric annotations for the supplied identifiers. The command can be executed with the bundled smoke dataset in `tests/data/input-smoke/testitem.csv` or any CSV that exposes the required identifier column.
 
+The CLI now derives pagination defaults from `sources.chembl.pipelines.testitem` in `config.yaml`. By default the pipeline requests 1,000 molecules per call (`batch_size`/`request_limit`) and limits responses to the fields listed under `testitem.fields` to minimise payload size. Adjust these values in the configuration or via environment overrides when a smaller batch size or additional columns are required:
+
+```yaml
+sources:
+  chembl:
+    pipelines:
+      testitem:
+        offset: 500        # skip the first 500 IDs
+        request_limit: 750 # clamp per-request limit below the API maximum
+        fields:
+          - molecule_chembl_id
+          - pref_name
+          - structure_type
+```
+
+Run a configuration-backed export with the tuned settings:
+
+```bash
+python scripts/get_testitem_data.py \
+  --config config/config.yaml \
+  --input data/input/testitem_ids.csv \
+  --batch-size 750 \
+  --offset 500
+```
+
 * Combine `--offset` with `--limit` to resume partially completed runs without re-reading identifiers that were already exported.
 
 ### Tracking `properties_hash`
