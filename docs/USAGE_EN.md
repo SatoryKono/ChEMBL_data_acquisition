@@ -20,6 +20,7 @@ directly.
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
 | `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
+| `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
 
 Each parser may add domain-specific switches such as `--timeout`, `--limit` or `--dry-run`. After parsing, `apply_config_overrides`
 loads `config/config.yaml`, applies environment variables, merges CLI overrides back into the configuration, and updates missing CLI
@@ -41,6 +42,7 @@ All entry points rely on `library.logging_setup.Logger` and emit JSON lines enri
 | `pipeline_start` | Immediately after the CLI configures logging and before validation begins. |
 | `documents_processed` | Document pipeline progress counter emitted after each processed batch. |
 | `process_limit` | Recorded when `--limit` (or configuration equivalents) trims the identifier set. |
+| `process_offset` | Emitted when `--offset` advances the identifier iterator before processing. |
 | `write_done` | Successful CSV write including the path and retained row count. |
 | `pipeline_done` / `pipeline_fail` | Final outcome logged before exit. |
 
@@ -60,13 +62,14 @@ python scripts/get_activity_data.py \
   --input tests/data/activity_ids_small.csv \
   --column activity_id \
   --batch-size 25 \
-  --timeout 45
+  --timeout 45 \
+  --offset 5
 ```
 
 * The repository ships `tests/data/activity_ids_small.csv` for smoke-style runs; override `--column` to the file header (`activity_id`) or rename the column to `activity_chembl_id` to rely on defaults.
 * Reads the column configured at `sources.chembl.pipelines.activity.column` (`activity_chembl_id` by default).
 * Writes the main CSV, `*.meta.yaml`, optional `*_failure_cases.csv` and quality reports.
-* Supports `--limit` to restrict the number of identifiers and `--dry-run` to validate inputs without API calls.
+* Supports `--limit` to restrict the number of identifiers, `--offset` to resume after a known checkpoint and `--dry-run` to validate inputs without API calls.
 * Populates `lower_value` and `upper_value` using canonical `standard_*` fields. Tweak the behaviour via `activity_bounds.*` in the configuration (relation-based inference, ± parsing, rounding, clamping and logging).
 * Monitor warnings such as `activity_bounds_unknown_relation` or `activity_bounds_missing_standard_value` in the log output; they indicate rows where bounds could not be derived or the relation marker is not recognised.
 
@@ -91,7 +94,7 @@ python scripts/get_document_data.py all \
 ```
 
 The script merges ChEMBL and PubMed sources. Prepare a CSV with the `document_chembl_id` column or override `--column` to match your schema—the repository does not bundle a smoke dataset for this pipeline. Use the exposed flags (`--batch-size`, `--timeout`, `--limit`, `--dry-run`) for
-one-off tweaks. Nested parameters such as the PubMed batch size are managed via configuration or environment variables, for
+one-off tweaks. All sub-commands accept `--offset` to resume from a particular position in the input file. Nested parameters such as the PubMed batch size are managed via configuration or environment variables, for
 example:
 
 ```bash
@@ -131,6 +134,8 @@ python scripts/get_target_data.py chembl \
 
 Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository. Swap `chembl` in the example for `uniprot`, `iuphar` or `all` to choose a different source mix.
 
+* Use `--offset` on any sub-command to skip identifiers that have already been processed in a previous run.
+
 ## Target pipeline harness (`library.utils.cli_tools.pipeline_targets_main`)
 
 ```bash
@@ -160,6 +165,8 @@ python scripts/get_testitem_data.py \
 ```
 
 Downloads compound-centric annotations for the supplied identifiers. The command can be executed with the bundled smoke dataset in `tests/data/input-smoke/testitem.csv` or any CSV that exposes the required identifier column.
+
+* Combine `--offset` with `--limit` to resume partially completed runs without re-reading identifiers that were already exported.
 
 ### Tracking `properties_hash`
 

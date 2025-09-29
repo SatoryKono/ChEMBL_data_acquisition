@@ -828,6 +828,10 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             path=str(args.input_csv),
         )
         return 1
+    offset = getattr(args, "offset", 0)
+    if offset:
+        pmids_iter = islice(pmids_iter, offset, None)
+        logger.info("process_offset", offset=offset)
     pmids: Iterable[str] = pmids_iter
     if limit is not None:
         limited_pmids = list(islice(pmids_iter, limit))
@@ -928,6 +932,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
 
+        offset = getattr(args, "offset", 0)
+        if offset:
+            ids_iter = islice(ids_iter, offset, None)
+            logger.info("process_offset", offset=offset)
+
         ids: Iterable[str] = ids_iter
         if limit is not None:
             limited_ids = list(islice(ids_iter, limit))
@@ -1000,6 +1009,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             path=str(args.input_csv),
         )
         return 1
+
+    offset = getattr(args, "offset", 0)
+    if offset:
+        ids_iter = islice(ids_iter, offset, None)
+        logger.info("process_offset", offset=offset)
 
     ids_source: Iterable[str] = ids_iter
     if limit is not None:
@@ -1141,6 +1155,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Maximum number of identifiers to process",
     )
     pubmed.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
+    pubmed.add_argument(
         "--openalex-rps",
         type=float,
         default=None,
@@ -1196,6 +1216,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Maximum number of identifiers to process",
     )
+    chembl.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
     chembl.set_defaults(func=run_chembl)
 
     all_cmd = sub.add_parser(
@@ -1240,6 +1266,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Maximum number of identifiers to process",
     )
     all_cmd.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
+    all_cmd.add_argument(
         "--openalex-rps",
         type=float,
         default=None,
@@ -1271,6 +1303,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     limit_value = getattr(args, "limit", None)
     if limit_value is not None and limit_value <= 0:
         subparser.error("--limit must be a positive integer")
+    offset_value = getattr(args, "offset", 0)
+    if offset_value < 0:
+        subparser.error("--offset must be zero or a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)

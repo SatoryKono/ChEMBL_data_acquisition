@@ -1225,11 +1225,15 @@ def read_input_ids(
     column: str,
     io_cfg: IoCfg,
     limit: int | None,
+    offset: int = 0,
 ) -> tuple[int, ReadInputIdsResult | None]:
     """Load identifiers from ``input_csv`` honouring ``limit`` when provided."""
 
     try:
         ids_iter = io.read_ids(input_csv, column=column, cfg=io_cfg)
+        if offset:
+            ids_iter = islice(ids_iter, offset, None)
+            logger.info("process_offset", offset=offset)
         if limit is not None:
             ids_iter = islice(ids_iter, limit)
         ids_iter, sample_iter = tee(ids_iter)
@@ -1701,6 +1705,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             column=cfg.testitem.column,
             io_cfg=cfg.io,
             limit=limit,
+            offset=getattr(args, "offset", 0),
         )
         if read_status != 0 or read_result is None:
             return read_status
@@ -1809,6 +1814,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Maximum number of identifiers to process",
     )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -1819,6 +1830,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
+    if args.offset < 0:
+        parser.error("--offset must be zero or a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)

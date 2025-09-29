@@ -223,6 +223,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Maximum number of identifiers to process",
     )
+    uniprot.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
     uniprot.set_defaults(func=run_uniprot)
 
     # ----------------------------
@@ -255,6 +261,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=int,
         default=None,
         help="Maximum number of identifiers to process",
+    )
+    chembl.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
     )
     chembl.set_defaults(func=run_chembl)
 
@@ -289,6 +301,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=int,
         default=None,
         help="Maximum number of rows to process",
+    )
+    iuphar.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
     )
     iuphar.set_defaults(func=run_iuphar)
 
@@ -363,6 +381,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Maximum number of identifiers to process",
     )
+    all_cmd.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
     all_cmd.set_defaults(func=run_all)
 
     parser.subparsers_map = {  # type: ignore[attr-defined]
@@ -416,6 +440,11 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         df = df[(df[column].str.strip() != "") & (df[column] != "#N/A")].reset_index(
             drop=True
         )
+        offset = getattr(args, "offset", 0)
+        if offset:
+            original_rows = len(df)
+            df = df.iloc[offset:].reset_index(drop=True)
+            logger.info("process_offset", offset=min(offset, original_rows))
         if limit is not None:
             df = df.head(limit)
             logger.info("process_limit", limit=len(df))
@@ -541,6 +570,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 path=str(args.input_csv),
             )
             return 1
+
+        offset = getattr(args, "offset", 0)
+        if offset:
+            ids_iter = islice(ids_iter, offset, None)
+            logger.info("process_offset", offset=offset)
 
         ids = ids_iter
         if limit is not None:
@@ -673,20 +707,29 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     source_csv = args.input_csv
 
     try:
-        if limit is not None:
-            df_limited = pd.read_csv(
+        df_to_process: pd.DataFrame | None = None
+        offset = getattr(args, "offset", 0)
+        if limit is not None or offset:
+            df_full = pd.read_csv(
                 args.input_csv,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
                 dtype=str,
-                nrows=limit,
             )
-            logger.info("process_limit", limit=len(df_limited))
+            if offset:
+                total_rows = len(df_full)
+                df_full = df_full.iloc[offset:].reset_index(drop=True)
+                logger.info("process_offset", offset=min(offset, total_rows))
+            if limit is not None:
+                df_full = df_full.head(limit)
+                logger.info("process_limit", limit=len(df_full))
+            df_to_process = df_full
+        if df_to_process is not None:
             from tempfile import NamedTemporaryFile
 
             with NamedTemporaryFile(delete=False) as tmp:
                 tmp_path = Path(tmp.name)
-            df_limited.to_csv(
+            df_to_process.to_csv(
                 tmp_path,
                 index=False,
                 sep=cfg.io.csv_sep,
@@ -737,6 +780,7 @@ def fetch_chembl(
     limit: int | None = None,
     *,
     chunk_size: int | None = None,
+    offset: int = 0,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -758,7 +802,9 @@ def fetch_chembl(
     """
 
     logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
-    chembl_args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    chembl_args = argparse.Namespace(
+        input_csv=input_csv, output_csv=output_csv, offset=offset
+    )
     original_limit = cfg.target.chembl.limit
     original_chunk_size = cfg.target.chembl.chunk_size
     if limit is not None:
@@ -1111,6 +1157,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chembl_out,
             limit=limit,
             chunk_size=cfg.target.all.chunk_size,
+            offset=getattr(args, "offset", 0),
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
@@ -1137,6 +1184,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     limit_value = getattr(args, "limit", None)
     if limit_value is not None and limit_value <= 0:
         subparser.error("--limit must be a positive integer")
+    offset_value = getattr(args, "offset", 0)
+    if offset_value < 0:
+        subparser.error("--offset must be zero or a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)

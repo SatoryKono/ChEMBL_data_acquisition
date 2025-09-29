@@ -89,6 +89,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
 
+        offset = getattr(args, "offset", 0)
+        if offset:
+            ids_iter = islice(ids_iter, offset, None)
+            logger.info("process_offset", offset=offset)
+
         # Apply the ``limit`` without materialising the entire iterator first.
         # ``itertools.islice`` allows lazy slicing; converting to ``list`` enables
         # length calculation for logging purposes.
@@ -260,6 +265,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Maximum number of identifiers to process",
     )
     parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Number of identifiers to skip before processing",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Read input and exit without contacting the API or writing files",
@@ -275,6 +286,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.limit is not None and args.limit <= 0:
         # Reject non-positive limits early to provide clear CLI feedback.
         parser.error("--limit must be a positive integer")
+    if args.offset < 0:
+        parser.error("--offset must be zero or a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
