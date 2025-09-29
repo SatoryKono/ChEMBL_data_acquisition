@@ -14,7 +14,9 @@ import requests
 from library import chembl_library as cl
 from library import io
 from library import pubchem_library as pl
-from library.config import Config, IoCfg
+
+from library.config import ApiCfg, Config, IoCfg
+
 from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
@@ -419,6 +421,78 @@ def test_add_pubchem_data_reuses_resolution_cache(
 
     assert len(calls) == 1
     assert result["pubchem_cid"].tolist() == ["123", "123"]
+
+
+def test_add_pubchem_data_prefetches_parent_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1"],
+            "parent_molecule_chembl_id": ["CHEMBL2"],
+            "canonical_smiles": ["C"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, batch_size=7)
+    api_cfg = ApiCfg()
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    parent_record_cache: dict[str, pd.Series | None] = {}
+
+    calls: list[tuple[tuple[str, ...], int, float | None]] = []
+
+    def fake_get_testitem(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+    ) -> pd.DataFrame:
+        calls.append((tuple(ids), chunk_size, timeout))
+        return pd.DataFrame(
+            {
+                "molecule_chembl_id": ["CHEMBL2"],
+                "parent_molecule_chembl_id": [None],
+                "canonical_smiles": ["CC"],
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+
+    def fake_resolve(
+        identifiers: Mapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        *,
+        cache_key: str | None = None,
+        **_: object,
+    ) -> pl.PubChemResolution:
+        if cache_key == "CHEMBL2":
+            return pl.PubChemResolution(cid="321", source="parent")
+        return pl.PubChemResolution(cid=None, source=None)
+
+    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
+    )
+
+    timeout = 12.5
+    result = gtd.add_pubchem_data(
+        df,
+        cfg,
+        client=object(),
+        api_cfg=api_cfg,
+        timeout=timeout,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+    )
+
+    assert calls == [(("CHEMBL2",), 7, timeout)]
+    assert parent_record_cache["CHEMBL2"]["canonical_smiles"] == "CC"
+    assert result.loc[0, "pubchem_cid"] == "321"
 
 
 def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) -> None:
