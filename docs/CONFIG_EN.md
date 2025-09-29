@@ -310,6 +310,7 @@ IUPHAR and UniProt lookups are stored there by default.
 | `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
 | `csv_chunksize` | `10000` | Rows processed per batch by deterministic CSV writers; see [`config/config.yaml`](../config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Extra values treated as missing identifiers when reading CSV files. |
+| `keep_na_markers` | `false` | Preserve identifiers matching `na_markers` instead of filtering them out. |
 | `exist_ok` | `true` | Create directories automatically when `true`. |
 
 ### Initialisation workbooks (`local.init`)

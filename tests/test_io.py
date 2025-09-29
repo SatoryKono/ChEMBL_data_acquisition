@@ -153,6 +153,65 @@ def test_read_ids_custom_na_marker(tmp_path: Path) -> None:
     assert ids == ["1", "2"]
 
 
+def test_read_ids_logs_dropped_markers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropped identifiers are logged before returning the iterator."""
+
+    path = tmp_path / "ids.csv"
+    with path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["id"])
+        writer.writerow(["1"])
+        writer.writerow(["NA"])
+        writer.writerow(["2"])
+
+    calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+    def _record(event: str, *args: object, **data: object) -> None:
+        calls.append((event, args, data))
+
+    from library.io import readers as io_readers
+
+    monkeypatch.setattr(io_readers.logger, "warning", _record)
+
+    ids = list(io.read_ids(path, column="id", cfg=IoCfg(), na_markers=["NA"]))
+    assert ids == ["1", "2"]
+    assert (
+        "read_ids_dropped_na_markers",
+        (),
+        {
+            "path": str(path),
+            "column": "id",
+            "dropped_total": 1,
+            "dropped_ids": ["NA"],
+        },
+    ) in calls
+
+
+def test_read_ids_keep_na_markers(tmp_path: Path) -> None:
+    """Setting ``keep_na_markers`` preserves identifiers matching the markers."""
+
+    path = tmp_path / "ids.csv"
+    with path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["id"])
+        writer.writerow(["1"])
+        writer.writerow(["NA"])
+        writer.writerow(["2"])
+
+    ids = list(
+        io.read_ids(
+            path,
+            column="id",
+            cfg=IoCfg(),
+            na_markers=["NA"],
+            keep_na_markers=True,
+        )
+    )
+    assert ids == ["1", "NA", "2"]
+
+
 def test_read_ids_falls_back_to_alternative_encoding(tmp_path: Path) -> None:
     """``read_ids`` retries with configured fallback encodings."""
 

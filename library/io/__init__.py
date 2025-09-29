@@ -8,6 +8,7 @@ _writers = import_module(f"{__name__}.writers")
 _readers = reload(import_module(f"{__name__}.readers"))
 
 pa = _readers.pa
+locale = _readers.locale
 read_csv = _readers.read_csv
 read_ids = _readers.read_ids
 write_csv = _writers.write_csv
@@ -17,6 +18,7 @@ write_meta_yaml = _metadata.write_meta_yaml
 __all__ = [
     "default_output_path",
     "pa",
+    "locale",
     "read_csv",
     "read_ids",
     "write_csv",

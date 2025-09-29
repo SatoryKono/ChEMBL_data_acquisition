@@ -414,6 +414,7 @@ class IoCfg(_BoolModel):
     na_markers: Sequence[str] | None = ("#N/A",)
     csv_chunksize: int = Field(10000, ge=1)
     exist_ok: bool = True
+    keep_na_markers: bool = False
 
     @field_validator("exist_ok", mode="before")
     @classmethod
