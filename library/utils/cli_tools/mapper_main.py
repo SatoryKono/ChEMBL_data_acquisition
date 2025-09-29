@@ -18,8 +18,8 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import Config, ensure_dirs, print_config
-from library.log import logger
-from library.mapper_library import map_chembl_to_uniprot
+from library.utils.logging import logger
+from library.clients.mapper import map_chembl_to_uniprot
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

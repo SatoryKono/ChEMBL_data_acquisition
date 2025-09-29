@@ -1,7 +1,7 @@
 """Lightweight Git helpers.
 
 This module provides shared utilities related to Git.
-Currently it exposes :func:`_git_sha` which returns the current
+Currently it exposes :func:`git_sha` which returns the current
 commit hash.  The helper is centralised here so other modules can
 record provenance without duplicating logic.
 """
@@ -15,13 +15,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .log import logger
+from .logging import logger
 
 
 def _repo_root() -> Path:
     """Return the repository root used for Git metadata."""
 
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def _resolve_git_dir(repo_root: Path) -> Path | None:
@@ -195,7 +195,7 @@ def _error_payload(error: BaseException) -> dict[str, Any]:
 
 
 @functools.lru_cache(maxsize=1)
-def _git_sha() -> str:
+def git_sha() -> str:
     """Return the Git commit hash for the repository.
 
     The command is executed only once and the result cached to avoid
@@ -248,3 +248,7 @@ def _git_sha() -> str:
         logger.warning("git_sha_unavailable", extra=_error_payload(exc))
 
         return "UNKNOWN"
+
+
+# Backwards compatibility alias
+_git_sha = git_sha

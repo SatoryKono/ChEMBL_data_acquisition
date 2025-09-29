@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-from library.activity_action_properties import annotate_action_properties
+from library.processing.activity import annotate_action_properties
 from library.config import ActivityActionTypeCfg, ActivityPropertiesCfg
 from library.processing.activity import (
     apply_activity_annotations,

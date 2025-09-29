@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library.csv_utils import write_csv_deterministic
+from library.io.writers import write_csv_deterministic
 
 psutil = pytest.importorskip("psutil")
 

@@ -23,12 +23,12 @@ except ImportError as exc:  # pragma: no cover - import-time check
     ) from exc
 
 from library.cli import LoggerConfig, configure_logger
-from library.csv_utils import (
+from library.io.writers import (
     sha256_file,
     write_csv_chunks_deterministic,
     write_csv_deterministic,
 )
-from library.log import logger
+from library.utils.logging import logger
 from library.timing import log_duration
 
 

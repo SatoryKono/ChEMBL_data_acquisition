@@ -24,7 +24,7 @@ def test_init_session_uses_cfg_retry(
     """Ensure CLI scripts use retry settings from :class:`Config`.
 
     The test verifies that each script passes ``cfg.retry`` to
-    :class:`library.chembl_client.ChemblClient` by monkeypatching the
+    :class:`library.clients.base.ChemblClient` by monkeypatching the
     class and capturing the supplied arguments.
     """
 

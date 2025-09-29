@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from library import cli
 from library.activities import get_activities
-from library.log import logger
+from library.utils.logging import logger
 
 
 def parse_args(

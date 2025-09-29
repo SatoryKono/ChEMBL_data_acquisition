@@ -33,9 +33,10 @@ bootstrap.ensure_project_root()
 
 from library import chembl_library as cl
 from library import cli
-from library import io, molecule_catalog, testitem_enrichment
-from library import pubchem_library as pl
-from library.chembl_client import ChemblClient
+from library import io, molecule_catalog
+from library.processing import testitem
+import library.clients.pubchem as pl
+from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -53,7 +54,7 @@ from library.config import (
     ensure_dirs,
     print_config,
 )
-from library.log import logger
+from library.utils.logging import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.molecule_catalog import (
     load_parent_catalog,
@@ -65,7 +66,7 @@ from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
-from schemas import TestitemsSchema, normalize_testitems
+from library.constants import TestitemsSchema, normalize_testitems
 
 
 # ===== Parameters =====
@@ -1413,7 +1414,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if enrichment_cfg.enable:
             logger.info("testitem_enrichment_start")
             try:
-                df = testitem_enrichment.enrich(
+                df = testitem.enrich(
                     df,
                     cfg=enrichment_cfg,
                     io_cfg=cfg.io,

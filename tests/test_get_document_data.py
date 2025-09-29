@@ -81,9 +81,9 @@ def test_cli_uses_custom_column(
         path: Path,
         *,
         cfg: Any,
-        **_: Any,
         key_cols: Sequence[str],
         chunk_size: int | None,
+        **_: Any,
     ) -> Path:
         list(chunks)
         return path

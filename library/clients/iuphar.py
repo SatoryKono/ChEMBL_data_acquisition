@@ -26,9 +26,9 @@ import pandas as pd
 import requests
 from requests import Session
 
-from .config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
-from .log import logger
-from .rate_limiter import get_limiter, sleep
+from ..config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
+from ..utils.logging import logger
+from ..rate_limiter import get_limiter, sleep
 
 # Default session with placeholder user agent; callers should override via
 # :func:`init_session` with a configuration that provides their own contact

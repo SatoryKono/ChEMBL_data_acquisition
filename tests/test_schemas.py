@@ -15,14 +15,14 @@ from hypothesis.extra.pandas import column, data_frames, range_indexes
 from pandera.errors import SchemaError, SchemaErrors
 
 from library.normalization import normalize_activities
-from schemas import (
+from library.constants import (
     ActivitiesSchema,
     AssaysSchema,
     DocumentsSchema,
     TargetsSchema,
     TestitemsSchema,
 )
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.constants import TARGETS_COLUMN_ORDER
 
 
 def test_activities_schema_validation() -> None:

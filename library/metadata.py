@@ -18,8 +18,8 @@ from typing import Any, TypedDict
 import yaml
 
 from .config import _mask_secrets
-from .git_utils import _git_sha
-from .log import logger
+from .utils.git import git_sha
+from .utils.logging import logger
 
 # ``datetime.UTC`` is only available in Python 3.11 and later.
 # ``timezone.utc`` provides the same value and works on older versions.
@@ -110,7 +110,7 @@ def write_meta_yaml(
     metadata.update(
         {
             "generated_at": datetime.now(UTC).isoformat(),
-            "git_sha": _git_sha(),
+            "git_sha": git_sha(),
             "python_version": platform.python_version(),
             "platform": platform.platform(),
             "command": command,

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import io
-from .config import IoCfg, TestitemMoleculeEnrichmentCfg
-from .log import logger
+from ..io.readers import read_csv
+from ..config import IoCfg, TestitemMoleculeEnrichmentCfg
+from ..utils.logging import logger
 
 _FLAG_COLUMNS: tuple[str, ...] = ("natural_product", "prodrug", "polymer_flag")
 _TRUE_VALUES: frozenset[str] = frozenset({"1", "true", "t", "yes", "y"})
@@ -25,7 +25,7 @@ class _SourceFrames:
 def _read_source(path: Path, *, io_cfg: IoCfg) -> pd.DataFrame:
     """Read a CSV file using the shared I/O configuration."""
 
-    return io.read_csv(path, cfg=io_cfg, dtype=pd.StringDtype())
+    return read_csv(path, cfg=io_cfg, dtype=pd.StringDtype())
 
 
 def _normalise_ids(series: pd.Series) -> pd.Series:

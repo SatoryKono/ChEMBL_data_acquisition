@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from library import mapper_batch_library as mbl
+import library.clients.mapper_batch as mbl
 from library.config import UniprotMappingCfg
 
 

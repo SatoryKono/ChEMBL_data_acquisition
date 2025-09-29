@@ -1,6 +1,6 @@
 """Semantic Scholar query utilities.
 
-This module wraps :func:`library.pubmed_library.fetch_semantic_scholar` to
+This module wraps :func:`library.clients.pubmed.fetch_semantic_scholar` to
 provide a dedicated namespace for Semantic Scholar related functionality.
 The underlying implementation already performs robust error handling and
 request retries.
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import requests
 
-from . import pubmed_library as _pl
-from .config import SemanticScholarCfg
+from . import pubmed as _pubmed
+from ..config import SemanticScholarCfg
 
 
 def fetch_semantic_scholar(
@@ -40,7 +40,7 @@ def fetch_semantic_scholar(
         returned dictionary and never raise exceptions.
 
     """
-    return _pl.fetch_semantic_scholar(session, pmid, sleep, cfg=cfg)
+    return _pubmed.fetch_semantic_scholar(session, pmid, sleep, cfg=cfg)
 
 
 def fetch_semantic_scholar_batch(
@@ -67,4 +67,4 @@ def fetch_semantic_scholar_batch(
         dictionary and never raise exceptions.
 
     """
-    return _pl.fetch_semantic_scholar_batch(session, pmids, sleep, cfg=cfg)
+    return _pubmed.fetch_semantic_scholar_batch(session, pmids, sleep, cfg=cfg)

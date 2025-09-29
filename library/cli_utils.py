@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "CLI wrapper for :func:`write_csv_deterministic`. This script reads "
             "an input CSV file and re-serialises it deterministically using "
-            ":func:`library.csv_utils.write_csv_deterministic`."
+            ":func:`library.io.writers.write_csv_deterministic`."
         )
     )
     add_common_arguments(parser)

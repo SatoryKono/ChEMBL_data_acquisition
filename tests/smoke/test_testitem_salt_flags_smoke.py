@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 
 from library import chembl_library as cl
-from library import pubchem_library as pl
-from library import testitem_enrichment
+import library.clients.pubchem as pl
+from library.processing import testitem as testitem_enrichment
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import get_testitem_data
 
@@ -101,7 +101,7 @@ def test_testitem_salt_flags_smoke(
     monkeypatch.setattr(
         testitem_enrichment,
         "_load_sources",
-        lambda cfg, io_cfg: testitem_enrichment._SourceFrames(
+        lambda cfg, io_cfg: testitem._SourceFrames(
             hierarchy=hierarchy, catalog=catalog
         ),
     )

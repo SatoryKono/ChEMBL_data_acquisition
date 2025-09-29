@@ -8,7 +8,7 @@ import pytest
 
 from library import chembl_library as cl
 from library import cli as base_cli
-from library import pubchem_library as pl
+import library.clients.pubchem as pl
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 
 _ORIGINAL_APPLY = base_cli.apply_config_overrides

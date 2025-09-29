@@ -9,7 +9,7 @@ import pytest
 from pandas.api import types as ptypes
 
 from library import chembl_library as cl
-from library import pubchem_library as pl
+import library.clients.pubchem as pl
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import (
     get_activity_data,

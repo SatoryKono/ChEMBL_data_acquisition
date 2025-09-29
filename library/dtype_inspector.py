@@ -24,9 +24,9 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 
 from . import chembl_library as cl
-from .chembl_client import ChemblClient
+from .clients import ChemblClient
 from .config import Config
-from .log import logger
+from .utils.logging import logger
 
 # Default sample identifiers for each dataset.  These are deliberately minimal
 # and can be overridden via the ``samples`` argument to :func:`inspect_dtypes`.

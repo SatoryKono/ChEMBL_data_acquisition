@@ -20,7 +20,7 @@ def test_mapper_library_has_no_logging_side_effect() -> None:
     for handler in list(root.handlers):
         root.removeHandler(handler)
     assert not root.handlers
-    module_name = "library.mapper_library"
+    module_name = "library.clients.mapper"
     if module_name in sys.modules:
         del sys.modules[module_name]
     importlib.import_module(module_name)

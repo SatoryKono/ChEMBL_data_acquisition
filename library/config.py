@@ -28,7 +28,7 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .log import logger
+from .utils.logging import logger
 from .utils.config import ConfigLoaderError, load_yaml_config
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")

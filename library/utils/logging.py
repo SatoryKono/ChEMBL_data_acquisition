@@ -8,7 +8,7 @@ emitting any log records.
 
 from __future__ import annotations
 
-from .logging_setup import Logger, LoggerConfig, configure_logger
+from ..logging_setup import Logger, LoggerConfig, configure_logger
 
 # Default logger used throughout the codebase.  The configuration is replaced
 # by :func:`library.cli.configure_logger` when a CLI entry point starts up.

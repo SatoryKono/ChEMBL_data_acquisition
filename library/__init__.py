@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from . import io, validation
 from .config import Config, load_config
-from .csv_utils import (
+from .io.writers import (
     sha256_file,
     write_csv_chunks_deterministic,
     write_csv_deterministic,

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import pubmed_library as pl
+import library.clients.pubmed as pl
 
 
 class DummyLimiter:
@@ -43,10 +43,10 @@ def _stub_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pl, "get_limiter", lambda *a, **k: DummyLimiter())
 
 
-def test_pubmed_library_single_config(
+def test_pubmed_single_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Ensure :func:`pubmed_library.main` creates ``Config`` only once."""
+    """Ensure :func:`library.clients.pubmed.main` creates ``Config`` only once."""
     _stub_network(monkeypatch)
     input_csv = Path("tests/data/pmids.csv")
     output_csv = tmp_path / "out.csv"

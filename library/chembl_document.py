@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from .chembl_client import ChemblClient, _chunked
+from .clients import ChemblClient, chunked
 from .config import ApiCfg
 
 DOCUMENT_COLUMNS = [
@@ -68,7 +68,7 @@ def get_documents(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     records: list[dict[str, Any]] = []
 
-    for chunk in _chunked(unique_ids, chunk_size):
+    for chunk in chunked(unique_ids, chunk_size):
         url = f"{base}&document_chembl_id__in={','.join(chunk)}"
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("documents") or data.get("document") or []

@@ -1,4 +1,4 @@
-"""Tests for the shared logger instance in :mod:`library.log`."""
+"""Tests for the shared logger instance in :mod:`library.utils.logging`."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import io
 import json
 import sys
 
-from library import log
 from library.cli import LoggerConfig, configure_logger
+from library.utils.logging import logger
 
 
 def test_logger_emits_required_fields() -> None:
@@ -15,7 +15,7 @@ def test_logger_emits_required_fields() -> None:
 
     buffer = io.StringIO()
     configure_logger(LoggerConfig(level="INFO", run_id="rid", stream=buffer))
-    log.logger.info("test_event", extra={"status": "ok", "rps": 1.5})
+    logger.info("test_event", extra={"status": "ok", "rps": 1.5})
     record = json.loads(buffer.getvalue().splitlines()[0])
     configure_logger(LoggerConfig(stream=sys.stdout))
     assert record["event"] == "test_event"

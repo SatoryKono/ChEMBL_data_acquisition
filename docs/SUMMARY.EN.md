@@ -11,7 +11,7 @@ utilities, their structure, shared services and supporting workflows.
 * `library/` – reusable modules covering API clients, rate limiting,
   normalisation, enrichment, validation, deterministic I/O, logging and
   metadata helpers.
-* `schemas/` – `pandera` validation schemas and normalisers that keep column
+* `library/constants/` – `pandera` validation schemas and normalisers that keep column
   ordering, data types and canonical values consistent across exports.
 * `dictionary/` & `data/` – local lookup tables, cached API responses and input
   workbooks consumed by the pipelines.

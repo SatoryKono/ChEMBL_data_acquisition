@@ -1,6 +1,6 @@
 """Command line interface for retrieving document metadata from external sources.
 
-The tool integrates :mod:`library.pubmed_library` and
+The tool integrates :mod:`library.clients.pubmed` and
 :mod:`library.chembl_library` to collect information about publications from
 several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and
 provides three sub-commands:
@@ -51,11 +51,12 @@ from library import chembl_library as cl
 from library import cli
 from library import document_postprocessing as dp
 from library import io
-from library.csv_utils import write_csv_chunks_deterministic
-from library import openalex_crossref_library as ocl
-from library import pubmed_library as pl
-from library import semantic_scholar_library as ssl
-from library.chembl_client import ChemblClient, _chunked
+from library.io.writers import write_csv_chunks_deterministic
+import library.clients.openalex_crossref as ocl
+import library.clients.pubmed as pl
+import library.clients.semantic_scholar as ssl
+from library.clients import ChemblClient
+from library.clients import chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,
@@ -74,7 +75,7 @@ from library.config import (
     print_config,
     session_with_retry,
 )
-from library.document_pipeline import (
+from library.processing.document import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
     build_quality_report,
@@ -84,13 +85,13 @@ from library.document_pipeline import (
     normalise_doi,
     save_quality_report,
 )
-from library.log import logger
+from library.utils.logging import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
-from schemas import DocumentsSchema, normalize_documents
+from library.constants import DocumentsSchema, normalize_documents
 
 
 def _build_fallback_doi_map(
@@ -399,7 +400,7 @@ def fetch_pubmed_records(
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         offset = 0
         pending: set[Future[list[dict[str, str]]]] = set()
-        for batch in _chunked(iterator, batch_size):
+        for batch in chunked(iterator, batch_size):
             if not batch:
                 continue
             future = ex.submit(_fetch_batch, batch)

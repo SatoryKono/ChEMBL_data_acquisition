@@ -19,7 +19,7 @@ The pipeline is orchestrated through the shared configuration file `config/confi
 
 ### Shared normalization and quality checks
 
-All entities are processed through the unified `schemas.normalize` layer, which replaces non-standard characters such as “μ” with “u”, aligns comparison operators (`<` → `<=`, `>` → `>=`), and trims identifiers across the dataframe, eliminating discrepancies before validation. After normalization each script adds the technical columns `pipeline_version` and `timestamp_utc` via `add_pipeline_metadata`, sourcing the version from `pyproject.toml` or the installed package to preserve export lineage.
+All entities are processed through the unified `library.constants.normalization` layer, which replaces non-standard characters such as “μ” with “u”, aligns comparison operators (`<` → `<=`, `>` → `>=`), and trims identifiers across the dataframe, eliminating discrepancies before validation. After normalization each script adds the technical columns `pipeline_version` and `timestamp_utc` via `add_pipeline_metadata`, sourcing the version from `pyproject.toml` or the installed package to preserve export lineage.
 
 Validation relies on `pandera`: when mismatches occur, the `SidecarErrors` helper aggregates row-level violations and persists them into a separate CSV with metadata, keeping the primary export intact. Export duties are handled by `io.write_csv`, which enforces deterministic ordering of rows and columns, creates directories, and generates a YAML sidecar containing the launch command, configuration snapshot, and file hash. After writing, each table is assessed by `analyze_table_quality`, delivering numeric profiles and type distributions.
 
@@ -72,7 +72,7 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 * **`config/config.yaml`** — Central configuration for APIs, limits, paths, reference data, and parameters of each subsystem.
 * **`scripts/`** — CLI wrappers for entity loading, quality reporting, and dictionary maintenance; every command covers input reading, client calls, normalization, validation, and export.
 * **`library/`** — Core business logic: API clients, post-processing (documents, targets, assays), normalization, validation, logging, CSV operations, and sidecar handling.
-* **`schemas/`** — `pandera` schemas and normalization routines for every entity.
+* **`library/constants/`** — `pandera` schemas and normalization routines for every entity.
 * **`dictionary/` and `data/`** — Local dictionaries, UniProt/IUPHAR caches, and input CSV/Excel files for launching pipelines.
 * **`docs/`** — Documentation for configuration, execution, and outputs; this report extends it with an end-to-end ETL description.
 
