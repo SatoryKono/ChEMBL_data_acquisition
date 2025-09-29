@@ -22,11 +22,9 @@ from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
 from .config import Config, ensure_dirs, print_config, session_with_retry
 from .csv_utils import write_csv_deterministic
+from .clients.pubmed import PubMedClient
 from .pubmed import (
     EMPTY_PUBMED,
-    _do_request,
-    _handle_response,
-    _make_request,
     combine,
     fetch_crossref,
     fetch_openalex,
@@ -45,9 +43,6 @@ from .rate_limiter import get_limiter
 __all__ = [
     "Config",
     "read_pmids",
-    "_make_request",
-    "_handle_response",
-    "_do_request",
     "fetch_pubmed_batch",
     "fetch_pubmed",
     "fetch_semantic_scholar",
@@ -135,6 +130,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     pmids = pmid_df["PMID"].tolist()
     openalex_limiter = get_limiter("openalex", cfg.openalex.rps, cfg.openalex.burst)
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
+    pubmed_client = PubMedClient(cfg.pubmed)
 
     records: list[dict[str, str]] = []
     batch_size = cfg.document.pubmed.batch_size
@@ -144,7 +140,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             batch_pmids = pmids[i : i + batch_size]
             limiter.acquire()
             pubmed_list = fetch_pubmed_batch(
-                session, batch_pmids, delay, cfg=cfg.pubmed
+                session, batch_pmids, delay, client=pubmed_client
             )
             limiter.acquire()
             semsch_list = fetch_semantic_scholar_batch(

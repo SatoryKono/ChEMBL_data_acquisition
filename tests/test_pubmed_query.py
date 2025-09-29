@@ -11,8 +11,16 @@ import pytest
 import requests
 
 from library import rate_limiter as rl
+ 
+from library.clients import pubmed as pc
+from library.config import (
+    Config,
+    PubMedCfg,
+    SemanticScholarCfg,
+)
+ 
 from library.clients import semantic_scholar as ss_client
-from library.config import Config, PubMedCfg, SemanticScholarCfg
+ 
 from library.pubmed import query as pq
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -80,7 +88,7 @@ class DummySession:
 def test_do_request_success() -> None:
     """Successful call returns parsed JSON and empty error string."""
     session = DummySession(DummyResponse(200, text="{}", json_data={"a": 1}))
-    data, err = pq._do_request(
+    data, err = pc._do_request(
         cast(requests.Session, session), "http://example.org", delay=0
     )
     assert data == {"a": 1}
@@ -90,7 +98,7 @@ def test_do_request_success() -> None:
 def test_do_request_404() -> None:
     """404 response is reported as 'PMID not found'."""
     session = DummySession(DummyResponse(404, text="not found", json_data={}))
-    data, err = pq._do_request(
+    data, err = pc._do_request(
         cast(requests.Session, session), "http://example.org", delay=0
     )
     assert data is None
@@ -111,9 +119,9 @@ def test_do_request_attempt_count(monkeypatch: pytest.MonkeyPatch) -> None:
             return status, "error", None, ""
         return status, "{}", {"ok": True}, ""
 
-    monkeypatch.setattr(pq, "_make_request", fake_make_request)
+    monkeypatch.setattr(pc, "_make_request", fake_make_request)
 
-    data, err = pq._do_request(
+    data, err = pc._do_request(
         cast(
             requests.Session, DummySession(DummyResponse(200, text="{}", json_data={}))
         ),
@@ -129,7 +137,7 @@ def test_do_request_attempt_count(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_handle_response_retryable() -> None:
     """500 response triggers a retry on non-final attempts."""
-    data, err, retry = pq._handle_response(
+    data, err, retry = pc._handle_response(
         "http://example.org", 500, "error", None, "", True, 0, 1
     )
     assert data is None
@@ -139,7 +147,7 @@ def test_handle_response_retryable() -> None:
 
 def test_handle_response_retryable_last_attempt() -> None:
     """Retryable error returns a message on the last attempt."""
-    data, err, retry = pq._handle_response(
+    data, err, retry = pc._handle_response(
         "http://example.org", 500, "error", None, "", True, 1, 1
     )
     assert data is None
@@ -149,7 +157,7 @@ def test_handle_response_retryable_last_attempt() -> None:
 
 def test_handle_response_parse_error() -> None:
     """Invalid JSON is reported as a failure."""
-    data, err, retry = pq._handle_response(
+    data, err, retry = pc._handle_response(
         "http://example.org", 200, "", None, "boom", True, 0, 0
     )
     assert data is None
@@ -159,7 +167,7 @@ def test_handle_response_parse_error() -> None:
 
 def test_handle_response_success_text() -> None:
     """Text responses are returned when JSON is not expected."""
-    data, err, retry = pq._handle_response(
+    data, err, retry = pc._handle_response(
         "http://example.org", 200, "hi", "hi", "", False, 0, 0
     )
     assert data == "hi"
@@ -169,7 +177,7 @@ def test_handle_response_success_text() -> None:
 
 def test_handle_response_404() -> None:
     """404 error returns a specific message."""
-    data, err, retry = pq._handle_response(
+    data, err, retry = pc._handle_response(
         "http://example.org", 404, "not found", None, "", True, 0, 0
     )
     assert data is None
@@ -179,7 +187,7 @@ def test_handle_response_404() -> None:
 
 def test_handle_response_400() -> None:
     """400 error is reported as a bad request."""
-    data, err, retry = pq._handle_response(
+    data, err, retry = pc._handle_response(
         "http://example.org", 400, "bad", None, "", True, 0, 0
     )
     assert data is None
@@ -196,32 +204,30 @@ def test_fetch_pubmed_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     captured: dict[str, Any] = {}
 
-    def fake_do_request(
+    def fake_fetch_pubmed_batch(
         session: requests.Session,
-        url: str,
-        sleep: float,
-        expect_json: bool = True,
-        retries: int = 2,
-        method: str = "GET",
-        timeout: float = 10,
-        **kwargs: Any,
+        pmids: list[str],
+        delay: float,
+        cfg: PubMedCfg | None = None,
     ) -> tuple[str, str]:
         captured.update(
-            {"url": url, "sleep": sleep, "retries": retries, "timeout": timeout}
+            {
+                "url": f"{cfg.base.rstrip('/')}/efetch.fcgi?db=pubmed&id={','.join(pmids)}&retmode=xml",
+                "sleep": delay,
+                "retries": cfg.retries,
+                "timeout": (cfg.timeout_connect, cfg.timeout_read),
+            }
         )
         return "<root></root>", ""
 
     sleeps: list[float] = []
-    monkeypatch.setattr(pq, "_do_request", fake_do_request)
-    monkeypatch.setattr(pq, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(pc, "fetch_pubmed_batch", fake_fetch_pubmed_batch)
+    monkeypatch.setattr(pc, "sleep", lambda s: sleeps.append(s))
 
     session = requests.Session()
     res = pq.fetch_pubmed(session, "1", 0.5, cfg=cfg)
     assert res["PubMed.Error"] == "No PubmedArticle"
-    assert (
-        captured["url"]
-        == "https://example.org/eutils/efetch.fcgi?db=pubmed&id=1&retmode=xml"
-    )
+    assert captured["url"] == "https://example.org/eutils/efetch.fcgi?db=pubmed&id=1&retmode=xml"
     assert captured["timeout"] == (1, 2)
     assert captured["retries"] == 4
     assert captured["sleep"] == 0.5
@@ -262,7 +268,7 @@ def test_fetch_openalex_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
             "mesh": [],
         }, ""
 
-    monkeypatch.setattr(pq, "_do_request", fake_do_request)
+    monkeypatch.setattr(pc, "_do_request", fake_do_request)
 
     class DummyLimiter(rl.RateLimiter):
         def __init__(self) -> None:
@@ -312,7 +318,7 @@ def test_fetch_crossref_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         return {"message": {}}, ""
 
-    monkeypatch.setattr(pq, "_do_request", fake_do_request)
+    monkeypatch.setattr(pc, "_do_request", fake_do_request)
 
     class DummyLimiter(rl.RateLimiter):
         def __init__(self) -> None:
@@ -360,7 +366,12 @@ def test_fetch_semantic_scholar_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> Non
         )
         return {"publicationTypes": [], "externalIds": {}}, ""
 
-    monkeypatch.setattr(ss_client, "_do_request", fake_do_request)
+ 
+    sleeps: list[float] = []
+    monkeypatch.setattr(pc, "_do_request", fake_do_request)
+    monkeypatch.setattr(pc, "sleep", lambda s: sleeps.append(s))
+ 
+ 
 
     session = requests.Session()
     res = ss_client.fetch_semantic_scholar(session, "1", 0.2, cfg=cfg)
@@ -392,7 +403,11 @@ def test_fetch_semantic_scholar_batch_partial_response(
         },
     ]
 
+ 
+    monkeypatch.setattr(pc, "_do_request", lambda *_, **__: (payload, ""))
+ 
     monkeypatch.setattr(ss_client, "_do_request", lambda *_, **__: (payload, ""))
+ 
 
     session = requests.Session()
     results = ss_client.fetch_semantic_scholar_batch(session, ["1", "2", "3"], 0.0)

@@ -806,7 +806,8 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    limit = args.limit
+    pubmed_defaults = cfg.document.pubmed
+    limit = getattr(args, "limit", pubmed_defaults.limit)
     if limit is not None and limit < 0:
         logger.error(
             "invalid_limit",
@@ -816,7 +817,9 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     try:
         pmids_iter = io.read_ids(
-            args.input_csv, column=args.column, cfg=cfg.io
+            args.input_csv,
+            column=getattr(args, "column", pubmed_defaults.column),
+            cfg=cfg.io,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
@@ -862,13 +865,13 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         df = fetch_pubmed_records(
             pmids,
             cfg,
-            sleep=args.sleep,
+            sleep=getattr(args, "sleep", pubmed_defaults.sleep),
             pubmed_cfg=cfg.pubmed,
             semantic_scholar_cfg=cfg.semantic_scholar,
             openalex_cfg=cfg.openalex,
             crossref_cfg=cfg.crossref,
-            max_workers=args.workers,
-            batch_size=args.batch_size,
+            max_workers=getattr(args, "workers", pubmed_defaults.workers),
+            batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
             fallback_doi_map=fallback_doi_map,
         )
         output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
@@ -879,7 +882,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=args.batch_size,
+            chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("pubmed_pipeline_failed", error=str(exc))
@@ -903,7 +906,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    limit = args.limit
+    chembl_defaults = cfg.document.chembl
+    limit = getattr(args, "limit", chembl_defaults.limit)
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.chembl", limit=limit)
         return 1
@@ -912,7 +916,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
         try:
             ids_iter = io.read_ids(
-                args.input_csv, column=args.column, cfg=cfg.io
+                args.input_csv,
+                column=getattr(args, "column", chembl_defaults.column),
+                cfg=cfg.io,
             )
         except (FileNotFoundError, ValueError) as exc:
             logger.error(
@@ -933,14 +939,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 ids,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=args.chunk_size,
-                timeout=args.timeout,
+                chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+                timeout=getattr(args, "timeout", chembl_defaults.timeout),
             )
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_documents_fetch_failed",
                 error=str(exc),
-                chunk_size=args.chunk_size,
+                chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
             )
             return 1
         if "doi" in df.columns:
@@ -953,7 +959,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=args.chunk_size,
+            chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
         )
         return exit_code
 
@@ -974,7 +980,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         Zero on success, non-zero on failure.
 
     """
-    limit = args.limit
+    all_defaults = cfg.document.all
+    limit = getattr(args, "limit", all_defaults.limit)
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.all", limit=limit)
         return 1
@@ -982,7 +989,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     # Prepare shared session before performing any API calls
     try:
         ids_iter = io.read_ids(
-            args.input_csv, column=args.column, cfg=cfg.io
+            args.input_csv,
+            column=getattr(args, "column", all_defaults.column),
+            cfg=cfg.io,
         )
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
@@ -999,7 +1008,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("process_limit", limit=len(limited_ids))
 
     iterator = iter(ids_source)
-    sample_size = args.chunk_size
+    sample_size = getattr(args, "chunk_size", all_defaults.chunk_size)
     sample_ids = list(islice(iterator, sample_size))
     ids_for_fetch = chain(sample_ids, iterator)
     try:
@@ -1008,15 +1017,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 ids_for_fetch,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=args.chunk_size,
-                timeout=args.timeout,
+                chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+                timeout=getattr(args, "timeout", all_defaults.timeout),
             )
     except (requests.RequestException, ValueError) as exc:
         logger.error(
             "chembl_documents_fetch_failed",
             ids=sample_ids,
             error=str(exc),
-            chunk_size=args.chunk_size,
+            chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
         )
         return 1
     output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
@@ -1038,7 +1047,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=args.chunk_size,
+            chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
         )
         return exit_code
 
@@ -1060,12 +1069,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pmids = pubmed_ids.dropna().astype(str).tolist()
     pub_df = fetch_pubmed_records(
         pmids,
-        args.sleep,
-        cfg.semantic_scholar,
-        cfg.openalex,
-        cfg.crossref,
-        args.workers,
-        args.batch_size,
+        cfg,
+        sleep=getattr(args, "sleep", all_defaults.sleep),
+        semantic_scholar_cfg=cfg.semantic_scholar,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        max_workers=getattr(args, "workers", all_defaults.workers),
+        batch_size=getattr(args, "batch_size", all_defaults.batch_size),
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
     )
@@ -1086,7 +1096,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg,
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
-        chunk_size=args.chunk_size,
+        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
     )
     return exit_code
 

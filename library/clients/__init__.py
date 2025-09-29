@@ -21,6 +21,9 @@ from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
  
+from .pubmed import PubMedClient
+ 
+ 
 from .iuphar import (
     download_gtp_to_hgnc_mapping,
     download_gtp_to_uniprot_mapping,
@@ -44,6 +47,8 @@ __all__ = [
     "ClientError",
     "ClientPayload",
     "ClientProtocol",
+    "PubMedClient",
+ 
     "download_gtp_to_hgnc_mapping",
     "download_gtp_to_uniprot_mapping",
     "init_iuphar_session",
@@ -53,6 +58,7 @@ __all__ = [
     "fetch_crossref",
     "fetch_openalex",
     "_chunked",
+ 
 ]
 
 
