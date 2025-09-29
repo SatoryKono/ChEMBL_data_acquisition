@@ -8,7 +8,7 @@ from urllib.parse import urlencode, urljoin
 import pandas as pd
 
 from library.clients import ChemblClient, _chunked
-from .config import ApiCfg
+from .config import ApiCfg, TESTITEM_FIELD_DEFAULTS
 from .log import logger
 from .pandas_utils import json_normalize_pyarrow
 
@@ -115,22 +115,7 @@ TESTITEM_COLUMNS = [
 ]
 
 
-TESTITEM_QUERY_FIELDS = (
-    "molecule_chembl_id",
-    "parent_molecule_chembl_id",
-    "pref_name",
-    "max_phase",
-    "molecule_type",
-    "first_approval",
-    "oral",
-    "parenteral",
-    "topical",
-    "black_box_warning",
-    "structure_type",
-    "molecule_structures.canonical_smiles",
-    "molecule_structures.standard_inchi",
-    "molecule_structures.standard_inchi_key",
-)
+TESTITEM_QUERY_FIELDS = TESTITEM_FIELD_DEFAULTS
 
 
 def get_assay(
@@ -325,6 +310,8 @@ def get_testitem(
     client: ChemblClient,
     chunk_size: int = 5,
     timeout: float | None = None,
+    fields: Sequence[str] | None = None,
+    page_limit: int = 1000,
 ) -> pd.DataFrame:
     """Fetch compound records for *ids*.
 
@@ -351,25 +338,42 @@ def get_testitem(
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
 
     records: list[pd.DataFrame] = []
-    base_params: list[tuple[str, str]] = [("format", "json")]
-    per_request_limit = chunk_size
-    if per_request_limit:
-        base_params.append(("limit", str(per_request_limit)))
-    if TESTITEM_QUERY_FIELDS:
-        base_params.append(("fields", ",".join(TESTITEM_QUERY_FIELDS)))
+    effective_fields = tuple(fields) if fields else TESTITEM_QUERY_FIELDS
+    max_limit = max(1, min(page_limit, 1000))
+    effective_chunk = max(1, min(chunk_size, max_limit))
+    base_params: list[tuple[str, str]] = [("format", "json"), ("limit", str(max_limit))]
+    if effective_fields:
+        base_params.append(("fields", ",".join(effective_fields)))
     query_string = urlencode(base_params)
     base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?{query_string}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
+    for chunk in _chunked(valid, effective_chunk):
         chunk_key = ",".join(chunk)
         logger.info(
             "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
         )
         url = f"{base}&molecule_chembl_id__in={chunk_key}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("molecules") or data.get("molecule") or []
-        if items:
-            records.append(json_normalize_pyarrow(items))
+        next_url: str | None = url
+        seen_urls: set[str] = set()
+        chunk_frames: list[pd.DataFrame] = []
+        while next_url:
+            absolute_url = urljoin(cfg.chembl_base, next_url)
+            if absolute_url in seen_urls:
+                logger.warning(
+                    "pagination_loop_detected",
+                    extra={"stage": "chunk_loop", "chunk_key": chunk_key},
+                )
+                break
+            seen_urls.add(absolute_url)
+            data = client.request_json(absolute_url, cfg=cfg, timeout=effective_timeout)
+            items = data.get("molecules") or data.get("molecule") or []
+            if items:
+                chunk_frames.append(json_normalize_pyarrow(items))
+            page_meta = data.get("page_meta") or {}
+            next_token = page_meta.get("next")
+            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        if chunk_frames:
+            records.append(pd.concat(chunk_frames, ignore_index=True))
             logger.info(
                 "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
             )

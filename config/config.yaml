@@ -46,9 +46,28 @@ sources:
         limit: null
       testitem:
         column: "molecule_chembl_id"
-        batch_size: 50
+        batch_size: 1000
         timeout: 30.0
         limit: null
+        offset: 0
+        request_limit: 1000
+        retries: 5
+        backoff_factor: 0.5
+        fields:
+          - molecule_chembl_id
+          - parent_molecule_chembl_id
+          - pref_name
+          - max_phase
+          - molecule_type
+          - first_approval
+          - oral
+          - parenteral
+          - topical
+          - black_box_warning
+          - structure_type
+          - molecule_structures.canonical_smiles
+          - molecule_structures.standard_inchi
+          - molecule_structures.standard_inchi_key
       document:
         pubmed:
           column: "PMID"

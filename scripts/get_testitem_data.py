@@ -730,18 +730,19 @@ def attach_parent_molecule_ids(
         catalog_data = ChainMap({}, base_view)
     else:
         catalog_data = {}
-        queried = query_parent_catalog(unique_children, catalog_cfg)
-        if queried:
-            catalog_data.update(queried)
-            used_partial_cache = True
-            if source_resolved is None:
-                source_resolved = PARENT_LOOKUP_SOURCE_CACHE
-        else:
-            sqlite_exists = catalog_cfg.sqlite_path.is_file()
-            used_partial_cache = sqlite_exists
-            if sqlite_exists:
+        if unique_children:
+            queried = query_parent_catalog(unique_children, catalog_cfg)
+            if queried:
+                catalog_data.update(queried)
+                used_partial_cache = True
                 if source_resolved is None:
                     source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+            else:
+                sqlite_exists = catalog_cfg.sqlite_path.is_file()
+                used_partial_cache = sqlite_exists
+                if sqlite_exists:
+                    if source_resolved is None:
+                        source_resolved = PARENT_LOOKUP_SOURCE_CACHE
 
     parent_map = {
         key: catalog_data[key] for key in unique_children if key in catalog_data
@@ -862,6 +863,8 @@ def add_pubchem_data(
     resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
     | None = None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
+    testitem_fields: Sequence[str] | None = None,
+    request_limit: int = 1000,
 ) -> pd.DataFrame:
     """Augment ChEMBL records with PubChem information.
 
@@ -1004,6 +1007,8 @@ def add_pubchem_data(
                 client=client,
                 chunk_size=chunk_size,
                 timeout=timeout,
+                fields=testitem_fields,
+                page_limit=request_limit,
             )
         except (requests.RequestException, ValueError) as exc:
             logger.warning(
@@ -1257,6 +1262,8 @@ def fetch_testitems(
     timeout: float,
     client: ChemblClient,
     sample_ids: Sequence[str],
+    fields: Sequence[str] | None,
+    page_limit: int,
 ) -> tuple[int, pd.DataFrame | None]:
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
@@ -1268,6 +1275,8 @@ def fetch_testitems(
             client=client,
             chunk_size=batch_size,
             timeout=timeout,
+            fields=fields,
+            page_limit=page_limit,
         )
     except (requests.RequestException, ValueError) as exc:
         logger.error(
@@ -1431,7 +1440,7 @@ def prepare_parent_enrichment(
     parent_lookup_data = ParentLookupPreparedData(
         child_ids=normalised_ids,
         existing_parent_ids=existing_parent,
-        need_lookup=set(initial_need_lookup),
+        need_lookup=set(need_lookup),
     )
     if (
         lookup_resolved
@@ -1508,6 +1517,8 @@ def augment_pubchem(
     api_cfg: ApiCfg,
     timeout: float,
     client: ChemblClient,
+    fields: Sequence[str] | None,
+    request_limit: int,
 ) -> pd.DataFrame:
     """Augment ``df`` with PubChem information if enabled."""
 
@@ -1534,6 +1545,8 @@ def augment_pubchem(
         cid_cache=pubchem_cid_cache,
         resolution_cache=pubchem_resolution_cache,
         parent_record_cache=pubchem_parent_record_cache,
+        testitem_fields=fields,
+        request_limit=request_limit,
     )
     logger.info("pubchem_augment_done")
     return result
@@ -1697,26 +1710,35 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
-    pc.init_session(cfg.api, cfg.retry)
+    api_overrides: dict[str, Any] = {}
+    if cfg.testitem.retries is not None:
+        api_overrides["retries"] = cfg.testitem.retries
+    if cfg.testitem.backoff_factor is not None:
+        api_overrides["backoff_factor"] = cfg.testitem.backoff_factor
+    api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+    pc.init_session(api_cfg, cfg.retry)
+
+    with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
         read_status, read_result = read_input_ids(
             args.input_csv,
             column=cfg.testitem.column,
             io_cfg=cfg.io,
             limit=limit,
-            offset=getattr(args, "offset", 0),
+            offset=getattr(args, "offset", cfg.testitem.offset),
         )
         if read_status != 0 or read_result is None:
             return read_status
 
         fetch_status, df = fetch_testitems(
             read_result.ids_iter,
-            api_cfg=cfg.api,
+            api_cfg=api_cfg,
             batch_size=cfg.testitem.batch_size,
             timeout=cfg.testitem.timeout,
             client=client,
             sample_ids=read_result.sample_ids,
+            fields=cfg.testitem.fields,
+            page_limit=cfg.testitem.request_limit,
         )
         if fetch_status != 0 or df is None:
             return fetch_status
@@ -1736,7 +1758,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             df,
             catalog_cfg=cfg.molecule_catalog,
             io_cfg=cfg.io,
-            api_cfg=cfg.api,
+            api_cfg=api_cfg,
             timeout=cfg.testitem.timeout,
             client=client,
             hierarchy_lookup_path=hierarchy_lookup_path,
@@ -1748,7 +1770,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         parent_status, parent_result = run_parent_enrichment(
             prep,
             client=client,
-            api_cfg=cfg.api,
+            api_cfg=api_cfg,
             catalog_cfg=cfg.molecule_catalog,
             timeout=cfg.testitem.timeout,
         )
@@ -1761,9 +1783,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = augment_pubchem(
             df,
             pubchem_cfg=cfg.pubchem,
-            api_cfg=cfg.api,
+            api_cfg=api_cfg,
             timeout=cfg.testitem.timeout,
             client=client,
+            fields=cfg.testitem.fields,
+            request_limit=cfg.testitem.request_limit,
         )
 
         enrichment_status, enriched_df = apply_testitem_enrichment(
@@ -1798,7 +1822,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     parser, log_cfg = base_parser(
         "ChEMBL and PubChem compound data utilities",
         column="molecule_chembl_id",
-        chunk_size=5,
+        chunk_size=1000,
         size_option="--batch-size",
         size_dest="batch_size",
     )
@@ -1845,6 +1869,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "column": "testitem.column",
                 "batch_size": "testitem.batch_size",
                 "limit": "testitem.limit",
+                "offset": "testitem.offset",
             },
         )
         if args.print_config:
