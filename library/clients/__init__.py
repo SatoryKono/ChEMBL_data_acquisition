@@ -20,11 +20,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
+from .chembl import ChemblClient, _chunked
+
 __all__ = [
+    "ChemblClient",
     "ClientConfig",
     "ClientError",
     "ClientPayload",
     "ClientProtocol",
+    "_chunked",
 ]
 
 

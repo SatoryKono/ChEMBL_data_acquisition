@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from .chembl_client import ChemblClient, _chunked
+from library.clients import ChemblClient, _chunked
 from .config import ApiCfg, UniprotMappingCfg
 from .log import logger
 from .mapper_library import map_chembl_to_uniprot
