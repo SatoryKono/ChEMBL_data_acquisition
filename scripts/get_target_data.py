@@ -18,6 +18,11 @@ from itertools import islice
 from pathlib import Path
 from typing import cast
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT_STR = str(PROJECT_ROOT)
+if PROJECT_ROOT_STR not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT_STR)
+
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
