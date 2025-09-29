@@ -462,6 +462,28 @@
           "title": "Parent Field",
           "type": "string"
         },
+        "hierarchy_lookup_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "dictionary/_testitem/molecule_hierarchy.csv",
+          "title": "Hierarchy Lookup Path"
+        },
+        "hierarchy_lookup_encoding": {
+          "default": "utf-8-sig",
+          "title": "Hierarchy Lookup Encoding",
+          "type": "string"
+        },
+        "hierarchy_lookup_delimiter": {
+          "default": ",",
+          "title": "Hierarchy Lookup Delimiter",
+          "type": "string"
+        },
         "force_refresh_existing": {
           "default": false,
           "title": "Force Refresh Existing",

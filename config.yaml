@@ -28,6 +28,9 @@ sources:
       endpoint: "molecule"  # API resource providing parent relationships
       child_field: "molecule_chembl_id"  # Column containing molecule identifiers
       parent_field: "parent_molecule_chembl_id"  # Column containing parent molecule identifiers
+      hierarchy_lookup_path: "dictionary/_testitem/molecule_hierarchy.csv"  # CSV with precomputed parent relationships
+      hierarchy_lookup_encoding: "utf-8-sig"  # Encoding used for the hierarchy CSV
+      hierarchy_lookup_delimiter: ","  # Delimiter used for the hierarchy CSV
       page_size: 500  # Page size for catalog fetching
     pipelines:
       activity:

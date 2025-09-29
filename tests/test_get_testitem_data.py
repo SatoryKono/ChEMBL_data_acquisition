@@ -312,7 +312,11 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
 
     result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
-    assert result == {"CHEMBL1": "CHEMBL2", "CHEMBL5": "CHEMBL6"}
+    assert result == {
+        "CHEMBL1": "CHEMBL2",
+        "CHEMBL3": None,
+        "CHEMBL5": "CHEMBL6",
+    }
 
 
 def test_load_molecule_hierarchy_lookup_missing_columns(
