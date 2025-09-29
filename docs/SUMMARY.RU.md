@@ -50,8 +50,9 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Конфигурация
 
-* Базовые значения задаются в [`config/config.yaml`](../config/config.yaml) и проверяются по
-  [`config.schema.json`](../config.schema.json).
+* Базовые значения задаются в [`config/config.yaml`](../config/config.yaml) и валидируются
+  `library.config.load_config` через `Config.model_validate` из Pydantic. Сгенерированный
+  [`config.schema.json`](../config.schema.json) отражает структуру для IDE и инструментов.
 * Ключевые разделы:
   * `sources.*` — базовые URL, политика ретраев, лимиты и настройки пайплайнов
     для ChEMBL, UniProt, IUPHAR, PubMed, Semantic Scholar, OpenAlex, CrossRef и

@@ -49,8 +49,9 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Configuration
 
-* Defaults live in [`config/config.yaml`](../config/config.yaml) and are validated against
-  [`config.schema.json`](../config.schema.json).
+* Defaults live in [`config/config.yaml`](../config/config.yaml) and are validated by
+  `library.config.load_config` via Pydantic's `Config.model_validate`. The generated
+  [`config.schema.json`](../config.schema.json) mirrors the structure for IDEs and tooling.
 * Key sections:
   * `sources.*` – base URLs, retry policy, rate limiting and pipeline defaults
     for ChEMBL, UniProt, IUPHAR, PubMed, Semantic Scholar, OpenAlex, CrossRef
