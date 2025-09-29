@@ -51,6 +51,9 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
+| `hierarchy_lookup_path` | `dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
+| `hierarchy_lookup_encoding` | `utf-8-sig` | Text encoding applied when reading the hierarchy lookup CSV; change when the snapshot is saved with a different charset (for example Latin-1 from legacy exports). |
+| `hierarchy_lookup_delimiter` | `,` | Delimiter expected by the hierarchy lookup loader; override for semicolon- or tab-separated snapshots produced by regional data teams. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
 | `fallback_single_limit` | `null` | Caps the number of single-molecule fallback requests performed after bulk fetching fails; `null` keeps the fallback unlimited. |
 
