@@ -218,7 +218,10 @@ def _load_molecule_hierarchy_mapping(
 
     lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        lookup[molecule_id] = parent_id or None
+        parent = parent_id or None
+        if parent is not None and parent == molecule_id:
+            parent = None
+        lookup[molecule_id] = parent
 
     return lookup
 
@@ -1424,7 +1427,7 @@ def prepare_parent_enrichment(
     parent_lookup_data = ParentLookupPreparedData(
         child_ids=normalised_ids,
         existing_parent_ids=existing_parent,
-        need_lookup=set(need_lookup),
+        need_lookup=set(initial_need_lookup),
     )
     if (
         lookup_resolved
