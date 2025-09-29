@@ -6,5 +6,5 @@ python scripts\get_document_data.py --output data\output\document\output.documen
 
 python scripts\get_target_data.py --output data\output\target\output.target_20250928.csv --input data\input\full\target.csv
 
-python scripts\get_testitem_data.py --output data\output\testitem\output.testitem_20250928.csv --input data\input\full\testitem.csv
+python scripts\get_testitem_data.py --output data\output\testitem\output.testitem_20250928-3.csv --input data\input\full\testitem.csv --limit 1000 --offset 1000
 
