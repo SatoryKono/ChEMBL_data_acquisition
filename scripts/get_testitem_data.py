@@ -1334,9 +1334,10 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
+    requested_ids = list(ids_iter)
     try:
         df = cl.get_testitem(
-            ids_iter,
+            requested_ids,
             cfg=api_cfg,
             client=client,
             chunk_size=batch_size,
@@ -1357,6 +1358,45 @@ def fetch_testitems(
     rows = len(df)
     logger.info("chembl_fetch_done", rows=rows)
     logger.info("identifiers_retrieved", count=rows)
+
+    original_id_lookup: dict[str, str] = {}
+    requested_ids_upper: list[str] = []
+    for identifier in requested_ids:
+        normalised = str(identifier).strip().upper()
+        requested_ids_upper.append(normalised)
+        original_id_lookup[normalised] = str(identifier)
+    if "molecule_chembl_id" not in df.columns:
+        df["molecule_chembl_id"] = pd.Series(dtype="string")
+    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string").str.upper()
+
+    retrieved_ids = set(df["molecule_chembl_id"].dropna())
+    missing_ids = [
+        identifier for identifier in requested_ids_upper if identifier not in retrieved_ids
+    ]
+    if missing_ids:
+        missing_ids_original = [
+            original_id_lookup.get(identifier, identifier) for identifier in missing_ids
+        ]
+        logger.warning(
+            "chembl_missing_identifiers",
+            missing_count=len(missing_ids),
+            missing_ids=missing_ids,
+            missing_ids_original=missing_ids_original,
+        )
+
+    df = df.set_index("molecule_chembl_id", drop=False)
+    index = pd.Index(requested_ids_upper, name="molecule_chembl_id")
+    df = df.reindex(index)
+    df["molecule_chembl_id"] = pd.Series(
+        index.array,
+        index=index,
+        dtype="string",
+    )
+    df = df.where(pd.notna(df), pd.NA)
+    df = df.convert_dtypes()
+    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string")
+    df = df.reset_index(drop=True)
+
     return 0, df
 
 
