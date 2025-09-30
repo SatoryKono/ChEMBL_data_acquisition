@@ -162,6 +162,31 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
     assert attempts["n"] == 2
 
 
+def test_make_request_uses_all_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``make_request`` should honour the configured retry count."""
+
+    attempts = {"n": 0}
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> None:
+        attempts["n"] += 1
+        raise requests.RequestException("boom")
+
+    class Limiter:
+        def acquire(self) -> None:  # pragma: no cover - simple stub
+            return None
+
+    monkeypatch.setattr(pc, "get_limiter", lambda *a, **k: Limiter())
+    monkeypatch.setattr(pc._session, "get", fake_get)
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+    pc._CACHE = None
+
+    cfg = pl.PubChemCfg(retries=2, delay=0, backoff_initial_seconds=0)
+    result = pl.make_request("https://example.org", cfg)
+
+    assert result is None
+    assert attempts["n"] == cfg.retries + 1
+
+
 def test_make_request_aborts_when_timeout_exceeded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
