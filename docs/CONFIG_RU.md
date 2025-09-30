@@ -110,7 +110,8 @@
 * `column` — исходная колонка со структурированными свойствами (`activity_properties`).
 * `summary_column` — колонка для текстового резюме (`activity_property_summary`).
 * `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).
-* `separator` и `pair_separator` управляют форматированием списка свойств (`"; "` между парами и `"="` между названием и значением).
+* `separator` и `pair_separator` — устаревшие параметры форматирования, сохранённые для совместимости; текущая
+  сериализация JSON их не использует.
 * `drop_source_column` удаляет исходную структурированную колонку после агрегации (`true`).
 * Флаги логирования по умолчанию выключены (`log_missing=false`, `log_distribution=false`).
 * `allowlist` ограничивает перечень сохраняемых групп (measurement, assay, comments, effect_features, triage, mechanism,
