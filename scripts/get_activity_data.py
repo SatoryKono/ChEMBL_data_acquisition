@@ -7,6 +7,20 @@ import sys
 from itertools import islice
 from pathlib import Path
 
+
+def _ensure_project_root() -> None:
+    """Ensure the repository root is on ``sys.path`` when executed as a script."""
+
+    script_path = Path(__file__).resolve()
+    project_root = script_path.parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+
+if __package__ in {None, ""}:
+    _ensure_project_root()
+
 import requests
 from pandera.errors import SchemaErrors
 
