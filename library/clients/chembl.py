@@ -38,6 +38,7 @@ class ChemblClient:
     session: Session = field(init=False)
     cache: TTLCache[str, dict[str, Any]] = field(init=False)
     _cache_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _session_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
 
     def __init__(
         self,
@@ -58,6 +59,7 @@ class ChemblClient:
         )
         self.cache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._cache_lock = threading.Lock()
+        self._session_lock = threading.Lock()
 
     def close(self) -> None:
         """Close the underlying HTTP session.
@@ -144,32 +146,33 @@ class ChemblClient:
             event = "request_start" if attempt == 1 else "request_retry"
             logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
             try:
-                with self.session.get(
-                    url, timeout=(cfg.timeout_connect, read_timeout)
-                ) as response:
-                    response.raise_for_status()
-                    try:
-                        data = cast(dict[str, Any], response.json())
-                    except ValueError as exc:
-                        logger.exception("json_error", extra={"url": url})
-                        raise ValueError(
-                            f"invalid JSON in response from {url}"
-                        ) from exc
-                    logger.info(
-                        "request_ok",
-                        extra={
-                            "url": url,
-                            "status": getattr(response, "status_code", None),
-                            "rps": cfg.rps,
-                        },
-                    )
-                    with self._cache_lock:
-                        cached = self.cache.get(cache_key)
-                        if cached is not None:
-                            return cast(dict[str, Any], cached)
-                        self.cache[cache_key] = data
-                        logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
-                        return data
+                with self._session_lock:
+                    with self.session.get(
+                        url, timeout=(cfg.timeout_connect, read_timeout)
+                    ) as response:
+                        response.raise_for_status()
+                        try:
+                            data = cast(dict[str, Any], response.json())
+                        except ValueError as exc:
+                            logger.exception("json_error", extra={"url": url})
+                            raise ValueError(
+                                f"invalid JSON in response from {url}"
+                            ) from exc
+                        logger.info(
+                            "request_ok",
+                            extra={
+                                "url": url,
+                                "status": getattr(response, "status_code", None),
+                                "rps": cfg.rps,
+                            },
+                        )
+                        with self._cache_lock:
+                            cached = self.cache.get(cache_key)
+                            if cached is not None:
+                                return cast(dict[str, Any], cached)
+                            self.cache[cache_key] = data
+                            logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
+                            return data
             except (requests.RequestException, ValueError) as exc:
                 last_exc = exc
                 if attempt >= total_attempts:
