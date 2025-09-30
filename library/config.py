@@ -377,6 +377,8 @@ class PubMedCfg(_BaseModel):
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(10, ge=1)
     retries: int = Field(2, ge=0)
+    rps: int | None = Field(default=None, ge=1)
+    burst: int | None = Field(default=None, ge=1)
 
     @field_validator("base")
     @classmethod
@@ -391,6 +393,8 @@ class SemanticScholarCfg(_BaseModel):
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(10, ge=1)
     retries: int = Field(2, ge=0)
+    rps: int | None = Field(default=None, ge=1)
+    burst: int | None = Field(default=None, ge=1)
 
     @field_validator("base")
     @classmethod
@@ -1474,6 +1478,14 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_LIMITER_CACHE_TTL": ["system", "rate", "limiter_cache_ttl"],
     "CHEMBL_DA_OUTDIR": ["local", "io", "output_dir"],
     "CHEMBL_DA_RPS": ["sources", "chembl", "api", "rps"],
+    "CHEMBL_DA_PUBMED_RPS": ["sources", "pubmed", "rps"],
+    "CHEMBL_DA_PUBMED_BURST": ["sources", "pubmed", "burst"],
+    "CHEMBL_DA_SEMANTIC_SCHOLAR_RPS": ["sources", "semantic_scholar", "rps"],
+    "CHEMBL_DA_SEMANTIC_SCHOLAR_BURST": [
+        "sources",
+        "semantic_scholar",
+        "burst",
+    ],
     "CHEMBL_DA_TARGETS_TYPE_CSV": ["local", "resources", "targets_type_csv"],
     "CHEMBL_DA_TIMEOUT_CONNECT": ["sources", "chembl", "api", "timeout_connect"],
     "CHEMBL_DA_TIMEOUT_READ": ["sources", "chembl", "api", "timeout_read"],

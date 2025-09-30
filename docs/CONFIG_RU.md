@@ -245,8 +245,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5`, `timeout=300.0`, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
 | `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | См. [детальные настройки PubChem](#pubchem-sourcespubchem). |
-| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
-| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
+| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`, опциональные `rps`/`burst` для документарных запросов. |
+| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`, опциональные `rps`/`burst` для документарных запросов. |
 
 Соблюдайте требования сервисов по rate limit и указанию контактной информации.
 

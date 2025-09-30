@@ -77,7 +77,7 @@ from library.document_pipeline import (
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
-from library.rate_limiter import get_limiter
+from library.rate_limiter import RateLimiter, get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
@@ -248,10 +248,43 @@ def fetch_pubmed_records(
     rate_cfg = settings.rate
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
-    pubmed_limiter = get_limiter("pubmed", rate_cfg.global_rps, rate_cfg.global_burst)
-    semantic_limiter = get_limiter(
-        "semantic_scholar", rate_cfg.global_rps, rate_cfg.global_burst
+
+    documents_limiter = get_limiter(
+        "documents_global", rate_cfg.global_rps, rate_cfg.global_burst
     )
+
+    def _service_limiter(
+        name: str,
+        *,
+        rps: int | None,
+        burst: int | None,
+    ) -> RateLimiter | None:
+        effective_rps = rps if rps is not None else rate_cfg.global_rps
+        effective_burst = burst if burst is not None else rate_cfg.global_burst
+        if (
+            rps is None
+            and burst is None
+            or (
+                effective_rps == rate_cfg.global_rps
+                and effective_burst == rate_cfg.global_burst
+            )
+        ):
+            return None
+        return get_limiter(f"documents_{name}", effective_rps, effective_burst)
+
+    pubmed_service_limiter = _service_limiter(
+        "pubmed", rps=getattr(pubmed_cfg, "rps", None), burst=getattr(pubmed_cfg, "burst", None)
+    )
+    semantic_service_limiter = _service_limiter(
+        "semantic_scholar",
+        rps=getattr(semantic_scholar_cfg, "rps", None),
+        burst=getattr(semantic_scholar_cfg, "burst", None),
+    )
+
+    def _acquire_documents(limiter: RateLimiter | None) -> None:
+        documents_limiter.acquire()
+        if limiter is not None:
+            limiter.acquire()
 
     def _failure_records(batch: Sequence[str], message: str) -> list[dict[str, str]]:
         """Return placeholder rows describing a failure for ``batch`` PMIDs."""
@@ -299,7 +332,7 @@ def fetch_pubmed_records(
 
         try:
             with session_with_retry(__cfg.api, __cfg.retry) as session:
-                pubmed_limiter.acquire()
+                _acquire_documents(pubmed_service_limiter)
                 pubmed_list = pl.fetch_pubmed_batch(
                     session, batch_list, sleep, cfg=pubmed_cfg
                 )
@@ -310,7 +343,7 @@ def fetch_pubmed_records(
                 semsch_map: dict[str, dict[str, str]] = {}
                 if semantic_pmids:
                     # Fetch Semantic Scholar data in a single batch
-                    semantic_limiter.acquire()
+                    _acquire_documents(semantic_service_limiter)
                     semsch_list = ssl.fetch_semantic_scholar_batch(
                         session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
                     )
@@ -333,7 +366,7 @@ def fetch_pubmed_records(
                         if record is None or record.get("scholar.Error"):
                             fallback_pmids.append(pmid)
                     for pmid in fallback_pmids:
-                        semantic_limiter.acquire()
+                        _acquire_documents(semantic_service_limiter)
                         fallback_record = ssl.fetch_semantic_scholar(
                             session, pmid, sleep, cfg=semantic_scholar_cfg
                         )
