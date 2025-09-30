@@ -707,7 +707,10 @@ def attach_parent_molecule_ids(
             .astype("string")
             .copy()
         )
-        lookup_mask = normalised_child.isin(precomputed.need_lookup)
+        if catalog is not None and not precomputed.need_lookup:
+            lookup_mask = normalised_child.ne("")
+        else:
+            lookup_mask = normalised_child.isin(precomputed.need_lookup)
     else:
         normalised_child = _normalise_chembl_ids(result[child_column])
         if parent_column in result.columns:

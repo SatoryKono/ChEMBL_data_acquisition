@@ -322,7 +322,6 @@ def test_default_resource_paths_exist() -> None:
     cfg_path = DEFAULT_CONFIG_PATH
     cfg = load_config(cfg_path)
     resources = cfg.resources
-    project_root = cfg_path.parents[1]
     for field in (
         "dictionary_dir",
         "iuphar_target_csv",
@@ -331,12 +330,7 @@ def test_default_resource_paths_exist() -> None:
         "targets_type_csv",
     ):
         resource_path = getattr(resources, field)
-        full_path = (
-            resource_path
-            if resource_path.is_absolute()
-            else project_root / resource_path
-        )
-        assert full_path.exists(), f"Missing default resource: {full_path}"
+        assert resource_path.exists(), f"Missing default resource: {resource_path}"
 
 
 def test_config_class_default_resources_exist() -> None:
@@ -344,7 +338,6 @@ def test_config_class_default_resources_exist() -> None:
 
     cfg = Config()
     resources = cfg.resources
-    project_root = Path(__file__).resolve().parents[1]
     for field in (
         "dictionary_dir",
         "iuphar_target_csv",
@@ -353,12 +346,7 @@ def test_config_class_default_resources_exist() -> None:
         "targets_type_csv",
     ):
         resource_path = getattr(resources, field)
-        resolved = (
-            resource_path
-            if resource_path.is_absolute()
-            else project_root / resource_path
-        )
-        assert resolved.exists(), f"Missing default resource: {resolved}"
+        assert resource_path.exists(), f"Missing default resource: {resource_path}"
 
 
 def test_yaml_error_includes_path(tmp_path: Path) -> None:

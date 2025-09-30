@@ -333,4 +333,6 @@ def compute_activity_bounds(
 
     result["lower_value"] = lower
     result["upper_value"] = upper
+    if "activity_id" in result.columns:
+        result["activity_id"] = result["activity_id"].astype("object")
     return result

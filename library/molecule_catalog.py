@@ -173,7 +173,9 @@ def _fetch_parent_catalog_chunk(
         or data.get("molecule_parent")
         or []
     )
-    if not isinstance(items, list):
+    if isinstance(items, Mapping):
+        items = [items]
+    elif not isinstance(items, list):
         logger.warning("unexpected_response_items", extra={"url": url})
         return {}
 
@@ -437,15 +439,6 @@ def fetch_parent_catalog_for(
     parentless_filtered = _filters_exclude_parentless(cfg)
 
     if len(unique_ids) <= _PARENT_LOOKUP_FALLBACK_THRESHOLD:
-        if parentless_filtered:
-            chunk_result = _fetch_parent_catalog_chunk(
-                unique_ids,
-                client=client,
-                api_cfg=api_cfg,
-                timeout=effective_timeout,
-            )
-            result.update(chunk_result)
-            return result
         fallback_result = _fetch_parent_catalog_via_helper(
             unique_ids,
             client=client,
@@ -482,7 +475,7 @@ def fetch_parent_catalog_for(
             if missing:
                 fallback_candidates.extend(missing)
 
-    if fallback_candidates and not parentless_filtered:
+    if fallback_candidates:
         ordered = [
             item for item in dict.fromkeys(fallback_candidates) if item not in result
         ]

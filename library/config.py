@@ -13,16 +13,27 @@ aliases are supported; see ``_ALIAS_MAP`` for the full list.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import re
+from contextlib import ExitStack
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
+import importlib.resources as importlib_resources
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import ErrorDetails
 from requests import Session
 from requests.adapters import HTTPAdapter
@@ -32,6 +43,58 @@ from .log import logger
 from .utils.config import ConfigLoaderError, load_yaml_config
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+_RESOURCE_STACK = ExitStack()
+_PACKAGE_ROOTS: dict[str, Path] = {}
+
+
+def _close_resource_stack() -> None:
+    _RESOURCE_STACK.close()
+
+
+atexit.register(_close_resource_stack)
+
+
+def _package_root(package: str) -> Path:
+    """Return a filesystem path for the given resource *package*."""
+
+    cached = _PACKAGE_ROOTS.get(package)
+    if cached is not None:
+        return cached
+    traversable = importlib_resources.files(package)
+    path = _RESOURCE_STACK.enter_context(importlib_resources.as_file(traversable))
+    _PACKAGE_ROOTS[package] = path
+    return path
+
+
+def _default_dictionary_dir() -> Path:
+    """Return the packaged dictionary directory if available."""
+
+    try:
+        return _package_root("dictionary")
+    except ModuleNotFoundError:  # pragma: no cover - editable installs without package
+        return Path("dictionary")
+
+
+def _strip_dictionary_prefix(path: Path) -> Path:
+    parts = path.parts
+    if parts and parts[0] == "dictionary":
+        return Path(*parts[1:]) if len(parts) > 1 else Path(".")
+    return path
+
+
+def _resolve_dictionary_path(path: Path, *, base: Path | None = None) -> Path:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate
+    stripped = _strip_dictionary_prefix(candidate)
+    if stripped != candidate or base is not None:
+        base_dir = base or _default_dictionary_dir()
+        if stripped == Path("."):
+            return base_dir
+        return base_dir / stripped
+    return candidate
 
 
 def _valid_url(url: str) -> bool:
@@ -163,6 +226,14 @@ class MoleculeCatalogCfg(_BaseModel):
     )
     page_size: int = Field(500, ge=1)
     fallback_single_limit: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _normalise_paths(self) -> "MoleculeCatalogCfg":
+        if self.hierarchy_lookup_path is not None:
+            self.hierarchy_lookup_path = _resolve_dictionary_path(
+                self.hierarchy_lookup_path
+            )
+        return self
 
 
 class OpenAlexCfg(_BaseModel):
@@ -396,11 +467,28 @@ class DocTypeCfg(_BaseModel):
 
 
 class ResourcesCfg(_BaseModel):
-    dictionary_dir: Path = Path("dictionary")
-    iuphar_target_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_target.csv")
-    iuphar_family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
-    uniprot_data_dir: Path = Path("dictionary/_target/_uniprot")
-    targets_type_csv: Path = Path("dictionary/_Target/targets_type.csv")
+    dictionary_dir: Path = Field(default_factory=_default_dictionary_dir)
+    iuphar_target_csv: Path = Path("_target/_IUPHAR/_IUPHAR_target.csv")
+    iuphar_family_csv: Path = Path("_target/_IUPHAR/_IUPHAR_family.csv")
+    uniprot_data_dir: Path = Path("_target/_uniprot")
+    targets_type_csv: Path = Path("_Target/targets_type.csv")
+
+    @staticmethod
+    def _normalise_dictionary_dir(path: Path) -> Path:
+        resolved = Path(path)
+        if not resolved.is_absolute() and resolved == Path("dictionary"):
+            return _default_dictionary_dir()
+        return resolved
+
+    @model_validator(mode="after")
+    def _normalise(self) -> "ResourcesCfg":
+        base = self._normalise_dictionary_dir(self.dictionary_dir)
+        self.dictionary_dir = base
+        self.iuphar_target_csv = _resolve_dictionary_path(self.iuphar_target_csv, base=base)
+        self.iuphar_family_csv = _resolve_dictionary_path(self.iuphar_family_csv, base=base)
+        self.uniprot_data_dir = _resolve_dictionary_path(self.uniprot_data_dir, base=base)
+        self.targets_type_csv = _resolve_dictionary_path(self.targets_type_csv, base=base)
+        return self
 
 
 class IoCfg(_BoolModel):
@@ -680,8 +768,18 @@ class TestitemCfg(_BaseModel):
 
 
 class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):
-    molecule_catalog_path: Path = Path("dictionary/molecule_catalog.csv")
-    molecule_hierarchy_path: Path = Path("dictionary/molecule_hierarchy.csv")
+    molecule_catalog_path: Path = Path("dictionary/_testitem/molecule_catalog.csv")
+    molecule_hierarchy_path: Path = Path("dictionary/_testitem/molecule_hierarchy.csv")
+
+    @model_validator(mode="after")
+    def _normalise_paths(self) -> "TestitemMoleculeEnrichmentSourcesCfg":
+        self.molecule_catalog_path = _resolve_dictionary_path(
+            self.molecule_catalog_path
+        )
+        self.molecule_hierarchy_path = _resolve_dictionary_path(
+            self.molecule_hierarchy_path
+        )
+        return self
 
 
 class TestitemMoleculeEnrichmentOutputCfg(_BoolModel):
@@ -770,6 +868,11 @@ class TargetUniprotCfg(_BaseModel):
     data_dir: Path = Path("dictionary/_target/_uniprot")
     limit: int | None = Field(default=None, ge=0)
 
+    @model_validator(mode="after")
+    def _normalise_paths(self) -> "TargetUniprotCfg":
+        self.data_dir = _resolve_dictionary_path(self.data_dir)
+        return self
+
 
 class TargetChemblCfg(_BaseModel):
     """Defaults for fetching ChEMBL targets.
@@ -790,6 +893,12 @@ class TargetIupharCfg(_BaseModel):
     family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
     limit: int | None = Field(default=None, ge=0)
 
+    @model_validator(mode="after")
+    def _normalise_paths(self) -> "TargetIupharCfg":
+        self.target_csv = _resolve_dictionary_path(self.target_csv)
+        self.family_csv = _resolve_dictionary_path(self.family_csv)
+        return self
+
 
 class TargetAllCfg(_BaseModel):
     data_dir: Path = Path("dictionary/_target/_uniprot")
@@ -802,6 +911,13 @@ class TargetAllCfg(_BaseModel):
     uniprot_out: Path | None = None
     iuphar_out: Path | None = None
     limit: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _normalise_paths(self) -> "TargetAllCfg":
+        self.data_dir = _resolve_dictionary_path(self.data_dir)
+        self.target_csv = _resolve_dictionary_path(self.target_csv)
+        self.family_csv = _resolve_dictionary_path(self.family_csv)
+        return self
 
 
 class TargetCfg(_BaseModel):
