@@ -119,37 +119,59 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         return cast(dict[str, Any], cached)
     logger.info("cache_miss", url=url, rps=cfg.rps, status="miss")
 
-    attempts = max(cfg.retries, 1)
+    total_attempts = cfg.retries + 1
+    if total_attempts <= 0:
+        total_attempts = 1
     backoff_delay = cfg.backoff_initial_seconds
     deadline: float | None = None
     if cfg.timeout_seconds > 0:
         deadline = monotonic() + cfg.timeout_seconds
 
-    for attempt in range(1, attempts + 1):
+    for attempt in range(1, total_attempts + 1):
         if deadline is not None and monotonic() >= deadline:
-            logger.warning("request_timeout", url=url, attempt=attempt, rps=cfg.rps)
-            logger.info("request_fail", url=url, status=None, rps=cfg.rps)
+            logger.warning(
+                "request_timeout",
+                url=url,
+                attempt=attempt,
+                total_attempts=total_attempts,
+                rps=cfg.rps,
+            )
+            logger.info(
+                "request_fail",
+                url=url,
+                status=None,
+                total_attempts=total_attempts,
+                rps=cfg.rps,
+            )
             return None
         event = "request_start" if attempt == 1 else "request_retry"
-        logger.info(event, url=url, attempt=attempt, rps=cfg.rps)
+        logger.info(
+            event,
+            url=url,
+            attempt=attempt,
+            total_attempts=total_attempts,
+            rps=cfg.rps,
+        )
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
             response = _session.get(
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)
             )
         except requests.RequestException as exc:  # pragma: no cover - network
-            if attempt >= attempts:
+            if attempt >= total_attempts:
                 logger.error(
                     "request_error",
                     url=url,
                     error=str(exc),
                     attempt=attempt,
+                    total_attempts=total_attempts,
                     rps=cfg.rps,
                 )
                 logger.info(
                     "request_fail",
                     url=url,
                     status=None,
+                    total_attempts=total_attempts,
                     rps=cfg.rps,
                 )
                 return None
@@ -160,7 +182,13 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         status = response.status_code
         if status == 404:
             logger.info("request_not_found", url=url, status=status, rps=cfg.rps)
-            logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+            logger.info(
+                "request_fail",
+                url=url,
+                status=status,
+                total_attempts=total_attempts,
+                rps=cfg.rps,
+            )
             return None
         if status == 429 or 500 <= status < 600:
             event_name = (
@@ -171,10 +199,17 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 url=url,
                 status=status,
                 attempt=attempt,
+                total_attempts=total_attempts,
                 rps=cfg.rps,
             )
-            if attempt >= attempts:
-                logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+            if attempt >= total_attempts:
+                logger.info(
+                    "request_fail",
+                    url=url,
+                    status=status,
+                    total_attempts=total_attempts,
+                    rps=cfg.rps,
+                )
                 return None
             delay = backoff_delay if backoff_delay > 0 else cfg.delay
             if delay > 0:
@@ -188,22 +223,35 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 status=status,
                 rps=cfg.rps,
             )
-            logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+            logger.info(
+                "request_fail",
+                url=url,
+                status=status,
+                total_attempts=total_attempts,
+                rps=cfg.rps,
+            )
             return None
 
         try:
             response.raise_for_status()
             data = cast(dict[str, Any], response.json())
         except requests.RequestException as exc:  # pragma: no cover - network
-            if attempt >= attempts:
+            if attempt >= total_attempts:
                 logger.error(
                     "request_error",
                     url=url,
                     error=str(exc),
                     attempt=attempt,
+                    total_attempts=total_attempts,
                     rps=cfg.rps,
                 )
-                logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+                logger.info(
+                    "request_fail",
+                    url=url,
+                    status=status,
+                    total_attempts=total_attempts,
+                    rps=cfg.rps,
+                )
                 return None
             if cfg.delay > 0:
                 sleep(cfg.delay)
@@ -215,7 +263,13 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 status=status,
                 rps=cfg.rps,
             )
-            logger.info("request_fail", url=url, status=status, rps=cfg.rps)
+            logger.info(
+                "request_fail",
+                url=url,
+                status=status,
+                total_attempts=total_attempts,
+                rps=cfg.rps,
+            )
             return None
 
         logger.info(
