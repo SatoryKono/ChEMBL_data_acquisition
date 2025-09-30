@@ -1339,10 +1339,10 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    requested_ids = list(ids_iter)
+    requested_ids_raw = list(ids_iter)
     try:
         df = cl.get_testitem(
-            requested_ids,
+            requested_ids_raw,
             cfg=api_cfg,
             client=client,
             chunk_size=batch_size,
@@ -1365,19 +1365,18 @@ def fetch_testitems(
     logger.info("identifiers_retrieved", count=rows)
 
     original_id_lookup: dict[str, str] = {}
-    requested_ids_upper: list[str] = []
-    for identifier in requested_ids:
+    requested_ids: list[str] = []
+    for identifier in requested_ids_raw:
         normalised = str(identifier).strip().upper()
-        requested_ids_upper.append(normalised)
+        requested_ids.append(normalised)
         original_id_lookup[normalised] = str(identifier)
+
     if "molecule_chembl_id" not in df.columns:
         df["molecule_chembl_id"] = pd.Series(dtype="string")
     df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string").str.upper()
 
     retrieved_ids = set(df["molecule_chembl_id"].dropna())
-    missing_ids = [
-        identifier for identifier in requested_ids_upper if identifier not in retrieved_ids
-    ]
+    missing_ids = [identifier for identifier in requested_ids if identifier not in retrieved_ids]
     if missing_ids:
         missing_ids_original = [
             original_id_lookup.get(identifier, identifier) for identifier in missing_ids
@@ -1388,12 +1387,13 @@ def fetch_testitems(
             missing_ids=missing_ids,
             missing_ids_original=missing_ids_original,
         )
+    else:
+        logger.info("chembl_all_identifiers_retrieved")
 
-    df = df.set_index("molecule_chembl_id", drop=False)
-    index = pd.Index(requested_ids_upper, name="molecule_chembl_id")
-    df = df.reindex(index)
+    index = pd.Index(requested_ids, name="molecule_chembl_id")
+    df = df.set_index("molecule_chembl_id", drop=False).reindex(index)
     df["molecule_chembl_id"] = pd.Series(
-        index.array,
+        requested_ids,
         index=index,
         dtype="string",
     )
