@@ -50,9 +50,10 @@ def _collect_ids_with_encoding(
                 if not value:
                     continue
                 if value in marker_set:
-                    dropped.append(value)
                     if keep_na_markers:
                         values.append(value)
+                    else:
+                        dropped.append(value)
                 else:
                     values.append(value)
             return values, dropped
@@ -161,7 +162,7 @@ def read_ids(
         raise ValueError(f"malformed CSV in file: {path}: {exc}") from exc
 
     if not keep_markers and dropped:
-        unique_dropped = sorted(set(dropped))
+        unique_dropped = list(dict.fromkeys(dropped))
         logger.warning(
             "read_ids_dropped_na_markers",
             path=str(path_obj),
