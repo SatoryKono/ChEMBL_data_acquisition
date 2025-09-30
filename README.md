@@ -307,9 +307,10 @@ api:
   user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
 ```
 
-Параметр можно переопределить в `config/config.yaml`, через переменную окружения
-`CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` или флаг CLI
-`--sources.chembl.api.user_agent`.
+Параметр можно переопределить в `config/config.yaml` или через переменную
+окружения `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. Отдельного CLI-флага
+для `api.user_agent` не предусмотрено (см. `library/cli/parser.py`), поэтому
+значение задаётся только через конфигурационный файл или окружение.
 
 ## Валидация конфигурации
 
