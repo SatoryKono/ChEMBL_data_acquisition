@@ -2,24 +2,18 @@
 
 from __future__ import annotations
 
-import json
+from pathlib import Path
 import sys
 
-from datetime import datetime, timedelta, timezone
-
-from pathlib import Path
-
 import argparse
-from collections import ChainMap, OrderedDict, deque
-from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from collections import OrderedDict, deque
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
 from itertools import islice, tee
-from typing import Any, NamedTuple
+from typing import Any
 
 import pandas as pd
 import requests
-from pandera.errors import SchemaErrors
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -27,8 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from library import chembl_library as cl
 from library import cli
-from library import io, molecule_catalog, testitem_enrichment
-from library import pubchem_library as pl
+from library import io
 
 from library.clients import pubchem as pc
 from library.chembl_client import ChemblClient
@@ -40,52 +33,30 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.config import (
-    ApiCfg,
-    Config,
-    IoCfg,
-    MoleculeCatalogCfg,
-    PubChemCfg,
-    _serialize_paths,
-    ensure_dirs,
-    print_config,
-)
+from library.config import ApiCfg, Config, IoCfg, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.molecule_catalog import (
-    load_parent_catalog,
-    query_parent_catalog,
-    update_parent_catalog_cache,
-    write_parent_catalog_cache,
+from schemas import TestitemsSchema
+from library.testitem_pipeline import (
+    PARENT_LOOKUP_SOURCE_CACHE,
+    PARENT_LOOKUP_SOURCE_LOOKUP,
+    PARENT_LOOKUP_SOURCE_PARTIAL,
+    PARENT_LOOKUP_SOURCE_SKIPPED,
+    PARENT_LOOKUP_SOURCE_SYNC,
+    ParentEnrichmentPreparation,
+    ParentEnrichmentResult,
+    ParentLookupPreparedData,
+    ParentLookupStats,
+    augment_pubchem,
+    apply_testitem_enrichment,
+    finalize_output,
+    prepare_parent_enrichment,
+    run_parent_enrichment,
 )
-from library.pipeline_metadata import add_pipeline_metadata
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
-from library.validation import validate_testitems
-from schemas import TestitemsSchema, normalize_testitems
 
 
 # ===== Parameters =====
 
-ENCODING_UTF8 = "utf-8"
-PUBCHEM_CID_CACHE_ENCODING = ENCODING_UTF8
-
-
-# ===== Providers =====
-
-_DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
-
-
-# ===== Helpers =====
-
-UTC = timezone.utc  # noqa: UP017
-_TYPO_PARENT_COLUMN = "parant_molecule_id"
-_MOLECULE_HIERARCHY_COLUMNS = (
-    "molecule_chembl_id",
-    "parent_molecule_chembl_id",
-)
-
-UTC = timezone.utc
+_FETCH_ERROR_SAMPLE_SIZE = 10
 
 @dataclass
 class ReadInputIdsResult:
@@ -94,6 +65,7 @@ class ReadInputIdsResult:
     ids_iter: Iterator[str]
     sample_ids: tuple[str, ...]
     requested_ids: tuple[str, ...]
+
 
 
 @dataclass
@@ -1195,7 +1167,6 @@ def add_pubchem_data(
 
     return result
 
-
 def read_input_ids(
     input_csv: Path,
     *,
@@ -1387,418 +1358,6 @@ def fetch_testitems(
     df = df.reset_index(drop=True)
 
     return 0, df
-
-
-def prepare_parent_enrichment(
-    df: pd.DataFrame,
-    *,
-    catalog_cfg: MoleculeCatalogCfg,
-    io_cfg: IoCfg,
-    api_cfg: ApiCfg,
-    timeout: float,
-    client: ChemblClient,
-    hierarchy_lookup_path: Path | None,
-) -> tuple[int, ParentEnrichmentPreparation | None]:
-    """Prepare DataFrame and catalog information prior to enrichment."""
-
-    parent_stats = ParentLookupStats(
-        source=PARENT_LOOKUP_SOURCE_SKIPPED,
-        missing=0,
-        unique=0,
-        attached=0,
-        uncovered=0,
-    )
-
-    parent_column = catalog_cfg.parent_field
-    child_column = catalog_cfg.child_field
-
-    if child_column in df.columns:
-        normalised_ids = _normalise_chembl_ids(df[child_column])
-    else:
-        normalised_ids = pd.Series("", index=df.index, dtype="string")
-
-    if parent_column in df.columns:
-        existing_parent = _normalise_chembl_ids(df[parent_column])
-    else:
-        existing_parent = pd.Series("", index=df.index, dtype="string")
-
-    resolved_lookup_path = hierarchy_lookup_path or catalog_cfg.hierarchy_lookup_path
-    if resolved_lookup_path:
-        try:
-            hierarchy_lookup = load_molecule_hierarchy_lookup(
-                resolved_lookup_path,
-                io_cfg=io_cfg,
-                encoding=catalog_cfg.hierarchy_lookup_encoding,
-                delimiter=catalog_cfg.hierarchy_lookup_delimiter,
-                catalog_cfg=catalog_cfg,
-            )
-        except ValueError as exc:
-            logger.error(
-                "molecule_hierarchy_lookup_invalid",
-                error=str(exc),
-                path=str(resolved_lookup_path),
-            )
-            return 1, None
-    else:
-        hierarchy_lookup = {}
-
-    if hierarchy_lookup:
-        hierarchy_values = {
-            key: value for key, value in hierarchy_lookup.items() if value is not None
-        }
-    else:
-        hierarchy_values = {}
-
-    if hierarchy_values:
-        hierarchy_series = normalised_ids.map(
-            lambda value: hierarchy_values.get(value) if value else None
-        )
-        hierarchy_mask = hierarchy_series.notna()
-        if hierarchy_mask.any():
-            resolved = hierarchy_series[hierarchy_mask].astype("string")
-            if parent_column in df.columns:
-                df[parent_column] = df[parent_column].astype("string")
-            else:
-                df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
-            df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
-            existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
-
-    if getattr(catalog_cfg, "force_refresh_existing", False):
-        need_lookup_mask = normalised_ids != ""
-    else:
-        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
-    initial_need_lookup = set(normalised_ids[need_lookup_mask])
-    need_lookup = set(initial_need_lookup)
-
-    cache_before = _cache_state(catalog_cfg.cache_path)
-    cache_after = cache_before
-    parent_catalog: dict[str, str] = {}
-    parent_catalog_source = PARENT_LOOKUP_SOURCE_SKIPPED
-
-    if need_lookup and cache_before[0]:
-        try:
-            parent_catalog = query_parent_catalog(
-                need_lookup,
-                catalog_cfg=catalog_cfg,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "parent_catalog_invalid",
-                error=str(exc),
-                path=str(catalog_cfg.cache_path),
-            )
-            return 1, None
-        cache_after = _cache_state(catalog_cfg.cache_path)
-        parent_catalog_source = (
-            PARENT_LOOKUP_SOURCE_CACHE
-            if cache_after == cache_before
-            else PARENT_LOOKUP_SOURCE_SYNC
-        )
-        if parent_catalog:
-            need_lookup -= set(parent_catalog)
-
-    if need_lookup:
-        try:
-            fetched = molecule_catalog.fetch_parent_catalog_for(
-                need_lookup,
-                client=client,
-                api_cfg=api_cfg,
-                timeout=timeout,
-                catalog_cfg=catalog_cfg,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error("parent_lookup_partial_fetch_failed", error=str(exc))
-            return 1, None
-        if fetched:
-            parent_catalog.update(fetched)
-            update_parent_catalog_cache(fetched, catalog_cfg)
-            parent_catalog_source = PARENT_LOOKUP_SOURCE_PARTIAL
-            need_lookup -= set(fetched)
-
-    if need_lookup:
-        try:
-            fallback_catalog = load_parent_catalog(
-                client=client,
-                api_cfg=api_cfg,
-                catalog_cfg=catalog_cfg,
-                timeout=timeout,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error("parent_catalog_invalid", error=str(exc))
-            return 1, None
-        if fallback_catalog:
-            parent_catalog.update(fallback_catalog)
-            parent_catalog_source = PARENT_LOOKUP_SOURCE_CACHE
-            need_lookup -= set(fallback_catalog)
-
-    lookup_resolved = initial_need_lookup - need_lookup
-    parent_lookup_data = ParentLookupPreparedData(
-        child_ids=normalised_ids,
-        existing_parent_ids=existing_parent,
-        need_lookup=set(need_lookup),
-    )
-    if (
-        lookup_resolved
-        and not need_lookup
-        and parent_catalog_source
-        not in (PARENT_LOOKUP_SOURCE_PARTIAL, PARENT_LOOKUP_SOURCE_SYNC)
-    ):
-        parent_catalog_source = PARENT_LOOKUP_SOURCE_LOOKUP
-
-    try:
-        ensure_no_parant_column(df)
-    except ValueError as exc:
-        logger.error(
-            "invalid_column",
-            column=_TYPO_PARENT_COLUMN,
-            error=str(exc),
-        )
-        return 1, None
-
-    return (
-        0,
-        ParentEnrichmentPreparation(
-            df=df,
-            lookup_data=parent_lookup_data,
-            parent_catalog=parent_catalog or None,
-            parent_catalog_source=parent_catalog_source,
-            parent_stats=parent_stats,
-        ),
-    )
-
-
-def run_parent_enrichment(
-    prep: ParentEnrichmentPreparation,
-    *,
-    client: ChemblClient,
-    api_cfg: ApiCfg,
-    catalog_cfg: MoleculeCatalogCfg,
-    timeout: float,
-) -> tuple[int, ParentEnrichmentResult | None]:
-    """Attach parent molecule identifiers using the prepared context."""
-
-    logger.info("parent_lookup_start")
-    try:
-        df, parent_stats = attach_parent_molecule_ids(
-            prep.df,
-            client=client,
-            api_cfg=api_cfg,
-            catalog_cfg=catalog_cfg,
-            timeout=timeout,
-            catalog=prep.parent_catalog,
-            source=prep.parent_catalog_source,
-            precomputed=prep.lookup_data,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        logger.error("parent_lookup_failed", error=str(exc))
-        return 1, None
-
-    logger.info(
-        "parent_lookup_done",
-        source=parent_stats.source,
-        unique=parent_stats.unique,
-        attached=parent_stats.attached,
-        missing=parent_stats.missing,
-        uncovered=parent_stats.uncovered,
-    )
-
-    return 0, ParentEnrichmentResult(df=df, parent_stats=parent_stats)
-
-
-def augment_pubchem(
-    df: pd.DataFrame,
-    *,
-    pubchem_cfg: PubChemCfg,
-    api_cfg: ApiCfg,
-    timeout: float,
-    client: ChemblClient,
-    fields: Sequence[str] | None,
-    request_limit: int,
-) -> pd.DataFrame:
-    """Augment ``df`` with PubChem information if enabled."""
-
-    pubchem_cid_cache: dict[str, str | None] | None = None
-    pubchem_resolution_cache: (
-        dict[tuple[str | None, ...], pl.PubChemResolution] | None
-    ) = None
-    pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
-    if getattr(pubchem_cfg, "enable", True):
-        pubchem_cid_cache = _load_pubchem_cid_cache(
-            getattr(pubchem_cfg, "cid_cache_path", None),
-            ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),
-        )
-        pubchem_resolution_cache = {}
-        pubchem_parent_record_cache = {}
-
-    logger.info("pubchem_augment_start")
-    result = add_pubchem_data(
-        df,
-        pubchem_cfg,
-        client=client,
-        api_cfg=api_cfg,
-        timeout=timeout,
-        cid_cache=pubchem_cid_cache,
-        resolution_cache=pubchem_resolution_cache,
-        parent_record_cache=pubchem_parent_record_cache,
-        testitem_fields=fields,
-        request_limit=request_limit,
-    )
-    logger.info("pubchem_augment_done")
-    return result
-
-
-def apply_testitem_enrichment(
-    df: pd.DataFrame,
-    *,
-    enrichment_cfg,
-    io_cfg: IoCfg,
-) -> tuple[int, pd.DataFrame | None]:
-    """Apply optional test item enrichment if enabled."""
-
-    if not enrichment_cfg.enable:
-        return 0, df
-
-    logger.info("testitem_enrichment_start")
-    try:
-        enriched = testitem_enrichment.enrich(
-            df,
-            cfg=enrichment_cfg,
-            io_cfg=io_cfg,
-        )
-    except ValueError as exc:
-        logger.error("testitem_enrichment_failed", error=str(exc))
-        return 1, None
-    logger.info("testitem_enrichment_done")
-    return 0, enriched
-
-
-def finalize_output(
-    df: pd.DataFrame,
-    *,
-    cfg: Config,
-    output: Path,
-    parent_stats: ParentLookupStats,
-    input_csv: Path,
-    rows_total: int,
-    missing_ids: Sequence[str] | None = None,
-) -> int:
-    """Normalise, validate, and persist the final dataset."""
-
-    df = normalize_testitems(df)
-    if "pubchem_cid" in df.columns:
-        df["pubchem_cid"] = df["pubchem_cid"].astype(object)
-    df = add_pipeline_metadata(df)
-
-    schema_cols = list(TestitemsSchema.columns)
-    head = [c for c in schema_cols if c in df.columns]
-    tail = sorted(c for c in df.columns if c not in schema_cols)
-    col_order = head + tail
-
-    exit_code = 0
-    required_cols = {name for name, col in TestitemsSchema.columns.items() if col.required}
-    optional_cols = set(TestitemsSchema.columns) - required_cols
-    missing_required = required_cols - set(df.columns)
-    missing_optional = optional_cols - set(df.columns)
-    if not missing_required:
-        if missing_optional:
-            logger.warning(
-                "optional_columns_missing",
-                columns=sorted(missing_optional),
-            )
-        try:
-            validation_result = validate_testitems(df, return_result=True)
-        except SchemaErrors as exc:
-            failure_path = Path(output).with_name(
-                f"{Path(output).stem}_failure_cases.csv"
-            )
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "validation_failed",
-                failures=len(exc.failure_cases),
-                path=str(failure_path),
-            )
-            df = getattr(exc, "validated_data", df)
-            exit_code = 1
-        else:
-            df = validation_result.data
-            if not validation_result.failure_cases.empty:
-                failure_path = Path(output).with_name(
-                    f"{Path(output).stem}_failure_cases.csv"
-                )
-                errors = SidecarErrors()
-                for row in validation_result.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation_failed",
-                    failures=len(validation_result.failure_cases),
-                    path=str(failure_path),
-                )
-                df = validation_result.data
-                exit_code = 1
-    else:
-        logger.warning(
-            "validation_skipped",
-            missing_columns=sorted(missing_required),
-        )
-
-    rows_kept = len(df)
-    rows_dropped = rows_total - rows_kept
-
-    try:
-        key_cols = ["molecule_chembl_id"]
-        csv_path = io.write_csv(
-            df,
-            output,
-            cfg=cfg,
-            key_cols=key_cols or None,
-            col_order=col_order,
-        )
-        logger.info("write_done", rows=rows_kept, path=str(csv_path))
-    except OSError as exc:
-        logger.error(
-            "write_fail",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
-
-    missing_ids = tuple(missing_ids or ())
-
-    stats: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-        "parent_lookup_source": parent_stats.source,
-        "parent_lookup_missing": parent_stats.missing,
-    }
-    if missing_ids:
-        stats["missing_molecule_ids"] = list(missing_ids)
-        stats["missing_molecule_ids_count"] = len(missing_ids)
-    write_meta_yaml(
-        csv_path=csv_path,
-        command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(input_csv)},
-        stats=stats,
-        schema="TestitemsSchema",
-    )
-    try:
-        analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
-
-    return exit_code
-
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:

@@ -14,6 +14,7 @@ import requests
 from library import chembl_library as cl
 from library import io
 from library import molecule_catalog, pubchem_library as pl
+from library import testitem_pipeline as pipeline
 
 from library.config import ApiCfg, Config, IoCfg
 
@@ -23,24 +24,28 @@ from scripts import get_testitem_data as gtd
 
 def prepare_parent_lookup_data(
     df: pd.DataFrame, catalog_cfg
-) -> gtd.ParentLookupPreparedData:
+) -> pipeline.ParentLookupPreparedData:
     child_column = catalog_cfg.child_field
     parent_column = catalog_cfg.parent_field
 
     if child_column in df.columns:
-        normalised_child = gtd._normalise_chembl_ids(df[child_column])
+        normalised_child = (
+            df[child_column].astype("string").fillna("").str.strip().str.upper()
+        )
     else:
         normalised_child = pd.Series("", index=df.index, dtype="string")
 
     if parent_column in df.columns:
-        existing_parent = gtd._normalise_chembl_ids(df[parent_column])
+        existing_parent = (
+            df[parent_column].astype("string").fillna("").str.strip().str.upper()
+        )
     else:
         existing_parent = pd.Series("", index=df.index, dtype="string")
 
     need_lookup_mask = (normalised_child != "") & (existing_parent == "")
     need_lookup = set(normalised_child[need_lookup_mask])
 
-    return gtd.ParentLookupPreparedData(
+    return pipeline.ParentLookupPreparedData(
         child_ids=normalised_child,
         existing_parent_ids=existing_parent,
         need_lookup=need_lookup,
@@ -246,12 +251,12 @@ def test_prepare_parent_enrichment_uses_lookup_path(
         captured_path = path
         return {"CHEMBL1": "CHEMBL999"}
 
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", fake_lookup)
-    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: {})
-    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {})
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", fake_lookup)
+    monkeypatch.setattr(pipeline, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda *_, **__: {})
 
-    status, prep = gtd.prepare_parent_enrichment(
+    status, prep = pipeline.prepare_parent_enrichment(
         df.copy(),
         catalog_cfg=cfg.molecule_catalog,
         io_cfg=cfg.io,
@@ -271,18 +276,18 @@ def test_run_parent_enrichment_failure(
     monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     df = pd.DataFrame({cfg.molecule_catalog.parent_field: [pd.NA]})
-    lookup = gtd.ParentLookupPreparedData(
+    lookup = pipeline.ParentLookupPreparedData(
         child_ids=pd.Series(["CHEMBL1"], dtype="string"),
         existing_parent_ids=pd.Series([""], dtype="string"),
         need_lookup=set(),
     )
-    prep = gtd.ParentEnrichmentPreparation(
+    prep = pipeline.ParentEnrichmentPreparation(
         df=df,
         lookup_data=lookup,
         parent_catalog=None,
-        parent_catalog_source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
-        parent_stats=gtd.ParentLookupStats(
-            source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        parent_catalog_source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+        parent_stats=pipeline.ParentLookupStats(
+            source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
             missing=0,
             unique=0,
             attached=0,
@@ -293,9 +298,9 @@ def test_run_parent_enrichment_failure(
     def fail_attach(*args: object, **kwargs: object) -> tuple[pd.DataFrame, object]:
         raise ValueError("attach failed")
 
-    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fail_attach)
+    monkeypatch.setattr(pipeline, "attach_parent_molecule_ids", fail_attach)
 
-    status, result = gtd.run_parent_enrichment(
+    status, result = pipeline.run_parent_enrichment(
         prep,
         client=SimpleNamespace(),
         api_cfg=cfg.api,
@@ -329,10 +334,10 @@ def test_augment_pubchem_initialises_caches(
         captured["add_kwargs"] = kwargs
         return frame.assign(pubchem_cid="1")
 
-    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", fake_load)
-    monkeypatch.setattr(gtd, "add_pubchem_data", fake_add)
+    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", fake_load)
+    monkeypatch.setattr(pipeline, "add_pubchem_data", fake_add)
 
-    result = gtd.augment_pubchem(
+    result = pipeline.augment_pubchem(
         df,
         pubchem_cfg=cfg.pubchem,
         api_cfg=cfg.api,
@@ -351,7 +356,7 @@ def test_augment_pubchem_initialises_caches(
 
 def test_apply_testitem_enrichment_disable(cfg: Config) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
-    status, result = gtd.apply_testitem_enrichment(
+    status, result = pipeline.apply_testitem_enrichment(
         df,
         enrichment_cfg=SimpleNamespace(enable=False),
         io_cfg=cfg.io,
@@ -369,9 +374,9 @@ def test_apply_testitem_enrichment_failure(
     def fail_enrich(*args: object, **kwargs: object) -> pd.DataFrame:
         raise ValueError("enrich failed")
 
-    monkeypatch.setattr(gtd.testitem_enrichment, "enrich", fail_enrich)
+    monkeypatch.setattr(pipeline.testitem_enrichment, "enrich", fail_enrich)
 
-    status, result = gtd.apply_testitem_enrichment(
+    status, result = pipeline.apply_testitem_enrichment(
         df,
         enrichment_cfg=SimpleNamespace(enable=True),
         io_cfg=cfg.io,
@@ -385,8 +390,8 @@ def test_finalize_output_success(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
     df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
-    parent_stats = gtd.ParentLookupStats(
-        source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+    parent_stats = pipeline.ParentLookupStats(
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
         missing=0,
         unique=1,
         attached=1,
@@ -396,17 +401,17 @@ def test_finalize_output_success(
     def fake_validate(frame: pd.DataFrame, *, return_result: bool) -> SimpleNamespace:
         return SimpleNamespace(data=frame, failure_cases=pd.DataFrame())
 
-    monkeypatch.setattr(gtd, "validate_testitems", fake_validate)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "hash")
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(pipeline, "validate_testitems", fake_validate)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(
         io,
         "write_csv",
         lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
     )
 
-    exit_code = gtd.finalize_output(
+    exit_code = pipeline.finalize_output(
         df,
         cfg=cfg,
         output=tmp_path / "out.csv",
@@ -420,7 +425,7 @@ def test_finalize_output_success(
 def test_load_molecule_hierarchy_lookup_missing(tmp_path: Path, cfg: Config) -> None:
     path = tmp_path / "missing.csv"
 
-    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
     assert result == {}
 
@@ -443,7 +448,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
         encoding=cfg.io.csv_encoding,
     )
 
-    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
     assert result == {
         "CHEMBL1": "CHEMBL2",
@@ -462,7 +467,7 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
     )
 
     with pytest.raises(ValueError) as excinfo:
-        gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+        pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
     assert "invalid hierarchy lookup" in str(excinfo.value)
 
@@ -479,7 +484,7 @@ def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> No
         "resolve_pubchem_record",
         lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
     )
-    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
 
     calls: list[str] = []
     monkeypatch.setattr(
@@ -488,7 +493,7 @@ def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> No
         lambda cid, cfg: calls.append(cid) or pl.Properties(None, None, None, None, None, None),
     )
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
     pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
     assert pubchem_cols
     assert result[pubchem_cols].isna().all().all()
@@ -507,7 +512,7 @@ def test_add_pubchem_data_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *args, **kwargs: calls.append((args, kwargs)),
     )
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
 
     assert calls == []
     assert list(result.columns) == list(df.columns)
@@ -529,9 +534,9 @@ def test_add_pubchem_data_not_found_literal(monkeypatch: pytest.MonkeyPatch) -> 
         "get_properties",
         lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
     )
-    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
 
     assert result.loc[0, "pubchem_cid"] == "Not Found"
 
@@ -573,9 +578,9 @@ def test_add_pubchem_data_reuses_resolution_cache(
         "get_properties",
         lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
     )
-    monkeypatch.setattr(gtd, "_load_pubchem_cid_cache", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
 
     assert len(calls) == 1
     assert result["pubchem_cid"].tolist() == ["123", "123"]
@@ -627,7 +632,7 @@ def test_add_pubchem_data_prefetches_parent_records(
         cache_key: str | None = None,
         **_: object,
     ) -> pl.PubChemResolution:
-        if cache_key == "CHEMBL2":
+        if cache_key == "CHEMBL2" or identifiers.get("canonical_smiles") == "CC":
             return pl.PubChemResolution(cid="321", source="parent")
         return pl.PubChemResolution(cid=None, source=None)
 
@@ -639,7 +644,7 @@ def test_add_pubchem_data_prefetches_parent_records(
     )
 
     timeout = 12.5
-    result = gtd.add_pubchem_data(
+    result = pipeline.add_pubchem_data(
         df,
         cfg,
         client=object(),
@@ -683,7 +688,7 @@ def test_add_pubchem_data_primes_parent_cache_with_duplicates(
         cache_key: str | None = None,
         **_: object,
     ) -> pl.PubChemResolution:
-        if cache_key == "CHEMBL1":
+        if cache_key == "CHEMBL1" or identifiers.get("canonical_smiles") == "C":
             return pl.PubChemResolution(cid="111", source="local")
         return pl.PubChemResolution(cid=None, source=None)
 
@@ -694,7 +699,7 @@ def test_add_pubchem_data_primes_parent_cache_with_duplicates(
         lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
     )
 
-    result = gtd.add_pubchem_data(
+    result = pipeline.add_pubchem_data(
         df,
         cfg,
         client=object(),
@@ -741,10 +746,10 @@ def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
     monkeypatch.setattr(pl, "get_properties", fail)
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
 
     expected = df.copy()
-    for column in gtd.PUBCHEM_COLUMNS:
+    for column in pipeline.PUBCHEM_COLUMNS:
         expected[column] = expected[column].astype("string")
     pd.testing.assert_frame_equal(result, expected)
 
@@ -783,19 +788,19 @@ def test_add_pubchem_data_preserves_existing_values(
         calls.append(row["molecule_chembl_id"])
         return "333"
 
-    monkeypatch.setattr(gtd, "resolve_pubchem_cid", fake_resolve)
+    monkeypatch.setattr(pipeline, "resolve_pubchem_cid", fake_resolve)
     monkeypatch.setattr(
         pl,
         "get_properties",
         lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
     )
     monkeypatch.setattr(
-        gtd.logger,
+        pipeline.logger,
         "warning",
         lambda event, **kwargs: warnings.append((event, kwargs)),
     )
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
 
     assert calls == ["CHEMBL3"]
     assert any(
@@ -846,7 +851,7 @@ def test_resolve_pubchem_cid_prefers_inchikey(
 
     monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
 
-    cid = gtd.resolve_pubchem_cid(row, cache, cfg, resolution_cache={})
+    cid = pipeline.resolve_pubchem_cid(row, cache, cfg, resolution_cache={})
 
     assert cid == "10"
     assert cache["CHEMBL1"] == "10"
@@ -885,7 +890,7 @@ def test_resolve_pubchem_cid_uses_pubchem_inchikey(
 
     monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
 
-    cid = gtd.resolve_pubchem_cid(row, cache, cfg, resolution_cache={})
+    cid = pipeline.resolve_pubchem_cid(row, cache, cfg, resolution_cache={})
 
     assert cid == "77"
     assert cache["CHEMBL1"] == "77"
@@ -931,7 +936,7 @@ def test_resolve_pubchem_cid_uses_parent_when_enabled(
 
     monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
 
-    cid = gtd.resolve_pubchem_cid(
+    cid = pipeline.resolve_pubchem_cid(
         child_row,
         cache,
         cfg,
@@ -962,14 +967,14 @@ def test_resolve_pubchem_cid_logs_when_parent_missing(
     def capture(event: str, **kwargs: object) -> None:
         events.append((event, kwargs))
 
-    monkeypatch.setattr(gtd.logger, "info", capture)
+    monkeypatch.setattr(pipeline.logger, "info", capture)
     monkeypatch.setattr(
         pl,
         "resolve_pubchem_record",
         lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
     )
 
-    cid = gtd.resolve_pubchem_cid(
+    cid = pipeline.resolve_pubchem_cid(
         row,
         cache,
         cfg,
@@ -1014,14 +1019,14 @@ def test_add_pubchem_data_uses_disk_cache(
     props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
     monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
 
-    result = gtd.add_pubchem_data(df, cfg)
+    result = pipeline.add_pubchem_data(df, cfg)
 
     assert result.loc[0, "pubchem_cid"] == "321"
     assert result.loc[0, "pubchem_iupac_name"] == "name"
     cache_data = json.loads(cache_path.read_text())
     if "values" in cache_data:
         assert cache_data["values"] == {"CHEMBL1": "321"}
-        assert cache_data["metadata"]["version"] == gtd._PUBCHEM_CACHE_SCHEMA_VERSION
+        assert cache_data["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
     else:
         assert cache_data == {"CHEMBL1": "321"}
 
@@ -1031,12 +1036,12 @@ def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
 
     assert not cache_path.parent.exists()
 
-    gtd._write_pubchem_cid_cache(cache_path, {"CHEMBL1": "321"})
+    pipeline._write_pubchem_cid_cache(cache_path, {"CHEMBL1": "321"})
 
     assert cache_path.exists()
     payload = json.loads(cache_path.read_text())
     assert payload["values"] == {"CHEMBL1": "321"}
-    assert payload["metadata"]["version"] == gtd._PUBCHEM_CACHE_SCHEMA_VERSION
+    assert payload["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
 
 
 def test_load_pubchem_cid_cache_uses_shared_selector(
@@ -1078,14 +1083,14 @@ def test_load_pubchem_cid_cache_expires(tmp_path: Path) -> None:
     expired_at = datetime.now(UTC) - timedelta(hours=2)
     payload = {
         "metadata": {
-            "version": gtd._PUBCHEM_CACHE_SCHEMA_VERSION,
+            "version": pipeline._PUBCHEM_CACHE_SCHEMA_VERSION,
             "updated_at": expired_at.isoformat(),
         },
         "values": {"CHEMBL1": "321"},
     }
     cache_path.write_text(json.dumps(payload))
 
-    cache = gtd._load_pubchem_cid_cache(cache_path, ttl_hours=1)
+    cache = pipeline._load_pubchem_cid_cache(cache_path, ttl_hours=1)
 
     assert cache == {}
 
@@ -1117,16 +1122,16 @@ def test_run_chembl_column_order(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
     precomputed_catalog = {"CHEMBL1": "CHEMBL1_PARENT"}
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: precomputed_catalog)
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: precomputed_catalog)
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "add_pubchem_data",
         lambda df, cfg, **__: df,
     )
@@ -1137,8 +1142,8 @@ def test_run_chembl_column_order(
         captured_precomputed["frame"] = frame.copy()
         return (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -1147,11 +1152,11 @@ def test_run_chembl_column_order(
         )
 
     monkeypatch.setattr(
-        gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
+        pipeline, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda p: "deadbeef")
 
     captured: dict[str, list[str]] = {}
 
@@ -1174,7 +1179,7 @@ def test_run_chembl_column_order(
     assert rc == 0
 
     prepared = captured_precomputed["data"]
-    assert isinstance(prepared, gtd.ParentLookupPreparedData)
+    assert isinstance(prepared, pipeline.ParentLookupPreparedData)
     captured_frame = captured_precomputed["frame"]
     assert isinstance(captured_frame, pd.DataFrame)
     expected_prepared = prepare_parent_lookup_data(captured_frame, cfg.molecule_catalog)
@@ -1232,8 +1237,8 @@ def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
     )
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
 
     cache_path = tmp_path / "parent_catalog.json"
     cache_path.write_text("{}", encoding="utf-8")
@@ -1242,9 +1247,9 @@ def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
 
     parent_catalog = {"CHEMBL1": "CHEMBL1_PARENT"}
 
-    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: parent_catalog)
+    monkeypatch.setattr(pipeline, "query_parent_catalog", lambda *_, **__: parent_catalog)
     monkeypatch.setattr(
-        gtd.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+        pipeline.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
     )
 
     captured_precomputed: dict[str, object] = {}
@@ -1253,8 +1258,8 @@ def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
         captured_precomputed["data"] = kwargs.get("precomputed")
         return (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
                 missing=0,
                 unique=0,
                 attached=len(frame),
@@ -1262,10 +1267,10 @@ def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
             ),
         )
 
-    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach)
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "attach_parent_molecule_ids", fake_attach)
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
     monkeypatch.setattr(
         io,
         "write_csv",
@@ -1276,7 +1281,7 @@ def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
     assert rc == 0
 
     prepared = captured_precomputed.get("data")
-    assert isinstance(prepared, gtd.ParentLookupPreparedData)
+    assert isinstance(prepared, pipeline.ParentLookupPreparedData)
     assert prepared.need_lookup == {"CHEMBL2"}
 
 
@@ -1294,22 +1299,22 @@ def test_run_chembl_initialises_pubchem_session(
         {"molecule_chembl_id": ["CHEMBL1"], "molecule_type": ["Small molecule"]}
     )
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, pubchem_cfg, **__: frame)
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, pubchem_cfg, **__: frame)
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "attach_parent_molecule_ids",
         lambda frame, **kwargs: (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -1329,9 +1334,9 @@ def test_run_chembl_initialises_pubchem_session(
         "write_csv",
         lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     rc = gtd.run_chembl(cfg, args)
 
@@ -1383,22 +1388,22 @@ def test_run_chembl_uses_lazy_identifier_stream(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(gtd.pc, "init_session", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, *args, **__: frame)
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
-    monkeypatch.setattr(gtd, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, *args, **__: frame)
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "query_parent_catalog", lambda *_, **__: {})
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "attach_parent_molecule_ids",
         lambda frame, **kwargs: (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -1406,10 +1411,10 @@ def test_run_chembl_uses_lazy_identifier_stream(
             ),
         ),
     )
-    monkeypatch.setattr(gtd, "normalize_testitems", lambda frame: frame)
-    monkeypatch.setattr(gtd, "add_pipeline_metadata", lambda frame: frame)
+    monkeypatch.setattr(pipeline, "normalize_testitems", lambda frame: frame)
+    monkeypatch.setattr(pipeline, "add_pipeline_metadata", lambda frame: frame)
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "validate_testitems",
         lambda frame, return_result=True: SimpleNamespace(
             data=frame,
@@ -1421,10 +1426,10 @@ def test_run_chembl_uses_lazy_identifier_stream(
         "write_csv",
         lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
     )
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "update_parent_catalog_cache", lambda *_, **__: None)
 
     rc = gtd.run_chembl(cfg, args)
 
@@ -1457,21 +1462,21 @@ def test_run_chembl_calls_pubchem_once(
     )
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "attach_parent_molecule_ids",
         lambda frame, **kwargs: (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -1503,9 +1508,9 @@ def test_run_chembl_calls_pubchem_once(
         "write_csv",
         lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     rc = gtd.run_chembl(cfg, args)
 
@@ -1534,12 +1539,12 @@ def test_run_chembl_prefills_parent_from_hierarchy(
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
     monkeypatch.setattr(gtd.pc, "init_session", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **_: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
-    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **_: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "update_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_parent_catalog_cache", lambda *_, **__: None)
 
     cfg.molecule_catalog.cache_path = tmp_path / "parent_catalog.json"
     cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
@@ -1562,10 +1567,10 @@ def test_run_chembl_prefills_parent_from_hierarchy(
     def fail_load(**_: object) -> dict[str, str]:
         raise AssertionError("load_parent_catalog should not be called")
 
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", fake_lookup)
-    monkeypatch.setattr(gtd, "query_parent_catalog", fail_query)
-    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fail_fetch)
-    monkeypatch.setattr(gtd, "load_parent_catalog", fail_load)
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", fake_lookup)
+    monkeypatch.setattr(pipeline, "query_parent_catalog", fail_query)
+    monkeypatch.setattr(pipeline.molecule_catalog, "fetch_parent_catalog_for", fail_fetch)
+    monkeypatch.setattr(pipeline, "load_parent_catalog", fail_load)
 
     captured_df: pd.DataFrame | None = None
 
@@ -1628,15 +1633,15 @@ def test_run_chembl_merges_parent_catalog(
         query_calls += 1
         return parent_catalog
 
-    monkeypatch.setattr(gtd, "query_parent_catalog", fake_query_parent_catalog)
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "query_parent_catalog", fake_query_parent_catalog)
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     captured_catalog: dict[str, str] | None = None
     captured_source: str | None = None
 
     def fake_attach_parent_molecule_ids(
         frame: pd.DataFrame, **kwargs: object
-    ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
+    ) -> tuple[pd.DataFrame, pipeline.ParentLookupStats]:
         nonlocal captured_catalog, captured_source
         captured_catalog = kwargs.get("catalog")
         captured_source = kwargs.get("source")
@@ -1659,8 +1664,8 @@ def test_run_chembl_merges_parent_catalog(
         )
         return (
             updated,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -1669,11 +1674,11 @@ def test_run_chembl_merges_parent_catalog(
         )
 
     monkeypatch.setattr(
-        gtd, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
+        pipeline, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     captured_df: pd.DataFrame | None = None
 
@@ -1701,7 +1706,7 @@ def test_run_chembl_merges_parent_catalog(
     ]
     assert query_calls == 1
     assert captured_catalog is parent_catalog
-    assert captured_source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
+    assert captured_source == pipeline.PARENT_LOOKUP_SOURCE_LOOKUP
 
 
 def test_run_chembl_updates_parent_cache_and_reuses_results(
@@ -1719,8 +1724,8 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     source = pd.DataFrame([{child_field: "CHEMBL1", parent_field: pd.NA}])
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
     cache_path = tmp_path / "parent_catalog.json"
     cache_path.write_text("{}", encoding="utf-8")
@@ -1744,30 +1749,30 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
         return {item: f"{item}_PARENT" for item in normalised}
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         fake_fetch,
     )
 
     update_calls: list[dict[str, str]] = []
-    original_update = gtd.update_parent_catalog_cache
+    original_update = pipeline.update_parent_catalog_cache
 
     def tracking_update(catalog: Mapping[str, str], catalog_cfg: object) -> None:
         update_calls.append(dict(catalog))
         original_update(catalog, catalog_cfg)
 
-    monkeypatch.setattr(gtd, "update_parent_catalog_cache", tracking_update)
+    monkeypatch.setattr(pipeline, "update_parent_catalog_cache", tracking_update)
 
     attach_calls: list[tuple[dict[str, str], str | None]] = []
 
     def fake_attach(
         frame: pd.DataFrame, **kwargs: object
-    ) -> tuple[pd.DataFrame, gtd.ParentLookupStats]:
+    ) -> tuple[pd.DataFrame, pipeline.ParentLookupStats]:
         catalog = dict(kwargs.get("catalog", {}))
         source_name = kwargs.get("source")
         attach_calls.append((catalog, source_name))
-        stats_source = source_name or gtd.PARENT_LOOKUP_SOURCE_SKIPPED
-        stats = gtd.ParentLookupStats(
+        stats_source = source_name or pipeline.PARENT_LOOKUP_SOURCE_SKIPPED
+        stats = pipeline.ParentLookupStats(
             source=stats_source,
             missing=0,
             unique=len(catalog),
@@ -1776,10 +1781,10 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
         )
         return frame, stats
 
-    monkeypatch.setattr(gtd, "attach_parent_molecule_ids", fake_attach)
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "attach_parent_molecule_ids", fake_attach)
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     monkeypatch.setattr(
         io,
@@ -1795,8 +1800,8 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     assert fetch_calls == [["CHEMBL1"]]
     assert update_calls == [{"CHEMBL1": "CHEMBL1_PARENT"}]
     assert [source for _, source in attach_calls] == [
-        gtd.PARENT_LOOKUP_SOURCE_PARTIAL,
-        gtd.PARENT_LOOKUP_SOURCE_LOOKUP,
+        pipeline.PARENT_LOOKUP_SOURCE_PARTIAL,
+        pipeline.PARENT_LOOKUP_SOURCE_LOOKUP,
     ]
 
 
@@ -1817,14 +1822,14 @@ def test_attach_parent_ids_preserves_existing_values_when_cache_has_no_matches(
         }
     )
 
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         lambda *_, **__: {},
     )
 
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         source,
         client=object(),
         api_cfg=cfg.api,
@@ -1862,16 +1867,16 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
     )
 
     monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "attach_parent_molecule_ids",
         lambda frame, **kwargs: (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -1879,9 +1884,9 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
             ),
         ),
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     captured_df: pd.DataFrame | None = None
 
@@ -1935,14 +1940,14 @@ def test_run_chembl_parent_catalog_error(
             ]
         ),
     )
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "query_parent_catalog",
         lambda *_, **__: (_ for _ in ()).throw(
             ValueError("missing columns: parant_molecule_id")
@@ -1992,25 +1997,25 @@ def test_run_chembl_parent_catalog_request_error(
             ]
         ),
     )
-    monkeypatch.setattr(gtd, "add_pubchem_data", lambda frame, _, **__: frame)
-    monkeypatch.setattr(gtd, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gtd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
+    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "query_parent_catalog",
         lambda *_, **__: (_ for _ in ()).throw(requests.RequestException("boom")),
     )
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "attach_parent_molecule_ids",
         lambda frame, **kwargs: (
             frame,
-            gtd.ParentLookupStats(
-                source=gtd.PARENT_LOOKUP_SOURCE_SKIPPED,
+            pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_SKIPPED,
                 missing=0,
                 unique=0,
                 attached=0,
@@ -2033,7 +2038,7 @@ def test_run_chembl_parent_catalog_request_error(
     def fake_logger_error(event: str, *args: object, **kwargs: object) -> None:
         errors.append((event, kwargs))
 
-    monkeypatch.setattr(gtd.logger, "error", fake_logger_error)
+    monkeypatch.setattr(pipeline.logger, "error", fake_logger_error)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 1
@@ -2060,7 +2065,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
     catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
@@ -2080,7 +2085,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
         return fetched
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         fake_fetch,
     )
@@ -2088,7 +2093,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2105,7 +2110,7 @@ def test_attach_parent_molecule_ids_fetches_missing(
     assert stats.unique == 2
     assert stats.attached == 2
     assert stats.missing == 0
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_SYNC
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
@@ -2148,15 +2153,15 @@ def test_attach_parent_molecule_ids_skips_filled_children(
         fetch_calls.append(ordered)
         return {value: f"{value}_PARENT" for value in ordered}
 
-    monkeypatch.setattr(gtd, "query_parent_catalog", fake_query)
-    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
-    monkeypatch.setattr(gtd, "write_parent_catalog_cache", lambda *_, **__: None)
-    monkeypatch.setattr(gtd, "update_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "query_parent_catalog", fake_query)
+    monkeypatch.setattr(pipeline.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
+    monkeypatch.setattr(pipeline, "write_parent_catalog_cache", lambda *_, **__: None)
+    monkeypatch.setattr(pipeline, "update_parent_catalog_cache", lambda *_, **__: None)
 
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2176,7 +2181,7 @@ def test_attach_parent_molecule_ids_skips_filled_children(
     assert stats.unique == 1
     assert stats.attached == 3
     assert stats.missing == 0
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_PARTIAL
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
@@ -2209,13 +2214,13 @@ def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
         return {value: f"{value}_PARENT" for value in ordered}
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         fake_fetch,
     )
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "load_parent_catalog",
         lambda **_: (_ for _ in ()).throw(
             AssertionError("load_parent_catalog should not be called")
@@ -2225,7 +2230,7 @@ def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2236,7 +2241,7 @@ def test_attach_parent_molecule_ids_prefers_partial_fetch_when_complete(
 
     assert fetch_calls == [["CHEMBL10", "CHEMBL11"]]
     assert result[parent_field].tolist() == ["CHEMBL10_PARENT", "CHEMBL11_PARENT"]
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_PARTIAL
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
@@ -2283,14 +2288,14 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
         catalog=tracking_catalog,
-        source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
         precomputed=precomputed,
     )
 
@@ -2299,7 +2304,7 @@ def test_attach_parent_molecule_ids_handles_large_catalog(
     assert stats.unique == 3
     assert stats.attached == 3
     assert stats.missing == 0
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_LOOKUP
     assert tracking_catalog.iterations == 0
     assert set(tracking_catalog.lookups) == {"CHEMBL1", "CHEMBL2", "CHEMBL3"}
 
@@ -2317,7 +2322,7 @@ def test_attach_parent_molecule_ids_handles_partial_remote_success(
     catalog_cfg.cache_path = tmp_path / "catalog.json"
     catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
-    monkeypatch.setattr(gtd, "load_parent_catalog", lambda **__: {})
+    monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
 
     remote_result = {"CHEMBL1": "CHEMBL1_PARENT"}
 
@@ -2332,12 +2337,12 @@ def test_attach_parent_molecule_ids_handles_partial_remote_success(
         assert ids == ["CHEMBL1", "CHEMBL2"]
         return remote_result
 
-    monkeypatch.setattr(gtd.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
+    monkeypatch.setattr(pipeline.molecule_catalog, "fetch_parent_catalog_for", fake_fetch)
 
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2350,7 +2355,7 @@ def test_attach_parent_molecule_ids_handles_partial_remote_success(
     assert parent_values == ["CHEMBL1_PARENT", pd.NA]
     assert stats.attached == 1
     assert stats.missing == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_SYNC
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
@@ -2385,7 +2390,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         return {"CHEMBL2": "CHEMBL2_PARENT"}
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         fake_fetch,
     )
@@ -2393,7 +2398,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    first_result, first_stats = gtd.attach_parent_molecule_ids(
+    first_result, first_stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2407,7 +2412,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         "CHEMBL1_PARENT",
         "CHEMBL2_PARENT",
     ]
-    assert first_stats.source == gtd.PARENT_LOOKUP_SOURCE_PARTIAL
+    assert first_stats.source == pipeline.PARENT_LOOKUP_SOURCE_PARTIAL
 
     stored_catalog = json.loads(catalog_cfg.cache_path.read_text(encoding="utf-8"))
     assert stored_catalog == {
@@ -2418,7 +2423,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
     precomputed_second = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    second_result, second_stats = gtd.attach_parent_molecule_ids(
+    second_result, second_stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2432,7 +2437,7 @@ def test_attach_parent_molecule_ids_updates_cache_for_reuse(
         "CHEMBL1_PARENT",
         "CHEMBL2_PARENT",
     ]
-    assert second_stats.source == gtd.PARENT_LOOKUP_SOURCE_CACHE
+    assert second_stats.source == pipeline.PARENT_LOOKUP_SOURCE_CACHE
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
@@ -2452,19 +2457,19 @@ def test_attach_parent_molecule_ids_uses_sqlite_after_migration(
         encoding="utf-8",
     )
 
-    original_loads = gtd.molecule_catalog.json.loads
+    original_loads = pipeline.molecule_catalog.json.loads
     calls = {"loads": 0}
 
     def counting_loads(data: str, *args: object, **kwargs: object) -> object:
         calls["loads"] += 1
         return original_loads(data, *args, **kwargs)
 
-    monkeypatch.setattr(gtd.molecule_catalog.json, "loads", counting_loads)
+    monkeypatch.setattr(pipeline.molecule_catalog.json, "loads", counting_loads)
 
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    first_result, _ = gtd.attach_parent_molecule_ids(
+    first_result, _ = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2481,7 +2486,7 @@ def test_attach_parent_molecule_ids_uses_sqlite_after_migration(
     precomputed_second = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    second_result, _ = gtd.attach_parent_molecule_ids(
+    second_result, _ = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2508,7 +2513,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
 
     monkeypatch.setattr(
-        gtd,
+        pipeline,
         "load_parent_catalog",
         lambda **__: {},
     )
@@ -2524,7 +2529,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
         raise requests.RequestException("boom")
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         failing_fetch,
     )
@@ -2532,7 +2537,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
@@ -2546,7 +2551,7 @@ def test_attach_parent_molecule_ids_fetch_failure(
     assert stats.unique == 1
     assert stats.attached == 0
     assert stats.missing == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_SYNC
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_SYNC
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
@@ -2566,7 +2571,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     def unexpected_load_parent_catalog(**_: object) -> dict[str, str]:
         raise AssertionError("load_parent_catalog should not be called")
 
-    monkeypatch.setattr(gtd, "load_parent_catalog", unexpected_load_parent_catalog)
+    monkeypatch.setattr(pipeline, "load_parent_catalog", unexpected_load_parent_catalog)
 
     def unexpected_fetch(
         ids: list[str],
@@ -2578,7 +2583,7 @@ def test_attach_parent_molecule_ids_uses_cache_only(
         raise AssertionError("fetch_parent_catalog_for should not be called")
 
     monkeypatch.setattr(
-        gtd.molecule_catalog,
+        pipeline.molecule_catalog,
         "fetch_parent_catalog_for",
         unexpected_fetch,
     )
@@ -2586,18 +2591,18 @@ def test_attach_parent_molecule_ids_uses_cache_only(
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
-    result, stats = gtd.attach_parent_molecule_ids(
+    result, stats = pipeline.attach_parent_molecule_ids(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
         catalog_cfg=catalog_cfg,
         timeout=None,
         catalog={"CHEMBL1": "CHEMBL1_PARENT"},
-        source=gtd.PARENT_LOOKUP_SOURCE_CACHE,
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
         precomputed=precomputed,
     )
 
     assert result[catalog_cfg.parent_field].tolist() == ["CHEMBL1_PARENT"]
     assert stats.missing == 0
     assert stats.attached == 1
-    assert stats.source == gtd.PARENT_LOOKUP_SOURCE_LOOKUP
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_LOOKUP
