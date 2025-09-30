@@ -13,19 +13,38 @@ class DummyLogger:
 
     def __init__(self) -> None:
         self.events: list[tuple[str, dict[str, object]]] = []
+        self.config: dict[str, object | None] = {}
 
     def info(self, event: str, **payload: object) -> None:
         self.events.append((event, payload))
 
 
-def test_main_invokes_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _configure_logger_factory(loggers: list[DummyLogger]):
+    def _configure_logger(
+        cfg: object, *, fmt: str | None = None, datefmt: str | None = None
+    ) -> DummyLogger:
+        logger = DummyLogger()
+        logger.config = {"fmt": fmt, "datefmt": datefmt, "cfg": cfg}
+        loggers.append(logger)
+        return logger
+
+    return _configure_logger
+
+
+def test_main_invokes_run_without_print_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """CLI entry point should configure logging and execute ``run``."""
 
-    logger = DummyLogger()
-    monkeypatch.setattr(cli, "configure_logger", lambda cfg: logger)
+    configured_loggers: list[DummyLogger] = []
+    monkeypatch.setattr(
+        cli, "configure_logger", _configure_logger_factory(configured_loggers)
+    )
 
     cfg = Config()
     cfg.api.user_agent = "test@example.org"
+    cfg.log.format = "json"
+    cfg.log.datefmt = "iso"
     monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *_, **__: cfg)
     monkeypatch.setattr(cli, "ensure_dirs", lambda *_: None)
 
@@ -61,9 +80,62 @@ def test_main_invokes_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     assert exit_code == 0
     assert called["cfg"] is cfg
     assert called["args"].input_csv == input_csv
-    assert printed["cfg"] is cfg
-    assert any(event == "pipeline_start" for event, _ in logger.events)
+    assert "cfg" not in printed
+    assert len(configured_loggers) >= 2
+    assert any(
+        event == "pipeline_start" for event, _ in configured_loggers[0].events
+    )
     assert any(
         event == "pipeline_end" and payload.get("exit_code") == 0
-        for event, payload in logger.events
+        for event, payload in configured_loggers[-1].events
+    )
+    assert configured_loggers[-1].config["fmt"] == cfg.log.format
+    assert configured_loggers[-1].config["datefmt"] == cfg.log.datefmt
+
+
+def test_main_prints_config_when_requested(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``--print-config`` should output configuration and skip execution."""
+
+    configured_loggers: list[DummyLogger] = []
+    monkeypatch.setattr(
+        cli, "configure_logger", _configure_logger_factory(configured_loggers)
+    )
+
+    cfg = Config()
+    cfg.log.format = "json"
+    cfg.log.datefmt = "iso"
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *_, **__: cfg)
+    monkeypatch.setattr(cli, "ensure_dirs", lambda *_: None)
+
+    printed: dict[str, Config] = {}
+    monkeypatch.setattr(cli, "print_config", lambda c: printed.setdefault("cfg", c))
+
+    def fake_run(*_: object, **__: object) -> int:  # pragma: no cover - safety
+        raise AssertionError("run should not be invoked when printing config")
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    exit_code = cli.main(
+        [
+            "--input",
+            str(input_csv),
+            "--column",
+            "chembl_id",
+            "--chunk-size",
+            "2",
+            "--print-config",
+        ]
+    )
+
+    assert exit_code == 0
+    assert printed["cfg"] is cfg
+    assert len(configured_loggers) >= 2
+    assert any(
+        event == "pipeline_end" and payload.get("exit_code") == 0
+        for event, payload in configured_loggers[-1].events
     )

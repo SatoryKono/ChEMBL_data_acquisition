@@ -115,7 +115,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     cfg = cli.apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
-    print_config(cfg)
+    logger = configure_logger(
+        log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt
+    )
+    if args.print_config:
+        print_config(cfg)
+        logger.info("pipeline_end", exit_code=0)
+        return 0
     func: Callable[[Config, argparse.Namespace], int] = args.func
     exit_code = func(cfg, args)
     logger.info("pipeline_end", exit_code=exit_code)
