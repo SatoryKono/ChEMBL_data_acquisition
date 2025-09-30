@@ -42,9 +42,9 @@ def test_run_chembl_respects_limit(
     monkeypatch.setattr(cl, "get_activities", fake_get)
 
     monkeypatch.setattr(
-        io,
-        "write_csv",
-        lambda df, output, *, cfg, sep=None, encoding=None, **__: output,
+        gad,
+        "write_csv_deterministic",
+        lambda df, output, *, key_cols, col_order, chunksize, sort_chunksize, sep, encoding, cfg, **__: output,
     )
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
@@ -113,11 +113,23 @@ def test_run_chembl_column_order(
 
     captured: dict[str, list[str]] = {}
 
-    def fake_write_csv(df, output, *, cfg, key_cols=None, col_order=None, **__) -> Path:
+    def fake_write_csv(
+        df,
+        output,
+        *,
+        key_cols,
+        col_order,
+        chunksize,
+        sort_chunksize,
+        sep,
+        encoding,
+        cfg,
+        **__,
+    ) -> Path:
         captured["col_order"] = list(col_order or [])
         return output
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gad, "write_csv_deterministic", fake_write_csv)
 
     rc = gad.run_chembl(cfg, args)
     assert rc == 0
@@ -135,3 +147,91 @@ def test_run_chembl_column_order(
     expected_head = [c for c in schema_cols if c in available]
     expected_tail = sorted(available - set(schema_cols))
     assert captured["col_order"] == expected_head + expected_tail
+
+
+def test_run_chembl_streams_large_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    """Ensure large datasets trigger chunked deterministic CSV writes."""
+
+    chunk_size = cfg.io.csv_chunksize
+    total_rows = chunk_size * 2 + 5
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\n" + "\n".join(str(i) for i in range(total_rows)))
+
+    monkeypatch.setattr(
+        io,
+        "read_ids",
+        lambda *_, **__: (str(i) for i in range(total_rows)),
+    )
+
+    def fake_get(ids, cfg, client, chunk_size, timeout, **kwargs):
+        data = list(ids)
+        return pd.DataFrame(
+            {
+                "activity_id": data,
+                "standard_value": [1.0] * len(data),
+                "standard_type": ["IC50"] * len(data),
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_activities", fake_get)
+    monkeypatch.setattr(gad, "normalize_activities", lambda df: df)
+    monkeypatch.setattr(gad, "add_pipeline_metadata", lambda df: df)
+    monkeypatch.setattr(gad, "compute_activity_bounds", lambda df, cfg: df)
+    monkeypatch.setattr(
+        gad,
+        "apply_activity_annotations",
+        lambda df, action_cfg, properties_cfg: df,
+    )
+
+    class _Result:
+        def __init__(self, data: pd.DataFrame) -> None:
+            self.data = data
+            self.failure_cases = pd.DataFrame()
+
+    monkeypatch.setattr(
+        gad,
+        "validate_activities",
+        lambda df, return_result: _Result(df),
+    )
+    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+
+    captured: dict[str, object] = {}
+
+    def fake_write_csv(
+        df: pd.DataFrame,
+        output: Path,
+        *,
+        key_cols,
+        col_order,
+        chunksize,
+        sort_chunksize,
+        sep,
+        encoding,
+        cfg,
+        **__,
+    ) -> Path:
+        chunk_count = (len(df) + chunksize - 1) // chunksize if chunksize else 1
+        captured.update(
+            {
+                "chunksize": chunksize,
+                "sort_chunksize": sort_chunksize,
+                "chunk_count": chunk_count,
+                "rows": len(df),
+            }
+        )
+        return output
+
+    monkeypatch.setattr(gad, "write_csv_deterministic", fake_write_csv)
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+    rc = gad.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert captured["rows"] == total_rows
+    assert captured["chunksize"] == chunk_size
+    assert captured["sort_chunksize"] == chunk_size
+    assert captured["chunk_count"] > 1
