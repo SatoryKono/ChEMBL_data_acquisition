@@ -27,6 +27,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import cli
 from library import io
+from library.csv_utils import write_csv_deterministic
 from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -214,12 +215,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         rows_dropped = rows_total - rows_kept
         try:
             key_cols = [c for c in ["activity_id"] if c in df.columns]
-            csv_path = io.write_csv(
+            sort_columns = key_cols or sorted(df.columns)
+            csv_path = write_csv_deterministic(
                 df,
                 output,
-                cfg=cfg,
-                key_cols=key_cols or None,
+                key_cols=sort_columns,
                 col_order=col_order,
+                chunksize=cfg.io.csv_chunksize,
+                sort_chunksize=cfg.io.csv_chunksize,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                cfg=cfg,
             )
             logger.info("write_done", rows=rows_kept, path=str(csv_path))
         except OSError as exc:
