@@ -27,12 +27,12 @@ from .config import PubChemCfg
 from .log import logger
 
 
-def _select_primary_cid(
+def select_primary_cid(
     candidates: str | None,
     *,
-    cache_key: str | None,
     identifier: str,
     value: str | None,
+    context_id: str | None = None,
 ) -> str | None:
     """Return the first CID from ``candidates`` logging alternatives."""
 
@@ -45,7 +45,7 @@ def _select_primary_cid(
     if len(cid_list) > 1:
         logger.info(
             "pubchem_multiple_cid",
-            chembl_id=cache_key,
+            chembl_id=context_id,
             identifier=identifier,
             value=value,
             cid=primary,
@@ -92,11 +92,11 @@ def resolve_pubchem_record(
         if cid_cache is not None and cache_key:
             cached_value = cid_cache.get(cache_key)
             if isinstance(cached_value, str) and cached_value:
-                cid = _select_primary_cid(
+                cid = select_primary_cid(
                     cached_value,
-                    cache_key=cache_key,
                     identifier="cache",
                     value=cached_value,
+                    context_id=cache_key,
                 )
                 if cid:
                     if cached_value != cid:
@@ -104,11 +104,11 @@ def resolve_pubchem_record(
                     return PubChemResolution(cid=cid, source="cache")
         existing_cid = identifiers.get("pubchem_cid")
         if existing_cid:
-            cid = _select_primary_cid(
+            cid = select_primary_cid(
                 existing_cid,
-                cache_key=cache_key,
                 identifier="pubchem_cid",
                 value=existing_cid,
+                context_id=cache_key,
             )
             if cid:
                 return PubChemResolution(cid=cid, source="pubchem_cid")
@@ -122,11 +122,11 @@ def resolve_pubchem_record(
             if not value:
                 continue
             resolved = resolver(value, cfg)
-            cid = _select_primary_cid(
+            cid = select_primary_cid(
                 resolved,
-                cache_key=cache_key,
                 identifier=identifier,
                 value=value,
+                context_id=cache_key,
             )
             if cid:
                 return PubChemResolution(cid=cid, source=identifier)
@@ -164,11 +164,11 @@ def resolve_pubchem_record(
             ("pref_name_partial", get_all_cid),
         ):
             resolved = resolver(name_value, cfg)
-            cid = _select_primary_cid(
+            cid = select_primary_cid(
                 resolved,
-                cache_key=cache_key,
                 identifier=identifier,
                 value=name_value,
+                context_id=cache_key,
             )
             if cid:
                 return PubChemResolution(cid=cid, source=identifier)

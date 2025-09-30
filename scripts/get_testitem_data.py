@@ -314,11 +314,11 @@ def _load_pubchem_cid_cache(
         value = _normalise_identifier(raw_value)
         if not value:
             continue
-        primary = _select_primary_cid(
+        primary = pl.select_primary_cid(
             value,
-            chembl_id=key,
             identifier="cache_file",
             value=value,
+            context_id=key,
         )
         if primary is not None:
             cache[key] = primary
@@ -352,35 +352,6 @@ def _write_pubchem_cid_cache(
             json.dump(payload, handle, indent=2, sort_keys=True)
     except OSError as exc:  # pragma: no cover - I/O errors
         logger.warning("pubchem_cache_write_failed", path=str(path), error=str(exc))
-
-
-def _select_primary_cid(
-    candidates: str | None,
-    *,
-    chembl_id: str | None,
-    identifier: str,
-    value: str | None,
-) -> str | None:
-    """Return the primary CID from a pipe-separated list."""
-
-    if not candidates:
-        return None
-    cid_list = [cid.strip() for cid in str(candidates).split("|") if cid.strip()]
-    if not cid_list:
-        return None
-    primary = cid_list[0]
-    if len(cid_list) > 1:
-        logger.info(
-            "pubchem_multiple_cid",
-            chembl_id=chembl_id,
-            identifier=identifier,
-            value=value,
-            cid=primary,
-            alternatives=cid_list[1:],
-        )
-    return primary
-
-
 def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
     """Return mapping of identifier names to normalised values."""
 
