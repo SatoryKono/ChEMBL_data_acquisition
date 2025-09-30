@@ -17,9 +17,12 @@ data/output/
 ├── output_activity_20240105.csv.meta.yaml
 ├── output_activity_20240105_failure_cases.csv
 ├── output_activity_20240105_quality_report_table.csv
-├── output_activity_20240105_data_correlation_report_table.csv
-└── output_activity_20240105.quality.json
+└── output_activity_20240105_data_correlation_report_table.csv
 ```
+
+Документные пайплайны (например, `scripts/get_document_data.py`) дополняют
+выгрузку файлом `<base>.quality.json`, который агрегирует покрытие DOI и ошибки
+внешних сервисов. Активности, биотесты и таргеты такой отчёт не создают.
 
 Промежуточные файлы таргет-пайплайна в режиме `all`
 (`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) используют тот же шаблон.
