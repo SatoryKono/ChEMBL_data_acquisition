@@ -63,6 +63,7 @@ get-activities = "library.utils.cli_tools.get_activities:main"
 check-determinism = "library.utils.cli_tools.check_determinism:main"
 
 [tool.setuptools]
+include-package-data = true
 py-modules = [
   "scripts.get_activity_data",
   "scripts.get_assay_data",
@@ -72,7 +73,10 @@ py-modules = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["library", "schemas"]
+include = ["library", "schemas", "config"]
+
+[tool.setuptools.package-data]
+"config" = ["config.yaml"]
 
 [tool.black]
 line-length = 88

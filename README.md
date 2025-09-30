@@ -531,6 +531,23 @@ sections:
 * ``system`` – shared concerns such as logging, retry strategy, rate limiting
   and document-type normalisation.
 
+Because the wheel bundles ``config/config.yaml``, any custom configuration file
+can simply extend it by overriding the keys you need while omitting the rest.
+Create a lightweight YAML such as:
+
+```
+sources:
+  chembl:
+    api:
+      rps: 10
+system:
+  log:
+    level: DEBUG
+```
+
+Pass this file via ``--config`` (or ``CHEMBL_DA__...`` environment variables)
+and the loader will merge your overrides with the packaged defaults.
+
 The companion ``config.schema.json`` file documents these fields and is useful
 for editor validation, but it must **not** be passed to ``--config`` because it
 lacks runtime values such as ``sources.chembl.api.user_agent``. A minimal
