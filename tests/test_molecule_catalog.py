@@ -107,6 +107,101 @@ def test_fetch_parent_catalog_for_returns_only_requested(api_cfg: ApiCfg) -> Non
     assert result == {"CHEMBL1": "CHEMBL10"}
 
 
+def test_fetch_parent_catalog_for_applies_custom_filters(api_cfg: ApiCfg) -> None:
+    responses = [
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL1",
+                    "parent_molecule_chembl_id": "CHEMBL10",
+                }
+            ]
+        }
+    ]
+    client = DummyClient(responses)
+    cfg = MoleculeCatalogCfg(
+        filters={
+            "parent_molecule_chembl_id__isnull": "false",
+            "molecule_type": "small_molecule",
+        }
+    )
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1"],
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10"}
+    first_call = client.calls[0]
+    assert "molecule_type=small_molecule" in first_call
+    assert "parent_molecule_chembl_id__isnull=false" in first_call
+
+
+def test_fetch_parent_catalog_for_uses_custom_fields(api_cfg: ApiCfg) -> None:
+    responses = [
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL1",
+                    "parent_molecule_chembl_id": "CHEMBL10",
+                }
+            ]
+        }
+    ]
+    client = DummyClient(responses)
+    cfg = MoleculeCatalogCfg(
+        fields=("molecule_chembl_id", "molecule_properties", "parent_molecule_chembl_id"),
+    )
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1"],
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10"}
+    assert (
+        "fields=molecule_chembl_id%2Cmolecule_properties%2Cparent_molecule_chembl_id"
+        in client.calls[0]
+    )
+
+
+def test_fetch_parent_catalog_for_respects_page_size(api_cfg: ApiCfg) -> None:
+    responses = [
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL1",
+                    "parent_molecule_chembl_id": "CHEMBL10",
+                }
+            ]
+        },
+        {
+            "molecules": [
+                {
+                    "molecule_chembl_id": "CHEMBL2",
+                    "parent_molecule_chembl_id": "CHEMBL20",
+                }
+            ]
+        },
+    ]
+    client = DummyClient(responses)
+    cfg = MoleculeCatalogCfg(page_size=1)
+
+    result = fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"],
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert result == {"CHEMBL1": "CHEMBL10", "CHEMBL2": "CHEMBL20"}
+    assert all("limit=1" in call for call in client.calls)
+
+
 def test_fetch_parent_catalog_for_chunks_requests(api_cfg: ApiCfg) -> None:
     responses = [
         {
