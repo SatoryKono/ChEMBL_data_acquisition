@@ -9,8 +9,11 @@ creation.
 Exports are written to `local.io.output_dir` (default `data/output`). By
 default each CLI command derives the destination file as
 `output_<stem>_<date>.csv`, where `<stem>` is the input filename without
-extension and `<date>` is the current UTC date in `YYYYMMDD` format. The writer
-creates parent directories automatically when `local.io.exist_ok` is `true`.
+extension and `<date>` is the host-local calendar date in `YYYYMMDD` format.
+The writer creates parent directories automatically when `local.io.exist_ok`
+is `true`. If your automation requires UTC-based filenames, wrap the CLI with a
+custom `--output` value or set `local.io.output_dir` explicitly so you can
+inject an alternate timestamp.
 
 ```
 data/output/
