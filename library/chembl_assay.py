@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from urllib.parse import urlencode, urljoin
 
 import pandas as pd
@@ -116,6 +116,43 @@ TESTITEM_COLUMNS = [
 
 
 TESTITEM_QUERY_FIELDS = TESTITEM_FIELD_DEFAULTS
+
+
+MAX_TESTITEM_URL_LENGTH = 7500
+
+
+def _split_chunk_for_url(
+    chunk: Sequence[str],
+    base_url: str,
+    *,
+    max_length: int = MAX_TESTITEM_URL_LENGTH,
+) -> Iterator[list[str]]:
+    """Yield sub-chunks that keep the request URL within ``max_length``."""
+
+    prefix = f"{base_url}&molecule_chembl_id__in="
+    prefix_length = len(prefix)
+    if prefix_length >= max_length:
+        raise ValueError("base URL exceeds maximum request length")
+
+    buffer: list[str] = []
+    buffer_length = 0
+    for identifier in chunk:
+        separator = 1 if buffer else 0
+        candidate_length = buffer_length + separator + len(identifier)
+        if prefix_length + candidate_length > max_length and buffer:
+            yield buffer
+            buffer = [identifier]
+            buffer_length = len(identifier)
+        elif prefix_length + candidate_length > max_length:
+            yield [identifier]
+            buffer = []
+            buffer_length = 0
+        else:
+            buffer.append(identifier)
+            buffer_length = candidate_length
+
+    if buffer:
+        yield buffer
 
 
 def get_assay(
@@ -348,39 +385,42 @@ def get_testitem(
     base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?{query_string}"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, effective_chunk):
-        chunk_key = ",".join(chunk)
-        logger.info(
-            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
-        )
-        url = f"{base}&molecule_chembl_id__in={chunk_key}"
-        next_url: str | None = url
-        seen_urls: set[str] = set()
-        chunk_frames: list[pd.DataFrame] = []
-        while next_url:
-            absolute_url = urljoin(cfg.chembl_base, next_url)
-            if absolute_url in seen_urls:
-                logger.warning(
-                    "pagination_loop_detected",
-                    extra={"stage": "chunk_loop", "chunk_key": chunk_key},
+        for url_chunk in _split_chunk_for_url(chunk, base):
+            chunk_key = ",".join(url_chunk)
+            logger.info(
+                "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+            )
+            url = f"{base}&molecule_chembl_id__in={chunk_key}"
+            next_url: str | None = url
+            seen_urls: set[str] = set()
+            chunk_frames: list[pd.DataFrame] = []
+            while next_url:
+                absolute_url = urljoin(cfg.chembl_base, next_url)
+                if absolute_url in seen_urls:
+                    logger.warning(
+                        "pagination_loop_detected",
+                        extra={"stage": "chunk_loop", "chunk_key": chunk_key},
+                    )
+                    break
+                seen_urls.add(absolute_url)
+                data = client.request_json(
+                    absolute_url, cfg=cfg, timeout=effective_timeout
                 )
-                break
-            seen_urls.add(absolute_url)
-            data = client.request_json(absolute_url, cfg=cfg, timeout=effective_timeout)
-            items = data.get("molecules") or data.get("molecule") or []
-            if items:
-                chunk_frames.append(json_normalize_pyarrow(items))
-            page_meta = data.get("page_meta") or {}
-            next_token = page_meta.get("next")
-            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
-        if chunk_frames:
-            records.append(pd.concat(chunk_frames, ignore_index=True))
-            logger.info(
-                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
-            )
-        else:
-            logger.info(
-                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
-            )
+                items = data.get("molecules") or data.get("molecule") or []
+                if items:
+                    chunk_frames.append(json_normalize_pyarrow(items))
+                page_meta = data.get("page_meta") or {}
+                next_token = page_meta.get("next")
+                next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+            if chunk_frames:
+                records.append(pd.concat(chunk_frames, ignore_index=True))
+                logger.info(
+                    "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+                )
+            else:
+                logger.info(
+                    "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+                )
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)
