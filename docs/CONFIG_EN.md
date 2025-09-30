@@ -112,7 +112,9 @@ This block controls derived annotations appended to every activity row. It works
 * `summary_column` — reserved for the future text renderer. The current implementation keeps the JSON payload in `column`,
   generates only the deterministic fingerprint in `hash_column` and does not emit a separate summary field.
 * `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).
-* `separator` and `pair_separator` are likewise reserved; formatting knobs will take effect once the summary renderer ships.
+* `separator` and `pair_separator` are legacy formatting knobs retained for backwards compatibility; the current
+  JSON serialisation ignores them.
+
 * `drop_source_column` removes the original structured column after summarisation (`true`).
 * Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.
 * `allowlist` restricts which property groups are retained (measurement, assay, comments, effect_features, triage, mechanism,
