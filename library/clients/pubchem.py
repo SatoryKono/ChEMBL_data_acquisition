@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Lock
 from time import monotonic
 from typing import Any, cast
 from urllib.parse import quote
@@ -34,6 +35,7 @@ __all__ = [
 # Cache is initialised lazily to allow configuration of the TTL via
 # :class:`PubChemCfg`. The cache is recreated when the TTL changes.
 _CACHE: TTLCache[str, dict[str, Any]] | None = None
+_CACHE_LOCK = Lock()
 
 # Shared session with placeholder user agent; production code should call
 # :func:`init_session` to supply real contact details.
@@ -107,10 +109,11 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
 
     global _CACHE
-    if _CACHE is None or _CACHE.ttl != cfg.cache_ttl:
-        _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
-
-    cached = _CACHE.get(url)
+    with _CACHE_LOCK:
+        if _CACHE is None or _CACHE.ttl != cfg.cache_ttl:
+            _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
+        cache = _CACHE
+        cached = cache.get(url) if cache is not None else None
     if cached is not None:
         logger.info("cache_hit", url=url, rps=cfg.rps, status="hit")
         return cast(dict[str, Any], cached)
@@ -221,8 +224,11 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             status=status,
             rps=cfg.rps,
         )
-        assert _CACHE is not None
-        _CACHE[url] = data
+        with _CACHE_LOCK:
+            cache = _CACHE
+            if cache is None or cache.ttl != cfg.cache_ttl:
+                cache = _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
+            cache[url] = data
         logger.info("cache_set", url=url, rps=cfg.rps)
         return data
 
