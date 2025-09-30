@@ -1039,6 +1039,40 @@ def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
     assert payload["metadata"]["version"] == gtd._PUBCHEM_CACHE_SCHEMA_VERSION
 
 
+def test_load_pubchem_cid_cache_uses_shared_selector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_path = tmp_path / "cid_cache.json"
+    cache_payload = {
+        "values": {
+            "chembl1": "123 | 456",
+            "chembl2": None,
+        }
+    }
+    cache_path.write_text(json.dumps(cache_payload))
+
+    calls: list[tuple[str | None, str, str | None, str | None]] = []
+
+    def fake_select(
+        candidates: str | None,
+        *,
+        identifier: str,
+        value: str | None,
+        context_id: str | None = None,
+    ) -> str | None:
+        calls.append((candidates, identifier, value, context_id))
+        if candidates:
+            return candidates.split("|")[0].strip()
+        return None
+
+    monkeypatch.setattr(pl, "select_primary_cid", fake_select)
+
+    cache = gtd._load_pubchem_cid_cache(cache_path)
+
+    assert cache == {"CHEMBL1": "123", "CHEMBL2": None}
+    assert calls == [("123 | 456", "cache_file", "123 | 456", "CHEMBL1")]
+
+
 def test_load_pubchem_cid_cache_expires(tmp_path: Path) -> None:
     cache_path = tmp_path / "cid_cache.json"
     expired_at = datetime.now(UTC) - timedelta(hours=2)
