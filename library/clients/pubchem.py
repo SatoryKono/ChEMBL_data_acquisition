@@ -145,7 +145,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             )
             return None
         event = "request_start" if attempt == 1 else "request_retry"
-        logger.info(
+        logger.debug(
             event,
             url=url,
             attempt=attempt,
@@ -272,7 +272,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             )
             return None
 
-        logger.info(
+        logger.debug(
             "request_ok",
             url=url,
             status=status,

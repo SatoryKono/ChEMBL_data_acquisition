@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import time
 
+import io
+import json
+
 import pytest
 import requests
 
@@ -13,6 +16,7 @@ responses = pytest.importorskip("responses")
 from library import pubchem_library as pl  # noqa: E402
 from library.clients import pubchem as pc  # noqa: E402
 from library import rate_limiter as rl  # noqa: E402
+from library.logging_setup import LoggerConfig, configure_logger  # noqa: E402
 
 
 @responses.activate
@@ -160,6 +164,63 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
 
     assert sleeps == [1]
     assert attempts["n"] == 2
+
+
+def test_make_request_logs_per_request_events_as_debug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Per-request PubChem logs should use DEBUG for verbose events."""
+
+    buf = io.StringIO()
+    test_logger = configure_logger(
+        LoggerConfig(level="DEBUG", run_id="test", stream=buf)
+    ).bind(status=None, rps=None)
+    monkeypatch.setattr(pc, "logger", test_logger)
+
+    class DummyResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {}
+
+        def raise_for_status(self) -> None:  # pragma: no cover - no error
+            return None
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url: str, timeout: tuple[int, int]) -> DummyResponse:
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.RequestException("boom")
+            return DummyResponse()
+
+    monkeypatch.setattr(pc, "_session", DummySession())
+
+    class Limiter:
+        def acquire(self) -> None:  # pragma: no cover - simple stub
+            return None
+
+    monkeypatch.setattr(pc, "get_limiter", lambda *a, **k: Limiter())
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+    pc._CACHE = None
+
+    cfg = pl.PubChemCfg(retries=1, delay=0, backoff_initial_seconds=0)
+    result = pl.make_request("https://example.org", cfg)
+
+    assert result == {}
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    levels = {
+        record["event"]: record["level"]
+        for record in records
+        if record["event"] in {"request_start", "request_retry", "request_ok"}
+    }
+
+    assert levels["request_start"] == "DEBUG"
+    assert levels["request_retry"] == "DEBUG"
+    assert levels["request_ok"] == "DEBUG"
 
 
 def test_make_request_uses_all_attempts(monkeypatch: pytest.MonkeyPatch) -> None:

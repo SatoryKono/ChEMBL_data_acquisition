@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import random
 import time
@@ -12,6 +13,7 @@ import pytest
 from library import rate_limiter as rl
 from library.clients import ChemblClient
 from library.config import ApiCfg, RetryCfg
+from library.logging_setup import LoggerConfig, configure_logger
 
 cachetools = pytest.importorskip("cachetools")
 from cachetools import TTLCache  # type: ignore[import-untyped]  # noqa: E402
@@ -166,6 +168,39 @@ def test_request_json_retries_with_mocked_session() -> None:
 
     assert result == {"ok": True}
     assert session.get.call_count == 2
+
+
+def test_request_json_logs_per_request_events_as_debug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Per-request logging should use DEBUG level for verbose events."""
+
+    buf = io.StringIO()
+    test_logger = configure_logger(
+        LoggerConfig(level="DEBUG", run_id="test", stream=buf)
+    ).bind(status=None, rps=None)
+    monkeypatch.setattr("library.clients.chembl.logger", test_logger)
+
+    session = DummySession(failures=1)
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+    client.clear_cache()
+
+    monkeypatch.setattr("library.clients.chembl.sleep", lambda _: None)
+    monkeypatch.setattr("library.clients.chembl.random.uniform", lambda a, b: 0.0)
+
+    cfg = api_cfg(retries=2, backoff_factor=0)
+    client.request_json("http://example.com", cfg=cfg)
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    levels = {
+        record["event"]: record["level"]
+        for record in records
+        if record["event"] in {"request_start", "request_retry", "request_ok"}
+    }
+
+    assert levels["request_start"] == "DEBUG"
+    assert levels["request_retry"] == "DEBUG"
+    assert levels["request_ok"] == "DEBUG"
 
 
 def test_request_json_reuses_session(monkeypatch) -> None:
