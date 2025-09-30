@@ -525,6 +525,89 @@ def test_fetch_pubmed_records_handles_generic_error(
     assert row["publication_class"] == "unknown"
 
 
+def test_fetch_pubmed_records_returns_generator_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generator mode should yield batches in submission order."""
+
+    pmids = ["1", "2", "3", "4"]
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [{"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch]
+
+    def fake_semantic_batch(
+        session: Any,
+        ids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"}
+            for pmid in ids
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_, **__: {"scholar.DOI": "10.1000/fallback"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda session, pmid, cfg, limiter: {"OpenAlex.Id": f"OA{pmid}"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda session, doi, cfg, limiter: {"crossref.DOI": doi},
+    )
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=2,
+        batch_size=2,
+        return_generator=True,
+    )
+
+    frames = list(generator)
+    assert [frame["PubMed.PMID"].tolist() for frame in frames] == [["1", "2"], ["3", "4"]]
+
+    combined = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=2,
+        batch_size=2,
+    )
+
+    assert combined["PubMed.PMID"].tolist() == pmids
+
+
 def test_fetch_pubmed_records_accepts_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1006,6 +1089,70 @@ def test_finalise_export_falls_back_to_default_key(
 
     assert exit_code == 0
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
+
+
+def test_finalise_export_accepts_generator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generator inputs should be validated and written in order."""
+
+    cfg = Config()
+    frames = [
+        pd.DataFrame({
+            "document_chembl_id": ["CHEMBL1"],
+            "PubMed.PMID": ["101"],
+        }),
+        pd.DataFrame({
+            "document_chembl_id": ["CHEMBL2"],
+            "PubMed.PMID": ["102"],
+        }),
+    ]
+    output = tmp_path / "documents.csv"
+
+    captured: dict[str, Any] = {"chunks": [], "validated": []}
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Any,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        **_: Any,
+    ) -> Path:
+        captured["chunks"] = [chunk.copy() for chunk in chunks]
+        captured["key_cols"] = list(key_cols or [])
+        return path
+
+    def fake_validate(frame: pd.DataFrame, lazy: bool = True) -> pd.DataFrame:
+        captured["validated"].append(frame.copy())
+        return frame
+
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", fake_validate)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {"rows": len(df)})
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+
+    exit_code = gdd._finalise_export(
+        iter(frames),
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=["document_chembl_id"],
+    )
+
+    assert exit_code == 0
+    assert [chunk["PubMed.PMID"].tolist() for chunk in captured["chunks"]] == [
+        ["101"],
+        ["102"],
+    ]
+    assert [frame["PubMed.PMID"].tolist() for frame in captured["validated"]] == [
+        ["101"],
+        ["102"],
+    ]
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
