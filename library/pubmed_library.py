@@ -75,9 +75,9 @@ def parse_args(
         help="Input CSV path with PMID column",
     )
     parser.add_argument(
-        "--keep-verbose-dumps",
+        "--verbose",
         action="store_true",
-        help="Log combined metadata dumps at INFO level for troubleshooting",
+        help="Log compact metadata dumps at INFO level for troubleshooting",
     )
     args = parser.parse_args(argv)
     return args, parser, log_cfg
@@ -134,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     records: list[dict[str, str]] = []
     batch_size = cfg.document.pubmed.batch_size
-    dump_level = "INFO" if args.keep_verbose_dumps else "DEBUG"
+    dump_level = "INFO" if args.verbose else "DEBUG"
     with session_with_retry(cfg.api, cfg.retry) as session:
         for i in range(0, len(pmids), batch_size):
             batch_pmids = pmids[i : i + batch_size]

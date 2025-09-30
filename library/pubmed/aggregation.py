@@ -8,6 +8,9 @@ from typing import Any
 
 from ..log import logger
 
+TITLE_PREVIEW_LIMIT = 80
+TITLE_SUFFIX = "..."
+
 __all__ = ["merge_records", "print_results"]
 
 
@@ -52,6 +55,28 @@ def _emit_output(log: Any, level: str, output: str) -> None:
             log_method(level_no, output)
 
 
+def _first_non_empty(record: Mapping[str, Any], keys: tuple[str, ...]) -> str:
+    """Return the first non-empty string value from ``record`` keyed by ``keys``."""
+
+    for key in keys:
+        value = record.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _shorten_title(title: str) -> str:
+    """Return a shortened representation of ``title`` suitable for logs."""
+
+    clean = title.strip()
+    if len(clean) <= TITLE_PREVIEW_LIMIT:
+        return clean
+    return clean[: TITLE_PREVIEW_LIMIT - len(TITLE_SUFFIX)] + TITLE_SUFFIX
+
+
 def print_results(records: list[dict[str, str]], *, level: str = "DEBUG") -> None:
     """Log result records instead of printing to ``stdout``."""
 
@@ -65,15 +90,34 @@ def print_results(records: list[dict[str, str]], *, level: str = "DEBUG") -> Non
 
     display_records = []
     for rec in records:
-        d = rec.copy()
-        title = (
-            d.get("PubMed.ArticleTitle")
-            or d.get("crossref.Title")
-            or d.get("Title")
-            or ""
+        pmid = _first_non_empty(
+            rec,
+            (
+                "PubMed.PMID",
+                "scholar.PMID",
+                "PMID",
+            ),
         )
-        d["Title"] = title[:77] + "..." if len(title) > 80 else title
-        display_records.append(d)
+        doi = _first_non_empty(
+            rec,
+            (
+                "PubMed.DOI",
+                "scholar.DOI",
+                "crossref.DOI",
+                "DOI",
+            ),
+        )
+        title = _shorten_title(
+            _first_non_empty(
+                rec,
+                (
+                    "PubMed.ArticleTitle",
+                    "crossref.Title",
+                    "Title",
+                ),
+            )
+        )
+        display_records.append({"PMID": pmid, "DOI": doi, "Title": title})
 
     if use_tabulate:
         output = tabulate(display_records, headers="keys")
