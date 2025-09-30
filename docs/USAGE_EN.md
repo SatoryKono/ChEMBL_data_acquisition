@@ -22,7 +22,7 @@ directly.
 | `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
 | `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
 
-Each parser may add domain-specific switches such as `--timeout`, `--limit` or `--dry-run`. After parsing, `apply_config_overrides`
+Each parser may add domain-specific switches such as `--timeout`, `--limit` or rate-limit knobs like `--openalex-rps`. After parsing, `apply_config_overrides`
 loads `config/config.yaml`, applies environment variables, merges CLI overrides back into the configuration, and updates missing CLI
 arguments with the final values.
 
@@ -93,8 +93,7 @@ python scripts/get_document_data.py all \
   --batch-size 20
 ```
 
-The script merges ChEMBL and PubMed sources. Prepare a CSV with the `document_chembl_id` column or override `--column` to match your schema—the repository does not bundle a smoke dataset for this pipeline. Use the exposed flags (`--batch-size`, `--timeout`, `--limit`, `--dry-run`) for
-one-off tweaks. All sub-commands accept `--offset` to resume from a particular position in the input file. Nested parameters such as the PubMed batch size are managed via configuration or environment variables, for
+The script merges ChEMBL and PubMed sources. Prepare a CSV with the `document_chembl_id` column or override `--column` to match your schema—the repository does not bundle a smoke dataset for this pipeline. Adjust execution through the available switches (`--chunk-size`, `--sleep`, `--workers`, `--batch-size`, `--timeout`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`) depending on the sub-command in use. All sub-commands accept `--offset` to resume from a particular position in the input file, and the PubMed pipeline adds `--fallback-doi-*` arguments for DOI overrides. Nested parameters such as the PubMed batch size are managed via configuration or environment variables, for
 example:
 
 ```bash
