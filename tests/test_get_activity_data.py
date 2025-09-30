@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import types
 from pathlib import Path
 
 import pandas as pd
@@ -135,3 +136,60 @@ def test_run_chembl_column_order(
     expected_head = [c for c in schema_cols if c in available]
     expected_tail = sorted(available - set(schema_cols))
     assert captured["col_order"] == expected_head + expected_tail
+
+
+def test_run_chembl_skip_quality_omits_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+    output_csv = tmp_path / "out.csv"
+    args = argparse.Namespace(
+        input_csv=input_csv, output_csv=output_csv, enable_quality=False
+    )
+
+    cfg.system.reports.enable_quality = True
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["1"]))
+
+    df = pd.DataFrame(
+        [
+            {
+                "activity_id": "1",
+                "assay_chembl_id": "A1",
+                "molecule_chembl_id": "CHEMBL1",
+                "standard_type": "IC50",
+                "standard_value": 10.0,
+            }
+        ]
+    )
+    monkeypatch.setattr(cl, "get_activities", lambda *_, **__: df)
+    monkeypatch.setattr(gad, "apply_activity_annotations", lambda frame, **__: frame)
+    monkeypatch.setattr(gad, "compute_activity_bounds", lambda frame, _: frame)
+    monkeypatch.setattr(gad, "add_pipeline_metadata", lambda frame: frame)
+    def fake_write_csv(frame: pd.DataFrame, output: Path | str, *, cfg, **__) -> Path:
+        path = Path(output)
+        frame.to_csv(path, index=False)
+        return path
+
+    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gad, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gad, "file_sha256", lambda _: "deadbeef")
+    monkeypatch.setattr(
+        gad,
+        "validate_activities",
+        lambda frame, return_result: types.SimpleNamespace(
+            data=frame, failure_cases=pd.DataFrame()
+        ),
+    )
+
+    rc = gad.run_chembl(cfg, args)
+    assert rc == 0
+
+    base = output_csv.with_suffix("")
+    expected_reports = [
+        base.with_name(f"{base.name}_quality_report_table.csv"),
+        base.with_name(f"{base.name}_data_correlation_report_table.csv"),
+    ]
+    for report in expected_reports:
+        assert not report.exists()

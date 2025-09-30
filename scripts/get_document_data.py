@@ -691,6 +691,7 @@ def _finalise_export(
     input_csv: Path,
     key_columns: Sequence[str] | None = None,
     chunk_size: int | None = None,
+    quality_enabled: bool = True,
 ) -> int:
     """Validate ``df`` and write CSV/metadata artefacts."""
 
@@ -803,23 +804,24 @@ def _finalise_export(
         schema="DocumentsSchema",
     )
 
-    quality_path = csv_path.with_suffix(".quality.json")
-    try:
-        report = build_quality_report(export_ready)
-        save_quality_report(report, quality_path)
-    except (OSError, TypeError, ValueError) as exc:
-        logger.error(
-            "quality_report_write_failed",
-            error=str(exc),
-            path=str(quality_path),
-        )
-        return 1
+    if quality_enabled:
+        quality_path = csv_path.with_suffix(".quality.json")
+        try:
+            report = build_quality_report(export_ready)
+            save_quality_report(report, quality_path)
+        except (OSError, TypeError, ValueError) as exc:
+            logger.error(
+                "quality_report_write_failed",
+                error=str(exc),
+                path=str(quality_path),
+            )
+            return 1
 
-    try:
-        analyze_table_quality(export_ready, table_name=str(csv_path.with_suffix("")))
-    except ValueError as exc:
-        logger.error("quality_report_generation_failed", error=str(exc))
-        return 1
+        try:
+            analyze_table_quality(export_ready, table_name=str(csv_path.with_suffix("")))
+        except ValueError as exc:
+            logger.error("quality_report_generation_failed", error=str(exc))
+            return 1
     return exit_code
 
 
@@ -840,6 +842,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     pubmed_defaults = cfg.document.pubmed
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
     limit = getattr(args, "limit", pubmed_defaults.limit)
     if limit is not None and limit < 0:
         logger.error(
@@ -920,6 +923,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
+            quality_enabled=quality_enabled,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("pubmed_pipeline_failed", error=str(exc))
@@ -944,6 +948,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     chembl_defaults = cfg.document.chembl
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
     limit = getattr(args, "limit", chembl_defaults.limit)
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.chembl", limit=limit)
@@ -1002,6 +1007,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+            quality_enabled=quality_enabled,
         )
         return exit_code
 
@@ -1023,6 +1029,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     all_defaults = cfg.document.all
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
     limit = getattr(args, "limit", all_defaults.limit)
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.all", limit=limit)
@@ -1095,6 +1102,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+            quality_enabled=quality_enabled,
         )
         return exit_code
 
@@ -1144,6 +1152,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
         chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+        quality_enabled=quality_enabled,
     )
     return exit_code
 

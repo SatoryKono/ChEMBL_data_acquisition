@@ -414,6 +414,15 @@ class DocTypeCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class ReportsCfg(_BoolModel):
+    enable_quality: bool = True
+
+    @field_validator("enable_quality", mode="before")
+    @classmethod
+    def _bool(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+
 class ResourcesCfg(_BaseModel):
     dictionary_dir: Path = Field(default_factory=_dictionary_resource)
     iuphar_target_csv: Path = Field(
@@ -902,6 +911,7 @@ class SystemCfg(_BaseModel):
     rate: RateCfg = Field(default_factory=lambda: RateCfg())
     retry: RetryCfg = Field(default_factory=lambda: RetryCfg())
     doc_type: DocTypeCfg = Field(default_factory=lambda: DocTypeCfg())
+    reports: ReportsCfg = Field(default_factory=lambda: ReportsCfg())
 
 
 class Config(_BaseModel):
@@ -972,6 +982,10 @@ class Config(_BaseModel):
     @property
     def doc_type(self) -> DocTypeCfg:
         return self.system.doc_type
+
+    @property
+    def reports(self) -> ReportsCfg:
+        return self.system.reports
 
     @property
     def resources(self) -> ResourcesCfg:
@@ -1522,6 +1536,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_LOG_DATEFMT": ["system", "log", "datefmt"],
     "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["system", "retry", "max_attempts"],
     "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["system", "retry", "backoff_factor"],
+    "CHEMBL_DA_ENABLE_QUALITY": ["system", "reports", "enable_quality"],
 }
 
 _ALIAS_MAP: dict[str, list[str]] = {
@@ -1543,6 +1558,7 @@ __all__ = [
     "PubMedCfg",
     "SemanticScholarCfg",
     "DocTypeCfg",
+    "ReportsCfg",
     "ActivityCfg",
     "ActivityActionTypeCfg",
     "ActivityEnrichmentCfg",

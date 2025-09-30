@@ -655,6 +655,18 @@
       "title": "DocTypeCfg",
       "type": "object"
     },
+    "ReportsCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable_quality": {
+          "default": true,
+          "title": "Enable Quality",
+          "type": "boolean"
+        }
+      },
+      "title": "ReportsCfg",
+      "type": "object"
+    },
     "DocumentAllCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1474,6 +1486,9 @@
         },
         "doc_type": {
           "$ref": "#/$defs/DocTypeCfg"
+        },
+        "reports": {
+          "$ref": "#/$defs/ReportsCfg"
         }
       },
       "title": "SystemCfg",
