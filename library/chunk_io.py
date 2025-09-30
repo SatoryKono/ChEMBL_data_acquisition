@@ -131,6 +131,7 @@ def process_csv_chunks(
     checkpoint_path: Path | None = None,
     sep: str | None = None,
     encoding: str | None = None,
+    ensure_directory: bool = False,
 ) -> int:
     """Copy ``input_path`` to ``output_path`` using chunked I/O.
 
@@ -154,6 +155,10 @@ def process_csv_chunks(
         Location of a checkpoint file storing processed row counts.
     sep, encoding:
         CSV formatting options overriding ``cfg`` defaults.
+    ensure_directory:
+        When ``True``, create the parent directory of ``output_path`` if it does
+        not exist and :attr:`IoCfg.exist_ok` permits directory creation. When
+        ``False``, callers must ensure the directory is available.
 
     Returns
     -------
@@ -163,11 +168,25 @@ def process_csv_chunks(
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
 
+    output_path = Path(output_path)
+    if ensure_directory:
+        parent = output_path.parent
+        if parent.exists():
+            if not parent.is_dir():
+                msg = f"{parent} is not a directory"
+                raise NotADirectoryError(msg)
+        else:
+            if cfg.exist_ok:
+                parent.mkdir(parents=True, exist_ok=True)
+            else:
+                msg = f"{parent} does not exist"
+                raise FileNotFoundError(msg)
+
     processed = 0
     header_written = False
     if checkpoint_path is not None:
         processed = _read_checkpoint(checkpoint_path)
-        header_written = Path(output_path).exists() and processed > 0
+        header_written = output_path.exists() and processed > 0
         if processed:
             logger.info("resume_from_row", row=processed)
 
