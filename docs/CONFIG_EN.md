@@ -166,9 +166,18 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | Key | Default | Description |
 | --- | --- | --- |
 | `column` | `molecule_chembl_id` | Input column with compound identifiers. |
-| `batch_size` | `50` | Batch size for API requests. |
+| `batch_size` | `1000` | Batch size for API requests. |
 | `timeout` | `30.0` | Request timeout in seconds. |
 | `limit` | `null` | Optional cap on identifiers processed. |
+| `offset` | `0` | Starting position for paginated exports, enabling resumable runs. |
+| `request_limit` | `1000` | Hard cap on the number of paginated requests performed in a single execution. |
+| `retries` | `5` | Maximum number of retry attempts applied to failed API calls. |
+| `backoff_factor` | `0.5` | Multiplier controlling exponential backoff between retry attempts. |
+| `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id', 'pref_name', 'max_phase', 'molecule_type', 'first_approval', 'oral', 'parenteral', 'topical', 'black_box_warning', 'structure_type', 'molecule_structures.canonical_smiles', 'molecule_structures.standard_inchi', 'molecule_structures.standard_inchi_key']` | List of ChEMBL fields requested for each test item batch. |
+
+Pagination now tracks both the starting `offset` and a `request_limit`, allowing operators to resume large exports and bound the
+number of pages consumed per run. Network failures are handled via the shared retry policy (`retries`/`backoff_factor`) that
+applies exponential backoff between attempts before surfacing the error.
 
 #### Test item molecule enrichment (`testitem_molecule_enrichment`)
 
