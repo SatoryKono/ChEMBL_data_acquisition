@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
+import yaml
 
 from library.utils.cli_tools import csv_utils_main as cli
 
@@ -47,6 +48,8 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         called["output"] = output
         called["write_chunksize"] = chunksize
         called["merge_chunksize"] = merge_chunksize
+        called["write_sep"] = kwargs.get("sep")
+        called["write_encoding"] = kwargs.get("encoding")
         list(chunks)  # exhaust generator
 
     monkeypatch.setattr(pd, "read_csv", fake_read_csv)
@@ -81,6 +84,8 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert called["chunksize"] == 2
     assert called["write_chunksize"] == 2
     assert called["merge_chunksize"] == 3
+    assert called["write_sep"] == "|"
+    assert called["write_encoding"] == "latin1"
 
 
 def test_cli_generates_output_path(
@@ -131,3 +136,76 @@ def test_cli_generates_output_path(
     assert rc == 0
     expected = input_csv.with_name("output_input_20240102.csv")
     assert called["output"] == expected
+
+
+def test_cli_uses_configured_delimiter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("a,b\n1,2\n", encoding="utf8")
+    config_path = tmp_path / "cfg.yaml"
+    config_data = yaml.safe_load(Path("config/config.yaml").read_text(encoding="utf8"))
+    config_data["local"]["io"]["csv_sep"] = ";"
+    config_data["local"]["io"]["csv_encoding"] = "latin1"
+    config_data["local"]["io"]["csv_chunksize"] = 256
+    config_path.write_text(yaml.safe_dump(config_data), encoding="utf8")
+
+    called: dict[str, object] = {}
+
+    def fake_read_csv(
+        path: Path | str,
+        sep: str,
+        encoding: str,
+        chunksize: int,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Iterator[pd.DataFrame]:
+        called["path"] = path
+        called["sep"] = sep
+        called["encoding"] = encoding
+        called["chunksize"] = chunksize
+
+        def gen() -> Iterator[pd.DataFrame]:
+            yield pd.DataFrame({"a": [1], "b": [2]})
+
+        return gen()
+
+    def fake_write(
+        chunks: Iterable[pd.DataFrame],
+        output: Path | str,
+        col_order: list[str] | None = None,
+        key_cols: list[str] | None = None,
+        chunksize: int | None = None,
+        merge_chunksize: int | None = None,
+        drop_unexpected_cols: bool = False,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        called["output"] = output
+        called["write_chunksize"] = chunksize
+        called["merge_chunksize"] = merge_chunksize
+        called["write_sep"] = kwargs.get("sep")
+        called["write_encoding"] = kwargs.get("encoding")
+        list(chunks)
+
+    monkeypatch.setattr(pd, "read_csv", fake_read_csv)
+    monkeypatch.setattr(cli, "write_csv_chunks_deterministic", fake_write)
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_csv),
+            "--key-cols",
+            "a",
+            "--config",
+            str(config_path),
+        ]
+    )
+    assert rc == 0
+    assert called["path"] == input_csv
+    assert called["sep"] == ";"
+    assert called["encoding"] == "latin1"
+    assert called["chunksize"] == 256
+    assert called["write_sep"] == ";"
+    assert called["write_encoding"] == "latin1"
+    assert called["write_chunksize"] == 256
