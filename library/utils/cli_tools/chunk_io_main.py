@@ -53,7 +53,15 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if args.limit is not None and args.limit <= 0:
             raise SystemExit("--limit must be a positive integer")
 
-        output = args.output_csv or default_output_path(args.input_csv, cfg.io)
+        output = Path(args.output_csv or default_output_path(args.input_csv, cfg.io))
+        parent = output.parent
+        if not parent.exists():
+            if cfg.io.exist_ok:
+                parent.mkdir(parents=True, exist_ok=True)
+            else:
+                raise SystemExit(f"output directory {parent} does not exist")
+        elif not parent.is_dir():
+            raise SystemExit(f"output directory {parent} is not a directory")
         ensure_dirs(cfg)
         rows = process_csv_chunks(
             args.input_csv,
@@ -64,6 +72,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             checkpoint_path=args.checkpoint,
             sep=args.sep,
             encoding=args.encoding,
+            ensure_directory=False,
         )
         logger.info("rows_processed", rows=rows)
         return 0
