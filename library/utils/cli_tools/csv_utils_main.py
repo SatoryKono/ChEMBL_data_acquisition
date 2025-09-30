@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from library import cli
 from library.cli import LoggerConfig, configure_logger
 from library.cli_utils import build_parser
 from library.csv_utils import write_csv_chunks_deterministic
@@ -44,18 +45,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         ns.output_csv = Path(ns.input_csv).with_name(
             f"output_{Path(ns.input_csv).stem}_{date.today():%Y%m%d}.csv"
         )
-    args = CSVExportArgs.model_validate(vars(ns))
+    cfg = cli.apply_config_overrides(
+        ns,
+        parser,
+        ns.config,
+        mapping={"chunk_size": "io.csv_chunksize"},
+    )
+    arg_data = {field: getattr(ns, field) for field in CSVExportArgs.model_fields}
+    args = CSVExportArgs.model_validate(arg_data)
     if not args.key_cols:
         parser.error("--key-cols must be provided")
     configure_logger(LoggerConfig(level=args.log_level))
 
     start = time.perf_counter()
 
+    sep = args.sep or cfg.io.csv_sep
+    encoding = args.encoding or cfg.io.csv_encoding
+    chunk_size = args.chunk_size or cfg.io.csv_chunksize
+
     reader = pd.read_csv(
         args.input_csv,
-        sep=args.sep,
-        encoding=args.encoding,
-        chunksize=args.chunk_size,
+        sep=sep,
+        encoding=encoding,
+        chunksize=chunk_size,
     )
     output = args.output_csv or Path(args.input_csv).with_name(
         f"output_{Path(args.input_csv).stem}.csv"
@@ -65,8 +77,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         output,
         col_order=args.col_order or None,
         key_cols=args.key_cols,
-        chunksize=args.chunk_size,
+        chunksize=chunk_size,
         merge_chunksize=args.merge_chunk_size,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        cfg=cfg,
         drop_unexpected_cols=True,
     )
     elapsed = time.perf_counter() - start

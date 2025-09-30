@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import argparse
 
-from .cli import add_common_arguments
+from .cli import add_common_arguments, path_argument
+from .utils.config import DEFAULT_CONFIG_RELATIVE
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,5 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1000,
         help="Rows loaded per temporary file during merge",
+    )
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=path_argument,
+        default=DEFAULT_CONFIG_RELATIVE,
+        help="YAML configuration file",
     )
     return parser
