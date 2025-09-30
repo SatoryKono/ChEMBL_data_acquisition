@@ -73,10 +73,18 @@ py-modules = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["library", "schemas", "config"]
+include = [
+  "library",
+  "library.*",
+  "schemas",
+  "schemas.*",
+  "config",
+  "dictionary",
+]
 
 [tool.setuptools.package-data]
 "config" = ["config.yaml"]
+"dictionary" = ["**/*"]
 
 [tool.black]
 line-length = 88

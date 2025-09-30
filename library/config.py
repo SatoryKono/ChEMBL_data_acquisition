@@ -13,10 +13,13 @@ aliases are supported; see ``_ALIAS_MAP`` for the full list.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import re
 from collections.abc import Sequence
+from contextlib import ExitStack
+from importlib import resources
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -30,6 +33,18 @@ from urllib3.util.retry import Retry
 
 from .log import logger
 from .utils.config import ConfigLoaderError, load_yaml_config
+
+_RESOURCE_STACK = ExitStack()
+atexit.register(_RESOURCE_STACK.close)
+
+
+def _dictionary_resource(*parts: str) -> Path:
+    """Return a filesystem path for a bundled dictionary resource."""
+
+    traversable = resources.files("dictionary")
+    for part in parts:
+        traversable = traversable.joinpath(part)
+    return Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
@@ -396,11 +411,37 @@ class DocTypeCfg(_BaseModel):
 
 
 class ResourcesCfg(_BaseModel):
-    dictionary_dir: Path = Path("dictionary")
-    iuphar_target_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_target.csv")
-    iuphar_family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
-    uniprot_data_dir: Path = Path("dictionary/_target/_uniprot")
-    targets_type_csv: Path = Path("dictionary/_Target/targets_type.csv")
+    dictionary_dir: Path = Field(default_factory=_dictionary_resource)
+    iuphar_target_csv: Path = Field(
+        default_factory=lambda: _dictionary_resource(
+            "_target", "_IUPHAR", "_IUPHAR_target.csv"
+        )
+    )
+    iuphar_family_csv: Path = Field(
+        default_factory=lambda: _dictionary_resource(
+            "_target", "_IUPHAR", "_IUPHAR_family.csv"
+        )
+    )
+    uniprot_data_dir: Path = Field(
+        default_factory=lambda: _dictionary_resource("_target", "_uniprot")
+    )
+    targets_type_csv: Path = Field(
+        default_factory=lambda: _dictionary_resource("_Target", "targets_type.csv")
+    )
+
+    @field_validator(
+        "dictionary_dir",
+        "iuphar_target_csv",
+        "iuphar_family_csv",
+        "uniprot_data_dir",
+        "targets_type_csv",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_path(cls, value: Any) -> Path | Any:
+        if isinstance(value, (str, os.PathLike)):
+            return Path(value)
+        return value
 
 
 class IoCfg(_BoolModel):
