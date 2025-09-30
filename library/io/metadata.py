@@ -9,7 +9,7 @@ from typing import Mapping, Sequence
 
 import yaml
 
-from ..config import Config, _serialize_paths
+from ..config import Config, _mask_secrets, _serialize_paths
 from ..git_utils import _git_sha
 
 
@@ -31,7 +31,9 @@ def write_meta_yaml(
         "command": " ".join(sys.argv),
         "columns": list(columns or []),
         "dtypes": dict(dtypes or {}),
-        "config": _serialize_paths(cfg.to_dict()) if cfg is not None else {},
+        "config": (
+            _mask_secrets(_serialize_paths(cfg.to_dict())) if cfg is not None else {}
+        ),
     }
     meta_path = Path(f"{path}.meta.yaml")
     with meta_path.open("w", encoding="utf8") as fh:

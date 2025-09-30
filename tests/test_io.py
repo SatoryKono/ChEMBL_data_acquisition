@@ -116,6 +116,23 @@ def test_write_meta_serialises_paths(tmp_path: Path, cfg: Config) -> None:
     assert meta["config"]["local"]["io"]["output_dir"] == str(cfg.io.output_dir)
 
 
+def test_write_meta_masks_secrets(tmp_path: Path, cfg: Config) -> None:
+    class SecretConfig(Config):
+        def to_dict(self) -> dict[str, object]:
+            data = super().to_dict()
+            data["api_token"] = "dummy-token"
+            return data
+
+    secret_cfg = SecretConfig.model_validate(cfg.model_dump())
+    df = pd.DataFrame({"a": [1]})
+    path = tmp_path / "out.csv"
+    io.write_csv(df, path, cfg=secret_cfg)
+
+    meta_path = Path(f"{path}.meta.yaml")
+    meta = yaml.safe_load(meta_path.read_text())
+    assert meta["config"]["api_token"] == "***"
+
+
 def test_write_csv_deterministic_hash(tmp_path: Path, cfg: Config) -> None:
     df = pd.DataFrame({"b": [3, 1], "a": [4.0, 2.0]})
     path = tmp_path / "out.csv"
