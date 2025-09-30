@@ -56,6 +56,10 @@ data/output/
   выгрузкой, а `library.utils.cli_tools.get_input_initialisation` использует
   подкаталог `<output>/data_validity_report/`.
 
+  Чтобы пропустить эти CSV и связанный `<base>.quality.json`, передайте флаг
+  `--skip-quality` или установите `system.reports.enable_quality: false` в
+  конфигурации.
+
 Все файлы пишутся в UTF-8 и соблюдают детерминированный порядок строк и колонок,
 что упрощает сравнение версий.
 

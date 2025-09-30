@@ -61,6 +61,10 @@ are preserved.
   next to the dataset, while `library.utils.cli_tools.get_input_initialisation`
   stores them under `<output>/data_validity_report/`.
 
+  Pass `--skip-quality` (or set `system.reports.enable_quality: false` in the
+  configuration) to suppress these CSV summaries and any document-level
+  `<base>.quality.json` files when diagnostics are not required.
+
 All files are saved with UTF-8 encoding and deterministic row/column ordering to
 simplify diffing across runs.
 

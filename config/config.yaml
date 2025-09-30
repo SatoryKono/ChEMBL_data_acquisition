@@ -310,6 +310,8 @@ system:
       - 502
       - 503
       - 504
+  reports:
+    enable_quality: true  # Generate CSV/JSON quality artefacts alongside exports
   doc_type:
     weights:
       pubmed: 4

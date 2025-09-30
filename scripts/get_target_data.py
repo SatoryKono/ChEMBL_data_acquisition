@@ -520,15 +520,17 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             output=str(output),
         )
         return 1
-    try:
-        analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
+    if quality_enabled:
+        try:
+            analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
+        except ValueError as exc:
+            logger.error(
+                "quality_report_failed",
+                error=str(exc),
+                path=str(output),
+            )
+            return 1
     return 0
 
 
@@ -666,15 +668,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         stats=stats,
         schema="TargetsSchema",
     )
-    try:
-        analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
+    if quality_enabled:
+        try:
+            analyze_table_quality(df, table_name=str(output.with_suffix("")))
+        except ValueError as exc:
+            logger.error(
+                "quality_report_failed",
+                error=str(exc),
+                path=str(output),
+            )
+            return 1
     return exit_code
 
 
@@ -761,15 +765,17 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
-    try:
-        analyze_table_quality(output, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
+    if quality_enabled:
+        try:
+            analyze_table_quality(output, table_name=str(output.with_suffix("")))
+        except ValueError as exc:
+            logger.error(
+                "quality_report_failed",
+                error=str(exc),
+                path=str(output),
+            )
+            return 1
     return 0
 
 
@@ -1053,7 +1059,9 @@ def merge_results(
     return final_df
 
 
-def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
+def validate_and_write(
+    df: pd.DataFrame, output: Path, cfg: Config, *, quality_enabled: bool = True
+) -> int:
     """Normalise, validate and export the target table.
 
     Parameters
@@ -1114,15 +1122,16 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         encoding=cfg.io.csv_encoding,
         col_order=TARGETS_COLUMN_ORDER,
     )
-    try:
-        analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
+    if quality_enabled:
+        try:
+            analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
+        except ValueError as exc:
+            logger.error(
+                "quality_report_failed",
+                error=str(exc),
+                path=str(output),
+            )
+            return 1
     logger.info("validate_write_done", rows=len(final_df))
     return exit_code
 
@@ -1162,7 +1171,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
-        exit_code = validate_and_write(merged, output, cfg)
+        quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
+        exit_code = validate_and_write(merged, output, cfg, quality_enabled=quality_enabled)
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(

@@ -50,6 +50,17 @@ def test_cli_overrides_config(tmp_path: Path) -> None:
     assert cfg.log.level == "DEBUG"
 
 
+def test_skip_quality_flag(tmp_path: Path) -> None:
+    cfg_path = _write_config(tmp_path)
+    parser = argparse.ArgumentParser()
+    add_common_arguments(parser)
+    parser.add_argument("--config", default=cfg_path, type=path_argument)
+    args = parser.parse_args(["--config", str(cfg_path), "--skip-quality"])
+    cfg = cli.apply_config_overrides(args, parser, args.config)
+    assert args.enable_quality is False
+    assert cfg.system.reports.enable_quality is False
+
+
 def test_path_argument_normalises_windows_style(tmp_path: Path) -> None:
     cfg_path = _write_config(tmp_path)
     parser = argparse.ArgumentParser()

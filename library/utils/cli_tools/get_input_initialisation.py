@@ -101,12 +101,14 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if missing:
             raise RuntimeError("failed to write output files: " + ", ".join(missing))
 
-        logger.info("generate_quality_reports")
-        report_dir = out_dir / "data_validity_report"
-        report_dir.mkdir(parents=True, exist_ok=True)
-        for entity, path in paths.items():
-            logger.info("profiling", entity=entity)
-            analyze_table_quality(path, table_name=str(report_dir / path.stem))
+        quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
+        if quality_enabled:
+            logger.info("generate_quality_reports")
+            report_dir = out_dir / "data_validity_report"
+            report_dir.mkdir(parents=True, exist_ok=True)
+            for entity, path in paths.items():
+                logger.info("profiling", entity=entity)
+                analyze_table_quality(path, table_name=str(report_dir / path.stem))
 
         logger.info("save_done", tables=len(paths), path=str(out_dir))
         return 0

@@ -925,6 +925,65 @@ def test_finalise_export_falls_back_to_default_key(
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
 
 
+def test_finalise_export_skip_quality_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"document_chembl_id": ["CHEMBL1"]})
+    output = tmp_path / "documents.csv"
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n")
+
+    class _DummyColumn:
+        required = True
+
+    class DummySchema:
+        columns = {"document_chembl_id": _DummyColumn()}
+
+        @staticmethod
+        def validate(frame: pd.DataFrame, lazy: bool = True) -> pd.DataFrame:
+            return frame
+
+    monkeypatch.setattr(gdd, "add_pipeline_metadata", lambda frame: frame)
+    monkeypatch.setattr(gdd, "build_dataframe", lambda frame, **__: frame)
+    monkeypatch.setattr(gdd, "DocumentsSchema", DummySchema)
+    monkeypatch.setattr(gdd, "_EXPORT_COLUMNS", ["document_chembl_id"])
+    monkeypatch.setattr(gdd, "_EXPORT_COLUMN_RENAMES", {})
+    monkeypatch.setattr(gdd, "_EXPORT_SORT_FALLBACK", ["document_chembl_id"])
+    monkeypatch.setattr(gdd, "_EXPORT_STREAM_CHUNK_SIZE", 1)
+    monkeypatch.setattr(gdd, "_iter_export_chunks", lambda frame, chunk_size: (frame,))
+
+    def fake_write_chunks(
+        chunks: Iterable[pd.DataFrame], path: Path, *, cfg: Any, **__: Any
+    ) -> Path:
+        frame = next(iter(chunks))
+        path = Path(path)
+        frame.to_csv(path, index=False)
+        return path
+
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_chunks)
+    monkeypatch.setattr(gdd, "file_sha256", lambda _: "deadbeef")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+
+    rc = gdd._finalise_export(
+        df,
+        output,
+        cfg,
+        input_csv=input_csv,
+        key_columns=["document_chembl_id"],
+        quality_enabled=False,
+    )
+
+    assert rc == 0
+    quality_json = output.with_suffix(".quality.json")
+    base = output.with_suffix("")
+    quality_tables = [
+        base.with_name(f"{base.name}_quality_report_table.csv"),
+        base.with_name(f"{base.name}_data_correlation_report_table.csv"),
+    ]
+    for artefact in [quality_json, *quality_tables]:
+        assert not artefact.exists()
+
+
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
 def test_fetch_pubmed_records_accepts_executor_context(
     monkeypatch: pytest.MonkeyPatch,

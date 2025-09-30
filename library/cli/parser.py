@@ -132,6 +132,7 @@ def add_common_arguments(
     output_default: Path | None | object = None if defaults else argparse.SUPPRESS
     sep_default: str | object = "," if defaults else argparse.SUPPRESS
     enc_default: str | object = "utf8" if defaults else argparse.SUPPRESS
+    quality_default: bool | object = True if defaults else argparse.SUPPRESS
 
     parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
@@ -150,6 +151,13 @@ def add_common_arguments(
     )
     parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
     parser.add_argument("--encoding", default=enc_default, help="File encoding")
+    parser.add_argument(
+        "--skip-quality",
+        dest="enable_quality",
+        action="store_false",
+        default=quality_default,
+        help="Skip generating table quality reports",
+    )
     return parser
 
 
@@ -330,6 +338,7 @@ _PATH_PREFIXES: dict[str, list[str]] = {
     "log": ["system", "log"],
     "rate": ["system", "rate"],
     "retry": ["system", "retry"],
+    "reports": ["system", "reports"],
     "doc_type": ["system", "doc_type"],
 }
 
@@ -353,6 +362,7 @@ _DEFAULT_OVERRIDES: dict[str, str] = {
         "encoding": "io.csv_encoding",
         "log_level": "log.level",
         "timeout": "api.timeout_read",
+        "enable_quality": "reports.enable_quality",
     }.items()
 }
 

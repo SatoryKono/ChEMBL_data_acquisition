@@ -60,6 +60,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     limit = cfg.assay.limit
+    quality_enabled = getattr(args, "enable_quality", True) and cfg.system.reports.enable_quality
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="assay.limit", limit=limit)
         return 1
@@ -201,15 +202,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             schema="AssaysSchema",
         )
 
-        try:
-            analyze_table_quality(df, table_name=str(output.with_suffix("")))
-        except ValueError as exc:
-            logger.error(
-                "quality_report_failed",
-                error=str(exc),
-                path=str(output),
-            )
-            return 1
+        if quality_enabled:
+            try:
+                analyze_table_quality(df, table_name=str(output.with_suffix("")))
+            except ValueError as exc:
+                logger.error(
+                    "quality_report_failed",
+                    error=str(exc),
+                    path=str(output),
+                )
+                return 1
         return exit_code
 
 
