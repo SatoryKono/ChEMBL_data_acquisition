@@ -578,7 +578,7 @@ def _resolve_catalog_load_source(
 def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
     """Return ``series`` normalised to upper-case ChEMBL identifiers."""
 
-    normalised = series.fillna("").astype("string").str.strip().str.upper()
+    normalised = series.astype("string").fillna("").str.strip().str.upper()
     return normalised
 
 
@@ -1339,10 +1339,11 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    requested_ids_raw = list(ids_iter)
+    ids_iter, capture_iter = tee(ids_iter)
+    requested_ids_raw = list(capture_iter)
     try:
         df = cl.get_testitem(
-            requested_ids_raw,
+            ids_iter,
             cfg=api_cfg,
             client=client,
             chunk_size=batch_size,
@@ -1713,6 +1714,8 @@ def finalize_output(
     """Normalise, validate, and persist the final dataset."""
 
     df = normalize_testitems(df)
+    if "pubchem_cid" in df.columns:
+        df["pubchem_cid"] = df["pubchem_cid"].astype(object)
     df = add_pipeline_metadata(df)
 
     schema_cols = list(TestitemsSchema.columns)
