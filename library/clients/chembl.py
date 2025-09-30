@@ -144,7 +144,9 @@ class ChemblClient:
         for attempt in range(1, total_attempts + 1):
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
-            logger.info(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
+            logger.debug(
+                event, extra={"url": url, "attempt": attempt, "rps": cfg.rps}
+            )
             try:
                 with self._session_lock:
                     with self.session.get(
@@ -158,7 +160,7 @@ class ChemblClient:
                             raise ValueError(
                                 f"invalid JSON in response from {url}"
                             ) from exc
-                        logger.info(
+                        logger.debug(
                             "request_ok",
                             extra={
                                 "url": url,

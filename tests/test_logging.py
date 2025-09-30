@@ -41,3 +41,26 @@ def test_warnings_are_logged() -> None:
     assert record["logger"] == "py.warnings"
     assert "problem occurred" in str(record.get("event"))
     assert record["run_id"] == "rid"
+
+
+def test_debug_events_filtered_by_default() -> None:
+    """DEBUG-level request events should be hidden when log level is INFO."""
+
+    code = (
+        "import io; "
+        "from library.logging_setup import LoggerConfig, configure_logger; "
+        "buf = io.StringIO(); "
+        "logger = configure_logger(LoggerConfig(level='INFO', run_id='rid', stream=buf)); "
+        "logger.debug('request_start', url='https://example.org'); "
+        "logger.info('request_fail', url='https://example.org'); "
+        "print(buf.getvalue())"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    records = _parse(result.stdout)
+    assert all(record["event"] != "request_start" for record in records)
+    assert any(
+        record["event"] == "request_fail" and record["level"] == "INFO"
+        for record in records
+    )
