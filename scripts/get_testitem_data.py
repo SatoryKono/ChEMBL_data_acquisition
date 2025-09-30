@@ -1390,6 +1390,18 @@ def fetch_testitems(
     else:
         logger.info("chembl_all_identifiers_retrieved")
 
+    duplicates_mask = df["molecule_chembl_id"].duplicated(keep=False)
+    if duplicates_mask.any():
+        duplicate_ids = (
+            df.loc[duplicates_mask, "molecule_chembl_id"].dropna().unique().tolist()
+        )
+        logger.warning(
+            "chembl_duplicate_identifiers",
+            duplicate_count=len(duplicate_ids),
+            duplicate_ids=duplicate_ids,
+        )
+        df = df.drop_duplicates(subset="molecule_chembl_id", keep="first")
+
     index = pd.Index(requested_ids, name="molecule_chembl_id")
     df = df.set_index("molecule_chembl_id", drop=False).reindex(index)
     df["molecule_chembl_id"] = pd.Series(
