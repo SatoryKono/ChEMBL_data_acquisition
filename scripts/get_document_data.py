@@ -28,9 +28,9 @@ import sys
 from pathlib import Path
 
 import argparse
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from itertools import chain, islice
+from itertools import chain, islice, tee
 from typing import cast
 
 import pandas as pd
@@ -128,7 +128,8 @@ def fetch_pubmed_records(
     max_workers: int | None = None,
     batch_size: int | None = None,
     fallback_doi_map: Mapping[str, str] | None = None,
-) -> pd.DataFrame:
+    return_generator: bool = False,
+) -> pd.DataFrame | Iterator[pd.DataFrame]:
     """Retrieve metadata for a sequence of PubMed identifiers.
 
     Parameters
@@ -162,11 +163,17 @@ def fetch_pubmed_records(
         Explicit DOI overrides keyed by PMID. When provided, entries supply the
         DOI used to seed downstream CrossRef lookups whenever neither PubMed
         nor Semantic Scholar returns one.
+    return_generator : bool, optional
+        When ``True`` return a generator yielding ordered batches instead of a
+        concatenated dataframe.
 
     Returns
     -------
-    pandas.DataFrame
-        Combined metadata from the different sources.
+    pandas.DataFrame or Iterator[pandas.DataFrame]
+        Combined metadata from the different sources. When
+        ``return_generator`` is ``True`` a generator yielding ordered
+        :class:`~pandas.DataFrame` batches is returned instead of a single
+        concatenated frame.
 
     Notes
     -----
@@ -412,11 +419,26 @@ def fetch_pubmed_records(
             processed += len(submitted_batch)
             logger.info("documents_processed", count=processed)
 
-    for offset in sorted(ordered):
-        records.extend(ordered[offset])
-    if not records:
+    def _iter_frames() -> Iterator[pd.DataFrame]:
+        for offset in sorted(ordered):
+            batch_records = ordered[offset]
+            if not batch_records:
+                yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
+                continue
+            yield build_dataframe(
+                batch_records, columns=DOCUMENT_SCHEMA_COLUMNS
+            )
+
+    frame_iter = _iter_frames()
+    if return_generator:
+        return frame_iter
+
+    frame_iter, concat_iter = tee(frame_iter)
+    try:
+        first_frame = next(concat_iter)
+    except StopIteration:
         return build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
-    return build_dataframe(records, columns=DOCUMENT_SCHEMA_COLUMNS)
+    return pd.concat(chain([first_frame], concat_iter), ignore_index=True)
 
 
 _NUMERIC_EXPORT_COLUMNS = {
@@ -651,7 +673,7 @@ def _write_export_chunks(
 
 
 def _finalise_export(
-    df: pd.DataFrame,
+    df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
     cfg: Config,
     *,
@@ -659,64 +681,86 @@ def _finalise_export(
     key_columns: Sequence[str] | None = None,
     chunk_size: int | None = None,
 ) -> int:
-    """Validate ``df`` and write CSV/metadata artefacts."""
+    """Validate input frames and write CSV/metadata artefacts."""
 
-    df_with_metadata = add_pipeline_metadata(df)
-    ordered = build_dataframe(
-        df_with_metadata, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
-    )
-    rows_total = len(ordered)
-    exit_code = 0
+    if isinstance(df, pd.DataFrame):
+        frames_iterable: Iterable[pd.DataFrame] = (df,)
+    else:
+        frames_iterable = df
+
+    frames_iterator = iter(frames_iterable)
+    analysis_iter, process_iter = tee(frames_iterator)
+
     required_cols = {
         name for name, col in DocumentsSchema.columns.items() if col.required
     }
     optional_cols = set(DocumentsSchema.columns) - required_cols
-    missing_required = required_cols - set(ordered.columns)
-    missing_optional = optional_cols - set(ordered.columns)
 
-    validated = ordered
-    if not missing_required:
-        if missing_optional:
-            logger.warning(
-                "missing_optional_columns",
-                columns=sorted(missing_optional),
-            )
-        try:
-            validated = DocumentsSchema.validate(ordered, lazy=True)
-        except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "document_validation_failed",
-                failure_count=len(exc.failure_cases),
-                failure_path=str(failure_path),
-                error=str(exc),
-            )
-            validated = getattr(exc, "validated_data", ordered)
-            exit_code = 1
-    else:
+    present_columns: set[str] = set()
+    for frame in analysis_iter:
+        prepared = build_dataframe(
+            add_pipeline_metadata(frame),
+            columns=DOCUMENT_SCHEMA_COLUMNS,
+            fill_missing=False,
+        )
+        present_columns.update(prepared.columns)
+
+    missing_required = required_cols - present_columns
+    missing_optional = optional_cols - present_columns
+
+    if missing_required:
         logger.warning(
             "validation_skipped_missing_required",
             columns=sorted(missing_required),
         )
+    elif missing_optional:
+        logger.warning(
+            "missing_optional_columns",
+            columns=sorted(missing_optional),
+        )
 
-    rows_kept = len(validated)
-    rows_dropped = rows_total - rows_kept
+    should_validate = not missing_required
 
+    stream_chunk = max(1, int(chunk_size or _EXPORT_STREAM_CHUNK_SIZE))
+    failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+    errors = SidecarErrors()
+    rows_total = 0
+    rows_kept = 0
+    exit_code = 0
+    validated_chunks: list[pd.DataFrame] = []
 
-    export_ready = build_dataframe(
-        validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
-    )
+    def _validated_chunks() -> Iterator[pd.DataFrame]:
+        nonlocal rows_total, rows_kept, exit_code
+        for frame in process_iter:
+            with_metadata = add_pipeline_metadata(frame)
+            ordered = build_dataframe(
+                with_metadata, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+            )
+            rows_total += len(ordered)
+            validated = ordered
+            if should_validate:
+                try:
+                    validated = DocumentsSchema.validate(ordered, lazy=True)
+                except SchemaErrors as exc:
+                    for row in exc.failure_cases.to_dict("records"):
+                        errors.add_error(row)
+                    logger.error(
+                        "document_validation_failed",
+                        failure_count=len(exc.failure_cases),
+                        failure_path=str(failure_path),
+                        error=str(exc),
+                    )
+                    validated = getattr(exc, "validated_data", ordered)
+                    exit_code = 1
+            rows_kept += len(validated)
+            cleaned = build_dataframe(
+                validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
+            )
+            validated_chunks.append(cleaned)
+            for chunk in _iter_export_chunks(cleaned, chunk_size=stream_chunk):
+                yield chunk
 
-    renamed_columns = {
-        column: _EXPORT_COLUMN_RENAMES.get(column, column)
-        for column in export_ready.columns
-    }
-    final_column_names = set(renamed_columns.values())
-
+    export_generator = _validated_chunks()
 
     key_cols: list[str] = []
     if key_columns:
@@ -727,19 +771,15 @@ def _finalise_export(
     if not key_cols:
         for candidate in _EXPORT_SORT_FALLBACK:
             if candidate in _EXPORT_COLUMNS:
-
                 key_cols = [candidate]
                 break
     if not key_cols:
         key_cols = [_EXPORT_COLUMNS[0]]
 
-
     col_order = list(_EXPORT_COLUMNS)
-    stream_chunk = max(1, int(chunk_size or _EXPORT_STREAM_CHUNK_SIZE))
-    export_chunks = _iter_export_chunks(validated, chunk_size=stream_chunk)
     try:
         csv_path = write_csv_chunks_deterministic(
-            export_chunks,
+            export_generator,
             output,
             cfg=cfg,
             key_cols=key_cols,
@@ -753,7 +793,28 @@ def _finalise_export(
     except OSError as exc:
         logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
+
+    errors.save(failure_path)
+
+    rows_dropped = rows_total - rows_kept
     logger.info("write_done", rows=rows_kept, path=str(csv_path))
+
+    if not validated_chunks:
+        export_ready = build_dataframe(
+            add_pipeline_metadata(pd.DataFrame()),
+            columns=DOCUMENT_SCHEMA_COLUMNS,
+            fill_missing=False,
+        )
+    elif len(validated_chunks) == 1:
+        export_ready = validated_chunks[0]
+    else:
+        export_ready = pd.concat(validated_chunks, ignore_index=True)
+
+    renamed_columns = {
+        column: _EXPORT_COLUMN_RENAMES.get(column, column)
+        for column in export_ready.columns
+    }
+    final_column_names = set(renamed_columns.values())
 
     stats: Stats = {
         "rows_total": rows_total,
