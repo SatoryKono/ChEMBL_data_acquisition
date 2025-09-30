@@ -108,7 +108,8 @@
 
 * `enabled` — флаг включения (`true`).
 * `column` — исходная колонка со структурированными свойствами (`activity_properties`).
-* `summary_column` — колонка для текстового резюме (`activity_property_summary`).
+* `summary_column` — зарезервирован под будущий текстовый рендер. Сейчас конвейер сохраняет JSON в `column`,
+  вычисляет только детерминированный отпечаток в `hash_column` и не создаёт отдельное поле с резюме.
 * `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).
 * `separator` и `pair_separator` — устаревшие параметры форматирования, сохранённые для совместимости; текущая
   сериализация JSON их не использует.
@@ -245,8 +246,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5`, `timeout=300.0`, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
 | `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | См. [детальные настройки PubChem](#pubchem-sourcespubchem). |
-| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
-| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
+| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`, опциональные `rps`/`burst` для документарных запросов. |
+| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`, опциональные `rps`/`burst` для документарных запросов. |
 
 Соблюдайте требования сервисов по rate limit и указанию контактной информации.
 

@@ -109,10 +109,12 @@ This block controls derived annotations appended to every activity row. It works
 
 * `enabled` — feature switch (`true`).
 * `column` — name of the raw JSON-like source column (`activity_properties`).
-* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).
+* `summary_column` — reserved for the future text renderer. The current implementation keeps the JSON payload in `column`,
+  generates only the deterministic fingerprint in `hash_column` and does not emit a separate summary field.
 * `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).
 * `separator` and `pair_separator` are legacy formatting knobs retained for backwards compatibility; the current
   JSON serialisation ignores them.
+
 * `drop_source_column` removes the original structured column after summarisation (`true`).
 * Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.
 * `allowlist` restricts which property groups are retained (measurement, assay, comments, effect_features, triage, mechanism,
@@ -254,8 +256,8 @@ applies exponential backoff between attempts before surfacing the error.
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5` seconds, `timeout=300.0` seconds, `cache_ttl=null`. |
 | `iuphar` | `https://www.guidetopharmacology.org/services` | `timeout_connect=5`, `timeout_read=30`, `rps=5`, `burst=5`. |
 | `pubchem` | `https://pubchem.ncbi.nlm.nih.gov/rest/pug` | See [detailed PubChem options](#pubchem-lookups-sourcespubchem). |
-| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
-| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`. |
+| `pubmed` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils` | `timeout_connect=5`, `timeout_read=10`, `retries=2`, optional `rps`/`burst` overrides for document acquisition. |
+| `semantic_scholar` | `https://api.semanticscholar.org/graph/v1` | `timeout_connect=5`, `timeout_read=10`, `retries=2`, optional `rps`/`burst` overrides for document acquisition. |
 
 All URLs must comply with the respective service usage policies, including rate limits and contact information requirements.
 

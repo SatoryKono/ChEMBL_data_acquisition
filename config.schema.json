@@ -1248,6 +1248,32 @@
           "minimum": 0,
           "title": "Retries",
           "type": "integer"
+        },
+        "rps": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rps"
+        },
+        "burst": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Burst"
         }
       },
       "title": "PubMedCfg",
@@ -1372,6 +1398,32 @@
           "minimum": 0,
           "title": "Retries",
           "type": "integer"
+        },
+        "rps": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rps"
+        },
+        "burst": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Burst"
         }
       },
       "title": "SemanticScholarCfg",

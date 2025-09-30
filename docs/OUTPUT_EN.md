@@ -21,9 +21,12 @@ data/output/
 ├── output_activity_20240105.csv.meta.yaml
 ├── output_activity_20240105_failure_cases.csv
 ├── output_activity_20240105_quality_report_table.csv
-├── output_activity_20240105_data_correlation_report_table.csv
-└── output_activity_20240105.quality.json
+└── output_activity_20240105_data_correlation_report_table.csv
 ```
+
+Document-oriented pipelines (for example `scripts/get_document_data.py`) append
+`<base>.quality.json` next to the CSV to summarise DOI coverage and service
+errors. Activity, assay and target jobs do not generate this report.
 
 Intermediate artefacts produced by the target `all` pipeline (`*_chembl.csv`,
 `*_uniprot.csv`, `*_iuphar.csv`) follow the same pattern. Custom `--output`

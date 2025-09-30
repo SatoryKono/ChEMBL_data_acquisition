@@ -34,3 +34,33 @@ def test_cli_limit(tmp_path: Path) -> None:
     )
     result = pd.read_csv(output_path)
     assert len(result) == 100
+
+
+def test_cli_creates_output_directory(tmp_path: Path) -> None:
+    """CLI creates missing output directories when allowed by configuration."""
+    input_path = tmp_path / "input.csv"
+    df = pd.DataFrame({"a": range(10)})
+    df.to_csv(input_path, index=False)
+    output_path = tmp_path / "missing" / "sub" / "out.csv"
+    checkpoint = tmp_path / "cp.json"
+    assert not output_path.parent.exists()
+
+    exit_code = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--chunk-size",
+            "5",
+            "--checkpoint",
+            str(checkpoint),
+            "--log-level",
+            "WARNING",
+        ]
+    )
+
+    assert exit_code == 0
+    assert output_path.exists()
+    result = pd.read_csv(output_path)
+    assert len(result) == len(df)
