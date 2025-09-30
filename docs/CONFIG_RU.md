@@ -108,9 +108,10 @@
 
 * `enabled` — флаг включения (`true`).
 * `column` — исходная колонка со структурированными свойствами (`activity_properties`).
-* `summary_column` — колонка для текстового резюме (`activity_property_summary`).
+* `summary_column` — зарезервирован под будущий текстовый рендер. Сейчас конвейер сохраняет JSON в `column`,
+  вычисляет только детерминированный отпечаток в `hash_column` и не создаёт отдельное поле с резюме.
 * `name_field`, `value_field`, `units_field` задают имена ключей внутри записей (`type`, `value`, `units`).
-* `separator` и `pair_separator` управляют форматированием списка свойств (`"; "` между парами и `"="` между названием и значением).
+* `separator` и `pair_separator` также зарезервированы; параметры форматирования заработают после появления текстового рендера.
 * `drop_source_column` удаляет исходную структурированную колонку после агрегации (`true`).
 * Флаги логирования по умолчанию выключены (`log_missing=false`, `log_distribution=false`).
 * `allowlist` ограничивает перечень сохраняемых групп (measurement, assay, comments, effect_features, triage, mechanism,

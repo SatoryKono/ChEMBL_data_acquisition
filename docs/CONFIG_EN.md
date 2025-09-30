@@ -109,10 +109,10 @@ This block controls derived annotations appended to every activity row. It works
 
 * `enabled` — feature switch (`true`).
 * `column` — name of the raw JSON-like source column (`activity_properties`).
-* `summary_column` — destination column for the rendered text summary (`activity_property_summary`).
+* `summary_column` — reserved for the future text renderer. The current implementation keeps the JSON payload in `column`,
+  generates only the deterministic fingerprint in `hash_column` and does not emit a separate summary field.
 * `name_field`, `value_field`, `units_field` identify keys within each property record (`type`, `value`, `units`).
-* `separator` and `pair_separator` control formatting when properties are concatenated (`"; "` between pairs,
-  `"="` between name and value).
+* `separator` and `pair_separator` are likewise reserved; formatting knobs will take effect once the summary renderer ships.
 * `drop_source_column` removes the original structured column after summarisation (`true`).
 * Logging flags default to `false`, muting missing/distribution reports unless troubleshooting is required.
 * `allowlist` restricts which property groups are retained (measurement, assay, comments, effect_features, triage, mechanism,
