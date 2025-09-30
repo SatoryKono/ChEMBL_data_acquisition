@@ -27,6 +27,7 @@ from library.config import (
     PubChemCfg,
     _serialize_paths,
 )
+from library.csv_utils import write_csv_deterministic
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.molecule_catalog import (
@@ -1501,12 +1502,17 @@ def finalize_output(
 
     try:
         key_cols = ["molecule_chembl_id"]
-        csv_path = io.write_csv(
+        csv_chunksize = cfg.io.csv_chunksize
+        csv_path = write_csv_deterministic(
             df,
             output,
-            cfg=cfg,
             key_cols=key_cols or None,
             col_order=col_order,
+            chunksize=csv_chunksize,
+            sort_chunksize=csv_chunksize,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
         )
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
     except OSError as exc:

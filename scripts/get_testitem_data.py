@@ -10,7 +10,8 @@ from collections import OrderedDict, deque
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from itertools import islice, tee
-from typing import Any
+from functools import lru_cache
+from typing import Any, NamedTuple
 
 import pandas as pd
 import requests

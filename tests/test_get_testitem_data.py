@@ -406,9 +406,9 @@ def test_finalize_output_success(
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(
-        io,
-        "write_csv",
-        lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
+        pipeline,
+        "write_csv_deterministic",
+        lambda frame, path, *, key_cols=None, col_order=None, **__: path,
     )
 
     exit_code = pipeline.finalize_output(
@@ -420,6 +420,61 @@ def test_finalize_output_success(
         rows_total=len(df),
     )
 
+    assert exit_code == 0
+
+
+def test_finalize_output_streams_sorted_chunks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": [
+                "CHEMBL3",
+                "CHEMBL1",
+                "CHEMBL2",
+                "CHEMBL5",
+            ],
+            "value": [3, 1, 2, 4],
+        }
+    )
+    parent_stats = pipeline.ParentLookupStats(
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+        missing=0,
+        unique=4,
+        attached=4,
+        uncovered=0,
+    )
+
+    def fake_validate(frame: pd.DataFrame, *, return_result: bool) -> SimpleNamespace:
+        return SimpleNamespace(data=frame, failure_cases=pd.DataFrame())
+
+    recorded_targets: list[str] = []
+    original_to_csv = pd.DataFrame.to_csv
+
+    def spy_to_csv(self, *args, **kwargs):  # type: ignore[override]
+        target = args[0] if args else kwargs.get("path_or_buf")
+        recorded_targets.append(str(target))
+        return original_to_csv(self, *args, **kwargs)
+
+    cfg.io.csv_chunksize = 2
+
+    monkeypatch.setattr(pipeline, "validate_testitems", fake_validate)
+    monkeypatch.setattr(pd.DataFrame, "to_csv", spy_to_csv)
+    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+
+    exit_code = pipeline.finalize_output(
+        df,
+        cfg=cfg,
+        output=tmp_path / "out.csv",
+        parent_stats=parent_stats,
+        input_csv=tmp_path / "in.csv",
+        rows_total=len(df),
+    )
+
+    chunk_writes = [target for target in recorded_targets if "chunk_" in target]
+    assert len(chunk_writes) >= 2
     assert exit_code == 0
 
 def test_load_molecule_hierarchy_lookup_missing(tmp_path: Path, cfg: Config) -> None:
