@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -71,6 +72,49 @@ class ThreadTrackingSession:
     def get(self, url: str, timeout: Any) -> ThreadTrackingResponse:
         self.calls.append(threading.get_ident())
         return ThreadTrackingResponse()
+
+
+class StressResponse:
+    """Response keeping the owning session marked as in use."""
+
+    def __init__(self, session: StressSession, thread_id: int) -> None:
+        self._session = session
+        self._thread_id = thread_id
+
+    def __enter__(self) -> StressResponse:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op
+        self._session.release()
+
+    def raise_for_status(self) -> None:  # pragma: no cover - no error
+        pass
+
+    def json(self) -> dict[str, Any]:
+        time.sleep(0.005)
+        return {"thread": self._thread_id}
+
+
+class StressSession:
+    """Session detecting concurrent ``get`` calls from multiple threads."""
+
+    def __init__(self) -> None:
+        self.calls: list[int] = []
+        self._lock = threading.Lock()
+        self._in_use = False
+
+    def release(self) -> None:
+        with self._lock:
+            self._in_use = False
+
+    def get(self, url: str, timeout: Any) -> StressResponse:
+        thread_id = threading.get_ident()
+        with self._lock:
+            if self._in_use:
+                raise RuntimeError("Concurrent access to shared session")
+            self._in_use = True
+        self.calls.append(thread_id)
+        return StressResponse(self, thread_id)
 
 
 def test_request_json_threadsafe(monkeypatch) -> None:
@@ -152,3 +196,36 @@ def test_cache_shared_across_threads(monkeypatch) -> None:
 
     assert all(r == {"ok": True} for r in results)
     assert client.session.calls == 1
+
+
+def test_session_lock_prevents_concurrent_access() -> None:
+    """High concurrency should serialise access to the shared session."""
+
+    session = StressSession()
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+    client.clear_cache()
+
+    start = threading.Event()
+    urls = [f"http://example.com/stress/{idx}" for idx in range(20)]
+    results: list[dict[str, Any]] = []
+    errors: list[Exception] = []
+
+    def worker(target_url: str) -> None:
+        start.wait()
+        try:
+            results.append(client.request_json(target_url, cfg=api_cfg()))
+        except Exception as exc:  # pragma: no cover - exercised on failure
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(url,)) for url in urls]
+    for thread in threads:
+        thread.start()
+
+    start.set()
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    assert len(results) == len(urls)
+    assert session.calls == [result["thread"] for result in results]
+    assert len(set(session.calls)) > 1
