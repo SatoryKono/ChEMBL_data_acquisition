@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -13,7 +12,7 @@ responses = pytest.importorskip("responses")
 
 from library import uniprot_library as ul  # noqa: E402
 from library.clients import uniprot as uniprot_client  # noqa: E402
-from library.config import IupharCfg, UniprotCfg  # noqa: E402
+from library.config import IupharCfg, RetryCfg, UniprotCfg  # noqa: E402
 
 
 def test_extract_names() -> None:
@@ -29,15 +28,22 @@ def test_extract_names() -> None:
 
 
 @responses.activate
-def test_fetch_uniprot_network_error() -> None:
+def test_fetch_uniprot_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = UniprotCfg(base="https://example.org", delay=0)
+    retry_cfg = RetryCfg(max_attempts=2, backoff_factor=0.1)
+    monkeypatch.setattr(uniprot_client, "_retry_cfg", retry_cfg)
+    sleeps: list[float] = []
+    monkeypatch.setattr(uniprot_client, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(uniprot_client.random, "uniform", lambda _a, _b: 0.0)
     responses.add(
         responses.GET,
         "https://example.org/uniprotkb/P12345.json",
         body=requests.RequestException("boom"),
+        repeat=True,
     )
     with pytest.raises(ul.UniProtFetchError):
         ul.fetch_uniprot("P12345", cfg=cfg)
+    assert sleeps == [pytest.approx(0.1)]
 
 
 @responses.activate
@@ -54,7 +60,7 @@ def test_fetch_uniprot_bad_json() -> None:
 
 
 @responses.activate
-def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
+def test_fetch_uniprot_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
     called: dict[str, object] = {}
     session = uniprot_client.get_session()
     orig_get = session.get
@@ -64,10 +70,9 @@ def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
         called["timeout"] = timeout
         return orig_get(url, timeout=timeout)
 
-    sleeps: list[float] = []
-
     monkeypatch.setattr(session, "get", capture)
-    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+    sleeps: list[float] = []
+    monkeypatch.setattr(uniprot_client, "sleep", lambda seconds: sleeps.append(seconds))
     cfg = UniprotCfg(
         base="https://example.org/api",
         timeout_connect=1,
@@ -80,7 +85,48 @@ def test_fetch_uniprot_uses_cfg(monkeypatch) -> None:
     ul.fetch_uniprot("P12345", cfg=cfg)
     assert called["url"] == "https://example.org/api/uniprotkb/P12345.json"
     assert called["timeout"] == (1, 2)
-    assert sleeps and sleeps[0] == pytest.approx(0.5)
+    assert sleeps == []
+
+
+@responses.activate
+def test_fetch_uniprot_retries_with_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0.5)
+    retry_cfg = RetryCfg(max_attempts=3, backoff_factor=0.2)
+    monkeypatch.setattr(uniprot_client, "_retry_cfg", retry_cfg)
+    limiter_calls: list[tuple[int, int]] = []
+    acquire_calls = 0
+
+    class DummyLimiter:
+        def acquire(self) -> None:
+            nonlocal acquire_calls
+            acquire_calls += 1
+
+    def fake_get_limiter(name: str, rps: int, burst: int) -> DummyLimiter:
+        limiter_calls.append((rps, burst))
+        return DummyLimiter()
+
+    monkeypatch.setattr(uniprot_client, "get_limiter", fake_get_limiter)
+    sleeps: list[float] = []
+    monkeypatch.setattr(uniprot_client, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(uniprot_client.random, "uniform", lambda _a, _b: 0.0)
+
+    responses.add(
+        responses.GET,
+        "https://example.org/uniprotkb/P12345.json",
+        status=500,
+    )
+    responses.add(
+        responses.GET,
+        "https://example.org/uniprotkb/P12345.json",
+        json={"primaryAccession": "P12345"},
+    )
+
+    result = ul.fetch_uniprot("P12345", cfg=cfg)
+
+    assert result == {"primaryAccession": "P12345"}
+    assert limiter_calls == [(cfg.rps, cfg.burst), (cfg.rps, cfg.burst)]
+    assert acquire_calls == 2
+    assert sleeps == [pytest.approx(0.7)]
 
 
 @responses.activate
