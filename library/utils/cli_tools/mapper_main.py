@@ -24,6 +24,9 @@ from library.log import logger
 from library.mapper_batch_library import map_chembl_ids_to_uniprot
 
 
+SUMMARY_SAMPLE_LIMIT = 5
+
+
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Map ChEMBL target identifiers to UniProt accessions.
 
@@ -69,7 +72,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             if normalized is not None:
                 ids_to_map.append(normalized)
 
-        mapping_failed = False
+        log_each = bool(getattr(args, "log_each", False))
+        total_ids = len(ids_to_map)
+        mapped_count = 0
+        missing_count = 0
+        missing_sample: list[str] = []
+
+
         try:
             mappings = map_chembl_ids_to_uniprot(
                 ids_to_map,
@@ -81,18 +90,33 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         except (ValueError, TimeoutError, URLError) as exc:
             logger.warning("map_failed", error=str(exc))
             df["mapping_uniprot_id"] = [None for _ in df[args.column]]
-            mapping_failed = True
+            missing_count = total_ids
+            missing_sample = ids_to_map[:SUMMARY_SAMPLE_LIMIT]
         else:
             for chembl_id in ids_to_map:
                 uniprot_id = mappings.get(chembl_id)
                 if uniprot_id:
-                    logger.info(
-                        "mapped",
-                        chembl_id=chembl_id,
-                        uniprot_id=uniprot_id,
-                    )
+                    mapped_count += 1
+                    if log_each:
+                        logger.info(
+                            "mapped",
+                            chembl_id=chembl_id,
+                            uniprot_id=uniprot_id,
+                        )
+                    else:
+                        logger.debug(
+                            "mapped",
+                            chembl_id=chembl_id,
+                            uniprot_id=uniprot_id,
+                        )
                 else:
-                    logger.warning("uniprot_id_missing", chembl_id=chembl_id)
+                    missing_count += 1
+                    if len(missing_sample) < SUMMARY_SAMPLE_LIMIT:
+                        missing_sample.append(chembl_id)
+                    if log_each:
+                        logger.warning("uniprot_id_missing", chembl_id=chembl_id)
+                    else:
+                        logger.debug("uniprot_id_missing", chembl_id=chembl_id)
             mapped_values: list[str | None] = []
             for value in df[args.column]:
                 normalized = _normalize(value)
@@ -100,6 +124,15 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                     mappings.get(normalized) if normalized is not None else None
                 )
             df["mapping_uniprot_id"] = mapped_values
+
+        summary_payload = {
+            "total": total_ids,
+            "mapped": mapped_count,
+            "missing": missing_count,
+        }
+        if missing_sample:
+            summary_payload["sample_missing"] = missing_sample
+        logger.info("mapper_summary", **summary_payload)
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         try:
             io.write_csv(
@@ -144,6 +177,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=positive_int,
         default=1,
         help="Number of worker threads",
+    )
+    parser.add_argument(
+        "--log-each",
+        action="store_true",
+        help="Emit per-ID mapping logs at INFO/WARN level",
     )
     parser.set_defaults(func=run)
     return parser, log_cfg

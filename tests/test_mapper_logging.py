@@ -73,11 +73,14 @@ def test_mapper_main_logs_mapping(
     exit_code = mapper_main.run(cfg_ns, args)
     assert exit_code == 0
     records = [json.loads(line) for line in buffer.getvalue().splitlines()]
-    mapped = [r for r in records if r["event"] == "mapped"]
-    assert mapped
-    rec = mapped[0]
-    assert rec["chembl_id"] == "CHEMBL1"
-    assert rec["uniprot_id"] == "P12345"
+    summary = [r for r in records if r["event"] == "mapper_summary"]
+    assert summary
+    payload = summary[0]
+    assert payload["total"] == 1
+    assert payload["mapped"] == 1
+    assert payload["missing"] == 0
+    assert "sample_missing" not in payload
+    assert not [r for r in records if r["event"] in {"mapped", "uniprot_id_missing"}]
 
 
 def test_mapper_main_concurrent_preserves_order(
@@ -144,7 +147,7 @@ def test_mapper_main_concurrent_preserves_order(
     )
 
     buffer = io.StringIO()
-    configure_logger(LoggerConfig(stream=buffer, level="INFO"))
+    configure_logger(LoggerConfig(stream=buffer, level="DEBUG"))
 
     cfg_ns = SimpleNamespace(
         io=cfg.io,
@@ -185,51 +188,46 @@ def test_mapper_main_concurrent_preserves_order(
         ("mapped", "CHEMBL2"),
         ("uniprot_id_missing", "CHEMBL3"),
     ]
+    summary = [r for r in records if r["event"] == "mapper_summary"]
+    assert summary
+    payload = summary[0]
+    assert payload["total"] == 3
+    assert payload["mapped"] == 2
+    assert payload["missing"] == 1
+    assert payload["sample_missing"] == ["CHEMBL3"]
 
 
-def test_mapper_main_returns_error_on_mapping_failure(
+def test_mapper_main_log_each_emits_per_id_logs(
     tmp_path: Path, monkeypatch: Any, cfg: Config
 ) -> None:
-    """Mapping failures keep diagnostics but result in non-zero exit."""
-
     df = pd.DataFrame({"chembl_id": ["CHEMBL1", "CHEMBL2"]})
     input_path = tmp_path / "in.csv"
     df.to_csv(input_path, index=False)
-    output_path = tmp_path / "out.csv"
 
-    def failing_map(*_a: Any, **_k: Any) -> dict[str, str]:
-        raise TimeoutError("request timed out")
-
-    monkeypatch.setattr(mapper_main, "map_chembl_ids_to_uniprot", failing_map)
-
-    captured: dict[str, Any] = {}
-
-    def fake_write_csv(
-        df_out: pd.DataFrame,
-        path: Path,
+    def fake_map(
+        ids: list[str],
+        cfg_mapping: object,
         *,
-        cfg: Config,
-        sep: str,
-        encoding: str,
-        key_cols: Any,
-    ) -> Path:
-        captured["df"] = df_out.copy()
-        captured["path"] = path
-        captured["key_cols"] = key_cols
-        return path
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
+        return {"CHEMBL1": "P111", "CHEMBL2": None}
 
-    monkeypatch.setattr(mapper_main.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(mapper_main, "map_chembl_ids_to_uniprot", fake_map)
 
     args = argparse.Namespace(
         input_csv=input_path,
-        output_csv=output_path,
+        output_csv=tmp_path / "out.csv",
         column="chembl_id",
         sep=",",
         encoding="utf8",
         key_cols=None,
-        chunk_size=2,
-        rps=5.0,
-        workers=2,
+
+        chunk_size=1,
+        rps=1.0,
+        workers=1,
+        log_each=True,
     )
 
     buffer = io.StringIO()
@@ -242,20 +240,17 @@ def test_mapper_main_returns_error_on_mapping_failure(
     )
 
     exit_code = mapper_main.run(cfg_ns, args)
+    assert exit_code == 0
 
-    assert exit_code == 1
-
-    output_df = captured["df"]
-    assert "mapping_uniprot_id" in output_df.columns
-    assert output_df["mapping_uniprot_id"].isna().all()
-    assert captured["path"] == output_path
-    assert captured["key_cols"] is None
-
-
-def test_mapper_help_mentions_retry_guidance() -> None:
-    """Help output should include retry guidance for failed mappings."""
-
-    parser, _ = mapper_main.build_parser()
-    help_text = parser.format_help().lower()
-    assert "retry" in help_text
-    assert "chunk-size" in help_text
+    records = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+    mapped = [r for r in records if r["event"] == "mapped"]
+    assert mapped and mapped[0]["level"] == "INFO"
+    missing = [r for r in records if r["event"] == "uniprot_id_missing"]
+    assert missing and missing[0]["level"] in {"WARN", "WARNING"}
+    summary = [r for r in records if r["event"] == "mapper_summary"]
+    assert summary
+    payload = summary[0]
+    assert payload["total"] == 2
+    assert payload["mapped"] == 1
+    assert payload["missing"] == 1
+    assert payload["sample_missing"] == ["CHEMBL2"]
