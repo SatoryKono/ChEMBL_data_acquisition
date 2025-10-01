@@ -16,6 +16,7 @@ def test_write_csv_chunks_deterministic(tmp_path: Path) -> None:
             "b": [i % 2 == 0 for i in range(rows)],
             "d": pd.date_range("2020-01-01", periods=rows, freq="D"),
             "f": [i / 3 for i in range(rows)],
+            "chembl_id": pd.Series((f"{i:05d}" for i in range(rows)), dtype="string"),
         }
     )
     shuffled = df.sample(frac=1, random_state=1).reset_index(drop=True)
@@ -24,14 +25,14 @@ def test_write_csv_chunks_deterministic(tmp_path: Path) -> None:
     write_csv_deterministic(
         shuffled,
         path_full,
-        col_order=["a", "b", "d", "f"],
+        col_order=["chembl_id", "a", "b", "d", "f"],
         key_cols=["a"],
     )
     chunk_iter = (shuffled.iloc[i : i + 1000] for i in range(0, len(shuffled), 1000))
     write_csv_chunks_deterministic(
         chunk_iter,
         path_chunks,
-        col_order=["a", "b", "d", "f"],
+        col_order=["chembl_id", "a", "b", "d", "f"],
         key_cols=["a"],
         chunksize=1000,
     )
@@ -63,6 +64,40 @@ def test_write_csv_chunks_deterministic_missing_keys(tmp_path: Path) -> None:
         col_order=["value", "name"],
         key_cols=["chembl_id"],
         chunksize=2,
+        merge_chunksize=1,
+    )
+
+    assert path_full.read_bytes() == path_chunks.read_bytes()
+
+
+def test_write_csv_chunks_preserves_leading_zeros(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "chembl_id": pd.Series(["0001", "0100", "1000"], dtype="string"),
+            "value": [3, 2, 1],
+        }
+    )
+
+    shuffled = df.sample(frac=1, random_state=7).reset_index(drop=True)
+    path_full = tmp_path / "full_leading.csv"
+    path_chunks = tmp_path / "chunks_leading.csv"
+
+    write_csv_deterministic(
+        shuffled,
+        path_full,
+        col_order=["chembl_id", "value"],
+        key_cols=["chembl_id"],
+    )
+
+    chunk_iter = (
+        shuffled.iloc[i : i + 1] for i in range(0, len(shuffled))
+    )
+    write_csv_chunks_deterministic(
+        chunk_iter,
+        path_chunks,
+        col_order=["chembl_id", "value"],
+        key_cols=["chembl_id"],
+        chunksize=1,
         merge_chunksize=1,
     )
 
