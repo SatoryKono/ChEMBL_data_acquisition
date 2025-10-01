@@ -93,6 +93,25 @@ def _resolve_sort_columns(
     return fallback
 
 
+def _make_key_converter(dtype: Any) -> Callable[[Any], tuple[int, Any]]:
+    """Return a callable that converts string values to sortable keys."""
+
+    def _is_missing(value: Any) -> bool:
+        if pd.isna(value):
+            return True
+        if isinstance(value, str):
+            return value == ""
+        return False
+
+    if dtype is not None and ptypes.is_integer_dtype(dtype):
+        return lambda value: (1, 0) if _is_missing(value) else (0, int(value))
+
+    if dtype is not None and ptypes.is_float_dtype(dtype):
+        return lambda value: (1, 0.0) if _is_missing(value) else (0, float(value))
+
+    return lambda value: (1, "") if _is_missing(value) else (0, value)
+
+
 def write_csv_deterministic(
     df: pd.DataFrame,
     path: str | Path,
@@ -362,7 +381,9 @@ def write_csv_chunks_deterministic(
     peak memory usage. After all chunks are processed the temporary files are
     reloaded via a :class:`~collections.abc.Generator` and combined with
     :func:`pandas.concat`. The concatenated frame is finally serialised
-    deterministically to ``path``.
+    deterministically to ``path``. Temporary CSV chunks are re-read with
+    ``dtype="string"`` so that textual representations (for example leading
+    zeros) are preserved during the merge step.
 
     Parameters
     ----------
@@ -414,6 +435,10 @@ def write_csv_chunks_deterministic(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_paths: list[Path] = []
+        original_dtypes: dict[str, Any] | None = None
+        meta_dtypes: dict[str, str] | None = None
+        meta_columns: list[str] | None = None
+
         for idx, df_chunk in enumerate(chunks):
             # Detect duplicate column names within each chunk
             duplicated = df_chunk.columns[df_chunk.columns.duplicated()]
@@ -438,6 +463,12 @@ def write_csv_chunks_deterministic(
                 cfg=None,
                 drop_unexpected_cols=drop_unexpected_cols,
             )
+            if original_dtypes is None:
+                original_dtypes = df_chunk.dtypes.to_dict()
+                meta_dtypes = {
+                    col: dtype.name if hasattr(dtype, "name") else str(dtype)
+                    for col, dtype in original_dtypes.items()
+                }
             meta = tmp_path.with_suffix(tmp_path.suffix + ".meta.yaml")
             if meta.exists():
                 meta.unlink()
@@ -457,6 +488,7 @@ def write_csv_chunks_deterministic(
                 drop_unexpected_cols=drop_unexpected_cols,
             )
 
+        dtype_lookup = original_dtypes or {}
         with ExitStack() as stack:
             readers = []
             for tmp_path in tmp_paths:
@@ -467,6 +499,7 @@ def write_csv_chunks_deterministic(
                     handle,
                     sep=sep,
                     chunksize=merge_chunksize,
+                    dtype="string",
                 )
                 stack.callback(reader.close)
                 readers.append(reader)
@@ -479,10 +512,21 @@ def write_csv_chunks_deterministic(
 
             first = next((c for c in current if c is not None), pd.DataFrame())
             columns = list(first.columns)
-            dtypes = {col: first.dtypes[col].name for col in columns}
+            if meta_columns is None:
+                meta_columns = list(columns)
+            if meta_dtypes is not None:
+                dtype_names = {
+                    col: meta_dtypes.get(col, first.dtypes[col].name)
+                    for col in columns
+                }
+            else:
+                dtype_names = {col: first.dtypes[col].name for col in columns}
             resolved_sort_cols = _resolve_sort_columns(
                 first, key_cols_list, emit_warning=False
             )
+            key_converters = [
+                _make_key_converter(dtype_lookup.get(col)) for col in resolved_sort_cols
+            ]
 
             def _fmt(value: Any) -> Any:
                 if pd.isna(value):
@@ -498,7 +542,12 @@ def write_csv_chunks_deterministic(
                 if frame is not None and not frame.empty:
                     row = frame.iloc[0]
                     key = (
-                        tuple(row[k] for k in resolved_sort_cols)
+                        tuple(
+                            converter(row[col])
+                            for converter, col in zip(
+                                key_converters, resolved_sort_cols
+                            )
+                        )
                         if resolved_sort_cols
                         else tuple()
                     )
@@ -517,7 +566,12 @@ def write_csv_chunks_deterministic(
                     if row_idx < len(chunk):
                         next_row = chunk.iloc[row_idx]
                         key = (
-                            tuple(next_row[k] for k in resolved_sort_cols)
+                            tuple(
+                                converter(next_row[col])
+                                for converter, col in zip(
+                                    key_converters, resolved_sort_cols
+                                )
+                            )
                             if resolved_sort_cols
                             else tuple()
                         )
@@ -532,13 +586,23 @@ def write_csv_chunks_deterministic(
                             if not next_chunk.empty:
                                 next_row = next_chunk.iloc[0]
                                 key = (
-                                    tuple(next_row[k] for k in resolved_sort_cols)
+                                    tuple(
+                                        converter(next_row[col])
+                                        for converter, col in zip(
+                                            key_converters, resolved_sort_cols
+                                        )
+                                    )
                                     if resolved_sort_cols
                                     else tuple()
                                 )
                                 heapq.heappush(heap, (key, file_idx, 0))
 
-    write_meta_yaml(out_path, cfg, columns=columns, dtypes=dtypes)
+    write_meta_yaml(
+        out_path,
+        cfg,
+        columns=meta_columns,
+        dtypes=dtype_names,
+    )
     return out_path
 
 
