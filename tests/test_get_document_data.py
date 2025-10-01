@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterable, Iterator, Sequence
 from concurrent.futures import Future
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 import pytest
@@ -1811,6 +1811,144 @@ def test_fetch_pubmed_records_parallel_enrichment(
     assert crossref_threads
     assert all(name.startswith("ThreadPoolExecutor") for name in openalex_threads)
     assert all(name.startswith("ThreadPoolExecutor") for name in crossref_threads)
+
+
+def test_fetch_pubmed_records_reuses_service_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Service lookups should reuse sessions within a batch."""
+
+    pmids = ["100", "200", "300"]
+    session_labels: list[str] = []
+
+    class DummySession:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    def fake_session_with_retry(*_args: object, **_kwargs: object) -> DummySession:
+        label = f"session-{len(session_labels)}"
+        session_labels.append(label)
+        return DummySession(label)
+
+    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
+
+    def fake_pubmed_batch(
+        session: DummySession,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        assert session.label == "session-0"
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"10.1234/{pmid}",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        session: DummySession,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        assert session.label == "session-0"
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+
+    openalex_sessions: list[str] = []
+
+    def fake_openalex(
+        session: DummySession,
+        pmid: str,
+        cfg: OpenAlexCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        openalex_sessions.append(session.label)
+        return {
+            "OpenAlex.Id": pmid,
+            "OpenAlex.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+
+    crossref_sessions: list[str] = []
+
+    def fake_crossref(
+        session: DummySession,
+        doi: str,
+        cfg: CrossRefCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        crossref_sessions.append(session.label)
+        return {
+            "crossref.Title": doi,
+            "crossref.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    class ImmediateFuture:
+        def __init__(self, value: list[dict[str, str]]) -> None:
+            self._value = value
+
+        def result(self) -> list[dict[str, str]]:  # pragma: no cover - trivial
+            return self._value
+
+    class ImmediateExecutor:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        def __enter__(self) -> "ImmediateExecutor":  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+        def submit(
+            self, fn: Callable[[Sequence[str]], list[dict[str, str]]], batch: Sequence[str]
+        ) -> ImmediateFuture:
+            return ImmediateFuture(fn(batch))
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", ImmediateExecutor)
+    monkeypatch.setattr(gdd, "as_completed", lambda futures: list(futures))
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(burst=1, rps=1),
+        crossref_cfg=CrossRefCfg(burst=1, rps=1),
+        max_workers=1,
+        batch_size=3,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert len(session_labels) == 3
+    assert openalex_sessions and len(openalex_sessions) == len(pmids)
+    assert openalex_sessions == [openalex_sessions[0]] * len(openalex_sessions)
+    assert crossref_sessions and len(crossref_sessions) == len(pmids)
+    assert crossref_sessions == [crossref_sessions[0]] * len(crossref_sessions)
 
 
 def test_fetch_pubmed_records_reuses_service_executors(

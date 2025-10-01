@@ -28,9 +28,10 @@ import argparse
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from itertools import chain, islice, tee
 from pathlib import Path
+from threading import Lock
 from typing import Any, cast
 
 import pandas as pd
@@ -325,8 +326,11 @@ def fetch_pubmed_records(
         burst=getattr(crossref_cfg, "burst", None),
     )
 
-    def _acquire_documents(limiter: RateLimiter | None) -> None:
-        documents_limiter.acquire()
+    def _acquire_documents(
+        limiter: RateLimiter | None, *, use_global: bool = True
+    ) -> None:
+        if use_global and documents_limiter is not None:
+            documents_limiter.acquire()
         if limiter is not None:
             limiter.acquire()
 
@@ -389,23 +393,68 @@ def fetch_pubmed_records(
 
         batch_summary = _summarise_batch(batch_list)
 
-        def _invoke_with_session(
-            fetcher: Callable[
-                [requests.Session, str, Any, RateLimiter | None], dict[str, str]
-            ],
-            identifier: str,
-            *,
-            cfg_obj: Any,
-            limiter: RateLimiter | None,
-        ) -> dict[str, str]:
-            with session_with_retry(__cfg.api, __cfg.retry) as nested_session:
-                return fetcher(nested_session, identifier, cfg_obj, limiter)
+        class _SessionPool:
+            def __init__(
+                self,
+                stack: ExitStack,
+                factory: Callable[[], requests.Session],
+            ) -> None:
+                self._stack = stack
+                self._factory = factory
+                self._available: list[requests.Session] = []
+                self._lock = Lock()
+
+            def _acquire(self) -> requests.Session:
+                with self._lock:
+                    if self._available:
+                        return self._available.pop()
+                session_cm = self._factory()
+                return self._stack.enter_context(session_cm)
+
+            def _release(self, session: requests.Session) -> None:
+                with self._lock:
+                    self._available.append(session)
+
+            @contextmanager
+            def session(self) -> Iterator[requests.Session]:
+                nested_session = self._acquire()
+                try:
+                    yield nested_session
+                finally:
+                    self._release(nested_session)
 
         try:
-            with session_with_retry(__cfg.api, __cfg.retry) as session:
+            with ExitStack() as session_stack:
+                base_session = session_stack.enter_context(
+                    session_with_retry(__cfg.api, __cfg.retry)
+                )
+
+                session_factories: dict[str, Callable[[], requests.Session]] = {
+                    "openalex": lambda: session_with_retry(__cfg.api, __cfg.retry),
+                    "crossref": lambda: session_with_retry(__cfg.api, __cfg.retry),
+                }
+
+                session_pools = {
+                    service: _SessionPool(session_stack, factory)
+                    for service, factory in session_factories.items()
+                }
+
+                def _invoke_with_session(
+                    service: str,
+                    fetcher: Callable[
+                        [requests.Session, str, Any, RateLimiter | None], dict[str, str]
+                    ],
+                    identifier: str,
+                    *,
+                    cfg_obj: Any,
+                    limiter: RateLimiter | None,
+                ) -> dict[str, str]:
+                    with session_pools[service].session() as nested_session:
+                        return fetcher(nested_session, identifier, cfg_obj, limiter)
+
                 _acquire_documents(pubmed_service_limiter)
                 pubmed_list = pl.fetch_pubmed_batch(
-                    session, batch_list, sleep, cfg=pubmed_cfg
+                    base_session, batch_list, sleep, cfg=pubmed_cfg
                 )
 
                 pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
@@ -416,7 +465,7 @@ def fetch_pubmed_records(
                     # Fetch Semantic Scholar data in a single batch
                     _acquire_documents(semantic_service_limiter)
                     semsch_list = ssl.fetch_semantic_scholar_batch(
-                        session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
+                        base_session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
                     )
 
                     # Create a map for easy lookup
@@ -439,7 +488,7 @@ def fetch_pubmed_records(
                     for pmid in fallback_pmids:
                         _acquire_documents(semantic_service_limiter)
                         fallback_record = ssl.fetch_semantic_scholar(
-                            session, pmid, sleep, cfg=semantic_scholar_cfg
+                            base_session, pmid, sleep, cfg=semantic_scholar_cfg
                         )
                         semsch_map[pmid] = fallback_record
 
@@ -476,8 +525,11 @@ def fetch_pubmed_records(
 
                 openalex_jobs = list(openalex_lookup.keys())
                 def _fetch_openalex_job(pmid: str) -> dict[str, str]:
-                    _acquire_documents(openalex_service_limiter)
+                    _acquire_documents(
+                        openalex_service_limiter, use_global=False
+                    )
                     return _invoke_with_session(
+                        "openalex",
                         ocl.fetch_openalex,
                         pmid,
                         cfg_obj=openalex_cfg,
@@ -515,8 +567,11 @@ def fetch_pubmed_records(
 
                 crossref_jobs = list(crossref_lookup.keys())
                 def _fetch_crossref_job(doi: str) -> dict[str, str]:
-                    _acquire_documents(crossref_service_limiter)
+                    _acquire_documents(
+                        crossref_service_limiter, use_global=False
+                    )
                     return _invoke_with_session(
+                        "crossref",
                         ocl.fetch_crossref,
                         doi,
                         cfg_obj=crossref_cfg,
@@ -587,69 +642,72 @@ def fetch_pubmed_records(
     processed = 0
     max_in_flight = max(1, max_workers * 2)
 
-    with ExitStack() as stack:
-        batch_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=max_workers)
+    stack = ExitStack()
+    batch_executor = stack.enter_context(
+        ThreadPoolExecutor(max_workers=max_workers)
+    )
+    if openalex_capacity > 1:
+        openalex_executor = stack.enter_context(
+            ThreadPoolExecutor(max_workers=openalex_capacity)
         )
-        if openalex_capacity > 1:
-            openalex_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=openalex_capacity)
-            )
-        if crossref_capacity > 1:
-            crossref_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=crossref_capacity)
-            )
+    if crossref_capacity > 1:
+        crossref_executor = stack.enter_context(
+            ThreadPoolExecutor(max_workers=crossref_capacity)
+        )
 
-        offset = 0
-        pending: set[Future[list[dict[str, str]]]] = set()
+    offset = 0
+    pending: set[Future[list[dict[str, str]]]] = set()
 
-        def _drain_future(
-            done_future: Future[list[dict[str, str]]],
-        ) -> Iterator[list[dict[str, str]]]:
-            nonlocal processed, next_to_emit
+    def _drain_future(
+        done_future: Future[list[dict[str, str]]],
+    ) -> Iterator[list[dict[str, str]]]:
+        nonlocal processed, next_to_emit
 
-            pending.remove(done_future)
-            batch_id, batch_pmids = tasks.pop(done_future)
-            completed[batch_id] = done_future.result()
-            processed += len(batch_pmids)
-            logger.info("documents_processed", count=processed)
+        pending.remove(done_future)
+        batch_id, batch_pmids = tasks.pop(done_future)
+        completed[batch_id] = done_future.result()
+        processed += len(batch_pmids)
+        logger.info("documents_processed", count=processed)
 
-            while next_to_emit in completed:
-                yield completed.pop(next_to_emit)
-                next_to_emit += 1
+        while next_to_emit in completed:
+            records = completed.pop(next_to_emit)
+            yield records
+            next_to_emit += len(records)
 
-        def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
-            nonlocal next_to_emit
+    def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
+        nonlocal next_to_emit
 
-            while next_to_emit in completed:
-                yield completed.pop(next_to_emit)
-                next_to_emit += 1
+        while next_to_emit in completed:
+            records = completed.pop(next_to_emit)
+            yield records
+            next_to_emit += len(records)
 
-        def _iter_records() -> Iterator[list[dict[str, str]]]:
-            nonlocal offset
+    def _iter_records() -> Iterator[list[dict[str, str]]]:
+        nonlocal offset
 
-            for batch in _chunked(iterator, batch_size):
-                if not batch:
-                    continue
-                future = batch_executor.submit(_fetch_batch, batch)
-                tasks[future] = (offset, batch)
-                pending.add(future)
-                offset += len(batch)
-                if len(pending) >= max_in_flight:
+        for batch in _chunked(iterator, batch_size):
+            if not batch:
+                continue
+            future = batch_executor.submit(_fetch_batch, batch)
+            tasks[future] = (offset, batch)
+            pending.add(future)
+            offset += len(batch)
+            if len(pending) >= max_in_flight:
 
-                    done_future = next(as_completed(list(pending)))
-                    yield from _drain_future(done_future)
-
-                yield from _emit_ready_batches()
-
-            for done_future in as_completed(pending):
+                done_future = next(as_completed(list(pending)))
                 yield from _drain_future(done_future)
-
-            pending.clear()
 
             yield from _emit_ready_batches()
 
-        def _iter_frames() -> Iterator[pd.DataFrame]:
+        for done_future in as_completed(list(pending)):
+            yield from _drain_future(done_future)
+
+        pending.clear()
+
+        yield from _emit_ready_batches()
+
+    def _iter_frames() -> Iterator[pd.DataFrame]:
+        try:
             for records_batch in _iter_records():
                 if not records_batch:
                     yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
@@ -657,6 +715,8 @@ def fetch_pubmed_records(
                 yield build_dataframe(
                     records_batch, columns=DOCUMENT_SCHEMA_COLUMNS
                 )
+        finally:
+            stack.close()
 
     frame_iter = _iter_frames()
     if return_generator:
