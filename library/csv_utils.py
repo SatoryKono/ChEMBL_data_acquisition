@@ -13,7 +13,6 @@ import hashlib
 import heapq
 import os
 import tempfile
-from contextlib import ExitStack
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime
 from pathlib import Path
@@ -112,6 +111,203 @@ def _make_key_converter(dtype: Any) -> Callable[[Any], tuple[int, Any]]:
 
     return lambda value: (1, "") if _is_missing(value) else (0, value)
 
+
+class _CSVChunkStream:
+    """Lazy reader that streams DataFrame chunks from a CSV file."""
+
+    __slots__ = ("path", "encoding", "sep", "merge_chunksize", "_reader")
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        encoding: str,
+        sep: str,
+        merge_chunksize: int,
+    ) -> None:
+        self.path = path
+        self.encoding = encoding
+        self.sep = sep
+        self.merge_chunksize = merge_chunksize
+        self._reader: pd.io.parsers.TextFileReader | None = None
+
+    def next(self) -> pd.DataFrame | None:
+        """Return the next chunk from the CSV file or ``None`` when exhausted."""
+
+        if self._reader is None:
+            self._reader = pd.read_csv(
+                self.path,
+                sep=self.sep,
+                chunksize=self.merge_chunksize,
+                dtype="string",
+                encoding=self.encoding,
+            )
+        assert self._reader is not None
+        try:
+            return next(self._reader)
+        except StopIteration:
+            self.close()
+            return None
+
+    def close(self) -> None:
+        """Release the underlying file handle."""
+
+        if self._reader is not None:
+            self._reader.close()
+            self._reader = None
+
+
+def _batched_paths(paths: Sequence[Path], size: int) -> Iterable[list[Path]]:
+    """Yield ``paths`` in batches of ``size`` preserving order."""
+
+    if size <= 0:
+        raise ValueError("merge_file_window must be a positive integer")
+    for start in range(0, len(paths), size):
+        yield list(paths[start : start + size])
+
+
+def _merge_sorted_csv_group(
+    input_paths: Sequence[Path],
+    *,
+    destination: Path,
+    encoding: str,
+    sep: str,
+    merge_chunksize: int,
+    key_cols: Sequence[str],
+    dtype_lookup: dict[str, Any],
+    dtype_names_override: dict[str, str] | None,
+    fallback_columns: Sequence[str] | None,
+) -> tuple[list[str], dict[str, str]]:
+    """Merge ``input_paths`` into ``destination`` preserving deterministic order."""
+
+    streams = [
+        _CSVChunkStream(
+            path,
+            encoding=encoding,
+            sep=sep,
+            merge_chunksize=merge_chunksize,
+        )
+        for path in input_paths
+    ]
+    current: list[pd.DataFrame | None] = []
+    first_non_empty: pd.DataFrame | None = None
+    empty_columns: list[str] | None = None
+
+    try:
+        for stream in streams:
+            chunk = stream.next()
+            current.append(chunk)
+            if chunk is None:
+                continue
+            if not chunk.empty and first_non_empty is None:
+                first_non_empty = chunk
+            if chunk.empty and empty_columns is None:
+                empty_columns = list(chunk.columns)
+
+        if first_non_empty is None:
+            if fallback_columns is not None:
+                columns = list(fallback_columns)
+            elif empty_columns is not None:
+                columns = empty_columns
+            elif input_paths:
+                preview = pd.read_csv(
+                    input_paths[0],
+                    sep=sep,
+                    nrows=0,
+                    dtype="string",
+                    encoding=encoding,
+                )
+                columns = list(preview.columns)
+            else:
+                columns = []
+            resolved_sort_cols: list[str] = []
+            dtype_names = {
+                col: (dtype_names_override or {}).get(col, "string")
+                for col in columns
+            }
+            with open_atomic(destination, encoding=encoding, newline="") as fh:
+                writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
+                writer.writerow(columns)
+            return columns, dtype_names
+
+        columns = list(first_non_empty.columns)
+        resolved_sort_cols = _resolve_sort_columns(
+            first_non_empty, key_cols, emit_warning=False
+        )
+        dtype_names = {
+            col: (dtype_names_override or {}).get(col, first_non_empty.dtypes[col].name)
+            for col in columns
+        }
+        key_converters = [
+            _make_key_converter(dtype_lookup.get(col)) for col in resolved_sort_cols
+        ]
+
+        def _fmt(value: Any) -> Any:
+            if pd.isna(value):
+                return ""
+            if isinstance(value, float):
+                return f"{value:.6g}"
+            if isinstance(value, bool | np.bool_):
+                return "true" if bool(value) else "false"
+            return value
+
+        heap: list[tuple[tuple[Any, ...], int, int]] = []
+        for idx, frame in enumerate(current):
+            if frame is not None and not frame.empty:
+                row = frame.iloc[0]
+                key = (
+                    tuple(
+                        converter(row[col])
+                        for converter, col in zip(key_converters, resolved_sort_cols)
+                    )
+                    if resolved_sort_cols
+                    else tuple()
+                )
+                heapq.heappush(heap, (key, idx, 0))
+
+        with open_atomic(destination, encoding=encoding, newline="") as fh:
+            writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
+            writer.writerow(columns)
+            while heap:
+                _, file_idx, row_idx = heapq.heappop(heap)
+                chunk = current[file_idx]
+                assert chunk is not None
+                row = chunk.iloc[row_idx]
+                writer.writerow([_fmt(row[c]) for c in columns])
+                row_idx += 1
+                if row_idx < len(chunk):
+                    next_row = chunk.iloc[row_idx]
+                    key = (
+                        tuple(
+                            converter(next_row[col])
+                            for converter, col in zip(
+                                key_converters, resolved_sort_cols
+                            )
+                        )
+                        if resolved_sort_cols
+                        else tuple()
+                    )
+                    heapq.heappush(heap, (key, file_idx, row_idx))
+                else:
+                    next_chunk = streams[file_idx].next()
+                    current[file_idx] = next_chunk
+                    if next_chunk is not None and not next_chunk.empty:
+                        next_row = next_chunk.iloc[0]
+                        key = (
+                            tuple(
+                                converter(next_row[col])
+                                for converter, col in zip(
+                                    key_converters, resolved_sort_cols
+                                )
+                            )
+                            if resolved_sort_cols
+                            else tuple()
+                        )
+                        heapq.heappush(heap, (key, file_idx, 0))
+        return columns, dtype_names
+    finally:
+        for stream in streams:
+            stream.close()
 
 def write_csv_deterministic(
     df: pd.DataFrame,
@@ -367,6 +563,7 @@ def write_csv_chunks_deterministic(
     chunksize: int = 1000,
     merge_chunksize: int = 1000,
     sort_chunksize: int | None = None,
+    merge_file_window: int = 64,
     sep: str = ",",
     encoding: str = "utf-8-sig",
     cfg: Config | None = None,
@@ -405,6 +602,11 @@ def write_csv_chunks_deterministic(
     merge_chunksize:
         Number of rows loaded from each temporary file during the merge.
         Higher values may improve throughput at the expense of memory.
+
+    merge_file_window:
+        Maximum number of temporary chunk files opened simultaneously during
+        the merge step. Larger windows increase memory and file descriptor
+        usage but reduce the number of intermediate passes.
 
     sort_chunksize:
         Optional number of rows sorted per chunk during final write. Passed to
@@ -490,118 +692,54 @@ def write_csv_chunks_deterministic(
             )
 
         dtype_lookup = original_dtypes or {}
-        with ExitStack() as stack:
-            readers = []
-            for tmp_path in tmp_paths:
-                handle = stack.enter_context(
-                    tmp_path.open("r", encoding=encoding, newline="")
-                )
-                reader = pd.read_csv(
-                    handle,
+        if merge_file_window <= 0:
+            raise ValueError("merge_file_window must be a positive integer")
+        pending = list(tmp_paths)
+        columns: list[str] = []
+        dtype_names: dict[str, str] = {}
+
+        iteration = 0
+        while len(pending) > merge_file_window:
+            next_round: list[Path] = []
+            for batch_index, batch in enumerate(_batched_paths(pending, merge_file_window)):
+                merged_path = Path(tmpdir) / f"merge_{iteration}_{batch_index}.csv"
+                _merge_sorted_csv_group(
+                    batch,
+                    destination=merged_path,
+                    encoding=encoding,
                     sep=sep,
-                    chunksize=merge_chunksize,
-                    dtype="string",
+                    merge_chunksize=merge_chunksize,
+                    key_cols=key_cols_list,
+                    dtype_lookup=dtype_lookup,
+                    dtype_names_override=meta_dtypes,
+                    fallback_columns=meta_columns,
                 )
-                stack.callback(reader.close)
-                readers.append(reader)
-            current: list[pd.DataFrame | None] = []
-            for r in readers:
-                try:
-                    current.append(next(r))
-                except StopIteration:
-                    current.append(None)
+                next_round.append(merged_path)
+                for path_to_remove in batch:
+                    if path_to_remove.exists():
+                        path_to_remove.unlink()
+            pending = next_round
+            iteration += 1
 
-            first = next((c for c in current if c is not None), pd.DataFrame())
-            columns = list(first.columns)
-            if meta_columns is None:
-                meta_columns = list(columns)
-            if meta_dtypes is not None:
-                dtype_names = {
-                    col: meta_dtypes.get(col, first.dtypes[col].name)
-                    for col in columns
-                }
-            else:
-                dtype_names = {col: first.dtypes[col].name for col in columns}
-            resolved_sort_cols = _resolve_sort_columns(
-                first, key_cols_list, emit_warning=False
-            )
-            key_converters = [
-                _make_key_converter(dtype_lookup.get(col)) for col in resolved_sort_cols
-            ]
+        columns, dtype_names = _merge_sorted_csv_group(
+            pending,
+            destination=out_path,
+            encoding=encoding,
+            sep=sep,
+            merge_chunksize=merge_chunksize,
+            key_cols=key_cols_list,
+            dtype_lookup=dtype_lookup,
+            dtype_names_override=meta_dtypes,
+            fallback_columns=meta_columns,
+        )
 
-            def _fmt(value: Any) -> Any:
-                if pd.isna(value):
-                    return ""
-                if isinstance(value, float):
-                    return f"{value:.6g}"
-                if isinstance(value, bool | np.bool_):
-                    return "true" if bool(value) else "false"
-                return value
-
-            heap: list[tuple[tuple[Any, ...], int, int]] = []
-            for idx, frame in enumerate(current):
-                if frame is not None and not frame.empty:
-                    row = frame.iloc[0]
-                    key = (
-                        tuple(
-                            converter(row[col])
-                            for converter, col in zip(
-                                key_converters, resolved_sort_cols
-                            )
-                        )
-                        if resolved_sort_cols
-                        else tuple()
-                    )
-                    heapq.heappush(heap, (key, idx, 0))
-
-            with open_atomic(out_path, encoding=encoding, newline="") as fh:
-                writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
-                writer.writerow(columns)
-                while heap:
-                    _, file_idx, row_idx = heapq.heappop(heap)
-                    chunk = current[file_idx]
-                    assert chunk is not None
-                    row = chunk.iloc[row_idx]
-                    writer.writerow([_fmt(row[c]) for c in columns])
-                    row_idx += 1
-                    if row_idx < len(chunk):
-                        next_row = chunk.iloc[row_idx]
-                        key = (
-                            tuple(
-                                converter(next_row[col])
-                                for converter, col in zip(
-                                    key_converters, resolved_sort_cols
-                                )
-                            )
-                            if resolved_sort_cols
-                            else tuple()
-                        )
-                        heapq.heappush(heap, (key, file_idx, row_idx))
-                    else:
-                        try:
-                            next_chunk = next(readers[file_idx])
-                        except StopIteration:
-                            current[file_idx] = None
-                        else:
-                            current[file_idx] = next_chunk
-                            if not next_chunk.empty:
-                                next_row = next_chunk.iloc[0]
-                                key = (
-                                    tuple(
-                                        converter(next_row[col])
-                                        for converter, col in zip(
-                                            key_converters, resolved_sort_cols
-                                        )
-                                    )
-                                    if resolved_sort_cols
-                                    else tuple()
-                                )
-                                heapq.heappush(heap, (key, file_idx, 0))
+        if meta_columns is None:
+            meta_columns = list(columns)
 
     write_meta_yaml(
         out_path,
         cfg,
-        columns=meta_columns,
+        columns=meta_columns or columns,
         dtypes=dtype_names,
     )
     return out_path
