@@ -69,13 +69,6 @@ check-determinism = "library.utils.cli_tools.check_determinism:main"
 
 [tool.setuptools]
 include-package-data = true
-py-modules = [
-  "scripts.get_activity_data",
-  "scripts.get_assay_data",
-  "scripts.get_document_data",
-  "scripts.get_target_data",
-  "scripts.get_testitem_data",
-]
 
 [tool.setuptools.packages.find]
 include = [
@@ -85,6 +78,8 @@ include = [
   "schemas.*",
   "config",
   "dictionary",
+  "scripts",
+  "scripts.*",
 ]
 
 [tool.setuptools.package-data]
