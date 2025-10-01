@@ -101,8 +101,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             key_cols=args.key_cols,
             chunksize=chunk_size,
             merge_chunksize=merge_chunk_size,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
+            sep=sep,
+            encoding=encoding,
             cfg=cfg,
             drop_unexpected_cols=True,
         )
