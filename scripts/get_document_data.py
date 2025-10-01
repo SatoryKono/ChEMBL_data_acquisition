@@ -28,7 +28,7 @@ import argparse
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, AbstractContextManager
 from itertools import chain, islice, tee
 from pathlib import Path
 from threading import Lock
@@ -77,8 +77,10 @@ from library.config import (
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
+    openalex_session,
     print_config,
     session_with_retry,
+    crossref_session,
 )
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -397,7 +399,7 @@ def fetch_pubmed_records(
             def __init__(
                 self,
                 stack: ExitStack,
-                factory: Callable[[], requests.Session],
+                factory: Callable[[], AbstractContextManager[requests.Session]],
             ) -> None:
                 self._stack = stack
                 self._factory = factory
@@ -429,9 +431,15 @@ def fetch_pubmed_records(
                     session_with_retry(__cfg.api, __cfg.retry)
                 )
 
-                session_factories: dict[str, Callable[[], requests.Session]] = {
-                    "openalex": lambda: session_with_retry(__cfg.api, __cfg.retry),
-                    "crossref": lambda: session_with_retry(__cfg.api, __cfg.retry),
+                session_factories: dict[
+                    str, Callable[[], AbstractContextManager[requests.Session]]
+                ] = {
+                    "openalex": lambda: openalex_session(
+                        __cfg.api, __cfg.retry, openalex_cfg
+                    ),
+                    "crossref": lambda: crossref_session(
+                        __cfg.api, __cfg.retry, crossref_cfg
+                    ),
                 }
 
                 session_pools = {
@@ -440,7 +448,7 @@ def fetch_pubmed_records(
                 }
 
                 def _invoke_with_session(
-                    service: str,
+                    factory: Callable[[], AbstractContextManager[requests.Session]],
                     fetcher: Callable[
                         [requests.Session, str, Any, RateLimiter | None], dict[str, str]
                     ],
@@ -449,7 +457,7 @@ def fetch_pubmed_records(
                     cfg_obj: Any,
                     limiter: RateLimiter | None,
                 ) -> dict[str, str]:
-                    with session_pools[service].session() as nested_session:
+                    with factory() as nested_session:
                         return fetcher(nested_session, identifier, cfg_obj, limiter)
 
                 _acquire_documents(pubmed_service_limiter)
@@ -529,7 +537,7 @@ def fetch_pubmed_records(
                         openalex_service_limiter, use_global=False
                     )
                     return _invoke_with_session(
-                        "openalex",
+                        session_pools["openalex"].session,
                         ocl.fetch_openalex,
                         pmid,
                         cfg_obj=openalex_cfg,
@@ -571,7 +579,7 @@ def fetch_pubmed_records(
                         crossref_service_limiter, use_global=False
                     )
                     return _invoke_with_session(
-                        "crossref",
+                        session_pools["crossref"].session,
                         ocl.fetch_crossref,
                         doi,
                         cfg_obj=crossref_cfg,

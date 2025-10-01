@@ -8,13 +8,21 @@ import pandas as pd
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
+import library.config as config_module
+
 from library.cli import LoggerConfig, configure_logger
 from library.config import (
+    ApiCfg,
     Config,
     ConfigError,
+    CrossRefCfg,
+    OpenAlexCfg,
+    RetryCfg,
     build_alias_map,
+    crossref_session,
     ensure_dirs,
     load_config,
+    openalex_session,
 )
 from library.utils.config import DEFAULT_CONFIG_PATH
 from scripts import get_target_data as target_cli
@@ -413,9 +421,9 @@ def test_user_agent_default_and_overrides(
     path.write_text(
         "sources:\n"
         "  openalex:\n"
-        "    mailto: info@example.org\n"
+        "    mailto: contact@ebi.ac.uk\n"
         "  crossref:\n"
-        "    mailto: info@example.org\n"
+        "    mailto: contact@ebi.ac.uk\n"
     )
     monkeypatch.delenv("CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False)
     cfg = load_config(path)
@@ -608,3 +616,59 @@ def test_log_level_invalid_no_mapping(
     level_names = {name.upper(): level for name, level in logging._nameToLevel.items()}
     valid = ", ".join(sorted(level_names))
     assert f"log.level must be one of {valid}, got 'verbose'" in str(exc.value)
+
+
+def test_openalex_session_applies_mailto_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex session helper should forward the configured contact email."""
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.headers: dict[str, str] = {}
+
+        def __enter__(self) -> "DummySession":  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *_: object) -> bool:  # pragma: no cover - trivial
+            return False
+
+    created = DummySession()
+
+    def fake_session_with_retry(*_: object, **__: object) -> DummySession:
+        return created
+
+    monkeypatch.setattr(config_module, "session_with_retry", fake_session_with_retry)
+
+    session = openalex_session(ApiCfg(), RetryCfg(), OpenAlexCfg(mailto="contact@ebi.ac.uk"))
+
+    assert session is created
+    assert session.headers.get("mailto") == "contact@ebi.ac.uk"
+
+
+def test_crossref_session_applies_mailto_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CrossRef session helper should forward the configured contact email."""
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.headers: dict[str, str] = {}
+
+        def __enter__(self) -> "DummySession":  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *_: object) -> bool:  # pragma: no cover - trivial
+            return False
+
+    created = DummySession()
+
+    def fake_session_with_retry(*_: object, **__: object) -> DummySession:
+        return created
+
+    monkeypatch.setattr(config_module, "session_with_retry", fake_session_with_retry)
+
+    session = crossref_session(ApiCfg(), RetryCfg(), CrossRefCfg(mailto="contact@ebi.ac.uk"))
+
+    assert session is created
+    assert session.headers.get("mailto") == "contact@ebi.ac.uk"
