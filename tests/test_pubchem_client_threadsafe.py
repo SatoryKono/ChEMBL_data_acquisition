@@ -17,13 +17,18 @@ from library.config import ApiCfg, RetryCfg, session_with_retry
 class DummyResponse:
     """Simple response object returning a constant payload."""
 
-    status_code = 200
-
     def __init__(
-        self, payload: dict[str, object], close_log: list[object] | None = None
+        self,
+        payload: dict[str, object] | None,
+        close_log: list[object] | None = None,
+        *,
+        status_code: int = 200,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self._payload = payload
         self._close_log = close_log
+        self.status_code = status_code
+        self.headers = headers or {}
         self.closed = False
 
     def __enter__(self) -> DummyResponse:
@@ -42,6 +47,8 @@ class DummyResponse:
         return None
 
     def json(self) -> dict[str, object]:
+        if self._payload is None:
+            raise ValueError("response payload not set")
         return self._payload
 
 
@@ -64,6 +71,21 @@ class DummySession:
         self.closed = True
         if self._closed_log is not None:
             self._closed_log.append(self.headers["User-Agent"])
+
+
+class FakeClock:
+    """Deterministic clock used to track sleeps without real delays."""
+
+    def __init__(self) -> None:
+        self.current = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.current
+
+    def sleep(self, duration: float) -> None:
+        self.sleeps.append(duration)
+        self.current += duration
 
 
 @pytest.fixture(autouse=True)
@@ -231,6 +253,101 @@ def test_make_request_closes_response(monkeypatch) -> None:
 
     assert result == payload
     assert close_log == [True]
+
+
+def test_make_request_retry_after_adjusts_delay(monkeypatch) -> None:
+    """Retry-After headers should dictate the backoff delay."""
+
+    url = "https://example.org/rate-limit"
+    payload = {"ok": True}
+    cfg = pl.PubChemCfg(retries=1, delay=0, backoff_initial_seconds=0.1)
+
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
+    responses = [
+        DummyResponse(
+            None,
+            status_code=429,
+            headers={"Retry-After": "2.5"},
+        ),
+        DummyResponse(payload),
+    ]
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> DummyResponse:
+        return responses.pop(0)
+
+    clock = FakeClock()
+
+    monkeypatch.setattr(session, "get", fake_get)
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
+    monkeypatch.setattr(pc, "sleep", clock.sleep)
+    monkeypatch.setattr(pc, "monotonic", clock.monotonic)
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    result = pc.make_request(url, cfg)
+
+    assert result == payload
+    assert responses == []
+    assert clock.sleeps == [pytest.approx(2.5)]
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+
+def test_make_request_timeout_records_retry_after(monkeypatch) -> None:
+    """Timeouts should cache the last failure details including Retry-After."""
+
+    url = "https://example.org/timeout"
+    cfg = pl.PubChemCfg(
+        retries=3,
+        delay=0,
+        backoff_initial_seconds=0,
+        timeout_seconds=3,
+    )
+
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
+    responses = [
+        DummyResponse(None, status_code=429, headers={"Retry-After": "2"}),
+        DummyResponse(None, status_code=429, headers={"Retry-After": "2"}),
+    ]
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> DummyResponse:
+        return responses.pop(0)
+
+    clock = FakeClock()
+
+    monkeypatch.setattr(session, "get", fake_get)
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
+    monkeypatch.setattr(pc, "sleep", clock.sleep)
+    monkeypatch.setattr(pc, "monotonic", clock.monotonic)
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    result = pc.make_request(url, cfg)
+
+    assert result is None
+    assert responses == []
+    assert clock.sleeps == [pytest.approx(2.0), pytest.approx(2.0)]
+
+    with pc._CACHE_LOCK:
+        cache = pc._CACHE
+        assert cache is not None
+        entry = cache[url]
+
+    assert entry.outcome == "timeout"
+    assert entry.details is not None
+    assert entry.details.get("reason") == "rate_limited"
+    assert entry.details.get("status") == 429
+    assert entry.details.get("retry_after") == pytest.approx(2.0)
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
 
 
 def test_get_session_initialises_once_under_concurrency(monkeypatch) -> None:
