@@ -1334,11 +1334,17 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    requested_ids_raw: list[str] = []
+    requested_ids: list[str] = []
+    requested_ids_original: list[str] = []
+    original_id_lookup: dict[str, str] = {}
 
     def _iter_with_tracking(source: Iterable[str]) -> Iterator[str]:
         for identifier in source:
-            requested_ids_raw.append(identifier)
+            text_identifier = str(identifier)
+            normalised = text_identifier.strip().upper()
+            requested_ids_original.append(text_identifier)
+            requested_ids.append(normalised)
+            original_id_lookup.setdefault(normalised, text_identifier)
             yield identifier
 
     tracked_iter = _iter_with_tracking(ids_iter)
@@ -1360,20 +1366,13 @@ def fetch_testitems(
             timeout=timeout,
             sample_ids=list(sample_ids),
         )
-        return 1, None, tuple(requested_ids_raw)
+        return 1, None, tuple(requested_ids_original)
     finally:
         deque(tracked_iter, maxlen=0)
 
     rows = len(df)
     logger.info("chembl_fetch_done", rows=rows)
     logger.info("identifiers_retrieved", count=rows)
-
-    original_id_lookup: dict[str, str] = {}
-    requested_ids: list[str] = []
-    for identifier in requested_ids_raw:
-        normalised = str(identifier).strip().upper()
-        requested_ids.append(normalised)
-        original_id_lookup[normalised] = str(identifier)
 
     if "molecule_chembl_id" not in df.columns:
         df["molecule_chembl_id"] = pd.Series(dtype="string")
@@ -1420,7 +1419,7 @@ def fetch_testitems(
     df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string")
     df = df.reset_index(drop=True)
 
-    return 0, df, tuple(requested_ids_raw)
+    return 0, df, tuple(requested_ids_original)
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
