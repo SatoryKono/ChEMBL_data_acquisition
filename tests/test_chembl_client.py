@@ -4,11 +4,14 @@ import io
 import json
 import random
 import time
+from datetime import datetime, timedelta, timezone
 from types import TracebackType
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+
+from email.utils import format_datetime
 
 from library import rate_limiter as rl
 from library.clients import ChemblClient
@@ -61,6 +64,16 @@ class DummySession:
         if len(self.calls) <= self.failures:
             raise requests.RequestException("boom")
         return DummyResponse()
+
+
+class DummyHttpErrorResponse(DummyResponse):
+    def __init__(self, status_code: int, headers: dict[str, str]) -> None:
+        super().__init__()
+        self.status_code = status_code
+        self.headers = headers
+
+    def raise_for_status(self) -> None:
+        raise requests.HTTPError("boom", response=self)
 
 
 def test_client_closes_session() -> None:
@@ -138,6 +151,65 @@ def test_request_json_backoff_grows(monkeypatch) -> None:
 
     assert sleep_times == [1.0, 2.0]
     assert len(session.calls) == 3
+
+
+def test_request_json_uses_retry_after_seconds(monkeypatch) -> None:
+    class RetryAfterSession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url: str, timeout: Any) -> DummyResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return DummyHttpErrorResponse(429, {"Retry-After": "7"})
+            return DummyResponse()
+
+    sleep_times: list[float] = []
+    monkeypatch.setattr("library.clients.chembl.sleep", lambda t: sleep_times.append(t))
+    monkeypatch.setattr("library.clients.chembl.random.uniform", lambda a, b: 0.0)
+
+    session = RetryAfterSession()
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)  # type: ignore[arg-type]
+    client.clear_cache()
+
+    cfg = api_cfg(retries=2, backoff_factor=1)
+    result = client.request_json("http://example.com", cfg=cfg)
+
+    assert result == {"ok": True}
+    assert sleep_times == [7.0]
+    assert session.calls == 2
+
+
+def test_request_json_uses_retry_after_http_date(monkeypatch) -> None:
+    fixed_now = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    header_delay = 20
+    header_value = format_datetime(fixed_now + timedelta(seconds=header_delay))
+
+    class RetryAfterSession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url: str, timeout: Any) -> DummyResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return DummyHttpErrorResponse(503, {"Retry-After": header_value})
+            return DummyResponse()
+
+    sleep_times: list[float] = []
+    monkeypatch.setattr("library.clients.chembl.sleep", lambda t: sleep_times.append(t))
+    monkeypatch.setattr("library.clients.chembl.random.uniform", lambda a, b: 0.0)
+    monkeypatch.setattr("library.clients.chembl._utcnow", lambda: fixed_now)
+
+    session = RetryAfterSession()
+    client = ChemblClient(api_cfg(), RetryCfg(), session=session)  # type: ignore[arg-type]
+    client.clear_cache()
+
+    cfg = api_cfg(retries=2, backoff_factor=1)
+    result = client.request_json("http://example.com", cfg=cfg)
+
+    assert result == {"ok": True}
+    assert sleep_times == [float(header_delay)]
+    assert session.calls == 2
 
 
 def test_request_json_respects_zero_retries() -> None:
