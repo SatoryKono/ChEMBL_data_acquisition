@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,6 +25,92 @@ from scripts import (
 TypeCheck = Callable[[pd.Series], bool]
 
 CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
+
+
+def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure ``scripts.get_data`` orchestrates all pipelines with mocked steps."""
+
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("test: true\n")
+
+    invocations: list[str] = []
+
+    def make_stub(name: str, subcommand: str | None) -> Callable[[Sequence[str] | None], int]:
+        def _main(argv: Sequence[str] | None) -> int:
+            args = list(argv or [])
+            if subcommand is not None:
+                assert args, f"missing subcommand for {name}"
+                assert args[0] == subcommand
+                args = args[1:]
+            parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("--config")
+            parser.add_argument("--input")
+            parser.add_argument("--output")
+            parser.add_argument("--log-level")
+            ns = parser.parse_args(args)
+            input_path = Path(ns.input)
+            output_path = Path(ns.output)
+            assert input_path.exists(), f"missing input for {name}"
+            output_path.write_text(f"{name} output\n")
+            invocations.append(name)
+            return 0
+
+        return _main
+
+    for step in get_data._PIPELINE_STEPS:
+        input_path = input_dir / get_data._DEFAULT_INPUT_FILES[step.name]
+        input_path.write_text("id\n1\n")
+
+    stub_steps = tuple(
+        get_data.PipelineStep(step.name, make_stub(step.name, step.subcommand), step.subcommand)
+        for step in get_data._PIPELINE_STEPS
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    monkeypatch.setattr(get_data, "_LOGGER", DummyLogger())
+
+    exit_code = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--date",
+            "20240101",
+            "--log-level",
+            "ERROR",
+        ]
+    )
+
+    assert exit_code == 0
+    assert invocations == [step.name for step in stub_steps]
+    for step in stub_steps:
+        path = output_dir / f"20240101_{get_data._DEFAULT_OUTPUT_STEMS[step.name]}.csv"
+        assert path.exists()
+        assert path.read_text() == f"{step.name} output\n"
 
 
 def _cleanup_output(path: Path) -> None:

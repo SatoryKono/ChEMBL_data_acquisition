@@ -31,6 +31,8 @@ jobs:
         run: mypy --strict library
       - name: Run tests
         run: pytest
+      - name: Smoke test get_data orchestrator
+        run: pytest -k "get_data_main_smoke"
       - name: Verify deterministic CSV output
         run: python scripts/check_determinism.py --log-level DEBUG
       - name: Upload output data
