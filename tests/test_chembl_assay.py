@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import pandas as pd
+from requests import HTTPError, Response
 
 from library.chembl_assay import (
     MAX_TESTITEM_URL_LENGTH,
@@ -60,6 +61,36 @@ class RecordingTestitemClient:
             {"molecule_chembl_id": identifier}
             for identifier in joined.split(",")
             if identifier
+        ]
+        return {"molecules": molecules, "page_meta": {}}
+
+
+class LimitedTestitemClient:
+    """Client stub that raises HTTP 400 when too many IDs are requested."""
+
+    def __init__(self, max_ids: int) -> None:
+        self.max_ids = max_ids
+        self.calls: list[str] = []
+        self.call_sizes: list[int] = []
+
+    def request_json(
+        self, url: str, *, cfg: ApiCfg, timeout: float | None = None
+    ) -> dict[str, object]:
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        joined = params.get("molecule_chembl_id__in", [""])[0]
+        identifiers = [identifier for identifier in joined.split(",") if identifier]
+        self.calls.append(url)
+        self.call_sizes.append(len(identifiers))
+        if len(identifiers) > self.max_ids:
+            response = Response()
+            response.status_code = 400
+            response.url = url
+            raise HTTPError(
+                f"400 Client Error: Bad Request for url: {url}", response=response
+            )
+        molecules = [
+            {"molecule_chembl_id": identifier} for identifier in identifiers
         ]
         return {"molecules": molecules, "page_meta": {}}
 
@@ -151,3 +182,23 @@ def test_get_testitem_splits_requests_when_url_would_exceed_limit() -> None:
     assert len(client.calls) == len(splits)
     assert all(len(url) <= MAX_TESTITEM_URL_LENGTH for url in client.calls)
     assert sorted(df["molecule_chembl_id"].dropna()) == sorted(ids)
+
+
+def test_get_testitem_splits_chunk_on_http_400() -> None:
+    """A 400 response should trigger recursive chunk splitting."""
+
+    cfg = ApiCfg()
+    ids = [f"CHEMBL{index:07d}" for index in range(4)]
+    client = LimitedTestitemClient(max_ids=2)
+
+    df = get_testitem(
+        ids,
+        cfg=cfg,
+        client=client,
+        chunk_size=len(ids),
+        page_limit=1000,
+    )
+
+    assert sorted(df["molecule_chembl_id"].dropna()) == sorted(ids)
+    assert max(client.call_sizes) > 2  # initial oversized request attempted
+    assert client.call_sizes.count(2) >= 2  # fallback requests use smaller batches
