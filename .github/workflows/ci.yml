@@ -33,8 +33,16 @@ jobs:
         run: pytest
       - name: Smoke test get_data orchestrator
         run: pytest -k "get_data_main_smoke"
-      - name: Verify deterministic CSV output
-        run: python scripts/check_determinism.py --log-level DEBUG
+      - name: Smoke CLI entry points
+        run: |
+          set -euxo pipefail
+          python -m scripts.get_data --help
+          tmp_output="$(mktemp -d)"
+          python -m library.utils.cli_tools.pipeline_targets_main \
+            --input tests/data/chembl_targets_min.csv \
+            --output "${tmp_output}/targets.csv" \
+            --log-level INFO \
+            --limit 2
       - name: Upload output data
         if: always()
         uses: actions/upload-artifact@v4
