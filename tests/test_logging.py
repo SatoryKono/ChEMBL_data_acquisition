@@ -52,7 +52,8 @@ def test_debug_events_filtered_by_default() -> None:
         "buf = io.StringIO(); "
         "logger = configure_logger(LoggerConfig(level='INFO', run_id='rid', stream=buf)); "
         "logger.debug('request_start', url='https://example.org'); "
-        "logger.info('request_fail', url='https://example.org'); "
+        "logger.debug('request_fail', url='https://example.org'); "
+        "logger.info('request_not_found', url='https://example.org'); "
         "print(buf.getvalue())"
     )
     result = subprocess.run(
@@ -60,7 +61,8 @@ def test_debug_events_filtered_by_default() -> None:
     )
     records = _parse(result.stdout)
     assert all(record["event"] != "request_start" for record in records)
+    assert all(record["event"] != "request_fail" for record in records)
     assert any(
-        record["event"] == "request_fail" and record["level"] == "INFO"
+        record["event"] == "request_not_found" and record["level"] == "INFO"
         for record in records
     )

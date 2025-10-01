@@ -33,7 +33,7 @@ def fetch_openalex(
     url = f"{base}/works/pmid:{pmid}?mailto={quote(cfg.mailto)}"
     timeout = (cfg.timeout_connect, cfg.timeout_read)
 
-    logger.info("request_start", extra={"stage": "request_start", "url": url})
+    logger.debug("request_start", extra={"stage": "request_start", "url": url})
     data, error = _do_request(
         session,
         url,
@@ -42,7 +42,7 @@ def fetch_openalex(
         timeout=timeout,
     )
     if error:
-        logger.info("request_fail", extra={"stage": "request_fail", "url": url})
+        logger.debug("request_fail", extra={"stage": "request_fail", "url": url})
     else:
-        logger.info("request_ok", extra={"stage": "request_ok", "url": url})
+        logger.debug("request_ok", extra={"stage": "request_ok", "url": url})
     return data, error
