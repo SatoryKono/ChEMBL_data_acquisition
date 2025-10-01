@@ -883,6 +883,100 @@ def test_merge_pubchem_properties_preserves_existing_values(
     assert pubchem_df.loc[2, "pubchem_molecular_formula"] == "formula"
 
 
+def test_merge_pubchem_properties_throttles_by_rps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    count = 5
+    frame = pd.DataFrame({"value": range(count)})
+    cid_series = pd.Series(
+        [f"CID-{idx}" for idx in range(count)], index=frame.index, dtype="string"
+    )
+    lookup_cids = set(cid_series.tolist())
+    cfg = pl.PubChemCfg(delay=0, rps=2, batch_size=10)
+
+    lock = threading.Lock()
+    active = 0
+    peak_active = 0
+
+    def fake_get_properties(cid: str, pubchem_cfg: pl.PubChemCfg) -> pl.Properties:
+        nonlocal active, peak_active
+        assert pubchem_cfg is cfg
+        with lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return pl.Properties(f"name-{cid}", None, None, None, None, None)
+
+    monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    result = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert peak_active == cfg.rps
+    assert result["pubchem_cid"].tolist() == cid_series.tolist()
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"name-{cid}" for cid in cid_series.tolist()
+    ]
+
+
+def test_merge_pubchem_properties_uses_batch_size_when_below_rps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    count = 6
+    frame = pd.DataFrame({"value": range(count)})
+    cid_series = pd.Series(
+        [f"CID-{idx}" for idx in range(count)], index=frame.index, dtype="string"
+    )
+    lookup_cids = set(cid_series.tolist())
+    cfg = pl.PubChemCfg(delay=0, rps=10, batch_size=3)
+
+    lock = threading.Lock()
+    active = 0
+    peak_active = 0
+
+    def fake_get_properties(cid: str, pubchem_cfg: pl.PubChemCfg) -> pl.Properties:
+        nonlocal active, peak_active
+        assert pubchem_cfg is cfg
+        with lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return pl.Properties(f"name-{cid}", None, None, None, None, None)
+
+    monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    result = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert peak_active == cfg.batch_size
+    assert result["pubchem_cid"].tolist() == cid_series.tolist()
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"name-{cid}" for cid in cid_series.tolist()
+    ]
+
+
 def test_add_pubchem_data_fetches_properties_in_parallel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
