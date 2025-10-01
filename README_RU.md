@@ -428,7 +428,7 @@ ChEMBL_data_acquisition/
 export CHEMBL_DA__LOG__LEVEL=DEBUG
 ```
 
-Большинство опций имеют короткие алиасы для обратной совместимости. Таблица перечисляет все поддерживаемые алиасы и их канонические ключи. См. [`_ALIAS_OVERRIDES`](library/config.py#L1531-L1597) и [`_ALIAS_MAP`](library/config.py#L1599-L1602) как первоисточник:
+Большинство опций имеют короткие алиасы для обратной совместимости. Таблица перечисляет все поддерживаемые алиасы и их канонические ключи. См. [`_ALIAS_OVERRIDES`](library/config.py#L1544-L1616) и [`_ALIAS_MAP`](library/config.py#L1618-L1620) как первоисточник:
 
 | Alias | Эквивалентный ключ |
 |-------|--------------------|
@@ -457,9 +457,14 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 | `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__OPENALEX__TIMEOUT_READ` |
 | `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__LOCAL__IO__OUTPUT_DIR` |
 | `CHEMBL_DA_PUBCHEM_BASE` | `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `CHEMBL_DA_PUBCHEM_USER_AGENT` | `CHEMBL_DA__SOURCES__PUBCHEM__USER_AGENT` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__SYSTEM__RETRY__BACKOFF_FACTOR` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__SYSTEM__RETRY__MAX_ATTEMPTS` |
 | `CHEMBL_DA_RPS` | `CHEMBL_DA__SOURCES__CHEMBL__API__RPS` |
+| `CHEMBL_DA_PUBMED_RPS` | `CHEMBL_DA__SOURCES__PUBMED__RPS` |
+| `CHEMBL_DA_PUBMED_BURST` | `CHEMBL_DA__SOURCES__PUBMED__BURST` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_RPS` | `CHEMBL_DA__SOURCES__SEMANTIC_SCHOLAR__RPS` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_BURST` | `CHEMBL_DA__SOURCES__SEMANTIC_SCHOLAR__BURST` |
 | `CHEMBL_DA_TARGETS_TYPE_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__TARGETS_TYPE_CSV` |
 | `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__SOURCES__CHEMBL__API__TIMEOUT_CONNECT` |
 | `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__CHEMBL__API__TIMEOUT_READ` |
