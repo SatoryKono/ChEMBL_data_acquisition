@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from library.cli_utils import build_parser, run_pipeline
 from schemas import AssaysSchema
@@ -178,3 +179,44 @@ def test_run_pipeline_writes_failure_cases(tmp_path: Path) -> None:
     failure_csv = failure_path.read_text()
     assert "column" in failure_csv
     assert "value" in failure_csv
+
+
+def test_run_pipeline_missing_required_columns(tmp_path: Path) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [pd.DataFrame({"document_chembl_id": ["D1"]})]
+
+    hooks = [lambda df: df]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str],
+        key_cols: list[str],
+    ) -> Path:
+        pytest.fail("writer should not be called when required columns are missing")
+
+    def quality(_: Path) -> None:
+        pytest.fail("table quality should not run when required columns are missing")
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=hooks,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=quality,
+    )
+
+    assert exit_code == 1
+    assert not output.exists()
+    assert not failure_path.exists()
