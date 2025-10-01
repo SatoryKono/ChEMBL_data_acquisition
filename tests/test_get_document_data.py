@@ -6,13 +6,17 @@ import json
 import sys
 import threading
 import time
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable
 
+from itertools import islice
+
 import pandas as pd
 import pytest
+import requests
+import responses
 
 from library import chembl_library as cl
 from library import io as lib_io
@@ -252,6 +256,185 @@ def test_run_all_passes_generator_to_get_documents(
     rc = gdd.run_all(cfg, args)
     assert rc == 0
     assert captured["values"] == ids
+
+
+def test_run_pubmed_large_limit_streams(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Large limits should not force PubMed runs to materialise identifiers."""
+
+    cfg = Config()
+    limit = 1_000_000
+    input_csv = tmp_path / "pmids.csv"
+    input_csv.write_text("PMID\n1\n")
+
+    def fake_read_ids(
+        *_: Any,
+        **__: Any,
+    ) -> Iterable[str]:
+        return (str(i) for i in range(limit))
+
+    monkeypatch.setattr(lib_io, "read_ids", fake_read_ids)
+
+    captured: dict[str, Any] = {}
+
+    def fake_fetch_pubmed_records(
+        pmids: Iterable[str],
+        cfg_param: Config,
+        *,
+        sleep: float,
+        pubmed_cfg: Any | None = None,
+        semantic_scholar_cfg: SemanticScholarCfg,
+        openalex_cfg: OpenAlexCfg,
+        crossref_cfg: CrossRefCfg,
+        max_workers: int,
+        batch_size: int,
+        fallback_doi_map: Mapping[str, str] | None = None,
+        return_generator: bool = False,
+    ) -> Iterable[pd.DataFrame]:
+        assert not isinstance(pmids, list)
+        assert isinstance(pmids, Iterator)
+        subset = list(islice(pmids, 3))
+        captured["pmids"] = subset
+
+        def _generator() -> Iterator[pd.DataFrame]:
+            yield pd.DataFrame({"PMID": subset})
+
+        return _generator()
+
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+
+    def fake_finalise_export(
+        frames: Iterable[pd.DataFrame],
+        output: Path,
+        cfg_param: Config,
+        *,
+        input_csv: Path,
+        key_columns: Sequence[str] | None,
+        **kwargs: Any,
+    ) -> int:
+        collected = list(frames)
+        assert len(collected) == 1
+        assert collected[0]["PMID"].tolist() == captured["pmids"]
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="INFO", stream=buffer))
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+        limit=limit,
+    )
+
+    exit_code = gdd.run_pubmed(cfg, args)
+    assert exit_code == 0
+    assert captured["pmids"] == ["0", "1", "2"]
+
+    records = [
+        json.loads(line)
+        for line in buffer.getvalue().splitlines()
+        if line.strip()
+    ]
+    configure_logger(LoggerConfig(stream=sys.stdout))
+    assert any(
+        record.get("event") == "process_limit" and record.get("limit") == 3
+        for record in records
+    )
+
+
+def test_run_all_large_limit_streams(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Large limits should leave ``run_all`` streaming identifiers lazily."""
+
+    cfg = Config()
+    limit = 1_000_000
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL0\n")
+
+    def fake_read_ids(
+        *_: Any,
+        **__: Any,
+    ) -> Iterable[str]:
+        return (f"CHEMBL{i}" for i in range(limit))
+
+    monkeypatch.setattr(lib_io, "read_ids", fake_read_ids)
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    captured: dict[str, Any] = {}
+
+    def fake_get_documents(
+        ids_iter: Iterable[str],
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        assert not isinstance(ids_iter, list)
+        assert isinstance(ids_iter, Iterator)
+        values = list(islice(ids_iter, 5))
+        captured["values"] = values
+        return pd.DataFrame(
+            {
+                "document_chembl_id": values,
+                "pubmed_id": list(range(1, 6)),
+                "doi": [f"10.1000/{i}" for i in range(1, 6)],
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_documents", fake_get_documents)
+    monkeypatch.setattr(gdd, "merge_with_chembl", lambda doc_df, _: doc_df)
+    monkeypatch.setattr(gdd.dp, "postprocess_documents", lambda df: df)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", lambda *args, **kwargs: iter(()))
+
+    def fake_finalise_export(*_: Any, **__: Any) -> int:
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="INFO", stream=buffer))
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+        limit=limit,
+        chunk_size=5,
+    )
+
+    exit_code = gdd.run_all(cfg, args)
+    assert exit_code == 0
+    assert captured["values"] == [f"CHEMBL{i}" for i in range(5)]
+
+    records = [
+        json.loads(line)
+        for line in buffer.getvalue().splitlines()
+        if line.strip()
+    ]
+    configure_logger(LoggerConfig(stream=sys.stdout))
+    assert any(
+        record.get("event") == "process_limit" and record.get("limit") == 5
+        for record in records
+    )
 
 
 def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:
@@ -1924,6 +2107,22 @@ def test_fetch_pubmed_records_reuses_service_sessions(
 
     monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
 
+    openalex_session_labels: list[str] = []
+    crossref_session_labels: list[str] = []
+
+    def fake_openalex_session(*_args: object, **_kwargs: object) -> DummySession:
+        label = f"openalex-{len(openalex_session_labels)}"
+        openalex_session_labels.append(label)
+        return DummySession(label)
+
+    def fake_crossref_session(*_args: object, **_kwargs: object) -> DummySession:
+        label = f"crossref-{len(crossref_session_labels)}"
+        crossref_session_labels.append(label)
+        return DummySession(label)
+
+    monkeypatch.setattr(gdd, "openalex_session", fake_openalex_session)
+    monkeypatch.setattr(gdd, "crossref_session", fake_crossref_session)
+
     def fake_pubmed_batch(
         session: DummySession,
         batch: Sequence[str],
@@ -2032,11 +2231,202 @@ def test_fetch_pubmed_records_reuses_service_sessions(
     )
 
     assert df["PubMed.PMID"].tolist() == pmids
-    assert len(session_labels) == 3
+    assert len(session_labels) == 1
+    assert len(openalex_session_labels) == 1
+    assert len(crossref_session_labels) == 1
     assert openalex_sessions and len(openalex_sessions) == len(pmids)
     assert openalex_sessions == [openalex_sessions[0]] * len(openalex_sessions)
     assert crossref_sessions and len(crossref_sessions) == len(pmids)
     assert crossref_sessions == [crossref_sessions[0]] * len(crossref_sessions)
+
+
+@responses.activate
+def test_fetch_pubmed_records_reuses_sessions_across_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Worker threads should reuse HTTP sessions across multiple batches."""
+
+    pmids = [str(100 + i) for i in range(6)]
+
+    for pmid in pmids:
+        responses.add(
+            responses.GET,
+            f"https://pubmed.test/{pmid}",
+            json={"pmid": pmid},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"https://openalex.test/{pmid}",
+            json={"id": pmid},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"https://crossref.test/10.1234/{pmid}",
+            json={"doi": pmid},
+            status=200,
+        )
+
+    class RecordingContext:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.session = requests.Session()
+            self.closed = False
+            self.session_id = id(self.session)
+
+        def __enter__(self) -> requests.Session:  # pragma: no cover - trivial
+            return self.session
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            self.closed = True
+            self.session.close()
+
+    contexts: list[RecordingContext] = []
+
+    def _make_context(label: str) -> RecordingContext:
+        ctx = RecordingContext(label)
+        contexts.append(ctx)
+        return ctx
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: _make_context("pubmed"))
+    monkeypatch.setattr(gdd, "openalex_session", lambda *_, **__: _make_context("openalex"))
+    monkeypatch.setattr(gdd, "crossref_session", lambda *_, **__: _make_context("crossref"))
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    pubmed_session_ids: set[int] = set()
+    openalex_session_ids: set[int] = set()
+    crossref_session_ids: set[int] = set()
+
+    def fake_pubmed_batch(
+        session: requests.Session,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        records: list[dict[str, str]] = []
+        for pmid in batch:
+            pubmed_session_ids.add(id(session))
+            session.get(
+                f"https://pubmed.test/{pmid}",
+                headers={"X-Session": str(id(session))},
+                timeout=0.1,
+            )
+            records.append(
+                {
+                    "PubMed.PMID": pmid,
+                    "PubMed.DOI": f"10.1234/{pmid}",
+                    "PubMed.ArticleTitle": f"Article {pmid}",
+                }
+            )
+        return records
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: requests.Session,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.Error": "unreachable",
+        },
+    )
+
+    def fake_fetch_openalex(
+        session: requests.Session,
+        pmid: str,
+        cfg: OpenAlexCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        openalex_session_ids.add(id(session))
+        session.get(
+            f"https://openalex.test/{pmid}",
+            headers={"X-Session": str(id(session))},
+            timeout=0.1,
+        )
+        return {
+            "OpenAlex.PMID": pmid,
+            "OpenAlex.DOI": f"10.1234/{pmid}",
+            "OpenAlex.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_fetch_openalex)
+
+    def fake_fetch_crossref(
+        session: requests.Session,
+        doi: str,
+        cfg: CrossRefCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        crossref_session_ids.add(id(session))
+        session.get(
+            f"https://crossref.test/{doi}",
+            headers={"X-Session": str(id(session))},
+            timeout=0.1,
+        )
+        return {
+            "crossref.DOI": doi,
+            "crossref.Title": f"Title {doi}",
+            "crossref.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_fetch_crossref)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=2,
+        batch_size=1,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+
+    assert len(pubmed_session_ids) <= 2
+    assert len(openalex_session_ids) <= 2
+    assert len(crossref_session_ids) <= 2
+
+    pubmed_headers = {
+        call.request.headers.get("X-Session")
+        for call in responses.calls
+        if call.request.url.startswith("https://pubmed.test/")
+    }
+    openalex_headers = {
+        call.request.headers.get("X-Session")
+        for call in responses.calls
+        if call.request.url.startswith("https://openalex.test/")
+    }
+    crossref_headers = {
+        call.request.headers.get("X-Session")
+        for call in responses.calls
+        if call.request.url.startswith("https://crossref.test/")
+    }
+
+    assert len(pubmed_headers) <= 2
+    assert len(openalex_headers) <= 2
+    assert len(crossref_headers) <= 2
+
+    assert all(ctx.closed for ctx in contexts)
 
 
 def test_fetch_pubmed_records_reuses_service_executors(

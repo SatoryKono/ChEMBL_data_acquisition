@@ -347,6 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         inputs=inputs,
         key_columns=["PubMed.PMID"],
         table_quality=table_quality,
+        cfg=cfg,
         logger=logger,
     )
     if output_path.exists():

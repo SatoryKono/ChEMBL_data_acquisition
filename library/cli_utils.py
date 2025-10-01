@@ -151,6 +151,7 @@ def run_pipeline(
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
+    cfg: Config | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
@@ -191,6 +192,8 @@ def run_pipeline(
         columns present in the final dataset are forwarded to ``writer``.
     table_quality:
         Callable invoked after writing the CSV to compute quality metrics.
+    cfg:
+        Optional application configuration forwarded to sidecar metadata.
     logger:
         Optional logger.  Defaults to :data:`library.log.logger` when omitted.
 
@@ -345,7 +348,7 @@ def run_pipeline(
         )
 
     if total_failures:
-        errors.save(failure_path)
+        errors.save(failure_path, cfg=cfg)
 
     stats: Stats = {
         "rows_total": rows_total,

@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 import threading
 from collections.abc import Iterable, Iterator
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from itertools import islice
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -208,7 +210,7 @@ class ChemblClient:
                         self.cache[cache_key] = data
                         logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
                         return data
-            except (requests.RequestException, ValueError) as exc:
+            except ValueError as exc:
                 last_exc = exc
                 if attempt >= total_attempts:
                     logger.exception(
@@ -216,8 +218,33 @@ class ChemblClient:
                         extra={"url": url, "status": None, "rps": cfg.rps},
                     )
                     break
-                delay = cfg.backoff_factor * (2 ** (attempt - 1))
-                delay += random.uniform(0, cfg.backoff_factor)
+                delay = _backoff_delay(attempt, cfg, header_delay=None)
+                _log_retry_delay(url, attempt, None, delay)
+                sleep(delay)
+            except requests.HTTPError as exc:
+                last_exc = exc
+                response = exc.response
+                status = getattr(response, "status_code", None)
+                if attempt >= total_attempts:
+                    logger.exception(
+                        "request_fail",
+                        extra={"url": url, "status": status, "rps": cfg.rps},
+                    )
+                    break
+                header_delay = _retry_after_delay(response)
+                delay = _backoff_delay(attempt, cfg, header_delay)
+                _log_retry_delay(url, attempt, status, delay, header_delay)
+                sleep(delay)
+            except requests.RequestException as exc:
+                last_exc = exc
+                if attempt >= total_attempts:
+                    logger.exception(
+                        "request_fail",
+                        extra={"url": url, "status": None, "rps": cfg.rps},
+                    )
+                    break
+                delay = _backoff_delay(attempt, cfg, header_delay=None)
+                _log_retry_delay(url, attempt, None, delay)
                 sleep(delay)
 
         if last_exc is not None:
@@ -265,6 +292,72 @@ def _chunked(items: Iterable[T], size: int) -> Iterator[list[T]]:
         if not chunk:
             break
         yield chunk
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _retry_after_delay(response: requests.Response | None) -> float | None:
+    if response is None:
+        return None
+    status = getattr(response, "status_code", None)
+    if status is None or not _is_retry_after_applicable(status):
+        return None
+    header = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    if header is None:
+        return None
+    value = header.strip()
+    if not value:
+        return None
+    try:
+        delay = float(value)
+        return max(0.0, delay)
+    except ValueError:
+        try:
+            dt = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return None
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = (dt - _utcnow()).total_seconds()
+        return max(0.0, delta)
+
+
+def _is_retry_after_applicable(status: int) -> bool:
+    return status == 429 or 500 <= status < 600
+
+
+def _backoff_delay(
+    attempt: int, cfg: ApiCfg, header_delay: float | None
+) -> float:
+    base = cfg.backoff_factor * (2 ** (attempt - 1))
+    jitter = random.uniform(0, cfg.backoff_factor)
+    delay = base + jitter
+    if header_delay is not None:
+        delay = max(delay, header_delay)
+    return delay
+
+
+def _log_retry_delay(
+    url: str,
+    attempt: int,
+    status: int | None,
+    delay: float,
+    header_delay: float | None = None,
+) -> None:
+    logger.debug(
+        "retry_sleep",
+        extra={
+            "url": url,
+            "attempt": attempt,
+            "status": status,
+            "delay": delay,
+            "retry_after": header_delay,
+        },
+    )
 
 
 __all__ = ["ChemblClient", "_chunked"]

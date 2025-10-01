@@ -208,7 +208,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers processed by each pipeline",
+        help=(
+            "Maximum number of identifiers processed by each pipeline; use 0 to "
+            "skip execution"
+        ),
     )
     parser.add_argument(
         "--force",
@@ -231,8 +234,8 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
     output_dir = _resolve_path(base_path, args.output_dir)
     config_path = args.config.expanduser().resolve()
 
-    if args.limit is not None and args.limit <= 0:
-        raise ValueError("--limit must be a positive integer")
+    if args.limit is not None and args.limit < 0:
+        raise ValueError("--limit must be zero or a positive integer")
 
     if not input_dir.exists():
         raise FileNotFoundError(f"input directory not found: {input_dir}")

@@ -1,12 +1,15 @@
 import threading
 from collections import Counter
+
 from collections.abc import Iterable, Iterator, Mapping
+
 from itertools import count
 from pathlib import Path
 
 import pandas as pd
 import pytest
 import requests
+from pandera.errors import SchemaErrors
 
 from library.config import Config
 import scripts.get_document_data as document_script
@@ -521,6 +524,7 @@ def test_fetch_pubmed_records_logs_compact_batch(
     assert payload["pmids_sample"] == pmids[:5] + ["..."]
 
 
+
 def test_finalise_export_streams_single_pass(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -685,3 +689,4 @@ def test_finalise_export_logs_missing_columns(
     event, payload = warnings[-1]
     assert event == "validation_skipped_missing_required"
     assert payload["columns"] == ["document_chembl_id"]
+
