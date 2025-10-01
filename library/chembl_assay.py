@@ -92,10 +92,29 @@ ACTIVITY_COLUMNS = [
     "assay_variant_mutation",
 ]
 
+TESTITEM_PUBCHEM_COLUMNS: tuple[str, ...] = (
+    "pubchem_cid",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+    "pubchem_isomeric_smiles",
+    "pubchem_canonical_smiles",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+)
+
+
 TESTITEM_STRUCTURE_COLUMNS = {
     "molecule_structures.canonical_smiles": "canonical_smiles",
     "molecule_structures.standard_inchi": "standard_inchi",
     "molecule_structures.standard_inchi_key": "standard_inchi_key",
+    "pubchem.cid": "pubchem_cid",
+    "pubchem.canonical_smiles": "pubchem_canonical_smiles",
+    "pubchem.isomeric_smiles": "pubchem_isomeric_smiles",
+    "pubchem.inchi": "pubchem_inchi",
+    "pubchem.inchikey": "pubchem_inchikey",
+    "pubchem.inchi_key": "pubchem_inchikey",
+    "pubchem.iupac_name": "pubchem_iupac_name",
+    "pubchem.molecular_formula": "pubchem_molecular_formula",
 }
 
 TESTITEM_COLUMNS = [
@@ -113,6 +132,7 @@ TESTITEM_COLUMNS = [
     "canonical_smiles",
     "standard_inchi",
     "standard_inchi_key",
+    *TESTITEM_PUBCHEM_COLUMNS,
 ]
 
 
@@ -489,4 +509,5 @@ __all__ = [
     "ASSAY_COLUMNS",
     "ACTIVITY_COLUMNS",
     "TESTITEM_COLUMNS",
+    "TESTITEM_PUBCHEM_COLUMNS",
 ]

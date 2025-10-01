@@ -31,6 +31,7 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import io, molecule_catalog, testitem_enrichment
 from library import pubchem_library as pl
+from library.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 from library.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.config import (
@@ -68,15 +69,7 @@ _MOLECULE_HIERARCHY_COLUMNS = (
     "parent_molecule_chembl_id",
 )
 
-PUBCHEM_COLUMNS = [
-    "pubchem_cid",
-    "pubchem_iupac_name",
-    "pubchem_molecular_formula",
-    "pubchem_isomeric_smiles",
-    "pubchem_canonical_smiles",
-    "pubchem_inchi",
-    "pubchem_inchikey",
-]
+PUBCHEM_COLUMNS = list(TESTITEM_PUBCHEM_COLUMNS)
 
 _CID_CACHE_MISSING = object()
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
