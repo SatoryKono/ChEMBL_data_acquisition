@@ -306,7 +306,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
 | `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
 | `uniprot_data_dir` | `dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
-| `targets_type_csv` | `dictionary/_Target/targets_type.csv` | Target type classification table. |
+| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Target type classification table. |
 
 
 The `dictionary/_target` folder mirrors the current repository layout; all

@@ -344,7 +344,7 @@ def process_activity_table(
     dictionary_dir:
 
         Directory containing ``_Curation/citation_fraction.csv`` and
-        ``targets_type.csv`` in a ``_Target`` subdirectory.
+        ``targets_type.csv`` in a ``_target`` subdirectory.
 
     targets_csv:
         Optional explicit path to ``targets_type.csv``. When provided, the file
@@ -498,14 +498,18 @@ def process_activity_table(
     else:
         targets_path = Path(dictionary_dir) / "targets_type.csv"
         if not targets_path.exists():
-            targets_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
+            targets_path = Path(dictionary_dir) / "_target" / "targets_type.csv"
         if not targets_path.exists():
-            msg = (
-                "targets_type.csv not found in the provided dictionary directory. "
-                "Expected at either 'dictionary/targets_type.csv' or "
-                "'dictionary/_Target/targets_type.csv'."
-            )
-            raise FileNotFoundError(msg)
+            legacy_path = Path(dictionary_dir) / "_Target" / "targets_type.csv"
+            if legacy_path.exists():
+                targets_path = legacy_path
+            else:
+                msg = (
+                    "targets_type.csv not found in the provided dictionary directory. "
+                    "Expected at either 'dictionary/targets_type.csv' or "
+                    "'dictionary/_target/targets_type.csv'."
+                )
+                raise FileNotFoundError(msg)
 
     targets = pd.read_csv(
         targets_path,

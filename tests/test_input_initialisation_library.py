@@ -668,7 +668,7 @@ def test_process_activity_table_without_nstereo(tmp_path: Path) -> None:
 
 
 def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
-    """Load targets from a nested ``_Target`` subdirectory."""
+    """Load targets from a nested ``_target`` subdirectory."""
     df = pd.DataFrame(
         {
             "activity_chembl_id": [1],
@@ -702,7 +702,7 @@ def test_process_activity_table_targets_in_subdir(tmp_path: Path) -> None:
         "N,K_min_significant,test_used_at_threshold,p_value_at_threshold\n1,1,x,0.05\n"
     )
 
-    subdir = tmp_path / "_Target"
+    subdir = tmp_path / "_target"
     subdir.mkdir()
     (subdir / "targets_type.csv").write_text(
         ",".join(

@@ -1415,7 +1415,7 @@
           "type": "string"
         },
         "targets_type_csv": {
-          "default": "dictionary/_Target/targets_type.csv",
+          "default": "dictionary/_target/targets_type.csv",
           "format": "path",
           "title": "Targets Type Csv",
           "type": "string"
