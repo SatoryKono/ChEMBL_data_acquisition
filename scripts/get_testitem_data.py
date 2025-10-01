@@ -38,7 +38,7 @@ from library import testitem_pipeline as pipeline
 from library.chembl_client import ChemblClient
 from library.testitem_pipeline import (
     PUBCHEM_CID_CACHE_ENCODING as _pipeline_pubchem_cid_cache_encoding,
-    ReadInputIdsResult as _ReadInputIdsResult,
+    ReadInputIdsResult,
     TestitemPipelineOptions,
     analyze_table_quality as _analyze_table_quality,
     file_sha256 as _pipeline_file_sha256,
@@ -59,7 +59,6 @@ from library.testitem_pipeline import (
 )
 
 # Re-export helpers consumed directly by unit tests.
-ReadInputIdsResult = _ReadInputIdsResult
 read_input_ids = _read_input_ids
 fetch_testitems = _fetch_testitems
 load_parent_catalog = _load_parent_catalog
@@ -85,15 +84,6 @@ DEFAULT_OUTPUT_STEM = "testitems"
 _FETCH_ERROR_SAMPLE_SIZE = 10
 
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
-
-@dataclass
-class ReadInputIdsResult:
-    """Container holding the identifier iterator and a diagnostic sample."""
-
-    ids_iter: Iterator[str]
-    sample_ids: tuple[str, ...]
-
-
 
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
     """Raise a :class:`ValueError` if the legacy typo column is present."""
