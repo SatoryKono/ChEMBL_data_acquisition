@@ -274,7 +274,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `cache_ttl` | `3600` | Время жизни in-memory кэша HTTP (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_ttl_hours` | `null` | TTL (часы) для постоянного CID-кэша; `null` отключает истечение. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
 | `cid_cache_path` | `"data/cache/pubchem_cid_cache.json"` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
-| `batch_size` | `50` | Размер батча для обработчика PubChem. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
+| `batch_size` | `50` | Размер батча для обработчика PubChem; параллелизм ограничен `min(batch_size, rps)`. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Пропускать запросы, если локальные SMILES/InChIKey уже заполнены. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Сохранять существующие колонки `pubchem_*`, если ответ пуст. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
 | `use_parent_for_salts` | `true` | Переходить к родительским структурам, если соль не найдена. | `CHEMBL_DA_SOURCES_PUBCHEM_USE_PARENT_FOR_SALTS`, `CHEMBL_DA__SOURCES__PUBCHEM__USE_PARENT_FOR_SALTS` |

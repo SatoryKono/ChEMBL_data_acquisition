@@ -941,6 +941,62 @@ def test_merge_pubchem_properties_throttles_by_rps(
     ]
 
 
+def test_merge_pubchem_properties_limits_workers_to_rps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame({"value": [0, 1, 2]})
+    cid_series = pd.Series(["CID-0", "CID-1", "CID-2"], index=frame.index, dtype="string")
+    lookup_cids = set(cid_series.tolist())
+    cfg = pl.PubChemCfg(delay=0, rps=2, batch_size=5)
+
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, pubchem_cfg: pl.Properties(f"name-{cid}", None, None, None, None, None),
+    )
+
+    class ImmediateFuture:
+        def __init__(self, value: object) -> None:
+            self._value = value
+
+        def result(self) -> object:
+            return self._value
+
+    captured_workers: list[int] = []
+
+    class DummyExecutor:
+        def __init__(self, max_workers: int) -> None:
+            captured_workers.append(max_workers)
+
+        def __enter__(self) -> DummyExecutor:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        def submit(self, func: Callable[..., object], *args: object, **kwargs: object) -> ImmediateFuture:
+            return ImmediateFuture(func(*args, **kwargs))
+
+    monkeypatch.setattr(pipeline, "ThreadPoolExecutor", DummyExecutor)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    result = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert captured_workers == [cfg.rps]
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"name-{cid}" for cid in cid_series.tolist()
+    ]
+
+
 def test_merge_pubchem_properties_uses_batch_size_when_below_rps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

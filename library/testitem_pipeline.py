@@ -1544,13 +1544,14 @@ def _merge_pubchem_properties(
     lookup_order = sorted(lookup_cids)
     if lookup_order:
         configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
-        rps_limit = max(int(getattr(cfg, "rps", configured_batch_size)), 1)
-        batch_size = min(configured_batch_size, rps_limit)
+        rps_limit = int(getattr(cfg, "rps", configured_batch_size))
+        max_workers = max(1, min(configured_batch_size, rps_limit))
+        batch_size = configured_batch_size
 
         def _fetch_properties(cid: str) -> pl.Properties:
             return pl.get_properties(cid, cfg)
 
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for start in range(0, len(lookup_order), batch_size):
                 batch = lookup_order[start : start + batch_size]
                 future_map = {
