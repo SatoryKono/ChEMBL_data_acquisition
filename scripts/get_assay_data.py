@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import argparse
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from functools import partial
 from itertools import islice
 
@@ -91,37 +91,44 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
 
-    ids_source: Iterable[str]
+    processed_ids = 0
+
+    def _iter_ids() -> Iterator[str]:
+        nonlocal processed_ids
+        for identifier in ids_iter:
+            processed_ids += 1
+            yield identifier
+
     if limit is not None:
-        limited_ids = list(islice(ids_iter, limit))
-        ids_source = limited_ids
-        logger.info("process_limit", limit=len(limited_ids))
+        ids_source: Iterable[str] = islice(_iter_ids(), limit)
     else:
-        ids_source = ids_iter
+        ids_source = _iter_ids()
 
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterable[pd.DataFrame]:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            try:
-                df = cl.get_assays(
-                    ids_source,
-                    cfg=cfg.api,
-                    client=client,
-                    chunk_size=cfg.assay.batch_size,
-                    timeout=cfg.assay.timeout,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error(
-                    "assay_fetch_failed",
-                    extra={"msg": str(exc)},
-                    error=str(exc),
-                    batch_size=cfg.assay.batch_size,
-                    timeout=cfg.assay.timeout,
-                )
-                raise PipelineError(str(exc)) from exc
-            yield df
+            chunk_iter = cl._chunked(ids_source, cfg.assay.batch_size)
+            for chunk_ids in chunk_iter:
+                try:
+                    df = cl.get_assays(
+                        chunk_ids,
+                        cfg=cfg.api,
+                        client=client,
+                        chunk_size=cfg.assay.batch_size,
+                        timeout=cfg.assay.timeout,
+                    )
+                except (requests.RequestException, ValueError) as exc:
+                    logger.error(
+                        "assay_fetch_failed",
+                        extra={"msg": str(exc)},
+                        error=str(exc),
+                        batch_size=cfg.assay.batch_size,
+                        timeout=cfg.assay.timeout,
+                    )
+                    raise PipelineError(str(exc)) from exc
+                yield df
 
     metadata_hooks = [
         ap.postprocess_assays,
@@ -155,7 +162,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         table_name=str(Path(output).with_suffix("")),
     )
 
-    return run_pipeline(
+    exit_code = run_pipeline(
         fetcher=fetcher,
         schema=AssaysSchema,
         schema_name="AssaysSchema",
@@ -171,6 +178,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         table_quality=table_quality,
         logger=logger,
     )
+
+    if limit is not None:
+        logger.info("process_limit", limit=processed_ids)
+    else:
+        logger.info("processed_count", count=processed_ids)
+
+    return exit_code
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:

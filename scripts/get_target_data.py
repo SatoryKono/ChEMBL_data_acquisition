@@ -550,6 +550,18 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _limited_ids(ids_iter: Iterator[str], limit: int) -> Iterator[str]:
+    """Yield up to ``limit`` identifiers while logging the processed count."""
+
+    count = 0
+    try:
+        for target_id in islice(ids_iter, limit):
+            count += 1
+            yield target_id
+    finally:
+        logger.info("process_limit", limit=count)
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command.
 
@@ -593,8 +605,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if offset:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
-
     processed_ids = 0
+
 
     def _iter_ids() -> Iterator[str]:
         nonlocal processed_ids

@@ -180,9 +180,9 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         cached = cache.get(url) if cache is not None else None
     if cached is not None:
         if cached.is_hit:
-            logger.info("cache_hit", url=url, rps=cfg.rps, status="hit")
+            logger.debug("cache_hit", url=url, rps=cfg.rps, status="hit")
             return cast(dict[str, Any], cached.payload)
-        logger.info(
+        logger.debug(
             "cache_hit",
             url=url,
             rps=cfg.rps,
@@ -190,7 +190,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             outcome=cached.outcome,
         )
         return None
-    logger.info("cache_miss", url=url, rps=cfg.rps, status="miss")
+    logger.debug("cache_miss", url=url, rps=cfg.rps, status="miss")
 
     total_attempts = cfg.retries + 1
     if total_attempts <= 0:
@@ -210,7 +210,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 rps=cfg.rps,
             )
             _store_cache_miss(url, cfg, "timeout")
-            logger.info(
+            logger.debug(
                 "request_fail",
                 url=url,
                 status=None,
@@ -238,7 +238,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         "request_not_found", url=url, status=status, rps=cfg.rps
                     )
                     _store_cache_miss(url, cfg, "not_found")
-                    logger.info(
+                    logger.debug(
                         "request_fail",
                         url=url,
                         status=status,
@@ -261,7 +261,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         rps=cfg.rps,
                     )
                     if attempt >= total_attempts:
-                        logger.info(
+                        logger.debug(
                             "request_fail",
                             url=url,
                             status=status,
@@ -281,7 +281,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         status=status,
                         rps=cfg.rps,
                     )
-                    logger.info(
+                    logger.debug(
                         "request_fail",
                         url=url,
                         status=status,
@@ -303,7 +303,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                             total_attempts=total_attempts,
                             rps=cfg.rps,
                         )
-                        logger.info(
+                        logger.debug(
                             "request_fail",
                             url=url,
                             status=status,
@@ -321,7 +321,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         status=status,
                         rps=cfg.rps,
                     )
-                    logger.info(
+                    logger.debug(
                         "request_fail",
                         url=url,
                         status=status,
@@ -351,7 +351,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     total_attempts=total_attempts,
                     rps=cfg.rps,
                 )
-                logger.info(
+                logger.debug(
                     "request_fail",
                     url=url,
                     status=None,
