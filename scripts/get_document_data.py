@@ -605,39 +605,45 @@ def fetch_pubmed_records(
                 yield completed.pop(next_to_emit)
                 next_to_emit += 1
 
-        for batch in _chunked(iterator, batch_size):
-            if not batch:
-                continue
-            future = batch_executor.submit(_fetch_batch, batch)
-            tasks[future] = (offset, batch)
-            pending.add(future)
-            offset += len(batch)
-            if len(pending) >= max_in_flight:
-
-                done_future = next(as_completed(list(pending)))
-                yield from _drain_future(done_future)
+        def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
+            nonlocal next_to_emit
 
             while next_to_emit in completed:
                 yield completed.pop(next_to_emit)
                 next_to_emit += 1
 
-        for done_future in as_completed(pending):
-            yield from _drain_future(done_future)
+        def _iter_records() -> Iterator[list[dict[str, str]]]:
+            nonlocal offset
 
-        pending.clear()
+            for batch in _chunked(iterator, batch_size):
+                if not batch:
+                    continue
+                future = batch_executor.submit(_fetch_batch, batch)
+                tasks[future] = (offset, batch)
+                pending.add(future)
+                offset += len(batch)
+                if len(pending) >= max_in_flight:
 
-        while next_to_emit in completed:
-            yield completed.pop(next_to_emit)
-            next_to_emit += 1
+                    done_future = next(as_completed(list(pending)))
+                    yield from _drain_future(done_future)
 
-    def _iter_frames() -> Iterator[pd.DataFrame]:
-        for records_batch in _iter_records():
-            if not records_batch:
-                yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
-                continue
-            yield build_dataframe(
-                records_batch, columns=DOCUMENT_SCHEMA_COLUMNS
-            )
+                yield from _emit_ready_batches()
+
+            for done_future in as_completed(pending):
+                yield from _drain_future(done_future)
+
+            pending.clear()
+
+            yield from _emit_ready_batches()
+
+        def _iter_frames() -> Iterator[pd.DataFrame]:
+            for records_batch in _iter_records():
+                if not records_batch:
+                    yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
+                    continue
+                yield build_dataframe(
+                    records_batch, columns=DOCUMENT_SCHEMA_COLUMNS
+                )
 
     frame_iter = _iter_frames()
     if return_generator:
