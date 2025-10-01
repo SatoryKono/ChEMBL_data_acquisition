@@ -981,6 +981,24 @@
           "title": "Csv Encoding",
           "type": "string"
         },
+        "csv_fallback_separators": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": [
+            "\t",
+            ";"
+          ],
+          "title": "Csv Fallback Separators"
+        },
         "csv_chunksize": {
           "default": 10000,
           "minimum": 1,
