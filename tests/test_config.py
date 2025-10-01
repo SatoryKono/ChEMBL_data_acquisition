@@ -173,13 +173,13 @@ def test_mailto_aliases_override_defaults(
     path = tmp_path / "cfg.yaml"
     path.write_text("")
 
-    monkeypatch.setenv("CHEMBL_DA_OPENALEX_MAILTO", "openalex@example.org")
-    monkeypatch.setenv("CHEMBL_DA_CROSSREF_MAILTO", "crossref@example.org")
+    monkeypatch.setenv("CHEMBL_DA_OPENALEX_MAILTO", "openalex@ebi.ac.uk")
+    monkeypatch.setenv("CHEMBL_DA_CROSSREF_MAILTO", "crossref@ebi.ac.uk")
 
     cfg = load_config(path)
 
-    assert cfg.openalex.mailto == "openalex@example.org"
-    assert cfg.crossref.mailto == "crossref@example.org"
+    assert cfg.openalex.mailto == "openalex@ebi.ac.uk"
+    assert cfg.crossref.mailto == "crossref@ebi.ac.uk"
 
 
 def test_base_aliases_override_defaults(
