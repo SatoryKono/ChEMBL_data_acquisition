@@ -62,15 +62,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         ns.config,
         mapping={"chunk_size": "io.csv_chunksize"},
     )
+    log_cfg: LoggerConfig = create_logger_config(ns.log_level)
     if getattr(ns, "print_config", False):
         print_config(cfg)
-        configure_logger(LoggerConfig(level=ns.log_level))
+        configure_logger(log_cfg)
         return 0
     arg_data = {field: getattr(ns, field) for field in CSVExportArgs.model_fields}
     args = CSVExportArgs.model_validate(arg_data)
     if not args.key_cols:
         parser.error("--key-cols must be provided")
-    log_cfg = create_logger_config(args.log_level)
+    if args.log_level != log_cfg.level:
+        log_cfg = LoggerConfig(
+            level=args.log_level,
+            run_id=log_cfg.run_id,
+            redact_secrets=log_cfg.redact_secrets,
+            stream=log_cfg.stream,
+        )
     configure_logger(log_cfg)
 
     try:
