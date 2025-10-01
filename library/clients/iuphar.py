@@ -12,7 +12,8 @@ from __future__ import annotations
 import io
 import random
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
@@ -31,6 +32,7 @@ __all__ = [
     "download_gtp_to_hgnc_mapping",
     "download_gtp_to_uniprot_mapping",
     "init_session",
+    "get_session",
     "load_families",
     "load_targets",
     "query_gene_symbol",
@@ -38,8 +40,52 @@ __all__ = [
 
 # Default session uses the library-wide API configuration; callers should
 # override via :func:`init_session` when custom settings are required.
-_session: Session = session_with_retry(ApiCfg(), RetryCfg())
-_session_lock = threading.Lock()
+_session_lock = threading.RLock()
+_session_condition = threading.Condition(_session_lock)
+
+
+def _make_session_factory(api: ApiCfg, retry: RetryCfg) -> Callable[[], Session]:
+    def factory() -> Session:
+        return session_with_retry(api, retry)
+
+    return factory
+
+
+_session_factory: Callable[[], Session] = _make_session_factory(ApiCfg(), RetryCfg())
+_session_local = threading.local()
+_sessions: set[Session] = set()
+_active_requests = 0
+
+
+def _close_sessions(sessions: Iterable[Session]) -> None:
+    for session in sessions:
+        close = getattr(session, "close", None)
+        if callable(close):
+            close()
+
+
+def _get_or_create_session_locked() -> Session:
+    session = cast(Session | None, getattr(_session_local, "session", None))
+    if session is None:
+        session = _session_factory()
+        _sessions.add(session)
+        setattr(_session_local, "session", session)
+    return session
+
+
+@contextmanager
+def _session_context() -> Iterator[Session]:
+    global _active_requests
+    with _session_condition:
+        session = _get_or_create_session_locked()
+        _active_requests += 1
+    try:
+        yield session
+    finally:
+        with _session_condition:
+            _active_requests -= 1
+            if _active_requests == 0:
+                _session_condition.notify_all()
 
 EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (
     "target_id",
@@ -64,14 +110,25 @@ EXPECTED_FAMILY_COLUMNS: tuple[str, ...] = (
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session used by the IUPHAR client."""
 
-    global _session
-    old_session: Session | None = None
-    with _session_lock:
-        old_session = _session
-        _session = session_with_retry(api, retry)
+    global _session_factory, _session_local
 
-    if old_session is not None and old_session is not _session:
-        old_session.close()
+    factory = _make_session_factory(api, retry)
+    with _session_condition:
+        while _active_requests > 0:
+            _session_condition.wait()
+        old_sessions = list(_sessions)
+        _sessions.clear()
+        _session_factory = factory
+        _session_local = threading.local()
+
+    _close_sessions(old_sessions)
+
+
+def get_session() -> Session:
+    """Expose the configured :class:`requests.Session` instance."""
+
+    with _session_condition:
+        return _get_or_create_session_locked()
 
 
 def _validate_columns(df: pd.DataFrame, expected: Iterable[str]) -> None:
@@ -118,8 +175,8 @@ def _download_csv(url: str, cfg: IupharCfg, retry: RetryCfg) -> pd.DataFrame:
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
         try:
-            with _session_lock:
-                with _session.get(url, timeout=timeout) as resp:
+            with _session_context() as session:
+                with session.get(url, timeout=timeout) as resp:
                     resp.raise_for_status()
                     return pd.read_csv(io.StringIO(resp.text))
         except requests.RequestException as exc:  # pragma: no cover - network
@@ -176,8 +233,8 @@ def _query_gene_symbol(
     for attempt in range(1, retry.max_attempts + 1):
         limiter.acquire()
         try:
-            with _session_lock:
-                with _session.get(url, timeout=timeout) as response:
+            with _session_context() as session:
+                with session.get(url, timeout=timeout) as response:
                     response.raise_for_status()
                     data = cast(list[dict[str, Any]], response.json())
                     return data[0] if data else {}

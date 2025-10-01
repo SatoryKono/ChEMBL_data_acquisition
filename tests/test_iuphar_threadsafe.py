@@ -31,9 +31,17 @@ class DummyResponse:
 class DummySession:
     def __init__(self) -> None:
         self.calls: list[int] = []
+        self.owner: int | None = None
 
     def get(self, url: str, timeout: tuple[int, int]) -> DummyResponse:
-        self.calls.append(threading.get_ident())
+        thread_id = threading.get_ident()
+        if self.owner is None:
+            self.owner = thread_id
+        else:
+            assert (
+                self.owner == thread_id
+            ), "Session reused across threads"
+        self.calls.append(thread_id)
         return DummyResponse()
 
 
@@ -44,27 +52,49 @@ class DummyLimiter:
 
 def test_websearch_gene_to_id_thread_safe(monkeypatch) -> None:
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
-    dummy = DummySession()
-    monkeypatch.setattr(ci, "_session", dummy)
-    monkeypatch.setattr(ci, "get_limiter", lambda name, rps, burst=None: DummyLimiter())
+    call_threads: list[int] = []
+    created_sessions: list[DummySession] = []
+
+    def session_factory() -> DummySession:
+        session = DummySession()
+        created_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(ci, "_session_factory", session_factory, raising=False)
+    monkeypatch.setattr(ci, "_session_local", threading.local(), raising=False)
+    monkeypatch.setattr(ci, "_sessions", set(), raising=False)
+    monkeypatch.setattr(ci, "_active_requests", 0, raising=False)
+    monkeypatch.setattr(
+        ci, "get_limiter", lambda name, rps, burst=None: DummyLimiter()
+    )
 
     cfg = IupharCfg(base="https://example.org/services", rps=10, burst=10)
+    genes = [f"GENE-{idx}" for idx in range(10)]
 
-    def worker() -> dict:
-        return data.websearch_gene_to_id("GENE", cfg)
+    def worker(symbol: str) -> dict:
+        result = data.websearch_gene_to_id(symbol, cfg)
+        call_threads.append(threading.get_ident())
+        return result
 
     with ThreadPoolExecutor(max_workers=10) as pool:
-        results = [f.result() for f in (pool.submit(worker) for _ in range(10))]
+        futures = [pool.submit(worker, gene) for gene in genes]
+        results = [f.result() for f in futures]
 
     assert all(r == {"id": 1} for r in results)
-    assert len(dummy.calls) == 10
+    assert len(call_threads) == 10
+    assert created_sessions
+    owners = [session.owner for session in created_sessions if session.owner is not None]
+    assert len(set(owners)) == len(owners)
+    total_calls = sum(len(session.calls) for session in created_sessions)
+    assert total_calls == len(call_threads)
 
 
 """Thread-safety tests for IUPHAR session handling."""
 
 
-def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure concurrent calls to the shared session are serialised."""
+def test_session_is_thread_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure each thread obtains an independent session instance."""
+
     data = ii.IUPHARData(target_df=pd.DataFrame(), family_df=pd.DataFrame())
     cfg = IupharCfg(
         base="https://example.org", timeout_connect=1, timeout_read=1, rps=1, burst=1
@@ -76,48 +106,32 @@ def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(ci, "get_limiter", lambda *a, **k: DummyLimiter())
 
-    order: list[str] = []
-    in_use = False
-    lock = threading.Lock()
+    created_sessions: list[DummySession] = []
 
-    def fake_get(url: str, timeout: tuple[int, int]):
-        nonlocal in_use
-        with lock:
-            assert not in_use, "Concurrent session usage detected"
-            in_use = True
-            order.append("start")
-        time.sleep(0.05)
-        with lock:
-            in_use = False
-            order.append("end")
+    def session_factory() -> DummySession:
+        session = DummySession()
+        created_sessions.append(session)
+        return session
 
-        class Resp:
-            def __enter__(self):
-                return self
+    monkeypatch.setattr(ci, "_session_factory", session_factory, raising=False)
+    monkeypatch.setattr(ci, "_session_local", threading.local(), raising=False)
+    monkeypatch.setattr(ci, "_sessions", set(), raising=False)
+    monkeypatch.setattr(ci, "_active_requests", 0, raising=False)
 
-            def __exit__(self, *exc):
-                return False
+    barrier = threading.Barrier(2)
 
-            def raise_for_status(self) -> None:
-                return None
+    def worker(symbol: str) -> dict:
+        barrier.wait()
+        return data.websearch_gene_to_id(symbol, cfg)
 
-            def json(self):  # pragma: no cover - unused
-                return []
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(worker, symbol) for symbol in ("GENE-A", "GENE-B")]
+        [f.result() for f in futures]
 
-        return Resp()
+    owners = {session.owner for session in created_sessions if session.owner is not None}
 
-    monkeypatch.setattr(ci._session, "get", fake_get)
-
-    threads = [
-        threading.Thread(target=data.websearch_gene_to_id, args=("GENE", cfg))
-        for _ in range(2)
-    ]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    assert order == ["start", "end", "start", "end"]
+    assert len(created_sessions) == 2
+    assert len(owners) == 2
 
 
 def test_init_session_closes_previous_session(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +149,10 @@ def test_init_session_closes_previous_session(monkeypatch: pytest.MonkeyPatch) -
             closed.append(self.name)
 
     dummy_initial = DummySession("initial")
-    monkeypatch.setattr(ci, "_session", dummy_initial, raising=False)
+    monkeypatch.setattr(ci, "_session_factory", lambda: dummy_initial, raising=False)
+    monkeypatch.setattr(ci, "_session_local", threading.local(), raising=False)
+    monkeypatch.setattr(ci, "_sessions", {dummy_initial}, raising=False)
+    monkeypatch.setattr(ci, "_active_requests", 0, raising=False)
 
     def fake_session_with_retry(api: ApiCfg, retry: RetryCfg) -> DummySession:
         return DummySession(api.user_agent)
@@ -147,14 +164,14 @@ def test_init_session_closes_previous_session(monkeypatch: pytest.MonkeyPatch) -
     second_api = ApiCfg(user_agent="chembl-tests/2.0 (mailto:tests@ebi.ac.uk)")
 
     ci.init_session(first_api, retry_cfg)
-    first_session = ci._session
+    first_session = ci.get_session()
 
     assert isinstance(first_session, DummySession)
     assert closed == ["initial"]
     assert dummy_initial.closed is True
 
     ci.init_session(second_api, retry_cfg)
-    second_session = ci._session
+    second_session = ci.get_session()
 
     assert isinstance(second_session, DummySession)
     assert closed == ["initial", first_api.user_agent]
