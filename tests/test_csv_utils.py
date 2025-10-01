@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import string
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -183,8 +183,15 @@ def test_write_csv_deterministic_hash_stable(
     path = tmp_path / "out.csv"
 
     # Freeze timestamp to keep metadata deterministic across runs
-    fixed_now = datetime(2024, 1, 1)
-    monkeypatch.setattr("library.io.metadata.datetime", SimpleNamespace(now=lambda: fixed_now))
+    fixed_now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    def _fixed_now(tz: object | None = None) -> datetime:
+        return fixed_now
+
+    monkeypatch.setattr(
+        "library.io.metadata.datetime",
+        SimpleNamespace(now=_fixed_now),
+    )
 
     write_csv_deterministic(df.copy(), path, key_cols=sorted(df.columns))
     first_hash = sha256_file(path)
