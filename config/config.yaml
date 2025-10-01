@@ -204,7 +204,7 @@ local:
     iuphar_target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
     iuphar_family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
     uniprot_data_dir: "dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
-    targets_type_csv: "dictionary/_Target/targets_type.csv"  # Target type mapping table
+    targets_type_csv: "dictionary/_target/targets_type.csv"  # Target type mapping table
   io:
     output_dir: "data/output"  # Directory for generated datasets
     cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
