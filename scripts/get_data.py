@@ -271,6 +271,21 @@ def _failure_sentinel_path(output_path: Path) -> Path:
     return output_path.with_name(f"{output_path.name}.failed")
 
 
+def _coerce_exit_code(value: object) -> int:
+    """Translate ``SystemExit.code`` values into integer exit codes."""
+
+    if isinstance(value, int):
+        return value
+    if value is None:
+        return 0
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 1
+    return 1
+
+
 def _sidecar_paths(base: Path) -> dict[str, Path]:
     """Return known auxiliary artefacts generated from ``base``."""
 
@@ -304,7 +319,13 @@ def _run_step(
 
     arguments = step.build_arguments(cfg, output_path=working_output)
     _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
-    exit_code = step.main(arguments)
+    try:
+        exit_code = step.main(arguments)
+    except SystemExit as exc:
+        exit_code = _coerce_exit_code(exc.code)
+        return StepExecutionResult(exit_code=exit_code, executed=True)
+    except BaseException:
+        raise
     return StepExecutionResult(exit_code=exit_code, executed=True)
 
 
@@ -427,7 +448,18 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
             working_output.unlink()
         try:
             result = _run_step(step, cfg, final_output, working_output)
-        except Exception as exc:  # pragma: no cover - defensive guard
+        except SystemExit as exc:  # pragma: no cover - defensive guard
+            exit_code = _coerce_exit_code(exc.code)
+            _LOGGER.error("step_system_exit", step=step.name, exit_code=exit_code)
+            _cleanup_failed_step(
+                final_output,
+                working_output,
+                sentinel_path,
+                executed=True,
+            )
+            overall_status = exit_code
+            break
+        except BaseException as exc:  # pragma: no cover - defensive guard
             _LOGGER.exception("step_exception", step=step.name, error=str(exc))
             _cleanup_failed_step(
                 final_output,

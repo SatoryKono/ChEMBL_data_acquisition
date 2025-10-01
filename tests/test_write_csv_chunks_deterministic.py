@@ -102,3 +102,36 @@ def test_write_csv_chunks_preserves_leading_zeros(tmp_path: Path) -> None:
     )
 
     assert path_full.read_bytes() == path_chunks.read_bytes()
+
+
+def test_write_csv_chunks_respects_file_window(tmp_path: Path) -> None:
+    rows = 60
+    df = pd.DataFrame(
+        {
+            "chembl_id": pd.Series((f"CHEMBL{i:05d}" for i in range(rows)), dtype="string"),
+            "value": list(range(rows)),
+        }
+    )
+    shuffled = df.sample(frac=1, random_state=11).reset_index(drop=True)
+    path_full = tmp_path / "full_window.csv"
+    path_chunks = tmp_path / "chunks_window.csv"
+
+    write_csv_deterministic(
+        shuffled,
+        path_full,
+        col_order=["chembl_id", "value"],
+        key_cols=["chembl_id"],
+    )
+
+    chunk_iter = (shuffled.iloc[i : i + 10] for i in range(0, len(shuffled), 10))
+    write_csv_chunks_deterministic(
+        chunk_iter,
+        path_chunks,
+        col_order=["chembl_id", "value"],
+        key_cols=["chembl_id"],
+        chunksize=10,
+        merge_chunksize=5,
+        merge_file_window=2,
+    )
+
+    assert path_full.read_bytes() == path_chunks.read_bytes()
