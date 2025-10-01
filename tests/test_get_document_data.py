@@ -720,6 +720,96 @@ def test_fetch_pubmed_records_returns_generator_in_order(
     assert combined["PubMed.PMID"].tolist() == pmids
 
 
+def test_fetch_pubmed_records_drains_pending_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """More batches than ``max_in_flight`` should still all be emitted."""
+
+    pmids = [str(i) for i in range(6)]
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"}
+            for pmid in batch
+        ]
+
+    def fake_semantic_batch(
+        session: Any,
+        ids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"}
+            for pmid in ids
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_, **__: {"scholar.DOI": "10.1000/fallback"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda session, pmid, cfg, limiter: {"OpenAlex.Id": f"OA{pmid}"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda session, doi, cfg, limiter: {"crossref.DOI": doi},
+    )
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=2,
+        return_generator=True,
+    )
+
+    frames = list(generator)
+    assert [frame["PubMed.PMID"].tolist() for frame in frames] == [
+        ["0", "1"],
+        ["2", "3"],
+        ["4", "5"],
+    ]
+
+    combined = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert combined["PubMed.PMID"].tolist() == pmids
+
+
 def test_fetch_pubmed_records_streams_large_batches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
