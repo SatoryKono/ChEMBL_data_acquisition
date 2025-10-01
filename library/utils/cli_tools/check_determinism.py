@@ -22,7 +22,7 @@ except ImportError as exc:  # pragma: no cover - import-time check
         " Install it with 'pip install pandas'."
     ) from exc
 
-from library.cli import LoggerConfig, configure_logger
+from library.cli import configure_logger, create_logger_config
 from library.csv_utils import (
     sha256_file,
     write_csv_chunks_deterministic,
@@ -103,7 +103,8 @@ def main() -> int:
         )
         args = parser.parse_args()
 
-        configure_logger(LoggerConfig(level=args.log_level))
+        log_cfg = create_logger_config(args.log_level)
+        configure_logger(log_cfg)
 
         with TemporaryDirectory() as tmp:
             ok = run_check(Path(tmp))

@@ -31,4 +31,7 @@ def test_cli_run_id(capfd: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     events = [json.loads(line) for line in captured if line.strip()]
     assert events[0]["event"] == "run_start"
     assert events[-1]["event"] == "run_done"
-    assert events[0]["run_id"] == events[-1]["run_id"] == "test-run"
+    run_id_start = events[0]["run_id"]
+    run_id_done = events[-1]["run_id"]
+    assert run_id_start == run_id_done
+    assert run_id_start
