@@ -25,6 +25,7 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
 )
+from library import document_pipeline as dpipeline
 from scripts import get_document_data as gdd
 
 
@@ -1659,8 +1660,8 @@ def test_fetch_pubmed_records_accepts_executor_context(
     def fake_crossref(session, doi, cfg, limiter):  # type: ignore[no-untyped-def]
         return {"crossref.DOI": doi}
 
-    monkeypatch.setattr(gdd, "ThreadPoolExecutor", DummyExecutor)
-    monkeypatch.setattr(gdd, "as_completed", lambda futures: iter(futures))
+    monkeypatch.setattr(dpipeline, "ThreadPoolExecutor", DummyExecutor)
+    monkeypatch.setattr(dpipeline, "as_completed", lambda futures: iter(futures))
     monkeypatch.setattr(gdd, "build_dataframe", fake_build_dataframe)
     monkeypatch.setattr(gdd, "merge_metadata", fake_merge_metadata)
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
@@ -1821,7 +1822,7 @@ def test_fetch_pubmed_records_reuses_service_executors(
     pmids = ["100", "200", "300", "400"]
     creations: list[int | None] = []
 
-    orig_executor = gdd.ThreadPoolExecutor
+    orig_executor = dpipeline.ThreadPoolExecutor
 
     class TrackingExecutor(orig_executor):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -1831,7 +1832,7 @@ def test_fetch_pubmed_records_reuses_service_executors(
             creations.append(max_workers)
             super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr(gdd, "ThreadPoolExecutor", TrackingExecutor)
+    monkeypatch.setattr(dpipeline, "ThreadPoolExecutor", TrackingExecutor)
     monkeypatch.setattr(gdd, "get_limiter", lambda _name, _rps, burst=None: DummyLimiter(burst or 1))
 
     class DummySession:
@@ -1931,7 +1932,7 @@ def test_fetch_pubmed_records_generator_batches(monkeypatch: pytest.MonkeyPatch)
         for future in reversed(snapshot):
             yield future
 
-    monkeypatch.setattr(gdd, "as_completed", fake_as_completed)
+    monkeypatch.setattr(dpipeline, "as_completed", fake_as_completed)
 
     class ImmediateExecutor:
         def __init__(self, *_: object, **__: object) -> None:
@@ -1951,7 +1952,7 @@ def test_fetch_pubmed_records_generator_batches(monkeypatch: pytest.MonkeyPatch)
             future.set_result(records)
             return future
 
-    monkeypatch.setattr(gdd, "ThreadPoolExecutor", ImmediateExecutor)
+    monkeypatch.setattr(dpipeline, "ThreadPoolExecutor", ImmediateExecutor)
 
     generator = gdd.fetch_pubmed_records(
         pmids,

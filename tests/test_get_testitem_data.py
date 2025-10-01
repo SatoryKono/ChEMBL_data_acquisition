@@ -65,7 +65,7 @@ def test_read_input_ids_limit_and_sample(
         encoding=cfg.io.csv_encoding,
     )
 
-    status, result = gtd.read_input_ids(
+    status, result = pipeline.read_input_ids(
         input_csv,
         column=cfg.testitem.column,
         io_cfg=cfg.io,
@@ -85,7 +85,7 @@ def test_read_input_ids_offset(tmp_path: Path, cfg: Config) -> None:
         encoding=cfg.io.csv_encoding,
     )
 
-    status, result = gtd.read_input_ids(
+    status, result = pipeline.read_input_ids(
         input_csv,
         column=cfg.testitem.column,
         io_cfg=cfg.io,
@@ -100,7 +100,7 @@ def test_read_input_ids_offset(tmp_path: Path, cfg: Config) -> None:
 
 
 def test_read_input_ids_missing_file(tmp_path: Path, cfg: Config) -> None:
-    status, result = gtd.read_input_ids(
+    status, result = pipeline.read_input_ids(
         tmp_path / "missing.csv",
         column=cfg.testitem.column,
         io_cfg=cfg.io,
@@ -117,7 +117,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     monkeypatch.setattr(cl, "get_testitem", fail_fetch)
 
-    status, df, requested_ids = gtd.fetch_testitems(
+    status, df, requested_ids = pipeline.fetch_testitems(
         iter(["CHEMBL1"]),
         api_cfg=cfg.api,
         batch_size=1,
@@ -158,7 +158,7 @@ def test_fetch_testitems_passes_fields_and_limit(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df, requested_ids = gtd.fetch_testitems(
+    status, df, requested_ids = pipeline.fetch_testitems(
         iter(["CHEMBL1", "CHEMBL2"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -201,7 +201,7 @@ def test_fetch_testitems_logs_missing_summary(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df, requested_ids = gtd.fetch_testitems(
+    status, df, requested_ids = pipeline.fetch_testitems(
         iter(["CHEMBL1", "chembl2", "CHEMBL3"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -266,7 +266,7 @@ def test_fetch_parent_catalog_skips_single_when_parentless(
 def test_prepare_pubchem_api_cfg_prefers_pubchem_override(cfg: Config) -> None:
     cfg.pubchem.user_agent = "chembl-da/1.0 (mailto:pubchem@example.org)"
 
-    pubchem_cfg = gtd._prepare_pubchem_api_cfg(cfg, cfg.api)
+    pubchem_cfg = pipeline._prepare_pubchem_api_cfg(cfg, cfg.api)
 
     assert pubchem_cfg.user_agent == cfg.pubchem.user_agent
     assert pubchem_cfg is not cfg.api
@@ -278,7 +278,7 @@ def test_prepare_pubchem_api_cfg_requires_custom_user_agent(cfg: Config) -> None
     cfg.pubchem.user_agent = placeholder
 
     with pytest.raises(ValueError, match="PubChem configuration requires a user_agent"):
-        gtd._prepare_pubchem_api_cfg(cfg, cfg.api)
+        pipeline._prepare_pubchem_api_cfg(cfg, cfg.api)
 
 
 def test_fetch_parent_catalog_single_entry_parentless_uses_bulk_only(
@@ -1183,9 +1183,9 @@ def test_load_pubchem_cid_cache_uses_shared_selector(
             return candidates.split("|")[0].strip()
         return None
 
-    monkeypatch.setattr(pl, "select_primary_cid", fake_select)
+    monkeypatch.setattr(pipeline, "_select_primary_cid", fake_select)
 
-    cache = gtd._load_pubchem_cid_cache(cache_path)
+    cache = pipeline._load_pubchem_cid_cache(cache_path)
 
     assert cache == {"CHEMBL1": "123", "CHEMBL2": None}
     assert calls == [("123 | 456", "cache_file", "123 | 456", "CHEMBL1")]
@@ -1456,7 +1456,7 @@ def test_run_chembl_initialises_pubchem_session(
     assert rc == 0
 
     init_api, init_retry = captured["init"]
-    expected_api = gtd._prepare_pubchem_api_cfg(cfg, cfg.api)
+    expected_api = pipeline._prepare_pubchem_api_cfg(cfg, cfg.api)
 
     assert init_api == expected_api
     assert init_retry == cfg.retry

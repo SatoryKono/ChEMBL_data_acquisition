@@ -19,32 +19,7 @@ from library.cli_utils import run_cli_command
 from library.config import Config
 from library.log import logger
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
-from library.testitem_pipeline import (
-    ReadInputIdsResult as _ReadInputIdsResult,
-    TestitemPipelineOptions,
-    analyze_table_quality as _analyze_table_quality,
-    fetch_testitems as _fetch_testitems,
-    load_parent_catalog as _load_parent_catalog,
-    query_parent_catalog as _query_parent_catalog,
-    read_input_ids as _read_input_ids,
-    run_testitem_pipeline,
-)
-from library.testitem_pipeline import (
-    _prepare_pubchem_api_cfg as _pipeline_prepare_pubchem_api_cfg,
-    _load_pubchem_cid_cache as _pipeline_load_pubchem_cid_cache,
-    integrate_missing_identifiers as _integrate_missing_identifiers,
-)
-
-# Re-export helpers consumed directly by unit tests.
-ReadInputIdsResult = _ReadInputIdsResult
-read_input_ids = _read_input_ids
-fetch_testitems = _fetch_testitems
-load_parent_catalog = _load_parent_catalog
-query_parent_catalog = _query_parent_catalog
-_prepare_pubchem_api_cfg = _pipeline_prepare_pubchem_api_cfg
-_load_pubchem_cid_cache = _pipeline_load_pubchem_cid_cache
-analyze_table_quality = _analyze_table_quality
-_integrate_missing_identifiers = _integrate_missing_identifiers
+from library.testitem_pipeline import TestitemPipelineOptions, run_testitem_pipeline
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:

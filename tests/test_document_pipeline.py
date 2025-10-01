@@ -7,7 +7,7 @@ import pytest
 import requests
 
 from library.config import Config
-import scripts.get_document_data as document_script
+import library.document_pipeline as document_pipeline
 
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -17,7 +17,6 @@ from library.document_pipeline import (
     merge_with_chembl,
 )
 from library.config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
-import scripts.get_document_data as gdd
 
 
 def test_document_schema_columns_are_unique() -> None:
@@ -236,17 +235,17 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
             "crossref.Error": "",
         }
 
-    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
-    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
-    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(document_pipeline, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(document_pipeline, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(document_pipeline.pl, "fetch_pubmed_batch", fake_pubmed_batch)
     monkeypatch.setattr(
-        gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch
+        document_pipeline.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch
     )
-    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
-    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
-    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(document_pipeline.ssl, "fetch_semantic_scholar", fake_semantic_single)
+    monkeypatch.setattr(document_pipeline.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(document_pipeline.ocl, "fetch_crossref", fake_crossref)
 
-    df = gdd.fetch_pubmed_records(
+    df = document_pipeline.fetch_pubmed_records(
         pmids,
         sleep=0.0,
         pubmed_cfg=PubMedCfg(),
@@ -390,16 +389,16 @@ def test_fetch_pubmed_records_reuses_duplicate_identifiers(
             payload.update(extra)
         info_events.append((event, payload))
 
-    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
-    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
-    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
-    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
-    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
-    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
-    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
-    monkeypatch.setattr(gdd.logger, "info", fake_info)
+    monkeypatch.setattr(document_pipeline, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(document_pipeline, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(document_pipeline.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(document_pipeline.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(document_pipeline.ssl, "fetch_semantic_scholar", fake_semantic_single)
+    monkeypatch.setattr(document_pipeline.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(document_pipeline.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(document_pipeline.logger, "info", fake_info)
 
-    df = gdd.fetch_pubmed_records(
+    df = document_pipeline.fetch_pubmed_records(
         pmids,
         sleep=0.0,
         pubmed_cfg=PubMedCfg(),
@@ -436,6 +435,9 @@ def test_fetch_pubmed_records_logs_compact_batch(monkeypatch: pytest.MonkeyPatch
             return None
 
     class DummyLimiter:
+        def __init__(self, burst: int | None = None) -> None:
+            self.burst = burst if burst is not None else 1
+
         def acquire(self) -> None:  # pragma: no cover - simple synchronisation
             return None
 
@@ -461,12 +463,12 @@ def test_fetch_pubmed_records_logs_compact_batch(monkeypatch: pytest.MonkeyPatch
             record.update(extra)
         warning_events.append((event, record))
 
-    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
-    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
-    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fail_pubmed_batch)
-    monkeypatch.setattr(gdd.logger, "warning", fake_warning)
+    monkeypatch.setattr(document_pipeline, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(document_pipeline, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(document_pipeline.pl, "fetch_pubmed_batch", fail_pubmed_batch)
+    monkeypatch.setattr(document_pipeline.logger, "warning", fake_warning)
 
-    df = gdd.fetch_pubmed_records(
+    df = document_pipeline.fetch_pubmed_records(
         pmids,
         sleep=0.0,
         pubmed_cfg=PubMedCfg(),
