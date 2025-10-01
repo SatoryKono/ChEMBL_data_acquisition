@@ -25,7 +25,7 @@ The README is available in multiple languages:
 
 | Компонент     | Минимальная версия |
 |---------------|-------------------|
-| Python        | 3.12              |
+| Python        | 3.11              |
 | pandas        | 2.3.2             |
 | requests      | 2.32.5            |
 | PyYAML        | 6.0.2             |
