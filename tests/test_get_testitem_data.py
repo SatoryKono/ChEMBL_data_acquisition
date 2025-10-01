@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -113,7 +113,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     monkeypatch.setattr(cl, "get_testitem", fail_fetch)
 
-    status, df = gtd.fetch_testitems(
+    status, df, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1"]),
         api_cfg=cfg.api,
         batch_size=1,
@@ -126,6 +126,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     assert status == 1
     assert df is None
+    assert requested_ids == ()
 
 
 def test_fetch_testitems_passes_fields_and_limit(
@@ -145,11 +146,15 @@ def test_fetch_testitems_passes_fields_and_limit(
     ) -> pd.DataFrame:
         captured["fields"] = fields
         captured["page_limit"] = page_limit
-        return pd.DataFrame(columns=["molecule_chembl_id"])
+        values = list(ids)
+        return pd.DataFrame(
+            [{"molecule_chembl_id": value} for value in values],
+            columns=["molecule_chembl_id"],
+        )
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df = gtd.fetch_testitems(
+    status, df, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1", "CHEMBL2"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -164,6 +169,7 @@ def test_fetch_testitems_passes_fields_and_limit(
     assert df is not None
     assert captured["fields"] == ("a", "b")
     assert captured["page_limit"] == 500
+    assert requested_ids == ("CHEMBL1", "CHEMBL2")
 
 
 def test_fetch_parent_catalog_skips_single_when_parentless(
@@ -1228,7 +1234,7 @@ def test_run_chembl_column_order(
         captured["columns"] = list(df.columns)
         return output
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
@@ -1492,7 +1498,8 @@ def test_run_chembl_uses_lazy_identifier_stream(
     assert ids_source.iterations == 1
     assert received_ids is not None
     assert not isinstance(received_ids, list)
-    assert received_ids.__class__.__name__ == "_tee"
+    assert isinstance(received_ids, Iterator)
+    assert received_ids.__class__.__name__ == "generator"
 
 
 def test_run_chembl_calls_pubchem_once(
@@ -1642,7 +1649,7 @@ def test_run_chembl_prefills_parent_from_hierarchy(
         captured_df = df.copy()
         return output
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
 
@@ -1750,7 +1757,7 @@ def test_run_chembl_merges_parent_catalog(
         captured_df = df.copy()
         return output
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
@@ -1958,7 +1965,7 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
         captured_df = df.copy()
         return output
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
@@ -2016,7 +2023,7 @@ def test_run_chembl_parent_catalog_error(
         called = True
         return Path("unused.csv")
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 1
@@ -2086,7 +2093,7 @@ def test_run_chembl_parent_catalog_request_error(
         called = True
         return Path("unused.csv")
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     errors: list[tuple[str, dict[str, object]]] = []
 
