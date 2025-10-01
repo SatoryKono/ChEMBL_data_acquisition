@@ -88,7 +88,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Create and activate a Python ≥3.11 virtual environment.
 2. Install the project with development extras: `pip install .[dev]`.
 3. Enable the quality gate: `pre-commit install`.
-4. Recommended ad-hoc checks:
+4. Recommended ad-hoc checks (see [Quality Assurance Process](QA_PROCESS_EN.md) for the living checklist):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`

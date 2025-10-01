@@ -89,7 +89,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Создайте и активируйте виртуальное окружение Python ≥ 3.11.
 2. Установите проект с dev-зависимостями: `pip install .[dev]`.
 3. Включите контроль качества: `pre-commit install`.
-4. Рекомендуемые проверки:
+4. Рекомендуемые проверки (см. живой список в [QA_PROCESS_EN.md](QA_PROCESS_EN.md)):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
