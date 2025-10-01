@@ -29,9 +29,11 @@ mypy --strict
    ```bash
    pytest --maxfail=1 --durations=10
    ```
-2. Full suite, keeping warnings visible for triage:
+2. Full suite, keeping warnings visible for triage.
+   Use quiet mode (`-q`) for routine certification runs.
+   Switch to verbose (`-vv`) output when you need detailed failure context:
    ```bash
-   pytest -q --disable-warnings -q
+   pytest -q --disable-warnings
    ```
 
 ## 4. Determinism and CLI smoke checks
