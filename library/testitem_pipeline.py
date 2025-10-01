@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from collections import ChainMap, OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -346,6 +347,7 @@ def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
 
 
 _PUBCHEM_SESSION_SIGNATURE: str | None = None
+_PUBCHEM_SESSION_LOCK = threading.Lock()
 
 
 @dataclass
@@ -1798,9 +1800,10 @@ def augment_pubchem(
     if getattr(pubchem_cfg, "enable", True):
         global _PUBCHEM_SESSION_SIGNATURE
         session_signature = _pubchem_session_signature(api_cfg, retry_cfg)
-        if session_signature != _PUBCHEM_SESSION_SIGNATURE:
-            pl.init_session(api_cfg, retry_cfg)
-            _PUBCHEM_SESSION_SIGNATURE = session_signature
+        with _PUBCHEM_SESSION_LOCK:
+            if session_signature != _PUBCHEM_SESSION_SIGNATURE:
+                pl.init_session(api_cfg, retry_cfg)
+                _PUBCHEM_SESSION_SIGNATURE = session_signature
         pubchem_cid_cache = _load_pubchem_cid_cache(
             getattr(pubchem_cfg, "cid_cache_path", None),
             ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),
