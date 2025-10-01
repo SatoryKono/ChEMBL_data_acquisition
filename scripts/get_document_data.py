@@ -760,6 +760,23 @@ def _write_export_chunks(
     )
 
 
+def _load_export_ready_frame(path: Path, *, cfg: Config) -> pd.DataFrame:
+    """Load the streamed CSV export for quality reporting."""
+
+    try:
+        loaded = pd.read_csv(
+            path,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+    except pd.errors.EmptyDataError:
+        loaded = pd.DataFrame(columns=list(_EXPORT_COLUMNS))
+    missing = [column for column in _EXPORT_COLUMNS if column not in loaded.columns]
+    for column in missing:
+        loaded[column] = ""
+    return loaded[_EXPORT_COLUMNS]
+
+
 def _finalise_export(
     df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
@@ -815,10 +832,10 @@ def _finalise_export(
     rows_total = 0
     rows_kept = 0
     exit_code = 0
-    validated_chunks: list[pd.DataFrame] = []
+    emitted_chunk = False
 
     def _validated_chunks() -> Iterator[pd.DataFrame]:
-        nonlocal rows_total, rows_kept, exit_code
+        nonlocal rows_total, rows_kept, exit_code, emitted_chunk
         for frame in process_iter:
             with_metadata = add_pipeline_metadata(frame)
             ordered = build_dataframe(
@@ -844,8 +861,18 @@ def _finalise_export(
             cleaned = build_dataframe(
                 validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
             )
-            validated_chunks.append(cleaned)
             for chunk in _iter_export_chunks(cleaned, chunk_size=stream_chunk):
+                emitted_chunk = True
+                yield chunk
+
+        if not emitted_chunk:
+            empty = build_dataframe(
+                add_pipeline_metadata(pd.DataFrame()),
+                columns=DOCUMENT_SCHEMA_COLUMNS,
+                fill_missing=False,
+            )
+            for chunk in _iter_export_chunks(empty, chunk_size=stream_chunk):
+                emitted_chunk = True
                 yield chunk
 
     export_generator = _validated_chunks()
@@ -887,22 +914,11 @@ def _finalise_export(
     rows_dropped = rows_total - rows_kept
     logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
-    if not validated_chunks:
-        export_ready = build_dataframe(
-            add_pipeline_metadata(pd.DataFrame()),
-            columns=DOCUMENT_SCHEMA_COLUMNS,
-            fill_missing=False,
-        )
-    elif len(validated_chunks) == 1:
-        export_ready = validated_chunks[0]
-    else:
-        export_ready = pd.concat(validated_chunks, ignore_index=True)
-
-    renamed_columns = {
-        column: _EXPORT_COLUMN_RENAMES.get(column, column)
-        for column in export_ready.columns
-    }
-    final_column_names = set(renamed_columns.values())
+    try:
+        export_ready = _load_export_ready_frame(csv_path, cfg=cfg)
+    except (OSError, ValueError) as exc:
+        logger.error("quality_frame_load_failed", error=str(exc), path=str(csv_path))
+        return 1
 
     stats: Stats = {
         "rows_total": rows_total,
