@@ -270,11 +270,12 @@ placeholder `contact@example.org` causes configuration validation to fail. Defau
 
 ```yaml
 api:
-  user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
+  user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 ```
 
-Override the parameter in `config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. The
-`contact@example.org` value is a placeholder and the validator rejects it, so update the address before running the tools. There is
+Override the parameter in `config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. Replace the
+`chembl-data@ebi.ac.uk` contact with your own mailbox before production use—the bundled address is provided only as a documented default.
+The validator still rejects the legacy placeholder `contact@example.org`, so any occurrence prevents the tools from starting. There is
 no dedicated CLI flag (see `library/cli/parser.py`), so configuration is limited to files or environment variables.
 
 
