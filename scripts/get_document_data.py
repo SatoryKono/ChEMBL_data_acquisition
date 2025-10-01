@@ -566,45 +566,61 @@ def fetch_pubmed_records(
             return _failure_records(batch_list, str(exc))
 
     iterator = (p for p in pmids if p)
-    records: list[dict[str, str]] = []
-    tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
-    ordered: dict[int, list[dict[str, str]]] = {}
     processed = 0
     max_in_flight = max(1, max_workers * 2)
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        offset = 0
-        pending: set[Future[list[dict[str, str]]]] = set()
-        for batch in _chunked(iterator, batch_size):
-            if not batch:
-                continue
-            future = ex.submit(_fetch_batch, batch)
-            tasks[future] = (offset, batch)
-            pending.add(future)
-            offset += len(batch)
-            if len(pending) >= max_in_flight:
+
+    def _iter_records() -> Iterator[list[dict[str, str]]]:
+        nonlocal processed
+
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            tasks: dict[
+                Future[list[dict[str, str]]], tuple[int, int]
+            ] = {}
+            pending: set[Future[list[dict[str, str]]]] = set()
+            completed: dict[int, list[dict[str, str]]] = {}
+            batch_index = 0
+            next_to_emit = 0
+
+            for batch in _chunked(iterator, batch_size):
+                if not batch:
+                    continue
+                future = ex.submit(_fetch_batch, batch)
+                tasks[future] = (batch_index, len(batch))
+                pending.add(future)
+                batch_index += 1
+                if len(pending) >= max_in_flight:
+                    done_future = next(as_completed(list(pending)))
+                    pending.remove(done_future)
+                    batch_id, batch_len = tasks.pop(done_future)
+                    completed[batch_id] = done_future.result()
+                    processed += batch_len
+                    logger.info("documents_processed", count=processed)
+                    while next_to_emit in completed:
+                        yield completed.pop(next_to_emit)
+                        next_to_emit += 1
+
+            while pending:
                 done_future = next(as_completed(list(pending)))
                 pending.remove(done_future)
-                batch_offset, submitted_batch = tasks.pop(done_future)
-                ordered[batch_offset] = done_future.result()
-                processed += len(submitted_batch)
+                batch_id, batch_len = tasks.pop(done_future)
+                completed[batch_id] = done_future.result()
+                processed += batch_len
                 logger.info("documents_processed", count=processed)
+                while next_to_emit in completed:
+                    yield completed.pop(next_to_emit)
+                    next_to_emit += 1
 
-        while pending:
-            done_future = next(as_completed(list(pending)))
-            pending.remove(done_future)
-            batch_offset, submitted_batch = tasks.pop(done_future)
-            ordered[batch_offset] = done_future.result()
-            processed += len(submitted_batch)
-            logger.info("documents_processed", count=processed)
+            while next_to_emit in completed:
+                yield completed.pop(next_to_emit)
+                next_to_emit += 1
 
     def _iter_frames() -> Iterator[pd.DataFrame]:
-        for offset in sorted(ordered):
-            batch_records = ordered[offset]
-            if not batch_records:
+        for records_batch in _iter_records():
+            if not records_batch:
                 yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
                 continue
             yield build_dataframe(
-                batch_records, columns=DOCUMENT_SCHEMA_COLUMNS
+                records_batch, columns=DOCUMENT_SCHEMA_COLUMNS
             )
 
     frame_iter = _iter_frames()
@@ -1121,7 +1137,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         fallback_doi_map = fallback_map or None
 
     try:
-        df = fetch_pubmed_records(
+        frame_iter = fetch_pubmed_records(
             pmids,
             cfg,
             sleep=getattr(args, "sleep", pubmed_defaults.sleep),
@@ -1132,11 +1148,12 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             max_workers=getattr(args, "workers", pubmed_defaults.workers),
             batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
             fallback_doi_map=fallback_doi_map,
+            return_generator=True,
         )
         output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
-        df = normalize_documents(df)
+        normalised_frames = (normalize_documents(frame) for frame in frame_iter)
         exit_code = _finalise_export(
-            df,
+            normalised_frames,
             output,
             cfg,
             input_csv=Path(args.input_csv),
@@ -1336,7 +1353,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 for pmid, doi in zip(masked_pmids, masked_dois, strict=True)
             }
     pmids = pubmed_ids.dropna().astype(str).tolist()
-    pub_df = fetch_pubmed_records(
+    pubmed_frames = fetch_pubmed_records(
         pmids,
         cfg,
         sleep=getattr(args, "sleep", all_defaults.sleep),
@@ -1347,7 +1364,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         batch_size=getattr(args, "batch_size", all_defaults.batch_size),
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
+        return_generator=True,
     )
+    concat_iter = iter(pubmed_frames)
+    try:
+        first_frame = next(concat_iter)
+    except StopIteration:
+        pub_df = build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
+    else:
+        pub_df = pd.concat(chain([first_frame], concat_iter), ignore_index=True)
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
     merged = merge_with_chembl(doc_df, pub_df)
     processed = dp.postprocess_documents(merged)
