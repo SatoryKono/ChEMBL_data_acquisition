@@ -30,7 +30,7 @@ if str(_REPO_ROOT) not in sys.path:
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
 from library import molecule_catalog
 from library import pubchem_library as pl
-from library.cli import LoggerConfig
+from library.cli import LoggerConfig, configure_logger
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
 from library.config import ApiCfg, Config, IoCfg, MoleculeCatalogCfg, PubChemCfg
