@@ -1351,14 +1351,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     limit_value = getattr(args, "limit", None)
-    if limit_value is not None and limit_value <= 0:
-        subparser.error("--limit must be a positive integer")
+    if limit_value is not None and limit_value < 0:
+        subparser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
         subparser.error("--offset must be zero or a positive integer")
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
+    if limit_value == 0:
+        logger.info("pipeline_skip_limit", limit=0)
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
+        return 0
     try:
         mapping: dict[str, str] = {}
         if args.command == "uniprot":

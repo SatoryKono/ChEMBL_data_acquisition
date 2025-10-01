@@ -154,7 +154,117 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
             f"output.{get_data._DEFAULT_OUTPUT_STEMS[step.name]}_20240101.csv"
         )
         assert path.exists()
-        assert path.read_text() == f"{step.name} output\n"
+    assert path.read_text() == f"{step.name} output\n"
+
+
+def test_get_data_limit_zero_skips_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--limit 0`` should forward the skip to every pipeline without writes."""
+
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("test: true\n")
+
+    for step in get_data._PIPELINE_STEPS:
+        input_path = input_dir / get_data._DEFAULT_INPUT_FILES[step.name]
+        input_path.write_text("id\nCHEMBL1\n", encoding="utf8")
+
+    invocations: list[str] = []
+
+    def make_stub(
+        name: str, subcommand: str | None
+    ) -> Callable[[Sequence[str] | None], int]:
+        def _main(argv: Sequence[str] | None) -> int:
+            args = list(argv or [])
+            if subcommand is not None:
+                assert args, f"missing subcommand for {name}"
+                assert args[0] == subcommand
+                args = args[1:]
+            parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("--config")
+            parser.add_argument("--input")
+            parser.add_argument("--output")
+            parser.add_argument("--log-level")
+            parser.add_argument("--limit")
+            ns = parser.parse_args(args)
+            assert Path(ns.input).exists(), f"missing input for {name}"
+            assert ns.limit == "0"
+            invocations.append(name)
+            return 0
+
+        return _main
+
+    stub_steps = tuple(
+        get_data.PipelineStep(
+            step.name, make_stub(step.name, step.subcommand), step.subcommand
+        )
+        for step in get_data._PIPELINE_STEPS
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    dummy_logger = DummyLogger()
+
+    def fake_configure(level_name: str, *, run_id: str | None = None) -> DummyLogger:
+        return dummy_logger
+
+    monkeypatch.setattr(get_data, "_configure_logging", fake_configure)
+
+    exit_code = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--date",
+            "20240101",
+            "--log-level",
+            "ERROR",
+            "--limit",
+            "0",
+        ]
+    )
+
+    assert exit_code == 0
+    assert invocations == [step.name for step in stub_steps]
+
+    for step in stub_steps:
+        final_output = output_dir / (
+            f"output.{get_data._DEFAULT_OUTPUT_STEMS[step.name]}_20240101.csv"
+        )
+        working_output = final_output.with_name(f".{final_output.name}.tmp")
+        sentinel = final_output.with_name(f"{final_output.name}.failed")
+        stemless = final_output.with_suffix("")
+        assert not final_output.exists()
+        assert not Path(f"{final_output}.meta.yaml").exists()
+        assert not final_output.with_name(f"{final_output.stem}_failure_cases.csv").exists()
+        assert not final_output.with_suffix(".quality.json").exists()
+        assert not Path(f"{stemless}_quality_report_table.csv").exists()
+        assert not Path(f"{stemless}_data_correlation_report_table.csv").exists()
+        assert not working_output.exists()
+        assert not sentinel.exists()
 
 
 def test_get_data_forwards_skip_existing_flag(
