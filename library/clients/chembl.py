@@ -8,7 +8,7 @@ from collections.abc import Iterable, Iterator
 from itertools import islice
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, TypeVar, cast
+from typing import Any, Callable, TypeVar, cast
 
 import requests
 from cachetools import TTLCache
@@ -36,10 +36,12 @@ class ChemblClient:
         intended for tests.
     """
 
-    session: Session = field(init=False)
     cache: TTLCache[str, dict[str, Any]] = field(init=False)
     _cache_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
-    _session_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _session_local: threading.local = field(init=False)
+    _sessions: set[Session] = field(init=False)
+    _sessions_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _session_factory: Callable[[], Session] = field(init=False)
 
     def __init__(
         self,
@@ -51,7 +53,12 @@ class ChemblClient:
     ) -> None:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
-        self.session = session or session_with_retry(api, retry)
+        if session is not None:
+            self._session_factory = lambda session=session: session
+        else:
+            self._session_factory = lambda api=api, retry=retry: session_with_retry(
+                api, retry
+            )
         ttl = chembl.cache_ttl if chembl is not None else ChemblCacheCfg().cache_ttl
         maxsize = (
             chembl.cache_maxsize
@@ -60,7 +67,9 @@ class ChemblClient:
         )
         self.cache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._cache_lock = threading.Lock()
-        self._session_lock = threading.Lock()
+        self._session_local = threading.local()
+        self._sessions = set()
+        self._sessions_lock = threading.Lock()
 
     def close(self) -> None:
         """Close the underlying HTTP session.
@@ -69,7 +78,14 @@ class ChemblClient:
         :class:`requests.Session` instance. It is safe to call multiple times.
         """
 
-        self.session.close()
+        with self._sessions_lock:
+            sessions = list(self._sessions)
+            self._sessions.clear()
+        for session in sessions:
+            close = getattr(session, "close", None)
+            if callable(close):
+                close()
+        self._session_local = threading.local()
 
     def __enter__(self) -> ChemblClient:
         """Return ``self`` when entering a context manager."""
@@ -92,6 +108,24 @@ class ChemblClient:
 
         self.close()
         return None
+
+    def _register_session(self, session: Session) -> None:
+        with self._sessions_lock:
+            self._sessions.add(session)
+
+    def _get_session(self) -> Session:
+        session = cast(Session | None, getattr(self._session_local, "session", None))
+        if session is None:
+            session = self._session_factory()
+            self._register_session(session)
+            setattr(self._session_local, "session", session)
+        return session
+
+    @property
+    def session(self) -> Session:
+        """Return the session bound to the current thread."""
+
+        return self._get_session()
 
     def request_json(
         self, url: str, *, cfg: ApiCfg, timeout: float | None = None
@@ -149,33 +183,33 @@ class ChemblClient:
                 event, extra={"url": url, "attempt": attempt, "rps": cfg.rps}
             )
             try:
-                with self._session_lock:
-                    with self.session.get(
-                        url, timeout=(cfg.timeout_connect, read_timeout)
-                    ) as response:
-                        response.raise_for_status()
-                        try:
-                            data = cast(dict[str, Any], response.json())
-                        except ValueError as exc:
-                            logger.exception("json_error", extra={"url": url})
-                            raise ValueError(
-                                f"invalid JSON in response from {url}"
-                            ) from exc
-                        logger.debug(
-                            "request_ok",
-                            extra={
-                                "url": url,
-                                "status": getattr(response, "status_code", None),
-                                "rps": cfg.rps,
-                            },
-                        )
-                        with self._cache_lock:
-                            cached = self.cache.get(cache_key)
-                            if cached is not None:
-                                return cast(dict[str, Any], cached)
-                            self.cache[cache_key] = data
-                            logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
-                            return data
+                session = self._get_session()
+                with session.get(
+                    url, timeout=(cfg.timeout_connect, read_timeout)
+                ) as response:
+                    response.raise_for_status()
+                    try:
+                        data = cast(dict[str, Any], response.json())
+                    except ValueError as exc:
+                        logger.exception("json_error", extra={"url": url})
+                        raise ValueError(
+                            f"invalid JSON in response from {url}"
+                        ) from exc
+                    logger.debug(
+                        "request_ok",
+                        extra={
+                            "url": url,
+                            "status": getattr(response, "status_code", None),
+                            "rps": cfg.rps,
+                        },
+                    )
+                    with self._cache_lock:
+                        cached = self.cache.get(cache_key)
+                        if cached is not None:
+                            return cast(dict[str, Any], cached)
+                        self.cache[cache_key] = data
+                        logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
+                        return data
             except (requests.RequestException, ValueError) as exc:
                 last_exc = exc
                 if attempt >= total_attempts:
