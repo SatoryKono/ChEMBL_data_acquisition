@@ -92,6 +92,39 @@ def test_write_meta_yaml_preserves_existing_columns(tmp_path: Path) -> None:
     assert data["stats"] == stats
 
 
+def test_write_meta_yaml_failure_preserves_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    csv_path = tmp_path / "output.csv"
+    csv_path.write_text("id\n1\n", encoding="utf-8")
+    meta_path = csv_path.with_name(csv_path.name + ".meta.yaml")
+    meta_path.write_text("sentinel: true\n", encoding="utf-8")
+
+    stats: Stats = {
+        "rows_total": 1,
+        "rows_kept": 1,
+        "rows_dropped": 0,
+        "output_sha256": "deadbeef",
+    }
+
+    def failing_dump(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(yaml, "safe_dump", failing_dump)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        write_meta_yaml(
+            csv_path=csv_path,
+            command="cmd",
+            config_subset={},
+            inputs={},
+            stats=stats,
+            schema="Schema",
+        )
+
+    assert meta_path.read_text(encoding="utf-8") == "sentinel: true\n"
+
+
 def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """_git_sha uses the ``GIT_SHA`` environment variable when available."""
 
