@@ -184,7 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if args.print_config:
             print_config(cfg)
-            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            configure_logger(log_cfg)
             logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
@@ -208,7 +208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.same_doc is None or args.all_doc is None:
             raise ValueError("same_doc and all_doc paths must be provided")
 
-        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        logger = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         logger.error(
             "config_error",

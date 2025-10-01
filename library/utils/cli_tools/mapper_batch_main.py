@@ -115,9 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     cfg = cli.apply_config_overrides(args, parser, args.config)
     ensure_dirs(cfg)
-    logger = configure_logger(
-        log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt
-    )
+    logger = configure_logger(log_cfg)
     if args.print_config:
         print_config(cfg)
         logger.info("pipeline_end", exit_code=0)

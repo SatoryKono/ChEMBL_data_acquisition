@@ -23,6 +23,8 @@ def _configure_logger_factory(loggers: list[DummyLogger]):
     def _configure_logger(
         cfg: object, *, fmt: str | None = None, datefmt: str | None = None
     ) -> DummyLogger:
+        if fmt is not None or datefmt is not None:
+            raise AssertionError("format overrides should not be supplied")
         logger = DummyLogger()
         logger.config = {"fmt": fmt, "datefmt": datefmt, "cfg": cfg}
         loggers.append(logger)
@@ -43,8 +45,6 @@ def test_main_invokes_run_without_print_config(
 
     cfg = Config()
     cfg.api.user_agent = "test@example.org"
-    cfg.log.format = "json"
-    cfg.log.datefmt = "iso"
     monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *_, **__: cfg)
     monkeypatch.setattr(cli, "ensure_dirs", lambda *_: None)
 
@@ -89,8 +89,8 @@ def test_main_invokes_run_without_print_config(
         event == "pipeline_end" and payload.get("exit_code") == 0
         for event, payload in configured_loggers[-1].events
     )
-    assert configured_loggers[-1].config["fmt"] == cfg.log.format
-    assert configured_loggers[-1].config["datefmt"] == cfg.log.datefmt
+    assert configured_loggers[-1].config["fmt"] is None
+    assert configured_loggers[-1].config["datefmt"] is None
 
 
 def test_main_prints_config_when_requested(
@@ -104,8 +104,6 @@ def test_main_prints_config_when_requested(
     )
 
     cfg = Config()
-    cfg.log.format = "json"
-    cfg.log.datefmt = "iso"
     monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *_, **__: cfg)
     monkeypatch.setattr(cli, "ensure_dirs", lambda *_: None)
 

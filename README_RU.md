@@ -316,14 +316,8 @@ api:
 
 ## Логирование
 
-CLI-хелперы настраивают структурированное JSON-логирование через `library.logging_setup.configure_logger`. Управляйте уровнем и форматом логов переменными окружения или флагами CLI.
+CLI-хелперы настраивают структурированное JSON-логирование через `library.logging_setup.configure_logger`. Управляйте уровнем логов переменными окружения или флагами CLI. Формат JSON фиксирован и не настраивается.
 
-Пример включения JSON-формата через переменную окружения:
-
-```bash
-LOG_FORMAT=json python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.csv --log-level INFO
-```
 
 Уровень логов можно задать флагом `--log-level` или переменной `CHEMBL_DA_LOG_LEVEL`:
 
@@ -435,8 +429,6 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__IUPHAR_TARGET_CSV` |
 | `CHEMBL_DA_LIMITER_CACHE_MAXSIZE` | `CHEMBL_DA__SYSTEM__RATE__LIMITER_CACHE_MAXSIZE` |
 | `CHEMBL_DA_LIMITER_CACHE_TTL` | `CHEMBL_DA__SYSTEM__RATE__LIMITER_CACHE_TTL` |
-| `CHEMBL_DA_LOG_DATEFMT` | `CHEMBL_DA__SYSTEM__LOG__DATEFMT` |
-| `CHEMBL_DA_LOG_FORMAT` | `CHEMBL_DA__SYSTEM__LOG__FORMAT` |
 | `CHEMBL_DA_LOG_LEVEL` | `CHEMBL_DA__SYSTEM__LOG__LEVEL` |
 | `CHEMBL_DA_MOLECULE_CATALOG_CACHE` | `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH` |
 | `CHEMBL_DA_OPENALEX_BASE` | `CHEMBL_DA__SOURCES__OPENALEX__BASE` |
