@@ -20,7 +20,14 @@ from typing import Protocol, TypeVar, overload
 import pandas as pd
 from pandera.errors import SchemaErrors
 
-from .cli import add_common_arguments, path_argument
+from .cli import (
+    LoggerConfig,
+    add_common_arguments,
+    apply_config_overrides,
+    configure_logger,
+    path_argument,
+)
+from .config import Config, ensure_dirs, print_config
 from .log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml
 from .sidecar import SidecarErrors
@@ -51,6 +58,60 @@ Fetcher = Callable[[], Iterable[pd.DataFrame] | pd.DataFrame]
 
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
+
+
+def run_cli_command(
+    *,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    log_cfg: LoggerConfig,
+    mapping: Mapping[str, str],
+    run: Callable[[Config, argparse.Namespace], int],
+    logger: logging.Logger | None = None,
+) -> int:
+    """Execute CLI boilerplate shared by data acquisition commands."""
+
+    log_cfg.level = getattr(args, "log_level", log_cfg.level)
+    configured_logger = configure_logger(log_cfg)
+    use_logger = logger or configured_logger
+    use_logger.info("pipeline_start", run_id=log_cfg.run_id)
+
+    try:
+        cfg: Config = apply_config_overrides(
+            args,
+            parser,
+            getattr(args, "config", None),
+            mapping=mapping,
+        )
+        if getattr(args, "print_config", False):
+            print_config(cfg)
+            configure_logger(log_cfg)
+            use_logger.info("pipeline_done", run_id=log_cfg.run_id)
+            return 0
+        ensure_dirs(cfg)
+        use_logger = configure_logger(log_cfg)
+    except (ValueError, TypeError) as exc:
+        use_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(getattr(args, "config", "")),
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        use_logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    exit_code = run(cfg, args)
+    if exit_code == 0:
+        use_logger.info("pipeline_done", run_id=log_cfg.run_id)
+    else:
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+    return exit_code
 
 
 @overload
