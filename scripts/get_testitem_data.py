@@ -92,25 +92,6 @@ class ReadInputIdsResult:
 
 
 
-@dataclass
-class ParentEnrichmentPreparation:
-    """Intermediate data required to attach parent identifiers."""
-
-    df: pd.DataFrame
-    lookup_data: "ParentLookupPreparedData"
-    parent_catalog: dict[str, str] | None
-    parent_catalog_source: str
-    parent_stats: "ParentLookupStats"
-
-
-@dataclass
-class ParentEnrichmentResult:
-    """Result returned after running the parent enrichment stage."""
-
-    df: pd.DataFrame
-    parent_stats: "ParentLookupStats"
-
-
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
     """Raise a :class:`ValueError` if the legacy typo column is present."""
 
