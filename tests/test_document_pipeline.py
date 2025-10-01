@@ -1,10 +1,13 @@
 import threading
 from collections import Counter
+from collections.abc import Iterable
 from itertools import count
+from pathlib import Path
 
 import pandas as pd
 import pytest
 import requests
+from pandera.errors import SchemaErrors
 
 from library.config import Config
 import scripts.get_document_data as document_script
@@ -489,3 +492,90 @@ def test_fetch_pubmed_records_logs_compact_batch(
     assert payload["error"] == "boom"
     assert payload["pmids_count"] == len(pmids)
     assert payload["pmids_sample"] == pmids[:5] + ["..."]
+
+
+def test_finalise_export_failure_skips_write_done(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validation failures should not emit ``write_done`` logs."""
+
+    cfg = Config()
+    df = pd.DataFrame(
+        {
+            "document_chembl_id": ["CHEMBL1"],
+            "PubMed.PMID": ["123"],
+        }
+    )
+    output = tmp_path / "documents.csv"
+
+    info_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_info(
+        event: str, *args: object, extra: dict[str, object] | None = None, **payload: object
+    ) -> None:
+        record = dict(payload)
+        if extra:
+            record.update(extra)
+        info_events.append((event, record))
+
+    def fake_validate(frame: pd.DataFrame, lazy: bool = True) -> pd.DataFrame:
+        failure_cases = pd.DataFrame(
+            [
+                {
+                    "index": 0,
+                    "column": "document_chembl_id",
+                    "failure_case": "invalid",
+                }
+            ]
+        )
+        exc = SchemaErrors.__new__(SchemaErrors)
+        exc.args = ("invalid",)
+        exc.failure_cases = failure_cases
+        exc.validated_data = frame.iloc[0:0]
+        exc.message = {"error": "invalid"}
+        raise exc
+
+    def fake_write_csv(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: object,
+        key_cols: list[str] | None = None,
+        **_: object,
+    ) -> Path:
+        list(chunks)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+        return path
+
+    captured_errors: list[Path] = []
+
+    def fake_save(self: gdd.SidecarErrors, path: Path, *, cfg: Config | None = None) -> None:
+        captured_errors.append(path)
+
+    monkeypatch.setattr(gdd.logger, "info", fake_info)
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", fake_validate)
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv)
+    monkeypatch.setattr(gdd.SidecarErrors, "save", fake_save, raising=False)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **_: None)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd,
+        "_load_export_ready_frame",
+        lambda path, cfg: pd.DataFrame(columns=list(gdd._EXPORT_COLUMNS)),
+    )
+
+    exit_code = gdd._finalise_export(
+        df,
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=["document_chembl_id"],
+    )
+
+    assert exit_code == 1
+    assert all(event != "write_done" for event, _payload in info_events)
+    assert captured_errors
