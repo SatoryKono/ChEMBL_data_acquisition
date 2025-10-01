@@ -1001,25 +1001,65 @@ def fetch_iuphar(
         )
         chembl_for_merge = chembl_for_merge.assign(**{merge_column: placeholder})
 
+    overlapping_columns = (
+        set(chembl_for_merge.columns)
+        .intersection(uniprot_df.columns)
+        .difference({"original_id"})
+    )
+
     combined_df = pd.merge(
         chembl_for_merge,
         uniprot_df,
         left_on=merge_column,
         right_on="original_id",
         how="left",
+        suffixes=("_chembl", "_uniprot"),
     )
+
+    def _is_missing_token(value: object) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, float) and pd.isna(value):
+            return True
+        if isinstance(value, str):
+            token = value.strip()
+            return token in {"", "-", "None"}
+        return False
+
+    def _prefer_uniprot(
+        uniprot_series: pd.Series | None, chembl_series: pd.Series | None
+    ) -> pd.Series:
+        if uniprot_series is None and chembl_series is None:
+            return pd.Series(dtype=object)
+        if uniprot_series is None:
+            return chembl_series.astype(object) if chembl_series is not None else pd.Series(dtype=object)
+        if chembl_series is None:
+            return uniprot_series.astype(object)
+
+        preferred = uniprot_series.astype(object)
+        fallback = chembl_series.astype(object)
+        result = fallback.copy()
+        mask = ~preferred.apply(_is_missing_token)
+        result.loc[mask] = preferred.loc[mask]
+        return result
+
+    for column in sorted(overlapping_columns):
+        chembl_name = f"{column}_chembl"
+        uniprot_name = f"{column}_uniprot"
+        chembl_series = combined_df.get(chembl_name)
+        uniprot_series = combined_df.get(uniprot_name)
+        combined_df[column] = _prefer_uniprot(uniprot_series, chembl_series)
+
+    suffix_columns = [
+        column
+        for column in combined_df.columns
+        if column.endswith("_chembl") or column.endswith("_uniprot")
+    ]
+    if suffix_columns:
+        combined_df = combined_df.drop(columns=suffix_columns, errors="ignore")
 
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
-    if merge_column == "uniprot_id":
-        left_series = combined_df.pop("uniprot_id_x") if "uniprot_id_x" in combined_df else None
-        right_series = combined_df.pop("uniprot_id_y") if "uniprot_id_y" in combined_df else None
-        if left_series is not None and right_series is not None:
-            combined_df["uniprot_id"] = right_series.fillna(left_series)
-        elif left_series is not None:
-            combined_df["uniprot_id"] = left_series
-        elif right_series is not None:
-            combined_df["uniprot_id"] = right_series
 
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
