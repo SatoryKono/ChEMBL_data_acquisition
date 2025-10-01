@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterator, Sequence
 from itertools import islice
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pandas as pd
 
 
 def _ensure_project_root() -> None:
@@ -27,8 +31,8 @@ from pandera.errors import SchemaErrors
 from library import chembl_library as cl
 from library import cli
 from library import io
-from library.csv_utils import write_csv_deterministic
-from library.clients import ChemblClient
+from library.csv_utils import write_csv_chunks_deterministic
+from library.clients import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -110,13 +114,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             logger.info("process_offset", offset=offset)
 
         # Apply the ``limit`` without materialising the entire iterator first.
-        # ``itertools.islice`` allows lazy slicing; converting to ``list`` enables
-        # length calculation for logging purposes.
-        ids: Iterable[str] = ids_iter
-        if limit is not None:
-            limited = list(islice(ids_iter, limit))
-            ids = limited
-            logger.info("process_limit", limit=len(limited))
+        ids = islice(ids_iter, limit) if limit is not None else ids_iter
 
         enrichment_cfg = cfg.activity_enrichment
         extra_columns: list[str] = []
@@ -125,116 +123,186 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             extra_columns.append(action_cfg.column)
         extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
 
-        try:
-            df = cl.get_activities(
-                ids,
-                cfg=cfg.api,
-                client=client,
-                chunk_size=cfg.activity.batch_size,
-                timeout=cfg.activity.timeout,
-                **extra_kwargs,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "activity_fetch_failed",
-                extra={"msg": str(exc)},
-                error=str(exc),
-                batch_size=cfg.activity.batch_size,
-                timeout=cfg.activity.timeout,
-            )
-            return 1
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        df = normalize_activities(df)
-        df = add_pipeline_metadata(df)
-        df = compute_activity_bounds(df, cfg.activity_bounds)
-        df = apply_activity_annotations(
-            df,
-            action_cfg=enrichment_cfg.action_type,
-            properties_cfg=enrichment_cfg.activity_properties,
-        )
-        # Determine final column order: schema-defined columns first in their
-        # declared sequence, followed by any additional columns sorted
-        # alphabetically to provide deterministic output.
-        schema_cols = list(ActivitiesSchema.columns)
-        head = [c for c in schema_cols if c in df.columns]
-        tail = sorted(c for c in df.columns if c not in schema_cols)
-        col_order = head + tail
-        rows_total = len(df)
-        exit_code = 0
+
+        processed_ids = 0
+
+        def _iter_ids() -> Iterator[str]:
+            nonlocal processed_ids
+            for identifier in ids:
+                processed_ids += 1
+                yield identifier
+
+        id_chunks = _chunked(_iter_ids(), cfg.activity.batch_size)
+
         required_cols = {
             name for name, col in ActivitiesSchema.columns.items() if col.required
         }
         optional_cols = set(ActivitiesSchema.columns) - required_cols
-        missing_required = required_cols - set(df.columns)
-        missing_optional = optional_cols - set(df.columns)
-        if not missing_required:
-            if missing_optional:
-                logger.warning(
-                    "optional_columns_missing",
-                    columns=sorted(missing_optional),
-                )
-            try:
-                validation_result = validate_activities(df, return_result=True)
-            except SchemaErrors as exc:
-                failure_path = Path(output).with_name(
-                    f"{Path(output).stem}_failure_cases.csv"
-                )
-                errors = SidecarErrors()
-                for row in exc.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation_failed",
-                    failures=len(exc.failure_cases),
-                    path=str(failure_path),
-                )
-                df = getattr(exc, "validated_data", df)
-                exit_code = 1
-            else:
-                df = validation_result.data
-                if not validation_result.failure_cases.empty:
-                    failure_path = Path(output).with_name(
-                        f"{Path(output).stem}_failure_cases.csv"
+        present_columns: set[str] = set()
+        total_failures = 0
+        rows_total = 0
+        rows_kept = 0
+        rows_dropped = 0
+        exit_code = 0
+        failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
+        errors = SidecarErrors()
+
+        chunk_paths: list[Path] = []
+        all_columns: set[str] = set()
+
+        validation_enabled = True
+        missing_required_columns: set[str] = set()
+
+        csv_path: Path | None = None
+        with TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            for chunk_index, chunk_ids in enumerate(id_chunks):
+                try:
+                    chunk_df = cl.get_activities(
+                        chunk_ids,
+                        cfg=cfg.api,
+                        client=client,
+                        chunk_size=cfg.activity.batch_size,
+                        timeout=cfg.activity.timeout,
+                        **extra_kwargs,
                     )
-                    errors = SidecarErrors()
-                    for row in validation_result.failure_cases.to_dict("records"):
-                        errors.add_error(row)
-                    errors.save(failure_path)
+                except (requests.RequestException, ValueError) as exc:
                     logger.error(
-                        "validation_failed",
-                        failures=len(validation_result.failure_cases),
-                        path=str(failure_path),
+                        "activity_fetch_failed",
+                        extra={"msg": str(exc)},
+                        error=str(exc),
+                        batch_size=cfg.activity.batch_size,
+                        timeout=cfg.activity.timeout,
                     )
-                    exit_code = 1
-        else:
+                    return 1
+
+                chunk_df = normalize_activities(chunk_df)
+                chunk_df = add_pipeline_metadata(chunk_df)
+                chunk_df = compute_activity_bounds(chunk_df, cfg.activity_bounds)
+                chunk_df = apply_activity_annotations(
+                    chunk_df,
+                    action_cfg=enrichment_cfg.action_type,
+                    properties_cfg=enrichment_cfg.activity_properties,
+                )
+
+                chunk_columns = set(chunk_df.columns)
+                present_columns.update(chunk_columns)
+                missing_chunk_required = required_cols - chunk_columns
+                if missing_chunk_required:
+                    missing_required_columns.update(missing_chunk_required)
+                    validation_enabled = False
+
+                rows_total += len(chunk_df)
+
+                validated_chunk = chunk_df
+                if validation_enabled and not chunk_df.empty:
+                    try:
+                        validation_result = validate_activities(
+                            chunk_df, return_result=True
+                        )
+                    except SchemaErrors as exc:
+                        for row in exc.failure_cases.to_dict("records"):
+                            errors.add_error(row)
+                        total_failures += len(exc.failure_cases)
+                        logger.error(
+                            "validation_failed",
+                            failures=len(exc.failure_cases),
+                            path=str(failure_path),
+                        )
+                        validated_chunk = getattr(exc, "validated_data", chunk_df)
+                        exit_code = 1
+                    else:
+                        validated_chunk = validation_result.data
+                        if not validation_result.failure_cases.empty:
+                            cases = validation_result.failure_cases.to_dict("records")
+                            for row in cases:
+                                errors.add_error(row)
+                            total_failures += len(cases)
+                            logger.error(
+                                "validation_failed",
+                                failures=len(cases),
+                                path=str(failure_path),
+                            )
+                            exit_code = 1
+
+                rows_kept += len(validated_chunk)
+                rows_dropped += len(chunk_df) - len(validated_chunk)
+                present_columns.update(validated_chunk.columns)
+                all_columns.update(validated_chunk.columns)
+
+                chunk_path = Path(tmpdir) / f"chunk_{chunk_index}.pkl"
+                validated_chunk.to_pickle(chunk_path)
+                chunk_paths.append(chunk_path)
+
+            if not chunk_paths:
+                empty_chunk = apply_activity_annotations(
+                    compute_activity_bounds(
+                        add_pipeline_metadata(pd.DataFrame()), cfg.activity_bounds
+                    ),
+                    action_cfg=enrichment_cfg.action_type,
+                    properties_cfg=enrichment_cfg.activity_properties,
+                )
+                present_columns.update(empty_chunk.columns)
+                all_columns.update(empty_chunk.columns)
+                chunk_path = Path(tmpdir) / "chunk_0.pkl"
+                empty_chunk.to_pickle(chunk_path)
+                chunk_paths.append(chunk_path)
+
+            schema_cols = list(ActivitiesSchema.columns)
+            head = [c for c in schema_cols if c in all_columns]
+            tail = sorted(c for c in all_columns if c not in schema_cols)
+            col_order = head + tail
+
+            def _iter_validated_chunks() -> Iterator[pd.DataFrame]:
+                for path in chunk_paths:
+                    df_chunk = pd.read_pickle(path)
+                    if col_order:
+                        df_chunk = df_chunk.reindex(columns=col_order)
+                    yield df_chunk
+
+            try:
+                key_cols = [c for c in ["activity_id"] if c in col_order]
+                sort_columns = key_cols or sorted(col_order)
+                csv_path = write_csv_chunks_deterministic(
+                    _iter_validated_chunks(),
+                    output,
+                    key_cols=sort_columns,
+                    col_order=col_order,
+                    chunksize=cfg.io.csv_chunksize,
+                    sort_chunksize=cfg.io.csv_chunksize,
+                    sep=cfg.io.csv_sep,
+                    encoding=cfg.io.csv_encoding,
+                    cfg=cfg,
+                )
+                logger.info("write_done", rows=rows_kept, path=str(csv_path))
+            except OSError as exc:
+                logger.error(
+                    "write_fail",
+                    error=str(exc),
+                    path=str(output),
+                )
+                return 1
+
+        if limit is not None:
+            logger.info("process_limit", limit=processed_ids)
+
+        if missing_required_columns:
             logger.warning(
                 "validation_skipped",
-                missing_columns=sorted(missing_required),
+                missing_columns=sorted(missing_required_columns),
             )
-        rows_kept = len(df)
-        rows_dropped = rows_total - rows_kept
-        try:
-            key_cols = [c for c in ["activity_id"] if c in df.columns]
-            sort_columns = key_cols or sorted(df.columns)
-            csv_path = write_csv_deterministic(
-                df,
-                output,
-                key_cols=sort_columns,
-                col_order=col_order,
-                chunksize=cfg.io.csv_chunksize,
-                sort_chunksize=cfg.io.csv_chunksize,
-                sep=cfg.io.csv_sep,
-                encoding=cfg.io.csv_encoding,
-                cfg=cfg,
+            validation_enabled = False
+        elif optional_cols - present_columns:
+            logger.warning(
+                "optional_columns_missing",
+                columns=sorted(optional_cols - present_columns),
             )
-            logger.info("write_done", rows=rows_kept, path=str(csv_path))
-        except OSError as exc:
-            logger.error(
-                "write_fail",
-                error=str(exc),
-                path=str(output),
-            )
-            return 1
+
+        if total_failures:
+            errors.save(failure_path)
+
+        assert csv_path is not None
 
         stats: Stats = {
             "rows_total": rows_total,
@@ -252,7 +320,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
         try:
-            analyze_table_quality(df, table_name=str(output.with_suffix("")))
+            analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
         except ValueError as exc:
             logger.error(
                 "quality_report_failed",
