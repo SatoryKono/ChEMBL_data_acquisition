@@ -297,6 +297,7 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
         {
             "target_chembl_id": ["C1"],
             "uniprot_id": ["P1"],
+            "mapping_uniprot_id": ["P1|ALT1"],
             "pref_name": ["pref"],
             "component_description": ["desc"],
             "gene": ["GENE"],
@@ -318,6 +319,14 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     out = tmp_path / "iuphar.csv"
 
     def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        input_df = pd.read_csv(
+            args.input_csv,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            dtype=str,
+        )
+        assert "mapping_uniprot_id" in input_df.columns
+        assert input_df.loc[0, "mapping_uniprot_id"] == "P1|ALT1"
         pd.DataFrame({"uniprot_id": ["P1"], "IUPHAR_class": ["Enzyme"]}).to_csv(
             args.output_csv, index=False
         )
