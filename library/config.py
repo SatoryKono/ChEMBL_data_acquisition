@@ -1110,6 +1110,28 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     return session
 
 
+def _session_with_mailto_header(
+    api: ApiCfg, retry: RetryCfg, mailto: str
+) -> Session:
+    """Return a session configured with the ``mailto`` contact header."""
+
+    session = session_with_retry(api, retry)
+    session.headers["mailto"] = mailto
+    return session
+
+
+def openalex_session(api: ApiCfg, retry: RetryCfg, cfg: OpenAlexCfg) -> Session:
+    """Return a session configured for OpenAlex requests."""
+
+    return _session_with_mailto_header(api, retry, cfg.mailto)
+
+
+def crossref_session(api: ApiCfg, retry: RetryCfg, cfg: CrossRefCfg) -> Session:
+    """Return a session configured for CrossRef requests."""
+
+    return _session_with_mailto_header(api, retry, cfg.mailto)
+
+
 def _set_by_path(data: dict[str, Any], path: list[str], value: Any) -> None:
     cur: dict[str, Any] = data
     for key in path[:-1]:
@@ -1616,6 +1638,8 @@ __all__ = [
     "RateCfg",
     "RetryCfg",
     "session_with_retry",
+    "openalex_session",
+    "crossref_session",
     "LogCfg",
     "ChemblSourceCfg",
     "SourcesCfg",
