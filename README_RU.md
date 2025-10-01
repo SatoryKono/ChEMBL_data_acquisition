@@ -217,8 +217,13 @@ pre-commit run --all-files
 
 ```dotenv
 CHEMBL_DA_LOG_LEVEL=INFO
-CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
+CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 ```
+
+Допустимо указывать как короткий алиас `CHEMBL_DA_BASE`, так и полное имя
+`CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; обе переменные настраивают одно
+и то же значение. Полный список доступных алиасов приведён в
+[`library/config.py`](library/config.py#L1471-L1498).
 
 Типовые переменные с контактными e-mail приведены в `.env.example`.
 

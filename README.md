@@ -288,8 +288,17 @@ to confirm nothing broke during the upgrade.
 
 ```dotenv
 CHEMBL_DA_LOG_LEVEL=INFO
-CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
+CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 ```
+
+**EN.** Use either the short alias `CHEMBL_DA_BASE` or the fully qualified
+`CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; both expand to the same setting.
+Refer to the [alias table](library/config.py#L1471-L1498) in
+`library/config.py` for all supported mappings. / **RU.** Допустимо указывать
+как короткий алиас `CHEMBL_DA_BASE`, так и полное имя
+`CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE` — обе переменные настраивают
+одно и то же значение. Полный список алиасов приведён в
+[`library/config.py`](library/config.py#L1471-L1498).
 
 См. также файл `.env.example` с типовыми переменными для контактных e-mail.
 

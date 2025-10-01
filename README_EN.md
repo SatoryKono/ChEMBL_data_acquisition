@@ -233,8 +233,13 @@ Example file:
 
 ```dotenv
 CHEMBL_DA_LOG_LEVEL=INFO
-CHEMBL_API_BASE=https://www.ebi.ac.uk/chembl/api/data
+CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 ```
+
+Use either the short alias `CHEMBL_DA_BASE` or the fully qualified
+`CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; both expand to the same setting.
+See the [alias table](library/config.py#L1471-L1498) in `library/config.py` for
+the complete mapping list.
 
 See `.env.example` for typical contact e-mail variables.
 
