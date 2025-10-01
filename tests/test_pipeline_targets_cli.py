@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -61,7 +62,7 @@ def test_cli_forwards_batch_size(
         return PipelineResult(chembl=pd.DataFrame({"target_chembl_id": ["CHEMBL1"]}))
 
     def fake_write_csv(
-        df: pd.DataFrame,
+        data: pd.DataFrame | Iterable[pd.DataFrame],
         path: Path | str,
         *,
         cfg: Config,
@@ -69,7 +70,14 @@ def test_cli_forwards_batch_size(
         encoding: str | None = None,
     ) -> Path:
         captured["written_path"] = Path(path)
-        captured["written_df"] = df.copy()
+        if isinstance(data, pd.DataFrame):
+            chunks = [data.copy()]
+        else:
+            chunks = [chunk.copy() for chunk in data]
+        captured["written_chunks"] = chunks
+        captured["written_df"] = (
+            pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
+        )
         return Path(path)
 
     dummy_logger = _DummyLogger()
@@ -130,7 +138,7 @@ def test_cli_limit_restricts_rows(
         return PipelineResult(chembl=pd.DataFrame({"target_chembl_id": ["CHEMBL1"]}))
 
     def fake_write_csv(
-        df: pd.DataFrame,
+        data: pd.DataFrame | Iterable[pd.DataFrame],
         path: Path | str,
         *,
         cfg: Config,
@@ -138,7 +146,14 @@ def test_cli_limit_restricts_rows(
         encoding: str | None = None,
     ) -> Path:
         captured["written_path"] = Path(path)
-        captured["written_df"] = df.copy()
+        if isinstance(data, pd.DataFrame):
+            chunks = [data.copy()]
+        else:
+            chunks = [chunk.copy() for chunk in data]
+        captured["written_chunks"] = chunks
+        captured["written_df"] = (
+            pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
+        )
         return Path(path)
 
     dummy_logger = _DummyLogger()
@@ -183,13 +198,15 @@ def test_cli_does_not_print_config_when_flag_missing(
         return PipelineResult(chembl=pd.DataFrame({"target_chembl_id": ["CHEMBL1"]}))
 
     def fake_write_csv(
-        df: pd.DataFrame,
+        data: pd.DataFrame | Iterable[pd.DataFrame],
         path: Path | str,
         *,
         cfg: Config,
         sep: str | None = None,
         encoding: str | None = None,
     ) -> Path:
+        if not isinstance(data, pd.DataFrame):
+            list(data)
         return Path(path)
 
     dummy_logger = _DummyLogger()
@@ -214,3 +231,75 @@ def test_cli_does_not_print_config_when_flag_missing(
     assert exit_code == 0
     captured = capsys.readouterr()
     assert captured.out == ""
+
+
+def test_cached_chembl_fetch_uses_chunk_concatenation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chunks = iter(
+        [
+            ["CHEMBL1", "CHEMBL2"],
+            ["CHEMBL3"],
+        ]
+    )
+
+    recorded: dict[str, Any] = {}
+    original_concat = pd.concat
+
+    def spy_concat(objs: Iterable[pd.DataFrame], **kwargs: Any) -> pd.DataFrame:
+        recorded["type"] = type(objs)
+        frames = list(objs)
+        recorded["sizes"] = [len(frame) for frame in frames]
+        return original_concat(frames, **kwargs)
+
+    monkeypatch.setattr(pd, "concat", spy_concat)
+
+    df = cli._cached_chembl_fetch(chunks, Config())
+
+    assert list(df["target_chembl_id"]) == ["CHEMBL1", "CHEMBL2", "CHEMBL3"]
+    assert list(df["source"]) == ["chembl", "chembl", "chembl"]
+    assert recorded["type"].__name__ == "chain"
+    assert recorded["sizes"] == [2, 1]
+
+
+def test_write_outputs_streams_large_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = Config()
+    options = cli.PipelineConfig(
+        input_csv=tmp_path / "input.csv",
+        output_csv=tmp_path / "out.csv",
+        chunk_size=50,
+        batch_size=50,
+    )
+
+    def frame_iterator() -> Iterable[pd.DataFrame]:
+        for idx in range(0, 500, 75):
+            upper = min(idx + 75, 500)
+            ids = [f"CHEMBL{value}" for value in range(idx, upper)]
+            yield pd.DataFrame({"target_chembl_id": ids})
+
+    recorded: dict[str, Any] = {}
+
+    def fake_write_csv(
+        data: pd.DataFrame | Iterable[pd.DataFrame],
+        path: Path | str,
+        *,
+        cfg: Config,
+        sep: str | None = None,
+        encoding: str | None = None,
+    ) -> Path:
+        recorded["path"] = Path(path)
+        recorded["is_generator"] = not isinstance(data, pd.DataFrame)
+        frames = [chunk.copy() for chunk in data] if recorded["is_generator"] else [data.copy()]
+        recorded["chunk_sizes"] = [len(frame) for frame in frames]
+        return Path(path)
+
+    monkeypatch.setattr(cli, "write_csv", fake_write_csv)
+
+    output = cli._write_outputs(cfg, options, frame_iterator())
+
+    assert output == options.output_csv
+    assert recorded["path"] == options.output_csv
+    assert recorded["is_generator"] is True
+    assert recorded["chunk_sizes"] == [75, 75, 75, 75, 75, 75, 50]
