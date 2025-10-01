@@ -19,14 +19,24 @@ class DummyResponse:
 
     status_code = 200
 
-    def __init__(self, payload: dict[str, object]) -> None:
+    def __init__(
+        self, payload: dict[str, object], close_log: list[object] | None = None
+    ) -> None:
         self._payload = payload
+        self._close_log = close_log
+        self.closed = False
 
     def __enter__(self) -> DummyResponse:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
         return None
+
+    def close(self) -> None:
+        self.closed = True
+        if self._close_log is not None:
+            self._close_log.append(True)
 
     def raise_for_status(self) -> None:  # pragma: no cover - no error
         return None
@@ -106,7 +116,7 @@ def test_make_request_serves_cached_results_across_threads(monkeypatch) -> None:
 
     with pc._CACHE_LOCK:
         pc._CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
-        pc._CACHE[url] = payload
+        pc._CACHE[url] = pc._CacheEntry(payload=payload, outcome="hit")  # type: ignore[attr-defined]
 
     results: list[dict[str, object]] = []
     start = threading.Event()
@@ -170,6 +180,34 @@ def test_make_request_cache_reinitialisation_threadsafe(monkeypatch) -> None:
     assert len(calls) >= 1
     with pc._CACHE_LOCK:
         pc._CACHE = None
+
+
+def test_make_request_closes_response(monkeypatch) -> None:
+    """HTTP responses should be closed after use."""
+
+    url = "https://example.org/close-check"
+    payload = {"ok": True}
+    cfg = pl.PubChemCfg(retries=0, delay=0)
+    close_log: list[object] = []
+
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+
+    def fake_get(url: str, timeout: tuple[int, int]) -> DummyResponse:
+        return DummyResponse(payload, close_log=close_log)
+
+    monkeypatch.setattr(session, "get", fake_get)
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    result = pc.make_request(url, cfg)
+
+    assert result == payload
+    assert close_log == [True]
 
 
 def test_get_session_initialises_once_under_concurrency(monkeypatch) -> None:
