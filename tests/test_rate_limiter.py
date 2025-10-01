@@ -23,3 +23,22 @@ def test_rate_limiter_enforces_rps(monkeypatch) -> None:
     for _ in range(5):
         limiter.acquire()
     assert fake_time.sleeps == [0.2, 0.2, 0.2, 0.2]
+
+
+def test_rate_limiter_combined_throttling(monkeypatch) -> None:
+    """Global and service limiters should compose into a combined delay."""
+
+    fake_time = FakeTime()
+    monkeypatch.setattr(rl, "time", fake_time)
+    monkeypatch.setattr(rl, "sleep", fake_time.sleep)
+
+    documents = rl.RateLimiter(rps=10, burst=1)
+    service = rl.RateLimiter(rps=4, burst=1)
+    request = rl.RateLimiter(rps=2, burst=1)
+
+    for _ in range(3):
+        documents.acquire()
+        service.acquire()
+        request.acquire()
+
+    assert fake_time.sleeps == [0.1, 0.25, 0.5, 0.5]

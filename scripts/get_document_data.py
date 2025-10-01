@@ -300,6 +300,16 @@ def fetch_pubmed_records(
         rps=getattr(semantic_scholar_cfg, "rps", None),
         burst=getattr(semantic_scholar_cfg, "burst", None),
     )
+    openalex_service_limiter = _service_limiter(
+        "openalex",
+        rps=getattr(openalex_cfg, "rps", None),
+        burst=getattr(openalex_cfg, "burst", None),
+    )
+    crossref_service_limiter = _service_limiter(
+        "crossref",
+        rps=getattr(crossref_cfg, "rps", None),
+        burst=getattr(crossref_cfg, "burst", None),
+    )
 
     def _acquire_documents(limiter: RateLimiter | None) -> None:
         documents_limiter.acquire()
@@ -433,15 +443,18 @@ def fetch_pubmed_records(
                     len(openalex_jobs), openalex_limiter, openalex_cfg.burst
                 )
                 if openalex_jobs and openalex_workers > 0:
+                    def _openalex_fetch(target_pmid: str) -> dict[str, str]:
+                        _acquire_documents(openalex_service_limiter)
+                        return ocl.fetch_openalex(
+                            session,
+                            target_pmid,
+                            openalex_cfg,
+                            openalex_limiter,
+                        )
+
                     with ThreadPoolExecutor(max_workers=openalex_workers) as pool:
                         future_to_index = {
-                            pool.submit(
-                                ocl.fetch_openalex,
-                                session,
-                                pmid,
-                                openalex_cfg,
-                                openalex_limiter,
-                            ): index
+                            pool.submit(_openalex_fetch, pmid): index
                             for index, pmid in openalex_jobs
                         }
                         for future in as_completed(future_to_index):
@@ -452,15 +465,19 @@ def fetch_pubmed_records(
                     len(crossref_jobs), crossref_limiter, crossref_cfg.burst
                 )
                 if crossref_jobs and crossref_workers > 0:
+                    def _crossref_fetch(target_doi: str) -> dict[str, str]:
+                        if target_doi:
+                            _acquire_documents(crossref_service_limiter)
+                        return ocl.fetch_crossref(
+                            session,
+                            target_doi,
+                            crossref_cfg,
+                            crossref_limiter,
+                        )
+
                     with ThreadPoolExecutor(max_workers=crossref_workers) as pool:
                         future_to_index = {
-                            pool.submit(
-                                ocl.fetch_crossref,
-                                session,
-                                doi,
-                                crossref_cfg,
-                                crossref_limiter,
-                            ): index
+                            pool.submit(_crossref_fetch, doi): index
                             for index, doi in crossref_jobs
                         }
                         for future in as_completed(future_to_index):
