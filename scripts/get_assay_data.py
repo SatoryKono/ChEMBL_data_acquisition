@@ -6,11 +6,12 @@ import sys
 from pathlib import Path
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from functools import partial
 from itertools import islice
 
+import pandas as pd
 import requests
-from pandera.errors import SchemaErrors
 
 # Ensure repository package imports work when the script is executed directly.
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,16 +28,10 @@ from library.cli import (
     configure_logger,
 )
 from library.cli import build_parser as base_parser
-from library.config import (
-    Config,
-    _serialize_paths,
-    ensure_dirs,
-    print_config,
-)
+from library.cli_utils import PipelineError, run_pipeline
+from library.config import Config, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
-from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
 from schemas import AssaysSchema, normalize_assays
@@ -69,153 +64,102 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("invalid_limit", section="assay.limit", limit=limit)
         return 1
 
-    # Prepare HTTP session for ChEMBL requests
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-        try:
-            ids_iter = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
-        except (FileNotFoundError, ValueError) as exc:
-            logger.error(
-                "read_fail",
-                error=str(exc),
-                path=str(args.input_csv),
-            )
-            return 1
+    try:
+        ids_iter = io.read_ids(args.input_csv, column=cfg.assay.column, cfg=cfg.io)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "read_fail",
+            error=str(exc),
+            path=str(args.input_csv),
+        )
+        return 1
 
-        offset = getattr(args, "offset", 0)
-        if offset:
-            ids_iter = islice(ids_iter, offset, None)
-            logger.info("process_offset", offset=offset)
+    offset = getattr(args, "offset", 0)
+    if offset:
+        ids_iter = islice(ids_iter, offset, None)
+        logger.info("process_offset", offset=offset)
 
-        ids = ids_iter
-        if limit is not None:
-            limited_ids = list(islice(ids_iter, limit))
-            ids = limited_ids
-            logger.info("process_limit", limit=len(limited_ids))
+    ids_source: Iterable[str]
+    if limit is not None:
+        limited_ids = list(islice(ids_iter, limit))
+        ids_source = limited_ids
+        logger.info("process_limit", limit=len(limited_ids))
+    else:
+        ids_source = ids_iter
 
-        try:
-            df = cl.get_assays(
-                ids,
-                cfg=cfg.api,
-                client=client,
-                chunk_size=cfg.assay.batch_size,
-                timeout=cfg.assay.timeout,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "assay_fetch_failed",
-                extra={"msg": str(exc)},
-                error=str(exc),
-                batch_size=cfg.assay.batch_size,
-                timeout=cfg.assay.timeout,
-            )
-            return 1
-        df = ap.postprocess_assays(df)
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        df = normalize_assays(df)
-        df = add_pipeline_metadata(df)
-        rows_total = len(df)
-        exit_code = 0
-        required_cols = {
-            name for name, col in AssaysSchema.columns.items() if col.required
-        }
-        optional_cols = set(AssaysSchema.columns) - required_cols
-        missing_required = required_cols - set(df.columns)
-        missing_optional = optional_cols - set(df.columns)
-        if not missing_required:
-            if missing_optional:
-                logger.warning(
-                    "optional_columns_missing",
-                    columns=sorted(missing_optional),
-                )
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
+
+    def fetcher() -> Iterable[pd.DataFrame]:
+        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
             try:
-                validation_result = validate_assays(df, return_result=True)
-            except SchemaErrors as exc:
-                failure_path = Path(output).with_name(
-                    f"{Path(output).stem}_failure_cases.csv"
+                df = cl.get_assays(
+                    ids_source,
+                    cfg=cfg.api,
+                    client=client,
+                    chunk_size=cfg.assay.batch_size,
+                    timeout=cfg.assay.timeout,
                 )
-                errors = SidecarErrors()
-                for row in exc.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
+            except (requests.RequestException, ValueError) as exc:
                 logger.error(
-                    "validation_failed",
-                    failures=len(exc.failure_cases),
-                    path=str(failure_path),
+                    "assay_fetch_failed",
+                    extra={"msg": str(exc)},
+                    error=str(exc),
+                    batch_size=cfg.assay.batch_size,
+                    timeout=cfg.assay.timeout,
                 )
-                df = getattr(exc, "validated_data", df)
-                exit_code = 1
-            else:
-                df = validation_result.data
-                if not validation_result.failure_cases.empty:
-                    failure_path = Path(output).with_name(
-                        f"{Path(output).stem}_failure_cases.csv"
-                    )
-                    errors = SidecarErrors()
-                    for row in validation_result.failure_cases.to_dict("records"):
-                        errors.add_error(row)
-                    errors.save(failure_path)
-                    logger.error(
-                        "validation_failed",
-                        failures=len(validation_result.failure_cases),
-                        path=str(failure_path),
-                    )
-                    exit_code = 1
-        else:
-            logger.warning(
-                "validation_skipped",
-                missing_columns=sorted(missing_required),
-            )
-        rows_kept = len(df)
-        rows_dropped = rows_total - rows_kept
-        # Arrange columns so schema-defined fields appear first while any
-        # additional columns are sorted alphabetically and placed at the end.
-        schema_cols: list[str] = list(AssaysSchema.columns)
-        head = [c for c in schema_cols if c in df.columns]
-        tail = sorted(c for c in df.columns if c not in schema_cols)
-        col_order = head + tail
-        try:
-            key_cols = [c for c in ["assay_chembl_id"] if c in df.columns]
-            csv_path = io.write_csv(
-                df,
-                output,
-                cfg=cfg,
-                key_cols=key_cols or None,
-                col_order=col_order,
-            )
-            logger.info("write_done", rows=rows_kept, path=str(csv_path))
-        except OSError as exc:
-            logger.error(
-                "write_fail",
-                error=str(exc),
-                path=str(output),
-            )
-            return 1
+                raise PipelineError(str(exc)) from exc
+            yield df
 
-        stats: Stats = {
-            "rows_total": rows_total,
-            "rows_kept": rows_kept,
-            "rows_dropped": rows_dropped,
-            "output_sha256": file_sha256(csv_path),
-        }
-        write_meta_yaml(
-            csv_path=csv_path,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            stats=stats,
-            schema="AssaysSchema",
+    metadata_hooks = [
+        ap.postprocess_assays,
+        normalize_assays,
+        add_pipeline_metadata,
+    ]
+
+    validators = [partial(validate_assays, return_result=True)]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Sequence[str],
+        key_cols: Sequence[str],
+    ) -> Path:
+        frames = [chunk for chunk in chunks]
+        if frames:
+            df = pd.concat(frames, ignore_index=True)
+        else:
+            df = pd.DataFrame(columns=col_order)
+        resolved_keys = list(key_cols) or None
+        return io.write_csv(
+            df,
+            destination,
+            cfg=cfg,
+            key_cols=resolved_keys,
+            col_order=col_order,
         )
 
-        try:
-            analyze_table_quality(df, table_name=str(output.with_suffix("")))
-        except ValueError as exc:
-            logger.error(
-                "quality_report_failed",
-                error=str(exc),
-                path=str(output),
-            )
-            return 1
-        return exit_code
+    table_quality = partial(
+        analyze_table_quality,
+        table_name=str(Path(output).with_suffix("")),
+    )
+
+    return run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=validators,
+        metadata_hooks=metadata_hooks,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command=" ".join(sys.argv),
+        config_snapshot=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        key_columns=["assay_chembl_id"],
+        table_quality=table_quality,
+        logger=logger,
+    )
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
