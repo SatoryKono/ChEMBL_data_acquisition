@@ -370,7 +370,7 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
     --table-name activity
 ```
 
-По умолчанию `--output` формируется как `output_<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`. Дополнительные примеры приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`. Дополнительные примеры приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Структура проекта
 
@@ -472,7 +472,7 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-По умолчанию `--output` формируется как `output_<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Дополнительные примеры см. в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Дополнительные примеры см. в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Вывод и метаданные
 

@@ -8,7 +8,7 @@ creation.
 
 Exports are written to `local.io.output_dir` (default `data/output`). By
 default each CLI command derives the destination file as
-`output_<stem>_<date>.csv`, where `<stem>` is the input filename without
+`output.<stem>_<date>.csv`, where `<stem>` is the input filename without
 extension and `<date>` is the host-local calendar date in `YYYYMMDD` format.
 The writer creates parent directories automatically when `local.io.exist_ok`
 is `true`. If your automation requires UTC-based filenames, wrap the CLI with a
@@ -17,11 +17,11 @@ inject an alternate timestamp.
 
 ```
 data/output/
-├── output_activity_20240105.csv
-├── output_activity_20240105.csv.meta.yaml
-├── output_activity_20240105_failure_cases.csv
-├── output_activity_20240105_quality_report_table.csv
-└── output_activity_20240105_data_correlation_report_table.csv
+├── output.activity_20240105.csv
+├── output.activity_20240105.csv.meta.yaml
+├── output.activity_20240105_failure_cases.csv
+├── output.activity_20240105_quality_report_table.csv
+└── output.activity_20240105_data_correlation_report_table.csv
 ```
 
 Document-oriented pipelines (for example `scripts/get_document_data.py`) append
@@ -37,7 +37,7 @@ arguments remain supported when a different layout (for example,
 
 Each CSV export is accompanied by `<base>.csv.meta.yaml` created via
 `library.metadata.write_meta_yaml`, where `<base>` matches the CSV filename
-without the extension (for example `output_activity_20240105`). The metadata
+without the extension (for example `output.activity_20240105`). The metadata
 captures the following keys:
 
 * `generated_at` – ISO 8601 timestamp (UTC) when the file was produced.
@@ -60,7 +60,7 @@ are preserved.
   interrupting the main export.
 * `library.table_quality.analyze_table_quality` generates
   `<base>_quality_report_table.csv` and
-  `<base>_data_correlation_report_table.csv`. CLI utilities write these reports
+`<base>_data_correlation_report_table.csv`. CLI utilities write these reports
   next to the dataset, while `library.utils.cli_tools.get_input_initialisation`
   stores them under `<output>/data_validity_report/`.
 
@@ -108,7 +108,7 @@ when the signal is inconclusive.
 
 ## Activity bounds (`lower_value`, `upper_value`)
 
-The activity export (`output_activity_<date>.csv` by default) exposes canonical
+The activity export (`output.activity_<date>.csv` by default) exposes canonical
 value ranges derived from ChEMBL `standard_*`
 columns in `scripts/get_activity_data.py`. Bounds are resolved in the following
 priority order:

@@ -190,6 +190,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     data from individual sources (UniProt, ChEMBL and IUPHAR) as well as a
     convenience ``all`` command that runs all pipelines and merges their
     outputs.
+
+    Returns
+    -------
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        Parser populated with every sub-command alongside the logging
+        configuration used by :func:`main`.
     """
 
     root, shared, log_cfg = build_root_parser()
@@ -410,20 +416,19 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
-    args:
-        Parsed command-line arguments specific to the ``uniprot`` sub-command.
+        Application configuration containing UniProt-specific overrides and
+        shared IO settings.
+    args : argparse.Namespace
+        Parsed command-line arguments produced by :func:`build_parser` for the
+        ``uniprot`` sub-command.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
-    Tests
-    -----
-    The post-processing step is covered by
-    :mod:`tests.test_target_postprocessing`.
-
+        ``0`` on success. Non-zero values indicate failures while reading the
+        input CSV, interacting with the UniProt data directory or producing the
+        derived artefacts. Input validation errors are logged and converted into
+        a failure code.
     """
     limit = cfg.target.uniprot.limit
     if limit is not None and limit < 0:
@@ -548,15 +553,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration providing ChEMBL client settings, retry
+        policy and CSV export behaviour.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments produced by :func:`build_parser`.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
+        ``0`` on success. Non-zero values indicate that reading identifiers,
+        fetching data from the ChEMBL API, validating the result or writing the
+        CSV artefact failed. All errors are logged with structured context.
     """
     limit = cfg.target.chembl.limit
     if limit is not None and limit < 0:
@@ -694,15 +701,17 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration containing paths to the IUPHAR export files
+        and shared IO settings.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments produced by :func:`build_parser`.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
+        ``0`` on success. Non-zero values indicate that the IUPHAR sources
+        could not be read, the combined dataset failed validation or the CSV
+        output could not be written.
     """
     limit = cfg.target.iuphar.limit
     if limit is not None and limit < 0:
@@ -796,19 +805,28 @@ def fetch_chembl(
 
     Parameters
     ----------
-    cfg:
-        Application configuration.
-    input_csv:
-        Source of ChEMBL identifiers.
-    output_csv:
-        Destination for the retrieved records.
-    limit:
-        Optional maximum number of identifiers to process.
+    cfg : Config
+        Application configuration used to drive the ChEMBL pipeline.
+    input_csv : pathlib.Path
+        Source CSV containing target identifiers.
+    output_csv : pathlib.Path
+        Destination path used by :func:`run_chembl` to persist results.
+    limit : int, optional
+        Maximum number of identifiers to process. ``None`` processes all rows.
+    chunk_size : int, optional
+        Temporary override for the batch size used when calling the API.
+    offset : int, optional
+        Number of identifiers to skip before starting the retrieval.
 
     Returns
     -------
     pandas.DataFrame
-        Retrieved ChEMBL data.
+        Retrieved ChEMBL data loaded from ``output_csv``.
+
+    Raises
+    ------
+    RuntimeError
+        Raised when :func:`run_chembl` reports a non-zero exit code.
     """
 
     logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
@@ -843,18 +861,24 @@ def fetch_uniprot(
 
     Parameters
     ----------
-    cfg:
-        Application configuration.
-    chembl_df:
-        DataFrame containing at least one UniProt identifier column.
-    output_csv:
-        Destination for the UniProt data.
+    cfg : Config
+        Application configuration used to invoke :func:`run_uniprot`.
+    chembl_df : pandas.DataFrame
+        DataFrame containing ChEMBL target records with at least one UniProt
+        identifier column.
+    output_csv : pathlib.Path
+        Destination path populated by the UniProt pipeline.
 
     Returns
     -------
     pandas.DataFrame
         UniProt records with an additional ``original_id`` column preserving
         the queried accessions.
+
+    Raises
+    ------
+    RuntimeError
+        Raised when :func:`run_uniprot` returns a non-zero exit code.
     """
 
     logger.info("fetch_uniprot_start", output=str(output_csv))
@@ -911,20 +935,27 @@ def fetch_iuphar(
 
     Parameters
     ----------
-    cfg:
-        Application configuration.
-    chembl_df:
-        ChEMBL target data.
-    uniprot_df:
-        UniProt annotations with ``original_id`` column.
-    output_csv:
-        Destination for the IUPHAR mapping output.
+    cfg : Config
+        Application configuration containing IUPHAR resource paths.
+    chembl_df : pandas.DataFrame
+        ChEMBL target data obtained from :func:`fetch_chembl`.
+    uniprot_df : pandas.DataFrame
+        UniProt annotations with an ``original_id`` column provided by
+        :func:`fetch_uniprot`.
+    output_csv : pathlib.Path
+        Destination where :func:`run_iuphar` persists the retrieved
+        classifications.
 
     Returns
     -------
     tuple[pandas.DataFrame, pandas.DataFrame]
         Two data frames: the merged ChEMBL/UniProt input and the IUPHAR
         classification results.
+
+    Raises
+    ------
+    RuntimeError
+        Raised when :func:`run_iuphar` reports a non-zero exit code.
     """
 
     logger.info("fetch_iuphar_start", output=str(output_csv))
@@ -1045,17 +1076,22 @@ def merge_results(
 
     Parameters
     ----------
-    combined_df:
-        DataFrame containing ChEMBL and UniProt information.
-    iuphar_df:
-        Classification information from IUPHAR.
-    cfg:
-        Application configuration.
+    combined_df : pandas.DataFrame
+        DataFrame containing ChEMBL and UniProt information produced by
+        :func:`fetch_iuphar`.
+    iuphar_df : pandas.DataFrame
+        IUPHAR classification results aligned with ``combined_df`` on
+        ``uniprot_id``.
+    cfg : Config
+        Application configuration providing classifier settings.
+    classifier : library.iuphar_library.IUPHARClassifier, optional
+        Pre-initialised classifier. When ``None`` a classifier is created from
+        ``cfg``.
 
     Returns
     -------
     pandas.DataFrame
-        Merged and post-processed target data.
+        Merged and post-processed target data ready for validation and export.
     """
 
     logger.info("merge_results_start")
@@ -1074,17 +1110,18 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
 
     Parameters
     ----------
-    df:
+    df : pandas.DataFrame
         DataFrame produced by :func:`merge_results`.
-    output:
+    output : pathlib.Path
         Destination CSV path.
-    cfg:
-        Application configuration.
+    cfg : Config
+        Application configuration providing schema definitions and IO settings.
 
     Returns
     -------
     int
-        Zero on success, non-zero on validation failure.
+        ``0`` on success. Non-zero values indicate validation errors or
+        failures when generating table-quality reports.
     """
 
     logger.info("validate_write_start", output=str(output))
@@ -1144,7 +1181,23 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
 
 
 def run_all(cfg: Config, args: argparse.Namespace) -> int:
-    """Run the full target acquisition pipeline."""
+    """Run the full target acquisition pipeline.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration combining defaults for every individual
+        pipeline.
+    args : argparse.Namespace
+        Parsed command-line arguments produced by :func:`build_parser`.
+
+    Returns
+    -------
+    int
+        ``0`` on success. Non-zero values indicate failures while fetching
+        data, validating the merged dataset or writing the resulting CSV. The
+        offending step is logged in the ``pipeline_step_failed`` event.
+    """
 
     limit = cfg.target.all.limit
     if limit is not None and limit < 0:
@@ -1192,7 +1245,24 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point using :class:`Config` for defaults."""
+    """Command line entry point using :class:`Config` for defaults.
+
+    Parameters
+    ----------
+    argv : Sequence[str] | None, optional
+        Command-line arguments to parse. When ``None`` the values from
+        :data:`sys.argv` are used.
+
+    Returns
+    -------
+    int
+        ``0`` when the selected target pipeline succeeds, non-zero otherwise.
+
+    Raises
+    ------
+    SystemExit
+        Raised when invalid command-line options are provided to the parser.
+    """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     prepare_io_paths(

@@ -194,6 +194,14 @@ def fetch_pubmed_records(
         :class:`~pandas.DataFrame` batches is returned instead of a single
         concatenated frame.
 
+    Raises
+    ------
+    TypeError
+        Raised when required configuration arguments are omitted or supplied
+        multiple times. The function accepts either a
+        :class:`~library.config.Config` instance or explicit keyword arguments
+        describing the external services.
+
     Notes
     -----
     For backward compatibility the function also accepts a
@@ -1094,15 +1102,17 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration containing rate limiting, API and CSV export
+        settings.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments produced by :func:`build_parser`.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
+        ``0`` on success. A non-zero value indicates that an error occurred
+        while reading input identifiers, fetching metadata or writing the
+        resulting CSV.
     """
     pubmed_defaults = cfg.document.pubmed
     limit = getattr(args, "limit", pubmed_defaults.limit)
@@ -1199,15 +1209,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration providing ChEMBL client, retry and CSV export
+        options.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments produced by :func:`build_parser`.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
+        ``0`` on success. A non-zero value indicates that reading the input
+        identifiers, fetching ChEMBL data or exporting the CSV failed. Network
+        errors are logged and converted into placeholder rows where possible.
     """
     chembl_defaults = cfg.document.chembl
     limit = getattr(args, "limit", chembl_defaults.limit)
@@ -1278,15 +1290,21 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration combining all document pipeline defaults.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments produced by :func:`build_parser`.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
+        ``0`` on success. Non-zero results indicate that reading identifiers,
+        fetching data from upstream APIs or writing derived artefacts failed.
 
+    Raises
+    ------
+    ValueError
+        Raised when DOI fallback information derived from the ChEMBL payload is
+        internally inconsistent.
     """
     all_defaults = cfg.document.all
     limit = getattr(args, "limit", all_defaults.limit)
@@ -1428,8 +1446,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     Returns
     -------
     tuple[argparse.ArgumentParser, LoggerConfig]
-        Parser populated with all sub-commands and logging configuration.
-
+        Parser populated with all sub-commands and default logging
+        configuration used by :func:`main`.
     """
     root, shared, log_cfg = build_root_parser()
     root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
@@ -1603,7 +1621,26 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point using :class:`Config` for defaults."""
+    """Command line entry point using :class:`Config` for defaults.
+
+    Parameters
+    ----------
+    argv : Sequence[str] | None, optional
+        Command-line arguments to parse. When ``None`` the process arguments
+        from :data:`sys.argv` are used.
+
+    Returns
+    -------
+    int
+        ``0`` when the selected pipeline completes successfully, non-zero
+        otherwise.
+
+    Raises
+    ------
+    SystemExit
+        Raised when argument validation fails and ``argparse`` aborts
+        execution.
+    """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     prepare_io_paths(

@@ -1,4 +1,9 @@
-"""Command line interface for retrieving ChEMBL assay data."""
+"""Command line interface for retrieving ChEMBL assay data.
+
+The script provides a reusable :func:`main` entry point together with helper
+functions that unit tests import directly. Functions return explicit exit codes
+instead of terminating the interpreter to make orchestration easier.
+"""
 
 from __future__ import annotations
 
@@ -47,21 +52,23 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute assay retrieval from the ChEMBL API.
 
     The output CSV arranges columns so that fields defined in
-    :class:`~schemas.assays.AssaysSchema` appear first.  Any additional columns
+    :class:`~schemas.assays.AssaysSchema` appear first. Any additional columns
     are appended alphabetically.
 
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration providing API credentials, retry strategy and
+        CSV export settings.
     args : argparse.Namespace
-        Parsed command-line arguments.
+        Parsed command-line arguments accepted by the ``assay`` CLI command.
 
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
+        ``0`` on success, non-zero when validation or I/O failures occur.
+        Upstream API errors are logged and converted into a failure code by
+        :func:`library.cli_utils.run_pipeline`.
     """
     limit = cfg.assay.limit
     if limit is not None and limit < 0:
@@ -167,7 +174,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Create the command-line argument parser."""
+    """Create the command-line argument parser.
+
+    Returns
+    -------
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        A tuple containing the fully configured parser and default logging
+        configuration for the pipeline run.
+    """
     parser, log_cfg = base_parser(
         "ChEMBL assay data utilities",
         column="assay_chembl_id",
@@ -199,7 +213,25 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point using :class:`Config` for defaults."""
+    """Execute the assay pipeline with optional argument overrides.
+
+    Parameters
+    ----------
+    argv : Sequence[str] | None, optional
+        Command-line arguments to parse. When ``None`` the process arguments
+        from :data:`sys.argv` are used.
+
+    Returns
+    -------
+    int
+        ``0`` on success, non-zero otherwise. Failures are logged with context
+        describing the failing section.
+
+    Raises
+    ------
+    SystemExit
+        Raised when invalid command-line options are supplied.
+    """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     cli.prepare_io_paths(

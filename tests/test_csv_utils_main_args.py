@@ -134,7 +134,7 @@ def test_cli_generates_output_path(
 
     rc = cli.main(["--input", str(input_csv), "--key-cols", "a"])
     assert rc == 0
-    expected = input_csv.with_name("output_input_20240102.csv")
+    expected = input_csv.with_name("output.input_20240102.csv")
     assert called["output"] == expected
 
 

@@ -1,4 +1,9 @@
-"""Command line interface for retrieving ChEMBL activity data."""
+"""Command line interface for retrieving ChEMBL activity data.
+
+The module exposes a ``main`` entry point compatible with setuptools console
+scripts as well as helpers that can be invoked directly from other
+applications or tests.
+"""
 
 from __future__ import annotations
 
@@ -65,7 +70,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     Parameters
     ----------
     cfg : Config
-        Application configuration.
+        Application configuration providing API credentials, retry strategy
+        and CSV export options.
     args : argparse.Namespace
         Parsed command-line arguments. ``args.limit`` constrains the number of
         identifiers processed, while ``args.dry_run`` skips network calls and
@@ -74,8 +80,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     Returns
     -------
     int
-        Zero on success, non-zero on failure.
-
+        ``0`` on success, non-zero when validation or I/O failures are
+        encountered. Upstream API errors are logged and converted into a
+        failure code by :func:`library.cli_utils.run_pipeline`.
     """
     limit = cfg.activity.limit
     if limit is not None and limit < 0:
@@ -218,7 +225,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Create the command-line argument parser."""
+    """Create the command-line argument parser.
+
+    Returns
+    -------
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        A tuple containing the fully configured parser and the logging
+        configuration populated with defaults.
+    """
     parser, log_cfg = base_parser(
         "ChEMBL activity data utilities",
         column="activity_id",
@@ -255,7 +269,25 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point using :class:`Config` for defaults."""
+    """Execute the activity pipeline with optional argument overrides.
+
+    Parameters
+    ----------
+    argv : Sequence[str] | None, optional
+        Command-line arguments to parse. When ``None`` the values from
+        :data:`sys.argv` are used.
+
+    Returns
+    -------
+    int
+        ``0`` on success, non-zero otherwise. Errors are logged with
+        structured context for easier diagnosis.
+
+    Raises
+    ------
+    SystemExit
+        Raised when argument parsing fails, mirroring ``argparse`` behaviour.
+    """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
     cli.prepare_io_paths(

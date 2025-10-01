@@ -15,7 +15,7 @@ directly.
 | `--print-config` | Print the effective configuration after overrides and exit. |
 | `--log-level` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
-| `--output` | Destination CSV. When omitted, a file named `output_<input-stem>_<YYYYMMDD>.csv` is created inside `local.io.output_dir`. |
+| `--output` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `local.io.output_dir`. |
 | `--sep` | CSV delimiter forwarded to `cfg.io.csv_sep`. |
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |

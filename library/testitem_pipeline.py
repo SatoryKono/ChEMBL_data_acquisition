@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import ChainMap
+import threading
+from collections import ChainMap, OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from itertools import chain, islice
 from pathlib import Path
 from typing import (
     Any,
     Callable,
     Collection,
+    Iterable,
+    Iterator,
     Mapping,
     MutableMapping,
     NamedTuple,
@@ -28,6 +32,7 @@ from library import chembl_library as cl
 from library import io, molecule_catalog, testitem_enrichment
 from library import pubchem_library as pl
 from library.chembl_client import ChemblClient
+from library.clients import pubchem as pc
 from library.config import (
     ApiCfg,
     Config,
@@ -78,6 +83,258 @@ _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
 
+_FETCH_ERROR_SAMPLE_SIZE = 10
+_PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
+
+
+@dataclass
+class ReadInputIdsResult:
+    """Container holding the identifier iterator and a diagnostic sample."""
+
+    ids_iter: Iterator[str]
+    sample_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TestitemPipelineOptions:
+    """Parameters controlling CLI execution of the test item pipeline."""
+
+    input_csv: Path
+    output_csv: Path | None = None
+    limit: int | None = None
+    offset: int | None = None
+
+
+def _is_placeholder_user_agent(user_agent: str | None) -> bool:
+    """Return ``True`` if *user_agent* still uses the default placeholder contact."""
+
+    if not user_agent:
+        return True
+    return _PLACEHOLDER_CONTACT_EMAIL in user_agent
+
+
+def _prepare_pubchem_api_cfg(cfg: Config, api_cfg: ApiCfg) -> ApiCfg:
+    """Return an :class:`ApiCfg` with a valid PubChem user agent."""
+
+    pubchem_user_agent = cfg.pubchem.user_agent.strip()
+    api_user_agent = api_cfg.user_agent.strip()
+
+    if not _is_placeholder_user_agent(pubchem_user_agent):
+        if pubchem_user_agent != api_user_agent:
+            return api_cfg.model_copy(update={"user_agent": pubchem_user_agent})
+        return api_cfg
+
+    if not _is_placeholder_user_agent(api_user_agent):
+        return api_cfg
+
+    raise ValueError(
+        "PubChem configuration requires a user_agent with real contact details; "
+        "set sources.pubchem.user_agent or api.user_agent in config.yaml.",
+    )
+
+
+def read_input_ids(
+    input_csv: Path,
+    *,
+    column: str,
+    io_cfg: IoCfg,
+    limit: int | None,
+    offset: int = 0,
+) -> tuple[int, ReadInputIdsResult | None]:
+    """Load identifiers from ``input_csv`` honouring ``limit`` when provided."""
+
+    try:
+        ids_iter = io.read_ids(
+            input_csv,
+            column=column,
+            cfg=io_cfg,
+            keep_na_markers=io_cfg.keep_na_markers,
+        )
+        ids_iter = iter(ids_iter)
+        if offset:
+            ids_iter = islice(ids_iter, offset, None)
+            ids_iter = iter(ids_iter)
+            logger.info("process_offset", offset=offset)
+        if limit is not None:
+            ids_iter = islice(ids_iter, limit)
+            ids_iter = iter(ids_iter)
+        sample_ids = tuple(islice(ids_iter, _FETCH_ERROR_SAMPLE_SIZE))
+        ids_iter = chain(sample_ids, ids_iter)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "read_fail",
+            error=str(exc),
+            path=str(input_csv),
+        )
+        return 1, None
+
+    return 0, ReadInputIdsResult(
+        ids_iter=ids_iter,
+        sample_ids=sample_ids,
+    )
+
+
+def integrate_missing_identifiers(
+    df: pd.DataFrame,
+    *,
+    missing_ids: Sequence[str],
+    requested_ids: Sequence[str],
+) -> pd.DataFrame:
+    """Attach placeholder rows for ``missing_ids`` and restore input ordering."""
+
+    if missing_ids:
+        columns = list(df.columns)
+        if "molecule_chembl_id" not in columns:
+            columns.append("molecule_chembl_id")
+        missing_frame = pd.DataFrame(
+            pd.NA,
+            index=range(len(missing_ids)),
+            columns=columns,
+        )
+        missing_frame["molecule_chembl_id"] = list(missing_ids)
+        df = pd.concat([df, missing_frame], ignore_index=True, sort=False)
+    else:
+        df = df.reset_index(drop=True)
+
+    if not requested_ids or "molecule_chembl_id" not in df.columns:
+        return df
+
+    order_map: dict[str, deque[int]] = {}
+    for index, identifier in enumerate(requested_ids):
+        if identifier is None:
+            continue
+        key = str(identifier).strip()
+        if not key:
+            continue
+        upper_key = key.upper()
+        order_map.setdefault(upper_key, deque()).append(index)
+
+    if not order_map:
+        return df
+
+    fallback_index = len(requested_ids)
+
+    def _pop_order(value: Any) -> int:
+        if value is None or pd.isna(value):
+            return fallback_index
+        key = str(value).strip()
+        if not key:
+            return fallback_index
+        upper_key = key.upper()
+        queue = order_map.get(upper_key)
+        if queue:
+            return queue.popleft()
+        return fallback_index
+
+    order_series = df["molecule_chembl_id"].map(_pop_order)
+    ordered = df.assign(_input_order=order_series).sort_values(
+        "_input_order", kind="stable"
+    )
+    ordered = ordered.drop(columns="_input_order").reset_index(drop=True)
+    return ordered
+
+
+def fetch_testitems(
+    ids_iter: Iterable[str],
+    *,
+    api_cfg: ApiCfg,
+    batch_size: int,
+    timeout: float,
+    client: ChemblClient,
+    sample_ids: Sequence[str],
+    fields: Sequence[str] | None,
+    page_limit: int,
+) -> tuple[int, pd.DataFrame | None, tuple[str, ...]]:
+    """Retrieve ChEMBL test item records for ``ids_iter``."""
+
+    logger.info("chembl_fetch_start", batch_size=batch_size)
+    requested_ids: list[str] = []
+    requested_ids_original: list[str] = []
+    original_id_lookup: dict[str, str] = {}
+
+    def _iter_with_tracking(source: Iterable[str]) -> Iterator[str]:
+        for identifier in source:
+            text_identifier = str(identifier)
+            normalised = text_identifier.strip().upper()
+            requested_ids_original.append(text_identifier)
+            requested_ids.append(normalised)
+            original_id_lookup.setdefault(normalised, text_identifier)
+            yield identifier
+
+    tracked_iter = _iter_with_tracking(ids_iter)
+    try:
+        df = cl.get_testitem(
+            tracked_iter,
+            cfg=api_cfg,
+            client=client,
+            chunk_size=batch_size,
+            timeout=timeout,
+            fields=fields,
+            page_limit=page_limit,
+        )
+    except (requests.RequestException, ValueError) as exc:
+        logger.error(
+            "testitem_fetch_failed",
+            error=str(exc),
+            batch_size=batch_size,
+            timeout=timeout,
+            sample_ids=list(sample_ids),
+        )
+        return 1, None, tuple(requested_ids_original)
+    finally:
+        deque(tracked_iter, maxlen=0)
+
+    rows = len(df)
+    logger.info("chembl_fetch_done", rows=rows)
+    logger.info("identifiers_retrieved", count=rows)
+
+    if "molecule_chembl_id" not in df.columns:
+        df["molecule_chembl_id"] = pd.Series(dtype="string")
+    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string").str.upper()
+
+    retrieved_ids = set(df["molecule_chembl_id"].dropna())
+    missing_ids = [identifier for identifier in requested_ids if identifier not in retrieved_ids]
+    if missing_ids:
+        sample_missing_ids = missing_ids[:5]
+        missing_ids_original = [
+            original_id_lookup.get(identifier, identifier) for identifier in missing_ids
+        ]
+        sample_missing_ids_original = missing_ids_original[:5]
+        logger.warning(
+            "chembl_missing_identifiers",
+            missing_count=len(missing_ids),
+            sample_missing_ids=sample_missing_ids,
+            sample_missing_ids_original=sample_missing_ids_original,
+        )
+    else:
+        logger.info("chembl_all_identifiers_retrieved")
+
+    duplicates_mask = df["molecule_chembl_id"].duplicated(keep=False)
+    if duplicates_mask.any():
+        duplicate_ids = (
+            df.loc[duplicates_mask, "molecule_chembl_id"].dropna().unique().tolist()
+        )
+        logger.warning(
+            "chembl_duplicate_identifiers",
+            duplicate_count=len(duplicate_ids),
+            duplicate_ids=duplicate_ids,
+        )
+        df = df.drop_duplicates(subset="molecule_chembl_id", keep="first")
+
+    index = pd.Index(requested_ids, name="molecule_chembl_id")
+    df = df.set_index("molecule_chembl_id", drop=False).reindex(index)
+    df["molecule_chembl_id"] = pd.Series(
+        requested_ids,
+        index=index,
+        dtype="string",
+    )
+    df = df.where(pd.notna(df), pd.NA)
+    df = df.convert_dtypes()
+    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string")
+    df = df.reset_index(drop=True)
+
+    return 0, df, tuple(requested_ids_original)
+
 
 def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
     """Return a stable signature for the PubChem session configuration."""
@@ -90,6 +347,7 @@ def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
 
 
 _PUBCHEM_SESSION_SIGNATURE: str | None = None
+_PUBCHEM_SESSION_LOCK = threading.Lock()
 
 
 @dataclass
@@ -1542,9 +1800,10 @@ def augment_pubchem(
     if getattr(pubchem_cfg, "enable", True):
         global _PUBCHEM_SESSION_SIGNATURE
         session_signature = _pubchem_session_signature(api_cfg, retry_cfg)
-        if session_signature != _PUBCHEM_SESSION_SIGNATURE:
-            pl.init_session(api_cfg, retry_cfg)
-            _PUBCHEM_SESSION_SIGNATURE = session_signature
+        with _PUBCHEM_SESSION_LOCK:
+            if session_signature != _PUBCHEM_SESSION_SIGNATURE:
+                pl.init_session(api_cfg, retry_cfg)
+                _PUBCHEM_SESSION_SIGNATURE = session_signature
         pubchem_cid_cache = _load_pubchem_cid_cache(
             getattr(pubchem_cfg, "cid_cache_path", None),
             ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),
@@ -1592,6 +1851,166 @@ def apply_testitem_enrichment(
         return 1, None
     logger.info("testitem_enrichment_done")
     return 0, enriched
+
+
+def run_testitem_pipeline(
+    cfg: Config,
+    options: TestitemPipelineOptions,
+) -> int:
+    """Execute compound retrieval from the ChEMBL API and augment with PubChem data."""
+
+    limit = options.limit if options.limit is not None else cfg.testitem.limit
+    if limit is not None and limit < 0:
+        logger.error("invalid_limit", section="testitem.limit", limit=limit)
+        return 1
+
+    api_overrides: dict[str, Any] = {}
+    if cfg.testitem.retries is not None:
+        api_overrides["retries"] = cfg.testitem.retries
+    if cfg.testitem.backoff_factor is not None:
+        api_overrides["backoff_factor"] = cfg.testitem.backoff_factor
+    api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
+
+    pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
+    pc.init_session(pubchem_api_cfg, cfg.retry)
+
+    requested_ids: tuple[str, ...] = ()
+    missing_ids: list[str] = []
+    parent_stats = ParentLookupStats(
+        source=PARENT_LOOKUP_SOURCE_SKIPPED,
+        missing=0,
+        unique=0,
+        attached=0,
+        uncovered=0,
+    )
+
+    input_csv = Path(options.input_csv)
+    output_csv = Path(options.output_csv) if options.output_csv is not None else None
+    offset = options.offset if options.offset is not None else cfg.testitem.offset
+
+    with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
+        read_status, read_result = read_input_ids(
+            input_csv,
+            column=cfg.testitem.column,
+            io_cfg=cfg.io,
+            limit=limit,
+            offset=offset,
+        )
+        if read_status != 0 or read_result is None:
+            return read_status
+
+        fetch_status, df, requested_ids = fetch_testitems(
+            read_result.ids_iter,
+            api_cfg=api_cfg,
+            batch_size=cfg.testitem.batch_size,
+            timeout=cfg.testitem.timeout,
+            client=client,
+            sample_ids=read_result.sample_ids,
+            fields=cfg.testitem.fields,
+            page_limit=cfg.testitem.request_limit,
+        )
+        if fetch_status != 0 or df is None:
+            return fetch_status
+
+        requested_unique: OrderedDict[str, str] = OrderedDict()
+        for identifier in requested_ids:
+            key = identifier.strip()
+            if not key:
+                continue
+            upper_key = key.upper()
+            requested_unique.setdefault(upper_key, identifier)
+
+        fetched_ids: set[str] = set()
+        if "molecule_chembl_id" in df.columns:
+            fetched_series = df["molecule_chembl_id"].dropna().astype(str).str.strip()
+            fetched_ids = {value.upper() for value in fetched_series if value}
+
+        missing_keys = [key for key in requested_unique if key not in fetched_ids]
+        missing_ids = [requested_unique[key] for key in missing_keys]
+        if missing_ids:
+            logger.warning(
+                "chembl_missing_identifiers",
+                count=len(missing_ids),
+                identifiers=missing_ids,
+            )
+
+        rows = len(df)
+        if limit is not None:
+            logger.info("process_limit", limit=min(limit, rows))
+
+        enrichment_sources = getattr(cfg.testitem_molecule_enrichment, "sources", None)
+        hierarchy_lookup_path = (
+            getattr(enrichment_sources, "molecule_hierarchy_path", None)
+            if enrichment_sources is not None
+            else None
+        )
+
+        prep_status, prep = prepare_parent_enrichment(
+            df,
+            catalog_cfg=cfg.molecule_catalog,
+            io_cfg=cfg.io,
+            api_cfg=api_cfg,
+            timeout=cfg.testitem.timeout,
+            client=client,
+            hierarchy_lookup_path=hierarchy_lookup_path,
+        )
+        if prep_status != 0 or prep is None:
+            return prep_status
+
+        parent_stats = prep.parent_stats
+        parent_status, parent_result = run_parent_enrichment(
+            prep,
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=cfg.molecule_catalog,
+            timeout=cfg.testitem.timeout,
+        )
+        if parent_status != 0 or parent_result is None:
+            return parent_status
+
+        df = parent_result.df
+        parent_stats = parent_result.parent_stats
+
+        df = augment_pubchem(
+            df,
+            pubchem_cfg=cfg.pubchem,
+            api_cfg=api_cfg,
+            retry_cfg=cfg.retry,
+            timeout=cfg.testitem.timeout,
+            client=client,
+            fields=cfg.testitem.fields,
+            request_limit=cfg.testitem.request_limit,
+        )
+
+        enrichment_status, enriched_df = apply_testitem_enrichment(
+            df,
+            enrichment_cfg=cfg.testitem_molecule_enrichment,
+            io_cfg=cfg.io,
+        )
+        if enrichment_status != 0 or enriched_df is None:
+            return enrichment_status
+
+        df = enriched_df
+
+    df = integrate_missing_identifiers(
+        df,
+        missing_ids=missing_ids,
+        requested_ids=requested_ids,
+    )
+
+    output_path = (
+        output_csv if output_csv is not None else io.default_output_path(input_csv, cfg.io)
+    )
+    rows_total = len(df)
+    return finalize_output(
+        df,
+        cfg=cfg,
+        output=output_path,
+        parent_stats=parent_stats,
+        input_csv=input_csv,
+        rows_total=rows_total,
+        missing_ids=missing_ids,
+    )
 
 
 def finalize_output(
@@ -1728,6 +2147,8 @@ def finalize_output(
 
 
 __all__ = [
+    "ReadInputIdsResult",
+    "TestitemPipelineOptions",
     "ParentEnrichmentPreparation",
     "ParentEnrichmentResult",
     "ParentLookupStats",
@@ -1746,6 +2167,10 @@ __all__ = [
     "add_pubchem_data",
     "augment_pubchem",
     "apply_testitem_enrichment",
+    "read_input_ids",
+    "integrate_missing_identifiers",
+    "fetch_testitems",
+    "run_testitem_pipeline",
     "finalize_output",
     "ensure_no_parant_column",
     "PUBCHEM_COLUMNS",

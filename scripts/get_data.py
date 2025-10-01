@@ -79,7 +79,7 @@ class PipelineRunConfig:
         """Return the fully resolved path for ``name`` in the output directory."""
 
         stem = _DEFAULT_OUTPUT_STEMS[name]
-        filename = f"{self.date_prefix}_{stem}.csv"
+        filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
 
 
@@ -249,6 +249,19 @@ def _failure_sentinel_path(output_path: Path) -> Path:
     return output_path.with_name(f"{output_path.name}.failed")
 
 
+def _sidecar_paths(base: Path) -> dict[str, Path]:
+    """Return known auxiliary artefacts generated from ``base``."""
+
+    stemless = str(base.with_suffix(""))
+    return {
+        "meta": base.with_name(base.name + ".meta.yaml"),
+        "failure": base.with_name(f"{base.stem}_failure_cases.csv"),
+        "quality_json": base.with_suffix(".quality.json"),
+        "quality_table": Path(f"{stemless}_quality_report_table.csv"),
+        "corr_table": Path(f"{stemless}_data_correlation_report_table.csv"),
+    }
+
+
 def _run_step(
     step: PipelineStep,
     cfg: PipelineRunConfig,
@@ -278,8 +291,21 @@ def _finalize_step_success(
 ) -> None:
     """Rename temporary outputs into place and clear failure sentinels."""
 
+    final_sidecars = _sidecar_paths(final_output)
+    working_sidecars = _sidecar_paths(working_output)
+
     if working_output.exists():
+        if final_output.exists():
+            final_output.unlink()
         working_output.replace(final_output)
+
+    for name, working_path in working_sidecars.items():
+        if not working_path.exists():
+            continue
+        final_path = final_sidecars[name]
+        if final_path.exists():
+            final_path.unlink()
+        working_path.replace(final_path)
     if sentinel_path.exists():
         sentinel_path.unlink()
 
@@ -292,6 +318,9 @@ def _cleanup_failed_step(
     executed: bool,
 ) -> None:
     """Remove partial outputs and persist a failure sentinel."""
+
+    final_sidecars = _sidecar_paths(final_output)
+    working_sidecars = _sidecar_paths(working_output)
 
     candidates = [working_output]
     if executed:
@@ -306,6 +335,52 @@ def _cleanup_failed_step(
                     path=str(candidate),
                     error=str(exc),
                 )
+
+    for name, working_path in working_sidecars.items():
+        final_path = final_sidecars[name]
+        if name == "failure":
+            if working_path.exists():
+                try:
+                    if final_path.exists():
+                        final_path.unlink()
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "failure_sidecar_cleanup_failed",
+                        path=str(final_path),
+                        error=str(exc),
+                    )
+                try:
+                    working_path.replace(final_path)
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "failure_sidecar_promote_failed",
+                        path=str(working_path),
+                        error=str(exc),
+                    )
+            elif executed and final_path.exists():
+                try:
+                    final_path.unlink()
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "failure_sidecar_cleanup_failed",
+                        path=str(final_path),
+                        error=str(exc),
+                    )
+            continue
+
+        paths_to_remove = [working_path]
+        if executed:
+            paths_to_remove.append(final_path)
+        for path in paths_to_remove:
+            if path.exists():
+                try:
+                    path.unlink()
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "step_cleanup_failed",
+                        path=str(path),
+                        error=str(exc),
+                    )
     try:
         sentinel_path.touch()
     except OSError as exc:  # pragma: no cover - defensive guard

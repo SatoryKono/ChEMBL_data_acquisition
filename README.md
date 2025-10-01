@@ -123,6 +123,10 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
 pre-commit run --all-files
 pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
+python -m scripts.get_data --help
+tmp_dir=$(mktemp -d) && python -m library.utils.cli_tools.pipeline_targets_main \
+    --input tests/data/chembl_targets_min.csv \
+    --output "${tmp_dir}/targets.csv" --log-level INFO --limit 2
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
     --output out/mapped.csv --log-level INFO
@@ -716,7 +720,7 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-`--output` по умолчанию формируется как `output_<имя_входа>_YYYYMMDD.csv`
+`--output` по умолчанию формируется как `output.<имя_входа>_YYYYMMDD.csv`
 в каталоге, заданном `local.io.output_dir`.
 Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md) и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
 
