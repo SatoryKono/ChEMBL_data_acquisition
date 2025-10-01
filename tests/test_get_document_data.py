@@ -13,6 +13,8 @@ from typing import Any, Callable
 
 import pandas as pd
 import pytest
+import requests
+import responses
 
 from library import chembl_library as cl
 from library import io as lib_io
@@ -1924,6 +1926,22 @@ def test_fetch_pubmed_records_reuses_service_sessions(
 
     monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
 
+    openalex_session_labels: list[str] = []
+    crossref_session_labels: list[str] = []
+
+    def fake_openalex_session(*_args: object, **_kwargs: object) -> DummySession:
+        label = f"openalex-{len(openalex_session_labels)}"
+        openalex_session_labels.append(label)
+        return DummySession(label)
+
+    def fake_crossref_session(*_args: object, **_kwargs: object) -> DummySession:
+        label = f"crossref-{len(crossref_session_labels)}"
+        crossref_session_labels.append(label)
+        return DummySession(label)
+
+    monkeypatch.setattr(gdd, "openalex_session", fake_openalex_session)
+    monkeypatch.setattr(gdd, "crossref_session", fake_crossref_session)
+
     def fake_pubmed_batch(
         session: DummySession,
         batch: Sequence[str],
@@ -2032,11 +2050,202 @@ def test_fetch_pubmed_records_reuses_service_sessions(
     )
 
     assert df["PubMed.PMID"].tolist() == pmids
-    assert len(session_labels) == 3
+    assert len(session_labels) == 1
+    assert len(openalex_session_labels) == 1
+    assert len(crossref_session_labels) == 1
     assert openalex_sessions and len(openalex_sessions) == len(pmids)
     assert openalex_sessions == [openalex_sessions[0]] * len(openalex_sessions)
     assert crossref_sessions and len(crossref_sessions) == len(pmids)
     assert crossref_sessions == [crossref_sessions[0]] * len(crossref_sessions)
+
+
+@responses.activate
+def test_fetch_pubmed_records_reuses_sessions_across_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Worker threads should reuse HTTP sessions across multiple batches."""
+
+    pmids = [str(100 + i) for i in range(6)]
+
+    for pmid in pmids:
+        responses.add(
+            responses.GET,
+            f"https://pubmed.test/{pmid}",
+            json={"pmid": pmid},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"https://openalex.test/{pmid}",
+            json={"id": pmid},
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"https://crossref.test/10.1234/{pmid}",
+            json={"doi": pmid},
+            status=200,
+        )
+
+    class RecordingContext:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.session = requests.Session()
+            self.closed = False
+            self.session_id = id(self.session)
+
+        def __enter__(self) -> requests.Session:  # pragma: no cover - trivial
+            return self.session
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            self.closed = True
+            self.session.close()
+
+    contexts: list[RecordingContext] = []
+
+    def _make_context(label: str) -> RecordingContext:
+        ctx = RecordingContext(label)
+        contexts.append(ctx)
+        return ctx
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: _make_context("pubmed"))
+    monkeypatch.setattr(gdd, "openalex_session", lambda *_, **__: _make_context("openalex"))
+    monkeypatch.setattr(gdd, "crossref_session", lambda *_, **__: _make_context("crossref"))
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    pubmed_session_ids: set[int] = set()
+    openalex_session_ids: set[int] = set()
+    crossref_session_ids: set[int] = set()
+
+    def fake_pubmed_batch(
+        session: requests.Session,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        records: list[dict[str, str]] = []
+        for pmid in batch:
+            pubmed_session_ids.add(id(session))
+            session.get(
+                f"https://pubmed.test/{pmid}",
+                headers={"X-Session": str(id(session))},
+                timeout=0.1,
+            )
+            records.append(
+                {
+                    "PubMed.PMID": pmid,
+                    "PubMed.DOI": f"10.1234/{pmid}",
+                    "PubMed.ArticleTitle": f"Article {pmid}",
+                }
+            )
+        return records
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: requests.Session,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.Error": "unreachable",
+        },
+    )
+
+    def fake_fetch_openalex(
+        session: requests.Session,
+        pmid: str,
+        cfg: OpenAlexCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        openalex_session_ids.add(id(session))
+        session.get(
+            f"https://openalex.test/{pmid}",
+            headers={"X-Session": str(id(session))},
+            timeout=0.1,
+        )
+        return {
+            "OpenAlex.PMID": pmid,
+            "OpenAlex.DOI": f"10.1234/{pmid}",
+            "OpenAlex.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_fetch_openalex)
+
+    def fake_fetch_crossref(
+        session: requests.Session,
+        doi: str,
+        cfg: CrossRefCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        crossref_session_ids.add(id(session))
+        session.get(
+            f"https://crossref.test/{doi}",
+            headers={"X-Session": str(id(session))},
+            timeout=0.1,
+        )
+        return {
+            "crossref.DOI": doi,
+            "crossref.Title": f"Title {doi}",
+            "crossref.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_fetch_crossref)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=2,
+        batch_size=1,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+
+    assert len(pubmed_session_ids) <= 2
+    assert len(openalex_session_ids) <= 2
+    assert len(crossref_session_ids) <= 2
+
+    pubmed_headers = {
+        call.request.headers.get("X-Session")
+        for call in responses.calls
+        if call.request.url.startswith("https://pubmed.test/")
+    }
+    openalex_headers = {
+        call.request.headers.get("X-Session")
+        for call in responses.calls
+        if call.request.url.startswith("https://openalex.test/")
+    }
+    crossref_headers = {
+        call.request.headers.get("X-Session")
+        for call in responses.calls
+        if call.request.url.startswith("https://crossref.test/")
+    }
+
+    assert len(pubmed_headers) <= 2
+    assert len(openalex_headers) <= 2
+    assert len(crossref_headers) <= 2
+
+    assert all(ctx.closed for ctx in contexts)
 
 
 def test_fetch_pubmed_records_reuses_service_executors(
