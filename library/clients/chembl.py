@@ -165,11 +165,11 @@ class ChemblClient:
         with self._cache_lock:
             cached = self.cache.get(cache_key)
             if cached is not None:
-                logger.info(
+                logger.debug(
                     "cache_hit", extra={"url": url, "rps": cfg.rps, "status": "hit"}
                 )
                 return cast(dict[str, Any], cached)
-            logger.info(
+            logger.debug(
                 "cache_miss", extra={"url": url, "rps": cfg.rps, "status": "miss"}
             )
 
