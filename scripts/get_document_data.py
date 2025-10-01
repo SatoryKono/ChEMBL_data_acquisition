@@ -26,11 +26,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from itertools import chain, islice, tee
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 import requests
@@ -360,6 +360,18 @@ def fetch_pubmed_records(
 
         batch_list = _coerce_batch_argument(first, *rest)
 
+        def _invoke_with_session(
+            fetcher: Callable[
+                [requests.Session, str, Any, RateLimiter | None], dict[str, str]
+            ],
+            identifier: str,
+            *,
+            cfg_obj: Any,
+            limiter: RateLimiter | None,
+        ) -> dict[str, str]:
+            with session_with_retry(__cfg.api, __cfg.retry) as nested_session:
+                return fetcher(nested_session, identifier, cfg_obj, limiter)
+
         try:
             with session_with_retry(__cfg.api, __cfg.retry) as session:
                 _acquire_documents(pubmed_service_limiter)
@@ -443,6 +455,14 @@ def fetch_pubmed_records(
                 openalex_workers = _pool_workers(
                     len(openalex_jobs), openalex_limiter, openalex_cfg.burst
                 )
+                def _fetch_openalex_job(pmid: str) -> dict[str, str]:
+                    return _invoke_with_session(
+                        ocl.fetch_openalex,
+                        pmid,
+                        cfg_obj=openalex_cfg,
+                        limiter=openalex_limiter,
+                    )
+
                 if openalex_jobs and openalex_workers > 0:
                     def _openalex_fetch(target_pmid: str) -> dict[str, str]:
                         _acquire_documents(openalex_service_limiter)
@@ -455,7 +475,7 @@ def fetch_pubmed_records(
 
                     with ThreadPoolExecutor(max_workers=openalex_workers) as pool:
                         future_to_index = {
-                            pool.submit(_openalex_fetch, pmid): index
+                            pool.submit(_fetch_openalex_job, pmid): index
                             for index, pmid in openalex_jobs
                         }
                         for future in as_completed(future_to_index):
@@ -465,6 +485,14 @@ def fetch_pubmed_records(
                 crossref_workers = _pool_workers(
                     len(crossref_jobs), crossref_limiter, crossref_cfg.burst
                 )
+                def _fetch_crossref_job(doi: str) -> dict[str, str]:
+                    return _invoke_with_session(
+                        ocl.fetch_crossref,
+                        doi,
+                        cfg_obj=crossref_cfg,
+                        limiter=crossref_limiter,
+                    )
+
                 if crossref_jobs and crossref_workers > 0:
                     def _crossref_fetch(target_doi: str) -> dict[str, str]:
                         if target_doi:
@@ -478,7 +506,7 @@ def fetch_pubmed_records(
 
                     with ThreadPoolExecutor(max_workers=crossref_workers) as pool:
                         future_to_index = {
-                            pool.submit(_crossref_fetch, doi): index
+                            pool.submit(_fetch_crossref_job, doi): index
                             for index, doi in crossref_jobs
                         }
                         for future in as_completed(future_to_index):
