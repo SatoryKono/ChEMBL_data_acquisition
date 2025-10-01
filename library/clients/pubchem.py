@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 from threading import Lock
 from time import monotonic
@@ -19,6 +21,7 @@ from ..rate_limiter import get_limiter, sleep
 __all__ = [
     "Properties",
     "init_session",
+    "get_session",
     "make_request",
     "url_encode",
     "get_cid_from_smiles",
@@ -32,23 +35,74 @@ __all__ = [
 ]
 
 
+def _config_signature(api: ApiCfg, retry: RetryCfg) -> str:
+    """Return a stable signature for the session configuration."""
+
+    api_dump = api.model_dump(mode="json")
+    retry_dump = retry.model_dump(mode="json")
+    return json.dumps({"api": api_dump, "retry": retry_dump}, sort_keys=True)
+
+
 # Cache is initialised lazily to allow configuration of the TTL via
 # :class:`PubChemCfg`. The cache is recreated when the TTL changes.
 _CACHE: TTLCache[str, dict[str, Any]] | None = None
 _CACHE_LOCK = Lock()
 
-# Shared session with placeholder user agent; production code should call
-# :func:`init_session` to supply real contact details.
-_session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
-)
+_SESSION_LOCK = Lock()
+_DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)")
+_DEFAULT_RETRY_CFG = RetryCfg()
+_SESSION_CFG: tuple[ApiCfg, RetryCfg] = (_DEFAULT_API_CFG, _DEFAULT_RETRY_CFG)
+_SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)
+_session: Session | None = session_with_retry(*_SESSION_CFG)
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session."""
 
-    global _session
-    _session = session_with_retry(api, retry)
+    global _SESSION_CFG, _SESSION_SIGNATURE, _session
+    signature = _config_signature(api, retry)
+    old_session: Session | None = None
+    with _SESSION_LOCK:
+        old_session = _session
+        _session = None
+        _SESSION_CFG = (api, retry)
+        _SESSION_SIGNATURE = signature
+    if old_session is not None:
+        old_session.close()
+
+
+def get_session(cfg: ApiCfg | None = None) -> Session:
+    """Return the shared HTTP session, creating or refreshing as needed."""
+
+    global _SESSION_CFG, _SESSION_SIGNATURE, _session
+    old_session: Session | None = None
+    with _SESSION_LOCK:
+        current_api, current_retry = _SESSION_CFG
+        target_api = cfg or current_api
+        signature = _config_signature(target_api, current_retry)
+        needs_refresh = signature != _SESSION_SIGNATURE or _session is None
+        _SESSION_CFG = (target_api, current_retry)
+        if needs_refresh:
+            if target_api.user_agent == _DEFAULT_API_CFG.user_agent:
+                raise ValueError(
+                    "PubChem client requires a custom User-Agent; "
+                    "call init_session with contact details before making requests."
+                )
+            new_session = session_with_retry(target_api, current_retry)
+            old_session = _session
+            _session = new_session
+            _SESSION_SIGNATURE = signature
+        session = _session
+    if old_session is not None:
+        old_session.close()
+    if session is None:
+        raise RuntimeError("Failed to initialise PubChem session")
+    if session.headers.get("User-Agent") == _DEFAULT_API_CFG.user_agent:
+        raise ValueError(
+            "PubChem client requires a custom User-Agent; "
+            "call init_session with contact details before making requests."
+        )
+    return session
 
 
 def url_encode(text: str) -> str:
@@ -154,7 +208,8 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         )
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
-            response = _session.get(
+            session = get_session()
+            response = session.get(
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)
             )
         except requests.RequestException as exc:  # pragma: no cover - network
