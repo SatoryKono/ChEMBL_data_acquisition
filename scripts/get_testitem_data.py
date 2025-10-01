@@ -1515,6 +1515,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             df,
             pubchem_cfg=cfg.pubchem,
             api_cfg=api_cfg,
+            retry_cfg=cfg.retry,
             timeout=cfg.testitem.timeout,
             client=client,
             fields=cfg.testitem.fields,

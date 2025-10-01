@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import library.cli_utils as cli_utils
 from library import chembl_library as cl
 from library import io
 from library.config import Config
@@ -34,8 +35,8 @@ def test_run_chembl_orders_columns(
     monkeypatch.setattr(cl, "get_assays", lambda *_, **__: df)
     monkeypatch.setattr(gas.ap, "postprocess_assays", lambda df: df)
     monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gas, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gas, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
     rc = gas.run_chembl(cfg, args)
     assert rc == 0

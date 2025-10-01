@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from collections import ChainMap
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -33,6 +34,7 @@ from library.config import (
     IoCfg,
     MoleculeCatalogCfg,
     PubChemCfg,
+    RetryCfg,
     _serialize_paths,
 )
 from library.csv_utils import write_csv_deterministic
@@ -48,6 +50,7 @@ from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
+from library.utils.atomic import open_atomic
 from schemas import TestitemsSchema, normalize_testitems
 
 
@@ -74,6 +77,19 @@ _CID_CACHE_MISSING = object()
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
+
+
+def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
+    """Return a stable signature for the PubChem session configuration."""
+
+    payload = {
+        "api": api_cfg.model_dump(mode="json"),
+        "retry": retry_cfg.model_dump(mode="json"),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+_PUBCHEM_SESSION_SIGNATURE: str | None = None
 
 
 @dataclass
@@ -834,7 +850,6 @@ def _write_pubchem_cid_cache(
 
     if path is None:
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
     serialisable: dict[str, str] = {}
     for key, value in cache.items():
         if not key:
@@ -843,7 +858,7 @@ def _write_pubchem_cid_cache(
             continue
         serialisable[key] = value
     try:
-        with path.open("w", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
+        with open_atomic(path, encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             payload = {
                 "metadata": {
                     "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
@@ -1266,20 +1281,37 @@ def _merge_pubchem_properties(
     def _value_or_na(value: str | None) -> object:
         return value if value not in (None, "") else pd.NA
 
-    properties: dict[str, pl.Properties] = {}
-    for cid in sorted(lookup_cids):
-        properties[cid] = pl.get_properties(cid, cfg)
-
     properties_records: dict[str, dict[str, object]] = {}
-    for cid, props in properties.items():
-        properties_records[cid] = {
-            "pubchem_iupac_name": _value_or_na(props.IUPACName),
-            "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
-            "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
-            "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
-            "pubchem_inchi": _value_or_na(props.InChI),
-            "pubchem_inchikey": _value_or_na(props.InChIKey),
-        }
+
+    lookup_order = sorted(lookup_cids)
+    if lookup_order:
+        batch_size = max(int(getattr(cfg, "rps", 1)), 1)
+
+        def _fetch_properties(cid: str) -> pl.Properties:
+            return pl.get_properties(cid, cfg)
+
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            for start in range(0, len(lookup_order), batch_size):
+                batch = lookup_order[start : start + batch_size]
+                future_map = {
+                    executor.submit(_fetch_properties, cid): cid for cid in batch
+                }
+                for future, cid in future_map.items():
+                    try:
+                        props = future.result()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        logger.warning("pubchem_properties_failed", cid=cid, error=str(exc))
+                        props = pl.Properties(None, None, None, None, None, None)
+                    properties_records[cid] = {
+                        "pubchem_iupac_name": _value_or_na(props.IUPACName),
+                        "pubchem_molecular_formula": _value_or_na(
+                            props.MolecularFormula
+                        ),
+                        "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
+                        "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
+                        "pubchem_inchi": _value_or_na(props.InChI),
+                        "pubchem_inchikey": _value_or_na(props.InChIKey),
+                    }
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
@@ -1489,12 +1521,18 @@ def augment_pubchem(
     *,
     pubchem_cfg: PubChemCfg,
     api_cfg: ApiCfg,
+    retry_cfg: RetryCfg,
     timeout: float,
     client: ChemblClient,
     fields: Sequence[str] | None,
     request_limit: int,
 ) -> pd.DataFrame:
-    """Augment ``df`` with PubChem information if enabled."""
+    """Augment ``df`` with PubChem information if enabled.
+
+    The shared PubChem client session is initialised with ``api_cfg`` and
+    ``retry_cfg`` before enrichment. Callers must therefore provide both
+    configurations even when invoking this function directly.
+    """
 
     pubchem_cid_cache: dict[str, str | None] | None = None
     pubchem_resolution_cache: (
@@ -1502,6 +1540,11 @@ def augment_pubchem(
     ) = None
     pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
     if getattr(pubchem_cfg, "enable", True):
+        global _PUBCHEM_SESSION_SIGNATURE
+        session_signature = _pubchem_session_signature(api_cfg, retry_cfg)
+        if session_signature != _PUBCHEM_SESSION_SIGNATURE:
+            pl.init_session(api_cfg, retry_cfg)
+            _PUBCHEM_SESSION_SIGNATURE = session_signature
         pubchem_cid_cache = _load_pubchem_cid_cache(
             getattr(pubchem_cfg, "cid_cache_path", None),
             ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),

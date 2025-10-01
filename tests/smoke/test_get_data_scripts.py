@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from scripts import (
     get_activity_data,
     get_assay_data,
     get_document_data,
+    get_data,
     get_target_data,
     get_testitem_data,
 )
@@ -480,3 +482,76 @@ def test_get_testitem_data_smoke(
     assert polymer_row["pubchem_cid"] == "POLY-CID"
     mixture_row = df.loc[df["molecule_type"] == "Mixture"].iloc[0]
     assert mixture_row["pubchem_cid"] == "MIX-CID"
+
+
+def test_run_pipeline_failure_removes_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure failed orchestrator steps clean artefacts and emit a sentinel."""
+
+    base_dir = tmp_path
+    input_dir = base_dir / "input"
+    output_dir = base_dir / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_dir / "config.yaml"
+    config_path.write_text("pipeline: test\n")
+
+    input_csv = input_dir / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+
+    cfg = get_data.PipelineRunConfig(
+        base_path=base_dir,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+        date_prefix="20240101",
+        log_level="ERROR",
+        force=False,
+        skip_existing=False,
+    )
+
+    final_output = cfg.output_path("activity")
+    working_output = final_output.with_name(f".{final_output.name}.tmp")
+    sentinel_path = final_output.with_name(f"{final_output.name}.failed")
+
+    def failing_main(argv: list[str] | None) -> int:
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--output")
+        parser.add_argument("--input")
+        parser.add_argument("--config")
+        parser.add_argument("--log-level")
+        ns = parser.parse_args(argv)
+        Path(ns.output).write_text("temporary output\n")
+        final_output.write_text("unexpected final output\n")
+        return 2
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def exception(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_STEPS",
+        (get_data.PipelineStep("activity", failing_main, None),),
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", DummyLogger())
+
+    status = get_data.run_pipeline(cfg)
+
+    assert status == 2
+    assert not final_output.exists()
+    assert not working_output.exists()
+    assert sentinel_path.exists()

@@ -613,7 +613,7 @@
           "type": "integer"
         },
         "mailto": {
-          "default": "contact@example.org",
+          "default": "chembl-data@ebi.ac.uk",
           "title": "Mailto",
           "type": "string"
         }
@@ -1114,7 +1114,7 @@
           "type": "integer"
         },
         "mailto": {
-          "default": "contact@example.org",
+          "default": "chembl-data@ebi.ac.uk",
           "title": "Mailto",
           "type": "string"
         }

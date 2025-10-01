@@ -13,6 +13,8 @@ from time import perf_counter
 from urllib.parse import urlencode, urljoin
 
 from library.clients import ChemblClient, _chunked
+from library.utils.atomic import open_atomic
+
 from .config import ApiCfg, MoleculeCatalogCfg
 from .log import logger
 from .rate_limiter import sleep
@@ -650,7 +652,7 @@ def _write_cache_from_items(
     entries = list(items)
 
     if cache_path.suffix.lower() == ".csv":
-        with cache_path.open("w", encoding="utf-8", newline="") as fh:
+        with open_atomic(cache_path, encoding="utf-8", newline="") as fh:
             writer = csv.DictWriter(
                 fh,
                 fieldnames=[catalog_cfg.child_field, catalog_cfg.parent_field],
@@ -665,10 +667,8 @@ def _write_cache_from_items(
                 )
         return
 
-    cache_path.write_text(
-        json.dumps(dict(entries), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    with open_atomic(cache_path, encoding="utf-8") as fh:
+        json.dump(dict(entries), fh, indent=2, sort_keys=True)
 
 
 def _write_parent_catalog_sqlite(

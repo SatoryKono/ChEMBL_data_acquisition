@@ -91,11 +91,13 @@ class PipelineStep:
     main: Callable[[Sequence[str] | None], int]
     subcommand: str | None
 
-    def build_arguments(self, cfg: PipelineRunConfig) -> list[str]:
+    def build_arguments(
+        self, cfg: PipelineRunConfig, output_path: Path | None = None
+    ) -> list[str]:
         """Return CLI arguments forwarded to the wrapped ``main`` function."""
 
         input_csv = cfg.input_path(self.name)
-        output_csv = cfg.output_path(self.name)
+        output_csv = output_path if output_path is not None else cfg.output_path(self.name)
         args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
         args.extend(["--output", str(output_csv)])
         args.extend(["--log-level", cfg.log_level])
@@ -227,23 +229,91 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
     )
 
 
-def _run_step(step: PipelineStep, cfg: PipelineRunConfig) -> int:
+@dataclass(frozen=True)
+class StepExecutionResult:
+    """Summarize the outcome of invoking a pipeline step."""
+
+    exit_code: int
+    executed: bool
+
+
+def _temporary_output_path(output_path: Path) -> Path:
+    """Return the path used for intermediate artefacts of ``output_path``."""
+
+    return output_path.with_name(f".{output_path.name}.tmp")
+
+
+def _failure_sentinel_path(output_path: Path) -> Path:
+    """Return the sentinel path recorded when a pipeline step fails."""
+
+    return output_path.with_name(f"{output_path.name}.failed")
+
+
+def _run_step(
+    step: PipelineStep,
+    cfg: PipelineRunConfig,
+    final_output: Path,
+    working_output: Path,
+) -> StepExecutionResult:
     """Execute ``step`` with ``cfg`` returning the resulting exit code."""
 
     input_path = step.required_input(cfg)
     if not input_path.exists():
         _LOGGER.error("step_input_missing", step=step.name, path=str(input_path))
-        return 1
-    output_path = step.expected_output(cfg)
-    if cfg.skip_existing and output_path.exists() and not cfg.force:
+        return StepExecutionResult(exit_code=1, executed=False)
+    if cfg.skip_existing and final_output.exists() and not cfg.force:
         _LOGGER.info(
-            "step_skipped_existing", step=step.name, path=str(output_path)
+            "step_skipped_existing", step=step.name, path=str(final_output)
         )
-        return 0
+        return StepExecutionResult(exit_code=0, executed=False)
 
-    arguments = step.build_arguments(cfg)
+    arguments = step.build_arguments(cfg, output_path=working_output)
     _LOGGER.debug("step_arguments", step=step.name, arguments=arguments)
-    return step.main(arguments)
+    exit_code = step.main(arguments)
+    return StepExecutionResult(exit_code=exit_code, executed=True)
+
+
+def _finalize_step_success(
+    final_output: Path, working_output: Path, sentinel_path: Path
+) -> None:
+    """Rename temporary outputs into place and clear failure sentinels."""
+
+    if working_output.exists():
+        working_output.replace(final_output)
+    if sentinel_path.exists():
+        sentinel_path.unlink()
+
+
+def _cleanup_failed_step(
+    final_output: Path,
+    working_output: Path,
+    sentinel_path: Path,
+    *,
+    executed: bool,
+) -> None:
+    """Remove partial outputs and persist a failure sentinel."""
+
+    candidates = [working_output]
+    if executed:
+        candidates.append(final_output)
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                candidate.unlink()
+            except OSError as exc:  # pragma: no cover - defensive guard
+                _LOGGER.warning(
+                    "step_cleanup_failed",
+                    path=str(candidate),
+                    error=str(exc),
+                )
+    try:
+        sentinel_path.touch()
+    except OSError as exc:  # pragma: no cover - defensive guard
+        _LOGGER.warning(
+            "sentinel_write_failed",
+            path=str(sentinel_path),
+            error=str(exc),
+        )
 
 
 def run_pipeline(cfg: PipelineRunConfig) -> int:
@@ -252,17 +322,35 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
     overall_status = 0
     for step in _PIPELINE_STEPS:
         _LOGGER.info("step_start", step=step.name)
+        final_output = step.expected_output(cfg)
+        working_output = _temporary_output_path(final_output)
+        sentinel_path = _failure_sentinel_path(final_output)
+        if working_output.exists():
+            working_output.unlink()
         try:
-            exit_code = _run_step(step, cfg)
+            result = _run_step(step, cfg, final_output, working_output)
         except Exception as exc:  # pragma: no cover - defensive guard
             _LOGGER.exception("step_exception", step=step.name, error=str(exc))
-            return 1
-        if exit_code != 0:
-            _LOGGER.error(
-                "step_failed", step=step.name, exit_code=exit_code
+            _cleanup_failed_step(
+                final_output,
+                working_output,
+                sentinel_path,
+                executed=True,
             )
-            overall_status = exit_code
+            return 1
+        if result.exit_code != 0:
+            _LOGGER.error(
+                "step_failed", step=step.name, exit_code=result.exit_code
+            )
+            _cleanup_failed_step(
+                final_output,
+                working_output,
+                sentinel_path,
+                executed=result.executed,
+            )
+            overall_status = result.exit_code
             break
+        _finalize_step_success(final_output, working_output, sentinel_path)
         _LOGGER.info("step_done", step=step.name)
     else:
         _LOGGER.info("workflow_complete")
