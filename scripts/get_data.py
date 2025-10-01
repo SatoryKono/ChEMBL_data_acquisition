@@ -29,10 +29,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Sequence
 
+from library.utils.bootstrap import ensure_project_root
+
+
 if __package__ in {None, ""}:
-    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-    if str(_PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(_PROJECT_ROOT))
+    ensure_project_root()
 
 from scripts import (
     get_activity_data,

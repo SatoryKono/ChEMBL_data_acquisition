@@ -18,10 +18,11 @@ from itertools import islice
 import pandas as pd
 import requests
 
-# Ensure repository package imports work when the script is executed directly.
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+from library.utils.bootstrap import ensure_project_root
+
+
+if __package__ in {None, ""}:
+    ensure_project_root()
 
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
