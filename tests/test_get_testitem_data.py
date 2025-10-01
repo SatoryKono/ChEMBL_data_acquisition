@@ -857,6 +857,53 @@ def test_resolve_pubchem_cids_skips_marked_rows(
     assert cache_dirty
 
 
+def test_resolve_pubchem_cids_skips_cached_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "canonical_smiles": ["C", "N"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    cid_cache: dict[str, str | None] = {"CHEMBL1": None}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    calls: list[str] = []
+
+    def fake_resolve(
+        row: pd.Series,
+        cache: MutableMapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        **_: object,
+    ) -> str:
+        chembl_id = row["molecule_chembl_id"]
+        calls.append(chembl_id)
+        cache[chembl_id] = "111"
+        return "111"
+
+    monkeypatch.setattr(pipeline, "resolve_pubchem_cid", fake_resolve)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    cid_series, lookup_cids, cache_dirty = pipeline._resolve_pubchem_cids(
+        frame,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        load_parent_record=lambda _: None,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert calls == ["CHEMBL2"]
+    assert pd.isna(cid_series.iloc[0])
+    assert cid_series.iloc[1] == "111"
+    assert lookup_cids == {"111"}
+    assert cache_dirty
+
+
 def test_merge_pubchem_properties_preserves_existing_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1265,11 +1312,13 @@ def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
 
     assert not cache_path.parent.exists()
 
-    pipeline._write_pubchem_cid_cache(cache_path, {"CHEMBL1": "321"})
+    pipeline._write_pubchem_cid_cache(
+        cache_path, {"CHEMBL1": "321", "CHEMBL2": None}
+    )
 
     assert cache_path.exists()
     payload = json.loads(cache_path.read_text())
-    assert payload["values"] == {"CHEMBL1": "321"}
+    assert payload["values"] == {"CHEMBL1": "321", "CHEMBL2": None}
     assert payload["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
 
 
