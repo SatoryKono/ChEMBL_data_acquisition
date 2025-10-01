@@ -6,8 +6,9 @@ utilities, their structure, shared services and supporting workflows.
 ## Repository layout
 
 * `scripts/` – command-line entry points for the activity, assay, document,
-  target and test-item pipelines, plus the cached target harness used for
-  offline smoke tests.
+  target and test-item pipelines.
+* `library/utils/cli_tools/` – cached target harness helpers for offline smoke
+  tests.
 * `library/` – reusable modules covering API clients, rate limiting,
   normalisation, enrichment, validation, deterministic I/O, logging and
   metadata helpers.
