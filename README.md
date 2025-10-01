@@ -211,6 +211,13 @@ Common options / Общие параметры:
   или префикс, добавляемый к именам выгрузок.
 * `--log-level`, `--force`, `--skip-existing` — **EN.** logging verbosity and
   overwrite policy. / **RU.** уровень логирования и политика перезаписи.
+* `--limit` — **EN.** cap forwarded to every pipeline; ``0`` skips execution
+  without touching inputs or outputs. / **RU.** ограничение для всех шагов;
+  значение ``0`` пропускает выполнение без обращений к входным данным и
+  файловой системе.
+
+Setting ``--limit 0`` logs ``pipeline_skip_limit`` for every stage and leaves
+existing artefacts untouched.
 
 Example / Пример запуска:
 
@@ -263,8 +270,8 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 The examples below illustrate how to run the main CLI tools with common
 options like ``--input``, ``--output`` and ``--limit``. Passing
-``--limit 0`` is permitted and skips processing after validation, which is
-handy for configuration smoke tests.
+``--limit 0`` short-circuits processing before any network or filesystem
+access, which is handy for configuration smoke tests.
 
 ### scripts/get_document_data.py
 

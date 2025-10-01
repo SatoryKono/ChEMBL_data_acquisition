@@ -163,7 +163,7 @@ as a CI artifact.
 
 ## Usage
 
-The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--output` and `--limit`. Using `--limit 0` is supported and short-circuits processing after validation, which is useful for smoke-testing configuration overrides.
+The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--output` and `--limit`. Using `--limit 0` now short-circuits processing before any network or filesystem access, which is useful for smoke-testing configuration overrides.
 After installing the project with `pip install .`, the same pipelines can be started via the console scripts listed in the
 [Quick Start](#quick-start) table—for example, `get-activity-data --help` is equivalent to `python -m scripts.get_activity_data --help`.
 Both forms accept identical arguments, so feel free to swap between them depending on your environment.
