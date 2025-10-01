@@ -314,6 +314,11 @@ system:
       - 502
       - 503
       - 504
+  doc_quality:
+    enable: true  # Toggle generation of table quality reports
+    sample_rows: null  # Limit profiling to the first N rows (null keeps all)
+    include_columns: null  # Optional allow list of column names to analyse
+    exclude_columns: null  # Optional deny list of column names to skip
   doc_type:
     weights:
       pubmed: 4

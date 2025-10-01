@@ -655,6 +655,61 @@
       "title": "DocTypeCfg",
       "type": "object"
     },
+    "DocQualityCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": true,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "sample_rows": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Rows"
+        },
+        "include_columns": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Include Columns"
+        },
+        "exclude_columns": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclude Columns"
+        }
+      },
+      "title": "DocQualityCfg",
+      "type": "object"
+    },
     "DocumentAllCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1471,6 +1526,9 @@
         },
         "retry": {
           "$ref": "#/$defs/RetryCfg"
+        },
+        "doc_quality": {
+          "$ref": "#/$defs/DocQualityCfg"
         },
         "doc_type": {
           "$ref": "#/$defs/DocTypeCfg"
