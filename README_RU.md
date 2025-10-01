@@ -255,12 +255,11 @@ CHEMBL2345678
 
 ```yaml
 api:
-  user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
+  user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 ```
 
 Переопределите параметр в `config/config.yaml` или переменной окружения `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`, которая
-соответствует пути `sources.chembl.api.user_agent`. Отдельного CLI-флага нет (см. `library/cli/parser.py`), поэтому используются
-только конфигурационные файлы или окружение.
+соответствует пути `sources.chembl.api.user_agent`. Перед выводом решения в продакшен замените `chembl-data@ebi.ac.uk` на свой рабочий адрес — встроенное значение служит лишь документированным дефолтом. Валидатор по-прежнему проверяет наличие шаблона `contact@example.org` и блокирует запуск, если он встречается. Отдельного CLI-флага нет (см. `library/cli/parser.py`), поэтому используются только конфигурационные файлы или окружение.
 
 ## Валидация конфигурации
 
