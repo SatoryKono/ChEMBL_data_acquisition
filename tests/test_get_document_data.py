@@ -91,7 +91,12 @@ def test_cli_uses_custom_column(
         chunk_size: int | None = None,
         **_: Any,
     ) -> Path:
-        list(chunks)
+        frames = list(chunks)
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame()
+        combined.to_csv(path, index=False)
         return path
 
     def fake_write_export_chunks(
@@ -102,7 +107,12 @@ def test_cli_uses_custom_column(
         key_cols: Sequence[str],
         chunk_size: int | None = None,
     ) -> Path:
-        list(chunks)
+        frames = list(chunks)
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame()
+        combined.to_csv(path, index=False)
         return path
 
     monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
@@ -477,6 +487,8 @@ def test_write_csv_column_order(
         captured["col_order"] = list(col_order or [])
         captured["columns"] = list(frames[0].columns) if frames else []
         captured["key_cols"] = list(key_cols or [])
+        combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        combined.to_csv(path, index=False)
         return path
 
     monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
@@ -1239,6 +1251,9 @@ def test_fetch_pubmed_records_accepts_executor_context(
     pmids = ["1", "2"]
 
     class DummyLimiter:
+        def __init__(self) -> None:
+            self.burst = 1
+
         def acquire(self) -> None:  # pragma: no cover - trivial
             return None
 
@@ -1457,3 +1472,105 @@ def test_fetch_pubmed_records_parallel_enrichment(
     assert crossref_threads
     assert all(name.startswith("ThreadPoolExecutor") for name in openalex_threads)
     assert all(name.startswith("ThreadPoolExecutor") for name in crossref_threads)
+
+
+def test_fetch_pubmed_records_reuses_service_executors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef executors should be shared across batches."""
+
+    pmids = ["100", "200", "300", "400"]
+    creations: list[int | None] = []
+
+    orig_executor = gdd.ThreadPoolExecutor
+
+    class TrackingExecutor(orig_executor):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            max_workers = kwargs.get("max_workers")
+            if max_workers is None and args:
+                max_workers = args[0]
+            creations.append(max_workers)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", TrackingExecutor)
+    monkeypatch.setattr(gdd, "get_limiter", lambda _name, _rps, burst=None: DummyLimiter(burst or 1))
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *_exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+
+    def fake_pubmed_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"10.1234/{pmid}",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {"scholar.PMID": "", "scholar.DOI": ""},
+    )
+
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda *_args, **_kwargs: {
+            "OpenAlex.Venue": "Venue",
+            "OpenAlex.Error": "",
+        },
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda *_args, **_kwargs: {
+            "crossref.Title": "Title",
+            "crossref.Error": "",
+        },
+    )
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert len(creations) == 3
+    assert creations.count(1) == 1
