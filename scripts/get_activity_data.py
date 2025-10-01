@@ -298,6 +298,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
+    if args.limit == 0:
+        logger.info("pipeline_skip_limit", limit=0)
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
+        return 0
     try:
         cfg: Config = cli.apply_config_overrides(
             args,

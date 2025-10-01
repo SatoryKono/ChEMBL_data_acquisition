@@ -55,9 +55,14 @@ All entry points rely on `library.logging_setup.Logger` and emit JSON lines enri
 | `pipeline_start` | Immediately after the CLI configures logging and before validation begins. |
 | `documents_processed` | Document pipeline progress counter emitted after each processed batch. |
 | `process_limit` | Recorded when `--limit` (or configuration equivalents) trims the identifier set. |
+| `pipeline_skip_limit` | Logged when `--limit 0` exits before configuration, network or filesystem access. |
 | `process_offset` | Emitted when `--offset` advances the identifier iterator before processing. |
 | `write_done` | Successful CSV write including the path and retained row count. |
 | `pipeline_done` / `pipeline_fail` | Final outcome logged before exit. |
+
+Passing `--limit 0` is the supported way to skip a pipeline. The command logs
+`pipeline_skip_limit` and exits without touching the configuration loader,
+network clients or output directories, keeping orchestrated runs idempotent.
 
 Warnings such as `pubmed_batch_request_failed` and `pubmed_batch_unexpected_error`
 now include `pmids_count` and a trimmed `pmids_sample` instead of the full
@@ -100,6 +105,7 @@ python -m scripts.get_activity_data \
 * Reads the column configured at `sources.chembl.pipelines.activity.column` (`activity_chembl_id` by default).
 * Writes the main CSV, `*.meta.yaml`, optional `*_failure_cases.csv` and quality reports.
 * Supports `--limit` to restrict the number of identifiers, `--offset` to resume after a known checkpoint and `--dry-run` to validate inputs without API calls.
+* Set `--limit 0` to emit `pipeline_skip_limit` and exit before any network or filesystem interaction.
 * Populates `lower_value` and `upper_value` using canonical `standard_*` fields. Tweak the behaviour via `activity_bounds.*` in the configuration (relation-based inference, ± parsing, rounding, clamping and logging).
 * Monitor warnings such as `activity_bounds_unknown_relation` or `activity_bounds_missing_standard_value` in the log output; they indicate rows where bounds could not be derived or the relation marker is not recognised.
 
