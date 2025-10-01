@@ -37,9 +37,16 @@ from library.clients import pubchem as pc  # noqa: F401 - patched in tests
 from library import testitem_pipeline as pipeline
 from library.chembl_client import ChemblClient
 from library.testitem_pipeline import (
+    PUBCHEM_COLUMNS,
     PUBCHEM_CID_CACHE_ENCODING as _pipeline_pubchem_cid_cache_encoding,
     ReadInputIdsResult as _ReadInputIdsResult,
     TestitemPipelineOptions,
+    _DEFAULT_CATALOG_CFG,
+    _FETCH_ERROR_SAMPLE_SIZE,
+    _MOLECULE_HIERARCHY_COLUMNS,
+    _PLACEHOLDER_CONTACT_EMAIL,
+    _PUBCHEM_CACHE_SCHEMA_VERSION,
+    _TYPO_PARENT_COLUMN,
     analyze_table_quality as _analyze_table_quality,
     file_sha256 as _pipeline_file_sha256,
     fetch_testitems as _fetch_testitems,
@@ -82,10 +89,6 @@ PUBCHEM_CID_CACHE_ENCODING = _pipeline_pubchem_cid_cache_encoding
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
 
-_FETCH_ERROR_SAMPLE_SIZE = 10
-
-_PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
-
 @dataclass
 class ReadInputIdsResult:
     """Container holding the identifier iterator and a diagnostic sample."""
@@ -111,22 +114,6 @@ PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
 
 
-PUBCHEM_COLUMNS = [
-    "pubchem_cid",
-    "pubchem_iupac_name",
-    "pubchem_molecular_formula",
-    "pubchem_isomeric_smiles",
-    "pubchem_canonical_smiles",
-    "pubchem_inchi",
-    "pubchem_inchikey",
-]
-
-
-_CID_CACHE_MISSING = object()
-
-_FETCH_ERROR_SAMPLE_SIZE = 10
-
-
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     """Return ``value`` normalised for PubChem lookup."""
 
@@ -141,9 +128,6 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     if not normalised:
         return None
     return normalised.upper() if uppercase else normalised
-
-
-_PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
