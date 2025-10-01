@@ -74,6 +74,7 @@ class PipelineRunConfig:
     config_path: Path
     date_prefix: str
     log_level: str
+    limit: int | None
     force: bool
     skip_existing: bool
 
@@ -109,6 +110,8 @@ class PipelineStep:
         args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
         args.extend(["--output", str(output_csv)])
         args.extend(["--log-level", cfg.log_level])
+        if cfg.limit is not None:
+            args.extend(["--limit", str(cfg.limit)])
         if self.subcommand is not None:
             return [self.subcommand, *args]
         return args
@@ -200,6 +203,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Logging verbosity for the orchestrator and child pipelines",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of identifiers processed by each pipeline",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Re-run pipelines even if the target file already exists",
@@ -220,6 +229,9 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
     output_dir = _resolve_path(base_path, args.output_dir)
     config_path = args.config.expanduser().resolve()
 
+    if args.limit is not None and args.limit <= 0:
+        raise ValueError("--limit must be a positive integer")
+
     if not input_dir.exists():
         raise FileNotFoundError(f"input directory not found: {input_dir}")
     if not config_path.exists():
@@ -233,6 +245,7 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         config_path=config_path,
         date_prefix=args.date_prefix,
         log_level=args.log_level,
+        limit=args.limit,
         force=args.force,
         skip_existing=args.skip_existing,
     )
