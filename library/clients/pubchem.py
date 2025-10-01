@@ -65,13 +65,14 @@ _DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/1.0 (mailto:chembl-data@ebi.ac.u
 _DEFAULT_RETRY_CFG = RetryCfg()
 _SESSION_CFG: tuple[ApiCfg, RetryCfg] = (_DEFAULT_API_CFG, _DEFAULT_RETRY_CFG)
 _SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)
+_SESSION_INITIALISED = False
 _session: Session | None = session_with_retry(*_SESSION_CFG)
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session."""
 
-    global _SESSION_CFG, _SESSION_SIGNATURE, _session
+    global _SESSION_CFG, _SESSION_SIGNATURE, _SESSION_INITIALISED, _session
     signature = _config_signature(api, retry)
     old_session: Session | None = None
     with _SESSION_LOCK:
@@ -79,6 +80,7 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
         _session = None
         _SESSION_CFG = (api, retry)
         _SESSION_SIGNATURE = signature
+        _SESSION_INITIALISED = True
     if old_session is not None:
         old_session.close()
 
@@ -86,7 +88,7 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
 def get_session(cfg: ApiCfg | None = None) -> Session:
     """Return the shared HTTP session, creating or refreshing as needed."""
 
-    global _SESSION_CFG, _SESSION_SIGNATURE, _session
+    global _SESSION_CFG, _SESSION_SIGNATURE, _SESSION_INITIALISED, _session
     old_session: Session | None = None
     with _SESSION_LOCK:
         current_api, current_retry = _SESSION_CFG
@@ -95,7 +97,10 @@ def get_session(cfg: ApiCfg | None = None) -> Session:
         needs_refresh = signature != _SESSION_SIGNATURE or _session is None
         _SESSION_CFG = (target_api, current_retry)
         if needs_refresh:
-            if target_api.user_agent == _DEFAULT_API_CFG.user_agent:
+            if (
+                target_api.user_agent == _DEFAULT_API_CFG.user_agent
+                and not _SESSION_INITIALISED
+            ):
                 raise ValueError(
                     "PubChem client requires a custom User-Agent; "
                     "call init_session with contact details before making requests."
@@ -109,7 +114,10 @@ def get_session(cfg: ApiCfg | None = None) -> Session:
         old_session.close()
     if session is None:
         raise RuntimeError("Failed to initialise PubChem session")
-    if session.headers.get("User-Agent") == _DEFAULT_API_CFG.user_agent:
+    if (
+        session.headers.get("User-Agent") == _DEFAULT_API_CFG.user_agent
+        and not _SESSION_INITIALISED
+    ):
         raise ValueError(
             "PubChem client requires a custom User-Agent; "
             "call init_session with contact details before making requests."
