@@ -101,6 +101,9 @@ _USER_AGENT_ERROR = (
     "call init_session with contact details before making requests."
 )
 
+_CACHE_MISS_OUTCOMES: frozenset[str] = frozenset({"timeout", "not_found"})
+_TIMEOUT_FLAG_KEY = "timeout"
+
 
 def _has_contact_details(user_agent: str | None) -> bool:
     """Return ``True`` when *user_agent* contains usable contact details."""
@@ -487,18 +490,31 @@ def _store_cache_miss(
 ) -> None:
     """Persist a cached miss outcome for ``url`` including optional details."""
 
-    details_copy = dict(details) if details else None
-    with _CACHE_LOCK:
-        cache = _ensure_cache(cfg.cache_ttl)
-        cache[url] = _CacheEntry(payload=None, outcome=outcome, details=details_copy)
+    if outcome not in _CACHE_MISS_OUTCOMES:
+        raise ValueError(f"Unsupported cache outcome: {outcome}")
+
+    details_copy = dict(details) if details else {}
+
     log_data: dict[str, Any] = {
         "url": url,
         "rps": cfg.rps,
         "status": "miss",
         "outcome": outcome,
     }
-    if details_copy:
-        log_data.update(details_copy)
+
+    if outcome == "timeout":
+        details_copy.setdefault(_TIMEOUT_FLAG_KEY, True)
+        if details_copy:
+            log_data.update(details_copy)
+        logger.info("cache_skip", **log_data)
+        return
+
+    details_payload = details_copy or None
+    with _CACHE_LOCK:
+        cache = _ensure_cache(cfg.cache_ttl)
+        cache[url] = _CacheEntry(payload=None, outcome=outcome, details=details_payload)
+    if details_payload:
+        log_data.update(details_payload)
     logger.info("cache_set", **log_data)
 
 

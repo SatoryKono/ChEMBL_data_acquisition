@@ -46,6 +46,12 @@ def test_make_request_uses_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     class Resp:
         status_code = 200
 
+        def __enter__(self) -> "Resp":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - simple stub
+            return False
+
         def json(self) -> dict[str, object]:
             return {}
 
@@ -95,6 +101,12 @@ def test_make_request_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
     class Resp:
         status_code = 200
 
+        def __enter__(self) -> "Resp":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - simple stub
+            return False
+
         def json(self) -> dict[str, object]:
             return {}
 
@@ -134,6 +146,12 @@ def test_make_request_waits_between_retries(monkeypatch) -> None:
 
     class Resp:
         status_code = 200
+
+        def __enter__(self) -> "Resp":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - simple stub
+            return False
 
         def json(self) -> dict[str, object]:
             return {}
@@ -179,6 +197,12 @@ def test_make_request_logs_per_request_events_as_debug(
 
     class DummyResponse:
         status_code = 200
+
+        def __enter__(self) -> "DummyResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - simple stub
+            return False
 
         def json(self) -> dict[str, object]:
             return {}
@@ -396,6 +420,12 @@ def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     class Resp:
         status_code = 200
 
+        def __enter__(self) -> "Resp":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - simple stub
+            return False
+
         def json(self) -> dict[str, object]:
             return {}
 
@@ -445,3 +475,121 @@ def test_make_request_caches_missing_results() -> None:
     assert first is None
     assert second is None
     assert len(responses.calls) == 1
+
+
+def test_store_cache_miss_rejects_unknown_outcome() -> None:
+    """``_store_cache_miss`` should reject unsupported outcomes."""
+
+    pc._CACHE = None
+    cfg = pl.PubChemCfg()
+
+    with pytest.raises(ValueError):
+        pc._store_cache_miss("https://example.org", cfg, "boom")
+
+
+def test_store_cache_miss_skips_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Timeout outcomes should not be persisted in the cache."""
+
+    class DummyLogger:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, dict[str, object]]] = []
+
+        def info(self, event: str, **data: object) -> None:
+            self.events.append((event, data))
+
+    dummy_logger = DummyLogger()
+    monkeypatch.setattr(pc, "logger", dummy_logger)
+
+    pc._CACHE = None
+    cfg = pl.PubChemCfg(timeout_seconds=5)
+    url = "https://example.org/timeout"
+
+    pc._store_cache_miss(url, cfg, "timeout", {"reason": "timeout"})
+
+    assert pc._CACHE is None
+    assert dummy_logger.events == [
+        (
+            "cache_skip",
+            {
+                "url": url,
+                "rps": cfg.rps,
+                "status": "miss",
+                "outcome": "timeout",
+                "reason": "timeout",
+                "timeout": True,
+            },
+        )
+    ]
+
+
+def test_make_request_does_not_cache_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overall timeouts should not prevent subsequent retries."""
+
+    class DummyLimiter:
+        def acquire(self) -> None:  # pragma: no cover - simple stub
+            return None
+
+    class ResponseStub:
+        status_code = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self) -> "ResponseStub":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - no cleanup
+            return False
+
+        def json(self) -> dict[str, object]:
+            return {}
+
+        def raise_for_status(self) -> None:  # pragma: no cover - no error
+            return None
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url: str, timeout: tuple[int, int]) -> ResponseStub:
+            self.calls += 1
+            if self.calls == 1:
+                raise requests.Timeout("boom")
+            return ResponseStub()
+
+    session = DummySession()
+
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: DummyLimiter())
+    monkeypatch.setattr(pc, "_session", session)
+    monkeypatch.setattr(pc, "get_session", lambda: session)
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+
+    monotonic_values = iter([0.0, 0.0, 10.0, 0.0, 0.0])
+
+    def fake_monotonic() -> float:
+        try:
+            return next(monotonic_values)
+        except StopIteration:
+            return 0.0
+
+    monkeypatch.setattr(pc, "monotonic", fake_monotonic)
+
+    pc._CACHE = None
+    cfg = pl.PubChemCfg(
+        retries=2,
+        delay=0,
+        backoff_initial_seconds=0,
+        timeout_seconds=5,
+    )
+    url = "https://example.org/resource"
+
+    first = pl.make_request(url, cfg)
+
+    assert first is None
+    assert session.calls == 1
+    with pc._CACHE_LOCK:
+        cache = pc._CACHE
+        assert cache is None or url not in cache
+
+    result = pl.make_request(url, cfg)
+
+    assert result == {}
+    assert session.calls == 2
