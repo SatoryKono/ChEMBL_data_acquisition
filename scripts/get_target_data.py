@@ -12,7 +12,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from itertools import islice
 from pathlib import Path
 from typing import cast
@@ -547,6 +547,18 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _limited_ids(ids_iter: Iterator[str], limit: int) -> Iterator[str]:
+    """Yield up to ``limit`` identifiers while logging the processed count."""
+
+    count = 0
+    try:
+        for target_id in islice(ids_iter, limit):
+            count += 1
+            yield target_id
+    finally:
+        logger.info("process_limit", limit=count)
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the ``chembl`` sub-command.
 
@@ -595,9 +607,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         ids = ids_iter
         if limit is not None:
-            limited_ids = list(islice(ids_iter, limit))
-            ids = limited_ids
-            logger.info("process_limit", limit=len(limited_ids))
+            ids = _limited_ids(ids_iter, limit)
 
         try:
             df = cl.get_targets(
