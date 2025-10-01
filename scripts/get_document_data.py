@@ -462,6 +462,7 @@ def fetch_pubmed_records(
                     len(openalex_jobs), openalex_limiter, openalex_cfg.burst
                 )
                 def _fetch_openalex_job(pmid: str) -> dict[str, str]:
+                    _acquire_documents(openalex_service_limiter)
                     return _invoke_with_session(
                         ocl.fetch_openalex,
                         pmid,
@@ -500,6 +501,7 @@ def fetch_pubmed_records(
                     len(crossref_jobs), crossref_limiter, crossref_cfg.burst
                 )
                 def _fetch_crossref_job(doi: str) -> dict[str, str]:
+                    _acquire_documents(crossref_service_limiter)
                     return _invoke_with_session(
                         ocl.fetch_crossref,
                         doi,
