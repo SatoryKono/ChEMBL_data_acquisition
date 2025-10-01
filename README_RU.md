@@ -376,7 +376,8 @@ jq 'select(.event=="dry_run")' log.jsonl
 
 ```json
 {"ts":"2024-05-01T12:00:00Z","level":"INFO","event":"pipeline_start","run_id":"abc123","stage":"pipeline"}
-{"ts":"2024-05-01T12:00:01Z","level":"INFO","event":"request_ok","run_id":"abc123","stage":"fetch","url":"https://api.example.org","status":200}
+{"ts":"2024-05-01T12:00:01Z","level":"DEBUG","event":"request_ok","run_id":"abc123","stage":"fetch","url":"https://api.example.org","status":200}
+{"ts":"2024-05-01T12:00:01Z","level":"DEBUG","event":"cache_set","run_id":"abc123","stage":"fetch","url":"https://api.example.org","status":"hit"}
 {"ts":"2024-05-01T12:00:02Z","level":"INFO","event":"validate_done","run_id":"abc123","stage":"validate","rows":42}
 {"ts":"2024-05-01T12:00:03Z","level":"INFO","event":"pipeline_done","run_id":"abc123","stage":"pipeline","elapsed":3.2}
 ```

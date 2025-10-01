@@ -439,7 +439,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 with _CACHE_LOCK:
                     cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
                     cache[url] = _CacheEntry(payload=data, outcome="hit")
-                logger.info("cache_set", url=url, rps=cfg.rps, status="hit")
+                logger.debug("cache_set", url=url, rps=cfg.rps, status="hit")
                 return data
         except requests.RequestException as exc:  # pragma: no cover - network
             last_failure_details = {
@@ -499,7 +499,7 @@ def _store_cache_miss(
     }
     if details_copy:
         log_data.update(details_copy)
-    logger.info("cache_set", **log_data)
+    logger.debug("cache_set", **log_data)
 
 
 def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:

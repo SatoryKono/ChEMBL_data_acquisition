@@ -208,7 +208,7 @@ class ChemblClient:
                         if cached is not None:
                             return cast(dict[str, Any], cached)
                         self.cache[cache_key] = data
-                        logger.info("cache_set", extra={"url": url, "rps": cfg.rps})
+                        logger.debug("cache_set", extra={"url": url, "rps": cfg.rps})
                         return data
             except ValueError as exc:
                 last_exc = exc
