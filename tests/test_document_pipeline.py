@@ -1,6 +1,8 @@
 import threading
 from collections import Counter
-from collections.abc import Iterable, Iterator, Sequence
+
+from collections.abc import Iterable, Iterator, Sequence, Mapping
+
 from itertools import count
 from pathlib import Path
 
@@ -280,11 +282,33 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
             "crossref.Error": "",
         }
 
+    def fake_openalex_session(*_args: object, **_kwargs: object):
+        class _Context:
+            def __enter__(self) -> str:  # pragma: no cover - simple context
+                return _next_session_token()
+
+            def __exit__(self, *_exc: object) -> None:  # pragma: no cover - simple context
+                return None
+
+        return _Context()
+
+    def fake_crossref_session(*_args: object, **_kwargs: object):
+        class _Context:
+            def __enter__(self) -> str:  # pragma: no cover - simple context
+                return _next_session_token()
+
+            def __exit__(self, *_exc: object) -> None:  # pragma: no cover - simple context
+                return None
+
+        return _Context()
+
     monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
     monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
     monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
     monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
+    monkeypatch.setattr(gdd, "openalex_session", fake_openalex_session)
+    monkeypatch.setattr(gdd, "crossref_session", fake_crossref_session)
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
 
@@ -309,8 +333,9 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
 
     assert len(openalex_sessions) == len(pmids)
     assert len(crossref_sessions) == len(pmids)
-    assert len(set(openalex_sessions)) == len(pmids)
-    assert len(set(crossref_sessions)) == len(pmids)
+    assert set(openalex_sessions).isdisjoint(pubmed_sessions)
+    assert set(crossref_sessions).isdisjoint(pubmed_sessions)
+    assert set(openalex_sessions) != set(crossref_sessions)
 
     first_session = pubmed_sessions[0]
     assert all(session != first_session for session in openalex_sessions)
@@ -484,6 +509,9 @@ def test_fetch_pubmed_records_logs_compact_batch(
             return None
 
     class DummyLimiter:
+        def __init__(self, burst: int | None = None) -> None:
+            self.burst = burst if burst is not None else 5
+
         def acquire(self) -> None:  # pragma: no cover - simple synchronisation
             return None
 
@@ -492,8 +520,10 @@ def test_fetch_pubmed_records_logs_compact_batch(
     def fake_session_with_retry(*_args: object, **_kwargs: object) -> DummySession:
         return DummySession()
 
-    def fake_get_limiter(*_args: object, **_kwargs: object) -> DummyLimiter:
-        return DummyLimiter()
+    def fake_get_limiter(
+        _name: str, _rps: float | int | None, burst: int | None = None
+    ) -> DummyLimiter:
+        return DummyLimiter(burst)
 
     def fail_pubmed_batch(*_args: object, **_kwargs: object) -> list[dict[str, str]]:
         raise requests.RequestException("boom")
@@ -534,88 +564,169 @@ def test_fetch_pubmed_records_logs_compact_batch(
     assert payload["pmids_sample"] == pmids[:5] + ["..."]
 
 
-def test_finalise_export_failure_skips_write_done(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+
+def test_finalise_export_streams_single_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Validation failures should not emit ``write_done`` logs."""
+    """The export finalisation stage streams frames without duplicating work."""
 
-    cfg = Config()
-    df = pd.DataFrame(
-        {
-            "document_chembl_id": ["CHEMBL1"],
-            "PubMed.PMID": ["123"],
-        }
-    )
-    output = tmp_path / "documents.csv"
+    frames_yielded = 3
+    next_calls = 0
 
-    info_events: list[tuple[str, dict[str, object]]] = []
+    def _frame_source() -> Iterator[pd.DataFrame]:
+        nonlocal next_calls
+        for idx in range(frames_yielded):
+            next_calls += 1
+            yield pd.DataFrame({"document_chembl_id": [f"CHEMBL{idx}"]})
 
-    def fake_info(
-        event: str, *args: object, extra: dict[str, object] | None = None, **payload: object
-    ) -> None:
-        record = dict(payload)
-        if extra:
-            record.update(extra)
-        info_events.append((event, record))
+    emitted_chunks: list[pd.DataFrame] = []
 
-    def fake_validate(frame: pd.DataFrame, lazy: bool = True) -> pd.DataFrame:
-        failure_cases = pd.DataFrame(
-            [
-                {
-                    "index": 0,
-                    "column": "document_chembl_id",
-                    "failure_case": "invalid",
-                }
-            ]
-        )
-        exc = SchemaErrors.__new__(SchemaErrors)
-        exc.args = ("invalid",)
-        exc.failure_cases = failure_cases
-        exc.validated_data = frame.iloc[0:0]
-        exc.message = {"error": "invalid"}
-        raise exc
-
-    def fake_write_csv(
+    def fake_write_csv_chunks(
         chunks: Iterable[pd.DataFrame],
         path: Path,
-        *,
-        cfg: object,
-        key_cols: list[str] | None = None,
-        **_: object,
+        **_kwargs: object,
     ) -> Path:
-        list(chunks)
-        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("")
+        for chunk in chunks:
+            emitted_chunks.append(chunk.copy())
         return path
 
-    captured_errors: list[Path] = []
+    def fake_load_export_ready_frame(path: Path, cfg: Config) -> pd.DataFrame:
+        return pd.concat(emitted_chunks, ignore_index=True) if emitted_chunks else pd.DataFrame()
 
-    def fake_save(self: gdd.SidecarErrors, path: Path, *, cfg: Config | None = None) -> None:
-        captured_errors.append(path)
+    class DummySidecarErrors:
+        def add_error(self, _row: Mapping[str, object]) -> None:
+            return None
 
-    monkeypatch.setattr(gdd.logger, "info", fake_info)
-    monkeypatch.setattr(gdd.DocumentsSchema, "validate", fake_validate)
-    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv)
-    monkeypatch.setattr(gdd.SidecarErrors, "save", fake_save, raising=False)
-    monkeypatch.setattr(gdd, "file_sha256", lambda path: "hash")
-    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **_: None)
-    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
-    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+        def save(self, _path: Path) -> None:
+            return None
+
+    monkeypatch.setattr(document_script, "SidecarErrors", DummySidecarErrors)
+    monkeypatch.setattr(document_script, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(document_script, "_load_export_ready_frame", fake_load_export_ready_frame)
+    monkeypatch.setattr(document_script, "write_meta_yaml", lambda **_kwargs: None)
+    monkeypatch.setattr(document_script, "build_quality_report", lambda _df: {})
+    monkeypatch.setattr(document_script, "save_quality_report", lambda *_args, **_kw: None)
+    monkeypatch.setattr(document_script, "analyze_table_quality", lambda *_args, **_kw: None)
+    monkeypatch.setattr(document_script, "file_sha256", lambda _path: "hash")
+    monkeypatch.setattr(document_script.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
+    monkeypatch.setattr(document_script, "add_pipeline_metadata", lambda frame: frame)
+    monkeypatch.setattr(document_script, "build_dataframe", lambda data, **_kw: data)
     monkeypatch.setattr(
-        gdd,
-        "_load_export_ready_frame",
-        lambda path, cfg: pd.DataFrame(columns=list(gdd._EXPORT_COLUMNS)),
+        document_script,
+        "_iter_export_chunks",
+        lambda df, *, chunk_size: [df],
     )
 
-    exit_code = gdd._finalise_export(
-        df,
+    cfg = Config()
+    output_dir = tmp_path / "documents"
+    output_dir.mkdir()
+    output = output_dir / "output.csv"
+    exit_code = document_script._finalise_export(
+        _frame_source(),
         output,
         cfg,
-        input_csv=tmp_path / "input.csv",
+        input_csv=output,
         key_columns=["document_chembl_id"],
+        chunk_size=1,
+    )
+
+    assert exit_code == 0
+    assert next_calls == frames_yielded
+    assert emitted_chunks
+
+
+def test_finalise_export_logs_missing_columns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Missing required columns still trigger warnings after streaming export."""
+
+    next_calls = 0
+
+    def _frame_source() -> Iterator[pd.DataFrame]:
+        nonlocal next_calls
+        next_calls += 1
+        yield pd.DataFrame({"title": ["missing id"]})
+
+    warnings: list[tuple[str, Mapping[str, object]]] = []
+
+    emitted_chunks: list[pd.DataFrame] = []
+
+    class DummyLogger:
+        def warning(
+            self,
+            event: str,
+            *_args: object,
+            **payload: object,
+        ) -> None:
+            warnings.append((event, payload))
+
+        def error(self, *_args: object, **_kw: object) -> None:
+            return None
+
+        def info(self, *_args: object, **_kw: object) -> None:
+            return None
+
+    monkeypatch.setattr(document_script, "logger", DummyLogger())
+
+    class DummySidecarErrors:
+        def add_error(self, _row: Mapping[str, object]) -> None:
+            return None
+
+        def save(self, _path: Path) -> None:
+            return None
+
+    monkeypatch.setattr(document_script, "SidecarErrors", DummySidecarErrors)
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        **_kwargs: object,
+    ) -> Path:
+        path.write_text("")
+        for chunk in chunks:
+            emitted_chunks.append(chunk.copy())
+        return path
+
+    monkeypatch.setattr(document_script, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(
+        document_script,
+        "_load_export_ready_frame",
+        lambda *_args, **_kw: pd.concat(emitted_chunks, ignore_index=True)
+        if emitted_chunks
+        else pd.DataFrame(),
+    )
+    monkeypatch.setattr(document_script, "write_meta_yaml", lambda **_kwargs: None)
+    monkeypatch.setattr(document_script, "build_quality_report", lambda _df: {})
+    monkeypatch.setattr(document_script, "save_quality_report", lambda *_args, **_kw: None)
+    monkeypatch.setattr(document_script, "analyze_table_quality", lambda *_args, **_kw: None)
+    monkeypatch.setattr(document_script, "file_sha256", lambda _path: "hash")
+    monkeypatch.setattr(document_script.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
+    monkeypatch.setattr(document_script, "add_pipeline_metadata", lambda frame: frame)
+    monkeypatch.setattr(document_script, "build_dataframe", lambda data, **_kw: data)
+    monkeypatch.setattr(
+        document_script,
+        "_iter_export_chunks",
+        lambda df, *, chunk_size: [df],
+    )
+
+    cfg = Config()
+    output_dir = tmp_path / "documents_missing"
+    output_dir.mkdir()
+    output = output_dir / "output.csv"
+    exit_code = document_script._finalise_export(
+        _frame_source(),
+        output,
+        cfg,
+        input_csv=output,
+        key_columns=["document_chembl_id"],
+        chunk_size=1,
     )
 
     assert exit_code == 1
-    assert all(event != "write_done" for event, _payload in info_events)
-    assert captured_errors
+    assert next_calls == 1
+    assert warnings
+    event, payload = warnings[-1]
+    assert event == "validation_skipped_missing_required"
+    assert payload["columns"] == ["document_chembl_id"]
+

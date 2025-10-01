@@ -1086,37 +1086,14 @@ def _finalise_export(
         frames_iterable = df
 
     frames_iterator = iter(frames_iterable)
-    analysis_iter, process_iter = tee(frames_iterator)
-
     required_cols = {
         name for name, col in DocumentsSchema.columns.items() if col.required
     }
     optional_cols = set(DocumentsSchema.columns) - required_cols
 
     present_columns: set[str] = set()
-    for frame in analysis_iter:
-        prepared = build_dataframe(
-            add_pipeline_metadata(frame),
-            columns=DOCUMENT_SCHEMA_COLUMNS,
-            fill_missing=False,
-        )
-        present_columns.update(prepared.columns)
-
-    missing_required = required_cols - present_columns
-    missing_optional = optional_cols - present_columns
-
-    if missing_required:
-        logger.warning(
-            "validation_skipped_missing_required",
-            columns=sorted(missing_required),
-        )
-    elif missing_optional:
-        logger.warning(
-            "missing_optional_columns",
-            columns=sorted(missing_optional),
-        )
-
-    should_validate = not missing_required
+    missing_required: set[str] = set(required_cols)
+    missing_optional: set[str] = set(optional_cols)
 
     stream_chunk = max(1, int(chunk_size or _EXPORT_STREAM_CHUNK_SIZE))
     failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
@@ -1128,27 +1105,35 @@ def _finalise_export(
 
     def _validated_chunks() -> Iterator[pd.DataFrame]:
         nonlocal rows_total, rows_kept, exit_code, emitted_chunk
-        for frame in process_iter:
+        nonlocal missing_required, missing_optional
+
+        def _update_column_sets(df: pd.DataFrame) -> None:
+            nonlocal missing_required, missing_optional
+            present_columns.update(df.columns)
+            missing_required = required_cols - present_columns
+            missing_optional = optional_cols - present_columns
+
+        for frame in frames_iterator:
             with_metadata = add_pipeline_metadata(frame)
             ordered = build_dataframe(
                 with_metadata, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
             )
+            _update_column_sets(ordered)
             rows_total += len(ordered)
             validated = ordered
-            if should_validate:
-                try:
-                    validated = DocumentsSchema.validate(ordered, lazy=True)
-                except SchemaErrors as exc:
-                    for row in exc.failure_cases.to_dict("records"):
-                        errors.add_error(row)
-                    logger.error(
-                        "document_validation_failed",
-                        failure_count=len(exc.failure_cases),
-                        failure_path=str(failure_path),
-                        error=str(exc),
-                    )
-                    validated = getattr(exc, "validated_data", ordered)
-                    exit_code = 1
+            try:
+                validated = DocumentsSchema.validate(ordered, lazy=True)
+            except SchemaErrors as exc:
+                for row in exc.failure_cases.to_dict("records"):
+                    errors.add_error(row)
+                logger.error(
+                    "document_validation_failed",
+                    failure_count=len(exc.failure_cases),
+                    failure_path=str(failure_path),
+                    error=str(exc),
+                )
+                validated = getattr(exc, "validated_data", ordered)
+                exit_code = 1
             rows_kept += len(validated)
             cleaned = build_dataframe(
                 validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
@@ -1163,6 +1148,7 @@ def _finalise_export(
                 columns=DOCUMENT_SCHEMA_COLUMNS,
                 fill_missing=False,
             )
+            _update_column_sets(empty)
             for chunk in _iter_export_chunks(empty, chunk_size=stream_chunk):
                 emitted_chunk = True
                 yield chunk
@@ -1201,7 +1187,21 @@ def _finalise_export(
         logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
 
-    errors.save(failure_path, cfg=cfg)
+
+    if missing_required:
+        logger.warning(
+            "validation_skipped_missing_required",
+            columns=sorted(missing_required),
+        )
+        exit_code = 1
+    elif missing_optional:
+        logger.warning(
+            "missing_optional_columns",
+            columns=sorted(missing_optional),
+        )
+
+    errors.save(failure_path)
+
 
     rows_dropped = rows_total - rows_kept
     if exit_code == 0:
