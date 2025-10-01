@@ -13,6 +13,7 @@ from pytest import MonkeyPatch
 from library import protein_classification as pc
 from library.config import Config
 from schemas import TargetsSchema
+from schemas.targets import TARGETS_COLUMN_ORDER
 from scripts import get_target_data as gtd
 
 
@@ -328,6 +329,26 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
 
 
+def test_fetch_iuphar_missing_uniprot_column(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    chembl_df = pd.DataFrame({"target_chembl_id": ["C1"]})
+    uniprot_df = pd.DataFrame(columns=["uniprot_id", "original_id"])
+    out = tmp_path / "iuphar.csv"
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame(columns=["uniprot_id"]).to_csv(args.output_csv, index=False)
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    merge_column = cfg.target.all.uniprot_column
+    assert merge_column in combined_df.columns
+    assert combined_df.loc[0, merge_column] == gtd.UNIPROT_MISSING_VALUE
+    assert iuphar_df.empty
+
+
 def test_run_all_preserves_reaction_ec_numbers(
     monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
 ) -> None:
@@ -391,3 +412,15 @@ def test_run_all_preserves_reaction_ec_numbers(
     assert result.loc[0, "protein_class_pred_L1"] == "ClassA"
     assert result.loc[0, "protein_class_pred_rule_id"] == "target_id"
     assert classifier.calls
+
+
+def test_validate_and_write_skips_quality_for_empty(
+    tmp_path: Path, cfg: Config
+) -> None:
+    df = pd.DataFrame(columns=TARGETS_COLUMN_ORDER)
+    output = tmp_path / "targets.csv"
+
+    exit_code = gtd.validate_and_write(df, output, cfg)
+
+    assert exit_code == 0
+    assert output.exists()
