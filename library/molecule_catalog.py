@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import sqlite3
+import threading
 from collections.abc import Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -23,7 +24,7 @@ _PARENT_LOOKUP_SINGLE_ATTEMPTS_MIN = 1
 _SQLITE_VARIABLE_LIMIT = 900
 _PARENT_LOOKUP_SINGLE_CONCURRENCY = 4
 
-_PARENT_CATALOG_LOADING = False
+_PARENT_CATALOG_LOCK = threading.Lock()
 
 __all__ = [
     "fetch_parent_catalog",
@@ -315,7 +316,7 @@ def _fetch_parent_catalog_via_helper(
                     continue
                 seen_outstanding.add(chembl_id)
                 outstanding.append(chembl_id)
-        if outstanding and not _PARENT_CATALOG_LOADING:
+        if outstanding and not _PARENT_CATALOG_LOCK.locked():
             try:
                 load_parent_catalog(
                     client=client,
@@ -808,25 +809,21 @@ def load_parent_catalog(
 ) -> dict[str, str]:
     """Return the molecule parent catalogue, using the on-disk cache if present."""
 
-    cache_path = catalog_cfg.cache_path
-    sqlite_path = catalog_cfg.sqlite_path
-    if not force_refresh:
-        sqlite_data, sqlite_ok = _read_sqlite_cache(sqlite_path)
-        if sqlite_ok:
-            return sqlite_data
-        cached = _read_cache(cache_path, catalog_cfg)
-        if cached:
-            items = sorted(cached.items())
-            _write_parent_catalog_sqlite(items, catalog_cfg, replace=True)
-            return cached
+    with _PARENT_CATALOG_LOCK:
+        cache_path = catalog_cfg.cache_path
+        sqlite_path = catalog_cfg.sqlite_path
+        if not force_refresh:
+            sqlite_data, sqlite_ok = _read_sqlite_cache(sqlite_path)
+            if sqlite_ok:
+                return sqlite_data
+            cached = _read_cache(cache_path, catalog_cfg)
+            if cached:
+                items = sorted(cached.items())
+                _write_parent_catalog_sqlite(items, catalog_cfg, replace=True)
+                return cached
 
-    global _PARENT_CATALOG_LOADING
-    _PARENT_CATALOG_LOADING = True
-    try:
         result = fetch_parent_catalog(
             client=client, api_cfg=api_cfg, catalog_cfg=catalog_cfg, timeout=timeout
         )
-    finally:
-        _PARENT_CATALOG_LOADING = False
-    write_parent_catalog_cache(result, catalog_cfg)
-    return result
+        write_parent_catalog_cache(result, catalog_cfg)
+        return result
