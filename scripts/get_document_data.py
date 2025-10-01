@@ -59,11 +59,11 @@ from library.clients import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
     build_root_parser,
-    configure_logger,
     path_argument,
     positive_int,
     prepare_io_paths,
 )
+from library.cli_utils import run_cli_command
 from library.config import (
     Config,
     CrossRefCfg,
@@ -71,8 +71,6 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
     _serialize_paths,
-    ensure_dirs,
-    print_config,
     session_with_retry,
 )
 from library.document_pipeline import (
@@ -1599,6 +1597,29 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the selected document pipeline with CLI-specific hooks."""
+
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    args.output_csv = output_path
+    timeout_value = getattr(args, "timeout", None)
+    if timeout_value is not None:
+        cfg.api.timeout_read = timeout_value
+    if args.skip_existing and output_path.exists() and not args.force:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        return 0
+    func = getattr(args, "func", None)
+    if func is None:
+        logger.error(
+            "missing_subcommand_handler", command=getattr(args, "command", "")
+        )
+        return 1
+    result = func(cfg, args)
+    return int(result)
+
+
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the argument parser for document utilities.
 
@@ -1821,9 +1842,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
         subparser.error("--offset must be zero or a positive integer")
-    log_cfg.level = args.log_level
-    logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", run_id=log_cfg.run_id)
     mapping = {
         "column": f"document.{args.command}.column",
         "limit": f"document.{args.command}.limit",
@@ -1853,48 +1871,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "timeout": "document.all.timeout",
             }
         )
-    try:
-        cfg: Config = cli.apply_config_overrides(
-            args,
-            subparser,
-            args.config,
-            mapping=mapping
-            | {
-                "openalex_rps": "openalex.rps",
-                "crossref_rps": "crossref.rps",
-            },
-            base_parser=parser,
-        )
-        cfg.api.timeout_read = getattr(args, "timeout", cfg.api.timeout_read)
-        if args.print_config:
-            print_config(cfg)
-            configure_logger(log_cfg)
-            logger.info("pipeline_done", run_id=log_cfg.run_id)
-            return 0
-        ensure_dirs(cfg)
-        output_path = Path(
-            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        )
-        args.output_csv = output_path
-        if args.skip_existing and output_path.exists() and not args.force:
-            logger.info("pipeline_skip_existing", output=str(output_path))
-            logger.info("pipeline_done", run_id=log_cfg.run_id)
-            return 0
-        logger = configure_logger(log_cfg)
-    except (ValueError, TypeError) as exc:
-        logger.error("config_override_error", error=str(exc))
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-    except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error("directory_setup_failed", error=str(exc))
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-    exit_code = cast(int, args.func(cfg, args))
-    if exit_code == 0:
-        logger.info("pipeline_done", run_id=log_cfg.run_id)
-    else:
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-    return exit_code
+    mapping |= {
+        "openalex_rps": "openalex.rps",
+        "crossref_rps": "crossref.rps",
+    }
+    return run_cli_command(
+        args=args,
+        parser=subparser,
+        base_parser=parser,
+        log_cfg=log_cfg,
+        mapping=mapping,
+        run=run,
+        logger=logger,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

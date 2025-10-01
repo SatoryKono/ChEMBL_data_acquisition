@@ -67,6 +67,7 @@ def run_cli_command(
     *,
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
+    base_parser: argparse.ArgumentParser | None = None,
     log_cfg: LoggerConfig,
     mapping: Mapping[str, str],
     run: Callable[[Config, argparse.Namespace], int],
@@ -85,6 +86,7 @@ def run_cli_command(
             parser,
             getattr(args, "config", None),
             mapping=mapping,
+            base_parser=base_parser,
         )
         if getattr(args, "print_config", False):
             print_config(cfg)

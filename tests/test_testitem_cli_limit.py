@@ -1,24 +1,40 @@
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
 
 import pytest
+
+import library.cli_utils as cli_utils
+from library.config import Config
 
 from scripts import get_testitem_data as gtd
 
 
 def test_zero_limit_allowed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cfg: Config
 ) -> None:
     """``--limit 0`` should be accepted by the test item CLI."""
 
     called: dict[str, object] = {}
 
-    def fake_run(cfg, args):  # type: ignore[no-untyped-def]
-        called["cfg_limit"] = cfg.testitem.limit
-        called["args_limit"] = args.limit
+    def fake_run(cfg_obj: Config, args_obj: argparse.Namespace) -> int:
+        called["cfg_limit"] = cfg_obj.testitem.limit
+        called["args_limit"] = args_obj.limit
         return 0
 
-    monkeypatch.setattr(gtd, "run_chembl", fake_run)
-    monkeypatch.setattr(gtd, "ensure_dirs", lambda cfg: None)
+    monkeypatch.setattr(gtd, "run", fake_run)
+
+    def fake_run_cli_command(**kwargs: object) -> int:
+        run_func = kwargs["run"]  # type: ignore[index]
+        args_obj = kwargs["args"]  # type: ignore[index]
+        assert run_func is fake_run
+        cfg_copy = cfg.model_copy(deep=True)
+        if getattr(args_obj, "limit", None) is not None:
+            cfg_copy.testitem.limit = args_obj.limit
+        return run_func(cfg_copy, args_obj)
+
+    monkeypatch.setattr(cli_utils, "run_cli_command", fake_run_cli_command)
 
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("molecule_chembl_id\nCHEMBL1\n")

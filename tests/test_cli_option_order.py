@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import library.cli_utils as cli_utils
 from library.config import Config
 from scripts import get_document_data as gdd
 from scripts import get_target_data as gtd
@@ -36,8 +37,9 @@ def test_target_input_before_subcommand(
         captured["input_csv"] = Path(args.input_csv)
         return 0
 
-    monkeypatch.setattr(gtd.cli, "apply_config_overrides", fake_apply)
+    monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply)
     monkeypatch.setattr(gtd, "run_all", fake_run_all)
+    monkeypatch.setattr(cli_utils, "ensure_dirs", lambda cfg: None)
 
     rc = gtd.main(["--config", str(config_yaml), "--input", str(input_csv), "all"])
     assert rc == 0
@@ -68,8 +70,9 @@ def test_document_input_before_subcommand(
         captured["input_csv"] = Path(args.input_csv)
         return 0
 
-    monkeypatch.setattr(gdd.cli, "apply_config_overrides", fake_apply)
-    monkeypatch.setattr(gdd, "run_chembl", fake_run)
+    monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply)
+    monkeypatch.setattr(gdd, "run", fake_run)
+    monkeypatch.setattr(cli_utils, "ensure_dirs", lambda cfg: None)
 
     rc = gdd.main(["--config", str(config_yaml), "--input", str(input_csv), "chembl"])
     assert rc == 0
