@@ -784,7 +784,9 @@ def _safe_to_int(series: pd.Series, col: str) -> pd.Series:
     try:
         return pd.to_numeric(series, errors="raise").astype("Int64")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning("Failed to convert column '%s' to Int64: %s", col, exc)
+        logger.warning(
+            "dtype_int_conversion_failed", column=col, error=str(exc)
+        )
         return series.astype("string")
 
 
@@ -810,7 +812,9 @@ def _safe_to_float(series: pd.Series, col: str) -> pd.Series:
     try:
         return pd.to_numeric(series, errors="raise").astype("float64")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning("Failed to convert column '%s' to float: %s", col, exc)
+        logger.warning(
+            "dtype_float_conversion_failed", column=col, error=str(exc)
+        )
         return series.astype("string")
 
 
@@ -836,7 +840,9 @@ def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
     try:
         return pd.to_datetime(series, errors="raise")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning("Failed to convert column '%s' to datetime: %s", col, exc)
+        logger.warning(
+            "dtype_datetime_conversion_failed", column=col, error=str(exc)
+        )
         return series.astype("string")
 
 
@@ -875,7 +881,9 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
         mapped = series.map(mapper)
         return mapped.astype("boolean")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning("Failed to convert column '%s' to boolean: %s", col, exc)
+        logger.warning(
+            "dtype_bool_conversion_failed", column=col, error=str(exc)
+        )
         return series.astype("string")
 
 
@@ -935,10 +943,10 @@ def generate_pair_entity_tables(
 
     activity_df = tables.get("activity")
     if activity_df is None:
-        logger.warning("'activity' table missing; cannot generate pair tables")
+        logger.warning("pair_activity_table_missing")
         return result
     if "activity_chembl_id" not in activity_df.columns:
-        logger.warning("'activity' table missing column 'activity_chembl_id'")
+        logger.warning("pair_activity_id_column_missing")
         return result
 
     # Columns linking activities to related entities use CHEMBL identifiers.
@@ -957,7 +965,7 @@ def generate_pair_entity_tables(
     for pair_key, suffix in pair_keys.items():
         pairs_df = tables.get(pair_key)
         if pairs_df is None:
-            logger.warning("pair table '%s' missing", pair_key)
+            logger.warning("pair_table_missing", pair_table=pair_key)
             continue
 
         # Harmonise activity identifier column names to ensure downstream
@@ -970,7 +978,9 @@ def generate_pair_entity_tables(
         missing = required - set(pairs_df.columns)
         if missing:
             logger.warning(
-                "pair table '%s' missing columns %s", pair_key, sorted(missing)
+                "pair_table_missing_columns",
+                pair_table=pair_key,
+                columns=sorted(missing),
             )
             continue
 
@@ -989,20 +999,22 @@ def generate_pair_entity_tables(
         for entity, id_col in entity_cols.items():
             if id_col not in filtered_activity.columns:
                 logger.warning(
-                    "activity table missing column '%s'; skipping %s_%s",
-                    id_col,
-                    entity,
-                    suffix,
+                    "pair_activity_column_missing",
+                    column=id_col,
+                    entity=entity,
+                    suffix=suffix,
                 )
                 continue
 
             ids = pd.unique(filtered_activity[id_col].dropna())
             entity_df = tables.get(entity)
             if entity_df is None:
-                logger.warning("entity table '%s' missing", entity)
+                logger.warning("pair_entity_table_missing", entity=entity)
                 continue
             if id_col not in entity_df.columns:
-                logger.warning("entity table '%s' missing column '%s'", entity, id_col)
+                logger.warning(
+                    "pair_entity_column_missing", entity=entity, column=id_col
+                )
                 continue
             result[f"{entity}_{suffix}"] = entity_df[entity_df[id_col].isin(ids)].copy()
 
@@ -1050,7 +1062,7 @@ def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
             result[col] = 0
         missing = [c for c in (indep_col, type_col) if c not in result.columns]
         logger.warning(
-            "pair table missing columns %s; metric flags set to zero", missing
+            "pair_metric_columns_missing", columns=missing
         )
     return result
 
@@ -1128,11 +1140,11 @@ def build_combined_tables(
         else:
             df = df_tmp
         logger.info(
-            "Entity %s: rows_same=%d rows_all=%d rows_after_dedup=%d",
-            entity,
-            len(df_same),
-            len(df_all),
-            len(df),
+            "entity_rows_summary",
+            entity=entity,
+            rows_same=len(df_same),
+            rows_all=len(df_all),
+            rows_after_dedup=len(df),
         )
         combined[entity] = df
 
@@ -1145,11 +1157,15 @@ def build_combined_tables(
     # ``concat`` requires unique column names across inputs.
     same_dups = df_same_act.columns[df_same_act.columns.duplicated()].tolist()
     if same_dups:
-        logger.info("Removed duplicate activity columns from 'same': %s", same_dups)
+        logger.info(
+            "activity_duplicate_columns_removed", source="same", columns=same_dups
+        )
         df_same_act = df_same_act.loc[:, ~df_same_act.columns.duplicated()]
     all_dups = df_all_act.columns[df_all_act.columns.duplicated()].tolist()
     if all_dups:
-        logger.info("Removed duplicate activity columns from 'all_': %s", all_dups)
+        logger.info(
+            "activity_duplicate_columns_removed", source="all", columns=all_dups
+        )
         df_all_act = df_all_act.loc[:, ~df_all_act.columns.duplicated()]
 
     concat = pd.concat([df_same_act, df_all_act], ignore_index=True, sort=False)
@@ -1164,11 +1180,11 @@ def build_combined_tables(
     if dict_dir is not None:
         df_activity = process_activity_table(df_activity, dict_dir, targets_path)
     logger.info(
-        "Entity activity: rows_same=%d rows_all=%d rows_concat=%d rows_after_dedup=%d",
-        len(df_same_act),
-        len(df_all_act),
-        len(concat),
-        len(df_activity),
+        "activity_rows_summary",
+        rows_same=len(df_same_act),
+        rows_all=len(df_all_act),
+        rows_concat=len(concat),
+        rows_after_dedup=len(df_activity),
     )
     remaining = ACTIVITY_DROP_COLS & set(df_activity.columns)
     if remaining:
@@ -1195,7 +1211,7 @@ def build_combined_tables(
         df_pairs_independent = df_pairs[indep_series].copy()
         df_pairs_non_independent = df_pairs[~indep_series].copy()
     else:
-        logger.warning("INDEPENDENT column missing; creating empty pair segments")
+        logger.warning("pair_independent_column_missing")
         df_pairs_independent = df_pairs.iloc[0:0].copy()
         df_pairs_non_independent = df_pairs.iloc[0:0].copy()
 
