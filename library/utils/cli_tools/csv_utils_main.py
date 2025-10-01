@@ -63,27 +63,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     encoding = args.encoding or cfg.io.csv_encoding
     chunk_size = args.chunk_size or cfg.io.csv_chunksize
 
-    reader = pd.read_csv(
+    output = args.output_csv or Path(args.input_csv).with_name(
+        f"output.{Path(args.input_csv).stem}.csv"
+    )
+    with pd.read_csv(
         args.input_csv,
         sep=sep,
         encoding=encoding,
         chunksize=chunk_size,
-    )
-    output = args.output_csv or Path(args.input_csv).with_name(
-        f"output.{Path(args.input_csv).stem}.csv"
-    )
-    write_csv_chunks_deterministic(
-        reader,
-        output,
-        col_order=args.col_order or None,
-        key_cols=args.key_cols,
-        chunksize=chunk_size,
-        merge_chunksize=args.merge_chunk_size,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-        cfg=cfg,
-        drop_unexpected_cols=True,
-    )
+    ) as reader:
+        write_csv_chunks_deterministic(
+            reader,
+            output,
+            col_order=args.col_order or None,
+            key_cols=args.key_cols,
+            chunksize=chunk_size,
+            merge_chunksize=args.merge_chunk_size,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+            drop_unexpected_cols=True,
+        )
     elapsed = time.perf_counter() - start
     logger.info("write_done", path=str(args.output_csv))
     logger.info("run_completed", elapsed=elapsed)

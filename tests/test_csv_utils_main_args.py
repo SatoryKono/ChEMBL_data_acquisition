@@ -10,6 +10,35 @@ import yaml
 from library.utils.cli_tools import csv_utils_main as cli
 
 
+def _fd_count() -> int:
+    fd_dir = Path("/proc/self/fd")
+    if not fd_dir.exists():
+        pytest.skip("/proc filesystem required to inspect file descriptors")
+    return sum(1 for _ in fd_dir.iterdir())
+
+
+class DummyReader(Iterator[pd.DataFrame]):
+    def __init__(self, frames: Iterable[pd.DataFrame]):
+        self._frames = iter(frames)
+        self.closed = False
+
+    def __iter__(self) -> "DummyReader":
+        return self
+
+    def __next__(self) -> pd.DataFrame:
+        return next(self._frames)
+
+    def close(self) -> None:
+        self.closed = True
+
+    def __enter__(self) -> "DummyReader":
+        return self
+
+    def __exit__(self, *exc_info: object) -> bool:
+        self.close()
+        return False
+
+
 def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     input_csv = tmp_path / "in.csv"
     input_csv.write_text("a|b\n1|2\n", encoding="latin1")
@@ -23,16 +52,13 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         chunksize: int,
         *args: Any,
         **kwargs: Any,
-    ) -> Iterator[pd.DataFrame]:
+    ) -> DummyReader:
         called["path"] = path
         called["sep"] = sep
         called["encoding"] = encoding
         called["chunksize"] = chunksize
 
-        def gen() -> Iterator[pd.DataFrame]:
-            yield pd.DataFrame({"a": [1], "b": [2]})
-
-        return gen()
+        return DummyReader([pd.DataFrame({"a": [1], "b": [2]})])
 
     def fake_write(
         chunks: Iterable[pd.DataFrame],
@@ -102,13 +128,9 @@ def test_cli_generates_output_path(
         chunksize: int,
         *args: Any,
         **kwargs: Any,
-    ) -> Iterator[pd.DataFrame]:
+    ) -> DummyReader:
         called["path"] = path
-
-        def gen() -> Iterator[pd.DataFrame]:
-            yield pd.DataFrame({"a": [1], "b": [2]})
-
-        return gen()
+        return DummyReader([pd.DataFrame({"a": [1], "b": [2]})])
 
     def fake_write(
         chunks: Iterable[pd.DataFrame],
@@ -159,16 +181,13 @@ def test_cli_uses_configured_delimiter(
         chunksize: int,
         *args: Any,
         **kwargs: Any,
-    ) -> Iterator[pd.DataFrame]:
+    ) -> DummyReader:
         called["path"] = path
         called["sep"] = sep
         called["encoding"] = encoding
         called["chunksize"] = chunksize
 
-        def gen() -> Iterator[pd.DataFrame]:
-            yield pd.DataFrame({"a": [1], "b": [2]})
-
-        return gen()
+        return DummyReader([pd.DataFrame({"a": [1], "b": [2]})])
 
     def fake_write(
         chunks: Iterable[pd.DataFrame],
@@ -209,3 +228,26 @@ def test_cli_uses_configured_delimiter(
     assert called["write_sep"] == ";"
     assert called["write_encoding"] == "latin1"
     assert called["write_chunksize"] == 256
+
+
+def test_cli_does_not_leak_file_descriptors(tmp_path: Path) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id,value\n1,a\n2,b\n", encoding="utf8")
+
+    baseline = _fd_count()
+    base_args = [
+        "--input",
+        str(input_csv),
+        "--key-cols",
+        "id",
+        "--chunk-size",
+        "1",
+    ]
+
+    for run in range(3):
+        output = tmp_path / f"out_{run}.csv"
+        rc = cli.main([*base_args, "--output", str(output)])
+        assert rc == 0
+        assert output.exists()
+
+    assert _fd_count() == baseline
