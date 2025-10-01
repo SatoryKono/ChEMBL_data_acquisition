@@ -28,6 +28,7 @@ import argparse
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from contextlib import ExitStack
 from itertools import chain, islice, tee
 from pathlib import Path
 from typing import Any, cast
@@ -343,6 +344,12 @@ def fetch_pubmed_records(
 
     session_cfg = settings
 
+    def _executor_capacity(limiter: RateLimiter | None, burst: int | None) -> int:
+        limit = burst if burst is not None else 1
+        if limiter is not None:
+            limit = min(limit, limiter.burst)
+        return max(1, limit)
+
     def _fetch_batch(
         first: object,
         *rest: object,
@@ -425,18 +432,6 @@ def fetch_pubmed_records(
 
                 combined_records: list[dict[str, str]] = []
 
-                def _pool_workers(
-                    total: int,
-                    limiter: RateLimiter | None,
-                    burst: int,
-                ) -> int:
-                    if total <= 0:
-                        return 0
-                    limit = burst
-                    if limiter is not None:
-                        limit = min(limit, limiter.burst)
-                    return max(1, min(total, limit))
-
                 plan: list[tuple[int, dict[str, str], dict[str, str], str, str]] = []
                 openalex_lookup: dict[str, list[int]] = {}
                 crossref_lookup: dict[str, list[int]] = {}
@@ -467,9 +462,6 @@ def fetch_pubmed_records(
                 crossref_results: dict[int, dict[str, str]] = {}
 
                 openalex_jobs = list(openalex_lookup.keys())
-                openalex_workers = _pool_workers(
-                    len(openalex_jobs), openalex_limiter, openalex_cfg.burst
-                )
                 def _fetch_openalex_job(pmid: str) -> dict[str, str]:
                     _acquire_documents(openalex_service_limiter)
                     return _invoke_with_session(
@@ -490,10 +482,13 @@ def fetch_pubmed_records(
 
                 openalex_by_key: dict[str, dict[str, str]] = {}
 
-                if openalex_jobs and openalex_workers > 0:
-                    with ThreadPoolExecutor(max_workers=openalex_workers) as pool:
+                if openalex_jobs:
+                    if openalex_executor is None:
+                        for pmid in openalex_jobs:
+                            openalex_by_key[pmid] = _fetch_openalex_job(pmid)
+                    else:
                         future_to_key = {
-                            pool.submit(_fetch_openalex_job, pmid): pmid
+                            openalex_executor.submit(_fetch_openalex_job, pmid): pmid
                             for pmid in openalex_jobs
                         }
                         for future in as_completed(future_to_key):
@@ -506,9 +501,6 @@ def fetch_pubmed_records(
                         openalex_results[idx] = result
 
                 crossref_jobs = list(crossref_lookup.keys())
-                crossref_workers = _pool_workers(
-                    len(crossref_jobs), crossref_limiter, crossref_cfg.burst
-                )
                 def _fetch_crossref_job(doi: str) -> dict[str, str]:
                     _acquire_documents(crossref_service_limiter)
                     return _invoke_with_session(
@@ -529,10 +521,13 @@ def fetch_pubmed_records(
 
                 crossref_by_key: dict[str, dict[str, str]] = {}
 
-                if crossref_jobs and crossref_workers > 0:
-                    with ThreadPoolExecutor(max_workers=crossref_workers) as pool:
+                if crossref_jobs:
+                    if crossref_executor is None:
+                        for doi in crossref_jobs:
+                            crossref_by_key[doi] = _fetch_crossref_job(doi)
+                    else:
                         future_to_key = {
-                            pool.submit(_fetch_crossref_job, doi): doi
+                            crossref_executor.submit(_fetch_crossref_job, doi): doi
                             for doi in crossref_jobs
                         }
                         for future in as_completed(future_to_key):
@@ -565,41 +560,43 @@ def fetch_pubmed_records(
             )
             return _failure_records(batch_list, str(exc))
 
+    openalex_capacity = _executor_capacity(openalex_limiter, openalex_cfg.burst)
+    crossref_capacity = _executor_capacity(crossref_limiter, crossref_cfg.burst)
+
+    openalex_executor: ThreadPoolExecutor | None = None
+    crossref_executor: ThreadPoolExecutor | None = None
+
     iterator = (p for p in pmids if p)
+
+    tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
+    ordered: dict[int, list[dict[str, str]]] = {}
     processed = 0
     max_in_flight = max(1, max_workers * 2)
 
-    def _iter_records() -> Iterator[list[dict[str, str]]]:
-        nonlocal processed
+    with ExitStack() as stack:
+        batch_executor = stack.enter_context(
+            ThreadPoolExecutor(max_workers=max_workers)
+        )
+        if openalex_capacity > 1:
+            openalex_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=openalex_capacity)
+            )
+        if crossref_capacity > 1:
+            crossref_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=crossref_capacity)
+            )
 
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            tasks: dict[
-                Future[list[dict[str, str]]], tuple[int, int]
-            ] = {}
-            pending: set[Future[list[dict[str, str]]]] = set()
-            completed: dict[int, list[dict[str, str]]] = {}
-            batch_index = 0
-            next_to_emit = 0
+        offset = 0
+        pending: set[Future[list[dict[str, str]]]] = set()
+        for batch in _chunked(iterator, batch_size):
+            if not batch:
+                continue
+            future = batch_executor.submit(_fetch_batch, batch)
+            tasks[future] = (offset, batch)
+            pending.add(future)
+            offset += len(batch)
+            if len(pending) >= max_in_flight:
 
-            for batch in _chunked(iterator, batch_size):
-                if not batch:
-                    continue
-                future = ex.submit(_fetch_batch, batch)
-                tasks[future] = (batch_index, len(batch))
-                pending.add(future)
-                batch_index += 1
-                if len(pending) >= max_in_flight:
-                    done_future = next(as_completed(list(pending)))
-                    pending.remove(done_future)
-                    batch_id, batch_len = tasks.pop(done_future)
-                    completed[batch_id] = done_future.result()
-                    processed += batch_len
-                    logger.info("documents_processed", count=processed)
-                    while next_to_emit in completed:
-                        yield completed.pop(next_to_emit)
-                        next_to_emit += 1
-
-            while pending:
                 done_future = next(as_completed(list(pending)))
                 pending.remove(done_future)
                 batch_id, batch_len = tasks.pop(done_future)
