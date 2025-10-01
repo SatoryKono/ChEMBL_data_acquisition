@@ -1577,7 +1577,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     pubmed.add_argument(
         "--offset",
@@ -1639,7 +1641,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     chembl.add_argument(
         "--offset",
@@ -1688,7 +1692,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     all_cmd.add_argument(
         "--offset",
@@ -1750,8 +1756,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     limit_value = getattr(args, "limit", None)
-    if limit_value is not None and limit_value <= 0:
-        subparser.error("--limit must be a positive integer")
+    if limit_value is not None and limit_value < 0:
+        subparser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
         subparser.error("--offset must be zero or a positive integer")
