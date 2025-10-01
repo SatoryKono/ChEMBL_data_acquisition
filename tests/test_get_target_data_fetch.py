@@ -167,18 +167,37 @@ def test_run_chembl_streams_chunks(
 
 
 def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
-    chembl_df = pd.DataFrame({"uniprot_id": ["P12345"]})
+    chembl_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P12345", "", ""],
+            gtd.MAPPING_UNIPROT_COLUMN: ["", "Q99999", "P12345"],
+        }
+    )
     out = tmp_path / "uniprot.csv"
 
+    recorded: dict[str, pd.DataFrame] = {}
+
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
-        pd.DataFrame({"uniprot_id": ["P12345"], "names": ["Foo"]}).to_csv(
-            args.output_csv, index=False
-        )
+        input_df = pd.read_csv(args.input_csv)
+        recorded["input"] = input_df
+        pd.DataFrame(
+            {
+                "uniprot_id": ["P12345", "Q99999"],
+                "names": ["Foo", "Bar"],
+            }
+        ).to_csv(args.output_csv, index=False)
         return 0
 
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     df = gtd.fetch_uniprot(cfg, chembl_df, out)
-    assert list(df["original_id"]) == ["P12345"]
+
+    assert recorded["input"]["uniprot_id"].tolist() == ["P12345", "Q99999"]
+    assert recorded["input"]["original_id"].tolist() == ["P12345", "Q99999"]
+    assert df.loc[0, gtd.UNIPROT_LOOKUP_ID_COLUMN] == "P12345"
+    assert df.loc[1, gtd.UNIPROT_LOOKUP_ID_COLUMN] == "Q99999"
+    assert df.loc[2, gtd.UNIPROT_LOOKUP_ID_COLUMN] == "P12345"
+    assert df.loc[2, gtd.UNIPROT_LOOKUP_SOURCE_COLUMN] == gtd.MAPPING_UNIPROT_COLUMN
+    assert df.loc[2, "names"] == "Foo"
 
 
 def test_run_uniprot_initialises_session(
@@ -313,7 +332,11 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
             "secondaryAccessionNames": ["sec"],
             "ec_numbers": ["3.3.3.3"],
             "reaction_ec_numbers": ["4.4.4.4"],
-        }
+            gtd.UNIPROT_LOOKUP_ID_COLUMN: ["P1"],
+            gtd.UNIPROT_LOOKUP_SOURCE_COLUMN: ["uniprot_id"],
+            gtd.UNIPROT_LOOKUP_VALUE_COLUMN: ["P1"],
+        },
+        index=chembl_df.index,
     )
     out = tmp_path / "iuphar.csv"
 
@@ -329,11 +352,62 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
 
 
+def test_fetch_iuphar_uses_mapping_lookup(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["C1"],
+            "uniprot_id": [""],
+            gtd.MAPPING_UNIPROT_COLUMN: ["P2"],
+            "pref_name": ["pref"],
+            "component_description": ["desc"],
+            "gene": ["GENE"],
+            "chembl_alternative_name": ["alt"],
+            "ec_numbers": ["1.1.1.1"],
+            "reaction_ec_numbers": ["2.2.2.2"],
+        }
+    )
+    uniprot_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P2"],
+            "original_id": ["P2"],
+            gtd.UNIPROT_LOOKUP_ID_COLUMN: ["P2"],
+            gtd.UNIPROT_LOOKUP_SOURCE_COLUMN: [gtd.MAPPING_UNIPROT_COLUMN],
+            gtd.UNIPROT_LOOKUP_VALUE_COLUMN: ["P2"],
+            "names": ["name"],
+        },
+        index=chembl_df.index,
+    )
+    out = tmp_path / "iuphar_lookup.csv"
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame({"uniprot_id": ["P2"], "IUPHAR_class": ["Enzyme"]}).to_csv(
+            args.output_csv, index=False
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    assert combined_df.loc[0, "uniprot_id"] == "P2"
+    assert combined_df.loc[0, gtd.UNIPROT_LOOKUP_SOURCE_COLUMN] == gtd.MAPPING_UNIPROT_COLUMN
+    assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
+
+
 def test_fetch_iuphar_missing_uniprot_column(
     monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
 ) -> None:
     chembl_df = pd.DataFrame({"target_chembl_id": ["C1"]})
-    uniprot_df = pd.DataFrame(columns=["uniprot_id", "original_id"])
+    uniprot_df = pd.DataFrame(
+        columns=[
+            "uniprot_id",
+            "original_id",
+            gtd.UNIPROT_LOOKUP_ID_COLUMN,
+            gtd.UNIPROT_LOOKUP_SOURCE_COLUMN,
+            gtd.UNIPROT_LOOKUP_VALUE_COLUMN,
+        ]
+    )
     out = tmp_path / "iuphar.csv"
 
     def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:

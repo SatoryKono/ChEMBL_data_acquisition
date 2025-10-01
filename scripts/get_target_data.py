@@ -11,6 +11,7 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
+import re
 import sys
 from collections.abc import Iterator, Sequence
 from functools import partial
@@ -73,6 +74,12 @@ TARGETS_OBJECT_COLUMNS: set[str] = {
 }
 
 UNIPROT_MISSING_VALUE = ""
+MAPPING_UNIPROT_COLUMN = "mapping_uniprot_id"
+UNIPROT_ACCESSION_KEYWORDS: tuple[str, ...] = ("uniprot", "accession")
+UNIPROT_TOKEN_SPLIT_PATTERN = re.compile(r"[|;,/\\\s]+")
+UNIPROT_LOOKUP_ID_COLUMN = "lookup_uniprot_id"
+UNIPROT_LOOKUP_SOURCE_COLUMN = "lookup_source_column"
+UNIPROT_LOOKUP_VALUE_COLUMN = "lookup_source_value"
 
 
 DEFAULT_INPUT_NAME = "target.csv"
@@ -107,6 +114,88 @@ def _first_token(value: str | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _clean_identifier(value: object) -> str:
+    """Return ``value`` as a stripped string or :data:`UNIPROT_MISSING_VALUE`."""
+
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned if cleaned else UNIPROT_MISSING_VALUE
+    return UNIPROT_MISSING_VALUE
+
+
+def _split_accession_tokens(value: object) -> list[str]:
+    """Return accession tokens discovered in ``value`` preserving order."""
+
+    if not isinstance(value, str):
+        return []
+    cleaned = value.strip()
+    if not cleaned:
+        return []
+    tokens = [token.strip() for token in UNIPROT_TOKEN_SPLIT_PATTERN.split(cleaned) if token.strip()]
+    return tokens if tokens else [cleaned]
+
+
+def _candidate_uniprot_columns(df: pd.DataFrame, primary: str) -> list[str]:
+    """Return UniProt accession columns ordered by preference."""
+
+    candidates: list[str] = []
+    if primary in df.columns:
+        candidates.append(primary)
+    if MAPPING_UNIPROT_COLUMN in df.columns and MAPPING_UNIPROT_COLUMN not in candidates:
+        candidates.append(MAPPING_UNIPROT_COLUMN)
+    for column in df.columns:
+        lowered = column.lower()
+        if column in candidates:
+            continue
+        if column in {UNIPROT_LOOKUP_ID_COLUMN, UNIPROT_LOOKUP_SOURCE_COLUMN, UNIPROT_LOOKUP_VALUE_COLUMN}:
+            continue
+        if any(keyword in lowered for keyword in UNIPROT_ACCESSION_KEYWORDS):
+            candidates.append(column)
+    return candidates
+
+
+def _sanitize_uniprot_value(value: object) -> str:
+    """Return a string representation of ``value`` suitable for exports."""
+
+    if value is None:
+        return UNIPROT_MISSING_VALUE
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        if pd.isna(value):
+            return UNIPROT_MISSING_VALUE
+        return str(value)
+    if pd.isna(value):
+        return UNIPROT_MISSING_VALUE
+    return str(value)
+
+
+def _merge_uniprot_id_series(
+    *series: pd.Series | None,
+) -> pd.Series:
+    """Return a merged UniProt identifier series from ``series`` in order."""
+
+    base_index: pd.Index | None = None
+    for candidate in series:
+        if candidate is not None:
+            base_index = candidate.index
+            break
+    if base_index is None:
+        return pd.Series(dtype=object)
+
+    merged = pd.Series(UNIPROT_MISSING_VALUE, index=base_index, dtype=object)
+    for candidate in series:
+        if candidate is None:
+            continue
+        normalised = candidate.astype(object).fillna(UNIPROT_MISSING_VALUE)
+        normalised = normalised.replace({None: UNIPROT_MISSING_VALUE})
+        merged = merged.mask(
+            (merged == UNIPROT_MISSING_VALUE) | merged.isna(),
+            normalised,
+        )
+    return merged
 
 
 def _prepare_targets_for_schema(
@@ -912,43 +1001,144 @@ def fetch_uniprot(
     """
 
     logger.info("fetch_uniprot_start", output=str(output_csv))
-    column = cfg.target.all.uniprot_column
-    series = chembl_df.get(column)
-    if series is None:
-        uids: list[str] = []
+    merge_column = cfg.target.all.uniprot_column
+    candidate_columns = _candidate_uniprot_columns(chembl_df, merge_column)
+    row_candidates: dict[object, list[dict[str, str]]] = {
+        index: [] for index in chembl_df.index
+    }
+    unique_records: list[dict[str, str]] = []
+    seen_queries: set[str] = set()
+
+    for index in chembl_df.index:
+        for column in candidate_columns:
+            if column not in chembl_df.columns:
+                continue
+            value = chembl_df.at[index, column]
+            tokens = _split_accession_tokens(value)
+            if not tokens:
+                continue
+            source_value = _clean_identifier(value)
+            for token in tokens:
+                if not token:
+                    continue
+                record = {
+                    "query_id": token,
+                    "source_column": column,
+                    "source_value": source_value,
+                    "original_id": source_value or token,
+                }
+                row_candidates[index].append(record)
+                if token not in seen_queries:
+                    seen_queries.add(token)
+                    unique_records.append(record)
+
+    queries = len(unique_records)
+    logger.debug("fetch_uniprot_queries", count=queries)
+
+    uniprot_df_raw: pd.DataFrame
+    if unique_records:
+        from tempfile import NamedTemporaryFile
+
+        with NamedTemporaryFile(
+            "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+
+        query_df = pd.DataFrame(
+            {
+                "uniprot_id": [record["query_id"] for record in unique_records],
+                "original_id": [record["original_id"] for record in unique_records],
+            }
+        )
+        query_df.to_csv(
+            tmp_path,
+            index=False,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+
+        uniprot_args = argparse.Namespace(input_csv=tmp_path, output_csv=output_csv)
+        orig_dir = cfg.target.uniprot.data_dir
+        cfg.target.uniprot.data_dir = cfg.target.all.data_dir
+        try:
+            if run_uniprot(cfg, uniprot_args) != 0:
+                raise RuntimeError("UniProt retrieval failed")
+        finally:
+            cfg.target.uniprot.data_dir = orig_dir
+            tmp_path.unlink(missing_ok=True)
+
+        uniprot_df_raw = pd.read_csv(
+            output_csv,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            dtype=str,
+        ).fillna(UNIPROT_MISSING_VALUE)
     else:
-        values = series.to_numpy(copy=False)
-        uids = [uid for uid in values if isinstance(uid, str) and uid]
-    from tempfile import NamedTemporaryFile
+        uniprot_df_raw = pd.DataFrame(columns=uu.UNIPROT_OUTPUT_COLUMNS)
 
-    with NamedTemporaryFile(
-        "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
-    ) as tmp:
-        tmp_path = Path(tmp.name)
+    uniprot_columns = list(uniprot_df_raw.columns)
+    if not uniprot_columns:
+        uniprot_columns = list(uu.UNIPROT_OUTPUT_COLUMNS)
 
-    pd.DataFrame({"uniprot_id": uids}).to_csv(
-        tmp_path,
-        index=False,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-    )
+    records_by_id: dict[str, dict[str, str]] = {}
+    for _, row in uniprot_df_raw.iterrows():
+        uid = _sanitize_uniprot_value(row.get("uniprot_id"))
+        if not uid:
+            continue
+        records_by_id[uid] = {
+            column: _sanitize_uniprot_value(row.get(column))
+            for column in uniprot_columns
+        }
 
-    uniprot_args = argparse.Namespace(input_csv=tmp_path, output_csv=output_csv)
-    orig_dir = cfg.target.uniprot.data_dir
-    cfg.target.uniprot.data_dir = cfg.target.all.data_dir
-    try:
-        if run_uniprot(cfg, uniprot_args) != 0:
-            raise RuntimeError("UniProt retrieval failed")
-    finally:
-        cfg.target.uniprot.data_dir = orig_dir
-        tmp_path.unlink(missing_ok=True)
+    default_originals = {
+        index: _clean_identifier(chembl_df.at[index, merge_column])
+        if merge_column in chembl_df.columns
+        else UNIPROT_MISSING_VALUE
+        for index in chembl_df.index
+    }
 
-    df = pd.read_csv(
-        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-    )
-    df["original_id"] = pd.Series(uids, index=df.index, dtype=object)
-    logger.info("fetch_uniprot_done", rows=len(df))
-    return df
+    ordered_columns = [
+        *uniprot_columns,
+        "original_id",
+        UNIPROT_LOOKUP_ID_COLUMN,
+        UNIPROT_LOOKUP_SOURCE_COLUMN,
+        UNIPROT_LOOKUP_VALUE_COLUMN,
+    ]
+
+    result_rows: list[dict[str, str]] = []
+    for index in chembl_df.index:
+        base_row = {column: UNIPROT_MISSING_VALUE for column in ordered_columns}
+        base_row["original_id"] = default_originals.get(index, UNIPROT_MISSING_VALUE)
+        candidates = row_candidates.get(index, [])
+        selected_candidate = None
+        selected_record: dict[str, str] | None = None
+        for candidate in candidates:
+            record = records_by_id.get(candidate["query_id"])
+            if record is None:
+                continue
+            selected_candidate = candidate
+            selected_record = record
+            break
+
+        if selected_record is not None:
+            for column in uniprot_columns:
+                base_row[column] = selected_record.get(column, UNIPROT_MISSING_VALUE)
+
+        candidate_for_metadata = selected_candidate or (candidates[0] if candidates else None)
+        if candidate_for_metadata is not None:
+            base_row["original_id"] = candidate_for_metadata["original_id"]
+            base_row[UNIPROT_LOOKUP_ID_COLUMN] = candidate_for_metadata["query_id"]
+            base_row[UNIPROT_LOOKUP_SOURCE_COLUMN] = candidate_for_metadata["source_column"]
+            source_value = candidate_for_metadata["source_value"] or candidate_for_metadata["original_id"]
+            base_row[UNIPROT_LOOKUP_VALUE_COLUMN] = source_value
+
+        result_rows.append(base_row)
+
+    result_df = pd.DataFrame(result_rows, index=chembl_df.index, columns=ordered_columns)
+    if not result_df.empty:
+        result_df = result_df.fillna(UNIPROT_MISSING_VALUE).astype(object)
+    logger.info("fetch_uniprot_done", rows=len(result_df))
+    return result_df
 
 
 def fetch_iuphar(
@@ -1001,25 +1191,44 @@ def fetch_iuphar(
         )
         chembl_for_merge = chembl_for_merge.assign(**{merge_column: placeholder})
 
-    combined_df = pd.merge(
-        chembl_for_merge,
-        uniprot_df,
-        left_on=merge_column,
-        right_on="original_id",
-        how="left",
-    )
+    left_series: pd.Series | None = None
+    right_series: pd.Series | None = None
+    lookup_series: pd.Series | None = None
 
-    if "original_id" in combined_df.columns:
-        combined_df = combined_df.drop(columns=["original_id"])
+    if UNIPROT_LOOKUP_ID_COLUMN in uniprot_df.columns:
+        aligned_uniprot_df = uniprot_df.reindex(chembl_for_merge.index)
+        combined_df = chembl_for_merge.join(
+            aligned_uniprot_df,
+            how="left",
+            rsuffix="_uniprot",
+        )
+        if "uniprot_id" in combined_df.columns:
+            left_series = combined_df.pop("uniprot_id")
+        if "uniprot_id_uniprot" in combined_df.columns:
+            right_series = combined_df.pop("uniprot_id_uniprot")
+        lookup_series = combined_df.get(UNIPROT_LOOKUP_ID_COLUMN)
+    else:
+        combined_df = pd.merge(
+            chembl_for_merge,
+            uniprot_df,
+            left_on=merge_column,
+            right_on="original_id",
+            how="left",
+        )
+        if "original_id" in combined_df.columns:
+            combined_df = combined_df.drop(columns=["original_id"])
+        if "uniprot_id_x" in combined_df.columns:
+            left_series = combined_df.pop("uniprot_id_x")
+        if "uniprot_id_y" in combined_df.columns:
+            right_series = combined_df.pop("uniprot_id_y")
+        lookup_series = combined_df.get(UNIPROT_LOOKUP_ID_COLUMN)
+
     if merge_column == "uniprot_id":
-        left_series = combined_df.pop("uniprot_id_x") if "uniprot_id_x" in combined_df else None
-        right_series = combined_df.pop("uniprot_id_y") if "uniprot_id_y" in combined_df else None
-        if left_series is not None and right_series is not None:
-            combined_df["uniprot_id"] = right_series.fillna(left_series)
-        elif left_series is not None:
-            combined_df["uniprot_id"] = left_series
-        elif right_series is not None:
-            combined_df["uniprot_id"] = right_series
+        combined_df["uniprot_id"] = _merge_uniprot_id_series(
+            right_series,
+            lookup_series,
+            left_series,
+        )
 
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
