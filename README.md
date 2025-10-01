@@ -128,22 +128,33 @@ Before running the smoke command, create a `chembl_ids.csv` file with a header `
 
 ## Генерация данных
 
-Шесть основных пайплайнов в каталоге `scripts/` формируют CSV-файлы и
-размещают их в `data/output/`:
+**EN.** Five production pipelines live in `scripts/` and write CSV outputs to
+`data/output/`. / **RU.** Пять рабочих пайплайнов расположены в каталоге
+`scripts/` и сохраняют CSV-файлы в `data/output/`:
 
-* `get_activity_data.py` — извлекает данные активностей из ChEMBL и
-  дополняет их расчётными границами значений.
-* `get_assay_data.py` — выгружает описания ассайев.
-* `get_document_data.py` — объединяет метаданные публикаций из ChEMBL и
+* **EN.** `get_activity_data.py` extracts activity records from ChEMBL and
+  adds calculated bounds. / **RU.** `get_activity_data.py` извлекает данные
+  активностей из ChEMBL и дополняет их расчётными границами значений.
+* **EN.** `get_assay_data.py` exports assay descriptions. / **RU.**
+  `get_assay_data.py` выгружает описания ассайев.
+* **EN.** `get_document_data.py` merges publication metadata from ChEMBL and
+  partner aggregators (PubMed, Semantic Scholar, OpenAlex, Crossref). /
+  **RU.** `get_document_data.py` объединяет метаданные публикаций из ChEMBL и
   агрегаторов (PubMed, Semantic Scholar, OpenAlex, Crossref).
-* `get_target_data.py` — собирает информацию о таргетах из ChEMBL, UniProt
-  и IUPHAR.
-* `get_testitem_data.py` — обогащает соединения структурными атрибутами и
-  данными PubChem.
-* `library.utils.cli_tools.pipeline_targets_main` — лёгкая обвязка для
-  `library.pipeline_targets.run_pipeline`, использующая те же параметры CLI,
-  что и боевой таргет-пайплайн, но работающая только с локальными файлами и
-  подготовленными чанками идентификаторов без сетевых вызовов.
+* **EN.** `get_target_data.py` collects target information from ChEMBL,
+  UniProt and IUPHAR. / **RU.** `get_target_data.py` собирает информацию о
+  таргетах из ChEMBL, UniProt и IUPHAR.
+* **EN.** `get_testitem_data.py` enriches compounds with structural attributes
+  and PubChem data. / **RU.** `get_testitem_data.py` обогащает соединения
+  структурными атрибутами и данными PubChem.
+
+**EN.** `library.utils.cli_tools.pipeline_targets_main` is a cached harness
+that reuses the CLI contract of the production target pipeline while working
+solely with local files and prepared identifier batches. / **RU.**
+`library.utils.cli_tools.pipeline_targets_main` — кешируемая обвязка, которая
+использует те же CLI-параметры, что и боевой таргет-пайплайн, но работает
+только с локальными файлами и подготовленными чанками идентификаторов без
+сетевых вызовов.
 
 Пример полноценного пайплайна:
 
