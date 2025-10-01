@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from library import pubmed_library as pl
+from library.config import RetryCfg
 
 
 class DummyLimiter:
@@ -14,7 +15,15 @@ class DummyLimiter:
 
 
 def _stub_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None, *, client=None):
+    def fake_fetch_pubmed_batch(
+        session,
+        pmids,
+        delay,
+        cfg=None,
+        *,
+        retry_cfg: RetryCfg | None = None,
+        client=None,
+    ):
         return [
             {
                 "PubMed.PMID": pid,
@@ -86,7 +95,15 @@ def test_pubmed_library_rate_override(
     calls: dict[str, list[tuple[str, float, int | None]]] = {"limiters": []}
     delays: dict[str, float] = {}
 
-    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None, *, client=None):
+    def fake_fetch_pubmed_batch(
+        session,
+        pmids,
+        delay,
+        cfg=None,
+        *,
+        retry_cfg: RetryCfg | None = None,
+        client=None,
+    ):
         delays["pubmed"] = delay
         return [
             {

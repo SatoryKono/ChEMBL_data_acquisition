@@ -539,7 +539,11 @@ def fetch_pubmed_records(
                     return fetcher(nested_session, identifier, cfg_obj, limiter)
             _acquire_documents(pubmed_service_limiter)
             pubmed_list = pl.fetch_pubmed_batch(
-                base_session, batch_list, sleep, cfg=pubmed_cfg
+                base_session,
+                batch_list,
+                sleep,
+                cfg=pubmed_cfg,
+                retry_cfg=session_cfg.retry,
             )
 
             pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]

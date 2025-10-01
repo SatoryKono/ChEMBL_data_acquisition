@@ -22,7 +22,13 @@ from ..clients import (
     pubmed as pubmed_client,
     semantic_scholar as semantic_client,
 )
-from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
+from ..config import (
+    CrossRefCfg,
+    OpenAlexCfg,
+    PubMedCfg,
+    RetryCfg,
+    SemanticScholarCfg,
+)
 
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
 
@@ -97,6 +103,7 @@ def fetch_pubmed_batch(
     cfg: PubMedCfg | None = None,
     *,
     client: pubmed_client.PubMedClient | None = None,
+    retry_cfg: RetryCfg | None = None,
 ) -> list[dict[str, str]]:
     """Fetch and parse PubMed metadata for multiple PMIDs."""
 
@@ -104,7 +111,9 @@ def fetch_pubmed_batch(
         raise ValueError("Specify either cfg or client, not both")
 
     resolved_client = client or pubmed_client.PubMedClient(cfg=cfg)
-    xml_text, error = resolved_client.fetch_pubmed_batch(session, pmids, sleep)
+    xml_text, error = resolved_client.fetch_pubmed_batch(
+        session, pmids, sleep, retry_cfg=retry_cfg
+    )
     results: list[dict[str, str]] = []
     if error:
         for pid in pmids:
@@ -155,6 +164,7 @@ def fetch_pubmed(
     cfg: PubMedCfg | None = None,
     *,
     client: pubmed_client.PubMedClient | None = None,
+    retry_cfg: RetryCfg | None = None,
 ) -> dict[str, str]:
     """Fetch metadata for a single PMID."""
 
@@ -164,6 +174,7 @@ def fetch_pubmed(
         [pmid],
         sleep,
         client=resolved_client,
+        retry_cfg=retry_cfg,
     )[0]
 
 

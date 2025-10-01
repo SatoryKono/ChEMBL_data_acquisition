@@ -167,7 +167,11 @@ def _stream_pubmed_batches(
             batch_pmids = pmids[i : i + batch_size]
             limiter.acquire()
             pubmed_list = fetch_pubmed_batch(
-                session, batch_pmids, delay, client=pubmed_client
+                session,
+                batch_pmids,
+                delay,
+                client=pubmed_client,
+                retry_cfg=retry_cfg,
             )
             limiter.acquire()
             semsch_list = fetch_semantic_scholar_batch(

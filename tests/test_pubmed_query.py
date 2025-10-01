@@ -273,6 +273,9 @@ def test_fetch_pubmed_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
         pmids: list[str],
         delay: float,
         cfg: PubMedCfg | None = None,
+        *,
+        retry_cfg: Any | None = None,
+        client: Any | None = None,
     ) -> tuple[str, str]:
         captured.update(
             {

@@ -976,6 +976,7 @@ def test_fetch_pubmed_records_returns_generator_in_order(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
@@ -1063,6 +1064,7 @@ def test_fetch_pubmed_records_drains_pending_batches(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
@@ -1152,6 +1154,7 @@ def test_fetch_pubmed_records_streams_large_batches(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
@@ -1232,6 +1235,7 @@ def test_fetch_pubmed_records_accepts_config(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         assert sleep == expected_sleep
@@ -1324,6 +1328,7 @@ def test_fetch_pubmed_records_acquires_documents_limiter(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         batches_seen.append(list(batch))
@@ -1414,6 +1419,7 @@ def test_openalex_and_crossref_jobs_acquire_service_limiters(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
@@ -1489,6 +1495,7 @@ def test_crossref_jobs_skip_missing_doi(monkeypatch: pytest.MonkeyPatch) -> None
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
@@ -1568,6 +1575,7 @@ def test_documents_limiter_enforces_shared_pace(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [{"PubMed.PMID": pmid} for pmid in batch]
@@ -1633,6 +1641,7 @@ def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
         sleep: float,
         cfg: PubMedCfg | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         seen_cfg["value"] = cfg
@@ -1681,6 +1690,7 @@ def test_fetch_pubmed_records_uses_fallback_doi(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         assert batch == ["123"]
@@ -1750,6 +1760,7 @@ def test_fetch_pubmed_records_falls_back_to_single_semantic_call(
         sleep: float,
         cfg: Any | None = None,
         *,
+        retry_cfg: Any | None = None,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         assert batch == ["123"]
