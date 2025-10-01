@@ -117,10 +117,9 @@ def test_generate_pair_entity_tables_normalizes_columns() -> None:
     assert set(res["activity_same"]["activity_chembl_id"]) == {1, 2}
 
 
-def test_generate_pair_entity_tables_missing_columns(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level("WARNING")
+def test_generate_pair_entity_tables_missing_columns() -> None:
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="WARNING", stream=buffer))
     tables: TableDict = {
         "activity": pd.DataFrame(
             {
@@ -137,8 +136,15 @@ def test_generate_pair_entity_tables_missing_columns(
         "testitem": pd.DataFrame({"molecule_chembl_id": ["m1"]}),
         "pairs_bad": pd.DataFrame({"foo": [1]}),
     }
-    res = generate_pair_entity_tables(tables, {"pairs_bad": "bad"})
+    try:
+        res = generate_pair_entity_tables(tables, {"pairs_bad": "bad"})
+    finally:
+        configure_logger(LoggerConfig(stream=sys.stdout))
     assert "activity_bad" not in res
+    records = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+    missing = next(r for r in records if r["event"] == "pair_table_missing_columns")
+    assert missing["pair_table"] == "pairs_bad"
+    assert missing["columns"] == ["activity_chembl_id1", "activity_chembl_id2"]
 
 
 def test_build_combined_tables_drops_activity_cols() -> None:
