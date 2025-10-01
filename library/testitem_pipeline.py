@@ -1108,13 +1108,14 @@ def _write_pubchem_cid_cache(
 
     if path is None:
         return
-    serialisable: dict[str, str] = {}
+    serialisable: dict[str, str | None] = {}
     for key, value in cache.items():
         if not key:
             continue
         if value is None:
-            continue
-        serialisable[key] = value
+            serialisable[key] = None
+        else:
+            serialisable[key] = value
     try:
         with open_atomic(path, encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             payload = {
@@ -1471,7 +1472,7 @@ def _resolve_pubchem_cids(
         )
 
     def _is_cached(chembl_id: str | None) -> bool:
-        return bool(chembl_id and cid_cache.get(chembl_id))
+        return bool(chembl_id) and chembl_id in cid_cache
 
     cached_mask = chembl_norm.map(_is_cached)
     needs_lookup_mask = (
@@ -1492,9 +1493,10 @@ def _resolve_pubchem_cids(
     cache_dirty = False
     for idx, chembl_id in chembl_norm[cached_mask].items():
         cached_value = cid_cache.get(chembl_id)
-        if cached_value:
-            cid_series.loc[idx] = cached_value
-            lookup_cids.add(cached_value)
+        if cached_value is None:
+            continue
+        cid_series.loc[idx] = cached_value
+        lookup_cids.add(cached_value)
 
     for progress, row in enumerate(frame.loc[needs_lookup_mask].itertuples(), start=1):
         logger.info("pubchem_progress", current=progress, total=total)
@@ -1544,13 +1546,14 @@ def _merge_pubchem_properties(
     lookup_order = sorted(lookup_cids)
     if lookup_order:
         configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
-        rps_limit = max(int(getattr(cfg, "rps", configured_batch_size)), 1)
-        batch_size = min(configured_batch_size, rps_limit)
+        rps_limit = int(getattr(cfg, "rps", configured_batch_size))
+        max_workers = max(1, min(configured_batch_size, rps_limit))
+        batch_size = configured_batch_size
 
         def _fetch_properties(cid: str) -> pl.Properties:
             return pl.get_properties(cid, cfg)
 
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for start in range(0, len(lookup_order), batch_size):
                 batch = lookup_order[start : start + batch_size]
                 future_map = {
@@ -2087,6 +2090,7 @@ def finalize_output(
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
+        return 1
 
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept

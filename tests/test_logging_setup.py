@@ -12,7 +12,9 @@ Run linters and tests on this module with::
 
 from __future__ import annotations
 
+import io
 import json
+import logging
 import sys
 import threading
 from typing import Any
@@ -133,3 +135,60 @@ def test_logger_bind_preserves_parent_context(
     assert records[0]["stage"] == "extract"
     parent = next(rec for rec in records if rec["event"] == "parent_event")
     assert "stage" not in parent
+
+
+def test_configure_logger_without_replacing_root_preserves_handlers() -> None:
+    """Opting out of root replacement keeps existing handlers intact."""
+
+    root = logging.getLogger()
+    warnings_logger = logging.getLogger("py.warnings")
+    structured_logger = logging.getLogger("library.structured")
+
+    class DummyHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - noop
+            return None
+
+    original_root_handlers = list(root.handlers)
+    original_root_level = root.level
+    original_warnings_handlers = list(warnings_logger.handlers)
+    original_warnings_level = warnings_logger.level
+    original_warnings_propagate = warnings_logger.propagate
+    original_structured_handlers = list(structured_logger.handlers)
+    original_structured_level = structured_logger.level
+    original_structured_propagate = structured_logger.propagate
+
+    root_handler = DummyHandler()
+    warnings_handler = DummyHandler()
+    root.handlers = [root_handler]
+    warnings_logger.handlers = [warnings_handler]
+    warnings_logger.propagate = True
+
+    buffer = io.StringIO()
+
+    try:
+        logger = configure_logger(
+            LoggerConfig(level="INFO", run_id="rid", stream=buffer),
+            replace_root=False,
+        )
+
+        assert root.handlers == [root_handler]
+        assert root.level == original_root_level
+        assert warnings_logger.handlers == [warnings_handler]
+        assert warnings_logger.level == original_warnings_level
+        assert warnings_logger.propagate is True
+
+        structured_logger.info("std_event")
+        logger.info("direct_event")
+
+        records = [json.loads(line) for line in buffer.getvalue().splitlines()]
+        events = {record["event"] for record in records}
+        assert {"std_event", "direct_event"}.issubset(events)
+    finally:
+        root.handlers = original_root_handlers
+        root.setLevel(original_root_level)
+        warnings_logger.handlers = original_warnings_handlers
+        warnings_logger.setLevel(original_warnings_level)
+        warnings_logger.propagate = original_warnings_propagate
+        structured_logger.handlers = original_structured_handlers
+        structured_logger.setLevel(original_structured_level)
+        structured_logger.propagate = original_structured_propagate

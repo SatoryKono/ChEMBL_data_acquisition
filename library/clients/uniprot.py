@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import random
+
 import threading
+
 from typing import Any, cast
 
 import requests
@@ -27,7 +29,10 @@ class UniProtFetchError(RuntimeError):
 
 # Default session uses the application-wide API configuration. Call
 # :func:`init_session` with a custom configuration to override it.
+
 _session_lock = threading.Lock()
+
+
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 _retry_cfg: RetryCfg = RetryCfg()
 
@@ -37,12 +42,14 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
 
     global _session, _retry_cfg
 
+
     new_session = session_with_retry(api, retry)
     old_session: Session | None = None
     with _session_lock:
         old_session = _session
         _session = new_session
         _retry_cfg = retry
+
 
     if old_session is not None:
         old_session.close()
@@ -74,6 +81,7 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
         limiter.acquire()
         try:
             with _session_lock:
+
                 with _session.get(url, timeout=timeout) as resp:
                     resp.raise_for_status()
                     try:
@@ -82,6 +90,7 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
                         raise UniProtFetchError(
                             f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
                         ) from exc
+
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= retry_cfg.max_attempts:
                 raise UniProtFetchError(

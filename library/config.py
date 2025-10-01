@@ -1078,8 +1078,10 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     """Return an HTTP session configured for retries and user agent.
 
     The returned session retries failed requests for *all* HTTP methods,
-    including ``POST``. It also avoids raising exceptions on HTTP error status
-    codes, allowing callers to handle responses manually.
+    including ``POST``. Requests are attempted once plus
+    ``retry.max_attempts - 1`` automatic retries for retryable statuses. The
+    session avoids raising exceptions on HTTP error status codes, allowing
+    callers to handle responses manually.
 
     Parameters
     ----------
@@ -1096,9 +1098,7 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
 
     session = Session()
     retry_cfg = Retry(
-        # Automatic retries are disabled to avoid double retry loops; HTTP
-        # clients implement their own attempt counters using ``retry``.
-        total=0,
+        total=max(0, retry.max_attempts - 1),
         backoff_factor=retry.backoff_factor,
         status_forcelist=retry.status_forcelist,
         # ``None`` disables method filtering and retries all HTTP methods.

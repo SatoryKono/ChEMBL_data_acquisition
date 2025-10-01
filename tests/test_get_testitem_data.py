@@ -294,6 +294,10 @@ def test_prepare_pubchem_api_cfg_prefers_pubchem_override(cfg: Config) -> None:
     assert pubchem_cfg is not cfg.api
 
 
+def test_prepare_pubchem_api_cfg_reexport_matches_pipeline() -> None:
+    assert gtd._prepare_pubchem_api_cfg is pipeline._prepare_pubchem_api_cfg
+
+
 def test_prepare_pubchem_api_cfg_requires_custom_user_agent(cfg: Config) -> None:
     placeholder = "chembl-da/0.1 (mailto:contact@example.org)"
     cfg.api.user_agent = placeholder
@@ -579,6 +583,42 @@ def test_finalize_output_success(
     assert exit_code == 0
 
 
+def test_finalize_output_missing_required_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"extra": ["value"]})
+    parent_stats = pipeline.ParentLookupStats(
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+        missing=0,
+        unique=0,
+        attached=0,
+        uncovered=0,
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "write_csv_deterministic",
+        lambda *args, **kwargs: pytest.fail("should not write output when required columns are missing"),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "analyze_table_quality",
+        lambda *args, **kwargs: pytest.fail("should not analyze quality when required columns are missing"),
+    )
+
+    exit_code = pipeline.finalize_output(
+        df,
+        cfg=cfg,
+        output=tmp_path / "out.csv",
+        parent_stats=parent_stats,
+        input_csv=tmp_path / "in.csv",
+        rows_total=len(df),
+    )
+
+    assert exit_code == 1
+    assert not (tmp_path / "out.csv").exists()
+
+
 def test_finalize_output_streams_sorted_chunks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
@@ -857,6 +897,53 @@ def test_resolve_pubchem_cids_skips_marked_rows(
     assert cache_dirty
 
 
+def test_resolve_pubchem_cids_skips_cached_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "canonical_smiles": ["C", "N"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    cid_cache: dict[str, str | None] = {"CHEMBL1": None}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    calls: list[str] = []
+
+    def fake_resolve(
+        row: pd.Series,
+        cache: MutableMapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        **_: object,
+    ) -> str:
+        chembl_id = row["molecule_chembl_id"]
+        calls.append(chembl_id)
+        cache[chembl_id] = "111"
+        return "111"
+
+    monkeypatch.setattr(pipeline, "resolve_pubchem_cid", fake_resolve)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    cid_series, lookup_cids, cache_dirty = pipeline._resolve_pubchem_cids(
+        frame,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        load_parent_record=lambda _: None,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert calls == ["CHEMBL2"]
+    assert pd.isna(cid_series.iloc[0])
+    assert cid_series.iloc[1] == "111"
+    assert lookup_cids == {"111"}
+    assert cache_dirty
+
+
 def test_merge_pubchem_properties_preserves_existing_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -936,6 +1023,62 @@ def test_merge_pubchem_properties_throttles_by_rps(
 
     assert peak_active == cfg.rps
     assert result["pubchem_cid"].tolist() == cid_series.tolist()
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"name-{cid}" for cid in cid_series.tolist()
+    ]
+
+
+def test_merge_pubchem_properties_limits_workers_to_rps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame({"value": [0, 1, 2]})
+    cid_series = pd.Series(["CID-0", "CID-1", "CID-2"], index=frame.index, dtype="string")
+    lookup_cids = set(cid_series.tolist())
+    cfg = pl.PubChemCfg(delay=0, rps=2, batch_size=5)
+
+    monkeypatch.setattr(
+        pl,
+        "get_properties",
+        lambda cid, pubchem_cfg: pl.Properties(f"name-{cid}", None, None, None, None, None),
+    )
+
+    class ImmediateFuture:
+        def __init__(self, value: object) -> None:
+            self._value = value
+
+        def result(self) -> object:
+            return self._value
+
+    captured_workers: list[int] = []
+
+    class DummyExecutor:
+        def __init__(self, max_workers: int) -> None:
+            captured_workers.append(max_workers)
+
+        def __enter__(self) -> DummyExecutor:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        def submit(self, func: Callable[..., object], *args: object, **kwargs: object) -> ImmediateFuture:
+            return ImmediateFuture(func(*args, **kwargs))
+
+    monkeypatch.setattr(pipeline, "ThreadPoolExecutor", DummyExecutor)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    result = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert captured_workers == [cfg.rps]
     assert result["pubchem_iupac_name"].tolist() == [
         f"name-{cid}" for cid in cid_series.tolist()
     ]
@@ -1265,11 +1408,13 @@ def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
 
     assert not cache_path.parent.exists()
 
-    pipeline._write_pubchem_cid_cache(cache_path, {"CHEMBL1": "321"})
+    pipeline._write_pubchem_cid_cache(
+        cache_path, {"CHEMBL1": "321", "CHEMBL2": None}
+    )
 
     assert cache_path.exists()
     payload = json.loads(cache_path.read_text())
-    assert payload["values"] == {"CHEMBL1": "321"}
+    assert payload["values"] == {"CHEMBL1": "321", "CHEMBL2": None}
     assert payload["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
 
 
