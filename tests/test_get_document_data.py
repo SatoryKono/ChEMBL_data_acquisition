@@ -4,6 +4,8 @@ import argparse
 import io
 import json
 import sys
+import threading
+import time
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,9 @@ from scripts import get_document_data as gdd
 
 
 class DummyLimiter:
+    def __init__(self, burst: int = 1) -> None:
+        self.burst = burst
+
     def acquire(self) -> None:
         return None
 
@@ -1253,3 +1258,133 @@ def test_fetch_pubmed_records_accepts_executor_context(
     )
 
     assert sorted(df["PubMed.PMID"].tolist()) == pmids
+
+
+def test_fetch_pubmed_records_parallel_enrichment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef lookups should run in parallel and preserve order."""
+
+    pmids = ["100", "200", "300"]
+
+    monkeypatch.setattr(rl, "sleep", lambda _delay: None)
+
+    def fake_pubmed_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"10.1234/{pmid}",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+                "PubMed.PublicationType": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+                "scholar.PublicationTypes": "",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.PublicationTypes": "",
+            "scholar.Error": "",
+        },
+    )
+
+    openalex_threads: list[str] = []
+    openalex_completion: list[str] = []
+
+    def fake_openalex(
+        _session: Any,
+        pmid: str,
+        cfg: OpenAlexCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        openalex_threads.append(threading.current_thread().name)
+        if pmid == "100":
+            time.sleep(0.01)
+        openalex_completion.append(pmid)
+        return {
+            "OpenAlex.PublicationTypes": "",
+            "OpenAlex.TypeCrossref": "",
+            "OpenAlex.Genre": "",
+            "OpenAlex.Id": pmid,
+            "OpenAlex.Venue": f"Venue {pmid}",
+            "OpenAlex.MeshDescriptors": "",
+            "OpenAlex.MeshQualifiers": "",
+            "OpenAlex.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+
+    crossref_threads: list[str] = []
+    crossref_completion: list[str] = []
+
+    def fake_crossref(
+        _session: Any,
+        doi: str,
+        cfg: CrossRefCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        crossref_threads.append(threading.current_thread().name)
+        pmid = doi.rsplit("/", 1)[-1] if doi else ""
+        if pmid == "200":
+            time.sleep(0.01)
+        crossref_completion.append(pmid)
+        return {
+            "crossref.Type": "",
+            "crossref.Subtype": "",
+            "crossref.Title": f"Title {pmid}",
+            "crossref.Subtitle": "",
+            "crossref.Subject": "",
+            "crossref.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=3,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert df["OpenAlex.Venue"].tolist() == [f"Venue {pmid}" for pmid in pmids]
+    assert df["crossref.Title"].tolist() == [f"Title {pmid}" for pmid in pmids]
+
+    assert openalex_completion != pmids
+    assert crossref_completion != pmids
+
+    assert openalex_threads
+    assert crossref_threads
+    assert all(name.startswith("ThreadPoolExecutor") for name in openalex_threads)
+    assert all(name.startswith("ThreadPoolExecutor") for name in crossref_threads)
