@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterable, Iterator, Sequence
+from concurrent.futures import Future
 from pathlib import Path
 from typing import Any
 
@@ -1912,3 +1913,59 @@ def test_fetch_pubmed_records_reuses_service_executors(
     assert df["PubMed.PMID"].tolist() == pmids
     assert len(creations) == 3
     assert creations.count(1) == 1
+
+
+def test_fetch_pubmed_records_generator_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generator mode should yield DataFrame batches in submission order."""
+
+    pmids = ["100", "200", "300", "400"]
+    cfg = Config()
+
+    def fake_get_limiter(*_: object, **__: object) -> DummyLimiter:
+        return DummyLimiter(burst=10)
+
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+
+    def fake_as_completed(futures: Iterable[Future]) -> Iterator[Future]:
+        snapshot = list(futures)
+        for future in reversed(snapshot):
+            yield future
+
+    monkeypatch.setattr(gdd, "as_completed", fake_as_completed)
+
+    class ImmediateExecutor:
+        def __init__(self, *_: object, **__: object) -> None:
+            return None
+
+        def __enter__(self) -> ImmediateExecutor:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def submit(self, func: Any, *args: object, **__: object) -> Future:
+            _ = func
+            batch = list(args[0]) if args else []
+            future: Future = Future()
+            records = [{"PubMed.PMID": pmid} for pmid in batch]
+            future.set_result(records)
+            return future
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", ImmediateExecutor)
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        cfg,
+        return_generator=True,
+        batch_size=1,
+        max_workers=2,
+    )
+
+    assert isinstance(generator, Iterator)
+    frames = list(generator)
+    assert [frame["PubMed.PMID"].tolist() for frame in frames] == [
+        ["100"],
+        ["200"],
+        ["300"],
+        ["400"],
+    ]
