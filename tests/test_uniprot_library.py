@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
@@ -127,6 +128,37 @@ def test_fetch_uniprot_retries_with_backoff(monkeypatch: pytest.MonkeyPatch) -> 
     assert limiter_calls == [(cfg.rps, cfg.burst), (cfg.rps, cfg.burst)]
     assert acquire_calls == 2
     assert sleeps == [pytest.approx(0.7)]
+
+
+@responses.activate
+def test_fetch_uniprot_is_thread_safe() -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0)
+    accessions = ["P10000", "P10001", "P10002", "P10003"]
+    for acc in accessions:
+        responses.add(
+            responses.GET,
+            f"https://example.org/uniprotkb/{acc}.json",
+            json={"primaryAccession": acc},
+        )
+
+    results: dict[str, dict[str, object]] = {}
+    errors: list[Exception] = []
+
+    def worker(uniprot_id: str) -> None:
+        try:
+            results[uniprot_id] = ul.fetch_uniprot(uniprot_id, cfg=cfg)
+        except Exception as exc:  # pragma: no cover - ensures failure is visible
+            errors.append(exc)
+
+    threads = [Thread(target=worker, args=(acc,)) for acc in accessions]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    assert {res["primaryAccession"] for res in results.values()} == set(accessions)
+    assert len(responses.calls) == len(accessions)
 
 
 @responses.activate

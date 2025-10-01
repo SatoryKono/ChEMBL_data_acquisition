@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+from threading import Lock
 from typing import Any, cast
 
 import requests
@@ -26,6 +27,7 @@ class UniProtFetchError(RuntimeError):
 
 # Default session uses the application-wide API configuration. Call
 # :func:`init_session` with a custom configuration to override it.
+_session_lock = Lock()
 _session: Session = session_with_retry(ApiCfg(), RetryCfg())
 _retry_cfg: RetryCfg = RetryCfg()
 
@@ -34,14 +36,20 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session."""
 
     global _session, _retry_cfg
-    _session = session_with_retry(api, retry)
-    _retry_cfg = retry
+    old_session: Session | None = None
+    with _session_lock:
+        old_session = _session
+        _session = session_with_retry(api, retry)
+        _retry_cfg = retry
+    if old_session is not None:
+        old_session.close()
 
 
 def get_session() -> Session:
     """Expose the configured :class:`requests.Session` instance."""
 
-    return _session
+    with _session_lock:
+        return _session
 
 
 def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
@@ -55,7 +63,9 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
         limiter = get_limiter("uniprot", cfg.rps, cfg.burst)
         limiter.acquire()
         try:
-            with _session.get(url, timeout=timeout) as resp:
+            with _session_lock:
+                response = _session.get(url, timeout=timeout)
+            with response as resp:
                 resp.raise_for_status()
                 try:
                     return cast(dict[str, Any], resp.json())
