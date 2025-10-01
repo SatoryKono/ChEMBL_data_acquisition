@@ -1,4 +1,8 @@
+import threading
+from itertools import count
+
 import pandas as pd
+import pytest
 
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -7,6 +11,8 @@ from library.document_pipeline import (
     merge_metadata,
     merge_with_chembl,
 )
+from library.config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
+import scripts.get_document_data as gdd
 
 
 def test_merge_metadata_normalises_fields() -> None:
@@ -94,3 +100,164 @@ def test_build_quality_report_counts() -> None:
     assert report["publication_class_counts"]["review"] == 1
     assert report["error_counts"]["pubmed"] == 1
     assert report["error_counts"]["crossref"] == 1
+
+
+def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef jobs open independent retry sessions."""
+
+    pmids = ["100", "200"]
+
+    session_counter = count()
+    counter_lock = threading.Lock()
+
+    def _next_session_token() -> str:
+        with counter_lock:
+            return f"session-{next(session_counter)}"
+
+    class DummyLimiter:
+        def __init__(self, burst: int | None = None) -> None:
+            self.burst = burst if burst is not None else 4
+
+        def acquire(self) -> None:  # pragma: no cover - simple synchronisation
+            return None
+
+    pubmed_sessions: list[str] = []
+    semantic_sessions: list[str] = []
+    openalex_sessions: list[str] = []
+    crossref_sessions: list[str] = []
+
+    def fake_session_with_retry(*_args: object, **_kwargs: object):
+        token = _next_session_token()
+
+        class _Context:
+            def __enter__(self) -> str:  # pragma: no cover - simple context
+                return token
+
+            def __exit__(self, *exc: object) -> None:  # pragma: no cover - simple context
+                return None
+
+        return _Context()
+
+    def fake_get_limiter(
+        _name: str, _rps: float | int | None, burst: int | None = None
+    ) -> DummyLimiter:
+        return DummyLimiter(burst)
+
+    def fake_pubmed_batch(
+        session: str,
+        batch: list[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        pubmed_sessions.append(session)
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"10.1/{pmid}",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+                "PubMed.PublicationType": "",
+            }
+            for pmid in batch
+        ]
+
+    def fake_semantic_batch(
+        session: str,
+        batch: list[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        semantic_sessions.append(session)
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1/{pmid}",
+                "scholar.PublicationTypes": "",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    def fake_semantic_single(
+        *_args: object, **_kwargs: object
+    ) -> dict[str, str]:  # pragma: no cover - not exercised
+        return {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.PublicationTypes": "",
+            "scholar.Error": "",
+        }
+
+    def fake_openalex(
+        session: str,
+        pmid: str,
+        cfg: OpenAlexCfg,
+        limiter: DummyLimiter | None = None,
+    ) -> dict[str, str]:
+        openalex_sessions.append(session)
+        return {
+            "OpenAlex.PublicationTypes": "",
+            "OpenAlex.TypeCrossref": "",
+            "OpenAlex.Genre": "",
+            "OpenAlex.Id": pmid,
+            "OpenAlex.Venue": f"Venue {pmid}",
+            "OpenAlex.MeshDescriptors": "",
+            "OpenAlex.MeshQualifiers": "",
+            "OpenAlex.Error": "",
+        }
+
+    def fake_crossref(
+        session: str,
+        doi: str,
+        cfg: CrossRefCfg,
+        limiter: DummyLimiter | None = None,
+    ) -> dict[str, str]:
+        crossref_sessions.append(session)
+        pmid = doi.rsplit("/", 1)[-1] if doi else ""
+        return {
+            "crossref.Type": "",
+            "crossref.Subtype": "",
+            "crossref.Title": f"Title {pmid}",
+            "crossref.Subtitle": "",
+            "crossref.Subject": "",
+            "crossref.Error": "",
+        }
+
+    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(
+        gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch
+    )
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=2,
+        batch_size=2,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert df["OpenAlex.Id"].tolist() == pmids
+    assert df["crossref.Title"].tolist() == [f"Title {pmid}" for pmid in pmids]
+
+    assert pubmed_sessions
+    assert semantic_sessions
+    assert pubmed_sessions == semantic_sessions
+
+    assert len(openalex_sessions) == len(pmids)
+    assert len(crossref_sessions) == len(pmids)
+    assert len(set(openalex_sessions)) == len(pmids)
+    assert len(set(crossref_sessions)) == len(pmids)
+
+    first_session = pubmed_sessions[0]
+    assert all(session != first_session for session in openalex_sessions)
+    assert all(session != first_session for session in crossref_sessions)
