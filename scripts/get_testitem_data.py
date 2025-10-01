@@ -3,6 +3,8 @@
 The module wraps :func:`library.testitem_pipeline.run_testitem_pipeline` while
 exposing helpers that tests can import directly. Entry points return numeric
 exit codes rather than terminating the interpreter to simplify orchestration.
+The :func:`ensure_no_parant_column` helper guards against legacy CSV exports
+that still include the misspelled parent identifier column.
 """
 
 from __future__ import annotations
