@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+import io
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -12,6 +14,7 @@ from cachetools import TTLCache
 from library import pubchem_library as pl
 from library.clients import pubchem as pc
 from library.config import ApiCfg, RetryCfg, session_with_retry
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 class DummyResponse:
@@ -400,3 +403,76 @@ def test_init_session_closes_previous_session(monkeypatch) -> None:
     assert closed == [first_api.user_agent]
     assert first_session.closed is True
     assert second_session.closed is False
+
+
+def test_make_request_logs_cache_set_hit_as_debug(monkeypatch) -> None:
+    """Successful requests should log cache writes at DEBUG level."""
+
+    buf = io.StringIO()
+    test_logger = configure_logger(
+        LoggerConfig(level="DEBUG", run_id="test", stream=buf)
+    ).bind(status=None, rps=None)
+    monkeypatch.setattr(pc, "logger", test_logger)
+
+    url = "https://example.org/cache-hit"
+    payload = {"value": 1}
+    cfg = pl.PubChemCfg(retries=0, delay=0)
+
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        session,
+        "get",
+        lambda *args, **kwargs: DummyResponse(payload),
+    )
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    result = pc.make_request(url, cfg)
+
+    assert result == payload
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    cache_records = [record for record in records if record.get("event") == "cache_set"]
+
+    assert cache_records
+    assert cache_records[0]["level"] == "DEBUG"
+    assert cache_records[0]["status"] == "hit"
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+
+def test_store_cache_miss_logs_debug(monkeypatch) -> None:
+    """Cached miss entries should emit DEBUG logs with context."""
+
+    buf = io.StringIO()
+    test_logger = configure_logger(
+        LoggerConfig(level="DEBUG", run_id="test", stream=buf)
+    ).bind(status=None, rps=None)
+    monkeypatch.setattr(pc, "logger", test_logger)
+
+    cfg = pl.PubChemCfg(retries=0, delay=0)
+    url = "https://example.org/cache-miss"
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    pc._store_cache_miss(url, cfg, "not_found", {"reason": "rate_limited"})
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    cache_records = [record for record in records if record.get("event") == "cache_set"]
+
+    assert cache_records
+    cache_record = cache_records[0]
+    assert cache_record["level"] == "DEBUG"
+    assert cache_record["status"] == "miss"
+    assert cache_record["outcome"] == "not_found"
+    assert cache_record["reason"] == "rate_limited"
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
