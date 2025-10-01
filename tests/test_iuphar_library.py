@@ -227,7 +227,7 @@ def test_map_uniprot_file_uses_mapping_uniprot(tmp_path: Path) -> None:
     target_df = pd.DataFrame(
         {
             "target_id": ["T1"],
-            "uniprot_id": ["P12345"],
+            "uniprot_id": ["Q99999"],
             "family_id": ["F1"],
             "type": ["Enzyme.Transferase"],
             "target_name": ["Example target"],
@@ -259,3 +259,53 @@ def test_map_uniprot_file_uses_mapping_uniprot(tmp_path: Path) -> None:
     assert result.loc[0, "IUPHAR_class"] == "Enzyme"
     assert result.loc[0, "IUPHAR_subclass"] == "Transferase"
     assert result.loc[0, "mapping_uniprot_id"] == "P12345|Q99999"
+
+
+def test_target_id_from_row_uses_mapping_accessions() -> None:
+    target_df = pd.DataFrame(
+        {
+            "target_id": ["T1"],
+            "uniprot_id": ["Q99999"],
+            "family_id": ["F1"],
+            "hgnc_id": ["HGNC:1"],
+            "hgnc_name": ["GENE1"],
+            "gene_name": ["GENE1"],
+        }
+    )
+    family_df = pd.DataFrame(
+        {
+            "family_id": ["F1"],
+            "parent_family_id": [pd.NA],
+            "family_name": ["Example family"],
+            "type": ["Enzyme.Transferase"],
+        }
+    )
+    data = ii.IUPHARData(target_df=target_df, family_df=family_df)
+
+    row = pd.Series({"uniprot_id": "", "mapping_uniprot_id": "ALT|Q99999"})
+
+    assert data.target_id_from_row(row) == "T1"
+
+
+def test_target_id_by_uniprot_accepts_iterable_values() -> None:
+    target_df = pd.DataFrame(
+        {
+            "target_id": ["T1"],
+            "uniprot_id": ["Q99999"],
+            "family_id": ["F1"],
+            "hgnc_id": ["HGNC:1"],
+            "hgnc_name": ["GENE1"],
+            "gene_name": ["GENE1"],
+        }
+    )
+    family_df = pd.DataFrame(
+        {
+            "family_id": ["F1"],
+            "parent_family_id": [pd.NA],
+            "family_name": ["Example family"],
+            "type": ["Enzyme.Transferase"],
+        }
+    )
+    data = ii.IUPHARData(target_df=target_df, family_df=family_df)
+
+    assert data.target_id_by_uniprot(["ALT", "Q99999"]) == "T1"
