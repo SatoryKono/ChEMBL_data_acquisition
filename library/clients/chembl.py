@@ -49,7 +49,7 @@ class ChemblClient:
         *,
         session: Session | None = None,
     ) -> None:
-        api = api or ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)")
+        api = api or ApiCfg()
         retry = retry or RetryCfg()
         self.session = session or session_with_retry(api, retry)
         ttl = chembl.cache_ttl if chembl is not None else ChemblCacheCfg().cache_ttl

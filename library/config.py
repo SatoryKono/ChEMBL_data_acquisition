@@ -145,6 +145,11 @@ class ApiCfg(_BaseModel):
     @field_validator("user_agent")
     @classmethod
     def _ua(cls, v: str) -> str:
+        if "contact@example.org" in v:
+            raise ConfigError(
+                "api.user_agent must include a real contact address; "
+                "replace contact@example.org with a valid email"
+            )
         if not _EMAIL_RE.search(v):
             raise ValueError(
                 "api.user_agent must include contact information such as an email"

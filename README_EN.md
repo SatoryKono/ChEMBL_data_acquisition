@@ -271,8 +271,9 @@ api:
   user_agent: "chembl-da/0.1 (mailto:contact@example.org)"
 ```
 
-Override the parameter in `config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. There
-is no dedicated CLI flag (see `library/cli/parser.py`), so configuration is limited to files or environment variables.
+Override the parameter in `config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. The
+`contact@example.org` value is a placeholder and the validator rejects it, so update the address before running the tools. There is
+no dedicated CLI flag (see `library/cli/parser.py`), so configuration is limited to files or environment variables.
 
 ## Configuration validation
 
