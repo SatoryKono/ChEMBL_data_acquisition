@@ -785,6 +785,85 @@ def test_fetch_pubmed_records_acquires_documents_limiter(
     assert list(df["PubMed.PMID"]) == ["1", "2"]
 
 
+def test_openalex_and_crossref_jobs_acquire_service_limiters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef jobs use their service-specific limiters."""
+
+    class TrackingLimiter:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.acquisitions = 0
+            self._lock = threading.Lock()
+
+        def acquire(self) -> None:
+            with self._lock:
+                self.acquisitions += 1
+
+    limiters = {
+        "documents_global": TrackingLimiter("global"),
+        "documents_openalex": TrackingLimiter("openalex"),
+        "documents_crossref": TrackingLimiter("crossref"),
+    }
+
+    def fake_get_limiter(name: str, *_, **__) -> Any:
+        return limiters.get(name, DummyLimiter())
+
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": "10.1000/xyz",
+            }
+            for pmid in batch
+        ]
+
+    def fake_semantic_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [{"scholar.PMID": pmid} for pmid in pmids]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+
+    gdd.fetch_pubmed_records(
+        ["1"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert limiters["documents_openalex"].acquisitions == 1
+    assert limiters["documents_crossref"].acquisitions == 1
+
+
 def test_documents_limiter_enforces_shared_pace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
