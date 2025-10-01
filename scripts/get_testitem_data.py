@@ -39,9 +39,15 @@ from library.clients import pubchem as pc  # noqa: F401 - patched in tests
 from library import testitem_pipeline as pipeline
 from library.chembl_client import ChemblClient
 from library.testitem_pipeline import (
+    PUBCHEM_COLUMNS,
     PUBCHEM_CID_CACHE_ENCODING as _pipeline_pubchem_cid_cache_encoding,
-    ReadInputIdsResult as _ReadInputIdsResult,
+    ReadInputIdsResult,
     TestitemPipelineOptions,
+    _DEFAULT_CATALOG_CFG,
+    _FETCH_ERROR_SAMPLE_SIZE,
+    _MOLECULE_HIERARCHY_COLUMNS,
+    _PLACEHOLDER_CONTACT_EMAIL,
+    _PUBCHEM_CACHE_SCHEMA_VERSION,
     _TYPO_PARENT_COLUMN,
     analyze_table_quality as _analyze_table_quality,
     file_sha256 as _pipeline_file_sha256,
@@ -58,11 +64,12 @@ from library.testitem_pipeline import (
 from library.testitem_pipeline import (
     _prepare_pubchem_api_cfg as _pipeline_prepare_pubchem_api_cfg,
     _load_pubchem_cid_cache as _pipeline_load_pubchem_cid_cache,
+    _write_pubchem_cid_cache as _pipeline_write_pubchem_cid_cache,
     integrate_missing_identifiers as _integrate_missing_identifiers,
+    _TYPO_PARENT_COLUMN as _pipeline_typo_parent_column,
 )
 
 # Re-export helpers consumed directly by unit tests.
-ReadInputIdsResult = _ReadInputIdsResult
 read_input_ids = _read_input_ids
 fetch_testitems = _fetch_testitems
 load_parent_catalog = _load_parent_catalog
@@ -74,16 +81,19 @@ _integrate_missing_identifiers = _integrate_missing_identifiers
 
 update_parent_catalog_cache = _pipeline_update_parent_catalog_cache
 write_parent_catalog_cache = _pipeline_write_parent_catalog_cache
+_write_pubchem_cid_cache = _pipeline_write_pubchem_cid_cache
 load_molecule_hierarchy_lookup = _pipeline_load_molecule_hierarchy_lookup
 file_sha256 = _pipeline_file_sha256
 write_meta_yaml = _pipeline_write_meta_yaml
 PUBCHEM_CID_CACHE_ENCODING = _pipeline_pubchem_cid_cache_encoding
+_TYPO_PARENT_COLUMN = _pipeline_typo_parent_column
 
 
 # ===== Parameters =====
 
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
+
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 
@@ -95,7 +105,6 @@ class ReadInputIdsResult:
 
     ids_iter: Iterator[str]
     sample_ids: tuple[str, ...]
-
 
 
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
@@ -114,22 +123,6 @@ PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
 
 
-PUBCHEM_COLUMNS = [
-    "pubchem_cid",
-    "pubchem_iupac_name",
-    "pubchem_molecular_formula",
-    "pubchem_isomeric_smiles",
-    "pubchem_canonical_smiles",
-    "pubchem_inchi",
-    "pubchem_inchikey",
-]
-
-
-_CID_CACHE_MISSING = object()
-
-_FETCH_ERROR_SAMPLE_SIZE = 10
-
-
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     """Return ``value`` normalised for PubChem lookup."""
 
@@ -144,9 +137,6 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     if not normalised:
         return None
     return normalised.upper() if uppercase else normalised
-
-
-_PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
@@ -335,34 +325,6 @@ def _load_pubchem_cid_cache(
             cache[key] = primary
     return cache
 
-
-def _write_pubchem_cid_cache(
-    path: Path | None, cache: Mapping[str, str | None]
-) -> None:
-    """Persist CID cache mapping to disk."""
-
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    serialisable: dict[str, str] = {}
-    for key, value in cache.items():
-        if not key:
-            continue
-        if value is None:
-            continue
-        serialisable[key] = value
-    try:
-        with path.open("w", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
-            payload = {
-                "metadata": {
-                    "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
-                    "updated_at": datetime.now(UTC).isoformat(),
-                },
-                "values": serialisable,
-            }
-            json.dump(payload, handle, indent=2, sort_keys=True)
-    except OSError as exc:  # pragma: no cover - I/O errors
-        logger.warning("pubchem_cache_write_failed", path=str(path), error=str(exc))
 def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
     """Return mapping of identifier names to normalised values."""
 

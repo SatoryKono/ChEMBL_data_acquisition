@@ -7,6 +7,7 @@ import threading
 import time
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from typing import Any
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -142,6 +143,16 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
     assert status == 1
     assert df is None
     assert requested_ids == ()
+
+
+def test_ensure_no_parant_column_raises() -> None:
+    df = pd.DataFrame([{"parant_molecule_id": "CHEMBL1"}])
+
+    with pytest.raises(
+        ValueError,
+        match="unexpected column 'parant_molecule_id'; use 'parent_molecule_id' instead",
+    ):
+        gtd.ensure_no_parant_column(df)
 
 
 def test_fetch_testitems_passes_fields_and_limit(
@@ -883,6 +894,100 @@ def test_merge_pubchem_properties_preserves_existing_values(
     assert pubchem_df.loc[2, "pubchem_molecular_formula"] == "formula"
 
 
+def test_merge_pubchem_properties_throttles_by_rps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    count = 5
+    frame = pd.DataFrame({"value": range(count)})
+    cid_series = pd.Series(
+        [f"CID-{idx}" for idx in range(count)], index=frame.index, dtype="string"
+    )
+    lookup_cids = set(cid_series.tolist())
+    cfg = pl.PubChemCfg(delay=0, rps=2, batch_size=10)
+
+    lock = threading.Lock()
+    active = 0
+    peak_active = 0
+
+    def fake_get_properties(cid: str, pubchem_cfg: pl.PubChemCfg) -> pl.Properties:
+        nonlocal active, peak_active
+        assert pubchem_cfg is cfg
+        with lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return pl.Properties(f"name-{cid}", None, None, None, None, None)
+
+    monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    result = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert peak_active == cfg.rps
+    assert result["pubchem_cid"].tolist() == cid_series.tolist()
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"name-{cid}" for cid in cid_series.tolist()
+    ]
+
+
+def test_merge_pubchem_properties_uses_batch_size_when_below_rps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    count = 6
+    frame = pd.DataFrame({"value": range(count)})
+    cid_series = pd.Series(
+        [f"CID-{idx}" for idx in range(count)], index=frame.index, dtype="string"
+    )
+    lookup_cids = set(cid_series.tolist())
+    cfg = pl.PubChemCfg(delay=0, rps=10, batch_size=3)
+
+    lock = threading.Lock()
+    active = 0
+    peak_active = 0
+
+    def fake_get_properties(cid: str, pubchem_cfg: pl.PubChemCfg) -> pl.Properties:
+        nonlocal active, peak_active
+        assert pubchem_cfg is cfg
+        with lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return pl.Properties(f"name-{cid}", None, None, None, None, None)
+
+    monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    result = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert peak_active == cfg.batch_size
+    assert result["pubchem_cid"].tolist() == cid_series.tolist()
+    assert result["pubchem_iupac_name"].tolist() == [
+        f"name-{cid}" for cid in cid_series.tolist()
+    ]
+
+
 def test_add_pubchem_data_fetches_properties_in_parallel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1166,6 +1271,35 @@ def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
     payload = json.loads(cache_path.read_text())
     assert payload["values"] == {"CHEMBL1": "321"}
     assert payload["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
+
+
+def test_write_pubchem_cid_cache_partial_write_keeps_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_path = tmp_path / "cid_cache.json"
+    original_payload = {
+        "metadata": {
+            "version": pipeline._PUBCHEM_CACHE_SCHEMA_VERSION,
+            "updated_at": datetime.now(UTC).isoformat(),
+        },
+        "values": {"CHEMBL1": "321"},
+    }
+    cache_path.write_text(json.dumps(original_payload))
+
+    real_dump = pipeline.json.dump
+
+    def fake_dump(payload: object, handle: Any, *args: object, **kwargs: object) -> None:
+        if isinstance(payload, dict) and "values" in payload:
+            handle.write("{\"values\": {")
+            handle.flush()
+            raise OSError("disk full")
+        real_dump(payload, handle, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline.json, "dump", fake_dump)
+
+    pipeline._write_pubchem_cid_cache(cache_path, {"CHEMBL2": "654"})
+
+    assert json.loads(cache_path.read_text()) == original_payload
 
 
 def test_load_pubchem_cid_cache_uses_shared_selector(

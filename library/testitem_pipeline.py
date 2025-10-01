@@ -1543,7 +1543,9 @@ def _merge_pubchem_properties(
 
     lookup_order = sorted(lookup_cids)
     if lookup_order:
-        batch_size = max(int(getattr(cfg, "rps", 1)), 1)
+        configured_batch_size = max(int(getattr(cfg, "batch_size", 1)), 1)
+        rps_limit = max(int(getattr(cfg, "rps", configured_batch_size)), 1)
+        batch_size = min(configured_batch_size, rps_limit)
 
         def _fetch_properties(cid: str) -> pl.Properties:
             return pl.get_properties(cid, cfg)

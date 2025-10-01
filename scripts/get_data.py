@@ -22,7 +22,7 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
-import logging
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,8 +36,10 @@ from scripts import (
     get_testitem_data,
 )
 
+from library.logging_setup import Logger, LoggerConfig, configure_logger
 
-_LOGGER = logging.getLogger(__name__)
+
+_LOGGER: Logger = Logger(LoggerConfig())
 
 _DEFAULT_INPUT_FILES = {
     "document": "document.csv",
@@ -134,16 +136,17 @@ def _resolve_path(base: Path, candidate: Path) -> Path:
     return (base / expanded).resolve()
 
 
-def _configure_logging(level_name: str) -> None:
+def _configure_logging(level_name: str, *, run_id: str | None = None) -> Logger:
     """Configure structured logging for the orchestration workflow."""
 
-    level = getattr(logging, level_name.upper(), None)
-    if not isinstance(level, int):
+    normalised = level_name.upper()
+    valid_levels = {"DEBUG", "INFO", "WARN", "WARNING", "ERROR"}
+    if normalised not in valid_levels:
         raise ValueError(f"invalid log level: {level_name}")
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+
+    resolved_run_id = run_id or uuid.uuid4().hex
+
+    return configure_logger(LoggerConfig(level=normalised, run_id=resolved_run_id))
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -395,6 +398,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
     """Execute all configured steps and return the resulting exit status."""
 
     overall_status = 0
+    _LOGGER.info("pipeline_start", stage="pipeline")
     for step in _PIPELINE_STEPS:
         _LOGGER.info("step_start", step=step.name)
         final_output = step.expected_output(cfg)
@@ -412,7 +416,8 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
                 sentinel_path,
                 executed=True,
             )
-            return 1
+            overall_status = 1
+            break
         if result.exit_code != 0:
             _LOGGER.error(
                 "step_failed", step=step.name, exit_code=result.exit_code
@@ -429,6 +434,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
         _LOGGER.info("step_done", step=step.name)
     else:
         _LOGGER.info("workflow_complete")
+    _LOGGER.info("pipeline_done", stage="pipeline", exit_code=overall_status)
     return overall_status
 
 
@@ -437,9 +443,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = _parse_args(argv)
     try:
-        _configure_logging(args.log_level)
+        logger = _configure_logging(args.log_level)
     except ValueError as exc:
         raise SystemExit(str(exc))
+
+    global _LOGGER
+    _LOGGER = logger
     try:
         cfg = _prepare_config(args)
     except (FileNotFoundError, OSError, ValueError) as exc:

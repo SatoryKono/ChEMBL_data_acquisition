@@ -54,6 +54,7 @@ dev = [
 ]
 
 [project.scripts]
+get-data = "scripts.get_data:main"
 get-activity-data = "library.cli.commands.get_activity_data:main"
 get-assay-data = "library.cli.commands.get_assay_data:main"
 get-target-data = "library.cli.commands.get_target_data:main"

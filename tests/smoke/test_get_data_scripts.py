@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import io
+import json
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +14,7 @@ from pandas.api import types as ptypes
 from library import chembl_library as cl
 from library import pubchem_library as pl
 from library.clients import pubchem as pc
+from library.logging_setup import LoggerConfig, configure_logger
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import (
     get_activity_data,
@@ -114,7 +117,12 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
             pass
 
-    monkeypatch.setattr(get_data, "_LOGGER", DummyLogger())
+    dummy_logger = DummyLogger()
+
+    def fake_configure(level_name: str, *, run_id: str | None = None) -> DummyLogger:
+        return dummy_logger
+
+    monkeypatch.setattr(get_data, "_configure_logging", fake_configure)
 
     exit_code = get_data.main(
         [
@@ -141,6 +149,101 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         )
         assert path.exists()
         assert path.read_text() == f"{step.name} output\n"
+
+
+def test_get_data_pipeline_events_include_run_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Structured log events include the configured ``run_id``."""
+
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("test: true\n")
+
+    for step in get_data._PIPELINE_STEPS:
+        input_path = input_dir / get_data._DEFAULT_INPUT_FILES[step.name]
+        input_path.write_text("id\n1\n")
+
+    def make_stub(name: str, subcommand: str | None) -> Callable[[Sequence[str] | None], int]:
+        def _main(argv: Sequence[str] | None) -> int:
+            args = list(argv or [])
+            if subcommand is not None:
+                assert args
+                assert args[0] == subcommand
+                args = args[1:]
+            parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("--config")
+            parser.add_argument("--input")
+            parser.add_argument("--output")
+            parser.add_argument("--log-level")
+            ns = parser.parse_args(args)
+            Path(ns.output).write_text(f"{name} output\n")
+            return 0
+
+        return _main
+
+    stub_steps = tuple(
+        get_data.PipelineStep(step.name, make_stub(step.name, step.subcommand), step.subcommand)
+        for step in get_data._PIPELINE_STEPS
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
+
+    stream = io.StringIO()
+    expected_run_id = "test-run-id"
+
+    def fake_configure(level_name: str, *, run_id: str | None = None):
+        return configure_logger(
+            LoggerConfig(
+                level=level_name.upper(),
+                run_id=run_id or expected_run_id,
+                stream=stream,
+            )
+        )
+
+    monkeypatch.setattr(get_data, "_configure_logging", fake_configure)
+
+    exit_code = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--date",
+            "20240101",
+            "--log-level",
+            "INFO",
+        ]
+    )
+
+    assert exit_code == 0
+
+    records = [
+        json.loads(line)
+        for line in stream.getvalue().splitlines()
+        if line.strip()
+    ]
+
+    events = {record["event"] for record in records}
+    assert {"pipeline_start", "pipeline_done", "workflow_complete", "workflow_succeeded"} <= events
+
+    interesting = [
+        record
+        for record in records
+        if record["event"].startswith("pipeline_")
+        or record["event"].startswith("step_")
+        or record["event"].startswith("workflow_")
+    ]
+    assert interesting
+    assert all(record["run_id"] == expected_run_id for record in interesting)
 
 
 def _cleanup_output(path: Path) -> None:
