@@ -190,17 +190,21 @@ def test_request_json_logs_per_request_events_as_debug(
 
     cfg = api_cfg(retries=2, backoff_factor=0)
     client.request_json("http://example.com", cfg=cfg)
+    client.request_json("http://example.com", cfg=cfg)
 
     records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
     levels = {
         record["event"]: record["level"]
         for record in records
-        if record["event"] in {"request_start", "request_retry", "request_ok"}
+        if record["event"]
+        in {"request_start", "request_retry", "request_ok", "cache_miss", "cache_hit"}
     }
 
     assert levels["request_start"] == "DEBUG"
     assert levels["request_retry"] == "DEBUG"
     assert levels["request_ok"] == "DEBUG"
+    assert levels["cache_miss"] == "DEBUG"
+    assert levels["cache_hit"] == "DEBUG"
 
 
 def test_request_json_reuses_session(monkeypatch) -> None:
