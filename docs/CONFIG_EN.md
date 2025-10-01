@@ -320,6 +320,7 @@ IUPHAR and UniProt lookups are stored there by default.
 | `output_dir` | `data/output` | Base directory for generated datasets. |
 | `cache_dir` | `.cache` | Location of the HTTP cache. |
 | `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
+| `csv_fallback_separators` | `["\t", ";"]` | Additional delimiters tried when the primary separator does not expose the requested column. |
 | `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
 | `csv_chunksize` | `10000` | Rows processed per batch by deterministic CSV writers; see [`config/config.yaml`](../config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Extra values treated as missing identifiers when reading CSV files. |
