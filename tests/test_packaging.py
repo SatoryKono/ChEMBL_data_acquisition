@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 
 def test_wheel_exposes_resources(tmp_path: Path) -> None:
@@ -32,6 +33,10 @@ def test_wheel_exposes_resources(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("*.whl"))
+
+    with ZipFile(wheel_path) as wheel:
+        contents = set(wheel.namelist())
+    assert "library/py.typed" in contents, "py.typed marker missing from wheel"
     script = r"""
 import sys
 from pathlib import Path
