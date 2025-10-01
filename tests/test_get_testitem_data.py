@@ -197,7 +197,7 @@ def test_fetch_testitems_logs_missing_summary(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df = gtd.fetch_testitems(
+    status, df, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1", "chembl2", "CHEMBL3"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -210,6 +210,7 @@ def test_fetch_testitems_logs_missing_summary(
 
     assert status == 0
     assert df is not None
+    assert requested_ids == ("CHEMBL1", "chembl2", "CHEMBL3")
 
     missing = next(
         (record for record in captured if record[0] == "chembl_missing_identifiers"),
@@ -1472,7 +1473,12 @@ def test_run_chembl_initialises_pubchem_session(
     rc = gtd.run_chembl(cfg, args)
 
     assert rc == 0
-    assert captured["init"] == (cfg.api, cfg.retry)
+
+    init_api, init_retry = captured["init"]
+    expected_api = gtd._prepare_pubchem_api_cfg(cfg, cfg.api)
+
+    assert init_api == expected_api
+    assert init_retry == cfg.retry
 
 
 def test_run_chembl_uses_lazy_identifier_stream(
