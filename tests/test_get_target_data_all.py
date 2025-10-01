@@ -10,10 +10,12 @@ expected content.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import shutil
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from pytest import MonkeyPatch
 
 from library import protein_classification as pc
@@ -21,6 +23,9 @@ from library.config import Config
 from schemas import TargetsSchema
 from schemas.targets import TARGETS_COLUMN_ORDER
 from scripts import get_target_data as gtd
+
+
+HAS_PYTEST_BENCHMARK = importlib.util.find_spec("pytest_benchmark") is not None
 
 
 class DummyRecord:
@@ -175,3 +180,55 @@ def test_run_all_uses_local_inputs(
         row["protein_synonym_list"]
         == "gene1|genea|sec1|alpha component|alt|recommended|name1|name2|alpha"
     )
+
+
+@pytest.mark.skipif(
+    not HAS_PYTEST_BENCHMARK, reason="requires pytest-benchmark for benchmarking"
+)
+def test_run_uniprot_large_input_benchmark(
+    tmp_path: Path, monkeypatch: MonkeyPatch, cfg: Config, benchmark
+) -> None:
+    """Benchmark ``run_uniprot`` with a large synthetic input dataset."""
+
+    rows = 10_000
+    column = cfg.target.uniprot.column
+    input_df = pd.DataFrame({column: [f"P{idx:05d}" for idx in range(rows)]})
+    input_csv = tmp_path / "large_uniprot_input.csv"
+    output_csv = tmp_path / "large_uniprot_output.csv"
+    meta_csv = output_csv.with_name(output_csv.name + ".meta.yaml")
+    input_df.to_csv(
+        input_csv,
+        index=False,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+    )
+
+    def fake_process(
+        *,
+        input_csv: str,
+        output_csv: str,
+        data_dir: Path | None,
+        cfg: object,
+        gtop_cfg: object,
+        sep: str,
+        encoding: str,
+    ) -> None:
+        frame = pd.read_csv(input_csv, sep=sep, encoding=encoding, dtype=str)
+        frame.to_csv(output_csv, index=False, sep=sep, encoding=encoding)
+
+    monkeypatch.setattr(gtd.uu, "process", fake_process)
+    monkeypatch.setattr(gtd.uu, "init_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *args, **kwargs: None)
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+
+    def runner() -> int:
+        output_csv.unlink(missing_ok=True)
+        meta_csv.unlink(missing_ok=True)
+        return gtd.run_uniprot(cfg, args)
+
+    result = benchmark(runner)
+    assert result == 0
+
+    output_df = pd.read_csv(output_csv, sep=cfg.io.csv_sep, dtype=str)
+    assert len(output_df) == rows
