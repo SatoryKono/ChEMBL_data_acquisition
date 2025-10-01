@@ -127,7 +127,7 @@ class _BoolModel(_BaseModel):
         raise ValueError(f"Invalid boolean value: {value!r}")
 
 
-# ChEMBL test item fields requested by default when fetching molecule data.
+# ChEMBL and PubChem test item fields requested by default when fetching molecule data.
 TESTITEM_FIELD_DEFAULTS: tuple[str, ...] = (
     "molecule_chembl_id",
     "parent_molecule_chembl_id",
@@ -143,6 +143,13 @@ TESTITEM_FIELD_DEFAULTS: tuple[str, ...] = (
     "molecule_structures.canonical_smiles",
     "molecule_structures.standard_inchi",
     "molecule_structures.standard_inchi_key",
+    "pubchem_cid",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+    "pubchem_isomeric_smiles",
+    "pubchem_canonical_smiles",
+    "pubchem_inchi",
+    "pubchem_inchikey",
 )
 
 
