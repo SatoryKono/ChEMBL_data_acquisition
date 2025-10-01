@@ -6,6 +6,8 @@ import threading
 
 import pandas as pd
 
+from types import SimpleNamespace
+
 from library.config import ApiCfg, PubChemCfg, RetryCfg
 from library import testitem_pipeline as pipeline
 
@@ -66,3 +68,192 @@ def test_augment_pubchem_single_initialisation(monkeypatch) -> None:
 
     assert not errors
     assert init_calls == 1
+
+
+def test_run_pipeline_streams_chunks(monkeypatch, tmp_path, cfg) -> None:
+    """Ensure :func:`run_testitem_pipeline` processes chunks sequentially."""
+
+    chunk_a = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1", "CHEMBL2"]})
+    chunk_b = pd.DataFrame({"molecule_chembl_id": ["CHEMBL3"]})
+    captured_prepare: list[pd.DataFrame] = []
+    captured_run: list[pd.DataFrame] = []
+    captured_chunks: list[pd.DataFrame] = []
+
+    def fake_read_ids(*_args, **_kwargs):
+        return 0, pipeline.ReadInputIdsResult(
+            ids_iter=iter(["CHEMBL1", "CHEMBL2", "CHEMBL3"]),
+            sample_ids=("CHEMBL1",),
+        )
+
+    def fake_fetch(*_args, **_kwargs):
+        return 0, iter([chunk_a, chunk_b]), ("CHEMBL1", "CHEMBL2", "CHEMBL3")
+
+    def fake_prepare(df: pd.DataFrame, **_kwargs):
+        captured_prepare.append(df.copy())
+        lookup = pipeline.ParentLookupPreparedData(
+            child_ids=pd.Series(dtype="string"),
+            existing_parent_ids=pd.Series(dtype="string"),
+            need_lookup=set(),
+        )
+        prep = pipeline.ParentEnrichmentPreparation(
+            df=df,
+            lookup_data=lookup,
+            parent_catalog=None,
+            parent_catalog_source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+            parent_stats=pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+                missing=0,
+                unique=len(df),
+                attached=len(df),
+                uncovered=0,
+            ),
+        )
+        return 0, prep
+
+    def fake_run(prep: pipeline.ParentEnrichmentPreparation, **_kwargs):
+        captured_run.append(prep.df.copy())
+        stats = pipeline.ParentLookupStats(
+            source=pipeline.PARENT_LOOKUP_SOURCE_LOOKUP,
+            missing=0,
+            unique=len(prep.df),
+            attached=len(prep.df),
+            uncovered=0,
+        )
+        return 0, pipeline.ParentEnrichmentResult(df=prep.df, parent_stats=stats)
+
+    def fake_augment(df: pd.DataFrame, **_kwargs) -> pd.DataFrame:
+        return df.assign(augmented=True)
+
+    def fake_enrich(df: pd.DataFrame, **_kwargs):
+        return 0, df
+
+    def fake_finalize(chunks, **_kwargs):
+        for chunk in chunks:
+            captured_chunks.append(chunk.copy())
+        return 0
+
+    class DummyClient:
+        def __init__(self, *_args, **_kwargs) -> None:  # pragma: no cover - simple stub
+            self.client = SimpleNamespace()
+
+        def __enter__(self) -> SimpleNamespace:
+            return self.client
+
+        def __exit__(self, *_args) -> bool:
+            return False
+
+    monkeypatch.setattr(pipeline, "read_input_ids", fake_read_ids)
+    monkeypatch.setattr(pipeline, "fetch_testitems", fake_fetch)
+    monkeypatch.setattr(pipeline, "prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr(pipeline, "run_parent_enrichment", fake_run)
+    monkeypatch.setattr(pipeline, "augment_pubchem", fake_augment)
+    monkeypatch.setattr(pipeline, "apply_testitem_enrichment", fake_enrich)
+    monkeypatch.setattr(pipeline, "finalize_output", fake_finalize)
+    monkeypatch.setattr(pipeline, "ChemblClient", DummyClient)
+    monkeypatch.setattr(pipeline.pc, "init_session", lambda *_args, **_kwargs: None)
+
+    options = pipeline.TestitemPipelineOptions(
+        input_csv=tmp_path / "input.csv",
+        output_csv=tmp_path / "output.csv",
+    )
+
+    result = pipeline.run_testitem_pipeline(cfg, options)
+
+    assert result == 0
+    assert [list(df["molecule_chembl_id"]) for df in captured_prepare] == [
+        ["CHEMBL1", "CHEMBL2"],
+        ["CHEMBL3"],
+    ]
+    assert [list(df["molecule_chembl_id"]) for df in captured_run] == [
+        ["CHEMBL1", "CHEMBL2"],
+        ["CHEMBL3"],
+    ]
+    assert [list(df["molecule_chembl_id"]) for df in captured_chunks] == [
+        ["CHEMBL1", "CHEMBL2"],
+        ["CHEMBL3"],
+    ]
+
+
+def test_run_pipeline_streams_missing(monkeypatch, tmp_path, cfg) -> None:
+    """Missing identifiers are appended as a final placeholder chunk."""
+
+    chunk = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    captured_chunks: list[pd.DataFrame] = []
+
+    def fake_read_ids(*_args, **_kwargs):
+        return 0, pipeline.ReadInputIdsResult(
+            ids_iter=iter(["CHEMBL1", "CHEMBL2"]),
+            sample_ids=("CHEMBL1",),
+        )
+
+    def fake_fetch(*_args, **_kwargs):
+        return 0, iter([chunk]), ("CHEMBL1", "CHEMBL2")
+
+    def fake_prepare(df: pd.DataFrame, **_kwargs):
+        lookup = pipeline.ParentLookupPreparedData(
+            child_ids=pd.Series(dtype="string"),
+            existing_parent_ids=pd.Series(dtype="string"),
+            need_lookup=set(),
+        )
+        prep = pipeline.ParentEnrichmentPreparation(
+            df=df,
+            lookup_data=lookup,
+            parent_catalog=None,
+            parent_catalog_source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+            parent_stats=pipeline.ParentLookupStats(
+                source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+                missing=0,
+                unique=len(df),
+                attached=len(df),
+                uncovered=0,
+            ),
+        )
+        return 0, prep
+
+    def fake_run(prep: pipeline.ParentEnrichmentPreparation, **_kwargs):
+        stats = pipeline.ParentLookupStats(
+            source=pipeline.PARENT_LOOKUP_SOURCE_LOOKUP,
+            missing=0,
+            unique=len(prep.df),
+            attached=len(prep.df),
+            uncovered=0,
+        )
+        return 0, pipeline.ParentEnrichmentResult(df=prep.df, parent_stats=stats)
+
+    def fake_finalize(chunks, **_kwargs):
+        for item in chunks:
+            captured_chunks.append(item.copy())
+        return 0
+
+    class DummyClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.client = SimpleNamespace()
+
+        def __enter__(self) -> SimpleNamespace:
+            return self.client
+
+        def __exit__(self, *_args) -> bool:
+            return False
+
+    monkeypatch.setattr(pipeline, "read_input_ids", fake_read_ids)
+    monkeypatch.setattr(pipeline, "fetch_testitems", fake_fetch)
+    monkeypatch.setattr(pipeline, "prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr(pipeline, "run_parent_enrichment", fake_run)
+    monkeypatch.setattr(pipeline, "augment_pubchem", lambda df, **_: df)
+    monkeypatch.setattr(pipeline, "apply_testitem_enrichment", lambda df, **_: (0, df))
+    monkeypatch.setattr(pipeline, "finalize_output", fake_finalize)
+    monkeypatch.setattr(pipeline, "ChemblClient", DummyClient)
+    monkeypatch.setattr(pipeline.pc, "init_session", lambda *_args, **_kwargs: None)
+
+    options = pipeline.TestitemPipelineOptions(
+        input_csv=tmp_path / "input.csv",
+        output_csv=tmp_path / "output.csv",
+    )
+
+    result = pipeline.run_testitem_pipeline(cfg, options)
+
+    assert result == 0
+    assert [list(df["molecule_chembl_id"]) for df in captured_chunks] == [
+        ["CHEMBL1"],
+        ["CHEMBL2"],
+    ]

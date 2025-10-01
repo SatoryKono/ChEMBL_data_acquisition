@@ -43,7 +43,7 @@ from library.config import (
     RetryCfg,
     _serialize_paths,
 )
-from library.csv_utils import write_csv_deterministic
+from library.csv_utils import write_csv_chunks_deterministic
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.molecule_catalog import (
@@ -227,6 +227,32 @@ def integrate_missing_identifiers(
     return ordered
 
 
+class TestitemFetchError(RuntimeError):
+    """Raised when streaming retrieval of test item data fails."""
+
+
+class TestitemPipelineStageError(RuntimeError):
+    """Raised when a streaming pipeline stage returns a non-zero status."""
+
+    def __init__(self, code: int, message: str | None = None) -> None:
+        detail = message if message is not None else f"pipeline stage failed ({code})"
+        super().__init__(detail)
+        self.code = code
+
+
+def _batched(iterable: Iterable[str], size: int) -> Iterator[list[str]]:
+    """Yield lists of at most ``size`` elements from ``iterable``."""
+
+    chunk: list[str] = []
+    for item in iterable:
+        chunk.append(item)
+        if len(chunk) == size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
 def fetch_testitems(
     ids_iter: Iterable[str],
     *,
@@ -237,96 +263,125 @@ def fetch_testitems(
     sample_ids: Sequence[str],
     fields: Sequence[str] | None,
     page_limit: int,
-) -> tuple[int, pd.DataFrame | None, tuple[str, ...]]:
-    """Retrieve ChEMBL test item records for ``ids_iter``."""
+) -> tuple[int, Iterator[pd.DataFrame] | None, tuple[str, ...]]:
+    """Retrieve ChEMBL test item records for ``ids_iter`` in chunks."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    requested_ids: list[str] = []
     requested_ids_original: list[str] = []
-    original_id_lookup: dict[str, str] = {}
 
-    def _iter_with_tracking(source: Iterable[str]) -> Iterator[str]:
-        for identifier in source:
-            text_identifier = str(identifier)
-            normalised = text_identifier.strip().upper()
-            requested_ids_original.append(text_identifier)
-            requested_ids.append(normalised)
-            original_id_lookup.setdefault(normalised, text_identifier)
-            yield identifier
+    for identifier in ids_iter:
+        text_identifier = str(identifier)
+        requested_ids_original.append(text_identifier)
 
-    tracked_iter = _iter_with_tracking(ids_iter)
+    requested_iter = iter(requested_ids_original)
+
+    seen_ids: set[str] = set()
+    duplicate_ids: set[str] = set()
+
+    def _load_chunk(batch: Sequence[str]) -> pd.DataFrame:
+        try:
+            frame = cl.get_testitem(
+                batch,
+                cfg=api_cfg,
+                client=client,
+                chunk_size=batch_size,
+                timeout=timeout,
+                fields=fields,
+                page_limit=page_limit,
+            )
+        except (requests.RequestException, ValueError) as exc:  # pragma: no cover - network
+            logger.error(
+                "testitem_fetch_failed",
+                error=str(exc),
+                batch_size=batch_size,
+                timeout=timeout,
+                sample_ids=list(sample_ids),
+            )
+            raise TestitemFetchError(str(exc)) from exc
+
+        if "molecule_chembl_id" not in frame.columns:
+            frame["molecule_chembl_id"] = pd.Series(dtype="string")
+        frame["molecule_chembl_id"] = frame["molecule_chembl_id"].astype("string").str.upper()
+
+        duplicated_mask = frame["molecule_chembl_id"].duplicated(keep=False)
+        if duplicated_mask.any():
+            duplicate_ids.update(
+                frame.loc[duplicated_mask, "molecule_chembl_id"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+        cleaned = frame.where(pd.notna(frame), pd.NA).convert_dtypes()
+        cleaned["molecule_chembl_id"] = cleaned["molecule_chembl_id"].astype("string")
+
+        if seen_ids:
+            keep_mask = ~cleaned["molecule_chembl_id"].isin(seen_ids)
+            dropped = (
+                cleaned.loc[~keep_mask, "molecule_chembl_id"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+            duplicate_ids.update(dropped)
+            cleaned = cleaned.loc[keep_mask]
+
+        if not cleaned.empty:
+            seen_ids.update(
+                cleaned["molecule_chembl_id"].dropna().astype(str).unique().tolist()
+            )
+
+        return cleaned.reset_index(drop=True)
+
+    batched_iter = _batched(requested_iter, max(1, batch_size))
+
     try:
-        df = cl.get_testitem(
-            tracked_iter,
-            cfg=api_cfg,
-            client=client,
-            chunk_size=batch_size,
-            timeout=timeout,
-            fields=fields,
-            page_limit=page_limit,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        logger.error(
-            "testitem_fetch_failed",
-            error=str(exc),
-            batch_size=batch_size,
-            timeout=timeout,
-            sample_ids=list(sample_ids),
-        )
+        first_batch = next(batched_iter)
+    except StopIteration:
+        logger.info("chembl_fetch_done", rows=0)
+        logger.info("identifiers_retrieved", count=0)
+        if duplicate_ids:
+            logger.warning(
+                "chembl_duplicate_identifiers",
+                duplicate_count=len(duplicate_ids),
+                duplicate_ids=sorted(duplicate_ids),
+            )
+        return 0, iter(()), tuple(requested_ids_original)
+
+    prefetched: list[pd.DataFrame] = []
+
+    try:
+        prefetched.append(_load_chunk(first_batch))
+    except TestitemFetchError:
         return 1, None, tuple(requested_ids_original)
-    finally:
-        deque(tracked_iter, maxlen=0)
 
-    rows = len(df)
-    logger.info("chembl_fetch_done", rows=rows)
-    logger.info("identifiers_retrieved", count=rows)
+    rows_counter = 0
 
-    if "molecule_chembl_id" not in df.columns:
-        df["molecule_chembl_id"] = pd.Series(dtype="string")
-    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string").str.upper()
+    def _chunk_stream() -> Iterator[pd.DataFrame]:
+        nonlocal rows_counter
+        try:
+            for prefetched_chunk in prefetched:
+                if not prefetched_chunk.empty:
+                    rows_counter += len(prefetched_chunk)
+                    yield prefetched_chunk
+            for batch in batched_iter:
+                chunk_df = _load_chunk(batch)
+                if not chunk_df.empty:
+                    rows_counter += len(chunk_df)
+                    yield chunk_df
+        finally:
+            logger.info("chembl_fetch_done", rows=rows_counter)
+            logger.info("identifiers_retrieved", count=rows_counter)
+            if duplicate_ids:
+                logger.warning(
+                    "chembl_duplicate_identifiers",
+                    duplicate_count=len(duplicate_ids),
+                    duplicate_ids=sorted(duplicate_ids),
+                )
 
-    retrieved_ids = set(df["molecule_chembl_id"].dropna())
-    missing_ids = [identifier for identifier in requested_ids if identifier not in retrieved_ids]
-    if missing_ids:
-        sample_missing_ids = missing_ids[:5]
-        missing_ids_original = [
-            original_id_lookup.get(identifier, identifier) for identifier in missing_ids
-        ]
-        sample_missing_ids_original = missing_ids_original[:5]
-        logger.warning(
-            "chembl_missing_identifiers",
-            missing_count=len(missing_ids),
-            sample_missing_ids=sample_missing_ids,
-            sample_missing_ids_original=sample_missing_ids_original,
-        )
-    else:
-        logger.info("chembl_all_identifiers_retrieved")
-
-    duplicates_mask = df["molecule_chembl_id"].duplicated(keep=False)
-    if duplicates_mask.any():
-        duplicate_ids = (
-            df.loc[duplicates_mask, "molecule_chembl_id"].dropna().unique().tolist()
-        )
-        logger.warning(
-            "chembl_duplicate_identifiers",
-            duplicate_count=len(duplicate_ids),
-            duplicate_ids=duplicate_ids,
-        )
-        df = df.drop_duplicates(subset="molecule_chembl_id", keep="first")
-
-    index = pd.Index(requested_ids, name="molecule_chembl_id")
-    df = df.set_index("molecule_chembl_id", drop=False).reindex(index)
-    df["molecule_chembl_id"] = pd.Series(
-        requested_ids,
-        index=index,
-        dtype="string",
-    )
-    df = df.where(pd.notna(df), pd.NA)
-    df = df.convert_dtypes()
-    df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string")
-    df = df.reset_index(drop=True)
-
-    return 0, df, tuple(requested_ids_original)
+    return 0, _chunk_stream(), tuple(requested_ids_original)
 
 
 def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
@@ -386,6 +441,37 @@ PARENT_LOOKUP_SOURCE_LOOKUP = "lookup"
 PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
 PARENT_LOOKUP_SOURCE_SYNC = "sync"
 PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
+
+_PARENT_SOURCE_PRIORITY: Mapping[str, int] = {
+    PARENT_LOOKUP_SOURCE_SKIPPED: 0,
+    PARENT_LOOKUP_SOURCE_CACHE: 1,
+    PARENT_LOOKUP_SOURCE_LOOKUP: 2,
+    PARENT_LOOKUP_SOURCE_PARTIAL: 3,
+    PARENT_LOOKUP_SOURCE_SYNC: 4,
+}
+
+
+def _merge_parent_stats(
+    base: ParentLookupStats, update: ParentLookupStats
+) -> ParentLookupStats:
+    """Combine two :class:`ParentLookupStats` instances."""
+
+    if base.source not in _PARENT_SOURCE_PRIORITY:
+        base_priority = -1
+    else:
+        base_priority = _PARENT_SOURCE_PRIORITY[base.source]
+    update_priority = _PARENT_SOURCE_PRIORITY.get(update.source, -1)
+    if update_priority >= base_priority:
+        resolved_source = update.source
+    else:
+        resolved_source = base.source
+    return ParentLookupStats(
+        source=resolved_source,
+        missing=base.missing + update.missing,
+        unique=base.unique + update.unique,
+        attached=base.attached + update.attached,
+        uncovered=base.uncovered + update.uncovered,
+    )
 
 
 def ensure_no_parant_column(df: pd.DataFrame) -> None:
@@ -1897,7 +1983,7 @@ def run_testitem_pipeline(
         if read_status != 0 or read_result is None:
             return read_status
 
-        fetch_status, df, requested_ids = fetch_testitems(
+        fetch_status, chunk_iter, requested_ids = fetch_testitems(
             read_result.ids_iter,
             api_cfg=api_cfg,
             batch_size=cfg.testitem.batch_size,
@@ -1907,7 +1993,7 @@ def run_testitem_pipeline(
             fields=cfg.testitem.fields,
             page_limit=cfg.testitem.request_limit,
         )
-        if fetch_status != 0 or df is None:
+        if fetch_status != 0 or chunk_iter is None:
             return fetch_status
 
         requested_unique: OrderedDict[str, str] = OrderedDict()
@@ -1919,22 +2005,17 @@ def run_testitem_pipeline(
             requested_unique.setdefault(upper_key, identifier)
 
         fetched_ids: set[str] = set()
-        if "molecule_chembl_id" in df.columns:
-            fetched_series = df["molecule_chembl_id"].dropna().astype(str).str.strip()
-            fetched_ids = {value.upper() for value in fetched_series if value}
-
-        missing_keys = [key for key in requested_unique if key not in fetched_ids]
-        missing_ids = [requested_unique[key] for key in missing_keys]
-        if missing_ids:
-            logger.warning(
-                "chembl_missing_identifiers",
-                count=len(missing_ids),
-                identifiers=missing_ids,
+        missing_ids = []
+        parent_stats_holder: dict[str, ParentLookupStats] = {
+            "value": ParentLookupStats(
+                source=PARENT_LOOKUP_SOURCE_SKIPPED,
+                missing=0,
+                unique=0,
+                attached=0,
+                uncovered=0,
             )
-
-        rows = len(df)
-        if limit is not None:
-            logger.info("process_limit", limit=min(limit, rows))
+        }
+        rows_counter = 0
 
         enrichment_sources = getattr(cfg.testitem_molecule_enrichment, "sources", None)
         hierarchy_lookup_path = (
@@ -1942,188 +2023,259 @@ def run_testitem_pipeline(
             if enrichment_sources is not None
             else None
         )
+        parent_timeout = cfg.testitem.timeout
 
-        prep_status, prep = prepare_parent_enrichment(
-            df,
-            catalog_cfg=cfg.molecule_catalog,
-            io_cfg=cfg.io,
-            api_cfg=api_cfg,
-            timeout=cfg.testitem.timeout,
-            client=client,
-            hierarchy_lookup_path=hierarchy_lookup_path,
+        def _parent_stats_supplier() -> ParentLookupStats:
+            return parent_stats_holder["value"]
+
+        def _processed_chunks() -> Iterator[pd.DataFrame]:
+            nonlocal rows_counter
+            try:
+                for chunk in chunk_iter:
+                    rows_counter += len(chunk)
+                    prep_status, prep = prepare_parent_enrichment(
+                        chunk,
+                        catalog_cfg=cfg.molecule_catalog,
+                        io_cfg=cfg.io,
+                        api_cfg=api_cfg,
+                        timeout=parent_timeout,
+                        client=client,
+                        hierarchy_lookup_path=hierarchy_lookup_path,
+                    )
+                    if prep_status != 0 or prep is None:
+                        raise TestitemPipelineStageError(prep_status)
+
+                    parent_status, parent_result = run_parent_enrichment(
+                        prep,
+                        client=client,
+                        api_cfg=api_cfg,
+                        catalog_cfg=cfg.molecule_catalog,
+                        timeout=parent_timeout,
+                    )
+                    if parent_status != 0 or parent_result is None:
+                        raise TestitemPipelineStageError(parent_status)
+
+                    current = parent_result.df
+                    parent_stats_holder["value"] = _merge_parent_stats(
+                        parent_stats_holder["value"], parent_result.parent_stats
+                    )
+
+                    current = augment_pubchem(
+                        current,
+                        pubchem_cfg=cfg.pubchem,
+                        api_cfg=api_cfg,
+                        retry_cfg=cfg.retry,
+                        timeout=parent_timeout,
+                        client=client,
+                        fields=cfg.testitem.fields,
+                        request_limit=cfg.testitem.request_limit,
+                    )
+
+                    enrichment_status, enriched_df = apply_testitem_enrichment(
+                        current,
+                        enrichment_cfg=cfg.testitem_molecule_enrichment,
+                        io_cfg=cfg.io,
+                    )
+                    if enrichment_status != 0 or enriched_df is None:
+                        raise TestitemPipelineStageError(enrichment_status)
+
+                    if "molecule_chembl_id" in enriched_df.columns:
+                        ids_series = (
+                            enriched_df["molecule_chembl_id"].dropna().astype(str).str.strip()
+                        )
+                        fetched_ids.update({value.upper() for value in ids_series if value})
+
+                    yield enriched_df
+            except TestitemFetchError as exc:  # pragma: no cover - propagated network error
+                raise TestitemPipelineStageError(1, str(exc)) from exc
+
+            missing_keys = [key for key in requested_unique if key not in fetched_ids]
+            missing_ids.extend(requested_unique[key] for key in missing_keys)
+            if missing_ids:
+                logger.warning(
+                    "chembl_missing_identifiers",
+                    count=len(missing_ids),
+                    identifiers=missing_ids,
+                )
+                placeholder = pd.DataFrame(
+                    {"molecule_chembl_id": list(missing_ids)}
+                )
+                rows_counter += len(placeholder)
+                yield placeholder
+
+        output_path = (
+            output_csv
+            if output_csv is not None
+            else io.default_output_path(input_csv, cfg.io)
         )
-        if prep_status != 0 or prep is None:
-            return prep_status
 
-        parent_stats = prep.parent_stats
-        parent_status, parent_result = run_parent_enrichment(
-            prep,
-            client=client,
-            api_cfg=api_cfg,
-            catalog_cfg=cfg.molecule_catalog,
-            timeout=cfg.testitem.timeout,
-        )
-        if parent_status != 0 or parent_result is None:
-            return parent_status
+        try:
+            exit_code = finalize_output(
+                _processed_chunks(),
+                cfg=cfg,
+                output=output_path,
+                parent_stats_supplier=_parent_stats_supplier,
+                input_csv=input_csv,
+                missing_ids=missing_ids,
+            )
+        except TestitemPipelineStageError as exc:
+            return exc.code
 
-        df = parent_result.df
-        parent_stats = parent_result.parent_stats
+    if limit is not None:
+        logger.info("process_limit", limit=min(limit, rows_counter))
 
-        df = augment_pubchem(
-            df,
-            pubchem_cfg=cfg.pubchem,
-            api_cfg=api_cfg,
-            retry_cfg=cfg.retry,
-            timeout=cfg.testitem.timeout,
-            client=client,
-            fields=cfg.testitem.fields,
-            request_limit=cfg.testitem.request_limit,
-        )
-
-        enrichment_status, enriched_df = apply_testitem_enrichment(
-            df,
-            enrichment_cfg=cfg.testitem_molecule_enrichment,
-            io_cfg=cfg.io,
-        )
-        if enrichment_status != 0 or enriched_df is None:
-            return enrichment_status
-
-        df = enriched_df
-
-    df = integrate_missing_identifiers(
-        df,
-        missing_ids=missing_ids,
-        requested_ids=requested_ids,
-    )
-
-    output_path = (
-        output_csv if output_csv is not None else io.default_output_path(input_csv, cfg.io)
-    )
-    rows_total = len(df)
-    return finalize_output(
-        df,
-        cfg=cfg,
-        output=output_path,
-        parent_stats=parent_stats,
-        input_csv=input_csv,
-        rows_total=rows_total,
-        missing_ids=missing_ids,
-    )
+    return exit_code
 
 
 def finalize_output(
-    df: pd.DataFrame,
+    chunks: Iterable[pd.DataFrame],
     *,
     cfg: Config,
     output: Path,
-    parent_stats: ParentLookupStats,
+    parent_stats_supplier: Callable[[], ParentLookupStats],
     input_csv: Path,
-    rows_total: int,
     missing_ids: Sequence[str] | None = None,
 ) -> int:
-    """Normalise, validate, and persist the final dataset."""
-
-    df = normalize_testitems(df)
-    if "pubchem_cid" in df.columns:
-        df["pubchem_cid"] = df["pubchem_cid"].astype(object)
-    df = add_pipeline_metadata(df)
+    """Normalise, validate, and persist the final dataset from ``chunks``."""
 
     schema_cols = list(TestitemsSchema.columns)
-    head = [c for c in schema_cols if c in df.columns]
-    tail = sorted(c for c in df.columns if c not in schema_cols)
-    col_order = head + tail
-
-    exit_code = 0
     required_cols = {name for name, col in TestitemsSchema.columns.items() if col.required}
     optional_cols = set(TestitemsSchema.columns) - required_cols
-    missing_required = required_cols - set(df.columns)
-    missing_optional = optional_cols - set(df.columns)
-    if not missing_required:
-        if missing_optional:
-            logger.warning(
-                "optional_columns_missing",
-                columns=sorted(missing_optional),
-            )
-        try:
-            validation_result = validate_testitems(df, return_result=True)
-        except SchemaErrors as exc:
-            failure_path = Path(output).with_name(
-                f"{Path(output).stem}_failure_cases.csv"
-            )
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "validation_failed",
-                failures=len(exc.failure_cases),
-                path=str(failure_path),
-            )
-            df = getattr(exc, "validated_data", df)
-            exit_code = 1
-        else:
-            df = validation_result.data
-            if not validation_result.failure_cases.empty:
-                failure_path = Path(output).with_name(
-                    f"{Path(output).stem}_failure_cases.csv"
-                )
-                errors = SidecarErrors()
-                for row in validation_result.failure_cases.to_dict("records"):
-                    errors.add_error(row)
-                errors.save(failure_path)
-                logger.error(
-                    "validation_failed",
-                    failures=len(validation_result.failure_cases),
-                    path=str(failure_path),
-                )
-                df = validation_result.data
-                exit_code = 1
-    else:
-        logger.warning(
-            "validation_skipped",
-            missing_columns=sorted(missing_required),
-        )
-        return 1
+    col_order = schema_cols
+    key_cols = ["molecule_chembl_id"]
+    csv_chunksize = cfg.io.csv_chunksize
 
-    rows_kept = len(df)
-    rows_dropped = rows_total - rows_kept
+    rows_total = 0
+    rows_written = 0
+    exit_code = 0
+    columns_seen: set[str] = set()
+    failure_cases = SidecarErrors()
+    failure_count = 0
+
+    chunk_iter = iter(chunks)
+
+    def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
+        nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
+
+        rows_total += len(raw)
+        current = normalize_testitems(raw)
+        if "pubchem_cid" in current.columns:
+            current["pubchem_cid"] = current["pubchem_cid"].astype(object)
+        current = add_pipeline_metadata(current)
+        columns_seen.update(current.columns)
+
+        chunk_missing_required = required_cols - set(current.columns)
+        if chunk_missing_required:
+            logger.warning(
+                "validation_skipped",
+                missing_columns=sorted(chunk_missing_required),
+            )
+            raise TestitemPipelineStageError(
+                1,
+                ", ".join(sorted(chunk_missing_required)),
+            )
+
+        try:
+            validation = validate_testitems(current, return_result=True)
+        except SchemaErrors as exc:
+            for row in exc.failure_cases.to_dict("records"):
+                failure_cases.add_error(row)
+                failure_count += 1
+            exit_code = 1
+            validated = getattr(exc, "validated_data", current)
+        else:
+            validated = validation.data
+            if not validation.failure_cases.empty:
+                exit_code = 1
+                for row in validation.failure_cases.to_dict("records"):
+                    failure_cases.add_error(row)
+                    failure_count += 1
+
+        rows_written += len(validated)
+        return validated
+
+    prepared_chunks: list[pd.DataFrame] = []
 
     try:
-        key_cols = ["molecule_chembl_id"]
-        csv_chunksize = cfg.io.csv_chunksize
-        csv_path = write_csv_deterministic(
-            df,
+        first_raw = next(chunk_iter)
+    except StopIteration:
+        empty = pd.DataFrame(columns=["molecule_chembl_id"])
+        try:
+            prepared_chunks.append(_process_chunk(empty))
+        except TestitemPipelineStageError:
+            return 1
+    else:
+        try:
+            prepared_chunks.append(_process_chunk(first_raw))
+        except TestitemPipelineStageError:
+            return 1
+
+    def _validated_chunks() -> Iterator[pd.DataFrame]:
+        for chunk in prepared_chunks:
+            if not chunk.empty or columns_seen:
+                yield chunk
+        for raw_chunk in chunk_iter:
+            yield _process_chunk(raw_chunk)
+
+    try:
+        csv_path = write_csv_chunks_deterministic(
+            _validated_chunks(),
             output,
-            key_cols=key_cols or None,
             col_order=col_order,
+            key_cols=key_cols,
             chunksize=csv_chunksize,
             sort_chunksize=csv_chunksize,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
             cfg=cfg,
         )
-        logger.info("write_done", rows=rows_kept, path=str(csv_path))
-    except OSError as exc:
-        logger.error(
-            "write_fail",
-            error=str(exc),
-            path=str(output),
+        logger.info("write_done", rows=rows_written, path=str(csv_path))
+    except TestitemPipelineStageError:
+        return 1
+    except (OSError, ValueError) as exc:
+        logger.error("write_fail", error=str(exc), path=str(output))
+        return 1
+
+    missing_required = required_cols - columns_seen
+    if missing_required:
+        logger.warning(
+            "validation_skipped",
+            missing_columns=sorted(missing_required),
         )
         return 1
 
-    missing_ids = tuple(missing_ids or ())
+    missing_optional = optional_cols - columns_seen
+    if missing_optional:
+        logger.warning(
+            "optional_columns_missing",
+            columns=sorted(missing_optional),
+        )
+
+    if failure_count:
+        failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
+        failure_cases.save(failure_path, cfg=cfg)
+        logger.error(
+            "validation_failed",
+            failures=failure_count,
+            path=str(failure_path),
+        )
+
+    rows_dropped = rows_total - rows_written
+    parent_stats = parent_stats_supplier()
+    missing_ids_tuple = tuple(missing_ids or ())
 
     stats: Stats = {
         "rows_total": rows_total,
-        "rows_kept": rows_kept,
+        "rows_kept": rows_written,
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
     }
-    if missing_ids:
-        stats["missing_molecule_ids"] = list(missing_ids)
-        stats["missing_molecule_ids_count"] = len(missing_ids)
+    if missing_ids_tuple:
+        stats["missing_molecule_ids"] = list(missing_ids_tuple)
+        stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
+
     write_meta_yaml(
         csv_path=csv_path,
         command=" ".join(sys.argv),
@@ -2132,14 +2284,11 @@ def finalize_output(
         stats=stats,
         schema="TestitemsSchema",
     )
+
     try:
-        analyze_table_quality(df, table_name=str(output.with_suffix("")))
+        analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
     except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
-        )
+        logger.error("quality_report_failed", error=str(exc), path=str(output))
         return 1
 
     return exit_code
