@@ -20,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from library import cli
-from library.cli import LoggerConfig, configure_logger
+from library.cli import configure_logger, create_logger_config
 from library.cli_utils import build_parser
 from library.csv_utils import write_csv_chunks_deterministic
 from library.config import print_config
@@ -68,7 +68,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = CSVExportArgs.model_validate(arg_data)
     if not args.key_cols:
         parser.error("--key-cols must be provided")
-    configure_logger(LoggerConfig(level=args.log_level))
+    log_cfg = create_logger_config(args.log_level)
+    configure_logger(log_cfg)
 
     start = time.perf_counter()
 

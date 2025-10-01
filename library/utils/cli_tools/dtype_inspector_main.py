@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from library.cli import LoggerConfig, configure_logger
+from library.cli import configure_logger, create_logger_config
 from library.dtype_inspector import inspect_dtypes
 
 
@@ -33,7 +33,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
-    configure_logger(LoggerConfig(level=args.log_level))
+    log_cfg = create_logger_config(args.log_level)
+    configure_logger(log_cfg)
     inspect_dtypes()
     return 0
 

@@ -12,6 +12,7 @@ from library.cli import (
     LoggerConfig,
     add_common_arguments,
     configure_logger,
+    create_logger_config,
     path_argument,
 )
 from library.config import Config, ensure_dirs, print_config
@@ -56,7 +57,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action="store_true",
         help="Print effective configuration and exit",
     )
-    return parser, LoggerConfig(level="INFO")
+    return parser, create_logger_config("INFO")
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
