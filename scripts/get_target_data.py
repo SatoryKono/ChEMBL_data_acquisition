@@ -12,7 +12,8 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from functools import partial
 from itertools import islice
 from pathlib import Path
 from typing import cast
@@ -33,7 +34,8 @@ from library import iuphar_library as ii
 from library import protein_classification as pc
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.clients import ChemblClient
+from library.clients import ChemblClient, _chunked
+from library.cli_utils import PipelineError, run_pipeline
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
@@ -54,6 +56,7 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
+from library.validation import ValidationResult
 from schemas import TargetsSchema, normalize_targets
 from schemas.targets import TARGETS_COLUMN_ORDER
 
@@ -574,124 +577,139 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Set up HTTP session with proper headers and retry behaviour
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-        try:
-            ids_iter = io.read_ids(
-                args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            logger.error(
-                "read_fail",
-                error=str(exc),
-                path=str(args.input_csv),
-            )
-            return 1
+    try:
+        ids_iter = io.read_ids(
+            args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "read_fail",
+            error=str(exc),
+            path=str(args.input_csv),
+        )
+        return 1
 
-        offset = getattr(args, "offset", 0)
-        if offset:
-            ids_iter = islice(ids_iter, offset, None)
-            logger.info("process_offset", offset=offset)
+    offset = getattr(args, "offset", 0)
+    if offset:
+        ids_iter = islice(ids_iter, offset, None)
+        logger.info("process_offset", offset=offset)
 
-        ids = ids_iter
-        if limit is not None:
-            limited_ids = list(islice(ids_iter, limit))
-            ids = limited_ids
-            logger.info("process_limit", limit=len(limited_ids))
+    processed_ids = 0
 
-        try:
-            df = cl.get_targets(
-                ids,
-                cfg=cfg.api,
-                client=client,
-                mapping_cfg=cfg.uniprot_mapping,
-                chunk_size=cfg.target.chembl.chunk_size,
-                timeout=cfg.target.chembl.timeout,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "chembl_fetch_failed",
-                error=str(exc),
-                chunk_size=cfg.target.chembl.chunk_size,
-                timeout=cfg.target.chembl.timeout,
-            )
-            return 1
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        df = normalize_targets(df)
-        df = add_pipeline_metadata(df)
-        rows_total = len(df)
-        exit_code = 0
-    validation_df, missing_required, missing_optional = _prepare_targets_for_schema(df)
-    if not missing_required:
-        if missing_optional:
-            logger.debug(
-                "schema_optional_columns_missing",
-                columns=sorted(missing_optional),
-            )
-        try:
-            TargetsSchema.validate(validation_df, lazy=True)
-        except SchemaErrors as exc:
-            failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
-            errors = SidecarErrors()
-            for row in exc.failure_cases.to_dict("records"):
-                errors.add_error(row)
-            errors.save(failure_path)
-            logger.error(
-                "validation_failed",
-                failures=len(exc.failure_cases),
-                path=str(failure_path),
-            )
-            validated_subset = getattr(exc, "validated_data", None)
-            if validated_subset is not None:
-                df = df.loc[validated_subset.index]
-            exit_code = 1
+    def _iter_ids() -> Iterator[str]:
+        nonlocal processed_ids
+        for identifier in ids_iter:
+            processed_ids += 1
+            yield identifier
+
+    limited_ids: Iterator[str]
+    if limit is not None:
+        limited_ids = islice(_iter_ids(), limit)
     else:
-        logger.warning(
-            "validation_skipped",
-            missing_columns=sorted(missing_required),
-        )
-    rows_kept = len(df)
-    rows_dropped = rows_total - rows_kept
-    try:
-        key_cols = [c for c in ["target_chembl_id"] if c in df.columns]
-        csv_path = io.write_csv(
-            df,
-            output,
-            cfg=cfg,
-            key_cols=key_cols or None,
-        )
-        logger.info("write_done", rows=rows_kept, path=str(csv_path))
-    except OSError as exc:
-        logger.error(
-            "write_fail",
-            error=str(exc),
-            path=str(output),
-        )
-        return 1
+        limited_ids = _iter_ids()
 
-    stats: Stats = {
-        "rows_total": rows_total,
-        "rows_kept": rows_kept,
-        "rows_dropped": rows_dropped,
-        "output_sha256": file_sha256(csv_path),
-    }
-    write_meta_yaml(
-        csv_path=csv_path,
-        command=" ".join(sys.argv),
-        config_subset=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
-        stats=stats,
-        schema="TargetsSchema",
-    )
-    try:
-        analyze_table_quality(df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
+    output_path = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    output = Path(output_path)
+    failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+
+    missing_optional_columns: set[str] = set()
+
+    def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
+        prepared, _, missing_optional = _prepare_targets_for_schema(frame)
+        missing_optional_columns.update(missing_optional)
+        return prepared
+
+    def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
+        try:
+            validated = TargetsSchema.validate(frame, lazy=True)
+        except SchemaErrors as exc:
+            validated_subset = getattr(exc, "validated_data", frame)
+            return ValidationResult(
+                validated_subset,
+                exc.failure_cases.copy(),
+                "TargetsSchema",
+            )
+        return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
+
+    def fetcher() -> Iterator[pd.DataFrame]:
+        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            for chunk_ids in _chunked(limited_ids, cfg.target.chembl.chunk_size):
+                if not chunk_ids:
+                    continue
+                try:
+                    chunk_df = cl.get_targets(
+                        chunk_ids,
+                        cfg=cfg.api,
+                        client=client,
+                        mapping_cfg=cfg.uniprot_mapping,
+                        chunk_size=cfg.target.chembl.chunk_size,
+                        timeout=cfg.target.chembl.timeout,
+                    )
+                except (requests.RequestException, ValueError) as exc:
+                    logger.error(
+                        "chembl_fetch_failed",
+                        error=str(exc),
+                        chunk_size=cfg.target.chembl.chunk_size,
+                        timeout=cfg.target.chembl.timeout,
+                    )
+                    raise PipelineError(str(exc)) from exc
+                yield chunk_df
+
+    def writer(
+        chunks: Iterator[pd.DataFrame],
+        destination: Path,
+        col_order: Sequence[str],
+        key_cols: Sequence[str],
+    ) -> Path:
+        key_columns = list(key_cols)
+        return io.write_csv(
+            chunks,
+            destination,
+            cfg=cfg,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            key_cols=key_columns or None,
+            col_order=col_order,
+            chunksize=cfg.io.csv_chunksize,
         )
-        return 1
+
+    table_quality = partial(
+        analyze_table_quality,
+        table_name=str(output.with_suffix("")),
+    )
+
+    metadata_hooks = [
+        normalize_targets,
+        add_pipeline_metadata,
+        _prepare_chunk,
+    ]
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=TargetsSchema,
+        schema_name="TargetsSchema",
+        validators=[_validate_chunk],
+        metadata_hooks=metadata_hooks,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command=" ".join(sys.argv),
+        config_snapshot=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        key_columns=["target_chembl_id"],
+        table_quality=table_quality,
+        logger=logger,
+    )
+
+    if limit is not None:
+        logger.info("process_limit", limit=processed_ids)
+
+    if missing_optional_columns:
+        logger.debug(
+            "schema_optional_columns_missing",
+            columns=sorted(missing_optional_columns),
+        )
+
     return exit_code
 
 
