@@ -370,7 +370,11 @@ class PubChemCfg(_BaseModel):
         default=Path("data/cache/pubchem_cid_cache.json"),
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
     )
-    batch_size: int = Field(50, ge=1)
+    batch_size: int = Field(
+        50,
+        ge=1,
+        description="Maximum PubChem property lookups submitted per batch; concurrency is capped by pubchem.rps",
+    )
     prefer_local_smiles: bool = Field(
         False,
         description="Skip PubChem lookups when existing pubchem_* columns are complete",

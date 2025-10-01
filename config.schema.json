@@ -1236,6 +1236,7 @@
         },
         "batch_size": {
           "default": 50,
+          "description": "Maximum PubChem property lookups submitted per batch; concurrency is capped by pubchem.rps",
           "minimum": 1,
           "title": "Batch Size",
           "type": "integer"
