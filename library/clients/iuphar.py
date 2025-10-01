@@ -36,12 +36,9 @@ __all__ = [
     "query_gene_symbol",
 ]
 
-# Default session with placeholder user agent; callers should override via
-# :func:`init_session` with a configuration that provides their own contact
-# information.
-_session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
-)
+# Default session uses the library-wide API configuration; callers should
+# override via :func:`init_session` when custom settings are required.
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
 _session_lock = threading.Lock()
 
 EXPECTED_TARGET_COLUMNS: tuple[str, ...] = (

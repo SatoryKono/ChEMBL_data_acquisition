@@ -142,6 +142,22 @@ def test_molecule_catalog_cache_alias(
     assert cfg.molecule_catalog.cache_path == cache
 
 
+def test_placeholder_user_agent_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure the default placeholder contact address is not accepted."""
+
+    path = tmp_path / "cfg.yaml"
+    path.write_text("")
+    monkeypatch.setenv(
+        "CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT",
+        "chembl-da/0.1 (mailto:contact@example.org)",
+    )
+
+    with pytest.raises(ConfigError, match="contact@example.org"):
+        load_config(path)
+
+
 def test_chembl_cache_maxsize_from_yaml(tmp_path: Path) -> None:
     """Custom ``chembl.cache_maxsize`` should override the default."""
 

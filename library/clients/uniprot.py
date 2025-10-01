@@ -24,11 +24,9 @@ class UniProtFetchError(RuntimeError):
     """Raised when a UniProt record cannot be retrieved or decoded."""
 
 
-# Default session using placeholder contact details. Call :func:`init_session`
-# with a proper configuration to set your own user agent.
-_session: Session = session_with_retry(
-    ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)"), RetryCfg()
-)
+# Default session uses the application-wide API configuration. Call
+# :func:`init_session` with a custom configuration to override it.
+_session: Session = session_with_retry(ApiCfg(), RetryCfg())
 _retry_cfg: RetryCfg = RetryCfg()
 
 

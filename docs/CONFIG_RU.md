@@ -29,7 +29,7 @@
 | `backoff_factor` | `0.5` | Множитель экспоненциального backoff между повторами. |
 | `rps` | `20` | Лимит запросов в секунду для rate limiter. |
 | `burst` | `20` | Размер «ведра» токенов. |
-| `user_agent` | `chembl-da/0.1 (mailto:contact@example.org)` | Заголовок User-Agent; замените шаблон реальным контактом. Валидация завершится ошибкой, если поле без контактных данных. Переопределение: `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
+| `user_agent` | `chembl-da/0.1 (mailto:contact@example.org)` | Заголовок User-Agent; замените заполнителя на рабочий e-mail. Задайте через `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
 
 ### Кэш ответов (`sources.chembl.cache`)
 

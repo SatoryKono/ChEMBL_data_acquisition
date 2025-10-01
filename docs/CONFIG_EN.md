@@ -29,7 +29,8 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `backoff_factor` | `0.5` | Multiplier for exponential backoff between retries. |
 | `rps` | `20` | Allowed requests per second for the rate limiter. |
 | `burst` | `20` | Bucket size used by the token bucket limiter. |
-| `user_agent` | `chembl-da/0.1 (mailto:contact@example.org)` | User-Agent header; replace the placeholder with a real contact. Validation fails if the value lacks contact details. Override via `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
+| `user_agent` | `chembl-da/0.1 (mailto:contact@example.org)` | User-Agent header; must be replaced with a real contact e-mail before use. Set via `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
+
 
 ### Response cache (`sources.chembl.cache`)
 
