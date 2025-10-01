@@ -71,6 +71,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     output = args.output_csv or Path(args.input_csv).with_name(
         f"output.{Path(args.input_csv).stem}.csv"
     )
+    ns.output_csv = output
+    if args.output_csv != output:
+        args = args.model_copy(update={"output_csv": output})
     with pd.read_csv(
         args.input_csv,
         sep=sep,

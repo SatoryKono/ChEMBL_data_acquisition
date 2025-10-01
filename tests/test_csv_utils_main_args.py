@@ -120,6 +120,7 @@ def test_cli_generates_output_path(
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("a,b\n1,2\n", encoding="utf8")
     called: dict[str, Path | str] = {}
+    recorded: dict[str, str | None] = {}
 
     def fake_read_csv(
         path: Path | str,
@@ -154,10 +155,17 @@ def test_cli_generates_output_path(
         type("D", (), {"today": staticmethod(lambda: date(2024, 1, 2))}),
     )
 
+    def fake_info(event: str, *args: Any, **kwargs: Any) -> None:
+        if event == "write_done":
+            recorded["path"] = kwargs.get("path")
+
+    monkeypatch.setattr(cli.logger, "info", fake_info)
+
     rc = cli.main(["--input", str(input_csv), "--key-cols", "a"])
     assert rc == 0
     expected = input_csv.with_name("output.input_20240102.csv")
     assert called["output"] == expected
+    assert recorded.get("path") == str(expected)
 
 
 def test_cli_uses_configured_delimiter(
