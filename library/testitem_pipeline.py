@@ -41,6 +41,7 @@ from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
+from library.utils.atomic import open_atomic
 from schemas import TestitemsSchema, normalize_testitems
 
 
@@ -840,7 +841,6 @@ def _write_pubchem_cid_cache(
 
     if path is None:
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
     serialisable: dict[str, str] = {}
     for key, value in cache.items():
         if not key:
@@ -849,7 +849,7 @@ def _write_pubchem_cid_cache(
             continue
         serialisable[key] = value
     try:
-        with path.open("w", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
+        with open_atomic(path, encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             payload = {
                 "metadata": {
                     "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
