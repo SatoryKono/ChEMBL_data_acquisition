@@ -91,7 +91,12 @@ def test_cli_uses_custom_column(
         chunk_size: int | None = None,
         **_: Any,
     ) -> Path:
-        list(chunks)
+        frames = list(chunks)
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame()
+        combined.to_csv(path, index=False)
         return path
 
     def fake_write_export_chunks(
@@ -102,7 +107,12 @@ def test_cli_uses_custom_column(
         key_cols: Sequence[str],
         chunk_size: int | None = None,
     ) -> Path:
-        list(chunks)
+        frames = list(chunks)
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame()
+        combined.to_csv(path, index=False)
         return path
 
     monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
@@ -112,6 +122,9 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
+    monkeypatch.setattr(
+        gdd, "_load_export_ready_frame", lambda path, cfg: pd.DataFrame()
+    )
     monkeypatch.setattr(gdd, "ensure_dirs", lambda cfg: None)
 
     rc = gdd.main(
@@ -321,7 +334,8 @@ def test_run_pubmed_uses_keyword_arguments(
         max_workers: int,
         batch_size: int,
         fallback_doi_map: dict[str, str] | None = None,
-    ) -> pd.DataFrame:
+        return_generator: bool = False,
+    ) -> Iterable[pd.DataFrame]:
         captured["pmids"] = list(pmids)
         captured["cfg"] = cfg_param
         captured["sleep"] = sleep
@@ -332,15 +346,32 @@ def test_run_pubmed_uses_keyword_arguments(
         captured["max_workers"] = max_workers
         captured["batch_size"] = batch_size
         captured["fallback_doi_map"] = fallback_doi_map
-        return pd.DataFrame({"PMID": ["1", "2"]})
+        assert return_generator is True
+
+        def _generator() -> Iterator[pd.DataFrame]:
+            yield pd.DataFrame({"PMID": ["1", "2"]})
+
+        return _generator()
 
     monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
     monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
-    monkeypatch.setattr(
-        gdd,
-        "_finalise_export",
-        lambda df, output, cfg, input_csv, key_columns, **kwargs: 0,
-    )
+
+    def fake_finalise_export(
+        frames: Iterable[pd.DataFrame],
+        output: Path,
+        cfg: Config,
+        *,
+        input_csv: Path,
+        key_columns: Sequence[str] | None,
+        **kwargs: Any,
+    ) -> int:
+        assert not isinstance(frames, pd.DataFrame)
+        collected = list(frames)
+        assert len(collected) == 1
+        assert collected[0]["PMID"].tolist() == ["1", "2"]
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
 
     cfg = Config()
     args = argparse.Namespace(
@@ -411,9 +442,15 @@ def test_run_pubmed_uses_fallback_csv(
         max_workers: int,
         batch_size: int,
         fallback_doi_map: dict[str, str] | None = None,
-    ) -> pd.DataFrame:
+        return_generator: bool = False,
+    ) -> Iterable[pd.DataFrame]:
         captured["fallback_doi_map"] = fallback_doi_map
-        return pd.DataFrame({"PMID": list(pmids)})
+        assert return_generator is True
+
+        def _generator() -> Iterator[pd.DataFrame]:
+            yield pd.DataFrame({"PMID": list(pmids)})
+
+        return _generator()
 
     monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
 
@@ -430,6 +467,71 @@ def test_run_pubmed_uses_fallback_csv(
 
     assert exit_code == 0
     assert captured["fallback_doi_map"] == {"1": "10.1000/foo"}
+
+
+def test_run_pubmed_streams_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PubMed CLI should stream chunks to the exporter."""
+
+    input_csv = tmp_path / "pmids.csv"
+    input_csv.write_text("PMID\n1\n2\n3\n4\n5\n6\n")
+
+    monkeypatch.setattr(
+        lib_io,
+        "read_ids",
+        lambda *_, **__: iter(["1", "2", "3", "4", "5", "6"]),
+    )
+
+    chunk_lengths: list[int] = []
+
+    def fake_fetch_pubmed_records(
+        *_,
+        return_generator: bool = False,
+        **__: Any,
+    ) -> Iterable[pd.DataFrame]:
+        assert return_generator is True
+
+        def _generator() -> Iterator[pd.DataFrame]:
+            for start in range(0, 6, 2):
+                yield pd.DataFrame({"PMID": [str(start + 1), str(start + 2)]})
+
+        return _generator()
+
+    def fake_normalize(df: pd.DataFrame) -> pd.DataFrame:
+        chunk_lengths.append(len(df))
+        return df
+
+    def fake_finalise_export(
+        frames: Iterable[pd.DataFrame],
+        output: Path,
+        cfg: Config,
+        *,
+        input_csv: Path,
+        key_columns: Sequence[str] | None,
+        **kwargs: Any,
+    ) -> int:
+        lengths = [len(frame) for frame in frames]
+        assert lengths == [2, 2, 2]
+        return 0
+
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
+    monkeypatch.setattr(gdd, "normalize_documents", fake_normalize)
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+
+    cfg = Config()
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+    )
+
+    exit_code = gdd.run_pubmed(cfg, args)
+
+    assert exit_code == 0
+    assert chunk_lengths == [2, 2, 2]
 
 
 def test_write_csv_column_order(
@@ -477,6 +579,8 @@ def test_write_csv_column_order(
         captured["col_order"] = list(col_order or [])
         captured["columns"] = list(frames[0].columns) if frames else []
         captured["key_cols"] = list(key_cols or [])
+        combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        combined.to_csv(path, index=False)
         return path
 
     monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
@@ -485,6 +589,9 @@ def test_write_csv_column_order(
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
+    monkeypatch.setattr(
+        gdd, "_load_export_ready_frame", lambda path, cfg: pd.DataFrame()
+    )
 
     cfg = Config()
     args = argparse.Namespace(
@@ -611,6 +718,80 @@ def test_fetch_pubmed_records_returns_generator_in_order(
     )
 
     assert combined["PubMed.PMID"].tolist() == pmids
+
+
+def test_fetch_pubmed_records_streams_large_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Large input should be streamed in bounded chunks."""
+
+    pmids = [str(i) for i in range(30)]
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"}
+            for pmid in batch
+        ]
+
+    def fake_semantic_batch(
+        session: Any,
+        ids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"}
+            for pmid in ids
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_, **__: {"scholar.DOI": "10.1000/fallback"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda session, pmid, cfg, limiter: {"OpenAlex.Id": f"OA{pmid}"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda session, doi, cfg, limiter: {"crossref.DOI": doi},
+    )
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=2,
+        batch_size=5,
+        return_generator=True,
+    )
+
+    batch_sizes = [len(frame) for frame in generator]
+    assert batch_sizes == [5, 5, 5, 5, 5, 5]
 
 
 def test_fetch_pubmed_records_accepts_config(
@@ -783,6 +964,85 @@ def test_fetch_pubmed_records_acquires_documents_limiter(
         ("semantic", 4),
     ]
     assert list(df["PubMed.PMID"]) == ["1", "2"]
+
+
+def test_openalex_and_crossref_jobs_acquire_service_limiters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef jobs use their service-specific limiters."""
+
+    class TrackingLimiter:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.acquisitions = 0
+            self._lock = threading.Lock()
+
+        def acquire(self) -> None:
+            with self._lock:
+                self.acquisitions += 1
+
+    limiters = {
+        "documents_global": TrackingLimiter("global"),
+        "documents_openalex": TrackingLimiter("openalex"),
+        "documents_crossref": TrackingLimiter("crossref"),
+    }
+
+    def fake_get_limiter(name: str, *_, **__) -> Any:
+        return limiters.get(name, DummyLimiter())
+
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": "10.1000/xyz",
+            }
+            for pmid in batch
+        ]
+
+    def fake_semantic_batch(
+        session: Any,
+        pmids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [{"scholar.PMID": pmid} for pmid in pmids]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+
+    gdd.fetch_pubmed_records(
+        ["1"],
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert limiters["documents_openalex"].acquisitions == 1
+    assert limiters["documents_crossref"].acquisitions == 1
 
 
 def test_documents_limiter_enforces_shared_pace(
@@ -1239,6 +1499,9 @@ def test_fetch_pubmed_records_accepts_executor_context(
     pmids = ["1", "2"]
 
     class DummyLimiter:
+        def __init__(self) -> None:
+            self.burst = 1
+
         def acquire(self) -> None:  # pragma: no cover - trivial
             return None
 
@@ -1457,3 +1720,105 @@ def test_fetch_pubmed_records_parallel_enrichment(
     assert crossref_threads
     assert all(name.startswith("ThreadPoolExecutor") for name in openalex_threads)
     assert all(name.startswith("ThreadPoolExecutor") for name in crossref_threads)
+
+
+def test_fetch_pubmed_records_reuses_service_executors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef executors should be shared across batches."""
+
+    pmids = ["100", "200", "300", "400"]
+    creations: list[int | None] = []
+
+    orig_executor = gdd.ThreadPoolExecutor
+
+    class TrackingExecutor(orig_executor):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            max_workers = kwargs.get("max_workers")
+            if max_workers is None and args:
+                max_workers = args[0]
+            creations.append(max_workers)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", TrackingExecutor)
+    monkeypatch.setattr(gdd, "get_limiter", lambda _name, _rps, burst=None: DummyLimiter(burst or 1))
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *_exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+
+    def fake_pubmed_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"10.1234/{pmid}",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {"scholar.PMID": "", "scholar.DOI": ""},
+    )
+
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda *_args, **_kwargs: {
+            "OpenAlex.Venue": "Venue",
+            "OpenAlex.Error": "",
+        },
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda *_args, **_kwargs: {
+            "crossref.Title": "Title",
+            "crossref.Error": "",
+        },
+    )
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert len(creations) == 3
+    assert creations.count(1) == 1

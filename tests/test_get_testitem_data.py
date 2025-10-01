@@ -206,6 +206,24 @@ def test_fetch_parent_catalog_skips_single_when_parentless(
     assert all("/molecule.json" in url for url in captured_urls)
 
 
+def test_prepare_pubchem_api_cfg_prefers_pubchem_override(cfg: Config) -> None:
+    cfg.pubchem.user_agent = "chembl-da/1.0 (mailto:pubchem@example.org)"
+
+    pubchem_cfg = gtd._prepare_pubchem_api_cfg(cfg, cfg.api)
+
+    assert pubchem_cfg.user_agent == cfg.pubchem.user_agent
+    assert pubchem_cfg is not cfg.api
+
+
+def test_prepare_pubchem_api_cfg_requires_custom_user_agent(cfg: Config) -> None:
+    placeholder = "chembl-da/0.1 (mailto:contact@example.org)"
+    cfg.api.user_agent = placeholder
+    cfg.pubchem.user_agent = placeholder
+
+    with pytest.raises(ValueError, match="PubChem configuration requires a user_agent"):
+        gtd._prepare_pubchem_api_cfg(cfg, cfg.api)
+
+
 def test_fetch_parent_catalog_single_entry_parentless_uses_bulk_only(
     cfg: Config,
 ) -> None:
