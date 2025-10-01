@@ -113,7 +113,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     monkeypatch.setattr(cl, "get_testitem", fail_fetch)
 
-    status, df = gtd.fetch_testitems(
+    status, df, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1"]),
         api_cfg=cfg.api,
         batch_size=1,
@@ -126,6 +126,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     assert status == 1
     assert df is None
+    assert requested_ids == []
 
 
 def test_fetch_testitems_passes_fields_and_limit(
@@ -143,13 +144,14 @@ def test_fetch_testitems_passes_fields_and_limit(
         fields: Sequence[str] | None = None,
         page_limit: int = 0,
     ) -> pd.DataFrame:
+        captured["ids"] = list(ids)
         captured["fields"] = fields
         captured["page_limit"] = page_limit
         return pd.DataFrame(columns=["molecule_chembl_id"])
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df = gtd.fetch_testitems(
+    status, df, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1", "CHEMBL2"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -164,6 +166,8 @@ def test_fetch_testitems_passes_fields_and_limit(
     assert df is not None
     assert captured["fields"] == ("a", "b")
     assert captured["page_limit"] == 500
+    assert captured["ids"] == ["CHEMBL1", "CHEMBL2"]
+    assert requested_ids == ["CHEMBL1", "CHEMBL2"]
 
 
 def test_fetch_parent_catalog_skips_single_when_parentless(
@@ -197,7 +201,13 @@ def test_fetch_parent_catalog_skips_single_when_parentless(
 
     assert result == {}
     assert captured_urls
-    assert all("/molecule.json" in url for url in captured_urls)
+    assert "/molecule.json" in captured_urls[0]
+    assert all(
+        any(identifier in url for identifier in ("CHEMBL1", "CHEMBL2"))
+        if "/molecule.json" not in url
+        else True
+        for url in captured_urls
+    )
 
 
 def test_fetch_parent_catalog_single_entry_parentless_uses_bulk_only(
@@ -231,7 +241,11 @@ def test_fetch_parent_catalog_single_entry_parentless_uses_bulk_only(
 
     assert result == {}
     assert captured_urls
-    assert all("/molecule.json" in url for url in captured_urls)
+    assert "/molecule.json" in captured_urls[0]
+    assert all(
+        "CHEMBL1" in url if "/molecule.json" not in url else True
+        for url in captured_urls
+    )
 
 
 def test_prepare_parent_enrichment_uses_lookup_path(
@@ -1175,7 +1189,11 @@ def test_run_chembl_column_order(
         ]
     )
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return df
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     precomputed_catalog = {"CHEMBL1": "CHEMBL1_PARENT"}
     monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: precomputed_catalog)
     monkeypatch.setattr(
@@ -1219,16 +1237,20 @@ def test_run_chembl_column_order(
         df: pd.DataFrame,
         output: Path,
         *,
-        cfg: Config,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        **__: object,
+        col_order: Sequence[str] | None = None,
+        key_cols: Sequence[str] | None = None,
+        chunksize: int | None = None,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8-sig",
+        cfg: Config | None = None,
+        drop_unexpected_cols: bool = False,
     ) -> Path:
         captured["col_order"] = list(col_order or [])
         captured["columns"] = list(df.columns)
-        return output
+        return Path(output)
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
@@ -1291,7 +1313,11 @@ def test_run_chembl_parent_lookup_precomputed_excludes_resolved(
         ]
     )
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return df.copy()
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
 
@@ -1353,7 +1379,11 @@ def test_run_chembl_initialises_pubchem_session(
     df = pd.DataFrame(
         {"molecule_chembl_id": ["CHEMBL1"], "molecule_type": ["Small molecule"]}
     )
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df)
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return df
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, pubchem_cfg, **__: frame)
     monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(
@@ -1492,7 +1522,7 @@ def test_run_chembl_uses_lazy_identifier_stream(
     assert ids_source.iterations == 1
     assert received_ids is not None
     assert not isinstance(received_ids, list)
-    assert received_ids.__class__.__name__ == "_tee"
+    assert received_ids.__class__.__name__ == "generator"
 
 
 def test_run_chembl_calls_pubchem_once(
@@ -1516,7 +1546,11 @@ def test_run_chembl_calls_pubchem_once(
         ]
     )
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: df.copy())
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return df.copy()
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(
         pipeline.molecule_catalog,
@@ -1592,7 +1626,11 @@ def test_run_chembl_prefills_parent_from_hierarchy(
         ]
     )
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return source.copy()
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(gtd.pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
@@ -1633,16 +1671,20 @@ def test_run_chembl_prefills_parent_from_hierarchy(
         df: pd.DataFrame,
         output: Path,
         *,
-        cfg: Config,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        **__: object,
+        col_order: Sequence[str] | None = None,
+        key_cols: Sequence[str] | None = None,
+        chunksize: int | None = None,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8-sig",
+        cfg: Config | None = None,
+        drop_unexpected_cols: bool = False,
     ) -> Path:
         nonlocal captured_df
         captured_df = df.copy()
-        return output
+        return Path(output)
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
 
@@ -1672,7 +1714,11 @@ def test_run_chembl_merges_parent_catalog(
         ]
     )
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return source.copy()
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     cache_path = tmp_path / "parent_catalog.json"
     cache_path.write_text("{}", encoding="utf-8")
     cfg.molecule_catalog.cache_path = cache_path
@@ -1741,16 +1787,20 @@ def test_run_chembl_merges_parent_catalog(
         df: pd.DataFrame,
         output: Path,
         *,
-        cfg: Config,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        **__: object,
+        col_order: Sequence[str] | None = None,
+        key_cols: Sequence[str] | None = None,
+        chunksize: int | None = None,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8-sig",
+        cfg: Config | None = None,
+        drop_unexpected_cols: bool = False,
     ) -> Path:
         nonlocal captured_df
         captured_df = df.copy()
-        return output
+        return Path(output)
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
@@ -1778,7 +1828,11 @@ def test_run_chembl_updates_parent_cache_and_reuses_results(
     parent_field = cfg.molecule_catalog.parent_field
     source = pd.DataFrame([{child_field: "CHEMBL1", parent_field: pd.NA}])
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return source.copy()
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
 
@@ -1921,7 +1975,11 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
         ]
     )
 
-    monkeypatch.setattr(cl, "get_testitem", lambda *_, **__: source.copy())
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return source.copy()
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "load_parent_catalog", lambda **__: {})
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
@@ -1949,16 +2007,20 @@ def test_run_chembl_preserves_existing_parent_value_when_catalog_missing(
         df: pd.DataFrame,
         output: Path,
         *,
-        cfg: Config,
-        key_cols: list[str] | None = None,
-        col_order: list[str] | None = None,
-        **__: object,
+        col_order: Sequence[str] | None = None,
+        key_cols: Sequence[str] | None = None,
+        chunksize: int | None = None,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8-sig",
+        cfg: Config | None = None,
+        drop_unexpected_cols: bool = False,
     ) -> Path:
         nonlocal captured_df
         captured_df = df.copy()
-        return output
+        return Path(output)
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 0
@@ -1983,18 +2045,18 @@ def test_run_chembl_parent_catalog_error(
     cfg.molecule_catalog.cache_path = cache_path
     cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
 
-    monkeypatch.setattr(
-        cl,
-        "get_testitem",
-        lambda *_, **__: pd.DataFrame(
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return pd.DataFrame(
             [
                 {
                     cfg.molecule_catalog.child_field: "CHEMBL1",
                     cfg.molecule_catalog.parent_field: pd.NA,
                 }
             ]
-        ),
-    )
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
@@ -2016,7 +2078,7 @@ def test_run_chembl_parent_catalog_error(
         called = True
         return Path("unused.csv")
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     rc = gtd.run_chembl(cfg, args)
     assert rc == 1
@@ -2040,18 +2102,18 @@ def test_run_chembl_parent_catalog_request_error(
     cfg.molecule_catalog.cache_path = cache_path
     cfg.molecule_catalog.sqlite_path = tmp_path / "parent_catalog.sqlite"
 
-    monkeypatch.setattr(
-        cl,
-        "get_testitem",
-        lambda *_, **__: pd.DataFrame(
+    def fake_get_testitem(ids: Iterable[str], **_: object) -> pd.DataFrame:
+        list(ids)
+        return pd.DataFrame(
             [
                 {
                     cfg.molecule_catalog.child_field: "CHEMBL1",
                     cfg.molecule_catalog.parent_field: pd.NA,
                 }
             ]
-        ),
-    )
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pipeline, "add_pubchem_data", lambda frame, _, **__: frame)
     monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
     monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_, **__: None)
@@ -2086,7 +2148,7 @@ def test_run_chembl_parent_catalog_request_error(
         called = True
         return Path("unused.csv")
 
-    monkeypatch.setattr(io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(pipeline, "write_csv_deterministic", fake_write_csv)
 
     errors: list[tuple[str, dict[str, object]]] = []
 

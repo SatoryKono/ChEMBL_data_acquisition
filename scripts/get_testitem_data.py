@@ -6,8 +6,9 @@ from pathlib import Path
 import sys
 
 import argparse
+import json
 from collections import OrderedDict, deque
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence, Mapping
 from dataclasses import dataclass
 from itertools import islice, tee
 from functools import lru_cache
@@ -23,6 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
 from library import chembl_library as cl
 from library import cli
 from library import io
+from library import pubchem_library as pl
 
 from library.clients import pubchem as pc
 from library.chembl_client import ChemblClient
@@ -39,6 +41,7 @@ from library.log import logger
 from schemas import TestitemsSchema
 from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_CACHE,
+    PUBCHEM_CID_CACHE_ENCODING,
     PARENT_LOOKUP_SOURCE_LOOKUP,
     PARENT_LOOKUP_SOURCE_PARTIAL,
     PARENT_LOOKUP_SOURCE_SKIPPED,
@@ -65,7 +68,6 @@ class ReadInputIdsResult:
 
     ids_iter: Iterator[str]
     sample_ids: tuple[str, ...]
-    requested_ids: tuple[str, ...]
 
 
 
@@ -1190,9 +1192,8 @@ def read_input_ids(
             logger.info("process_offset", offset=offset)
         if limit is not None:
             ids_iter = islice(ids_iter, limit)
-        ids_iter, sample_iter, capture_iter = tee(ids_iter, 3)
+        ids_iter, sample_iter = tee(ids_iter, 2)
         sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
-        requested_ids = tuple(capture_iter)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
@@ -1204,7 +1205,6 @@ def read_input_ids(
     return 0, ReadInputIdsResult(
         ids_iter=ids_iter,
         sample_ids=sample_ids,
-        requested_ids=requested_ids,
     )
 
 
@@ -1278,15 +1278,21 @@ def fetch_testitems(
     sample_ids: Sequence[str],
     fields: Sequence[str] | None,
     page_limit: int,
-) -> tuple[int, pd.DataFrame | None]:
+) -> tuple[int, pd.DataFrame | None, list[str]]:
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    ids_iter, capture_iter = tee(ids_iter)
-    requested_ids_raw = list(capture_iter)
+    requested_ids_raw: list[str] = []
+
+    def _tracking_iter(source: Iterable[str]) -> Iterator[str]:
+        for identifier in source:
+            requested_ids_raw.append(identifier)
+            yield identifier
+
+    tracked_iter = _tracking_iter(ids_iter)
     try:
         df = cl.get_testitem(
-            ids_iter,
+            tracked_iter,
             cfg=api_cfg,
             client=client,
             chunk_size=batch_size,
@@ -1302,7 +1308,7 @@ def fetch_testitems(
             timeout=timeout,
             sample_ids=list(sample_ids),
         )
-        return 1, None
+        return 1, None, requested_ids_raw
 
     rows = len(df)
     logger.info("chembl_fetch_done", rows=rows)
@@ -1358,7 +1364,7 @@ def fetch_testitems(
     df["molecule_chembl_id"] = df["molecule_chembl_id"].astype("string")
     df = df.reset_index(drop=True)
 
-    return 0, df
+    return 0, df, requested_ids_raw
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -1382,7 +1388,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     pc.init_session(api_cfg, cfg.retry)
 
-    requested_ids: tuple[str, ...] = ()
+    requested_ids: list[str] = []
     missing_ids: list[str] = []
 
     with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
@@ -1396,8 +1402,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if read_status != 0 or read_result is None:
             return read_status
 
-        requested_ids = read_result.requested_ids
-        fetch_status, df = fetch_testitems(
+        fetch_status, df, requested_ids = fetch_testitems(
             read_result.ids_iter,
             api_cfg=api_cfg,
             batch_size=cfg.testitem.batch_size,
