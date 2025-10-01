@@ -11,7 +11,6 @@ from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
-import csv
 import sys
 from collections.abc import Sequence
 from itertools import islice
@@ -448,7 +447,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         if limit is not None:
             df = df.head(limit)
             logger.info("process_limit", limit=len(df))
-        ids = df[column].tolist()
+        ids = df[column].to_numpy(copy=False)
         rows_total = len(ids)
 
         from tempfile import NamedTemporaryFile
@@ -456,13 +455,14 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         with NamedTemporaryFile(
             "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
         ) as tmp:
-            writer = csv.DictWriter(
-                tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
-            )
-            writer.writeheader()
-            for uid in ids:
-                writer.writerow({"uniprot_id": uid})
             tmp_path = Path(tmp.name)
+
+        pd.DataFrame({"uniprot_id": ids}).to_csv(
+            tmp_path,
+            index=False,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
 
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         data_dir = cfg.target.uniprot.data_dir
@@ -485,7 +485,11 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         )
         rows_kept = len(out_df)
         if "mapping_uniprot_id" in df.columns:
-            out_df.insert(1, "mapping_uniprot_id", df["mapping_uniprot_id"].tolist())
+            out_df.insert(
+                1,
+                "mapping_uniprot_id",
+                df["mapping_uniprot_id"].to_numpy(copy=False),
+            )
         csv_path = io.write_csv(
             out_df,
             output,
@@ -848,24 +852,30 @@ def fetch_uniprot(
     """
 
     logger.info("fetch_uniprot_start", output=str(output_csv))
-    uids = [
-        u
-        for u in chembl_df.get(cfg.target.all.uniprot_column, [])
-        if isinstance(u, str) and u
-    ]
+    column = cfg.target.all.uniprot_column
+    series = chembl_df.get(column)
+    if series is None:
+        uids: list[str] = []
+    else:
+        values = series.to_numpy(copy=False)
+        uids = [
+            uid
+            for uid in values
+            if isinstance(uid, str) and uid
+        ]
     from tempfile import NamedTemporaryFile
 
     with NamedTemporaryFile(
         "w", delete=False, encoding=cfg.io.csv_encoding, newline=""
     ) as tmp:
-        writer = csv.DictWriter(
-            tmp, fieldnames=["uniprot_id"], delimiter=cfg.io.csv_sep
-        )
-
-        writer.writeheader()
-        for uid in uids:
-            writer.writerow({"uniprot_id": uid})
         tmp_path = Path(tmp.name)
+
+    pd.DataFrame({"uniprot_id": uids}).to_csv(
+        tmp_path,
+        index=False,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+    )
 
     uniprot_args = argparse.Namespace(input_csv=tmp_path, output_csv=output_csv)
     orig_dir = cfg.target.uniprot.data_dir
@@ -880,7 +890,7 @@ def fetch_uniprot(
     df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
-    df["original_id"] = uids
+    df["original_id"] = pd.Series(uids, index=df.index, dtype=object)
     logger.info("fetch_uniprot_done", rows=len(df))
     return df
 
