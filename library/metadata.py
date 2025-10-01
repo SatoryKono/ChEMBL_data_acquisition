@@ -20,6 +20,7 @@ import yaml
 from .config import _mask_secrets
 from .git_utils import _git_sha
 from .log import logger
+from .utils.atomic import open_atomic
 
 # ``datetime.UTC`` is only available in Python 3.11 and later.
 # ``timezone.utc`` provides the same value and works on older versions.
@@ -123,7 +124,7 @@ def write_meta_yaml(
         }
     )
 
-    with meta_path.open("w", encoding="utf-8") as fh:
+    with open_atomic(meta_path, encoding="utf-8") as fh:
         yaml.safe_dump(metadata, fh, sort_keys=False)
         logger.info("metadata_written", path=str(meta_path))
 
