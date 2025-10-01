@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from library.cli import LoggerConfig
+
 from library.utils.cli_tools import csv_utils_main as cli
 
 
@@ -57,3 +59,19 @@ def test_csv_utils_cli_print_config_exits_without_writing(
     assert data["system"]["log"]["level"] == "DEBUG"
     assert data["local"]["io"]["csv_sep"] == "|"
     assert not output_csv.exists()
+
+
+def test_csv_utils_cli_print_config_uses_logger_config_run_id(monkeypatch) -> None:
+    """``--print-config`` configures logging with the generated run identifier."""
+
+    created_config = LoggerConfig(run_id="sentinel", level="INFO")
+    configured: list[LoggerConfig] = []
+
+    monkeypatch.setattr(cli, "create_logger_config", lambda level: created_config)
+    monkeypatch.setattr(cli, "configure_logger", lambda cfg: configured.append(cfg))
+    monkeypatch.setattr(cli, "print_config", lambda cfg: None)
+
+    exit_code = cli.main(["--print-config"])
+
+    assert exit_code == 0
+    assert configured == [created_config]
