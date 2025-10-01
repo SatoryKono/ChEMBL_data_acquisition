@@ -11,6 +11,7 @@ import yaml
 
 from ..config import Config, _mask_secrets, _serialize_paths
 from ..git_utils import _git_sha
+from ..utils.atomic import open_atomic
 
 
 def write_meta_yaml(
@@ -36,6 +37,6 @@ def write_meta_yaml(
         ),
     }
     meta_path = Path(f"{path}.meta.yaml")
-    with meta_path.open("w", encoding="utf8") as fh:
+    with open_atomic(meta_path, encoding="utf8") as fh:
         yaml.safe_dump(meta, fh, sort_keys=False)
     return meta_path
