@@ -7,7 +7,7 @@ import locale
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
 
@@ -25,6 +25,14 @@ class _EncodingDecodeError(Exception):
         self.error = error
 
 
+class _CollectedId(NamedTuple):
+    """Result of parsing a single identifier row."""
+
+    value: str
+    is_na_marker: bool
+    include: bool
+
+
 def _collect_ids_with_encoding(
     path: Path,
     *,
@@ -33,8 +41,8 @@ def _collect_ids_with_encoding(
     encoding: str,
     marker_set: set[str],
     keep_na_markers: bool,
-) -> tuple[list[str], list[str]]:
-    """Return identifiers and NA-marker hits using ``encoding``."""
+) -> Iterator[_CollectedId]:
+    """Yield identifiers and NA-marker hits using ``encoding``."""
 
     try:
         with path.open("r", encoding=encoding, newline="") as fh:
@@ -43,20 +51,15 @@ def _collect_ids_with_encoding(
                 raise ValueError(
                     f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
                 )
-            values: list[str] = []
-            dropped: list[str] = []
             for row in reader:
                 value = (row.get(column) or "").strip()
                 if not value:
                     continue
                 if value in marker_set:
-                    if keep_na_markers:
-                        values.append(value)
-                    else:
-                        dropped.append(value)
+                    include = keep_na_markers
+                    yield _CollectedId(value=value, is_na_marker=True, include=include)
                 else:
-                    values.append(value)
-            return values, dropped
+                    yield _CollectedId(value=value, is_na_marker=False, include=True)
     except UnicodeDecodeError as exc:  # pragma: no cover - exercised via fallback tests
         raise _EncodingDecodeError(encoding, exc) from exc
 
@@ -118,11 +121,11 @@ def read_ids(
 
     path_obj = Path(path)
 
-    def _resolve_candidates() -> tuple[list[str], list[str]]:
+    def _resolve_candidates() -> Iterator[_CollectedId]:
         last_error: UnicodeDecodeError | None = None
         for candidate in candidates:
             try:
-                return _collect_ids_with_encoding(
+                collected = _collect_ids_with_encoding(
                     path_obj,
                     column=column,
                     sep=sep,
@@ -130,6 +133,16 @@ def read_ids(
                     marker_set=marker_set,
                     keep_na_markers=keep_markers,
                 )
+                try:
+                    first_item = next(collected)
+                except StopIteration:
+                    return iter(())
+
+                def _with_peek() -> Iterator[_CollectedId]:
+                    yield first_item
+                    yield from collected
+
+                return _with_peek()
             except _EncodingDecodeError as exc:
                 last_error = exc.error
                 logger.warning(
@@ -155,23 +168,40 @@ def read_ids(
         raise ValueError(message) from last_error
 
     try:
-        values, dropped = _resolve_candidates()
+        collected_iter = _resolve_candidates()
     except FileNotFoundError:
         raise
     except csv.Error as exc:
         raise ValueError(f"malformed CSV in file: {path}: {exc}") from exc
 
-    if not keep_markers and dropped:
-        unique_dropped = list(dict.fromkeys(dropped))
-        logger.warning(
-            "read_ids_dropped_na_markers",
-            path=str(path_obj),
-            column=column,
-            dropped_total=len(dropped),
-            dropped_ids=unique_dropped,
-        )
+    def _stream() -> Iterator[str]:
+        dropped_total = 0
+        dropped_unique: list[str] = []
+        seen_dropped: set[str] = set()
+        try:
+            for item in collected_iter:
+                if item.is_na_marker:
+                    if item.include:
+                        yield item.value
+                    else:
+                        dropped_total += 1
+                        if item.value not in seen_dropped:
+                            seen_dropped.add(item.value)
+                            dropped_unique.append(item.value)
+                        continue
+                else:
+                    yield item.value
+        finally:
+            if not keep_markers and dropped_total:
+                logger.warning(
+                    "read_ids_dropped_na_markers",
+                    path=str(path_obj),
+                    column=column,
+                    dropped_total=dropped_total,
+                    dropped_ids=dropped_unique,
+                )
 
-    return iter(values)
+    return _stream()
 
 
 def read_csv(
