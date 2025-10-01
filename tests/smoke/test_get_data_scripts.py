@@ -346,7 +346,7 @@ def test_get_testitem_data_smoke(
     polymer_smiles = "POLY-SMILES"
     mixture_smiles = "MIX-SMILES"
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             base: dict[str, object] = {

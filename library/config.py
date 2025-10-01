@@ -133,7 +133,7 @@ class ApiCfg(_BaseModel):
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
     burst: int = Field(5, ge=1)
-    user_agent: str = "chembl-da/0.1 (mailto:contact@example.org)"
+    user_agent: str = "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 
     @field_validator("chembl_base")
     @classmethod
@@ -298,6 +298,10 @@ class PubChemCfg(_BaseModel):
         description="Enable PubChem augmentation for test item data",
     )
     base: str = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    user_agent: str = Field(
+        "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
+        description="Custom User-Agent for PubChem requests including contact details",
+    )
     timeout_connect: int = Field(5, ge=1)
     timeout_read: int = Field(60, ge=1)
     timeout_seconds: float = Field(
@@ -369,6 +373,15 @@ class PubChemCfg(_BaseModel):
     def _url(cls, v: str) -> str:
         if not _valid_url(v):
             raise ValueError("invalid URL")
+        return v
+
+    @field_validator("user_agent")
+    @classmethod
+    def _ua(cls, v: str) -> str:
+        if not _EMAIL_RE.search(v):
+            raise ValueError(
+                "pubchem.user_agent must include contact information such as an email",
+            )
         return v
 
 
@@ -1529,6 +1542,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_UNIPROT_BASE": ["sources", "uniprot", "api", "base"],
     "CHEMBL_DA_IUPHAR_BASE": ["sources", "iuphar", "base"],
     "CHEMBL_DA_PUBCHEM_BASE": ["sources", "pubchem", "base"],
+    "CHEMBL_DA_PUBCHEM_USER_AGENT": ["sources", "pubchem", "user_agent"],
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
     "CHEMBL_DA_LOG_FORMAT": ["system", "log", "format"],
     "CHEMBL_DA_LOG_DATEFMT": ["system", "log", "datefmt"],
