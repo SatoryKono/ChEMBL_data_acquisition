@@ -31,6 +31,7 @@ from .clients.iuphar import (
 from .config import IupharCfg, RetryCfg
 from .log import logger
 
+
 @dataclass
 class IUPHARData:
     """Container for IUPHAR target and family data."""

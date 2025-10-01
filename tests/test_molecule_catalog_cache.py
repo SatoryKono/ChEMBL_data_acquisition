@@ -59,7 +59,9 @@ def test_read_cache_invalid_json_logs_warning(
     assert any(event == "invalid_catalog_cache" for event, _ in events)
 
 
-def test_write_cache_crash_leaves_existing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_write_cache_crash_leaves_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = tmp_path / "catalog.json"
     original = {"CHEMBL1": "CHEMBL2"}
     path.write_text(json.dumps(original), encoding="utf-8")

@@ -211,9 +211,7 @@ def _fetch_testitem_chunk(
                     )
                     break
                 seen_urls.add(absolute_url)
-                data = client.request_json(
-                    absolute_url, cfg=cfg, timeout=timeout
-                )
+                data = client.request_json(absolute_url, cfg=cfg, timeout=timeout)
                 items = data.get("molecules") or data.get("molecule") or []
                 if items:
                     chunk_frames.append(json_normalize_pyarrow(items))

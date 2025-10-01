@@ -81,9 +81,7 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(cl, "get_documents", fake_get_documents)
     monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
 
-
     def fake_write_csv_chunks(
-
         chunks: Iterable[pd.DataFrame],
         path: Path,
         *,
@@ -566,7 +564,6 @@ def test_write_csv_column_order(
 
     captured: dict[str, Any] = {}
 
-
     def fake_write_csv_chunks(
         chunks: Iterable[pd.DataFrame],
         path: Path,
@@ -662,7 +659,9 @@ def test_fetch_pubmed_records_returns_generator_in_order(
         *,
         client: Any | None = None,
     ) -> list[dict[str, str]]:
-        return [{"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch]
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch
+        ]
 
     def fake_semantic_batch(
         session: Any,
@@ -671,8 +670,7 @@ def test_fetch_pubmed_records_returns_generator_in_order(
         cfg: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
-            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"}
-            for pmid in ids
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"} for pmid in ids
         ]
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
@@ -706,7 +704,10 @@ def test_fetch_pubmed_records_returns_generator_in_order(
     )
 
     frames = list(generator)
-    assert [frame["PubMed.PMID"].tolist() for frame in frames] == [["1", "2"], ["3", "4"]]
+    assert [frame["PubMed.PMID"].tolist() for frame in frames] == [
+        ["1", "2"],
+        ["3", "4"],
+    ]
 
     combined = gdd.fetch_pubmed_records(
         pmids,
@@ -746,8 +747,7 @@ def test_fetch_pubmed_records_drains_pending_batches(
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
-            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"}
-            for pmid in batch
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch
         ]
 
     def fake_semantic_batch(
@@ -757,8 +757,7 @@ def test_fetch_pubmed_records_drains_pending_batches(
         cfg: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
-            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"}
-            for pmid in ids
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"} for pmid in ids
         ]
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
@@ -837,8 +836,7 @@ def test_fetch_pubmed_records_streams_large_batches(
         client: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
-            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"}
-            for pmid in batch
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch
         ]
 
     def fake_semantic_batch(
@@ -848,8 +846,7 @@ def test_fetch_pubmed_records_streams_large_batches(
         cfg: Any | None = None,
     ) -> list[dict[str, str]]:
         return [
-            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"}
-            for pmid in ids
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"} for pmid in ids
         ]
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
@@ -1193,9 +1190,7 @@ def test_crossref_jobs_skip_missing_doi(monkeypatch: pytest.MonkeyPatch) -> None
 
     seen_crossref: list[str] = []
 
-    def fake_crossref(
-        session: Any, doi: str, cfg: Any, limiter: Any
-    ) -> dict[str, str]:
+    def fake_crossref(session: Any, doi: str, cfg: Any, limiter: Any) -> dict[str, str]:
         seen_crossref.append(doi)
         return {}
 
@@ -1293,6 +1288,7 @@ def test_documents_limiter_enforces_shared_pace(
     assert len(sleep_calls) >= 2
     assert sleep_calls[0] == pytest.approx(1.0, rel=1e-6)
     assert sleep_calls[1] == pytest.approx(1.0, rel=1e-6)
+
 
 def test_fetch_pubmed_records_uses_explicit_pubmed_cfg(
     monkeypatch: pytest.MonkeyPatch,
@@ -1542,14 +1538,18 @@ def test_finalise_export_accepts_generator(
 
     cfg = Config()
     frames = [
-        pd.DataFrame({
-            "document_chembl_id": ["CHEMBL1"],
-            "PubMed.PMID": ["101"],
-        }),
-        pd.DataFrame({
-            "document_chembl_id": ["CHEMBL2"],
-            "PubMed.PMID": ["102"],
-        }),
+        pd.DataFrame(
+            {
+                "document_chembl_id": ["CHEMBL1"],
+                "PubMed.PMID": ["101"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "document_chembl_id": ["CHEMBL2"],
+                "PubMed.PMID": ["102"],
+            }
+        ),
     ]
     output = tmp_path / "documents.csv"
 
@@ -1660,7 +1660,10 @@ def test_finalise_export_streaming_is_deterministic(
     assert exit_code == 0
     assert exported["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
     assert captured["quality_df"]["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
-    assert captured["quality_table_df"]["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
+    assert captured["quality_table_df"]["PubMed.PMID"].astype(str).tolist() == [
+        "101",
+        "102",
+    ]
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
@@ -2008,7 +2011,9 @@ def test_fetch_pubmed_records_reuses_service_sessions(
             return None
 
         def submit(
-            self, fn: Callable[[Sequence[str]], list[dict[str, str]]], batch: Sequence[str]
+            self,
+            fn: Callable[[Sequence[str]], list[dict[str, str]]],
+            batch: Sequence[str],
         ) -> ImmediateFuture:
             return ImmediateFuture(fn(batch))
 
@@ -2053,7 +2058,9 @@ def test_fetch_pubmed_records_reuses_service_executors(
             super().__init__(*args, **kwargs)
 
     monkeypatch.setattr(gdd, "ThreadPoolExecutor", TrackingExecutor)
-    monkeypatch.setattr(gdd, "get_limiter", lambda _name, _rps, burst=None: DummyLimiter(burst or 1))
+    monkeypatch.setattr(
+        gdd, "get_limiter", lambda _name, _rps, burst=None: DummyLimiter(burst or 1)
+    )
 
     class DummySession:
         def __enter__(self) -> DummySession:  # pragma: no cover - trivial
@@ -2136,7 +2143,9 @@ def test_fetch_pubmed_records_reuses_service_executors(
     assert creations.count(1) == 1
 
 
-def test_fetch_pubmed_records_generator_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_pubmed_records_generator_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Generator mode should yield DataFrame batches in submission order."""
 
     pmids = ["100", "200", "300", "400"]

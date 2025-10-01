@@ -193,12 +193,8 @@ def _swap_conflicts(lower: pd.Series, upper: pd.Series) -> None:
 def _clamp_nonnegative(
     df: pd.DataFrame, lower: pd.Series, upper: pd.Series
 ) -> tuple[pd.Series, pd.Series]:
-    std_types = df.get(
-        "standard_type", pd.Series([None] * len(df), index=df.index)
-    )
-    std_units = df.get(
-        "standard_units", pd.Series([None] * len(df), index=df.index)
-    )
+    std_types = df.get("standard_type", pd.Series([None] * len(df), index=df.index))
+    std_units = df.get("standard_units", pd.Series([None] * len(df), index=df.index))
     clamp_mask = std_types.combine(std_units, _needs_nonnegative_clamp)
     clamp_series = clamp_mask.fillna(False).astype(bool)
     lower_neg = clamp_series & lower.notna() & (lower < 0)

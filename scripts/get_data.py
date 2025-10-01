@@ -106,7 +106,9 @@ class PipelineStep:
         """Return CLI arguments forwarded to the wrapped ``main`` function."""
 
         input_csv = cfg.input_path(self.name)
-        output_csv = output_path if output_path is not None else cfg.output_path(self.name)
+        output_csv = (
+            output_path if output_path is not None else cfg.output_path(self.name)
+        )
         args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
         args.extend(["--output", str(output_csv)])
         args.extend(["--log-level", cfg.log_level])
@@ -312,9 +314,7 @@ def _run_step(
         _LOGGER.error("step_input_missing", step=step.name, path=str(input_path))
         return StepExecutionResult(exit_code=1, executed=False)
     if cfg.skip_existing and final_output.exists() and not cfg.force:
-        _LOGGER.info(
-            "step_skipped_existing", step=step.name, path=str(final_output)
-        )
+        _LOGGER.info("step_skipped_existing", step=step.name, path=str(final_output))
         return StepExecutionResult(exit_code=0, executed=False)
 
     arguments = step.build_arguments(cfg, output_path=working_output)
@@ -470,9 +470,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
             overall_status = 1
             break
         if result.exit_code != 0:
-            _LOGGER.error(
-                "step_failed", step=step.name, exit_code=result.exit_code
-            )
+            _LOGGER.error("step_failed", step=step.name, exit_code=result.exit_code)
             _cleanup_failed_step(
                 final_output,
                 working_output,

@@ -175,7 +175,9 @@ def test_init_session_waits_for_inflight_fetch(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(uniprot_client, "_session", BlockingSession("old"))
     monkeypatch.setattr(uniprot_client, "_retry_cfg", retry_cfg)
-    monkeypatch.setattr(uniprot_client, "get_limiter", lambda *_args, **_kwargs: DummyLimiter())
+    monkeypatch.setattr(
+        uniprot_client, "get_limiter", lambda *_args, **_kwargs: DummyLimiter()
+    )
     monkeypatch.setattr(
         uniprot_client,
         "session_with_retry",
@@ -186,7 +188,9 @@ def test_init_session_waits_for_inflight_fetch(monkeypatch: pytest.MonkeyPatch) 
         with ThreadPoolExecutor(max_workers=2) as executor:
             fetch_future = executor.submit(ul.fetch_uniprot, "P12345", cfg=cfg)
             assert entry_event.wait(timeout=5.0)
-            init_future = executor.submit(uniprot_client.init_session, ApiCfg(), retry_cfg)
+            init_future = executor.submit(
+                uniprot_client.init_session, ApiCfg(), retry_cfg
+            )
             assert not init_future.done()
             release_event.set()
             result = fetch_future.result(timeout=5.0)

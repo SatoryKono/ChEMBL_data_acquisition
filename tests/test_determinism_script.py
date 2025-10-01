@@ -37,6 +37,7 @@ def test_determinism_script_reports_mismatch(
     """The script should exit with ``1`` when hashes differ."""
 
     from library.utils.cli_tools import check_determinism as impl
+
     script = impl
 
     def fake_write_csv_deterministic(

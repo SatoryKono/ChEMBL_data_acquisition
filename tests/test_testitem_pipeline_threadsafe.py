@@ -36,7 +36,9 @@ def test_augment_pubchem_single_initialisation(monkeypatch) -> None:
     monkeypatch.setattr(pipeline, "_PUBCHEM_SESSION_LOCK", threading.Lock())
     monkeypatch.setattr(pipeline, "_pubchem_session_signature", fake_signature)
     monkeypatch.setattr(pipeline.pl, "init_session", fake_init_session)
-    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        pipeline, "_load_pubchem_cid_cache", lambda *_args, **_kwargs: {}
+    )
     monkeypatch.setattr(pipeline, "add_pubchem_data", fake_add_pubchem_data)
 
     api_cfg = ApiCfg()

@@ -130,7 +130,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         nargs="*",
         help="Columns used to sort the output CSV deterministically",
     )
-    parser.add_argument("--rps", type=float, default=1.0, help="Max requests per second")
+    parser.add_argument(
+        "--rps", type=float, default=1.0, help="Max requests per second"
+    )
     parser.add_argument(
         "--workers",
         type=positive_int,

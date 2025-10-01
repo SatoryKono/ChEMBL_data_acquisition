@@ -14,7 +14,9 @@ from library.config import Config
 class DummyChemblClient:
     """Minimal stub replacing :class:`library.clients.ChemblClient`."""
 
-    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - signature mirrors context
+    def __init__(
+        self, *args, **kwargs
+    ) -> None:  # noqa: D401 - signature mirrors context
         self.closed = False
 
     def __enter__(self) -> DummyChemblClient:

@@ -134,6 +134,8 @@ UNIPROT_OUTPUT_COLUMNS: list[str] = [
     "geneName",
     "secondaryAccessionNames",
 ]
+
+
 def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
     """Yield all full and short names from a UniProt name object."""
     if not isinstance(name_obj, dict):

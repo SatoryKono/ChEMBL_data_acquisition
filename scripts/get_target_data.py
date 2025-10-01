@@ -609,7 +609,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("process_offset", offset=offset)
     processed_ids = 0
 
-
     def _iter_ids() -> Iterator[str]:
         nonlocal processed_ids
         for identifier in ids_iter:
@@ -920,11 +919,7 @@ def fetch_uniprot(
         uids: list[str] = []
     else:
         values = series.to_numpy(copy=False)
-        uids = [
-            uid
-            for uid in values
-            if isinstance(uid, str) and uid
-        ]
+        uids = [uid for uid in values if isinstance(uid, str) and uid]
     from tempfile import NamedTemporaryFile
 
     with NamedTemporaryFile(

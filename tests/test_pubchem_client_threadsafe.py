@@ -88,7 +88,9 @@ def reset_pubchem_session() -> None:
             current_session.close()
 
 
-def _configure_session(user_agent: str = "pubchem-tests/1.0 (mailto:tests@example.org)") -> ApiCfg:
+def _configure_session(
+    user_agent: str = "pubchem-tests/1.0 (mailto:tests@example.org)",
+) -> ApiCfg:
     """Initialise the PubChem session for tests and return the API config."""
 
     api_cfg = ApiCfg(user_agent=user_agent)

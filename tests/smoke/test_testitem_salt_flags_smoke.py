@@ -139,5 +139,6 @@ def test_testitem_salt_flags_smoke(
 
     nonsalt_row = df.loc[df["molecule_chembl_id"] == "CHEMBL300"].iloc[0]
     assert pd.isna(nonsalt_row["salt_chembl_id"])
-CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
 
+
+CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)

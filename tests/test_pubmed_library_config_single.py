@@ -109,7 +109,9 @@ def test_pubmed_library_rate_override(
         ]
 
     monkeypatch.setattr(pl, "fetch_pubmed_batch", fake_fetch_pubmed_batch)
-    monkeypatch.setattr(pl, "fetch_semantic_scholar_batch", fake_fetch_semantic_scholar_batch)
+    monkeypatch.setattr(
+        pl, "fetch_semantic_scholar_batch", fake_fetch_semantic_scholar_batch
+    )
     monkeypatch.setattr(pl, "fetch_openalex", lambda *a, **k: {"OpenAlex.Error": ""})
     monkeypatch.setattr(pl, "fetch_crossref", lambda *a, **k: {"crossref.Error": ""})
 

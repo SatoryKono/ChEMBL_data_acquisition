@@ -310,7 +310,9 @@ def fetch_pubmed_records(
         return get_limiter(f"documents_{name}", effective_rps, effective_burst)
 
     pubmed_service_limiter = _service_limiter(
-        "pubmed", rps=getattr(pubmed_cfg, "rps", None), burst=getattr(pubmed_cfg, "burst", None)
+        "pubmed",
+        rps=getattr(pubmed_cfg, "rps", None),
+        burst=getattr(pubmed_cfg, "burst", None),
     )
     semantic_service_limiter = _service_limiter(
         "semantic_scholar",
@@ -532,10 +534,9 @@ def fetch_pubmed_records(
                 crossref_results: dict[int, dict[str, str]] = {}
 
                 openalex_jobs = list(openalex_lookup.keys())
+
                 def _fetch_openalex_job(pmid: str) -> dict[str, str]:
-                    _acquire_documents(
-                        openalex_service_limiter, use_global=False
-                    )
+                    _acquire_documents(openalex_service_limiter, use_global=False)
                     return _invoke_with_session(
                         session_pools["openalex"].session,
                         ocl.fetch_openalex,
@@ -574,10 +575,9 @@ def fetch_pubmed_records(
                         openalex_results[idx] = result
 
                 crossref_jobs = [doi for doi in crossref_lookup.keys() if doi]
+
                 def _fetch_crossref_job(doi: str) -> dict[str, str]:
-                    _acquire_documents(
-                        crossref_service_limiter, use_global=False
-                    )
+                    _acquire_documents(crossref_service_limiter, use_global=False)
                     return _invoke_with_session(
                         session_pools["crossref"].session,
                         ocl.fetch_crossref,
@@ -651,9 +651,7 @@ def fetch_pubmed_records(
     max_in_flight = max(1, max_workers * 2)
 
     stack = ExitStack()
-    batch_executor = stack.enter_context(
-        ThreadPoolExecutor(max_workers=max_workers)
-    )
+    batch_executor = stack.enter_context(ThreadPoolExecutor(max_workers=max_workers))
     if openalex_capacity > 1:
         openalex_executor = stack.enter_context(
             ThreadPoolExecutor(max_workers=openalex_capacity)
@@ -720,9 +718,7 @@ def fetch_pubmed_records(
                 if not records_batch:
                     yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
                     continue
-                yield build_dataframe(
-                    records_batch, columns=DOCUMENT_SCHEMA_COLUMNS
-                )
+                yield build_dataframe(records_batch, columns=DOCUMENT_SCHEMA_COLUMNS)
         finally:
             stack.close()
 
@@ -865,9 +861,7 @@ def _iter_export_chunks(df: pd.DataFrame, *, chunk_size: int) -> Iterable[pd.Dat
         export_chunk = build_dataframe(
             chunk, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
         )
-        export_chunk = dataframe_to_strings(
-            export_chunk, skip=_NUMERIC_EXPORT_COLUMNS
-        )
+        export_chunk = dataframe_to_strings(export_chunk, skip=_NUMERIC_EXPORT_COLUMNS)
         yield _prepare_export_frame(export_chunk)
 
 

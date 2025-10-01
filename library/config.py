@@ -25,7 +25,14 @@ from typing import Any, Mapping
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    ValidationError,
+    field_validator,
+)
 from pydantic_core import ErrorDetails
 from requests import Session
 from requests.adapters import HTTPAdapter
@@ -45,6 +52,7 @@ def _dictionary_resource(*parts: str) -> Path:
     for part in parts:
         traversable = traversable.joinpath(part)
     return Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
+
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _PLACEHOLDER_EMAIL_DOMAINS = {
@@ -1121,9 +1129,7 @@ def session_with_retry(api: ApiCfg, retry: RetryCfg) -> Session:
     return session
 
 
-def _session_with_mailto_header(
-    api: ApiCfg, retry: RetryCfg, mailto: str
-) -> Session:
+def _session_with_mailto_header(api: ApiCfg, retry: RetryCfg, mailto: str) -> Session:
     """Return a session configured with the ``mailto`` contact header."""
 
     session = session_with_retry(api, retry)

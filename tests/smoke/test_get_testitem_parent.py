@@ -73,9 +73,7 @@ def test_get_testitem_parent_catalog(
         cfg.pubchem.resolve_order = ("cache", "smiles")
         return cfg
 
-    monkeypatch.setattr(
-        get_testitem_data.cli, "apply_config_overrides", patched_apply
-    )
+    monkeypatch.setattr(get_testitem_data.cli, "apply_config_overrides", patched_apply)
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -204,9 +202,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
         cfg.pubchem.resolve_order = ("cache", "smiles")
         return cfg
 
-    monkeypatch.setattr(
-        get_testitem_data.cli, "apply_config_overrides", patched_apply
-    )
+    monkeypatch.setattr(get_testitem_data.cli, "apply_config_overrides", patched_apply)
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
     monkeypatch.setattr(pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
@@ -359,5 +355,6 @@ def test_get_testitem_refreshes_outdated_parents(
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
     assert fetch_calls and len(fetch_calls) == 1
     assert set(fetch_calls[0]) == {"CHEMBL1", "CHEMBL2"}
-CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
 
+
+CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)

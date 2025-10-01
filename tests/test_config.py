@@ -640,7 +640,9 @@ def test_openalex_session_applies_mailto_header(
 
     monkeypatch.setattr(config_module, "session_with_retry", fake_session_with_retry)
 
-    session = openalex_session(ApiCfg(), RetryCfg(), OpenAlexCfg(mailto="contact@ebi.ac.uk"))
+    session = openalex_session(
+        ApiCfg(), RetryCfg(), OpenAlexCfg(mailto="contact@ebi.ac.uk")
+    )
 
     assert session is created
     assert session.headers.get("mailto") == "contact@ebi.ac.uk"
@@ -668,7 +670,9 @@ def test_crossref_session_applies_mailto_header(
 
     monkeypatch.setattr(config_module, "session_with_retry", fake_session_with_retry)
 
-    session = crossref_session(ApiCfg(), RetryCfg(), CrossRefCfg(mailto="contact@ebi.ac.uk"))
+    session = crossref_session(
+        ApiCfg(), RetryCfg(), CrossRefCfg(mailto="contact@ebi.ac.uk")
+    )
 
     assert session is created
     assert session.headers.get("mailto") == "contact@ebi.ac.uk"

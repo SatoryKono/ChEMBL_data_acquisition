@@ -1,2 +1,1 @@
-"""Resource package for bundled lookup tables.
-"""
+"""Resource package for bundled lookup tables."""

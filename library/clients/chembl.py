@@ -179,9 +179,7 @@ class ChemblClient:
         for attempt in range(1, total_attempts + 1):
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
-            logger.debug(
-                event, extra={"url": url, "attempt": attempt, "rps": cfg.rps}
-            )
+            logger.debug(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
             try:
                 session = self._get_session()
                 with session.get(

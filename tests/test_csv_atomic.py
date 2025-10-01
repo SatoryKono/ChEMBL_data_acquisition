@@ -24,6 +24,7 @@ def test_write_csv_chunks_failure_preserves_original(
     @contextmanager
     def failing_open_atomic(*args: Any, **kwargs: Any) -> Any:
         with original_open_atomic(*args, **kwargs) as handle:
+
             class FaultyFile:
                 def __init__(self, wrapped: Any) -> None:
                     self._wrapped = wrapped

@@ -53,7 +53,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if date_value is None:
             date_value = f"{date.today():%Y%m%d}"
             setattr(ns, "date", date_value)
-        ns.output_csv = (target_dir / f"output.{output_stem}_{date_value}.csv").resolve()
+        ns.output_csv = (
+            target_dir / f"output.{output_stem}_{date_value}.csv"
+        ).resolve()
     cfg = cli.apply_config_overrides(
         ns,
         parser,

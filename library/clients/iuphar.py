@@ -147,9 +147,7 @@ def _data_base(cfg: IupharCfg) -> str:
     return f"{base_root}/DATA"
 
 
-def download_gtp_to_uniprot_mapping(
-    cfg: IupharCfg, retry: RetryCfg
-) -> pd.DataFrame:
+def download_gtp_to_uniprot_mapping(cfg: IupharCfg, retry: RetryCfg) -> pd.DataFrame:
     """Download the GtP to UniProt mapping CSV."""
 
     data_base = _data_base(cfg)
@@ -198,8 +196,9 @@ def _query_gene_symbol(
     return {}
 
 
-def query_gene_symbol(gene_name: str, cfg: IupharCfg, retry: RetryCfg) -> dict[str, Any]:
+def query_gene_symbol(
+    gene_name: str, cfg: IupharCfg, retry: RetryCfg
+) -> dict[str, Any]:
     """Public wrapper around :func:`_query_gene_symbol`."""
 
     return _query_gene_symbol(gene_name, cfg, retry)
-

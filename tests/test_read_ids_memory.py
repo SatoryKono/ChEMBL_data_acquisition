@@ -45,7 +45,9 @@ def test_read_ids_logs_dropped_markers_on_close(
         calls.append((event, args, data))
 
     monkeypatch.setattr(io_readers.logger, "warning", _record)
-    ids = io.read_ids(path, column="id", cfg=IoCfg(), na_markers=["NA"], keep_na_markers=False)
+    ids = io.read_ids(
+        path, column="id", cfg=IoCfg(), na_markers=["NA"], keep_na_markers=False
+    )
     assert next(ids) == "CHEMBL1"
     with pytest.raises(StopIteration):
         next(ids)
