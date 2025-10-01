@@ -123,8 +123,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
-    delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
+    pubmed_rps = cfg.pubmed.rps or cfg.rate.global_rps
+    pubmed_burst = cfg.pubmed.burst or cfg.rate.global_burst
+    limiter = get_limiter("pubmed", pubmed_rps, pubmed_burst)
+    delay = 1.0 / pubmed_rps if pubmed_rps > 0 else 0.0
 
     pmid_df = read_pmids(args.input_csv, cfg=cfg.pubmed)
     pmids = pmid_df["PMID"].tolist()
