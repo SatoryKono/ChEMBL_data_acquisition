@@ -52,7 +52,7 @@ from library.config import (
 )
 from library.log import logger
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
-from library import testitem_pipeline as pipeline
+import library.testitem_pipeline as pipeline
 from library.chembl_client import ChemblClient
 from library.testitem_pipeline import (
     PUBCHEM_COLUMNS,

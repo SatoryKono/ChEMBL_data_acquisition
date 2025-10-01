@@ -9,7 +9,7 @@ import pandas as pd
 from types import SimpleNamespace
 
 from library.config import ApiCfg, PubChemCfg, RetryCfg
-from library import testitem_pipeline as pipeline
+import library.testitem_pipeline as pipeline
 
 
 def test_augment_pubchem_single_initialisation(monkeypatch) -> None:

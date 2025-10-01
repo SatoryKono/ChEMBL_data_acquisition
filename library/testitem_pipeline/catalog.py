@@ -1,0 +1,714 @@
+"""Molecule catalog utilities for the test item pipeline."""
+
+from __future__ import annotations
+
+from collections import ChainMap
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Mapping, MutableMapping, NamedTuple, Sequence
+
+import pandas as pd
+import requests
+
+from library import molecule_catalog
+from library.chembl_client import ChemblClient
+from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
+from library.log import logger
+from library.molecule_catalog import (
+    load_parent_catalog,
+    query_parent_catalog,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
+)
+
+_DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
+
+_TYPO_PARENT_COLUMN = "parant_molecule_id"
+_MOLECULE_HIERARCHY_COLUMNS = (
+    "molecule_chembl_id",
+    "parent_molecule_chembl_id",
+)
+
+PARENT_LOOKUP_SOURCE_CACHE = "cache"
+PARENT_LOOKUP_SOURCE_LOOKUP = "lookup"
+PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
+PARENT_LOOKUP_SOURCE_SYNC = "sync"
+PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
+
+_PARENT_SOURCE_PRIORITY: Mapping[str, int] = {
+    PARENT_LOOKUP_SOURCE_SKIPPED: 0,
+    PARENT_LOOKUP_SOURCE_CACHE: 1,
+    PARENT_LOOKUP_SOURCE_LOOKUP: 2,
+    PARENT_LOOKUP_SOURCE_PARTIAL: 3,
+    PARENT_LOOKUP_SOURCE_SYNC: 4,
+}
+
+
+@dataclass
+class ParentEnrichmentPreparation:
+    """Intermediate data required to attach parent identifiers."""
+
+    df: pd.DataFrame
+    lookup_data: "ParentLookupPreparedData"
+    parent_catalog: dict[str, str] | None
+    parent_catalog_source: str
+    parent_stats: "ParentLookupStats"
+
+
+@dataclass
+class ParentEnrichmentResult:
+    """Result returned after running the parent enrichment stage."""
+
+    df: pd.DataFrame
+    parent_stats: "ParentLookupStats"
+
+
+@dataclass(frozen=True)
+class ParentLookupStats:
+    """Summary information about parent molecule enrichment."""
+
+    source: str
+    missing: int
+    unique: int
+    attached: int
+    uncovered: int
+
+
+class ParentLookupPreparedData(NamedTuple):
+    """Container for precomputed parent lookup data."""
+
+    child_ids: pd.Series
+    existing_parent_ids: pd.Series
+    need_lookup: set[str]
+
+
+def _merge_parent_stats(base: ParentLookupStats, update: ParentLookupStats) -> ParentLookupStats:
+    """Combine two :class:`ParentLookupStats` instances."""
+
+    if base.source not in _PARENT_SOURCE_PRIORITY:
+        base_priority = -1
+    else:
+        base_priority = _PARENT_SOURCE_PRIORITY[base.source]
+    update_priority = _PARENT_SOURCE_PRIORITY.get(update.source, -1)
+    if update_priority >= base_priority:
+        resolved_source = update.source
+    else:
+        resolved_source = base.source
+    return ParentLookupStats(
+        source=resolved_source,
+        missing=base.missing + update.missing,
+        unique=base.unique + update.unique,
+        attached=base.attached + update.attached,
+        uncovered=base.uncovered + update.uncovered,
+    )
+
+
+def ensure_no_parant_column(df: pd.DataFrame) -> None:
+    """Raise a :class:`ValueError` if the legacy typo column is present."""
+
+    if _TYPO_PARENT_COLUMN in df.columns:
+        raise ValueError(
+            "unexpected column 'parant_molecule_id'; use 'parent_molecule_id' instead"
+        )
+
+
+@lru_cache(maxsize=None)
+def _load_molecule_hierarchy_mapping(
+    path: str,
+    encoding: str,
+    delimiter: str,
+) -> dict[str, str | None]:
+    """Return cached child → parent mapping with normalised identifiers."""
+
+    csv_path = Path(path)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Molecule hierarchy dictionary not found: {csv_path}")
+
+    try:
+        frame = pd.read_csv(
+            csv_path,
+            sep=delimiter,
+            encoding=encoding,
+            dtype="string",
+        )
+    except ValueError as exc:  # pragma: no cover - pandas raises on missing columns
+        raise ValueError(
+            "Unable to read molecule hierarchy dictionary; verify the CSV format."
+        ) from exc
+
+    missing_columns = [
+        column for column in _MOLECULE_HIERARCHY_COLUMNS if column not in frame.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            "Molecule hierarchy dictionary missing required columns: "
+            + ", ".join(missing_columns)
+        )
+
+    subset = frame.loc[:, list(_MOLECULE_HIERARCHY_COLUMNS)].copy()
+    for column in _MOLECULE_HIERARCHY_COLUMNS:
+        subset[column] = (
+            subset[column].fillna("").astype("string").str.strip().str.upper()
+        )
+
+    subset = subset[subset["molecule_chembl_id"] != ""]
+    subset = subset.drop_duplicates(
+        subset=["molecule_chembl_id"],
+        keep="first",
+    )
+
+    lookup: dict[str, str | None] = {}
+    for molecule_id, parent_id in subset.itertuples(index=False, name=None):
+        parent = parent_id or None
+        if parent is not None and parent == molecule_id:
+            parent = None
+        lookup[molecule_id] = parent
+
+    return lookup
+
+
+def LoadMoleculeHierarchyLookup(
+    path: Path | str | None = None,
+    *,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
+) -> dict[str, dict[str, str | None]]:
+    """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
+
+    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
+    resolved_path_value = path or cfg_source.hierarchy_lookup_path
+    if resolved_path_value is None:
+        raise ValueError("hierarchy lookup path must be provided")
+    resolved_path = Path(resolved_path_value)
+    resolved_encoding = encoding or cfg_source.hierarchy_lookup_encoding
+    resolved_delimiter = delimiter or cfg_source.hierarchy_lookup_delimiter
+
+    cached = _load_molecule_hierarchy_mapping(
+        str(resolved_path),
+        resolved_encoding,
+        resolved_delimiter,
+    )
+    return {
+        key: {
+            "molecule_chembl_id": key,
+            "parent_molecule_chembl_id": value,
+        }
+        for key, value in cached.items()
+    }
+
+
+def load_molecule_hierarchy_lookup(
+    path: Path | None,
+    *,
+    io_cfg: IoCfg,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
+) -> dict[str, str]:
+    """Return child → parent mapping loaded from a local hierarchy file."""
+
+    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
+    resolved_path_value = path or cfg_source.hierarchy_lookup_path
+    if resolved_path_value is None:
+        return {}
+
+    resolved_path = Path(resolved_path_value)
+    resolved_encoding = (
+        encoding
+        or getattr(cfg_source, "hierarchy_lookup_encoding", None)
+        or io_cfg.csv_encoding
+    )
+    resolved_delimiter = (
+        delimiter
+        or getattr(cfg_source, "hierarchy_lookup_delimiter", None)
+        or io_cfg.csv_sep
+    )
+
+    try:
+        raw_lookup = _load_molecule_hierarchy_mapping(
+            str(resolved_path),
+            resolved_encoding,
+            resolved_delimiter,
+        )
+    except FileNotFoundError:
+        logger.info("molecule_hierarchy_lookup_missing", path=str(resolved_path))
+        return {}
+    except ValueError as exc:
+        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
+
+    lookup = dict(raw_lookup)
+    if not lookup:
+        return {}
+
+    attached_rows = sum(1 for value in lookup.values() if value is not None)
+
+    logger.info(
+        "molecule_hierarchy_lookup_loaded",
+        path=str(resolved_path),
+        rows=attached_rows,
+    )
+    return lookup
+
+
+def _cache_state(path: Path) -> tuple[bool, float | None]:
+    """Return cache file presence and modification time."""
+
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return False, None
+    return True, stat.st_mtime
+
+
+def _resolve_catalog_load_source(
+    before: tuple[bool, float | None], after: tuple[bool, float | None]
+) -> str:
+    """Determine the lookup source after invoking ``load_parent_catalog``."""
+
+    before_exists, before_mtime = before
+    after_exists, after_mtime = after
+
+    if after_exists and before_exists and after_mtime == before_mtime:
+        return PARENT_LOOKUP_SOURCE_CACHE
+    if after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    if before_exists and not after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    return PARENT_LOOKUP_SOURCE_SYNC
+
+
+def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
+    """Return ``series`` normalised to upper-case ChEMBL identifiers."""
+
+    normalised = series.astype("string").fillna("").str.strip().str.upper()
+    return normalised
+
+
+def attach_parent_molecule_ids(
+    df: pd.DataFrame,
+    *,
+    client: ChemblClient,
+    api_cfg: ApiCfg,
+    catalog_cfg: MoleculeCatalogCfg,
+    timeout: float | None,
+    catalog: Mapping[str, str] | None = None,
+    source: str | None = None,
+    precomputed: ParentLookupPreparedData | None = None,
+) -> tuple[pd.DataFrame, ParentLookupStats]:
+    """Attach parent molecule identifiers using the ChEMBL catalogue."""
+
+    if "parant_molecule_id" in df.columns:
+        raise ValueError("Input frame contains unexpected column 'parant_molecule_id'.")
+
+    result = df.copy()
+
+    if result.empty:
+        if catalog_cfg.parent_field not in result.columns:
+            result[catalog_cfg.parent_field] = pd.Series(
+                pd.NA, index=result.index, dtype="string"
+            )
+        stats = ParentLookupStats(
+            source=PARENT_LOOKUP_SOURCE_SKIPPED,
+            missing=0,
+            unique=0,
+            attached=0,
+            uncovered=0,
+        )
+        return result, stats
+
+    child_column = catalog_cfg.child_field
+    parent_column = catalog_cfg.parent_field
+
+    if child_column not in result.columns:
+        logger.warning("parent_lookup_missing_child_column", column=child_column)
+        result[parent_column] = pd.Series(pd.NA, index=result.index, dtype="string")
+        stats = ParentLookupStats(
+            source=PARENT_LOOKUP_SOURCE_SKIPPED,
+            missing=len(result),
+            unique=0,
+            attached=0,
+            uncovered=len(result),
+        )
+        return result, stats
+
+    source_resolved = source
+    if precomputed is not None:
+        normalised_child = (
+            precomputed.child_ids.reindex(result.index, fill_value="")
+            .astype("string")
+            .copy()
+        )
+        existing_parent = (
+            precomputed.existing_parent_ids.reindex(result.index)
+            .astype("string")
+            .copy()
+        )
+        lookup_mask = normalised_child.isin(precomputed.need_lookup)
+    else:
+        normalised_child = _normalise_chembl_ids(result[child_column])
+        if parent_column in result.columns:
+            existing_parent = result[parent_column].astype("string").copy()
+        else:
+            existing_parent = pd.Series(pd.NA, index=result.index, dtype="string")
+        lookup_mask = (normalised_child != "") & (
+            existing_parent.isna() | existing_parent.eq("")
+        )
+
+    unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
+    catalog_data: MutableMapping[str, str]
+    used_partial_cache = False
+    needs_full_sync = False
+    partial_fetch_used = False
+    full_sync_used = False
+    uncovered_children = 0
+
+    if catalog is not None:
+        base_view = {key: catalog[key] for key in unique_children if key in catalog}
+        catalog_data = ChainMap({}, base_view)
+    else:
+        catalog_data = {}
+        if unique_children:
+            queried = query_parent_catalog(unique_children, catalog_cfg)
+            if queried:
+                catalog_data.update(queried)
+                used_partial_cache = True
+                if source_resolved is None:
+                    source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+            else:
+                sqlite_exists = catalog_cfg.sqlite_path.is_file()
+                used_partial_cache = sqlite_exists
+                if sqlite_exists:
+                    if source_resolved is None:
+                        source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+
+    parent_map = {
+        key: catalog_data[key] for key in unique_children if key in catalog_data
+    }
+    missing_ids = [key for key in unique_children if key not in parent_map]
+    uncovered_children = len(missing_ids)
+
+    fetched: dict[str, str] = {}
+    if missing_ids and catalog is None:
+        try:
+            fetched = molecule_catalog.fetch_parent_catalog_for(
+                missing_ids,
+                client=client,
+                api_cfg=api_cfg,
+                timeout=timeout,
+                catalog_cfg=catalog_cfg,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
+            fetched = {}
+        if fetched:
+            partial_fetch_used = True
+            catalog_data.update(fetched)
+            parent_map.update(fetched)
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
+            if used_partial_cache:
+                update_parent_catalog_cache(fetched, catalog_cfg)
+            else:
+                write_parent_catalog_cache(catalog_data, catalog_cfg)
+                used_partial_cache = True
+
+    needs_full_sync = catalog is None and uncovered_children > 0
+
+    if missing_ids and catalog is None and needs_full_sync:
+        cache_before_load = _cache_state(catalog_cfg.cache_path)
+        catalog_data = load_parent_catalog(
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+        )
+        cache_after_load = _cache_state(catalog_cfg.cache_path)
+        full_sync_used = True
+        source_resolved = _resolve_catalog_load_source(
+            cache_before_load, cache_after_load
+        )
+        if partial_fetch_used:
+            catalog_data.update(fetched)
+        parent_map = {
+            key: catalog_data.get(key, parent_map.get(key, ""))
+            for key in unique_children
+            if key in catalog_data or key in parent_map
+        }
+        missing_ids = [key for key in unique_children if key not in parent_map]
+        uncovered_children = len(missing_ids)
+
+    if missing_ids:
+        logger.warning(
+            "parent_lookup_missing_parents",
+            count=len(missing_ids),
+            identifiers=missing_ids,
+        )
+
+    refreshed_parent = normalised_child.map(parent_map).astype("string")
+
+    combined_parent = existing_parent.astype("string").copy()
+
+    update_mask = combined_parent.isna() | combined_parent.eq("")
+    combined_parent.loc[update_mask] = refreshed_parent.loc[update_mask]
+
+    if getattr(catalog_cfg, "force_refresh_existing", False):
+        existing_normalised = combined_parent.fillna("").astype("string")
+        refreshed_normalised = refreshed_parent.fillna("").astype("string")
+        mismatch_mask = existing_normalised != refreshed_normalised
+        if mismatch_mask.any():
+            combined_parent.loc[mismatch_mask] = refreshed_parent.loc[mismatch_mask]
+
+    result[parent_column] = combined_parent.astype("string")
+
+    missing = int(combined_parent.isna().sum())
+    attached = int(combined_parent.notna().sum())
+
+    final_source = source_resolved
+    if catalog is not None and not missing_ids:
+        if final_source in (
+            None,
+            PARENT_LOOKUP_SOURCE_CACHE,
+            PARENT_LOOKUP_SOURCE_SKIPPED,
+        ):
+            final_source = PARENT_LOOKUP_SOURCE_LOOKUP
+    if full_sync_used:
+        final_source = PARENT_LOOKUP_SOURCE_SYNC
+    elif partial_fetch_used:
+        final_source = PARENT_LOOKUP_SOURCE_PARTIAL
+    elif final_source is None:
+        final_source = (
+            PARENT_LOOKUP_SOURCE_CACHE
+            if used_partial_cache or catalog is not None
+            else PARENT_LOOKUP_SOURCE_SYNC
+        )
+
+    stats = ParentLookupStats(
+        source=final_source,
+        missing=int(missing),
+        unique=int(len(unique_children)),
+        attached=int(attached),
+        uncovered=int(uncovered_children),
+    )
+
+    logger.info(
+        "parent_lookup_progress",
+        source=stats.source,
+        unique=stats.unique,
+        attached=stats.attached,
+        missing=stats.missing,
+        uncovered=stats.uncovered,
+    )
+
+    return result, stats
+
+
+def prepare_parent_enrichment(
+    df: pd.DataFrame,
+    *,
+    catalog_cfg: MoleculeCatalogCfg,
+    io_cfg: IoCfg,
+    api_cfg: ApiCfg,
+    timeout: float,
+    client: ChemblClient,
+    hierarchy_lookup_path: Path | None,
+) -> tuple[int, ParentEnrichmentPreparation | None]:
+    """Prepare DataFrame and catalog information prior to enrichment."""
+
+    parent_stats = ParentLookupStats(
+        source=PARENT_LOOKUP_SOURCE_SKIPPED,
+        missing=0,
+        unique=0,
+        attached=0,
+        uncovered=0,
+    )
+
+    parent_column = catalog_cfg.parent_field
+    child_column = catalog_cfg.child_field
+
+    if child_column in df.columns:
+        normalised_ids = _normalise_chembl_ids(df[child_column])
+    else:
+        normalised_ids = pd.Series("", index=df.index, dtype="string")
+
+    if parent_column in df.columns:
+        existing_parent = _normalise_chembl_ids(df[parent_column])
+    else:
+        existing_parent = pd.Series("", index=df.index, dtype="string")
+
+    resolved_lookup_path = hierarchy_lookup_path or catalog_cfg.hierarchy_lookup_path
+    if resolved_lookup_path:
+        try:
+            hierarchy_lookup = load_molecule_hierarchy_lookup(
+                resolved_lookup_path,
+                io_cfg=io_cfg,
+                encoding=catalog_cfg.hierarchy_lookup_encoding,
+                delimiter=catalog_cfg.hierarchy_lookup_delimiter,
+                catalog_cfg=catalog_cfg,
+            )
+        except ValueError as exc:
+            logger.error(
+                "molecule_hierarchy_lookup_invalid",
+                error=str(exc),
+                path=str(resolved_lookup_path),
+            )
+            return 1, None
+    else:
+        hierarchy_lookup = {}
+
+    if hierarchy_lookup:
+        hierarchy_values = {
+            key: value for key, value in hierarchy_lookup.items() if value is not None
+        }
+    else:
+        hierarchy_values = {}
+
+    if hierarchy_values:
+        hierarchy_series = normalised_ids.map(
+            lambda value: hierarchy_values.get(value) if value else None
+        )
+        hierarchy_mask = hierarchy_series.notna()
+        if hierarchy_mask.any():
+            resolved = hierarchy_series[hierarchy_mask].astype("string")
+            if parent_column in df.columns:
+                df[parent_column] = df[parent_column].astype("string")
+            else:
+                df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
+            df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
+            existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
+
+    if getattr(catalog_cfg, "force_refresh_existing", False):
+        need_lookup_mask = normalised_ids != ""
+    else:
+        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
+    initial_need_lookup = set(normalised_ids[need_lookup_mask])
+    need_lookup = set(initial_need_lookup)
+
+    cache_before = _cache_state(catalog_cfg.cache_path)
+    cache_after = cache_before
+    parent_catalog: dict[str, str] = {}
+    parent_catalog_source = PARENT_LOOKUP_SOURCE_SKIPPED
+
+    if need_lookup and cache_before[0]:
+        try:
+            parent_catalog = query_parent_catalog(
+                need_lookup,
+                catalog_cfg=catalog_cfg,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error(
+                "parent_catalog_invalid",
+                error=str(exc),
+                path=str(catalog_cfg.cache_path),
+            )
+            return 1, None
+        cache_after = _cache_state(catalog_cfg.cache_path)
+        parent_catalog_source = (
+            PARENT_LOOKUP_SOURCE_CACHE
+            if cache_after == cache_before
+            else PARENT_LOOKUP_SOURCE_SYNC
+        )
+        if parent_catalog:
+            need_lookup -= set(parent_catalog)
+
+    parent_lookup_data = ParentLookupPreparedData(
+        child_ids=normalised_ids,
+        existing_parent_ids=existing_parent,
+        need_lookup=need_lookup,
+    )
+
+    parent_stats = ParentLookupStats(
+        source=parent_catalog_source,
+        missing=len(need_lookup),
+        unique=len(initial_need_lookup),
+        attached=len(df) - len(need_lookup),
+        uncovered=len(need_lookup),
+    )
+
+    try:
+        ensure_no_parant_column(df)
+    except ValueError as exc:
+        logger.error(
+            "invalid_column",
+            column=_TYPO_PARENT_COLUMN,
+            error=str(exc),
+        )
+        return 1, None
+
+    return (
+        0,
+        ParentEnrichmentPreparation(
+            df=df,
+            lookup_data=parent_lookup_data,
+            parent_catalog=parent_catalog or None,
+            parent_catalog_source=parent_catalog_source,
+            parent_stats=parent_stats,
+        ),
+    )
+
+
+def run_parent_enrichment(
+    prep: ParentEnrichmentPreparation,
+    *,
+    client: ChemblClient,
+    api_cfg: ApiCfg,
+    catalog_cfg: MoleculeCatalogCfg,
+    timeout: float,
+) -> tuple[int, ParentEnrichmentResult | None]:
+    """Attach parent molecule identifiers using the prepared context."""
+
+    logger.info("parent_lookup_start")
+    try:
+        df, parent_stats = attach_parent_molecule_ids(
+            prep.df,
+            client=client,
+            api_cfg=api_cfg,
+            catalog_cfg=catalog_cfg,
+            timeout=timeout,
+            catalog=prep.parent_catalog,
+            source=prep.parent_catalog_source,
+            precomputed=prep.lookup_data,
+        )
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("parent_lookup_failed", error=str(exc))
+        return 1, None
+
+    logger.info(
+        "parent_lookup_done",
+        source=parent_stats.source,
+        unique=parent_stats.unique,
+        attached=parent_stats.attached,
+        missing=parent_stats.missing,
+        uncovered=parent_stats.uncovered,
+    )
+
+    return 0, ParentEnrichmentResult(df=df, parent_stats=parent_stats)
+
+
+__all__ = [
+    "LoadMoleculeHierarchyLookup",
+    "PARENT_LOOKUP_SOURCE_CACHE",
+    "PARENT_LOOKUP_SOURCE_LOOKUP",
+    "PARENT_LOOKUP_SOURCE_PARTIAL",
+    "PARENT_LOOKUP_SOURCE_SKIPPED",
+    "PARENT_LOOKUP_SOURCE_SYNC",
+    "ParentEnrichmentPreparation",
+    "ParentEnrichmentResult",
+    "ParentLookupPreparedData",
+    "ParentLookupStats",
+    "_DEFAULT_CATALOG_CFG",
+    "_MOLECULE_HIERARCHY_COLUMNS",
+    "_TYPO_PARENT_COLUMN",
+    "_merge_parent_stats",
+    "attach_parent_molecule_ids",
+    "ensure_no_parant_column",
+    "load_molecule_hierarchy_lookup",
+    "load_parent_catalog",
+    "molecule_catalog",
+    "prepare_parent_enrichment",
+    "query_parent_catalog",
+    "run_parent_enrichment",
+    "update_parent_catalog_cache",
+    "write_parent_catalog_cache",
+]
