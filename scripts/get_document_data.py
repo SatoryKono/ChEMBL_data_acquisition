@@ -569,7 +569,8 @@ def fetch_pubmed_records(
     iterator = (p for p in pmids if p)
 
     tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
-    ordered: dict[int, list[dict[str, str]]] = {}
+    completed: dict[int, list[dict[str, str]]] = {}
+    next_to_emit = 0
     processed = 0
     max_in_flight = max(1, max_workers * 2)
 
@@ -588,6 +589,22 @@ def fetch_pubmed_records(
 
         offset = 0
         pending: set[Future[list[dict[str, str]]]] = set()
+
+        def _drain_future(
+            done_future: Future[list[dict[str, str]]],
+        ) -> Iterator[list[dict[str, str]]]:
+            nonlocal processed, next_to_emit
+
+            pending.remove(done_future)
+            batch_id, batch_pmids = tasks.pop(done_future)
+            completed[batch_id] = done_future.result()
+            processed += len(batch_pmids)
+            logger.info("documents_processed", count=processed)
+
+            while next_to_emit in completed:
+                yield completed.pop(next_to_emit)
+                next_to_emit += 1
+
         for batch in _chunked(iterator, batch_size):
             if not batch:
                 continue
@@ -598,18 +615,20 @@ def fetch_pubmed_records(
             if len(pending) >= max_in_flight:
 
                 done_future = next(as_completed(list(pending)))
-                pending.remove(done_future)
-                batch_id, batch_len = tasks.pop(done_future)
-                completed[batch_id] = done_future.result()
-                processed += batch_len
-                logger.info("documents_processed", count=processed)
-                while next_to_emit in completed:
-                    yield completed.pop(next_to_emit)
-                    next_to_emit += 1
+                yield from _drain_future(done_future)
 
             while next_to_emit in completed:
                 yield completed.pop(next_to_emit)
                 next_to_emit += 1
+
+        for done_future in as_completed(pending):
+            yield from _drain_future(done_future)
+
+        pending.clear()
+
+        while next_to_emit in completed:
+            yield completed.pop(next_to_emit)
+            next_to_emit += 1
 
     def _iter_frames() -> Iterator[pd.DataFrame]:
         for records_batch in _iter_records():
