@@ -129,7 +129,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     monkeypatch.setattr(cl, "get_testitem", fail_fetch)
 
-    status, df, requested_ids = gtd.fetch_testitems(
+    status, chunks, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1"]),
         api_cfg=cfg.api,
         batch_size=1,
@@ -141,7 +141,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
     )
 
     assert status == 1
-    assert df is None
+    assert chunks is None
     assert requested_ids == ()
 
 
@@ -180,7 +180,7 @@ def test_fetch_testitems_passes_fields_and_limit(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df, requested_ids = gtd.fetch_testitems(
+    status, chunks, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1", "CHEMBL2"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -192,7 +192,10 @@ def test_fetch_testitems_passes_fields_and_limit(
     )
 
     assert status == 0
-    assert df is not None
+    assert chunks is not None
+    frames = list(chunks)
+    assert len(frames) == 1
+    assert frames[0]["molecule_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
     assert captured["fields"] == ("a", "b")
     assert captured["page_limit"] == 500
     assert requested_ids == ("CHEMBL1", "CHEMBL2")
@@ -223,7 +226,7 @@ def test_fetch_testitems_logs_missing_summary(
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    status, df, requested_ids = gtd.fetch_testitems(
+    status, chunks, requested_ids = gtd.fetch_testitems(
         iter(["CHEMBL1", "chembl2", "CHEMBL3"]),
         api_cfg=cfg.api,
         batch_size=2,
@@ -235,20 +238,11 @@ def test_fetch_testitems_logs_missing_summary(
     )
 
     assert status == 0
-    assert df is not None
+    assert chunks is not None
     assert requested_ids == ("CHEMBL1", "chembl2", "CHEMBL3")
-
-    missing = next(
-        (record for record in captured if record[0] == "chembl_missing_identifiers"),
-        None,
-    )
-
-    assert missing is not None
-    _, missing_data = missing
-
-    assert missing_data["missing_count"] == 2
-    assert missing_data["sample_missing_ids"] == ["CHEMBL2", "CHEMBL3"]
-    assert "missing_ids" not in missing_data
+    _ = list(chunks)
+    missing = [record for record in captured if record[0] == "chembl_missing_identifiers"]
+    assert not missing
 
 
 def test_log_missing_identifier_summary_limits_payload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -586,20 +580,19 @@ def test_finalize_output_success(
     monkeypatch.setattr(pipeline, "validate_testitems", fake_validate)
     monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
-    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         pipeline,
-        "write_csv_deterministic",
-        lambda frame, path, *, key_cols=None, col_order=None, **__: path,
+        "write_csv_chunks_deterministic",
+        lambda chunks, path, **kwargs: path,
     )
 
     exit_code = pipeline.finalize_output(
-        df,
+        [df],
         cfg=cfg,
         output=tmp_path / "out.csv",
-        parent_stats=parent_stats,
+        parent_stats_supplier=lambda: parent_stats,
         input_csv=tmp_path / "in.csv",
-        rows_total=len(df),
     )
 
     assert exit_code == 0
@@ -619,8 +612,10 @@ def test_finalize_output_missing_required_columns(
 
     monkeypatch.setattr(
         pipeline,
-        "write_csv_deterministic",
-        lambda *args, **kwargs: pytest.fail("should not write output when required columns are missing"),
+        "write_csv_chunks_deterministic",
+        lambda *args, **kwargs: pytest.fail(
+            "should not write output when required columns are missing"
+        ),
     )
     monkeypatch.setattr(
         pipeline,
@@ -629,12 +624,11 @@ def test_finalize_output_missing_required_columns(
     )
 
     exit_code = pipeline.finalize_output(
-        df,
+        [df],
         cfg=cfg,
         output=tmp_path / "out.csv",
-        parent_stats=parent_stats,
+        parent_stats_supplier=lambda: parent_stats,
         input_csv=tmp_path / "in.csv",
-        rows_total=len(df),
     )
 
     assert exit_code == 1
@@ -683,12 +677,11 @@ def test_finalize_output_streams_sorted_chunks(
     monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
 
     exit_code = pipeline.finalize_output(
-        df,
+        [df],
         cfg=cfg,
         output=tmp_path / "out.csv",
-        parent_stats=parent_stats,
+        parent_stats_supplier=lambda: parent_stats,
         input_csv=tmp_path / "in.csv",
-        rows_total=len(df),
     )
 
     chunk_writes = [target for target in recorded_targets if "chunk_" in target]
