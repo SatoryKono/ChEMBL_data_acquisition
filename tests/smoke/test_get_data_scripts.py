@@ -157,6 +157,103 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         assert path.read_text() == f"{step.name} output\n"
 
 
+def test_get_data_forwards_skip_existing_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify orchestrator forwards ``--skip-existing`` to every pipeline."""
+
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("test: true\n")
+
+    recorded_args: dict[str, list[str]] = {}
+
+    def make_stub(
+        name: str, subcommand: str | None
+    ) -> Callable[[Sequence[str] | None], int]:
+        def _main(argv: Sequence[str] | None) -> int:
+            args = list(argv or [])
+            if subcommand is not None:
+                assert args, f"missing subcommand for {name}"
+                assert args[0] == subcommand
+                args = args[1:]
+            recorded_args[name] = args
+            parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("--config")
+            parser.add_argument("--input")
+            parser.add_argument("--output")
+            parser.add_argument("--log-level")
+            parser.add_argument("--limit")
+            parser.add_argument("--force", action="store_true")
+            parser.add_argument("--skip-existing", action="store_true")
+            ns = parser.parse_args(args)
+            Path(ns.output).write_text(f"{name} output\n")
+            return 0
+
+        return _main
+
+    for step in get_data._PIPELINE_STEPS:
+        input_path = input_dir / get_data._DEFAULT_INPUT_FILES[step.name]
+        input_path.write_text("id\n1\n")
+
+    stub_steps = tuple(
+        get_data.PipelineStep(
+            step.name, make_stub(step.name, step.subcommand), step.subcommand
+        )
+        for step in get_data._PIPELINE_STEPS
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    dummy_logger = DummyLogger()
+
+    def fake_configure(level_name: str, *, run_id: str | None = None) -> DummyLogger:
+        return dummy_logger
+
+    monkeypatch.setattr(get_data, "_configure_logging", fake_configure)
+
+    exit_code = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--date",
+            "20240101",
+            "--log-level",
+            "ERROR",
+            "--skip-existing",
+        ]
+    )
+
+    assert exit_code == 0
+    assert set(recorded_args) == {step.name for step in stub_steps}
+    for args in recorded_args.values():
+        assert "--skip-existing" in args
+        assert "--force" not in args
+
+
 def test_get_data_pipeline_events_include_run_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
