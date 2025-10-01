@@ -100,11 +100,14 @@ def _configure_session(
     return api_cfg
 
 
-def test_get_session_requires_initialisation_for_default_user_agent() -> None:
-    """Default configuration must call init_session before use."""
+def test_get_session_initialises_for_default_user_agent() -> None:
+    """Default configuration should initialise lazily when unused."""
 
-    with pytest.raises(ValueError, match="requires a custom User-Agent"):
-        pc.get_session(ApiCfg())
+    api_cfg = ApiCfg()
+
+    session = pc.get_session(api_cfg)
+
+    assert session.headers.get("User-Agent") == api_cfg.user_agent
 
 
 def test_get_session_allows_default_after_initialisation() -> None:
