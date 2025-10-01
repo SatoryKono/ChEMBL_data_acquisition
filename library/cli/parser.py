@@ -124,7 +124,7 @@ def add_common_arguments(
     Notes
     -----
     When ``--output`` is omitted, a file named
-    ``output_<input-stem>_<YYYYMMDD>.csv`` is created next to the input file.
+    ``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the input file.
     """
 
     log_level = "INFO" if defaults else argparse.SUPPRESS
@@ -146,7 +146,7 @@ def add_common_arguments(
         dest="output_csv",
         type=path_argument,
         default=output_default,
-        help="Destination CSV file (default: output_<stem>_<YYYYMMDD>.csv)",
+        help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
     )
     parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
     parser.add_argument("--encoding", default=enc_default, help="File encoding")

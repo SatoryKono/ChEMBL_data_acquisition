@@ -6,18 +6,18 @@ Acquisition, а также вспомогательные модули, отве
 ## Структура каталогов
 
 Экспорты сохраняются в `local.io.output_dir` (по умолчанию `data/output`). По
-умолчанию CLI формирует имя как `output_<stem>_<date>.csv`, где `<stem>` — имя
+умолчанию CLI формирует имя как `output.<stem>_<date>.csv`, где `<stem>` — имя
 входного файла без расширения, а `<date>` — текущая дата в формате `YYYYMMDD`.
 Запись автоматически создаёт родительские каталоги, если `local.io.exist_ok`
 равно `true`.
 
 ```
 data/output/
-├── output_activity_20240105.csv
-├── output_activity_20240105.csv.meta.yaml
-├── output_activity_20240105_failure_cases.csv
-├── output_activity_20240105_quality_report_table.csv
-└── output_activity_20240105_data_correlation_report_table.csv
+├── output.activity_20240105.csv
+├── output.activity_20240105.csv.meta.yaml
+├── output.activity_20240105_failure_cases.csv
+├── output.activity_20240105_quality_report_table.csv
+└── output.activity_20240105_data_correlation_report_table.csv
 ```
 
 Документные пайплайны (например, `scripts/get_document_data.py`) дополняют
@@ -33,7 +33,7 @@ data/output/
 
 Каждый CSV сопровождается `<base>.csv.meta.yaml`, который создаёт
 `library.metadata.write_meta_yaml`, где `<base>` совпадает с именем файла без
-расширения (например, `output_activity_20240105`). Файл содержит:
+расширения (например, `output.activity_20240105`). Файл содержит:
 
 * `generated_at` — отметку времени в формате ISO 8601 (UTC).
 * `git_sha` — хэш коммита на момент запуска.
@@ -99,7 +99,7 @@ data/output/
 
 ## Границы активности (`lower_value`, `upper_value`)
 
-Выгрузка активностей (`output_activity_<date>.csv` по умолчанию) включает
+Выгрузка активностей (`output.activity_<date>.csv` по умолчанию) включает
 диапазоны значений, рассчитанные из канонических полей ChEMBL `standard_*`.
 Приоритет действий:
 

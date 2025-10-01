@@ -79,7 +79,7 @@ class PipelineRunConfig:
         """Return the fully resolved path for ``name`` in the output directory."""
 
         stem = _DEFAULT_OUTPUT_STEMS[name]
-        filename = f"{self.date_prefix}_{stem}.csv"
+        filename = f"output.{stem}_{self.date_prefix}.csv"
         return self.output_dir / filename
 
 

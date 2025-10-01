@@ -15,7 +15,7 @@ def test_default_output_path_uses_output_dir(tmp_path: Path) -> None:
     cfg = IoCfg(output_dir=tmp_path)
     result = io.default_output_path(tmp_path / "input.csv", cfg)
     assert result.parent == tmp_path
-    assert result.name.startswith("output_input_")
+    assert result.name.startswith("output.input_")
 
 
 def test_mapper_run_defaults_to_io_output_dir(

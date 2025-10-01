@@ -4,7 +4,7 @@ This script reads an input CSV file and re-serialises it deterministically
 using :func:`library.csv_utils.write_csv_deterministic`.
 
 If ``--output`` is omitted, a file named
-``output_<input-stem>_<YYYYMMDD>.csv`` is created next to the input.
+``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the input.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ns = parser.parse_args(argv)
     if ns.output_csv is None:
         ns.output_csv = Path(ns.input_csv).with_name(
-            f"output_{Path(ns.input_csv).stem}_{date.today():%Y%m%d}.csv"
+            f"output.{Path(ns.input_csv).stem}_{date.today():%Y%m%d}.csv"
         )
     cfg = cli.apply_config_overrides(
         ns,
@@ -70,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         chunksize=chunk_size,
     )
     output = args.output_csv or Path(args.input_csv).with_name(
-        f"output_{Path(args.input_csv).stem}.csv"
+        f"output.{Path(args.input_csv).stem}.csv"
     )
     write_csv_chunks_deterministic(
         reader,

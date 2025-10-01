@@ -31,7 +31,7 @@ def test_cli_utils_flags_and_help() -> None:
     assert actions["--input"].help == "Input CSV file"
     assert (
         actions["--output"].help
-        == "Destination CSV file (default: output_<stem>_<YYYYMMDD>.csv)"
+        == "Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)"
     )
     assert actions["--sep"].help == "CSV delimiter"
     assert actions["--encoding"].help == "File encoding"
