@@ -39,6 +39,41 @@ def test_merge_metadata_normalises_fields() -> None:
     assert merged["publication_class"] == "review"
 
 
+def test_merge_metadata_preserves_inputs_for_reused_identifiers() -> None:
+    """Repeatedly merging the same records leaves source dictionaries intact."""
+
+    pubmed = {"PubMed.PMID": "1", "PubMed.DOI": "10.1/abc"}
+    scholar = {"scholar.PMID": "1", "scholar.DOI": "10.1/abc"}
+    openalex = {
+        "OpenAlex.PublicationTypes": "journal-article",
+        "OpenAlex.TypeCrossref": "journal-article",
+        "OpenAlex.Genre": "journal-article",
+        "OpenAlex.Id": "OA1",
+        "OpenAlex.Venue": "Venue",
+        "OpenAlex.MeshDescriptors": "",
+        "OpenAlex.MeshQualifiers": "",
+        "OpenAlex.Error": "",
+    }
+    crossref = {
+        "crossref.Type": "journal-article",
+        "crossref.Subtype": "",
+        "crossref.Title": "Title",
+        "crossref.Subtitle": "",
+        "crossref.Subject": "",
+        "crossref.Error": "",
+    }
+
+    expected_openalex = openalex.copy()
+    expected_crossref = crossref.copy()
+
+    first = merge_metadata(pubmed, scholar, openalex, crossref)
+    second = merge_metadata(pubmed, scholar, openalex, crossref)
+
+    assert openalex == expected_openalex
+    assert crossref == expected_crossref
+    assert first == second
+
+
 def test_build_dataframe_orders_columns() -> None:
     """``build_dataframe`` respects the schema column ordering."""
 

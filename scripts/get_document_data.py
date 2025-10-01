@@ -407,65 +407,98 @@ def fetch_pubmed_records(
                     return max(1, min(total, limit))
 
                 plan: list[tuple[int, dict[str, str], dict[str, str]]] = []
-                openalex_jobs: list[tuple[int, str]] = []
-                crossref_jobs: list[tuple[int, str]] = []
+                openalex_plan: dict[str, list[int]] = {}
+                crossref_plan: dict[str, list[int]] = {}
 
                 for index, pubmed in enumerate(pubmed_list):
-                    pmid = pubmed.get("PubMed.PMID", "")
+                    pmid_value = pubmed.get("PubMed.PMID", "")
+                    pmid = "" if pmid_value is None else str(pmid_value)
                     semsch = semsch_map.get(pmid, {}) if pmid else {}
                     fallback_doi = ""
                     if fallback_doi_map:
                         fallback_doi = fallback_doi_map.get(pmid, "")
-                    doi = (
+                    doi_value = (
                         pubmed.get("PubMed.DOI")
                         or semsch.get("scholar.DOI")
                         or fallback_doi
                         or ""
                     )
+                    doi = "" if doi_value is None else str(doi_value)
                     plan.append((index, pubmed, semsch))
-                    openalex_jobs.append((index, pmid))
-                    crossref_jobs.append((index, doi))
+                    openalex_plan.setdefault(pmid, []).append(index)
+                    crossref_plan.setdefault(doi, []).append(index)
 
+                openalex_total = sum(len(indices) for indices in openalex_plan.values())
+                openalex_hits = openalex_total - len(openalex_plan)
+                if openalex_hits > 0:
+                    logger.debug(
+                        "openalex_cache_hits",
+                        total=openalex_total,
+                        unique=len(openalex_plan),
+                        hits=openalex_hits,
+                    )
+
+                crossref_total = sum(len(indices) for indices in crossref_plan.values())
+                crossref_hits = crossref_total - len(crossref_plan)
+                if crossref_hits > 0:
+                    logger.debug(
+                        "crossref_cache_hits",
+                        total=crossref_total,
+                        unique=len(crossref_plan),
+                        hits=crossref_hits,
+                    )
+
+                openalex_results_by_key: dict[str, dict[str, str]] = {}
                 openalex_results: dict[int, dict[str, str]] = {}
+                if openalex_plan:
+                    openalex_workers = _pool_workers(
+                        len(openalex_plan), openalex_limiter, openalex_cfg.burst
+                    )
+                    if openalex_workers > 0:
+                        with ThreadPoolExecutor(max_workers=openalex_workers) as pool:
+                            future_to_key = {
+                                pool.submit(
+                                    ocl.fetch_openalex,
+                                    session,
+                                    pmid,
+                                    openalex_cfg,
+                                    openalex_limiter,
+                                ): pmid
+                                for pmid in openalex_plan
+                            }
+                            for future in as_completed(future_to_key):
+                                key = future_to_key[future]
+                                openalex_results_by_key[key] = future.result()
+                    for key, indexes in openalex_plan.items():
+                        result = openalex_results_by_key.get(key, {})
+                        for idx in indexes:
+                            openalex_results[idx] = result
+
+                crossref_results_by_key: dict[str, dict[str, str]] = {}
                 crossref_results: dict[int, dict[str, str]] = {}
-
-                openalex_workers = _pool_workers(
-                    len(openalex_jobs), openalex_limiter, openalex_cfg.burst
-                )
-                if openalex_jobs and openalex_workers > 0:
-                    with ThreadPoolExecutor(max_workers=openalex_workers) as pool:
-                        future_to_index = {
-                            pool.submit(
-                                ocl.fetch_openalex,
-                                session,
-                                pmid,
-                                openalex_cfg,
-                                openalex_limiter,
-                            ): index
-                            for index, pmid in openalex_jobs
-                        }
-                        for future in as_completed(future_to_index):
-                            idx = future_to_index[future]
-                            openalex_results[idx] = future.result()
-
-                crossref_workers = _pool_workers(
-                    len(crossref_jobs), crossref_limiter, crossref_cfg.burst
-                )
-                if crossref_jobs and crossref_workers > 0:
-                    with ThreadPoolExecutor(max_workers=crossref_workers) as pool:
-                        future_to_index = {
-                            pool.submit(
-                                ocl.fetch_crossref,
-                                session,
-                                doi,
-                                crossref_cfg,
-                                crossref_limiter,
-                            ): index
-                            for index, doi in crossref_jobs
-                        }
-                        for future in as_completed(future_to_index):
-                            idx = future_to_index[future]
-                            crossref_results[idx] = future.result()
+                if crossref_plan:
+                    crossref_workers = _pool_workers(
+                        len(crossref_plan), crossref_limiter, crossref_cfg.burst
+                    )
+                    if crossref_workers > 0:
+                        with ThreadPoolExecutor(max_workers=crossref_workers) as pool:
+                            future_to_key = {
+                                pool.submit(
+                                    ocl.fetch_crossref,
+                                    session,
+                                    doi,
+                                    crossref_cfg,
+                                    crossref_limiter,
+                                ): doi
+                                for doi in crossref_plan
+                            }
+                            for future in as_completed(future_to_key):
+                                key = future_to_key[future]
+                                crossref_results_by_key[key] = future.result()
+                    for key, indexes in crossref_plan.items():
+                        result = crossref_results_by_key.get(key, {})
+                        for idx in indexes:
+                            crossref_results[idx] = result
 
                 for index, pubmed, semsch in plan:
                     openalex = openalex_results.get(index, {})
