@@ -1,5 +1,7 @@
 import pytest
 
+from pathlib import Path
+
 pd = pytest.importorskip("pandas")
 requests = pytest.importorskip("requests")
 responses = pytest.importorskip("responses")
@@ -219,3 +221,41 @@ def test_iuphar_upload_retries(monkeypatch) -> None:
     assert not df.empty
     assert sleeps == [pytest.approx(1.0)]
     assert calls["n"] == 3
+
+
+def test_map_uniprot_file_uses_mapping_uniprot(tmp_path: Path) -> None:
+    target_df = pd.DataFrame(
+        {
+            "target_id": ["T1"],
+            "uniprot_id": ["P12345"],
+            "family_id": ["F1"],
+            "type": ["Enzyme.Transferase"],
+            "target_name": ["Example target"],
+        }
+    )
+    family_df = pd.DataFrame(
+        {
+            "family_id": ["F1"],
+            "parent_family_id": [pd.NA],
+            "family_name": ["Example family"],
+            "type": ["Enzyme.Transferase"],
+        }
+    )
+    data = ii.IUPHARData(target_df=target_df, family_df=family_df)
+
+    input_df = pd.DataFrame(
+        {
+            "uniprot_id": [""],
+            "mapping_uniprot_id": ["P12345|Q99999"],
+        }
+    )
+    input_csv = tmp_path / "input.csv"
+    output_csv = tmp_path / "output.csv"
+    input_df.to_csv(input_csv, index=False)
+
+    result = data.map_uniprot_file(input_csv, output_csv)
+
+    assert result.loc[0, "target_id"] == "T1"
+    assert result.loc[0, "IUPHAR_class"] == "Enzyme"
+    assert result.loc[0, "IUPHAR_subclass"] == "Transferase"
+    assert result.loc[0, "mapping_uniprot_id"] == "P12345|Q99999"

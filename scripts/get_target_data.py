@@ -1216,6 +1216,11 @@ def fetch_iuphar(
     )
     combined_df = combined_df.drop(columns=["ec_numbers"], errors="ignore")
 
+    if "mapping_uniprot_id" in combined_df.columns:
+        combined_df["mapping_uniprot_id"] = (
+            combined_df["mapping_uniprot_id"].fillna("").astype(str)
+        )
+
     from tempfile import NamedTemporaryFile
 
     with NamedTemporaryFile(

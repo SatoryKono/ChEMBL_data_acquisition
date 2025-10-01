@@ -111,10 +111,26 @@ class IUPHARData:
         rows = self.target_df.loc[mask, "target_id"].dropna().astype(str)
         return list(rows.unique())
 
+    @staticmethod
+    def _normalise_uniprot_values(uniprot_id: str | float | None) -> list[str]:
+        """Split pipe-delimited UniProt accessions into individual entries."""
+
+        if not uniprot_id or (isinstance(uniprot_id, float) and pd.isna(uniprot_id)):
+            return []
+        return [
+            value.strip()
+            for value in str(uniprot_id).split("|")
+            if value and value.strip()
+        ]
+
     def target_id_by_uniprot(self, uniprot_id: str) -> str:
-        """Return the first target ID mapped to ``uniprot_id``."""
-        ids = self._select_target_ids(self.target_df["uniprot_id"].eq(uniprot_id))
-        return ids[0] if ids else ""
+        """Return the first target ID mapped to any of the supplied accessions."""
+
+        for accession in self._normalise_uniprot_values(uniprot_id):
+            ids = self._select_target_ids(self.target_df["uniprot_id"].eq(accession))
+            if ids:
+                return ids[0]
+        return ""
 
     def target_id_by_hgnc_name(self, hgnc_name: str) -> str:
         """Return target IDs whose HGNC name equals ``hgnc_name``."""
@@ -195,11 +211,16 @@ class IUPHARData:
         implementation.
         """
         uniprot = self.target_id_by_uniprot(row.get("uniprot_id", ""))
+        mapped_uniprot = self.target_id_by_uniprot(row.get("mapping_uniprot_id", ""))
         hgnc_name = self.target_id_by_hgnc_name(row.get("hgnc_name", ""))
         hgnc_id = self.target_id_by_hgnc_id(row.get("hgnc_id", ""))
         name = ""
         synonyms = ""
-        all_ids = [x for x in [uniprot, hgnc_name, hgnc_id, name, synonyms] if x]
+        all_ids = [
+            x
+            for x in [uniprot, mapped_uniprot, hgnc_name, hgnc_id, name, synonyms]
+            if x
+        ]
         unique = sorted({i for part in all_ids for i in part.split("|") if i})
         if not unique:
             return "N/A"
@@ -259,12 +280,19 @@ class IUPHARData:
             df["target_id"] = ""
 
         # Resolve remaining identifiers with a series of fallbacks. The search
-        # order mirrors the Power Query logic: UniProt accession, HGNC name,
-        # HGNC ID, gene symbol and finally any supplied synonyms.
+        # order mirrors the Power Query logic: UniProt accession, mapped
+        # UniProt identifiers supplied by the ChEMBL fallback, HGNC name, HGNC
+        # ID, gene symbol and finally any supplied synonyms.
         mask = df["target_id"].eq("")
         df.loc[mask, "target_id"] = df.loc[mask, "uniprot_id"].apply(
             self.target_id_by_uniprot
         )
+
+        if "mapping_uniprot_id" in df.columns:
+            mask = df["target_id"].eq("")
+            df.loc[mask, "target_id"] = df.loc[mask, "mapping_uniprot_id"].apply(
+                self.target_id_by_uniprot
+            )
 
         if "hgnc_name" in df.columns:
             mask = df["target_id"].eq("")
