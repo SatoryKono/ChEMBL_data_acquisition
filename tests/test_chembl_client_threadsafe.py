@@ -18,10 +18,7 @@ def api_cfg(**kwargs: Any) -> ApiCfg:
 
 
 class DummyResponse:
-    """Minimal response object returning a unique call identifier."""
-
-    def __init__(self, call_no: int) -> None:
-        self._call_no = call_no
+    """Minimal response object returning a constant payload."""
 
     def __enter__(self) -> DummyResponse:
         return self
@@ -37,30 +34,17 @@ class DummyResponse:
 
 
 class DummySession:
-    """HTTP session counting requests and yielding incrementing responses."""
+    """HTTP session counting requests and yielding dummy responses."""
 
     def __init__(self) -> None:
         self.calls = 0
 
     def get(self, url: str, timeout: Any) -> DummyResponse:
         self.calls += 1
-        return DummyResponse(self.calls)
+        return DummyResponse()
 
-
-class ThreadTrackingResponse:
-    """Response returning a constant payload."""
-
-    def __enter__(self) -> ThreadTrackingResponse:
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op
+    def close(self) -> None:  # pragma: no cover - tests supply lightweight sessions
         pass
-
-    def raise_for_status(self) -> None:  # pragma: no cover - no error
-        pass
-
-    def json(self) -> dict[str, Any]:
-        return {"ok": True}
 
 
 class ThreadTrackingSession:
@@ -69,59 +53,28 @@ class ThreadTrackingSession:
     def __init__(self) -> None:
         self.calls: list[int] = []
 
-    def get(self, url: str, timeout: Any) -> ThreadTrackingResponse:
+    def get(self, url: str, timeout: Any) -> DummyResponse:
         self.calls.append(threading.get_ident())
-        return ThreadTrackingResponse()
+        return DummyResponse()
 
-
-class StressResponse:
-    """Response keeping the owning session marked as in use."""
-
-    def __init__(self, session: StressSession, thread_id: int) -> None:
-        self._session = session
-        self._thread_id = thread_id
-
-    def __enter__(self) -> StressResponse:
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op
-        self._session.release()
-
-    def raise_for_status(self) -> None:  # pragma: no cover - no error
+    def close(self) -> None:  # pragma: no cover - tests supply lightweight sessions
         pass
-
-    def json(self) -> dict[str, Any]:
-        time.sleep(0.005)
-        return {"thread": self._thread_id}
-
-
-class StressSession:
-    """Session detecting concurrent ``get`` calls from multiple threads."""
-
-    def __init__(self) -> None:
-        self.calls: list[int] = []
-        self._lock = threading.Lock()
-        self._in_use = False
-
-    def release(self) -> None:
-        with self._lock:
-            self._in_use = False
-
-    def get(self, url: str, timeout: Any) -> StressResponse:
-        thread_id = threading.get_ident()
-        with self._lock:
-            if self._in_use:
-                raise RuntimeError("Concurrent access to shared session")
-            self._in_use = True
-        self.calls.append(thread_id)
-        return StressResponse(self, thread_id)
 
 
 def test_request_json_threadsafe(monkeypatch) -> None:
     """Concurrent calls should yield the same result as sequential ones."""
 
-    session = DummySession()
-    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+    created_sessions: list[DummySession] = []
+
+    def fake_session_with_retry(api: ApiCfg, retry: Any) -> DummySession:
+        session = DummySession()
+        created_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(
+        "library.clients.chembl.session_with_retry", fake_session_with_retry
+    )
+    client = ChemblClient(api_cfg(), RetryCfg())
     client.clear_cache()
 
     url = "http://example.com/threadsafe"
@@ -129,10 +82,9 @@ def test_request_json_threadsafe(monkeypatch) -> None:
 
     # Sequential calls: only the first should trigger a real request.
     sequential = [client.request_json(url, cfg=cfg) for _ in range(5)]
-    assert session.calls == 1
+    assert client.session.calls == 1
 
     client.clear_cache()
-    session.calls = 0
 
     # Parallel calls starting at the same time.
     results: list[dict[str, Any]] = []
@@ -143,89 +95,144 @@ def test_request_json_threadsafe(monkeypatch) -> None:
         results.append(client.request_json(url, cfg=cfg))
 
     threads = [threading.Thread(target=worker) for _ in range(5)]
-    for t in threads:
-        t.start()
+    for thread in threads:
+        thread.start()
     start.set()
-    for t in threads:
-        t.join()
+    for thread in threads:
+        thread.join()
 
     assert results == sequential
+    assert len(created_sessions) >= 1
 
 
-def test_single_session_created(monkeypatch) -> None:
-    """Ensure only one HTTP session is initialised across threads."""
+def test_thread_local_sessions_created(monkeypatch) -> None:
+    """Each thread should receive its own HTTP session."""
 
-    create_calls = 0
-    dummy = ThreadTrackingSession()
+    created_sessions: list[ThreadTrackingSession] = []
 
     def fake_session_with_retry(api: ApiCfg, retry: Any) -> ThreadTrackingSession:
-        nonlocal create_calls
-        create_calls += 1
-        return dummy
+        session = ThreadTrackingSession()
+        created_sessions.append(session)
+        return session
 
     monkeypatch.setattr(
         "library.clients.chembl.session_with_retry", fake_session_with_retry
     )
     client = ChemblClient(api_cfg(), RetryCfg())
 
-    def worker() -> dict[str, Any]:
-        return client.request_json("http://example.com", cfg=api_cfg())
+    urls = [f"http://example.com/thread/{idx}" for idx in range(5)]
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = [pool.submit(worker) for _ in range(5)]
-        results = [f.result() for f in futures]
+    def worker(target_url: str) -> dict[str, Any]:
+        return client.request_json(target_url, cfg=api_cfg())
 
-    assert create_calls == 1
-    assert all(r == {"ok": True} for r in results)
+    with ThreadPoolExecutor(max_workers=len(urls)) as pool:
+        futures = [pool.submit(worker, url) for url in urls]
+        results = [future.result() for future in futures]
+
+    assert all(result == {"ok": True} for result in results)
+    assert len(created_sessions) == len(urls)
+    assert all(len(session.calls) == 1 for session in created_sessions)
+    thread_ids = {session.calls[0] for session in created_sessions}
+    assert len(thread_ids) == len(urls)
 
 
 def test_cache_shared_across_threads(monkeypatch) -> None:
-    client = ChemblClient(api_cfg(), RetryCfg(), session=DummySession())
+    """Cached responses should be reused regardless of the calling thread."""
+
+    created_sessions: list[DummySession] = []
+
+    def fake_session_with_retry(api: ApiCfg, retry: Any) -> DummySession:
+        session = DummySession()
+        created_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(
+        "library.clients.chembl.session_with_retry", fake_session_with_retry
+    )
+    client = ChemblClient(api_cfg(), RetryCfg())
     client.clear_cache()
 
     url = "http://example.com/data"
+
     assert client.request_json(url, cfg=api_cfg()) == {"ok": True}
     assert client.session.calls == 1
+    assert len(created_sessions) == 1
 
     def worker() -> dict[str, Any]:
         return client.request_json(url, cfg=api_cfg())
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = [pool.submit(worker) for _ in range(5)]
-        results = [f.result() for f in futures]
+        results = [future.result() for future in futures]
 
-    assert all(r == {"ok": True} for r in results)
+    assert all(result == {"ok": True} for result in results)
+    assert len(created_sessions) == 1
     assert client.session.calls == 1
 
 
-def test_session_lock_prevents_concurrent_access() -> None:
-    """High concurrency should serialise access to the shared session."""
+def test_concurrent_fetches_no_longer_block(monkeypatch) -> None:
+    """Concurrent fetches should proceed in parallel without serialisation."""
 
-    session = StressSession()
-    client = ChemblClient(api_cfg(), RetryCfg(), session=session)
+    active_lock = threading.Lock()
+    active = 0
+    max_active = 0
+
+    class SlowResponse:
+        def __enter__(self) -> SlowResponse:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - no-op
+            pass
+
+        def raise_for_status(self) -> None:  # pragma: no cover - no error
+            pass
+
+        def json(self) -> dict[str, Any]:
+            return {"ok": True}
+
+    class SlowSession:
+        def get(self, url: str, timeout: Any) -> SlowResponse:
+            nonlocal active, max_active
+            with active_lock:
+                active += 1
+                max_active = max(max_active, active)
+            try:
+                time.sleep(0.05)
+                return SlowResponse()
+            finally:
+                with active_lock:
+                    active -= 1
+
+        def close(self) -> None:  # pragma: no cover - tests supply lightweight sessions
+            pass
+
+    def fake_session_with_retry(api: ApiCfg, retry: Any) -> SlowSession:
+        return SlowSession()
+
+    monkeypatch.setattr(
+        "library.clients.chembl.session_with_retry", fake_session_with_retry
+    )
+    client = ChemblClient(api_cfg(), RetryCfg())
     client.clear_cache()
 
+    urls = [f"http://example.com/stress/{idx}" for idx in range(5)]
+    cfg = api_cfg(rps=100, burst=100)
     start = threading.Event()
-    urls = [f"http://example.com/stress/{idx}" for idx in range(20)]
     results: list[dict[str, Any]] = []
-    errors: list[Exception] = []
 
     def worker(target_url: str) -> None:
         start.wait()
-        try:
-            results.append(client.request_json(target_url, cfg=api_cfg()))
-        except Exception as exc:  # pragma: no cover - exercised on failure
-            errors.append(exc)
+        results.append(client.request_json(target_url, cfg=cfg))
 
     threads = [threading.Thread(target=worker, args=(url,)) for url in urls]
     for thread in threads:
         thread.start()
 
     start.set()
+
     for thread in threads:
         thread.join()
 
-    assert not errors
     assert len(results) == len(urls)
-    assert session.calls == [result["thread"] for result in results]
-    assert len(set(session.calls)) > 1
+    assert all(result == {"ok": True} for result in results)
+    assert max_active > 1
