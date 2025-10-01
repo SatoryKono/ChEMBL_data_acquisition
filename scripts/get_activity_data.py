@@ -38,13 +38,12 @@ from library.csv_utils import write_csv_chunks_deterministic
 from library.clients import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
-    configure_logger,
 )
 from library.cli import (
     build_parser as base_parser,
 )
-from library.cli_utils import PipelineError, run_pipeline
-from library.config import Config, _serialize_paths, ensure_dirs, print_config
+from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.config import Config, _serialize_paths
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
 from library.table_quality import analyze_table_quality
@@ -225,6 +224,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run(cfg: Config, args: argparse.Namespace) -> int:
+    """Execute the activity pipeline handling ``--skip-existing`` semantics."""
+
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    args.output_csv = output_path
+    if args.skip_existing and output_path.exists() and not args.force:
+        logger.info("pipeline_skip_existing", output=str(output_path))
+        return 0
+    return run_chembl(cfg, args)
+
+
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the command-line argument parser.
 
@@ -303,59 +315,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
-    log_cfg.level = args.log_level
-    logger = configure_logger(log_cfg)
-    logger.info("pipeline_start", run_id=log_cfg.run_id)
-    try:
-        cfg: Config = cli.apply_config_overrides(
-            args,
-            parser,
-            args.config,
-            mapping={
-                "timeout": "activity.timeout",
-                "column": "activity.column",
-                "batch_size": "activity.batch_size",
-                "limit": "activity.limit",
-                "dry_run": "activity.dry_run",
-            },
-        )
-        if args.print_config:
-            print_config(cfg)
-            configure_logger(log_cfg)
-            logger.info("pipeline_done", run_id=log_cfg.run_id)
-            return 0
-        ensure_dirs(cfg)
-        output_path = Path(
-            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        )
-        args.output_csv = output_path
-        if args.skip_existing and output_path.exists() and not args.force:
-            logger.info("pipeline_skip_existing", output=str(output_path))
-            logger.info("pipeline_done", run_id=log_cfg.run_id)
-            return 0
-        logger = configure_logger(log_cfg)
-    except (ValueError, TypeError) as exc:
-        logger.error(
-            "config_error",
-            error=str(exc),
-            config=str(args.config),
-        )
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-    except (FileNotFoundError, NotADirectoryError) as exc:
-        logger.error(
-            "directory_setup_failed",
-            error=str(exc),
-            output=str(args.output_csv),
-        )
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-        return 1
-    exit_code: int = args.func(cfg, args)
-    if exit_code == 0:
-        logger.info("pipeline_done", run_id=log_cfg.run_id)
-    else:
-        logger.info("pipeline_fail", run_id=log_cfg.run_id)
-    return exit_code
+    return run_cli_command(
+        args=args,
+        parser=parser,
+        log_cfg=log_cfg,
+        mapping={
+            "timeout": "activity.timeout",
+            "column": "activity.column",
+            "batch_size": "activity.batch_size",
+            "limit": "activity.limit",
+            "dry_run": "activity.dry_run",
+        },
+        run=run,
+        logger=logger,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
