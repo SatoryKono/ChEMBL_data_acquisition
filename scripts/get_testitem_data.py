@@ -31,10 +31,11 @@ from typing import (
 import pandas as pd
 import requests
 
+from library.utils.bootstrap import ensure_project_root
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+
+if __package__ in {None, ""}:
+    ensure_project_root()
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
 from library import molecule_catalog

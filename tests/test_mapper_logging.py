@@ -223,6 +223,7 @@ def test_mapper_main_log_each_emits_per_id_logs(
         sep=",",
         encoding="utf8",
         key_cols=None,
+
         chunk_size=1,
         rps=1.0,
         workers=1,

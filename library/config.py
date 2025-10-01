@@ -493,7 +493,7 @@ class ResourcesCfg(_BaseModel):
         default_factory=lambda: _dictionary_resource("_target", "_uniprot")
     )
     targets_type_csv: Path = Field(
-        default_factory=lambda: _dictionary_resource("_Target", "targets_type.csv")
+        default_factory=lambda: _dictionary_resource("_target", "targets_type.csv")
     )
 
     @field_validator(

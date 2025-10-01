@@ -78,6 +78,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         missing_count = 0
         missing_sample: list[str] = []
 
+
         try:
             mappings = map_chembl_ids_to_uniprot(
                 ids_to_map,
@@ -146,7 +147,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         except OSError as exc:
             logger.error("write_fail", error=str(exc))
             return 1
-        return 0
+        return 0 if not mapping_failed else 1
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("run_fail", exc=exc)
         return 1
@@ -158,6 +159,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "Map ChEMBL target IDs to UniProt accessions",
         column="chembl_id",
         chunk_size=1,
+    )
+    parser.epilog = (
+        "Retry failed mappings by re-running the command. "
+        "Consider reducing --chunk-size or --rps when the remote service throttles requests."
     )
     parser.add_argument(
         "--key-cols",

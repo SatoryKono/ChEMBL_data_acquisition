@@ -146,7 +146,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=path_argument,
         default=None,
         help=(
-            "Directory with _Target/targets_type.csv and _Curation/citation_fraction.csv "
+            "Directory with _target/targets_type.csv and _Curation/citation_fraction.csv "
             "(default: config resources.dictionary_dir)"
         ),
     )
