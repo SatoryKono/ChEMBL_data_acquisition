@@ -37,12 +37,14 @@ console scripts for each pipeline. Use them interchangeably with the
 | `get-activity-data` | `python -m scripts.get_activity_data` | Activity data export / Выгрузка активностей |
 | `get-assay-data` | `python -m scripts.get_assay_data` | Assay metadata / Метаданные ассайев |
 | `get-document-data` | `python -m scripts.get_document_data` | Document metadata / Метаданные документов |
+| `get-document-type` | `python -m library.utils.cli_tools.get_document_type` | Document type classification / Классификация документов по типам публикаций |
 | `get-target-data` | `python -m scripts.get_target_data` | Target aggregation / Агрегация таргетов |
 | `get-testitem-data` | `python -m scripts.get_testitem_data` | Test item enrichment / Обогащение тест-объектов |
 | `csv-utils` | `python -m library.utils.cli_tools.csv_utils_main` | CSV helpers / Утилиты работы с CSV |
 | `mapper` | `python -m library.utils.cli_tools.mapper_main` | Identifier mapping / Маппинг идентификаторов |
 | `table-quality` | `python -m library.utils.cli_tools.table_quality_main` | Quality reports / Отчёты качества |
 | `chunk-io` | `python -m library.utils.cli_tools.chunk_io_main` | Chunked IO harness / Обвязка чтения чанков |
+| `get-input-initialisation` | `python -m library.utils.cli_tools.get_input_initialisation` | Combine init workbooks into pair/entity tables / Объединение Excel инициализации в пары и сущности |
 | `get-activities` | `python -m library.utils.cli_tools.get_activities` | Smoke logger / Демонстрация логов |
 | `check-determinism` | `python -m library.utils.cli_tools.check_determinism` | Determinism checks / Проверка детерминизма |
 
