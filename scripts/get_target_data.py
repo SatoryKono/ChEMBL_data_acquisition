@@ -1109,9 +1109,25 @@ def fetch_iuphar(
         cfg.target.iuphar.family_csv = orig_family
         iuphar_input.unlink(missing_ok=True)
 
-    iuphar_df = pd.read_csv(
-        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
-    )
+    try:
+        iuphar_df = pd.read_csv(
+            output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+        )
+    except pd.errors.EmptyDataError:
+        logger.warning("empty_iuphar_output", path=str(output_csv))
+        iuphar_df = pd.DataFrame({"uniprot_id": pd.Series(dtype=object)})
+    else:
+        if "uniprot_id" not in iuphar_df.columns:
+            logger.warning(
+                "missing_iuphar_uniprot_column",
+                path=str(output_csv),
+                columns=list(iuphar_df.columns),
+            )
+            placeholder = pd.Series(
+                UNIPROT_MISSING_VALUE, index=iuphar_df.index, dtype=object
+            )
+            iuphar_df = iuphar_df.copy()
+            iuphar_df.insert(0, "uniprot_id", placeholder)
     existing_cols = set(combined_df.columns)
     classification_cols = [c for c in iuphar_df.columns if c not in existing_cols]
     iuphar_df = iuphar_df[["uniprot_id", *classification_cols]].copy()
