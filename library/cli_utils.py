@@ -410,4 +410,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG_RELATIVE,
         help="YAML configuration file",
     )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
+    )
     return parser
