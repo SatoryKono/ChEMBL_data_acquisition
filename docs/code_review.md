@@ -1,16 +1,16 @@
 # Code Review Report: ChEMBL Data Acquisition
 
 ## Overview
-This document captures a reliability-focused review of the repository as of 2025-09-26. It highlights structural risks, failing checks, and recommended remediation steps aligned with industrial ETL standards.
+This document captures a reliability-focused review of the repository as of 2025-10-01. It highlights structural risks, failing checks, and recommended remediation steps aligned with industrial ETL standards.
 
 ### Repository Health Snapshot
-- `ruff check .` → **fails** (66 findings).【d92306†L1-L103】
-- `ruff format --check .` → **fails** (52 files unformatted).【4dd0fc†L1-L53】
-- `mypy --strict` → **fails** (24 errors).【a713b8†L1-L29】
-- `pytest -q --disable-warnings -q` → **fails** (13 failures, 10 skips).【822578†L1-L143】
-- `pytest --maxfail=1 --durations=10` → **fails** (same root cause as above).【80d4d2†L1-L74】
-- CLI smoke `PYTHONHASHSEED=0 python scripts/get_activities.py --limit 500 --dry-run` requires `PYTHONPATH=.` to avoid `ModuleNotFoundError`.【588027†L1-L7】【8021b5†L1-L2】
-- Determinism check succeeds once `PYTHONPATH` is exported.【70a1d2†L1-L3】
+- `ruff check .` → **fails** (195 findings).【c1f232†L109-L114】
+- `ruff format --check .` → **fails** (58 files unformatted).【79feee†L1-L59】
+- `mypy --strict` → **fails** (48 errors across 11 files).【5119e9†L1-L34】
+- `pytest -q --disable-warnings -q` → **fails** (33 failures, 532 passed, 11 skipped, 14 warnings).【893e48†L96-L101】
+- `pytest --maxfail=1 --durations=10` → **fails** on `tests/processing/test_activity_bounds.py::test_compute_activity_bounds_golden_samples`.【e3f9d5†L1-L36】
+- CLI smoke `PYTHONHASHSEED=0 python scripts/get_activities.py --limit 500 --dry-run` now fails because `scripts/get_activities.py` is absent from the repository tree.【e19286†L1-L3】
+- Determinism check succeeds once `PYTHONPATH` is exported.【544717†L1-L6】
 
 ## Key Findings
 1. **CLI packaging relies on runtime `sys.path` mutations.** Entry scripts like `scripts/get_activities.py` inject the repository root into `sys.path` and break when executed without `PYTHONPATH=.`. This surfaced immediately during the performance smoke test.【33c7f1†L1-L44】【588027†L1-L7】
