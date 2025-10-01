@@ -74,6 +74,8 @@ TARGETS_OBJECT_COLUMNS: set[str] = {
     if str(column.dtype) == "object"
 }
 
+UNIPROT_MISSING_VALUE = ""
+
 
 DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
@@ -989,21 +991,48 @@ def fetch_iuphar(
     """
 
     logger.info("fetch_iuphar_start", output=str(output_csv))
-    if cfg.target.all.uniprot_column != "uniprot_id":
+    merge_column = cfg.target.all.uniprot_column
+
+    if merge_column != "uniprot_id":
         chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
     else:
         chembl_for_merge = chembl_df.copy()
 
+    if merge_column not in chembl_for_merge.columns:
+        logger.warning("missing_uniprot_column", column=merge_column)
+        placeholder = pd.Series(
+            UNIPROT_MISSING_VALUE,
+            index=chembl_for_merge.index,
+            dtype=object,
+        )
+        chembl_for_merge = chembl_for_merge.assign(**{merge_column: placeholder})
+
     combined_df = pd.merge(
         chembl_for_merge,
         uniprot_df,
-        left_on=cfg.target.all.uniprot_column,
+        left_on=merge_column,
         right_on="original_id",
         how="left",
-    ).drop(columns=["original_id"])
-    if cfg.target.all.uniprot_column == "uniprot_id":
-        combined_df = combined_df.drop(columns=["uniprot_id_x"], errors="ignore")
-        combined_df = combined_df.rename(columns={"uniprot_id_y": "uniprot_id"})
+    )
+
+    if "original_id" in combined_df.columns:
+        combined_df = combined_df.drop(columns=["original_id"])
+    if merge_column == "uniprot_id":
+        left_series = combined_df.pop("uniprot_id_x") if "uniprot_id_x" in combined_df else None
+        right_series = combined_df.pop("uniprot_id_y") if "uniprot_id_y" in combined_df else None
+        if left_series is not None and right_series is not None:
+            combined_df["uniprot_id"] = right_series.fillna(left_series)
+        elif left_series is not None:
+            combined_df["uniprot_id"] = left_series
+        elif right_series is not None:
+            combined_df["uniprot_id"] = right_series
+
+    if "gene" not in combined_df.columns:
+        combined_df["gene"] = pd.Series(
+            UNIPROT_MISSING_VALUE,
+            index=combined_df.index,
+            dtype=object,
+        )
 
     ec_number_columns = [
         column for column in combined_df.columns if column.startswith("ec_numbers")
@@ -1197,15 +1226,22 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         encoding=cfg.io.csv_encoding,
         col_order=TARGETS_COLUMN_ORDER,
     )
-    try:
-        analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
-            "quality_report_failed",
-            error=str(exc),
-            path=str(output),
+    if final_df.empty:
+        logger.info(
+            "quality_report_skipped",
+            reason="empty_dataframe",
+            table=str(output.with_suffix("")),
         )
-        return 1
+    else:
+        try:
+            analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
+        except ValueError as exc:
+            logger.error(
+                "quality_report_failed",
+                error=str(exc),
+                path=str(output),
+            )
+            return 1
     logger.info("validate_write_done", rows=len(final_df))
     return exit_code
 
