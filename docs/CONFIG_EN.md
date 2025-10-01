@@ -371,6 +371,10 @@ Common short aliases:
 | --- | --- |
 | `CHEMBL_DA_BASE` | `sources.chembl.api.chembl_base` |
 | `CHEMBL_DA_RPS` | `sources.chembl.api.rps` |
+| `CHEMBL_DA_PUBMED_RPS` | `sources.pubmed.rps` |
+| `CHEMBL_DA_PUBMED_BURST` | `sources.pubmed.burst` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_RPS` | `sources.semantic_scholar.rps` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_BURST` | `sources.semantic_scholar.burst` |
 | `CHEMBL_DA_BURST` | `sources.chembl.api.burst` |
 | `CHEMBL_DA_TIMEOUT_CONNECT` | `sources.chembl.api.timeout_connect` |
 | `CHEMBL_DA_TIMEOUT_READ` | `sources.chembl.api.timeout_read` |
@@ -401,6 +405,7 @@ Common short aliases:
 | `CHEMBL_DA_UNIPROT_BASE` | `sources.uniprot.api.base` |
 | `CHEMBL_DA_IUPHAR_BASE` | `sources.iuphar.base` |
 | `CHEMBL_DA_PUBCHEM_BASE` | `sources.pubchem.base` |
+| `CHEMBL_DA_PUBCHEM_USER_AGENT` | `sources.pubchem.user_agent` |
 
 Any other key can be targeted using the long `CHEMBL_DA__...` form.
 

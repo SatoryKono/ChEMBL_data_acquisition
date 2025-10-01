@@ -114,6 +114,34 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert called["write_encoding"] == "latin1"
 
 
+def test_cli_writes_with_custom_separator_and_encoding(tmp_path: Path) -> None:
+    input_csv = tmp_path / "in.csv"
+    input_csv.write_text("id;value\n1;á\n", encoding="latin1")
+    output_csv = tmp_path / "out.csv"
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_csv),
+            "--sep",
+            ";",
+            "--encoding",
+            "latin1",
+            "--key-cols",
+            "id",
+            "--log-level",
+            "INFO",
+        ]
+    )
+
+    assert rc == 0
+    content = output_csv.read_text(encoding="latin1")
+    assert "id;value" in content.splitlines()[0]
+    assert "1;á" in content.splitlines()[1]
+
+
 def test_chunk_size_rejects_zero(capsys: pytest.CaptureFixture[str]) -> None:
     parser = cli.build_parser()
     with pytest.raises(SystemExit) as excinfo:

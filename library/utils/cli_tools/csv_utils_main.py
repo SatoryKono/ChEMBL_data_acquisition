@@ -20,10 +20,10 @@ from pathlib import Path
 import pandas as pd
 
 from library import cli
-from library.cli import configure_logger, create_logger_config
+from library.cli import LoggerConfig, configure_logger, create_logger_config
 from library.cli_utils import build_parser
 from library.csv_utils import write_csv_chunks_deterministic
-from library.config import print_config
+from library.config import ensure_dirs, print_config
 from library.log import logger
 from library.parser_schema import CSVExportArgs
 
@@ -62,16 +62,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         ns.config,
         mapping={"chunk_size": "io.csv_chunksize"},
     )
+    log_cfg: LoggerConfig = create_logger_config(ns.log_level)
     if getattr(ns, "print_config", False):
         print_config(cfg)
-        configure_logger(LoggerConfig(level=ns.log_level))
+        configure_logger(log_cfg)
         return 0
     arg_data = {field: getattr(ns, field) for field in CSVExportArgs.model_fields}
     args = CSVExportArgs.model_validate(arg_data)
     if not args.key_cols:
         parser.error("--key-cols must be provided")
-    log_cfg = create_logger_config(args.log_level)
+    if args.log_level != log_cfg.level:
+        log_cfg = LoggerConfig(
+            level=args.log_level,
+            run_id=log_cfg.run_id,
+            redact_secrets=log_cfg.redact_secrets,
+            stream=log_cfg.stream,
+        )
     configure_logger(log_cfg)
+
+    try:
+        ensure_dirs(cfg)
+    except OSError as exc:
+        payload = {"error": str(exc)}
+        path = getattr(exc, "filename", None)
+        if path:
+            payload["path"] = str(path)
+        logger.error("io_policy_violation", **payload)
+        return 1
 
     start = time.perf_counter()
 
@@ -88,11 +105,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ns.output_csv = output
     if args.output_csv != output:
         args = args.model_copy(update={"output_csv": output})
+    csv_dtype = getattr(cfg.io, "csv_dtype", str)
     with pd.read_csv(
         args.input_csv,
         sep=sep,
         encoding=encoding,
         chunksize=chunk_size,
+        dtype=csv_dtype,
     ) as reader:
         write_csv_chunks_deterministic(
             reader,
@@ -101,8 +120,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             key_cols=args.key_cols,
             chunksize=chunk_size,
             merge_chunksize=merge_chunk_size,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
+            sep=sep,
+            encoding=encoding,
             cfg=cfg,
             drop_unexpected_cols=True,
         )

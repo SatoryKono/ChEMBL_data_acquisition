@@ -35,6 +35,12 @@ class _DummyLogger:
         record = {**self._context, **kwargs}
         self._records.append((event, record))
 
+    def error(
+        self, event: str, *args: Any, **kwargs: Any
+    ) -> None:  # pragma: no cover - trivial
+        record = {**self._context, **kwargs}
+        self._records.append((event, record))
+
     @property
     def records(self) -> list[tuple[str, dict[str, Any]]]:  # pragma: no cover - trivial
         return list(self._records)
@@ -236,6 +242,7 @@ def test_cli_limit_allows_zero(
         str(input_csv),
         "--output",
         str(output_csv),
+
         "--limit",
         "0",
     ]
@@ -245,6 +252,7 @@ def test_cli_limit_allows_zero(
     assert captured["chunks"] == []
     assert captured["written_path"] == output_csv
     assert captured["written_df"].empty
+
 
 
 def test_cli_does_not_print_config_when_flag_missing(
