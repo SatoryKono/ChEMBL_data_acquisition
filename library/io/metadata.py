@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -27,7 +27,7 @@ def write_meta_yaml(
         dtypes = {col: "string" for col in columns}
 
     meta = {
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "git_sha": _git_sha(),
         "command": " ".join(sys.argv),
         "columns": list(columns or []),
