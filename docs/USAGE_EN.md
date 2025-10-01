@@ -55,6 +55,7 @@ All entry points rely on `library.logging_setup.Logger` and emit JSON lines enri
 | `pipeline_start` | Immediately after the CLI configures logging and before validation begins. |
 | `documents_processed` | Document pipeline progress counter emitted after each processed batch. |
 | `process_limit` | Recorded when `--limit` (or configuration equivalents) trims the identifier set. |
+| `pipeline_skip_limit` | Logged when `--limit 0` short-circuits execution before any network or file operations. |
 | `process_offset` | Emitted when `--offset` advances the identifier iterator before processing. |
 | `write_done` | Successful CSV write including the path and retained row count. |
 | `pipeline_done` / `pipeline_fail` | Final outcome logged before exit. |
@@ -99,7 +100,7 @@ python -m scripts.get_activity_data \
 * The repository ships `tests/data/activity_ids_small.csv` for smoke-style runs; override `--column` to the file header (`activity_id`) or rename the column to `activity_chembl_id` to rely on defaults.
 * Reads the column configured at `sources.chembl.pipelines.activity.column` (`activity_chembl_id` by default).
 * Writes the main CSV, `*.meta.yaml`, optional `*_failure_cases.csv` and quality reports.
-* Supports `--limit` to restrict the number of identifiers, `--offset` to resume after a known checkpoint and `--dry-run` to validate inputs without API calls.
+* Supports `--limit` to restrict the number of identifiers, `--offset` to resume after a known checkpoint and `--dry-run` to validate inputs without API calls. Use `--limit 0` to exit immediately without contacting external services or writing files.
 * Populates `lower_value` and `upper_value` using canonical `standard_*` fields. Tweak the behaviour via `activity_bounds.*` in the configuration (relation-based inference, ± parsing, rounding, clamping and logging).
 * Monitor warnings such as `activity_bounds_unknown_relation` or `activity_bounds_missing_standard_value` in the log output; they indicate rows where bounds could not be derived or the relation marker is not recognised.
 

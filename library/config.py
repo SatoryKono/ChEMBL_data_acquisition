@@ -1303,6 +1303,13 @@ def _is_valid_path(path: list[str]) -> bool:
     return True
 
 
+_OPTIONAL_UNKNOWN_KEYS: frozenset[str] = frozenset(
+    {
+        "local.io.csv_fallback_separators",
+    }
+)
+
+
 def _collect_unknown_keys(
     data: dict[str, Any], model: type[BaseModel], prefix: str = ""
 ) -> list[str]:
@@ -1355,6 +1362,16 @@ def load_config(
             _set_by_path(data, key.split("."), val)
 
     unknown = _collect_unknown_keys(data, Config)
+    ignored_unknown = [
+        key for key in unknown if key in _OPTIONAL_UNKNOWN_KEYS
+    ]
+    unknown = [key for key in unknown if key not in _OPTIONAL_UNKNOWN_KEYS]
+    if ignored_unknown:
+        logger.warning(
+            "config_unknown_ignored",
+            keys=", ".join(sorted(ignored_unknown)),
+            hint="Upgrade the application to use these options.",
+        )
     if unknown:
         msg = (
             "Unknown configuration key(s) in "

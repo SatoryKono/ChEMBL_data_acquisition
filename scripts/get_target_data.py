@@ -1366,11 +1366,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
+    limit_value = getattr(args, "limit", None)
+    if limit_value == 0:
+        logger.info("pipeline_skip_limit", limit=limit_value)
+        return 0
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
-    limit_value = getattr(args, "limit", None)
-    if limit_value is not None and limit_value <= 0:
-        subparser.error("--limit must be a positive integer")
+    if limit_value is not None and limit_value < 0:
+        subparser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
         subparser.error("--offset must be zero or a positive integer")

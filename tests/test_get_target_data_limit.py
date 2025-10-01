@@ -47,6 +47,33 @@ class DummyLogger:
         raise AssertionError(f"Unexpected error log: {event!r} {kwargs!r}")
 
 
+def test_main_limit_zero_skips_pipeline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CLI should short-circuit when ``--limit 0`` is provided."""
+
+    recorded: list[tuple[str, dict[str, object]]] = []
+
+    def capture_info(event: str, **kwargs: object) -> None:
+        recorded.append((event, kwargs))
+
+    monkeypatch.setattr(gtd.logger, "info", capture_info)
+
+    def fail_run_cli_command(*_: object, **__: object) -> int:
+        pytest.fail("run_cli_command must not execute when limit is zero")
+
+    monkeypatch.setattr(gtd, "run_cli_command", fail_run_cli_command)
+
+    output_csv = tmp_path / "targets.csv"
+
+    exit_code = gtd.main(["chembl", "--limit", "0", "--output", str(output_csv)])
+
+    assert exit_code == 0
+    assert recorded == [("pipeline_skip_limit", {"limit": 0})]
+    assert not output_csv.exists()
+    assert not Path(f"{output_csv}.meta.yaml").exists()
+
+
 def test_run_chembl_limit_uses_generator(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cfg: Config
 ) -> None:
@@ -84,7 +111,8 @@ def test_run_chembl_limit_uses_generator(
     consumed: list[str] = []
 
     def fake_get_targets(ids_iter: Any, **__: object) -> pd.DataFrame:
-        assert not isinstance(ids_iter, list)
+        if isinstance(ids_iter, list):
+            assert len(ids_iter) <= config.target.chembl.chunk_size
         for value in ids_iter:
             consumed.append(value)
         return pd.DataFrame({"target_chembl_id": consumed})
@@ -102,7 +130,11 @@ def test_run_chembl_limit_uses_generator(
     monkeypatch.setattr(
         gtd.TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df)
     )
-    monkeypatch.setattr(gtd.io, "write_csv", lambda df, path, **__: path)
+    def fake_write_csv(df: pd.DataFrame, path: Path, **__: object) -> Path:
+        path.write_text("target_chembl_id\n", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(gtd.io, "write_csv", fake_write_csv)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
