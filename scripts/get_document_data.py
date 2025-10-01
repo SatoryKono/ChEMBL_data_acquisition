@@ -1148,7 +1148,7 @@ def _finalise_export(
         logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
 
-    errors.save(failure_path)
+    errors.save(failure_path, cfg=cfg)
 
     rows_dropped = rows_total - rows_kept
     logger.info("write_done", rows=rows_kept, path=str(csv_path))

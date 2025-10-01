@@ -711,6 +711,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         inputs={"input_csv": str(args.input_csv)},
         key_columns=["target_chembl_id"],
         table_quality=table_quality,
+        cfg=cfg,
         logger=logger,
     )
 
@@ -1214,7 +1215,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
             errors = SidecarErrors()
             for row in exc.failure_cases.to_dict("records"):
                 errors.add_error(row)
-            errors.save(failure_path)
+            errors.save(failure_path, cfg=cfg)
             logger.error(
                 "validation_failed",
                 failures=len(exc.failure_cases),
