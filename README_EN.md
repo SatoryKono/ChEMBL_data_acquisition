@@ -117,16 +117,18 @@ Before running the smoke command, create a `chembl_ids.csv` file with a `chembl_
 
 ## Data generation
 
-Six primary pipelines in [`scripts/`](scripts/) generate CSV files and store them in `data/output/`:
+Five production pipelines live in [`scripts/`](scripts/) and write CSV outputs to `data/output/`:
 
 * `get_activity_data.py` — retrieves activity data from ChEMBL and enriches it with derived value ranges.
 * `get_assay_data.py` — exports assay descriptions.
 * `get_document_data.py` — merges publication metadata from ChEMBL and aggregators (PubMed, Semantic Scholar, OpenAlex, Crossref).
 * `get_target_data.py` — collects target information from ChEMBL, UniProt and IUPHAR.
 * `get_testitem_data.py` — enriches compounds with structural attributes and PubChem data.
-* `library.utils.cli_tools.pipeline_targets_main` — a lightweight wrapper around `library.pipeline_targets.run_pipeline` that uses
-  the same CLI parameters as the production target pipeline but operates solely on local files and prepared identifier chunks
-  without network calls.
+
+The cached harness `library.utils.cli_tools.pipeline_targets_main`, located under
+[`library/utils/cli_tools/`](library/utils/cli_tools/), reuses the CLI contract of the
+production target pipeline while operating solely on local files and prepared identifier
+batches without network calls.
 
 Example full pipeline execution:
 

@@ -112,14 +112,18 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 
 ## Генерация данных
 
-Шесть основных пайплайнов из каталога [`scripts/`](scripts/) формируют CSV-файлы и сохраняют их в `data/output/`:
+Пять рабочих пайплайнов находятся в каталоге [`scripts/`](scripts/) и сохраняют CSV в `data/output/`:
 
 * `get_activity_data.py` — выгружает активности из ChEMBL и обогащает расчётными границами значений.
 * `get_assay_data.py` — загружает описания ассайев.
 * `get_document_data.py` — объединяет метаданные публикаций из ChEMBL и агрегаторов (PubMed, Semantic Scholar, OpenAlex, Crossref).
 * `get_target_data.py` — собирает информацию о таргетах из ChEMBL, UniProt и IUPHAR.
 * `get_testitem_data.py` — дополняет соединения структурными атрибутами и данными PubChem.
-* `library.utils.cli_tools.pipeline_targets_main` — облегчённая обёртка над `library.pipeline_targets.run_pipeline`, использующая те же CLI-параметры, что и боевой таргет-пайплайн, но работающая только с локальными файлами и подготовленными чанками идентификаторов без сетевых вызовов.
+
+Кешируемая обвязка `library.utils.cli_tools.pipeline_targets_main`, размещённая в
+[`library/utils/cli_tools/`](library/utils/cli_tools/), использует те же CLI-параметры, что и
+боевой таргет-пайплайн, но работает только с локальными файлами и подготовленными чанками
+идентификаторов без сетевых вызовов.
 
 Пример запуска полного пайплайна:
 
