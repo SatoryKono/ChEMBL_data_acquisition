@@ -7,22 +7,22 @@ name = "chembl-data-acquisition"
 version = "0.1.0"
 description = "Utilities for downloading and processing biological data from public APIs."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
   {name = "ChEMBL Team"}
 ]
 dependencies = [
-  "numpy==2.3.3",
-  "pandas==2.3.2",
-  "requests==2.32.5",
-  "PyYAML==6.0.2",
-  "openpyxl==3.1.5",
-  "pyarrow==17.0.0",
-  "jsonschema==4.25.1",
-  "pandera==0.26.1",
-  "cachetools==5.3.2",
-  "pydantic==2.11.3",
+  "numpy~=2.3.3",
+  "pandas~=2.3.2",
+  "requests~=2.32.5",
+  "PyYAML~=6.0.2",
+  "openpyxl~=3.1.5",
+  "pyarrow~=17.0.0",
+  "jsonschema~=4.25.1",
+  "pandera~=0.26.1",
+  "cachetools~=5.3.2",
+  "pydantic~=2.11.3",
 ]
 
 [project.optional-dependencies]
@@ -89,11 +89,11 @@ include = [
 
 [tool.black]
 line-length = 88
-target-version = ["py312"]
+target-version = ["py311"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
@@ -101,7 +101,7 @@ ignore = ["E501"]
 
 [tool.mypy]
 files = ["library"]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 warn_unused_configs = true
 exclude = ["tests"]

@@ -15,14 +15,17 @@
 
 ## Требования
 
-| Компонент | Минимальная версия |
-|-----------|--------------------|
-| Python    | 3.12               |
-| pandas    | 2.3.2              |
-| requests  | 2.32.5             |
-| PyYAML    | 6.0.2              |
+| Компонент | Минимально поддерживаемая | Последняя протестированная |
+|-----------|---------------------------|----------------------------|
+| Python    | 3.11                      | 3.12                       |
+| numpy     | 2.3.3                     | 2.3.3                      |
+| pandas    | 2.3.2                     | 2.3.2                      |
+| requests  | 2.32.5                    | 2.32.5                     |
+| PyYAML    | 6.0.2                     | 6.0.2                      |
 
-Полный список доступен в `requirements-dev.txt` или `pyproject.toml`.
+Полный список доступен в `requirements-dev.txt` или `pyproject.toml`. Рабочие зависимости зафиксированы с помощью совместимых
+диапазонов, поэтому обновления исправлений внутри минорной версии поддерживаются. CI прогоняет проверки на минимальной и
+актуальной версиях из таблицы.
 
 ### Среда выполнения
 
@@ -97,6 +100,7 @@ pre-commit install
 
 ```bash
 pre-commit run --all-files
+pip check
 pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG

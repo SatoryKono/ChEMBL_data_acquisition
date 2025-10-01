@@ -16,14 +16,16 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 
 ## Requirements
 
-| Component | Minimum version |
-|-----------|-----------------|
-| Python    | 3.12            |
-| pandas    | 2.3.2           |
-| requests  | 2.32.5          |
-| PyYAML    | 6.0.2           |
+| Component | Minimum supported | Latest tested |
+|-----------|-------------------|---------------|
+| Python    | 3.11              | 3.12          |
+| numpy     | 2.3.3             | 2.3.3         |
+| pandas    | 2.3.2             | 2.3.2         |
+| requests  | 2.32.5            | 2.32.5        |
+| PyYAML    | 6.0.2             | 6.0.2         |
 
-See `requirements-dev.txt` or `pyproject.toml` for the full list.
+See `requirements-dev.txt` or `pyproject.toml` for the full list. Runtime dependencies follow compatible release ranges so patch
+updates within each minor version remain supported. Continuous integration validates both the minimum and latest rows above.
 
 ### Runtime environment
 
@@ -103,6 +105,7 @@ when required. Determinism and smoke checks are available through dedicated CLI 
 
 ```bash
 pre-commit run --all-files
+pip check
 pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG

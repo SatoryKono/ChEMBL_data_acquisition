@@ -9,15 +9,20 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           # Install package along with development extras
           pip install .[dev]
+      - name: Check installed packages
+        run: pip check
       - name: Check formatting
         run: ruff format --check .
       - name: Lint
