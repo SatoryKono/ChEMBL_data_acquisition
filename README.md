@@ -156,8 +156,9 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 `*.meta.yaml`. Утилиты разработки и отладки перенесены в
 `library/utils/cli_tools/`, например модуль `get_activities` предназначен
 только для демонстрационного логирования и не выполняет файловых операций.
-См. [docs/CLI_TOOLS.md](docs/CLI_TOOLS.md) для кратких описаний и типовых
-команд. Каталог с результатами игнорируется Git и автоматически публикуется
+См. [docs/CLI_TOOLS.md](docs/CLI_TOOLS.md) (English) и
+[docs/CLI_TOOLS_RU.md](docs/CLI_TOOLS_RU.md) (Русский) для кратких описаний и
+типовых команд. Каталог с результатами игнорируется Git и автоматически публикуется
 как артефакт CI.
 
 > **Примечание.** Ранее эта функциональность была доступна через
