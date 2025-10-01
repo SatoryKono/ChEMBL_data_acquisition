@@ -109,6 +109,38 @@ def _first_token(value: str | None) -> str:
     return ""
 
 
+def _prefer_primary(
+    primary: pd.Series | None, secondary: pd.Series | None
+) -> pd.Series:
+    """Return a series prioritising ``primary`` values over ``secondary``.
+
+    The function coalesces two series representing the same logical column
+    coming from different data sources. Values from ``primary`` are preferred
+    unless they are missing or empty, in which case the corresponding entry
+    from ``secondary`` is used. Missing inputs yield an empty object-typed
+    series to maintain downstream compatibility.
+    """
+
+    if primary is None and secondary is None:
+        return pd.Series(dtype=object)
+
+    if primary is None:
+        return secondary.astype(object) if secondary is not None else pd.Series(dtype=object)
+
+    if secondary is None:
+        return primary.astype(object)
+
+    primary = primary.astype(object)
+    secondary = secondary.astype(object)
+    result = primary.copy()
+    if len(result) != len(secondary):
+        secondary = secondary.reindex(result.index)
+    mask = result.isna() | (result == "")
+    if mask.any():
+        result.loc[mask] = secondary.loc[mask]
+    return result
+
+
 def _prepare_targets_for_schema(
     df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, set[str], set[str]]:
@@ -1007,19 +1039,30 @@ def fetch_iuphar(
         left_on=merge_column,
         right_on="original_id",
         how="left",
+        suffixes=("_chembl", "_uniprot"),
     )
 
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
-    if merge_column == "uniprot_id":
-        left_series = combined_df.pop("uniprot_id_x") if "uniprot_id_x" in combined_df else None
-        right_series = combined_df.pop("uniprot_id_y") if "uniprot_id_y" in combined_df else None
-        if left_series is not None and right_series is not None:
-            combined_df["uniprot_id"] = right_series.fillna(left_series)
-        elif left_series is not None:
-            combined_df["uniprot_id"] = left_series
-        elif right_series is not None:
-            combined_df["uniprot_id"] = right_series
+
+    overlap_columns = sorted(
+        set(chembl_for_merge.columns)
+        & (set(uniprot_df.columns) - {"original_id"})
+    )
+    for column in overlap_columns:
+        chembl_col = f"{column}_chembl"
+        uniprot_col = f"{column}_uniprot"
+        chembl_series = (
+            combined_df.pop(chembl_col)
+            if chembl_col in combined_df.columns
+            else None
+        )
+        uniprot_series = (
+            combined_df.pop(uniprot_col)
+            if uniprot_col in combined_df.columns
+            else None
+        )
+        combined_df[column] = _prefer_primary(uniprot_series, chembl_series)
 
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
