@@ -479,7 +479,7 @@ def fetch_parent_catalog_for(
             existing=result,
             catalog_cfg=cfg,
             allow_rebatch=False,
-            allow_single_lookup=True,
+            allow_single_lookup=not parentless_filtered,
         )
         result.update(fallback_result)
         return result
@@ -523,7 +523,7 @@ def fetch_parent_catalog_for(
                 timeout=effective_timeout,
                 existing=result,
                 catalog_cfg=cfg,
-                allow_single_lookup=True,
+                allow_single_lookup=not parentless_filtered,
             )
             result.update(fallback_result)
 

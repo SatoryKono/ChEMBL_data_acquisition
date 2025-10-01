@@ -264,7 +264,8 @@ Utilities read environment variables automatically, so values from `.env` are av
 
 ## `api.user_agent`
 
-The `api.user_agent` parameter identifies the application in API requests and should include contact details. Default value:
+The `api.user_agent` parameter identifies the application in API requests and must contain **real** contact details. Keeping the
+placeholder `contact@example.org` causes configuration validation to fail. Default value:
 
 ```yaml
 api:
@@ -274,6 +275,7 @@ api:
 Override the parameter in `config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. The
 `contact@example.org` value is a placeholder and the validator rejects it, so update the address before running the tools. There is
 no dedicated CLI flag (see `library/cli/parser.py`), so configuration is limited to files or environment variables.
+
 
 ## Configuration validation
 

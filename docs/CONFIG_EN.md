@@ -31,6 +31,7 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `burst` | `20` | Bucket size used by the token bucket limiter. |
 | `user_agent` | `chembl-da/0.1 (mailto:contact@example.org)` | User-Agent header; must be replaced with a real contact e-mail before use. Set via `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
 
+
 ### Response cache (`sources.chembl.cache`)
 
 | Key | Default | Description |
