@@ -579,6 +579,42 @@ def test_finalize_output_success(
     assert exit_code == 0
 
 
+def test_finalize_output_missing_required_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"extra": ["value"]})
+    parent_stats = pipeline.ParentLookupStats(
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+        missing=0,
+        unique=0,
+        attached=0,
+        uncovered=0,
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "write_csv_deterministic",
+        lambda *args, **kwargs: pytest.fail("should not write output when required columns are missing"),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "analyze_table_quality",
+        lambda *args, **kwargs: pytest.fail("should not analyze quality when required columns are missing"),
+    )
+
+    exit_code = pipeline.finalize_output(
+        df,
+        cfg=cfg,
+        output=tmp_path / "out.csv",
+        parent_stats=parent_stats,
+        input_csv=tmp_path / "in.csv",
+        rows_total=len(df),
+    )
+
+    assert exit_code == 1
+    assert not (tmp_path / "out.csv").exists()
+
+
 def test_finalize_output_streams_sorted_chunks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:

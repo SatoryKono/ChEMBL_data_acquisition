@@ -245,6 +245,8 @@ def run_pipeline(
                 if missing_chunk_required:
                     missing_required_columns.update(missing_chunk_required)
                     validation_enabled = False
+                    exit_code = 1
+                    break
 
                 validated_chunk = chunk
                 if validation_enabled and validators and not chunk.empty:
@@ -291,6 +293,13 @@ def run_pipeline(
         except PipelineError:
             return 1
 
+        if missing_required_columns:
+            use_logger.warning(
+                "validation_skipped",
+                missing_columns=sorted(missing_required_columns),
+            )
+            return exit_code or 1
+
         if not chunk_paths:
             empty = pd.DataFrame()
             for hook in metadata_hooks:
@@ -324,12 +333,7 @@ def run_pipeline(
             )
             return 1
 
-    if missing_required_columns:
-        use_logger.warning(
-            "validation_skipped",
-            missing_columns=sorted(missing_required_columns),
-        )
-    elif optional_cols - present_columns:
+    if optional_cols - present_columns:
         use_logger.warning(
             "optional_columns_missing",
             columns=sorted(optional_cols - present_columns),

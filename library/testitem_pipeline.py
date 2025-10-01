@@ -2087,6 +2087,7 @@ def finalize_output(
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
+        return 1
 
     rows_kept = len(df)
     rows_dropped = rows_total - rows_kept
