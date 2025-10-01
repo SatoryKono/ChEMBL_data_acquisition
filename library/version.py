@@ -1,7 +1,7 @@
 """Runtime checks for interpreter compatibility.
 
 This module provides a helper ensuring the running Python interpreter meets
-project requirements. The package targets Python 3.12+, so running the tools on
+project requirements. The package targets Python 3.11+, so running the tools on
 an older version should fail fast with a clear error message.
 """
 
@@ -12,13 +12,13 @@ import sys
 from .log import logger
 
 
-def require_python_version(min_version: tuple[int, int] = (3, 12)) -> None:
+def require_python_version(min_version: tuple[int, int] = (3, 11)) -> None:
     """Validate that the interpreter meets ``min_version``.
 
     Parameters
     ----------
     min_version:
-        Required ``(major, minor)`` Python version. Defaults to ``(3, 12)``.
+        Required ``(major, minor)`` Python version. Defaults to ``(3, 11)``.
 
     Raises
     ------

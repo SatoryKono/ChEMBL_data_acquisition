@@ -4,6 +4,9 @@ from itertools import count
 import pandas as pd
 import pytest
 
+from library.config import Config
+import scripts.get_document_data as document_script
+
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
@@ -100,6 +103,7 @@ def test_build_quality_report_counts() -> None:
     assert report["publication_class_counts"]["review"] == 1
     assert report["error_counts"]["pubmed"] == 1
     assert report["error_counts"]["crossref"] == 1
+
 
 
 def test_fetch_pubmed_records_uses_fresh_sessions_per_job(

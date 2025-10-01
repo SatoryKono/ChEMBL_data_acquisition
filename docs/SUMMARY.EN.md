@@ -85,7 +85,7 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Installation & tooling
 
-1. Create and activate a Python ≥3.12 virtual environment.
+1. Create and activate a Python ≥3.11 virtual environment.
 2. Install the project with development extras: `pip install .[dev]`.
 3. Enable the quality gate: `pre-commit install`.
 4. Recommended ad-hoc checks:
