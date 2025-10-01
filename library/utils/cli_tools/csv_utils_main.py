@@ -20,10 +20,10 @@ from pathlib import Path
 import pandas as pd
 
 from library import cli
-from library.cli import configure_logger, create_logger_config
+from library.cli import LoggerConfig, configure_logger, create_logger_config
 from library.cli_utils import build_parser
 from library.csv_utils import write_csv_chunks_deterministic
-from library.config import print_config
+from library.config import ensure_dirs, print_config
 from library.log import logger
 from library.parser_schema import CSVExportArgs
 
@@ -72,6 +72,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--key-cols must be provided")
     log_cfg = create_logger_config(args.log_level)
     configure_logger(log_cfg)
+
+    try:
+        ensure_dirs(cfg)
+    except OSError as exc:
+        payload = {"error": str(exc)}
+        path = getattr(exc, "filename", None)
+        if path:
+            payload["path"] = str(path)
+        logger.error("io_policy_violation", **payload)
+        return 1
 
     start = time.perf_counter()
 
