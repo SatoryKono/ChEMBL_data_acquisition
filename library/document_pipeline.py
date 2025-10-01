@@ -111,6 +111,10 @@ DOCUMENT_SCHEMA_COLUMNS: list[str] = (
     ]
 )
 
+# Remove accidental duplicates while preserving declaration order. Downstream
+# code assumes a one-to-one mapping between column name and position.
+DOCUMENT_SCHEMA_COLUMNS = list(dict.fromkeys(DOCUMENT_SCHEMA_COLUMNS))
+
 
 # ---------------------------------------------------------------------------
 # Normalisation helpers
@@ -206,21 +210,23 @@ def build_dataframe(
 ) -> pd.DataFrame:
     """Return a :class:`~pandas.DataFrame` with deterministic column order."""
 
+    unique_columns = list(dict.fromkeys(columns))
+
     if isinstance(data, pd.DataFrame):
         df = data.copy()
     else:
         if not data:
-            return pd.DataFrame(columns=list(columns))
+            return pd.DataFrame(columns=unique_columns)
         df = pd.DataFrame.from_records(data)
 
     if fill_missing:
-        for col in columns:
+        for col in unique_columns:
             if col not in df.columns:
                 df[col] = ""
 
-    extra = sorted(c for c in df.columns if c not in columns)
-    head = [c for c in columns if c in df.columns]
-    ordered = head + extra if not fill_missing else list(columns) + extra
+    extra = sorted(c for c in df.columns if c not in unique_columns)
+    head = [c for c in unique_columns if c in df.columns]
+    ordered = head + extra if not fill_missing else unique_columns + extra
     return df[ordered]
 
 

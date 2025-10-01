@@ -20,6 +20,12 @@ from library.config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarC
 import scripts.get_document_data as gdd
 
 
+def test_document_schema_columns_are_unique() -> None:
+    """Schema column declaration should not contain duplicates."""
+
+    assert len(DOCUMENT_SCHEMA_COLUMNS) == len(set(DOCUMENT_SCHEMA_COLUMNS))
+
+
 def test_merge_metadata_normalises_fields() -> None:
     """``merge_metadata`` normalises DOI and computes publication scores."""
 
