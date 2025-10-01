@@ -173,16 +173,27 @@ def test_init_session_waits_for_inflight_fetch(monkeypatch: pytest.MonkeyPatch) 
         def acquire(self) -> None:
             return None
 
-    monkeypatch.setattr(uniprot_client, "_session", BlockingSession("old"))
-    monkeypatch.setattr(uniprot_client, "_retry_cfg", retry_cfg)
+    old_session = BlockingSession("old")
+    created_sessions: list[BlockingSession] = []
+
+    def fake_session_with_retry(*_args, **_kwargs) -> BlockingSession:
+        session = BlockingSession("new")
+        created_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(uniprot_client, "_retry_cfg", retry_cfg, raising=False)
     monkeypatch.setattr(
         uniprot_client, "get_limiter", lambda *_args, **_kwargs: DummyLimiter()
     )
+    monkeypatch.setattr(uniprot_client, "session_with_retry", fake_session_with_retry)
     monkeypatch.setattr(
-        uniprot_client,
-        "session_with_retry",
-        lambda *_args, **_kwargs: BlockingSession("new"),
+        uniprot_client, "_session_factory", lambda: old_session, raising=False
     )
+    monkeypatch.setattr(
+        uniprot_client, "_session_local", threading.local(), raising=False
+    )
+    monkeypatch.setattr(uniprot_client, "_sessions", set(), raising=False)
+    monkeypatch.setattr(uniprot_client, "_active_requests", 0, raising=False)
 
     try:
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -200,12 +211,12 @@ def test_init_session_waits_for_inflight_fetch(monkeypatch: pytest.MonkeyPatch) 
         release_event.set()
 
     assert close_calls == ["old"]
-    with uniprot_client._session_lock:  # type: ignore[attr-defined]
-        current_session = uniprot_client._session
+    assert created_sessions, "expected init_session to create a replacement session"
+    new_session = uniprot_client.get_session()
 
-    assert isinstance(current_session, BlockingSession)
-    assert current_session.label == "new"
-    assert current_session.closed is False
+    assert isinstance(new_session, BlockingSession)
+    assert new_session.label == "new"
+    assert new_session.closed is False
 
 
 @responses.activate

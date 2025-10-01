@@ -1240,6 +1240,13 @@
           "title": "Cache Ttl",
           "type": "integer"
         },
+        "cache_maxsize": {
+          "default": 1024,
+          "description": "Maximum number of entries stored in the PubChem in-memory cache",
+          "minimum": 1,
+          "title": "Cache Maxsize",
+          "type": "integer"
+        },
         "cache_ttl_hours": {
           "default": null,
           "description": "Optional TTL for the persisted CID cache in hours",

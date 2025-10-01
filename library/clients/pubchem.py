@@ -223,7 +223,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
 
     global _CACHE
     with _CACHE_LOCK:
-        cache = _ensure_cache(cfg.cache_ttl)
+        cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
         cached = cache.get(url) if cache is not None else None
     if cached is not None:
         if cached.is_hit:
@@ -240,6 +240,8 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         )
         return None
     logger.debug("cache_miss", url=url, rps=cfg.rps, status="miss")
+
+    api_cfg = ApiCfg(user_agent=cfg.user_agent)
 
     total_attempts = cfg.retries + 1
     if total_attempts <= 0:
@@ -289,7 +291,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         )
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
-            session = get_session()
+            session = get_session(api_cfg)
             with session.get(
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)
             ) as response:
@@ -437,9 +439,9 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     rps=cfg.rps,
                 )
                 with _CACHE_LOCK:
-                    cache = _ensure_cache(cfg.cache_ttl)
+                    cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
                     cache[url] = _CacheEntry(payload=data, outcome="hit")
-                logger.info("cache_set", url=url, rps=cfg.rps, status="hit")
+                logger.debug("cache_set", url=url, rps=cfg.rps, status="hit")
                 return data
         except requests.RequestException as exc:  # pragma: no cover - network
             last_failure_details = {
@@ -472,13 +474,13 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     return None
 
 
-def _ensure_cache(ttl: float) -> TTLCache[str, _CacheEntry]:
-    """Return the shared cache instance, recreating it when TTL changes."""
+def _ensure_cache(ttl: float, maxsize: int) -> TTLCache[str, _CacheEntry]:
+    """Return the shared cache instance, recreating it when TTL or maxsize change."""
 
     global _CACHE
     cache = _CACHE
-    if cache is None or cache.ttl != ttl:
-        cache = _CACHE = TTLCache(maxsize=1024, ttl=ttl)
+    if cache is None or cache.ttl != ttl or cache.maxsize != maxsize:
+        cache = _CACHE = TTLCache(maxsize=maxsize, ttl=ttl)
     return cache
 
 
@@ -489,7 +491,7 @@ def _store_cache_miss(
 
     details_copy = dict(details) if details else None
     with _CACHE_LOCK:
-        cache = _ensure_cache(cfg.cache_ttl)
+        cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
         cache[url] = _CacheEntry(payload=None, outcome=outcome, details=details_copy)
     log_data: dict[str, Any] = {
         "url": url,
@@ -499,7 +501,7 @@ def _store_cache_miss(
     }
     if details_copy:
         log_data.update(details_copy)
-    logger.info("cache_set", **log_data)
+    logger.debug("cache_set", **log_data)
 
 
 def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:

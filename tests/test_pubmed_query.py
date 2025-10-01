@@ -13,11 +13,7 @@ import requests
 from library import rate_limiter as rl
 
 from library.clients import pubmed as pc
-from library.config import (
-    Config,
-    PubMedCfg,
-    SemanticScholarCfg,
-)
+from library.config import Config, PubMedCfg, RetryCfg, SemanticScholarCfg
 
 from library.clients import semantic_scholar as ss_client
 
@@ -43,11 +39,16 @@ def test_read_pmids_missing_column(tmp_path: Path) -> None:
 
 class DummyResponse:
     def __init__(
-        self, status: int, text: str = "", json_data: dict[str, Any] | None = None
+        self,
+        status: int,
+        text: str = "",
+        json_data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.status_code = status
         self._text = text
         self._json = json_data
+        self._headers = headers or {}
 
     def __enter__(self) -> DummyResponse:  # pragma: no cover - context manager proto
         return self
@@ -68,6 +69,10 @@ class DummyResponse:
         if self._json is None:
             raise ValueError("no json")
         return self._json
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return self._headers
 
 
 class DummySession:
@@ -111,13 +116,15 @@ def test_do_request_attempt_count(monkeypatch: pytest.MonkeyPatch) -> None:
     statuses = [500, 500, 200]
     calls: list[int] = []
 
-    def fake_make_request(*args: Any, **kwargs: Any) -> tuple[int, str, Any, str]:
+    def fake_make_request(
+        *args: Any, **kwargs: Any
+    ) -> tuple[int, str, Any, str, dict[str, str]]:
         idx = len(calls)
         calls.append(idx)
         status = statuses[idx]
         if status >= 500:
-            return status, "error", None, ""
-        return status, "{}", {"ok": True}, ""
+            return status, "error", None, "", {}
+        return status, "{}", {"ok": True}, "", {}
 
     monkeypatch.setattr(pc, "_make_request", fake_make_request)
 
@@ -135,64 +142,121 @@ def test_do_request_attempt_count(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(calls) == 3
 
 
+def test_do_request_retry_after_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retry loop should respect Retry-After headers between attempts."""
+
+    responses: list[tuple[int, str, Any, str, dict[str, str]]] = [
+        (429, "rate limited", None, "", {"Retry-After": "1.5"}),
+        (200, "{}", {"ok": True}, "", {}),
+    ]
+
+    def fake_make_request(*args: Any, **kwargs: Any) -> tuple[int, str, Any, str, dict[str, str]]:
+        return responses.pop(0)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(pc, "_make_request", fake_make_request)
+    monkeypatch.setattr(pc, "sleep", lambda value: sleeps.append(value))
+
+    data, err = pc._do_request(requests.Session(), "http://example.org", delay=0.1, retries=1)
+
+    assert data == {"ok": True}
+    assert err == ""
+    assert sleeps == [pytest.approx(1.5)]
+
+
+def test_do_request_retry_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retry loop falls back to RetryCfg exponential backoff."""
+
+    responses: list[tuple[int, str, Any, str, dict[str, str]]] = [
+        (500, "error", None, "", {}),
+        (200, "{}", {"ok": True}, "", {}),
+    ]
+
+    def fake_make_request(*args: Any, **kwargs: Any) -> tuple[int, str, Any, str, dict[str, str]]:
+        return responses.pop(0)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(pc, "_make_request", fake_make_request)
+    monkeypatch.setattr(pc, "sleep", lambda value: sleeps.append(value))
+
+    retry_cfg = RetryCfg(backoff_factor=0.2)
+    data, err = pc._do_request(
+        requests.Session(),
+        "http://example.org",
+        delay=0.0,
+        retries=1,
+        retry_cfg=retry_cfg,
+    )
+
+    assert data == {"ok": True}
+    assert err == ""
+    assert sleeps == [pytest.approx(0.2)]
+
+
 def test_handle_response_retryable() -> None:
     """500 response triggers a retry on non-final attempts."""
-    data, err, retry = pc._handle_response(
-        "http://example.org", 500, "error", None, "", True, 0, 1
+    data, err, retry, retry_after = pc._handle_response(
+        "http://example.org", 500, "error", None, "", True, 0, 1, {"Retry-After": "7"}
     )
     assert data is None
     assert err == ""
     assert retry is True
+    assert retry_after == pytest.approx(7.0)
 
 
 def test_handle_response_retryable_last_attempt() -> None:
     """Retryable error returns a message on the last attempt."""
-    data, err, retry = pc._handle_response(
-        "http://example.org", 500, "error", None, "", True, 1, 1
+    data, err, retry, retry_after = pc._handle_response(
+        "http://example.org", 500, "error", None, "", True, 1, 1, {}
     )
     assert data is None
     assert retry is False
     assert err.startswith("HTTP 500")
+    assert retry_after is None
 
 
 def test_handle_response_parse_error() -> None:
     """Invalid JSON is reported as a failure."""
-    data, err, retry = pc._handle_response(
-        "http://example.org", 200, "", None, "boom", True, 0, 0
+    data, err, retry, retry_after = pc._handle_response(
+        "http://example.org", 200, "", None, "boom", True, 0, 0, {}
     )
     assert data is None
     assert retry is False
     assert err.startswith("Invalid JSON")
+    assert retry_after is None
 
 
 def test_handle_response_success_text() -> None:
     """Text responses are returned when JSON is not expected."""
-    data, err, retry = pc._handle_response(
-        "http://example.org", 200, "hi", "hi", "", False, 0, 0
+    data, err, retry, retry_after = pc._handle_response(
+        "http://example.org", 200, "hi", "hi", "", False, 0, 0, {}
     )
     assert data == "hi"
     assert err == ""
     assert retry is False
+    assert retry_after is None
 
 
 def test_handle_response_404() -> None:
     """404 error returns a specific message."""
-    data, err, retry = pc._handle_response(
-        "http://example.org", 404, "not found", None, "", True, 0, 0
+    data, err, retry, retry_after = pc._handle_response(
+        "http://example.org", 404, "not found", None, "", True, 0, 0, {}
     )
     assert data is None
     assert err == "PMID not found"
     assert retry is False
+    assert retry_after is None
 
 
 def test_handle_response_400() -> None:
     """400 error is reported as a bad request."""
-    data, err, retry = pc._handle_response(
-        "http://example.org", 400, "bad", None, "", True, 0, 0
+    data, err, retry, retry_after = pc._handle_response(
+        "http://example.org", 400, "bad", None, "", True, 0, 0, {}
     )
     assert data is None
     assert retry is False
     assert err.startswith("Bad request")
+    assert retry_after is None
 
 
 def test_fetch_pubmed_uses_cfg(monkeypatch: pytest.MonkeyPatch) -> None:

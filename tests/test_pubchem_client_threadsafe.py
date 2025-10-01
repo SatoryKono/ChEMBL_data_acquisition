@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+import io
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -12,6 +14,7 @@ from cachetools import TTLCache
 from library import pubchem_library as pl
 from library.clients import pubchem as pc
 from library.config import ApiCfg, RetryCfg, session_with_retry
+from library.logging_setup import LoggerConfig, configure_logger
 
 
 class DummyResponse:
@@ -187,6 +190,55 @@ def test_make_request_serves_cached_results_across_threads(monkeypatch) -> None:
         pc._CACHE = None
 
 
+def test_make_request_refreshes_session_for_new_user_agent(monkeypatch) -> None:
+    """Requests with different agents should recreate the underlying session."""
+
+    url_one = "https://example.org/first"
+    url_two = "https://example.org/second"
+    cfg_one = pl.PubChemCfg(
+        retries=0,
+        delay=0,
+        user_agent="pubchem-tests/4.0 (mailto:tests@example.org)",
+    )
+    cfg_two = pl.PubChemCfg(
+        retries=0,
+        delay=0,
+        user_agent="pubchem-tests/5.0 (mailto:tests@example.org)",
+    )
+
+    created_sessions: list[DummySession] = []
+    close_log: list[str] = []
+
+    def fake_session_with_retry(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> DummySession:
+        session = DummySession(api_cfg.user_agent, closed_log=close_log)
+
+        def fake_get(url: str, timeout: tuple[int, int]) -> DummyResponse:
+            return DummyResponse({"user_agent": session.headers["User-Agent"]})
+
+        session.get = fake_get  # type: ignore[attr-defined]
+        created_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(pc, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+
+    pc.init_session(
+        ApiCfg(user_agent="pubchem-tests/init (mailto:tests@example.org)"), RetryCfg()
+    )
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    first_response = pc.make_request(url_one, cfg_one)
+    second_response = pc.make_request(url_two, cfg_two)
+
+    assert created_sessions[0].headers["User-Agent"] == cfg_one.user_agent
+    assert created_sessions[1].headers["User-Agent"] == cfg_two.user_agent
+    assert close_log == [cfg_one.user_agent]
+    assert first_response == {"user_agent": cfg_one.user_agent}
+    assert second_response == {"user_agent": cfg_two.user_agent}
+
+
 def test_make_request_cache_reinitialisation_threadsafe(monkeypatch) -> None:
     """Reinitialising the cache under concurrency should be safe."""
 
@@ -211,8 +263,12 @@ def test_make_request_cache_reinitialisation_threadsafe(monkeypatch) -> None:
     with pc._CACHE_LOCK:
         pc._CACHE = None
 
-    initial_cfg = pl.PubChemCfg(retries=1, delay=0, cache_ttl=1)
-    updated_cfg = pl.PubChemCfg(retries=1, delay=0, cache_ttl=2)
+    initial_cfg = pl.PubChemCfg(retries=1, delay=0, cache_ttl=1).model_copy(
+        update={"user_agent": api_cfg.user_agent}
+    )
+    updated_cfg = pl.PubChemCfg(retries=1, delay=0, cache_ttl=2).model_copy(
+        update={"user_agent": api_cfg.user_agent}
+    )
 
     # Prime the cache with the initial configuration.
     assert pc.make_request(url, initial_cfg) == payload
@@ -235,11 +291,14 @@ def test_make_request_closes_response(monkeypatch) -> None:
 
     url = "https://example.org/close-check"
     payload = {"ok": True}
-    cfg = pl.PubChemCfg(retries=0, delay=0)
     close_log: list[object] = []
 
     api_cfg = _configure_session()
     session = pc.get_session(api_cfg)
+
+    cfg = pl.PubChemCfg(retries=0, delay=0).model_copy(
+        update={"user_agent": api_cfg.user_agent}
+    )
 
     monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
     monkeypatch.setattr(pc, "sleep", lambda *_: None)
@@ -263,10 +322,13 @@ def test_make_request_retry_after_adjusts_delay(monkeypatch) -> None:
 
     url = "https://example.org/rate-limit"
     payload = {"ok": True}
-    cfg = pl.PubChemCfg(retries=1, delay=0, backoff_initial_seconds=0.1)
 
     api_cfg = _configure_session()
     session = pc.get_session(api_cfg)
+
+    cfg = pl.PubChemCfg(retries=1, delay=0, backoff_initial_seconds=0.1).model_copy(
+        update={"user_agent": api_cfg.user_agent}
+    )
 
     responses = [
         DummyResponse(
@@ -304,15 +366,15 @@ def test_make_request_timeout_records_retry_after(monkeypatch) -> None:
     """Timeouts should cache the last failure details including Retry-After."""
 
     url = "https://example.org/timeout"
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
     cfg = pl.PubChemCfg(
         retries=3,
         delay=0,
         backoff_initial_seconds=0,
         timeout_seconds=3,
-    )
-
-    api_cfg = _configure_session()
-    session = pc.get_session(api_cfg)
+    ).model_copy(update={"user_agent": api_cfg.user_agent})
 
     responses = [
         DummyResponse(None, status_code=429, headers={"Retry-After": "2"}),
@@ -400,3 +462,76 @@ def test_init_session_closes_previous_session(monkeypatch) -> None:
     assert closed == [first_api.user_agent]
     assert first_session.closed is True
     assert second_session.closed is False
+
+
+def test_make_request_logs_cache_set_hit_as_debug(monkeypatch) -> None:
+    """Successful requests should log cache writes at DEBUG level."""
+
+    buf = io.StringIO()
+    test_logger = configure_logger(
+        LoggerConfig(level="DEBUG", run_id="test", stream=buf)
+    ).bind(status=None, rps=None)
+    monkeypatch.setattr(pc, "logger", test_logger)
+
+    url = "https://example.org/cache-hit"
+    payload = {"value": 1}
+    cfg = pl.PubChemCfg(retries=0, delay=0)
+
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
+    monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
+    monkeypatch.setattr(pc, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        session,
+        "get",
+        lambda *args, **kwargs: DummyResponse(payload),
+    )
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    result = pc.make_request(url, cfg)
+
+    assert result == payload
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    cache_records = [record for record in records if record.get("event") == "cache_set"]
+
+    assert cache_records
+    assert cache_records[0]["level"] == "DEBUG"
+    assert cache_records[0]["status"] == "hit"
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+
+def test_store_cache_miss_logs_debug(monkeypatch) -> None:
+    """Cached miss entries should emit DEBUG logs with context."""
+
+    buf = io.StringIO()
+    test_logger = configure_logger(
+        LoggerConfig(level="DEBUG", run_id="test", stream=buf)
+    ).bind(status=None, rps=None)
+    monkeypatch.setattr(pc, "logger", test_logger)
+
+    cfg = pl.PubChemCfg(retries=0, delay=0)
+    url = "https://example.org/cache-miss"
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None
+
+    pc._store_cache_miss(url, cfg, "not_found", {"reason": "rate_limited"})
+
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line]
+    cache_records = [record for record in records if record.get("event") == "cache_set"]
+
+    assert cache_records
+    cache_record = cache_records[0]
+    assert cache_record["level"] == "DEBUG"
+    assert cache_record["status"] == "miss"
+    assert cache_record["outcome"] == "not_found"
+    assert cache_record["reason"] == "rate_limited"
+
+    with pc._CACHE_LOCK:
+        pc._CACHE = None

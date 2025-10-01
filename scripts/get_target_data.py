@@ -13,10 +13,11 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from library.utils.bootstrap import ensure_project_root
 
@@ -79,6 +80,117 @@ DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
 
 
+@dataclass(frozen=True)
+class _UniprotCandidate:
+    """Container describing a UniProt identifier candidate for a target row."""
+
+    value: str
+    source: str
+
+
+@dataclass(frozen=True)
+class _UniprotQueryPlan:
+    """Deterministic mapping of ChEMBL rows to UniProt identifiers."""
+
+    unique_records: list[dict[str, str]]
+    row_candidates: list[list[_UniprotCandidate]]
+    row_index: list[Any]
+
+
+def _split_uniprot_tokens(value: str) -> Iterator[str]:
+    """Yield cleaned UniProt identifiers from a pipe-delimited ``value``."""
+
+    for token in value.split("|"):
+        token = token.strip()
+        if token:
+            yield token
+
+
+def _collect_uniprot_candidate_columns(df: pd.DataFrame, cfg: Config) -> list[str]:
+    """Return ordered list of columns potentially holding UniProt accessions."""
+
+    primary = cfg.target.all.uniprot_column
+    ordered: list[str] = []
+    if primary in df.columns:
+        ordered.append(primary)
+
+    preferred = ["uniprot_id", "mapping_uniprot_id"]
+    for column in preferred:
+        if column != primary and column in df.columns and column not in ordered:
+            ordered.append(column)
+
+    extra = [
+        column
+        for column in df.columns
+        if column not in ordered
+        and any(keyword in column.lower() for keyword in ("uniprot", "accession"))
+    ]
+    ordered.extend(extra)
+    return ordered
+
+
+def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPlan:
+    """Create a deterministic plan for querying UniProt based on ``df``."""
+
+    candidate_columns = _collect_uniprot_candidate_columns(df, cfg)
+    unique_records: list[dict[str, str]] = []
+    seen: set[str] = set()
+    row_candidates: list[list[_UniprotCandidate]] = []
+    row_index = list(df.index)
+
+    if not candidate_columns:
+        return _UniprotQueryPlan(unique_records, [[] for _ in row_index], row_index)
+
+    positions = [df.columns.get_loc(column) for column in candidate_columns]
+    for row in df.itertuples(index=False, name=None):
+        candidates: list[_UniprotCandidate] = []
+        row_seen: set[str] = set()
+        for column, pos in zip(candidate_columns, positions):
+            raw_value = row[pos]
+            if not isinstance(raw_value, str) or not raw_value:
+                continue
+            for token in _split_uniprot_tokens(raw_value):
+                if token in row_seen:
+                    continue
+                row_seen.add(token)
+                candidate = _UniprotCandidate(value=token, source=column)
+                candidates.append(candidate)
+                if token not in seen:
+                    seen.add(token)
+                    unique_records.append({"uniprot_id": token, "original_id": token})
+        row_candidates.append(candidates)
+
+    return _UniprotQueryPlan(unique_records, row_candidates, row_index)
+
+
+def _resolve_uniprot_matches(
+    plan: _UniprotQueryPlan, uniprot_df: pd.DataFrame
+) -> pd.Series:
+    """Return preferred UniProt identifier for each ChEMBL row in ``plan``."""
+
+    if not plan.row_index:
+        return pd.Series(dtype=object)
+
+    lookup_column = "uniprot_id"
+    if lookup_column not in uniprot_df.columns:
+        return pd.Series(
+            [UNIPROT_MISSING_VALUE for _ in plan.row_index],
+            index=plan.row_index,
+            dtype=object,
+        )
+
+    cleaned = (
+        uniprot_df[lookup_column].dropna().astype(str).map(str.strip)
+    )
+    available = {value for value in cleaned if value}
+    resolved: list[str] = []
+    for candidates in plan.row_candidates:
+        match = next((c.value for c in candidates if c.value in available), UNIPROT_MISSING_VALUE)
+        resolved.append(match)
+
+    return pd.Series(resolved, index=plan.row_index, dtype=object)
+
+
 def _pipe_merge(values: Sequence[str | None]) -> str:
     """Return a ``"|"``-joined string of unique, non-empty tokens.
 
@@ -107,6 +219,38 @@ def _first_token(value: str | None) -> str:
     if isinstance(value, str) and value:
         return value.split("|")[0]
     return ""
+
+
+def _prefer_primary(
+    primary: pd.Series | None, secondary: pd.Series | None
+) -> pd.Series:
+    """Return a series prioritising ``primary`` values over ``secondary``.
+
+    The function coalesces two series representing the same logical column
+    coming from different data sources. Values from ``primary`` are preferred
+    unless they are missing or empty, in which case the corresponding entry
+    from ``secondary`` is used. Missing inputs yield an empty object-typed
+    series to maintain downstream compatibility.
+    """
+
+    if primary is None and secondary is None:
+        return pd.Series(dtype=object)
+
+    if primary is None:
+        return secondary.astype(object) if secondary is not None else pd.Series(dtype=object)
+
+    if secondary is None:
+        return primary.astype(object)
+
+    primary = primary.astype(object)
+    secondary = secondary.astype(object)
+    result = primary.copy()
+    if len(result) != len(secondary):
+        secondary = secondary.reindex(result.index)
+    mask = result.isna() | (result == "")
+    if mask.any():
+        result.loc[mask] = secondary.loc[mask]
+    return result
 
 
 def _prepare_targets_for_schema(
@@ -912,13 +1056,12 @@ def fetch_uniprot(
     """
 
     logger.info("fetch_uniprot_start", output=str(output_csv))
-    column = cfg.target.all.uniprot_column
-    series = chembl_df.get(column)
-    if series is None:
-        uids: list[str] = []
+    plan = _build_uniprot_query_plan(chembl_df, cfg)
+    if plan.unique_records:
+        id_df = pd.DataFrame(plan.unique_records, dtype=object)
     else:
-        values = series.to_numpy(copy=False)
-        uids = [uid for uid in values if isinstance(uid, str) and uid]
+        id_df = pd.DataFrame(columns=["uniprot_id", "original_id"], dtype=object)
+
     from tempfile import NamedTemporaryFile
 
     with NamedTemporaryFile(
@@ -926,7 +1069,7 @@ def fetch_uniprot(
     ) as tmp:
         tmp_path = Path(tmp.name)
 
-    pd.DataFrame({"uniprot_id": uids}).to_csv(
+    id_df.to_csv(
         tmp_path,
         index=False,
         sep=cfg.io.csv_sep,
@@ -943,10 +1086,15 @@ def fetch_uniprot(
         cfg.target.uniprot.data_dir = orig_dir
         tmp_path.unlink(missing_ok=True)
 
-    df = pd.read_csv(
+    fetched_df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
-    df["original_id"] = pd.Series(uids, index=df.index, dtype=object)
+    if "uniprot_id" in fetched_df.columns:
+        df = id_df.merge(fetched_df, on="uniprot_id", how="left", sort=False)
+    else:
+        df = id_df.copy()
+    if "original_id" not in df.columns:
+        df["original_id"] = pd.Series(dtype=object)
     logger.info("fetch_uniprot_done", rows=len(df))
     return df
 
@@ -986,6 +1134,19 @@ def fetch_iuphar(
 
     logger.info("fetch_iuphar_start", output=str(output_csv))
     merge_column = cfg.target.all.uniprot_column
+    plan = _build_uniprot_query_plan(chembl_df, cfg)
+    lookup_series = _resolve_uniprot_matches(plan, uniprot_df)
+    if lookup_series.empty and len(chembl_df.index):
+        lookup_series = pd.Series(
+            [UNIPROT_MISSING_VALUE] * len(chembl_df.index),
+            index=chembl_df.index,
+            dtype=object,
+        )
+    else:
+        lookup_series = lookup_series.reindex(
+            chembl_df.index, fill_value=UNIPROT_MISSING_VALUE
+        )
+    lookup_column = "__uniprot_lookup_id"
 
     if merge_column != "uniprot_id":
         chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
@@ -1001,25 +1162,39 @@ def fetch_iuphar(
         )
         chembl_for_merge = chembl_for_merge.assign(**{merge_column: placeholder})
 
+    chembl_for_merge[lookup_column] = lookup_series
+
     combined_df = pd.merge(
         chembl_for_merge,
         uniprot_df,
-        left_on=merge_column,
-        right_on="original_id",
+        left_on=lookup_column,
+        right_on="uniprot_id",
         how="left",
+        suffixes=("_chembl", "_uniprot"),
     )
 
+    combined_df = combined_df.drop(columns=[lookup_column], errors="ignore")
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
-    if merge_column == "uniprot_id":
-        left_series = combined_df.pop("uniprot_id_x") if "uniprot_id_x" in combined_df else None
-        right_series = combined_df.pop("uniprot_id_y") if "uniprot_id_y" in combined_df else None
-        if left_series is not None and right_series is not None:
-            combined_df["uniprot_id"] = right_series.fillna(left_series)
-        elif left_series is not None:
-            combined_df["uniprot_id"] = left_series
-        elif right_series is not None:
-            combined_df["uniprot_id"] = right_series
+
+    overlap_columns = sorted(
+        set(chembl_for_merge.columns)
+        & (set(uniprot_df.columns) - {"original_id"})
+    )
+    for column in overlap_columns:
+        chembl_col = f"{column}_chembl"
+        uniprot_col = f"{column}_uniprot"
+        chembl_series = (
+            combined_df.pop(chembl_col)
+            if chembl_col in combined_df.columns
+            else None
+        )
+        uniprot_series = (
+            combined_df.pop(uniprot_col)
+            if uniprot_col in combined_df.columns
+            else None
+        )
+        combined_df[column] = _prefer_primary(uniprot_series, chembl_series)
 
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
@@ -1083,6 +1258,11 @@ def fetch_iuphar(
         _first_token
     )
     combined_df = combined_df.drop(columns=["ec_numbers"], errors="ignore")
+
+    if "mapping_uniprot_id" in combined_df.columns:
+        combined_df["mapping_uniprot_id"] = (
+            combined_df["mapping_uniprot_id"].fillna("").astype(str)
+        )
 
     from tempfile import NamedTemporaryFile
 

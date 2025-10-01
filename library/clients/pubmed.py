@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+
 import random
-from collections.abc import Callable
+
+from collections.abc import Callable, Mapping
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+
 from typing import Any
 
 import requests
@@ -29,7 +34,7 @@ def _make_request(
     method: str,
     timeout: float | tuple[float, float],
     **kwargs: Any,
-) -> tuple[int, str, dict[str, Any] | str | None, str]:
+) -> tuple[int, str, dict[str, Any] | str | None, str, Mapping[str, str]]:
     """Issue a single HTTP request and parse its body."""
 
     if method.upper() == "POST":
@@ -43,9 +48,33 @@ def _make_request(
             try:
                 content = resp.json()
             except ValueError as exc:
-                return status_code, text, None, str(exc)
-            return status_code, text, content, ""
-        return status_code, text, text or "", ""
+                return status_code, text, None, str(exc), resp.headers
+            return status_code, text, content, "", resp.headers
+        return status_code, text, text or "", "", resp.headers
+
+
+def _retry_after_delay(headers: Mapping[str, str]) -> float | None:
+    """Parse the ``Retry-After`` header into a delay in seconds."""
+
+    header = headers.get("Retry-After")
+    if header is None:
+        return None
+    value = header.strip()
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        return max((retry_at - now).total_seconds(), 0.0)
+    else:
+        return max(seconds, 0.0)
 
 
 def _handle_response(
@@ -57,49 +86,51 @@ def _handle_response(
     expect_json: bool,
     attempt: int,
     retries: int,
-) -> tuple[dict[str, Any] | str | None, str, bool]:
+    headers: Mapping[str, str],
+) -> tuple[dict[str, Any] | str | None, str, bool, float | None]:
     """Process an HTTP response and decide whether to retry."""
 
     if status_code in (429, 500, 502, 503, 504):
+        retry_after = _retry_after_delay(headers)
         if attempt >= retries:
             logger.info(
                 "request_fail",
                 extra={"stage": "request_fail", "url": url, "status": status_code},
             )
-            return None, f"HTTP {status_code}: {text[:100]}", False
-        return None, "", True
+            return None, f"HTTP {status_code}: {text[:100]}", False, retry_after
+        return None, "", True, retry_after
     if status_code == 404:
         logger.info(
             "request_fail",
             extra={"stage": "request_fail", "url": url, "status": status_code},
         )
-        return None, "PMID not found", False
+        return None, "PMID not found", False, None
     if status_code == 400:
         logger.info(
             "request_fail",
             extra={"stage": "request_fail", "url": url, "status": status_code},
         )
-        return None, f"Bad request: {text[:100]}", False
+        return None, f"Bad request: {text[:100]}", False, None
     if status_code != 200:
         logger.info(
             "request_fail",
             extra={"stage": "request_fail", "url": url, "status": status_code},
         )
-        return None, f"HTTP {status_code}: {text[:100]}", False
+        return None, f"HTTP {status_code}: {text[:100]}", False, None
     if expect_json:
         if parse_error:
             logger.info("request_fail", extra={"stage": "request_fail", "url": url})
-            return None, f"Invalid JSON: {parse_error}", False
+            return None, f"Invalid JSON: {parse_error}", False, None
         logger.info(
             "request_ok",
             extra={"stage": "request_ok", "url": url, "status": status_code},
         )
-        return content, "", False
+        return content, "", False, None
     logger.info(
         "request_ok",
         extra={"stage": "request_ok", "url": url, "status": status_code},
     )
-    return content or "", "", False
+    return content or "", "", False, None
 
 
 def _max_timeout(timeout: float | tuple[float, float] | None) -> float | None:
@@ -154,11 +185,14 @@ def _do_request(
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Perform an HTTP request with retry logic."""
 
+    retry_policy = retry_cfg or RetryCfg()
+    retry_after_delay: float | None = None
     for attempt in range(retries + 1):
         event = "request_start" if attempt == 0 else "request_retry"
         extra = {"stage": event, "url": url, "attempt": attempt + 1}
 
         if attempt:
+
             retry_delay = _retry_delay(attempt, delay, retry_cfg, timeout)
             extra["delay"] = retry_delay
             logger.info(event, extra=extra)
@@ -175,8 +209,9 @@ def _do_request(
         else:
             logger.info(event, extra=extra)
 
+
         try:
-            status_code, text, content, parse_error = _make_request(
+            status_code, text, content, parse_error, headers = _make_request(
                 session, url, expect_json, method, timeout, **kwargs
             )
         except requests.RequestException as exc:
@@ -187,8 +222,16 @@ def _do_request(
                 return None, str(exc)
             continue
 
-        data, error, retry = _handle_response(
-            url, status_code, text, content, parse_error, expect_json, attempt, retries
+        data, error, retry, retry_after_delay = _handle_response(
+            url,
+            status_code,
+            text,
+            content,
+            parse_error,
+            expect_json,
+            attempt,
+            retries,
+            headers,
         )
         if retry:
             continue

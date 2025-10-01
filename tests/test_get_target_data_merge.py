@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -86,3 +87,58 @@ def test_iuphar_merge_preserves_ec_number(
     assert merged.loc[0, "protein_class_pred_L1"] == "ClassA"
     assert merged.loc[0, "target_type"] == "Multicellular organism"
     assert classifier.calls
+
+
+def test_fetch_iuphar_prioritises_uniprot_columns(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    """Ensure overlapping columns prefer UniProt data and remain unsuffixed."""
+
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["C1"],
+            "uniprot_id": ["P1"],
+            "isoform_ids": ["chembl_iso"],
+            "isoform_names": ["ChemblIso"],
+            "GuidetoPHARMACOLOGY": ["chembl_gtop"],
+            "gene": ["CHEMBLGENE"],
+        }
+    )
+    uniprot_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P1"],
+            "original_id": ["P1"],
+            "isoform_ids": ["UNI_ISO"],
+            "isoform_names": [""],
+            "GuidetoPHARMACOLOGY": ["uni_gtop"],
+            "gene": ["UNIPROTGENE"],
+        }
+    )
+    out = tmp_path / "iuphar.csv"
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame({"uniprot_id": ["P1"], "IUPHAR_class": ["Enzyme"]}).to_csv(
+            args.output_csv, index=False
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+
+    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    assert all(
+        not column.endswith("_chembl") and not column.endswith("_uniprot")
+        for column in combined_df.columns
+    )
+    assert combined_df.loc[0, "isoform_ids"] == "UNI_ISO"
+    assert combined_df.loc[0, "isoform_names"] == "ChemblIso"
+    assert combined_df.loc[0, "GuidetoPHARMACOLOGY"] == "uni_gtop"
+    assert combined_df.loc[0, "gene"] == "UNIPROTGENE"
+
+    merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+    processed = tp.postprocess_targets(merged)
+
+    assert processed.loc[0, "isoform_ids"].lower() == "uni_iso"
+    assert processed.loc[0, "isoform_names"].lower() == "chembliso"
+    assert processed.loc[0, "GuidetoPHARMACOLOGY"] == "uni_gtop"
+    assert processed.loc[0, "gene"] == "UNIPROTGENE"
