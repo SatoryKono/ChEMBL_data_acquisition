@@ -35,6 +35,12 @@ class _DummyLogger:
         record = {**self._context, **kwargs}
         self._records.append((event, record))
 
+    def error(
+        self, event: str, *args: Any, **kwargs: Any
+    ) -> None:  # pragma: no cover - trivial
+        record = {**self._context, **kwargs}
+        self._records.append((event, record))
+
     @property
     def records(self) -> list[tuple[str, dict[str, Any]]]:  # pragma: no cover - trivial
         return list(self._records)
@@ -177,6 +183,54 @@ def test_cli_limit_restricts_rows(
     assert captured["batch_size"] == 100
     assert captured["chunks"] == [["CHEMBL1", "CHEMBL2"]]
     assert captured["written_path"] == output_csv
+
+
+def test_cli_reports_directory_setup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf8")
+    output_csv = tmp_path / "out.csv"
+
+    dummy_logger = _DummyLogger()
+    monkeypatch.setattr(cli, "configure_logger", lambda cfg: dummy_logger)
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *a: Config())
+    monkeypatch.setattr(cli, "print_config", lambda cfg: None)
+
+    def fail_ensure_dirs(_: Config) -> None:
+        raise FileNotFoundError("missing output directory")
+
+    def fail_run_pipeline(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("run_pipeline should not be called")
+
+    def fail_write_csv(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("write_csv should not be called")
+
+    monkeypatch.setattr(cli, "ensure_dirs", fail_ensure_dirs)
+    monkeypatch.setattr(cli, "run_pipeline", fail_run_pipeline)
+    monkeypatch.setattr(cli, "write_csv", fail_write_csv)
+
+    args = [
+        "--input",
+        str(input_csv),
+        "--output",
+        str(output_csv),
+    ]
+    exit_code = cli.main(args)
+
+    assert exit_code == 1
+    assert any(
+        event == "directory_setup_failed"
+        and rec.get("stage") == "pipeline"
+        and rec.get("error") == "missing output directory"
+        for event, rec in dummy_logger.records
+    )
+    assert any(
+        event == "pipeline_done"
+        and rec.get("stage") == "pipeline"
+        and rec.get("exit_code") == 1
+        for event, rec in dummy_logger.records
+    )
 
 
 def test_cli_does_not_print_config_when_flag_missing(
