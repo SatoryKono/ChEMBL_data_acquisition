@@ -191,9 +191,9 @@ python -m scripts.get_data \
 ```
 
 The command reads files such as `data/input/document.csv`, writes outputs like
-`data/output/20240101_documents.csv` and stops if any step fails. / Команда
+`data/output/output.documents_20240101.csv` and stops if any step fails. / Команда
 использует входы вида `data/input/document.csv`, сохраняет результаты в
-файлы `data/output/20240101_documents.csv` и прерывает выполнение при ошибке
+файлы `data/output/output.documents_20240101.csv` и прерывает выполнение при ошибке
 любого шага.
 
 **EN.** `library.utils.cli_tools.pipeline_targets_main` is a cached harness
