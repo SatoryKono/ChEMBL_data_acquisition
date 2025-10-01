@@ -100,10 +100,37 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if df.shape[1] == 0:
             logger.warning("no_columns_after_filter", table_name=args.table_name)
 
+        output_dir = args.output_csv
+
+        if output_dir.suffix:
+            logger.error(
+                "output_directory_invalid",
+                path=str(output_dir),
+                reason="has_suffix",
+            )
+            return 1
+
+        if output_dir.exists():
+            if not output_dir.is_dir():
+                logger.error(
+                    "output_directory_invalid",
+                    path=str(output_dir),
+                    reason="not_directory",
+                )
+                return 1
+        else:
+            if not cfg.io.exist_ok:
+                logger.error(
+                    "output_directory_missing",
+                    path=str(output_dir),
+                    exist_ok=cfg.io.exist_ok,
+                )
+                return 1
+            output_dir.mkdir(parents=True, exist_ok=True)
+
         original_cwd = Path.cwd()
         try:
-            args.output_csv.mkdir(parents=True, exist_ok=True)
-            os.chdir(args.output_csv)
+            os.chdir(output_dir)
             analyze_table_quality(df, table_name=args.table_name)
         finally:
             os.chdir(original_cwd)
@@ -151,6 +178,14 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Exclude the specified columns from analysis",
     )
     parser.set_defaults(func=run, output_csv=Path("."), encoding="utf-8-sig")
+
+    for action in parser._actions:
+        if action.dest == "output_csv":
+            action.help = (
+                "Directory for profiling reports (must exist when cfg.io.exist_ok is false)"
+            )
+            action.metavar = "OUTPUT_DIR"
+            break
     return parser, log_cfg
 
 
