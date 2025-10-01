@@ -294,6 +294,10 @@ def test_prepare_pubchem_api_cfg_prefers_pubchem_override(cfg: Config) -> None:
     assert pubchem_cfg is not cfg.api
 
 
+def test_prepare_pubchem_api_cfg_reexport_matches_pipeline() -> None:
+    assert gtd._prepare_pubchem_api_cfg is pipeline._prepare_pubchem_api_cfg
+
+
 def test_prepare_pubchem_api_cfg_requires_custom_user_agent(cfg: Config) -> None:
     placeholder = "chembl-da/0.1 (mailto:contact@example.org)"
     cfg.api.user_agent = placeholder
