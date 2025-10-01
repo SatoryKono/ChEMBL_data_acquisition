@@ -1322,14 +1322,16 @@ def fetch_testitems(
     retrieved_ids = set(df["molecule_chembl_id"].dropna())
     missing_ids = [identifier for identifier in requested_ids if identifier not in retrieved_ids]
     if missing_ids:
+        sample_missing_ids = missing_ids[:5]
         missing_ids_original = [
             original_id_lookup.get(identifier, identifier) for identifier in missing_ids
         ]
+        sample_missing_ids_original = missing_ids_original[:5]
         logger.warning(
             "chembl_missing_identifiers",
             missing_count=len(missing_ids),
-            missing_ids=missing_ids,
-            missing_ids_original=missing_ids_original,
+            sample_missing_ids=sample_missing_ids,
+            sample_missing_ids_original=sample_missing_ids_original,
         )
     else:
         logger.info("chembl_all_identifiers_retrieved")
