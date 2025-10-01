@@ -67,6 +67,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     sep = args.sep or cfg.io.csv_sep
     encoding = args.encoding or cfg.io.csv_encoding
     chunk_size = args.chunk_size or cfg.io.csv_chunksize
+    merge_chunk_size = args.merge_chunk_size
+    if merge_chunk_size is None:
+        merge_chunk_size = max(chunk_size, 1)
 
     output = args.output_csv or Path(args.input_csv).with_name(
         f"output.{Path(args.input_csv).stem}.csv"
@@ -86,7 +89,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             col_order=args.col_order or None,
             key_cols=args.key_cols,
             chunksize=chunk_size,
-            merge_chunksize=args.merge_chunk_size,
+            merge_chunksize=merge_chunk_size,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
             cfg=cfg,

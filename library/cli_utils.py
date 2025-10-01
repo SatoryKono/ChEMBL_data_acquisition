@@ -26,6 +26,7 @@ from .cli import (
     apply_config_overrides,
     configure_logger,
     path_argument,
+    positive_int,
 )
 from .config import Config, ensure_dirs, print_config
 from .log import logger as default_logger
@@ -393,13 +394,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--key-cols", nargs="*", help="Columns used for sorting")
     parser.add_argument(
         "--chunk-size",
-        type=int,
+        type=positive_int,
         default=1000,
         help="Number of rows read per chunk",
     )
     parser.add_argument(
         "--merge-chunk-size",
-        type=int,
+        type=positive_int,
         default=1000,
         help="Rows loaded per temporary file during merge",
     )
