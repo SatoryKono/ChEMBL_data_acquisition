@@ -189,6 +189,7 @@ def test_testitem_timeout_override(
         client: Any,
         chunk_size: int,
         timeout: float,
+        **kwargs: Any,
     ) -> pd.DataFrame:
         data = list(ids)
         called["timeout"] = timeout

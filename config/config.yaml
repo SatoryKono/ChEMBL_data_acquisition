@@ -18,7 +18,7 @@ sources:
       backoff_factor: 0.5  # Exponential backoff multiplier
       rps: 20  # Requests per second limit (env: CHEMBL_DA_RPS)
       burst: 20  # Burst size for token bucket limiter (env: CHEMBL_DA_BURST)
-      user_agent: "chembl-da/0.1 (mailto:contact@example.org)"  # User-Agent header; override via CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT
+      user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"  # User-Agent header; override via CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT
     cache:
       cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA_CACHE_TTL)
       cache_maxsize: 1024  # Max cached ChEMBL responses (env: CHEMBL_DA_CACHE_MAXSIZE)
@@ -151,6 +151,7 @@ sources:
   pubchem:
     enable: true  # Toggle PubChem augmentation (env: CHEMBL_DA_PUBCHEM_ENABLE)
     base: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"  # PubChem PUG REST API (env: CHEMBL_DA__SOURCES__PUBCHEM__BASE / CHEMBL_DA_PUBCHEM_BASE)
+    user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"  # Contact details for PubChem requests (env: CHEMBL_DA_PUBCHEM_USER_AGENT)
     timeout_connect: 5  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_CONNECT)
     timeout_read: 60  # (env: CHEMBL_DA_PUBCHEM_TIMEOUT_READ)
     timeout_seconds: 30.0

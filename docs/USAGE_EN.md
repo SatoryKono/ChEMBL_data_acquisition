@@ -46,6 +46,11 @@ All entry points rely on `library.logging_setup.Logger` and emit JSON lines enri
 | `write_done` | Successful CSV write including the path and retained row count. |
 | `pipeline_done` / `pipeline_fail` | Final outcome logged before exit. |
 
+Warnings such as `pubmed_batch_request_failed` and `pubmed_batch_unexpected_error`
+now include `pmids_count` and a trimmed `pmids_sample` instead of the full
+identifier list, keeping log entries compact while preserving enough context to
+diagnose problematic batches.
+
 Pipe the output through `jq` or similar tooling for real-time monitoring:
 
 ```bash

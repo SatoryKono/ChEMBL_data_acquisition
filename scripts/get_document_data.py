@@ -367,6 +367,15 @@ def fetch_pubmed_records(
 
         batch_list = _coerce_batch_argument(first, *rest)
 
+        def _summarise_batch(pmids: Sequence[str]) -> dict[str, object]:
+            sample_limit = 5
+            sample = [pmids[index] for index in range(min(len(pmids), sample_limit))]
+            if len(pmids) > sample_limit:
+                sample.append("...")
+            return {"pmids_count": len(pmids), "pmids_sample": sample}
+
+        batch_summary = _summarise_batch(batch_list)
+
         def _invoke_with_session(
             fetcher: Callable[
                 [requests.Session, str, Any, RateLimiter | None], dict[str, str]
@@ -454,6 +463,7 @@ def fetch_pubmed_records(
 
                 openalex_jobs = list(openalex_lookup.keys())
                 def _fetch_openalex_job(pmid: str) -> dict[str, str]:
+                    _acquire_documents(openalex_service_limiter)
                     return _invoke_with_session(
                         ocl.fetch_openalex,
                         pmid,
@@ -492,6 +502,7 @@ def fetch_pubmed_records(
 
                 crossref_jobs = list(crossref_lookup.keys())
                 def _fetch_crossref_job(doi: str) -> dict[str, str]:
+                    _acquire_documents(crossref_service_limiter)
                     return _invoke_with_session(
                         ocl.fetch_crossref,
                         doi,
@@ -537,14 +548,14 @@ def fetch_pubmed_records(
         except requests.RequestException as exc:  # pragma: no cover - network errors
             logger.warning(
                 "pubmed_batch_request_failed",
-                pmids=batch_list,
+                **batch_summary,
                 error=str(exc),
             )
             return _failure_records(batch_list, str(exc))
         except Exception as exc:  # pragma: no cover - defensive safety net
             logger.warning(
                 "pubmed_batch_unexpected_error",
-                pmids=batch_list,
+                **batch_summary,
                 error=str(exc),
             )
             return _failure_records(batch_list, str(exc))
@@ -556,6 +567,7 @@ def fetch_pubmed_records(
     crossref_executor: ThreadPoolExecutor | None = None
 
     iterator = (p for p in pmids if p)
+
     tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
     ordered: dict[int, list[dict[str, str]]] = {}
     processed = 0
@@ -584,29 +596,28 @@ def fetch_pubmed_records(
             pending.add(future)
             offset += len(batch)
             if len(pending) >= max_in_flight:
+
                 done_future = next(as_completed(list(pending)))
                 pending.remove(done_future)
-                batch_offset, submitted_batch = tasks.pop(done_future)
-                ordered[batch_offset] = done_future.result()
-                processed += len(submitted_batch)
+                batch_id, batch_len = tasks.pop(done_future)
+                completed[batch_id] = done_future.result()
+                processed += batch_len
                 logger.info("documents_processed", count=processed)
+                while next_to_emit in completed:
+                    yield completed.pop(next_to_emit)
+                    next_to_emit += 1
 
-        while pending:
-            done_future = next(as_completed(list(pending)))
-            pending.remove(done_future)
-            batch_offset, submitted_batch = tasks.pop(done_future)
-            ordered[batch_offset] = done_future.result()
-            processed += len(submitted_batch)
-            logger.info("documents_processed", count=processed)
+            while next_to_emit in completed:
+                yield completed.pop(next_to_emit)
+                next_to_emit += 1
 
     def _iter_frames() -> Iterator[pd.DataFrame]:
-        for offset in sorted(ordered):
-            batch_records = ordered[offset]
-            if not batch_records:
+        for records_batch in _iter_records():
+            if not records_batch:
                 yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
                 continue
             yield build_dataframe(
-                batch_records, columns=DOCUMENT_SCHEMA_COLUMNS
+                records_batch, columns=DOCUMENT_SCHEMA_COLUMNS
             )
 
     frame_iter = _iter_frames()
@@ -1123,7 +1134,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         fallback_doi_map = fallback_map or None
 
     try:
-        df = fetch_pubmed_records(
+        frame_iter = fetch_pubmed_records(
             pmids,
             cfg,
             sleep=getattr(args, "sleep", pubmed_defaults.sleep),
@@ -1134,11 +1145,12 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             max_workers=getattr(args, "workers", pubmed_defaults.workers),
             batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
             fallback_doi_map=fallback_doi_map,
+            return_generator=True,
         )
         output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
-        df = normalize_documents(df)
+        normalised_frames = (normalize_documents(frame) for frame in frame_iter)
         exit_code = _finalise_export(
-            df,
+            normalised_frames,
             output,
             cfg,
             input_csv=Path(args.input_csv),
@@ -1338,7 +1350,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 for pmid, doi in zip(masked_pmids, masked_dois, strict=True)
             }
     pmids = pubmed_ids.dropna().astype(str).tolist()
-    pub_df = fetch_pubmed_records(
+    pubmed_frames = fetch_pubmed_records(
         pmids,
         cfg,
         sleep=getattr(args, "sleep", all_defaults.sleep),
@@ -1349,7 +1361,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         batch_size=getattr(args, "batch_size", all_defaults.batch_size),
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
+        return_generator=True,
     )
+    concat_iter = iter(pubmed_frames)
+    try:
+        first_frame = next(concat_iter)
+    except StopIteration:
+        pub_df = build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
+    else:
+        pub_df = pd.concat(chain([first_frame], concat_iter), ignore_index=True)
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
     merged = merge_with_chembl(doc_df, pub_df)
     processed = dp.postprocess_documents(merged)

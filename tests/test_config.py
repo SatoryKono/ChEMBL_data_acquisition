@@ -407,7 +407,7 @@ def test_user_agent_default_and_overrides(
     )
     monkeypatch.delenv("CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT", raising=False)
     cfg = load_config(path)
-    assert cfg.api.user_agent == "chembl-da/0.1 (mailto:contact@example.org)"
+    assert cfg.api.user_agent == "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 
     monkeypatch.setenv(
         "CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT",

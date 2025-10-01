@@ -370,7 +370,7 @@
           "type": "integer"
         },
         "user_agent": {
-          "default": "chembl-da/0.1 (mailto:contact@example.org)",
+          "default": "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
           "title": "User Agent",
           "type": "string"
         }
@@ -1144,6 +1144,12 @@
         "base": {
           "default": "https://pubchem.ncbi.nlm.nih.gov/rest/pug",
           "title": "Base",
+          "type": "string"
+        },
+        "user_agent": {
+          "default": "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
+          "description": "Custom User-Agent for PubChem requests including contact details",
+          "title": "User Agent",
           "type": "string"
         },
         "timeout_connect": {
