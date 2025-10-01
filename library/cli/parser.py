@@ -21,7 +21,7 @@ from ..config import Config, ConfigError, load_config
 from ..logging_setup import Logger, LoggerConfig
 from ..logging_setup import configure_logger as _configure_logger
 from ..version import require_python_version
-from ..utils.config import DEFAULT_CONFIG_RELATIVE
+from ..utils.config import DEFAULT_CONFIG_PATH
 
 require_python_version()
 
@@ -249,8 +249,8 @@ def build_parser(
         "--config",
         dest="config",
         type=path_argument,
-        default=DEFAULT_CONFIG_RELATIVE,
-        help="YAML configuration file",
+        default=DEFAULT_CONFIG_PATH,
+        help="YAML configuration file (default: config/config.yaml)",
     )
     parser.add_argument(
         "--print-config",
@@ -289,8 +289,8 @@ def build_root_parser() -> tuple[
         "--config",
         dest="config",
         type=path_argument,
-        default=DEFAULT_CONFIG_RELATIVE,
-        help="YAML configuration file",
+        default=DEFAULT_CONFIG_PATH,
+        help="YAML configuration file (default: config/config.yaml)",
     )
     root.add_argument(
         "--print-config",
@@ -305,7 +305,7 @@ def build_root_parser() -> tuple[
         dest="config",
         type=path_argument,
         default=argparse.SUPPRESS,
-        help="YAML configuration file",
+        help="YAML configuration file (default: config/config.yaml)",
     )
     shared.add_argument(
         "--print-config",
