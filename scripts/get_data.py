@@ -22,11 +22,17 @@ that the pipelines can be executed programmatically from other callers as well.
 from __future__ import annotations
 
 import argparse
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Sequence
+
+if __package__ in {None, ""}:
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    if str(_PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts import (
     get_activity_data,
