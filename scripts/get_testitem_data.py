@@ -55,6 +55,7 @@ from library.testitem_pipeline import (
 from library.testitem_pipeline import (
     _prepare_pubchem_api_cfg as _pipeline_prepare_pubchem_api_cfg,
     _load_pubchem_cid_cache as _pipeline_load_pubchem_cid_cache,
+    _write_pubchem_cid_cache as _pipeline_write_pubchem_cid_cache,
     integrate_missing_identifiers as _integrate_missing_identifiers,
 )
 
@@ -71,6 +72,7 @@ _integrate_missing_identifiers = _integrate_missing_identifiers
 
 update_parent_catalog_cache = _pipeline_update_parent_catalog_cache
 write_parent_catalog_cache = _pipeline_write_parent_catalog_cache
+_write_pubchem_cid_cache = _pipeline_write_pubchem_cid_cache
 load_molecule_hierarchy_lookup = _pipeline_load_molecule_hierarchy_lookup
 file_sha256 = _pipeline_file_sha256
 write_meta_yaml = _pipeline_write_meta_yaml
@@ -141,9 +143,6 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     if not normalised:
         return None
     return normalised.upper() if uppercase else normalised
-
-
-_PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 
 def _is_placeholder_user_agent(user_agent: str | None) -> bool:
@@ -332,34 +331,6 @@ def _load_pubchem_cid_cache(
             cache[key] = primary
     return cache
 
-
-def _write_pubchem_cid_cache(
-    path: Path | None, cache: Mapping[str, str | None]
-) -> None:
-    """Persist CID cache mapping to disk."""
-
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    serialisable: dict[str, str] = {}
-    for key, value in cache.items():
-        if not key:
-            continue
-        if value is None:
-            continue
-        serialisable[key] = value
-    try:
-        with path.open("w", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
-            payload = {
-                "metadata": {
-                    "version": _PUBCHEM_CACHE_SCHEMA_VERSION,
-                    "updated_at": datetime.now(UTC).isoformat(),
-                },
-                "values": serialisable,
-            }
-            json.dump(payload, handle, indent=2, sort_keys=True)
-    except OSError as exc:  # pragma: no cover - I/O errors
-        logger.warning("pubchem_cache_write_failed", path=str(path), error=str(exc))
 def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
     """Return mapping of identifier names to normalised values."""
 

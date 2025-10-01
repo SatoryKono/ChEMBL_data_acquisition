@@ -7,6 +7,7 @@ import threading
 import time
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
+from typing import Any
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -1155,6 +1156,35 @@ def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
     payload = json.loads(cache_path.read_text())
     assert payload["values"] == {"CHEMBL1": "321"}
     assert payload["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
+
+
+def test_write_pubchem_cid_cache_partial_write_keeps_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_path = tmp_path / "cid_cache.json"
+    original_payload = {
+        "metadata": {
+            "version": pipeline._PUBCHEM_CACHE_SCHEMA_VERSION,
+            "updated_at": datetime.now(UTC).isoformat(),
+        },
+        "values": {"CHEMBL1": "321"},
+    }
+    cache_path.write_text(json.dumps(original_payload))
+
+    real_dump = pipeline.json.dump
+
+    def fake_dump(payload: object, handle: Any, *args: object, **kwargs: object) -> None:
+        if isinstance(payload, dict) and "values" in payload:
+            handle.write("{\"values\": {")
+            handle.flush()
+            raise OSError("disk full")
+        real_dump(payload, handle, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline.json, "dump", fake_dump)
+
+    pipeline._write_pubchem_cid_cache(cache_path, {"CHEMBL2": "654"})
+
+    assert json.loads(cache_path.read_text()) == original_payload
 
 
 def test_load_pubchem_cid_cache_uses_shared_selector(
