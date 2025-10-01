@@ -418,6 +418,7 @@ def test_augment_pubchem_initialises_caches(
         df,
         pubchem_cfg=cfg.pubchem,
         api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
         fields=cfg.testitem.fields,
@@ -429,6 +430,58 @@ def test_augment_pubchem_initialises_caches(
     assert captured["add_kwargs"].get("testitem_fields") == cfg.testitem.fields
     assert captured["add_kwargs"].get("request_limit") == cfg.testitem.request_limit
     assert "pubchem_cid" in result.columns
+
+
+def test_augment_pubchem_initialises_session_once(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    cfg.pubchem.enable = True
+
+    monkeypatch.setattr(pipeline, "_PUBCHEM_SESSION_SIGNATURE", None, raising=False)
+
+    captured: dict[str, object] = {"init_calls": 0}
+
+    def fake_init_session(api: object, retry: object) -> None:
+        captured["init_calls"] = captured["init_calls"] + 1
+        captured["init_args"] = (api, retry)
+
+    def fake_add(
+        frame: pd.DataFrame,
+        pubchem_cfg: pl.PubChemCfg,
+        **kwargs: object,
+    ) -> pd.DataFrame:
+        return frame.assign(pubchem_cid="1")
+
+    monkeypatch.setattr(pipeline.pl, "init_session", fake_init_session)
+    monkeypatch.setattr(pipeline, "add_pubchem_data", fake_add)
+
+    first = pipeline.augment_pubchem(
+        df,
+        pubchem_cfg=cfg.pubchem,
+        api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        fields=cfg.testitem.fields,
+        request_limit=cfg.testitem.request_limit,
+    )
+
+    second = pipeline.augment_pubchem(
+        df,
+        pubchem_cfg=cfg.pubchem,
+        api_cfg=cfg.api,
+        retry_cfg=cfg.retry,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        fields=cfg.testitem.fields,
+        request_limit=cfg.testitem.request_limit,
+    )
+
+    assert captured["init_calls"] == 1
+    assert captured["init_args"] == (cfg.api, cfg.retry)
+    assert "pubchem_cid" in first.columns
+    assert "pubchem_cid" in second.columns
 
 
 def test_apply_testitem_enrichment_disable(cfg: Config) -> None:

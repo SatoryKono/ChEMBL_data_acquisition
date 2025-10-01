@@ -25,6 +25,7 @@ from library.config import (
     IoCfg,
     MoleculeCatalogCfg,
     PubChemCfg,
+    RetryCfg,
     _serialize_paths,
 )
 from library.csv_utils import write_csv_deterministic
@@ -66,6 +67,19 @@ _CID_CACHE_MISSING = object()
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
+
+
+def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
+    """Return a stable signature for the PubChem session configuration."""
+
+    payload = {
+        "api": api_cfg.model_dump(mode="json"),
+        "retry": retry_cfg.model_dump(mode="json"),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+_PUBCHEM_SESSION_SIGNATURE: str | None = None
 
 
 @dataclass
@@ -1362,12 +1376,18 @@ def augment_pubchem(
     *,
     pubchem_cfg: PubChemCfg,
     api_cfg: ApiCfg,
+    retry_cfg: RetryCfg,
     timeout: float,
     client: ChemblClient,
     fields: Sequence[str] | None,
     request_limit: int,
 ) -> pd.DataFrame:
-    """Augment ``df`` with PubChem information if enabled."""
+    """Augment ``df`` with PubChem information if enabled.
+
+    The shared PubChem client session is initialised with ``api_cfg`` and
+    ``retry_cfg`` before enrichment. Callers must therefore provide both
+    configurations even when invoking this function directly.
+    """
 
     pubchem_cid_cache: dict[str, str | None] | None = None
     pubchem_resolution_cache: (
@@ -1375,6 +1395,11 @@ def augment_pubchem(
     ) = None
     pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
     if getattr(pubchem_cfg, "enable", True):
+        global _PUBCHEM_SESSION_SIGNATURE
+        session_signature = _pubchem_session_signature(api_cfg, retry_cfg)
+        if session_signature != _PUBCHEM_SESSION_SIGNATURE:
+            pl.init_session(api_cfg, retry_cfg)
+            _PUBCHEM_SESSION_SIGNATURE = session_signature
         pubchem_cid_cache = _load_pubchem_cid_cache(
             getattr(pubchem_cfg, "cid_cache_path", None),
             ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),
