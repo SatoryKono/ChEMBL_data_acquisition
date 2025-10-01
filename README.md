@@ -86,19 +86,26 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
 
    RU: Git-хуки автоматически запускают форматирование, линтеры, проверки типов и тесты перед каждым коммитом.
 
-3. **Run a sample script / Запустите демонстрационный скрипт**
+3. **Inspect the unified orchestrator / Изучите унифицированный оркестратор**
 
    ```bash
-   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
+   get-data --help
    ```
 
-   This lightweight helper only emits structured log messages describing the
-   dummy activity rows it would generate; it neither reads input files nor
-   writes outputs. Use it to verify logging configuration and CLI wiring before
-   launching full pipelines. Common CLI flags include ``--limit`` to cap
-   processed records, ``--log-level`` for verbosity, ``--sep`` for CSV delimiter
-   and ``--encoding`` for file encoding. For end-to-end exports that create
-   files, run one of the data pipelines, for example:
+   EN: The ``get-data`` console script wires every pipeline together and
+   exposes common flags for configuration paths, input/output directories and
+   logging. Reviewing the help output confirms that the CLI entry point is
+   installed correctly. Once comfortable with the options you can launch a full
+   export by providing real directories.
+
+   RU: Консольная команда ``get-data`` объединяет все конвейеры и предоставляет
+   общие параметры для путей конфигурации, входных/выходных каталогов и
+   логирования. Просмотр справки подтверждает корректную установку CLI. После
+   ознакомления с опциями можно запускать полный экспорт, указав реальные
+   каталоги.
+
+   For lightweight smoke checks you can still call individual helpers, for
+   example:
 
   ```bash
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
