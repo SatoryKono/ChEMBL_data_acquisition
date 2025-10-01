@@ -494,8 +494,6 @@ class IoCfg(_BoolModel):
 
 class LogCfg(_BaseModel):
     level: str = "INFO"
-    format: str = "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
-    datefmt: str = "%Y-%m-%d %H:%M:%S"
 
     @field_validator("level")
     @classmethod
@@ -1549,8 +1547,6 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_PUBCHEM_BASE": ["sources", "pubchem", "base"],
     "CHEMBL_DA_PUBCHEM_USER_AGENT": ["sources", "pubchem", "user_agent"],
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
-    "CHEMBL_DA_LOG_FORMAT": ["system", "log", "format"],
-    "CHEMBL_DA_LOG_DATEFMT": ["system", "log", "datefmt"],
     "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["system", "retry", "max_attempts"],
     "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["system", "retry", "backoff_factor"],
 }

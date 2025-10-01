@@ -123,11 +123,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg: Config = cli.apply_config_overrides(args, parser, args.config)
         if args.print_config:
             print_config(cfg)
-            configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+            configure_logger(log_cfg)
             logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        logger = configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)
+        logger = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         logger.error("config_error", error=str(exc))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)

@@ -281,17 +281,26 @@ def configure_logger(
     cfg:
         Logging configuration containing ``run_id`` and ``level``.
     fmt, datefmt:
-        Unused parameters retained for backward compatibility.
+        Unsupported parameters retained for compatibility.
 
     Returns
     -------
     Logger
         Configured logger instance shared across the package.
+
+    Raises
+    ------
+    ValueError
+        If ``fmt`` or ``datefmt`` are supplied. Structured JSON logging has a
+        fixed layout and cannot be customised.
     """
 
-    # ``fmt`` and ``datefmt`` are ignored because JSON logs have a fixed
-    # structure. They are accepted to remain API compatible with the previous
-    # implementation that configured :mod:`logging`.
+    if fmt is not None or datefmt is not None:
+        raise ValueError(
+            "Structured logging uses a fixed JSON layout; fmt/datefmt overrides"
+            " are not supported."
+        )
+
     new_logger = _configure_logger(
         LoggerConfig(level=cfg.level, run_id=cfg.run_id, stream=cfg.stream)
     )

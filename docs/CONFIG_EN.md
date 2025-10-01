@@ -382,8 +382,6 @@ Common short aliases:
 | `CHEMBL_DA_LIMITER_CACHE_MAXSIZE` | `system.rate.limiter_cache_maxsize` |
 | `CHEMBL_DA_LIMITER_CACHE_TTL` | `system.rate.limiter_cache_ttl` |
 | `CHEMBL_DA_LOG_LEVEL` | `system.log.level` |
-| `CHEMBL_DA_LOG_FORMAT` | `system.log.format` |
-| `CHEMBL_DA_LOG_DATEFMT` | `system.log.datefmt` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `system.retry.max_attempts` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `system.retry.backoff_factor` |
 | `CHEMBL_DA_DICT_DIR` | `local.resources.dictionary_dir` |

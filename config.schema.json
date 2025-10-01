@@ -1070,16 +1070,6 @@
           "default": "INFO",
           "title": "Level",
           "type": "string"
-        },
-        "format": {
-          "default": "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
-          "title": "Format",
-          "type": "string"
-        },
-        "datefmt": {
-          "default": "%Y-%m-%d %H:%M:%S",
-          "title": "Datefmt",
-          "type": "string"
         }
       },
       "title": "LogCfg",

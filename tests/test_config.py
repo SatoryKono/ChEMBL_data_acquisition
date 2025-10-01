@@ -105,15 +105,11 @@ def test_retry_and_log_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setenv("CHEMBL_DA_RETRY_MAX_ATTEMPTS", "10")
     monkeypatch.setenv("CHEMBL_DA_RETRY_BACKOFF_FACTOR", "2.0")
-    monkeypatch.setenv("CHEMBL_DA_LOG_FORMAT", "%(levelname)s")
-    monkeypatch.setenv("CHEMBL_DA_LOG_DATEFMT", "%d/%m/%Y")
 
     cfg = load_config(path)
 
     assert cfg.retry.max_attempts == 10
     assert cfg.retry.backoff_factor == 2.0
-    assert cfg.log.format == "%(levelname)s"
-    assert cfg.log.datefmt == "%d/%m/%Y"
 
 
 def test_cache_dir_alias(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
