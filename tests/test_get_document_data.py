@@ -6,10 +6,12 @@ import json
 import sys
 import threading
 import time
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable
+
+from itertools import islice
 
 import pandas as pd
 import pytest
@@ -254,6 +256,185 @@ def test_run_all_passes_generator_to_get_documents(
     rc = gdd.run_all(cfg, args)
     assert rc == 0
     assert captured["values"] == ids
+
+
+def test_run_pubmed_large_limit_streams(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Large limits should not force PubMed runs to materialise identifiers."""
+
+    cfg = Config()
+    limit = 1_000_000
+    input_csv = tmp_path / "pmids.csv"
+    input_csv.write_text("PMID\n1\n")
+
+    def fake_read_ids(
+        *_: Any,
+        **__: Any,
+    ) -> Iterable[str]:
+        return (str(i) for i in range(limit))
+
+    monkeypatch.setattr(lib_io, "read_ids", fake_read_ids)
+
+    captured: dict[str, Any] = {}
+
+    def fake_fetch_pubmed_records(
+        pmids: Iterable[str],
+        cfg_param: Config,
+        *,
+        sleep: float,
+        pubmed_cfg: Any | None = None,
+        semantic_scholar_cfg: SemanticScholarCfg,
+        openalex_cfg: OpenAlexCfg,
+        crossref_cfg: CrossRefCfg,
+        max_workers: int,
+        batch_size: int,
+        fallback_doi_map: Mapping[str, str] | None = None,
+        return_generator: bool = False,
+    ) -> Iterable[pd.DataFrame]:
+        assert not isinstance(pmids, list)
+        assert isinstance(pmids, Iterator)
+        subset = list(islice(pmids, 3))
+        captured["pmids"] = subset
+
+        def _generator() -> Iterator[pd.DataFrame]:
+            yield pd.DataFrame({"PMID": subset})
+
+        return _generator()
+
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+
+    def fake_finalise_export(
+        frames: Iterable[pd.DataFrame],
+        output: Path,
+        cfg_param: Config,
+        *,
+        input_csv: Path,
+        key_columns: Sequence[str] | None,
+        **kwargs: Any,
+    ) -> int:
+        collected = list(frames)
+        assert len(collected) == 1
+        assert collected[0]["PMID"].tolist() == captured["pmids"]
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="INFO", stream=buffer))
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+        limit=limit,
+    )
+
+    exit_code = gdd.run_pubmed(cfg, args)
+    assert exit_code == 0
+    assert captured["pmids"] == ["0", "1", "2"]
+
+    records = [
+        json.loads(line)
+        for line in buffer.getvalue().splitlines()
+        if line.strip()
+    ]
+    configure_logger(LoggerConfig(stream=sys.stdout))
+    assert any(
+        record.get("event") == "process_limit" and record.get("limit") == 3
+        for record in records
+    )
+
+
+def test_run_all_large_limit_streams(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Large limits should leave ``run_all`` streaming identifiers lazily."""
+
+    cfg = Config()
+    limit = 1_000_000
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL0\n")
+
+    def fake_read_ids(
+        *_: Any,
+        **__: Any,
+    ) -> Iterable[str]:
+        return (f"CHEMBL{i}" for i in range(limit))
+
+    monkeypatch.setattr(lib_io, "read_ids", fake_read_ids)
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - no cleanup
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    captured: dict[str, Any] = {}
+
+    def fake_get_documents(
+        ids_iter: Iterable[str],
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        assert not isinstance(ids_iter, list)
+        assert isinstance(ids_iter, Iterator)
+        values = list(islice(ids_iter, 5))
+        captured["values"] = values
+        return pd.DataFrame(
+            {
+                "document_chembl_id": values,
+                "pubmed_id": list(range(1, 6)),
+                "doi": [f"10.1000/{i}" for i in range(1, 6)],
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_documents", fake_get_documents)
+    monkeypatch.setattr(gdd, "merge_with_chembl", lambda doc_df, _: doc_df)
+    monkeypatch.setattr(gdd.dp, "postprocess_documents", lambda df: df)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", lambda *args, **kwargs: iter(()))
+
+    def fake_finalise_export(*_: Any, **__: Any) -> int:
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(level="INFO", stream=buffer))
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+        limit=limit,
+        chunk_size=5,
+    )
+
+    exit_code = gdd.run_all(cfg, args)
+    assert exit_code == 0
+    assert captured["values"] == [f"CHEMBL{i}" for i in range(5)]
+
+    records = [
+        json.loads(line)
+        for line in buffer.getvalue().splitlines()
+        if line.strip()
+    ]
+    configure_logger(LoggerConfig(stream=sys.stdout))
+    assert any(
+        record.get("event") == "process_limit" and record.get("limit") == 5
+        for record in records
+    )
 
 
 def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:

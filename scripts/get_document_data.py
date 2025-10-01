@@ -31,8 +31,10 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
 from itertools import chain, islice, tee
 from pathlib import Path
+
 from threading import Lock, local
-from typing import Any, cast
+from typing import Any, cast, TypeVar
+
 
 import pandas as pd
 import requests
@@ -103,6 +105,38 @@ from schemas import DocumentsSchema, normalize_documents
 
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
+
+
+T = TypeVar("T")
+
+
+def limit_iterable(
+    iterable: Iterable[T],
+    limit: int,
+) -> tuple[Iterator[T], Callable[[], int]]:
+    """Return an iterator capped at ``limit`` items and a counter callback."""
+
+    if limit < 0:
+        msg = "limit must be non-negative"
+        raise ValueError(msg)
+
+    source = iter(iterable)
+    count = 0
+
+    def _generator() -> Iterator[T]:
+        nonlocal count
+        for item in source:
+            if count >= limit:
+                break
+            count += 1
+            yield item
+
+    limited_iter = _generator()
+
+    def _get_count() -> int:
+        return count
+
+    return limited_iter, _get_count
 
 
 def _build_fallback_doi_map(
@@ -1240,10 +1274,11 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         pmids_iter = islice(pmids_iter, offset, None)
         logger.info("process_offset", offset=offset)
     pmids: Iterable[str] = pmids_iter
+    limit_counter: Callable[[], int] | None = None
     if limit is not None:
-        limited_pmids = list(islice(pmids_iter, limit))
-        pmids = limited_pmids
-        logger.info("process_limit", limit=len(limited_pmids))
+        pmids_limited, get_limit_count = limit_iterable(pmids_iter, limit)
+        pmids = pmids_limited
+        limit_counter = get_limit_count
 
     fallback_doi_map: Mapping[str, str] | None = None
     fallback_csv = getattr(args, "fallback_doi_csv", None)
@@ -1299,6 +1334,8 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error("pubmed_pipeline_failed", error=str(exc))
         return 1
+    if limit_counter is not None:
+        logger.info("process_limit", limit=limit_counter())
     return exit_code
 
 
@@ -1432,10 +1469,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("process_offset", offset=offset)
 
     ids_source: Iterable[str] = ids_iter
+    limit_counter: Callable[[], int] | None = None
     if limit is not None:
-        limited_ids = list(islice(ids_iter, limit))
-        ids_source = limited_ids
-        logger.info("process_limit", limit=len(limited_ids))
+        ids_limited, get_limit_count = limit_iterable(ids_iter, limit)
+        ids_source = ids_limited
+        limit_counter = get_limit_count
 
     iterator = iter(ids_source)
     sample_size = getattr(args, "chunk_size", all_defaults.chunk_size)
@@ -1458,6 +1496,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
         )
         return 1
+    if limit_counter is not None:
+        logger.info("process_limit", limit=limit_counter())
     output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
     if "doi" in doc_df.columns:
         doc_df["doi"] = doc_df["doi"].map(normalise_doi)
