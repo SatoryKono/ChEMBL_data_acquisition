@@ -1893,9 +1893,9 @@ def augment_pubchem(
 ) -> pd.DataFrame:
     """Augment ``df`` with PubChem information if enabled.
 
-    The shared PubChem client session is initialised with ``api_cfg`` and
-    ``retry_cfg`` before enrichment. Callers must therefore provide both
-    configurations even when invoking this function directly.
+    Callers must provide ``api_cfg`` derived from
+    :func:`_prepare_pubchem_api_cfg` so the PubChem session uses the correct
+    contact details.
     """
 
     pubchem_cid_cache: dict[str, str | None] | None = None
@@ -2086,7 +2086,7 @@ def run_testitem_pipeline(
                     current = augment_pubchem(
                         current,
                         pubchem_cfg=cfg.pubchem,
-                        api_cfg=api_cfg,
+                        api_cfg=pubchem_api_cfg,
                         retry_cfg=cfg.retry,
                         timeout=parent_timeout,
                         client=client,

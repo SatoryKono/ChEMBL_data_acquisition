@@ -473,10 +473,12 @@ def test_augment_pubchem_initialises_caches(
     monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", fake_load)
     monkeypatch.setattr(pipeline, "add_pubchem_data", fake_add)
 
+    pubchem_api_cfg = pipeline._prepare_pubchem_api_cfg(cfg, cfg.api)
+
     result = pipeline.augment_pubchem(
         df,
         pubchem_cfg=cfg.pubchem,
-        api_cfg=cfg.api,
+        api_cfg=pubchem_api_cfg,
         retry_cfg=cfg.retry,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
@@ -504,6 +506,8 @@ def test_augment_pubchem_initialises_session_once(
 
     captured: dict[str, object] = {"init_calls": 0}
 
+    pubchem_api_cfg = pipeline._prepare_pubchem_api_cfg(cfg, cfg.api)
+
     def fake_init_session(api: object, retry: object) -> None:
         captured["init_calls"] = captured["init_calls"] + 1
         captured["init_args"] = (api, retry)
@@ -521,7 +525,7 @@ def test_augment_pubchem_initialises_session_once(
     first = pipeline.augment_pubchem(
         df,
         pubchem_cfg=cfg.pubchem,
-        api_cfg=cfg.api,
+        api_cfg=pubchem_api_cfg,
         retry_cfg=cfg.retry,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
@@ -532,7 +536,7 @@ def test_augment_pubchem_initialises_session_once(
     second = pipeline.augment_pubchem(
         df,
         pubchem_cfg=cfg.pubchem,
-        api_cfg=cfg.api,
+        api_cfg=pubchem_api_cfg,
         retry_cfg=cfg.retry,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
@@ -541,7 +545,7 @@ def test_augment_pubchem_initialises_session_once(
     )
 
     assert captured["init_calls"] == 1
-    assert captured["init_args"] == (cfg.api, cfg.retry)
+    assert captured["init_args"] == (pubchem_api_cfg, cfg.retry)
     assert "pubchem_cid" in first.columns
     assert "pubchem_cid" in second.columns
 
