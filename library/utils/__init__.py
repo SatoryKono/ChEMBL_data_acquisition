@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import bootstrap
+from . import atomic, bootstrap
 
-__all__ = ["bootstrap"]
+__all__ = ["atomic", "bootstrap"]
