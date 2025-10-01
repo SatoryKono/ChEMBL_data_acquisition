@@ -73,6 +73,7 @@ def reset_pubchem_session() -> None:
     with pc._SESSION_LOCK:  # type: ignore[attr-defined]
         original_cfg = pc._SESSION_CFG  # type: ignore[attr-defined]
         original_signature = pc._SESSION_SIGNATURE  # type: ignore[attr-defined]
+        original_initialised = pc._SESSION_INITIALISED  # type: ignore[attr-defined]
         original_session = pc._session  # type: ignore[attr-defined]
     try:
         yield
@@ -81,6 +82,7 @@ def reset_pubchem_session() -> None:
             current_session = pc._session  # type: ignore[attr-defined]
             pc._SESSION_CFG = original_cfg  # type: ignore[attr-defined]
             pc._SESSION_SIGNATURE = original_signature  # type: ignore[attr-defined]
+            pc._SESSION_INITIALISED = original_initialised  # type: ignore[attr-defined]
             pc._session = session_with_retry(*original_cfg)  # type: ignore[attr-defined]
         if current_session is not None:
             current_session.close()
@@ -94,6 +96,25 @@ def _configure_session(user_agent: str = "pubchem-tests/1.0 (mailto:tests@exampl
     pc.init_session(api_cfg, retry_cfg)
     pc.get_session(api_cfg)
     return api_cfg
+
+
+def test_get_session_requires_initialisation_for_default_user_agent() -> None:
+    """Default configuration must call init_session before use."""
+
+    with pytest.raises(ValueError, match="requires a custom User-Agent"):
+        pc.get_session(ApiCfg())
+
+
+def test_get_session_allows_default_after_initialisation() -> None:
+    """Calling init_session enables reuse of the bundled default agent."""
+
+    api_cfg = ApiCfg()
+    retry_cfg = RetryCfg()
+    pc.init_session(api_cfg, retry_cfg)
+
+    session = pc.get_session()
+
+    assert session.headers.get("User-Agent") == api_cfg.user_agent
 
 
 def test_make_request_serves_cached_results_across_threads(monkeypatch) -> None:
