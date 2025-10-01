@@ -1,8 +1,8 @@
 """Runtime helpers for script execution.
 
 This module ensures that executing a script via ``python scripts/foo.py``
-behaves the same as ``python -m scripts.foo`` by pre-pending the project
-root to :mod:`sys.path`.
+behaves the same as ``python -m scripts.foo`` by pre-pending the repository
+root (``library/utils/../..``) to :mod:`sys.path`.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def ensure_project_root() -> None:
