@@ -26,6 +26,17 @@ from schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
 
+def test_ensure_no_parant_column_smoke() -> None:
+    """The helper re-exports the pipeline validation logic."""
+
+    valid_df = pd.DataFrame({"parent_molecule_id": ["CHEMBL1"]})
+    gtd.ensure_no_parant_column(valid_df)
+
+    invalid_df = pd.DataFrame({pipeline._TYPO_PARENT_COLUMN: ["CHEMBL1"]})
+    with pytest.raises(ValueError):
+        gtd.ensure_no_parant_column(invalid_df)
+
+
 def prepare_parent_lookup_data(
     df: pd.DataFrame, catalog_cfg
 ) -> pipeline.ParentLookupPreparedData:

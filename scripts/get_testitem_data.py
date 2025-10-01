@@ -3,6 +3,8 @@
 The module wraps :func:`library.testitem_pipeline.run_testitem_pipeline` while
 exposing helpers that tests can import directly. Entry points return numeric
 exit codes rather than terminating the interpreter to simplify orchestration.
+The :func:`ensure_no_parant_column` helper guards against legacy CSV exports
+that still include the misspelled parent identifier column.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ from library.testitem_pipeline import (
     PUBCHEM_CID_CACHE_ENCODING as _pipeline_pubchem_cid_cache_encoding,
     ReadInputIdsResult as _ReadInputIdsResult,
     TestitemPipelineOptions,
+    _TYPO_PARENT_COLUMN,
     analyze_table_quality as _analyze_table_quality,
     file_sha256 as _pipeline_file_sha256,
     fetch_testitems as _fetch_testitems,
