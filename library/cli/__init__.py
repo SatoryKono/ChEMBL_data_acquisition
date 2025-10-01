@@ -12,6 +12,7 @@ from .parser import (
     path_argument,
     positive_int,
 )
+from .runner import run_cli_command
 
 __all__ = [
     "Logger",
@@ -24,4 +25,5 @@ __all__ = [
     "create_logger_config",
     "path_argument",
     "positive_int",
+    "run_cli_command",
 ]
