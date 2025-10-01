@@ -118,7 +118,8 @@ TESTITEM_COLUMNS = [
 TESTITEM_QUERY_FIELDS = TESTITEM_FIELD_DEFAULTS
 
 
-MAX_TESTITEM_URL_LENGTH = 7500
+# ChEMBL API rejects URLs above ~4096 characters, keep a conservative margin.
+MAX_TESTITEM_URL_LENGTH = 4000
 
 
 def _split_chunk_for_url(
