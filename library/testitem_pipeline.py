@@ -9,7 +9,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Mapping, MutableMapping, NamedTuple, Sequence
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Sequence,
+)
 
 import pandas as pd
 import requests
@@ -1031,6 +1039,279 @@ def resolve_pubchem_cid(
     return None
 
 
+def _prepare_pubchem_caches(
+    frame: pd.DataFrame,
+    cfg: PubChemCfg,
+    *,
+    cache_path: Path | str | None,
+    cache_ttl_hours: float | None,
+    cid_cache: MutableMapping[str, str | None] | None,
+    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
+    | None,
+    parent_record_cache: MutableMapping[str, pd.Series | None] | None,
+) -> tuple[
+    MutableMapping[str, str | None],
+    MutableMapping[tuple[str | None, ...], pl.PubChemResolution],
+    MutableMapping[str, pd.Series | None],
+    list[str],
+    Callable[[str], pd.Series | None],
+]:
+    """Prepare caches and parent lookups required for PubChem enrichment."""
+
+    if cid_cache is None:
+        cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
+    if resolution_cache is None:
+        resolution_cache = {}
+    if parent_record_cache is None:
+        parent_record_cache = {}
+
+    local_records: pd.DataFrame | None = None
+    if "molecule_chembl_id" in frame.columns:
+        prepared_local_records = (
+            frame.assign(
+                __local_molecule=lambda data: data["molecule_chembl_id"]
+                .astype("string")
+                .str.strip()
+                .str.upper()
+            )
+            .dropna(subset=["__local_molecule"])
+        )
+        if not prepared_local_records.empty:
+            local_records = (
+                prepared_local_records.drop_duplicates("__local_molecule")
+                .set_index("__local_molecule")
+                .rename_axis("molecule_chembl_id")
+                .reindex(columns=frame.columns)
+            )
+            for chembl_norm in local_records.index:
+                try:
+                    record = local_records.loc[chembl_norm]
+                except KeyError:  # pragma: no cover - defensive
+                    continue
+                parent_record_cache[chembl_norm] = record.copy()
+
+    pending_parent_ids: list[str] = []
+    seen_parent_ids: set[str] = set()
+    if "parent_molecule_chembl_id" in frame.columns:
+        for parent_value in frame["parent_molecule_chembl_id"]:
+            parent_norm = _normalise_identifier(parent_value, uppercase=True)
+            if not parent_norm:
+                continue
+            if parent_norm in parent_record_cache:
+                continue
+            if local_records is not None and parent_norm in local_records.index:
+                continue
+            if parent_norm in seen_parent_ids:
+                continue
+            seen_parent_ids.add(parent_norm)
+            pending_parent_ids.append(parent_norm)
+
+    def load_parent_record(parent_norm: str) -> pd.Series | None:
+        if parent_norm in parent_record_cache:
+            return parent_record_cache[parent_norm]
+        if local_records is not None and parent_norm in local_records.index:
+            try:
+                return local_records.loc[parent_norm]
+            except KeyError:  # pragma: no cover - defensive
+                return None
+        return parent_record_cache.get(parent_norm)
+
+    return (
+        cid_cache,
+        resolution_cache,
+        parent_record_cache,
+        pending_parent_ids,
+        load_parent_record,
+    )
+
+
+def _prefetch_parents(
+    parent_ids: Sequence[str],
+    *,
+    client: ChemblClient | None,
+    api_cfg: ApiCfg | None,
+    cfg: PubChemCfg,
+    timeout: float | None,
+    testitem_fields: Sequence[str] | None,
+    request_limit: int,
+    parent_record_cache: MutableMapping[str, pd.Series | None],
+) -> None:
+    """Prefetch parent records for the provided identifiers."""
+
+    if not parent_ids or client is None or api_cfg is None:
+        return
+
+    logger.info(
+        "pubchem_parent_prefetch",
+        count=len(parent_ids),
+        batch_size=getattr(cfg, "batch_size", 0),
+    )
+    try:
+        fetched = cl.get_testitem(
+            parent_ids,
+            cfg=api_cfg,
+            client=client,
+            chunk_size=getattr(cfg, "batch_size", 0),
+            timeout=timeout,
+            fields=testitem_fields,
+            page_limit=request_limit,
+        )
+    except (requests.RequestException, ValueError) as exc:
+        logger.warning("pubchem_parent_prefetch_failed", error=str(exc))
+        return
+
+    if fetched.empty:
+        return
+
+    fetched = fetched.astype("string")
+    fetched["molecule_chembl_id"] = fetched["molecule_chembl_id"].str.upper()
+    fetched = fetched.drop_duplicates("molecule_chembl_id")
+    fetched = fetched.set_index("molecule_chembl_id")
+    for parent_norm, row in fetched.iterrows():
+        parent_record_cache[parent_norm] = row
+
+
+def _resolve_pubchem_cids(
+    frame: pd.DataFrame,
+    cfg: PubChemCfg,
+    *,
+    cid_cache: MutableMapping[str, str | None],
+    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution],
+    load_parent_record: Callable[[str], pd.Series | None] | None,
+    skip_mask: pd.Series,
+    prefer_local_mask: pd.Series,
+) -> tuple[pd.Series, set[str], bool]:
+    """Resolve PubChem CIDs for rows requiring lookup."""
+
+    if "pubchem_cid" in frame.columns:
+        cid_series = frame["pubchem_cid"].astype("string").copy()
+    else:
+        cid_series = pd.Series(pd.NA, index=frame.index, dtype="string")
+
+    if "molecule_chembl_id" in frame.columns:
+        chembl_norm = frame["molecule_chembl_id"].map(
+            lambda value: _normalise_identifier(value, uppercase=True)
+        )
+    else:
+        chembl_norm = pd.Series(
+            [None] * len(frame), index=frame.index, dtype="object"
+        )
+
+    def _is_cached(chembl_id: str | None) -> bool:
+        return bool(chembl_id and cid_cache.get(chembl_id))
+
+    cached_mask = chembl_norm.map(_is_cached)
+    needs_lookup_mask = (
+        chembl_norm.notna()
+        & ~skip_mask.astype(bool)
+        & ~prefer_local_mask.astype(bool)
+        & ~cached_mask
+    )
+
+    total = int(needs_lookup_mask.sum())
+    if total:
+        logger.info("pubchem_start", total=total)
+    else:
+        logger.info("pubchem_no_smiles")
+
+    cid_series = cid_series.astype("string")
+    lookup_cids: set[str] = set()
+    cache_dirty = False
+    for idx, chembl_id in chembl_norm[cached_mask].items():
+        cached_value = cid_cache.get(chembl_id)
+        if cached_value:
+            cid_series.loc[idx] = cached_value
+            lookup_cids.add(cached_value)
+
+    for progress, row in enumerate(frame.loc[needs_lookup_mask].itertuples(), start=1):
+        logger.info("pubchem_progress", current=progress, total=total)
+        idx = row.Index
+        chembl_id = chembl_norm.loc[idx]
+        before_present = bool(chembl_id and chembl_id in cid_cache)
+        before_value = cid_cache[chembl_id] if before_present else _CID_CACHE_MISSING
+        cid = resolve_pubchem_cid(
+            frame.loc[idx],
+            cid_cache,
+            cfg,
+            parent_loader=load_parent_record,
+            resolution_cache=resolution_cache,
+        )
+        if cid:
+            cid_series.loc[idx] = cid
+            lookup_cids.add(cid)
+        elif getattr(cfg, "write_not_found_literal", False):
+            cid_series.loc[idx] = "Not Found"
+        else:
+            cid_series.loc[idx] = pd.NA
+        if chembl_id:
+            after_present = chembl_id in cid_cache
+            after_value = cid_cache[chembl_id] if after_present else _CID_CACHE_MISSING
+            if before_present != after_present or after_value != before_value:
+                cache_dirty = True
+
+    return cid_series, lookup_cids, cache_dirty
+
+
+def _merge_pubchem_properties(
+    frame: pd.DataFrame,
+    cid_series: pd.Series,
+    lookup_cids: Collection[str],
+    *,
+    cfg: PubChemCfg,
+    skip_mask: pd.Series,
+    prefer_local_mask: pd.Series,
+) -> pd.DataFrame:
+    """Fetch PubChem properties and merge them with the provided frame."""
+
+    def _value_or_na(value: str | None) -> object:
+        return value if value not in (None, "") else pd.NA
+
+    properties: dict[str, pl.Properties] = {}
+    for cid in sorted(lookup_cids):
+        properties[cid] = pl.get_properties(cid, cfg)
+
+    properties_records: dict[str, dict[str, object]] = {}
+    for cid, props in properties.items():
+        properties_records[cid] = {
+            "pubchem_iupac_name": _value_or_na(props.IUPACName),
+            "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
+            "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
+            "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
+            "pubchem_inchi": _value_or_na(props.InChI),
+            "pubchem_inchikey": _value_or_na(props.InChIKey),
+        }
+
+    properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
+    pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
+    pubchem_df = pubchem_df.reindex(frame.index)
+
+    preserve_mask = skip_mask | prefer_local_mask
+    if preserve_mask.any():
+        existing_columns = [
+            column
+            for column in PUBCHEM_COLUMNS
+            if column in frame.columns and column in pubchem_df.columns
+        ]
+        if existing_columns:
+            original_existing = frame[existing_columns].astype("string")
+            intersecting_columns = [
+                column for column in existing_columns if column in pubchem_df.columns
+            ]
+            if intersecting_columns:
+                pubchem_df[intersecting_columns] = (
+                    pubchem_df[intersecting_columns]
+                    .astype("string")
+                    .mask(preserve_mask, original_existing[intersecting_columns])
+                )
+            missing_columns = [
+                column for column in existing_columns if column not in pubchem_df.columns
+            ]
+            if missing_columns:
+                pubchem_df[missing_columns] = original_existing[missing_columns]
+
+    return pubchem_df.convert_dtypes()
+
+
 def add_pubchem_data(
     df: pd.DataFrame,
     cfg: PubChemCfg,
@@ -1101,94 +1382,33 @@ def add_pubchem_data(
 
     cache_path = getattr(cfg, "cid_cache_path", None)
     cache_ttl_hours = getattr(cfg, "cache_ttl_hours", None)
-    if cid_cache is None:
-        cid_cache = _load_pubchem_cid_cache(cache_path, ttl_hours=cache_ttl_hours)
+    (
+        cid_cache,
+        resolution_cache,
+        parent_record_cache,
+        pending_parent_ids,
+        load_parent_record,
+    ) = _prepare_pubchem_caches(
+        result,
+        cfg,
+        cache_path=cache_path,
+        cache_ttl_hours=cache_ttl_hours,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+    )
     cache_dirty = False
-    if resolution_cache is None:
-        resolution_cache = {}
 
-    if parent_record_cache is None:
-        parent_record_cache = {}
-
-    local_records: pd.DataFrame | None = None
-    if "molecule_chembl_id" in result.columns:
-        prepared_local_records = (
-            result.assign(
-                __local_molecule=lambda frame: frame[
-                    "molecule_chembl_id"
-                ]
-                .astype("string")
-                .str.strip()
-                .str.upper()
-            )
-            .dropna(subset=["__local_molecule"])
-        )
-        if not prepared_local_records.empty:
-            local_records = (
-                prepared_local_records.drop_duplicates("__local_molecule")
-                .set_index("__local_molecule")
-                .rename_axis("molecule_chembl_id")
-                .reindex(columns=result.columns)
-            )
-            for chembl_norm in local_records.index:
-                try:
-                    record = local_records.loc[chembl_norm]
-                except KeyError:  # pragma: no cover - defensive
-                    continue
-                parent_record_cache[chembl_norm] = record.copy()
-
-    pending_parent_ids: list[str] = []
-    seen_parent_ids: set[str] = set()
-    if "parent_molecule_chembl_id" in result.columns:
-        for parent_value in result["parent_molecule_chembl_id"]:
-            parent_norm = _normalise_identifier(parent_value, uppercase=True)
-            if not parent_norm:
-                continue
-            if parent_norm in parent_record_cache or (
-                local_records is not None and parent_norm in local_records.index
-            ):
-                continue
-            if parent_norm in seen_parent_ids:
-                continue
-            seen_parent_ids.add(parent_norm)
-            pending_parent_ids.append(parent_norm)
-
-    if pending_parent_ids and client is not None and api_cfg is not None:
-        logger.info(
-            "pubchem_parent_prefetch",
-            count=len(pending_parent_ids),
-            batch_size=getattr(cfg, "batch_size", 0),
-        )
-        try:
-            fetched = cl.get_testitem(
-                pending_parent_ids,
-                cfg=api_cfg,
-                client=client,
-                chunk_size=getattr(cfg, "batch_size", 0),
-                timeout=timeout,
-                fields=testitem_fields,
-                page_limit=request_limit,
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.warning("pubchem_parent_prefetch_failed", error=str(exc))
-        else:
-            if not fetched.empty:
-                fetched = fetched.astype("string")
-                fetched["molecule_chembl_id"] = fetched["molecule_chembl_id"].str.upper()
-                fetched = fetched.drop_duplicates("molecule_chembl_id")
-                fetched = fetched.set_index("molecule_chembl_id")
-                for parent_norm, row in fetched.iterrows():
-                    parent_record_cache[parent_norm] = row
-
-    def load_parent_record(parent_norm: str) -> pd.Series | None:
-        if parent_norm in parent_record_cache:
-            return parent_record_cache[parent_norm]
-        if local_records is not None and parent_norm in local_records.index:
-            try:
-                return local_records.loc[parent_norm]
-            except KeyError:
-                pass
-        return parent_record_cache.get(parent_norm)
+    _prefetch_parents(
+        pending_parent_ids,
+        client=client,
+        api_cfg=api_cfg,
+        cfg=cfg,
+        timeout=timeout,
+        testitem_fields=testitem_fields,
+        request_limit=request_limit,
+        parent_record_cache=parent_record_cache,
+    )
 
     if "molecule_chembl_id" in result.columns and "pubchem_cid" in result.columns:
         for chembl_raw, cid_raw in zip(
@@ -1205,11 +1425,6 @@ def add_pubchem_data(
             if before is _CID_CACHE_MISSING or before != cid_value:
                 cache_dirty = True
 
-    if "pubchem_cid" in result.columns:
-        cid_series = result["pubchem_cid"].astype("string").copy()
-    else:
-        cid_series = pd.Series(pd.NA, index=result.index, dtype="string")
-
     skip_mask = pd.Series(False, index=result.index)
     if skip_indexes:
         skip_mask.loc[list(skip_indexes)] = True
@@ -1220,116 +1435,28 @@ def add_pubchem_data(
         else pd.Series(False, index=result.index)
     )
 
-    if "molecule_chembl_id" in result.columns:
-        chembl_norm = result["molecule_chembl_id"].map(
-            lambda value: _normalise_identifier(value, uppercase=True)
-        )
-    else:
-        chembl_norm = pd.Series(
-            [None] * len(result), index=result.index, dtype="object"
-        )
-
-    def _is_cached(chembl_id: str | None) -> bool:
-        return bool(chembl_id and cid_cache.get(chembl_id))
-
-    cached_mask = chembl_norm.map(_is_cached)
-    needs_lookup_mask = (
-        chembl_norm.notna()
-        & ~skip_mask
-        & ~prefer_local_mask
-        & ~cached_mask
+    cid_series, lookup_cids, cid_dirty = _resolve_pubchem_cids(
+        result,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        load_parent_record=load_parent_record,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
     )
-
-    total = int(needs_lookup_mask.sum())
-    if total:
-        logger.info("pubchem_start", total=total)
-    else:
-        logger.info("pubchem_no_smiles")
-
-    cid_series = cid_series.astype("string")
-    lookup_cids: set[str] = set()
-    for idx, chembl_id in chembl_norm[cached_mask].items():
-        cached_value = cid_cache.get(chembl_id)
-        if cached_value:
-            cid_series.loc[idx] = cached_value
-            lookup_cids.add(cached_value)
-
-    for progress, row in enumerate(result.loc[needs_lookup_mask].itertuples(), start=1):
-        logger.info("pubchem_progress", current=progress, total=total)
-        idx = row.Index
-        chembl_id = chembl_norm.loc[idx]
-        before_present = bool(chembl_id and chembl_id in cid_cache)
-        before_value = cid_cache[chembl_id] if before_present else _CID_CACHE_MISSING
-        cid = resolve_pubchem_cid(
-            result.loc[idx],
-            cid_cache,
-            cfg,
-            parent_loader=load_parent_record,
-            resolution_cache=resolution_cache,
-        )
-        if cid:
-            cid_series.loc[idx] = cid
-            lookup_cids.add(cid)
-        elif getattr(cfg, "write_not_found_literal", False):
-            cid_series.loc[idx] = "Not Found"
-        else:
-            cid_series.loc[idx] = pd.NA
-        if chembl_id:
-            after_present = chembl_id in cid_cache
-            after_value = cid_cache[chembl_id] if after_present else _CID_CACHE_MISSING
-            if before_present != after_present or after_value != before_value:
-                cache_dirty = True
+    cache_dirty = cache_dirty or cid_dirty
 
     if cache_dirty:
         _write_pubchem_cid_cache(cache_path, cid_cache)
 
-    def _value_or_na(value: str | None) -> object:
-        return value if value not in (None, "") else pd.NA
-
-    properties: dict[str, pl.Properties] = {}
-    for cid in sorted(lookup_cids):
-        properties[cid] = pl.get_properties(cid, cfg)
-
-    properties_records: dict[str, dict[str, object]] = {}
-    for cid, props in properties.items():
-        properties_records[cid] = {
-            "pubchem_iupac_name": _value_or_na(props.IUPACName),
-            "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
-            "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
-            "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
-            "pubchem_inchi": _value_or_na(props.InChI),
-            "pubchem_inchikey": _value_or_na(props.InChIKey),
-        }
-
-    properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
-    pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
-    pubchem_df = pubchem_df.reindex(result.index)
-
-    preserve_mask = skip_mask | prefer_local_mask
-    if preserve_mask.any():
-        existing_columns = [
-            column
-            for column in PUBCHEM_COLUMNS
-            if column in result.columns and column in pubchem_df.columns
-        ]
-        if existing_columns:
-            original_existing = result[existing_columns].astype("string")
-            intersecting_columns = [
-                column for column in existing_columns if column in pubchem_df.columns
-            ]
-            if intersecting_columns:
-                pubchem_df[intersecting_columns] = (
-                    pubchem_df[intersecting_columns]
-                    .astype("string")
-                    .mask(preserve_mask, original_existing[intersecting_columns])
-                )
-            missing_columns = [
-                column for column in existing_columns if column not in pubchem_df.columns
-            ]
-            if missing_columns:
-                pubchem_df[missing_columns] = original_existing[missing_columns]
-
-    pubchem_df = pubchem_df.convert_dtypes()
+    pubchem_df = _merge_pubchem_properties(
+        result,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
 
     prefer_values = getattr(cfg, "prefer_local_values", False)
 

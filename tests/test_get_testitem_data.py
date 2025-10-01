@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -604,198 +604,10 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
     assert "invalid hierarchy lookup" in str(excinfo.value)
 
 
-def test_add_pubchem_data_missing_uses_na(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame({
-        "molecule_chembl_id": ["CHEMBL1"],
-        "canonical_smiles": ["C"],
-    })
-    cfg = pl.PubChemCfg(delay=0)
-
-    monkeypatch.setattr(
-        pl,
-        "resolve_pubchem_record",
-        lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
-    )
-    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
-
-    calls: list[str] = []
-    monkeypatch.setattr(
-        pl,
-        "get_properties",
-        lambda cid, cfg: calls.append(cid) or pl.Properties(None, None, None, None, None, None),
-    )
-
-    result = pipeline.add_pubchem_data(df, cfg)
-    pubchem_cols = [col for col in result.columns if col.startswith("pubchem_")]
-    assert pubchem_cols
-    assert result[pubchem_cols].isna().all().all()
-    assert not (result[pubchem_cols] == "Not Found").any().any()
-    assert calls == []
-
-
-def test_add_pubchem_data_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame({"canonical_smiles": ["C"]})
-    cfg = pl.PubChemCfg(delay=0, enable=False)
-
-    calls: list[tuple[tuple, dict]] = []
-    monkeypatch.setattr(
-        pl,
-        "resolve_pubchem_record",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
-    )
-
-    result = pipeline.add_pubchem_data(df, cfg)
-
-    assert calls == []
-    assert list(result.columns) == list(df.columns)
-
-
-def test_add_pubchem_data_not_found_literal(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame(
-        {"molecule_chembl_id": ["CHEMBL1"], "canonical_smiles": ["C"]}
-    )
-    cfg = pl.PubChemCfg(delay=0, write_not_found_literal=True)
-
-    monkeypatch.setattr(
-        pl,
-        "resolve_pubchem_record",
-        lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
-    )
-    monkeypatch.setattr(
-        pl,
-        "get_properties",
-        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
-    )
-    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
-
-    result = pipeline.add_pubchem_data(df, cfg)
-
-    assert result.loc[0, "pubchem_cid"] == "Not Found"
-
-
-def test_add_pubchem_data_reuses_resolution_cache(
+def test_prepare_pubchem_caches_primes_local_parent_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    df = pd.DataFrame(
-        {
-            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
-            "canonical_smiles": ["C", "C"],
-        }
-    )
-    cfg = pl.PubChemCfg(delay=0)
-
-    calls: list[tuple[str | None, ...]] = []
-
-    def fake_resolve(
-        identifiers: Mapping[str, str | None],
-        cfg: pl.PubChemCfg,
-        *,
-        resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution]
-        | None = None,
-        resolution_key: tuple[str | None, ...] | None = None,
-        **kwargs: object,
-    ) -> pl.PubChemResolution:
-        if resolution_cache is not None and resolution_key is not None:
-            if resolution_key in resolution_cache:
-                return resolution_cache[resolution_key]
-            calls.append(resolution_key)
-            result = pl.PubChemResolution(cid="123", source="canonical_smiles")
-            resolution_cache[resolution_key] = result
-            return result
-        raise AssertionError("resolution_cache should be provided")
-
-    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
-    monkeypatch.setattr(
-        pl,
-        "get_properties",
-        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
-    )
-    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
-
-    result = pipeline.add_pubchem_data(df, cfg)
-
-    assert len(calls) == 1
-    assert result["pubchem_cid"].tolist() == ["123", "123"]
-
-
-def test_add_pubchem_data_prefetches_parent_records(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    df = pd.DataFrame(
-        {
-            "molecule_chembl_id": ["CHEMBL1"],
-            "parent_molecule_chembl_id": ["CHEMBL2"],
-            "canonical_smiles": ["C"],
-        }
-    )
-    cfg = pl.PubChemCfg(delay=0, batch_size=7)
-    api_cfg = ApiCfg()
-    cid_cache: dict[str, str | None] = {}
-    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
-    parent_record_cache: dict[str, pd.Series | None] = {}
-
-    calls: list[tuple[tuple[str, ...], int, float | None]] = []
-
-    def fake_get_testitem(
-        ids: Iterable[str],
-        *,
-        cfg: ApiCfg,
-        client: object,
-        chunk_size: int,
-        timeout: float | None,
-        fields: Sequence[str] | None = None,
-        page_limit: int = 1000,
-    ) -> pd.DataFrame:
-        calls.append((tuple(ids), chunk_size, timeout))
-        return pd.DataFrame(
-            {
-                "molecule_chembl_id": ["CHEMBL2"],
-                "parent_molecule_chembl_id": [None],
-                "canonical_smiles": ["CC"],
-            }
-        )
-
-    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
-
-    def fake_resolve(
-        identifiers: Mapping[str, str | None],
-        cfg: pl.PubChemCfg,
-        *,
-        cache_key: str | None = None,
-        **_: object,
-    ) -> pl.PubChemResolution:
-        if cache_key == "CHEMBL2" or identifiers.get("canonical_smiles") == "CC":
-            return pl.PubChemResolution(cid="321", source="parent")
-        return pl.PubChemResolution(cid=None, source=None)
-
-    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
-    monkeypatch.setattr(
-        pl,
-        "get_properties",
-        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
-    )
-
-    timeout = 12.5
-    result = pipeline.add_pubchem_data(
-        df,
-        cfg,
-        client=object(),
-        api_cfg=api_cfg,
-        timeout=timeout,
-        cid_cache=cid_cache,
-        resolution_cache=resolution_cache,
-        parent_record_cache=parent_record_cache,
-    )
-
-    assert calls == [(("CHEMBL2",), 7, timeout)]
-    assert parent_record_cache["CHEMBL2"]["canonical_smiles"] == "CC"
-    assert result.loc[0, "pubchem_cid"] == "321"
-
-
-def test_add_pubchem_data_primes_parent_cache_with_duplicates(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    df = pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "molecule_chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"],
             "parent_molecule_chembl_id": [pd.NA, pd.NA, "CHEMBL1"],
@@ -803,152 +615,204 @@ def test_add_pubchem_data_primes_parent_cache_with_duplicates(
         }
     )
     cfg = pl.PubChemCfg(delay=0)
-    api_cfg = ApiCfg()
     cid_cache: dict[str, str | None] = {}
     resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
     parent_record_cache: dict[str, pd.Series | None] = {}
 
-    def fail_fetch(*args: object, **kwargs: object) -> pd.DataFrame:  # pragma: no cover
-        raise AssertionError("parent records should not be fetched remotely")
-
-    monkeypatch.setattr(cl, "get_testitem", fail_fetch)
-
-    def fake_resolve(
-        identifiers: Mapping[str, str | None],
-        cfg: pl.PubChemCfg,
-        *,
-        cache_key: str | None = None,
-        **_: object,
-    ) -> pl.PubChemResolution:
-        if cache_key == "CHEMBL1" or identifiers.get("canonical_smiles") == "C":
-            return pl.PubChemResolution(cid="111", source="local")
-        return pl.PubChemResolution(cid=None, source=None)
-
-    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
-    monkeypatch.setattr(
-        pl,
-        "get_properties",
-        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
-    )
-
-    result = pipeline.add_pubchem_data(
-        df,
+    (
+        prepared_cache,
+        prepared_resolution,
+        prepared_parent_cache,
+        pending_parent_ids,
+        load_parent_record,
+    ) = pipeline._prepare_pubchem_caches(
+        frame,
         cfg,
-        client=object(),
-        api_cfg=api_cfg,
+        cache_path=None,
+        cache_ttl_hours=None,
         cid_cache=cid_cache,
         resolution_cache=resolution_cache,
         parent_record_cache=parent_record_cache,
     )
 
-    assert "CHEMBL1" in parent_record_cache
-    parent_series = parent_record_cache["CHEMBL1"]
+    assert prepared_cache is cid_cache
+    assert prepared_resolution is resolution_cache
+    assert prepared_parent_cache is parent_record_cache
+    assert pending_parent_ids == []
+    assert "CHEMBL1" in prepared_parent_cache
+
+    parent_series = prepared_parent_cache["CHEMBL1"]
     assert isinstance(parent_series, pd.Series)
     assert parent_series["canonical_smiles"] == "C"
-    assert (
-        result.loc[result["molecule_chembl_id"] == "CHEMBL2", "pubchem_cid"]
-        .iloc[0]
-        == "111"
-    )
+    loaded_parent = load_parent_record("CHEMBL1")
+    assert isinstance(loaded_parent, pd.Series)
+    assert loaded_parent["canonical_smiles"] == "C"
 
 
-def test_add_pubchem_data_prefers_local_smiles(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame(
+def test_prefetch_parents_updates_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = pl.PubChemCfg(delay=0, batch_size=2)
+    parent_record_cache: dict[str, pd.Series | None] = {}
+    fetched = pd.DataFrame(
         {
-            "canonical_smiles": ["C"],
-            "pubchem_cid": ["1"],
-            "pubchem_iupac_name": ["methane"],
-            "pubchem_molecular_formula": ["CH4"],
-            "pubchem_isomeric_smiles": ["C"],
-            "pubchem_canonical_smiles": ["C"],
-            "pubchem_inchi": ["InChI=1S/CH4/h1H4"],
-            "pubchem_inchikey": ["VNWKTOKETHGBQD-UHFFFAOYSA-N"],
+            "molecule_chembl_id": ["CHEMBL2", "CHEMBL2"],
+            "canonical_smiles": ["CC", "CC"],
         }
     )
-    cfg = pl.PubChemCfg(delay=0, prefer_local_smiles=True)
 
-    def fake_resolve(*_: object, **__: object) -> pl.PubChemResolution:
-        return pl.PubChemResolution(cid="321", source="cache")
+    calls: list[Sequence[str]] = []
 
-    def fail(*_: object, **__: object) -> None:
-        raise AssertionError(
-            "get_properties should not be called when prefer_local_smiles is enabled"
-        )
+    def fake_get_testitem(*args: object, **kwargs: object) -> pd.DataFrame:
+        chembl_ids = args[0] if args else kwargs.get("chembl_ids")
+        calls.append(list(chembl_ids))
+        return fetched
 
-    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
-    monkeypatch.setattr(pl, "get_properties", fail)
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
 
-    result = pipeline.add_pubchem_data(df, cfg)
+    pipeline._prefetch_parents(
+        ["CHEMBL2"],
+        client=object(),
+        api_cfg=ApiCfg(),
+        cfg=cfg,
+        timeout=5.0,
+        testitem_fields=["canonical_smiles"],
+        request_limit=3,
+        parent_record_cache=parent_record_cache,
+    )
 
-    expected = df.copy()
-    for column in pipeline.PUBCHEM_COLUMNS:
-        expected[column] = expected[column].astype("string")
-    pd.testing.assert_frame_equal(result, expected)
+    assert calls == [["CHEMBL2"]]
+    assert "CHEMBL2" in parent_record_cache
+    assert parent_record_cache["CHEMBL2"]["canonical_smiles"] == "CC"
 
 
-def test_add_pubchem_data_preserves_existing_values(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    df = pd.DataFrame(
+def test_resolve_pubchem_cids_marks_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = pd.DataFrame(
         {
             "molecule_chembl_id": ["CHEMBL1", "CHEMBL2", "CHEMBL3"],
-            "canonical_smiles": ["", "C", "CC"],
-            "molecule_type": ["Polymer", "Mixture", "Small molecule"],
-            "pubchem_cid": ["111", "222", ""],
-            "pubchem_iupac_name": ["existing", "mixture", ""],
+            "canonical_smiles": ["C", "N", "O"],
         }
     )
-    cfg = pl.PubChemCfg(
-        delay=0,
-        allow_polymer=False,
-        prefer_local_smiles=False,
-        prefer_local_values=True,
-    )
-
+    cfg = pl.PubChemCfg(delay=0, write_not_found_literal=True)
+    cid_cache: dict[str, str | None] = {"CHEMBL2": "222"}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
     calls: list[str] = []
-    warnings: list[tuple[str, dict[str, object]]] = []
 
     def fake_resolve(
         row: pd.Series,
-        cache: dict[str, str | None],
+        cache: MutableMapping[str, str | None],
         cfg: pl.PubChemCfg,
-        *,
-        parent_loader: Callable[[str], pd.Series | None] | None = None,
-        resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution]
-        | None = None,
-    ) -> str:
-        calls.append(row["molecule_chembl_id"])
-        return "333"
+        **_: object,
+    ) -> str | None:
+        chembl_id = row["molecule_chembl_id"]
+        calls.append(chembl_id)
+        if chembl_id == "CHEMBL3":
+            cache[chembl_id] = "333"
+            return "333"
+        cache[chembl_id] = None
+        return None
 
     monkeypatch.setattr(pipeline, "resolve_pubchem_cid", fake_resolve)
-    monkeypatch.setattr(
-        pl,
-        "get_properties",
-        lambda cid, cfg: pl.Properties(None, None, None, None, None, None),
-    )
-    monkeypatch.setattr(
-        pipeline.logger,
-        "warning",
-        lambda event, **kwargs: warnings.append((event, kwargs)),
-    )
 
-    result = pipeline.add_pubchem_data(df, cfg)
+    skip_mask = pd.Series(False, index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
 
-    assert calls == ["CHEMBL3"]
-    assert any(
-        event == "pubchem_skip_polymers"
-        and kwargs.get("count") == 2
-        and kwargs.get("polymer_count") == 1
-        and kwargs.get("mixture_count") == 1
-        and kwargs.get("indexes") == [0, 1]
-        for event, kwargs in warnings
+    cid_series, lookup_cids, cache_dirty = pipeline._resolve_pubchem_cids(
+        frame,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        load_parent_record=lambda _: None,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
     )
 
-    assert result.loc[0, "pubchem_cid"] == "111"
-    assert result.loc[0, "pubchem_iupac_name"] == "existing"
-    assert result.loc[1, "pubchem_cid"] == "222"
-    assert result.loc[1, "pubchem_iupac_name"] == "mixture"
-    assert result.loc[2, "pubchem_cid"] == "333"
+    assert list(cid_series) == ["Not Found", "222", "333"]
+    assert lookup_cids == {"222", "333"}
+    assert cache_dirty
+    assert calls == ["CHEMBL1", "CHEMBL3"]
+
+
+def test_resolve_pubchem_cids_skips_marked_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "canonical_smiles": ["C", "N"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0)
+    cid_cache: dict[str, str | None] = {}
+    resolution_cache: dict[tuple[str | None, ...], pl.PubChemResolution] = {}
+    calls: list[str] = []
+
+    def fake_resolve(
+        row: pd.Series,
+        cache: MutableMapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        **_: object,
+    ) -> str:
+        chembl_id = row["molecule_chembl_id"]
+        calls.append(chembl_id)
+        cache[chembl_id] = "111"
+        return "111"
+
+    monkeypatch.setattr(pipeline, "resolve_pubchem_cid", fake_resolve)
+
+    skip_mask = pd.Series([True, False], index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    cid_series, lookup_cids, cache_dirty = pipeline._resolve_pubchem_cids(
+        frame,
+        cfg,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        load_parent_record=lambda _: None,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert calls == ["CHEMBL2"]
+    assert pd.isna(cid_series.iloc[0])
+    assert cid_series.iloc[1] == "111"
+    assert lookup_cids == {"111"}
+    assert cache_dirty
+
+
+def test_merge_pubchem_properties_preserves_existing_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = pd.DataFrame(
+        {
+            "pubchem_cid": ["111", "222", pd.NA],
+            "pubchem_iupac_name": ["existing", "mixture", ""],
+        }
+    )
+    cid_series = pd.Series(["111", "222", "333"], index=frame.index, dtype="string")
+    lookup_cids = {"333"}
+    cfg = pl.PubChemCfg(delay=0, prefer_local_values=True)
+
+    props = {
+        "333": pl.Properties("new", "formula", "iso", "can", "inchi", "inchikey"),
+    }
+
+    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props[cid])
+
+    skip_mask = pd.Series([True, True, False], index=frame.index)
+    prefer_local_mask = pd.Series(False, index=frame.index)
+
+    pubchem_df = pipeline._merge_pubchem_properties(
+        frame,
+        cid_series,
+        lookup_cids,
+        cfg=cfg,
+        skip_mask=skip_mask,
+        prefer_local_mask=prefer_local_mask,
+    )
+
+    assert pubchem_df.loc[0, "pubchem_iupac_name"] == "existing"
+    assert pubchem_df.loc[1, "pubchem_iupac_name"] == "mixture"
+    assert pubchem_df.loc[2, "pubchem_iupac_name"] == "new"
+    assert pubchem_df.loc[2, "pubchem_molecular_formula"] == "formula"
 
 
 def test_resolve_pubchem_cid_prefers_inchikey(
@@ -1119,48 +983,36 @@ def test_resolve_pubchem_cid_logs_when_parent_missing(
     assert any(event == "pubchem_parent_structure_missing" for event, _ in events)
 
 
-def test_add_pubchem_data_uses_disk_cache(
+def test_prepare_pubchem_caches_uses_disk_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache_path = tmp_path / "cid_cache.json"
     cache_path.write_text(json.dumps({"CHEMBL1": "321"}))
 
-    df = pd.DataFrame(
-        {
-            "molecule_chembl_id": ["CHEMBL1"],
-            "canonical_smiles": ["C"],
-        }
-    )
-
+    frame = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
     cfg = pl.PubChemCfg(delay=0, cid_cache_path=cache_path)
 
-    def fake_resolve(
-        identifiers: Mapping[str, str | None],
-        cfg: pl.PubChemCfg,
-        *,
-        cid_cache: Mapping[str, str | None] | None = None,
-        cache_key: str | None = None,
-        **__: object,
-    ) -> pl.PubChemResolution:
-        assert cache_key == "CHEMBL1"
-        assert cid_cache is not None and cid_cache.get("CHEMBL1") == "321"
-        return pl.PubChemResolution(cid="321", source="cache")
+    (
+        cid_cache,
+        resolution_cache,
+        parent_record_cache,
+        pending_parent_ids,
+        load_parent_record,
+    ) = pipeline._prepare_pubchem_caches(
+        frame,
+        cfg,
+        cache_path=cache_path,
+        cache_ttl_hours=None,
+        cid_cache=None,
+        resolution_cache=None,
+        parent_record_cache=None,
+    )
 
-    monkeypatch.setattr(pl, "resolve_pubchem_record", fake_resolve)
-
-    props = pl.Properties("name", "formula", "i", "c", "inchi", "inchikey")
-    monkeypatch.setattr(pl, "get_properties", lambda cid, cfg: props)
-
-    result = pipeline.add_pubchem_data(df, cfg)
-
-    assert result.loc[0, "pubchem_cid"] == "321"
-    assert result.loc[0, "pubchem_iupac_name"] == "name"
-    cache_data = json.loads(cache_path.read_text())
-    if "values" in cache_data:
-        assert cache_data["values"] == {"CHEMBL1": "321"}
-        assert cache_data["metadata"]["version"] == pipeline._PUBCHEM_CACHE_SCHEMA_VERSION
-    else:
-        assert cache_data == {"CHEMBL1": "321"}
+    assert cid_cache.get("CHEMBL1") == "321"
+    assert isinstance(resolution_cache, dict)
+    assert isinstance(parent_record_cache, dict)
+    assert pending_parent_ids == []
+    assert load_parent_record("CHEMBL1") is not None
 
 
 def test_write_pubchem_cid_cache_creates_parent_dir(tmp_path: Path) -> None:
