@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import uuid
 import os
+from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -132,6 +133,12 @@ def add_common_arguments(
     output_default: Path | None | object = None if defaults else argparse.SUPPRESS
     sep_default: str | object = "," if defaults else argparse.SUPPRESS
     enc_default: str | object = "utf8" if defaults else argparse.SUPPRESS
+    base_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    input_dir_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    output_dir_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    date_default: str | None | object = None if defaults else argparse.SUPPRESS
+    force_default: bool | object = False if defaults else argparse.SUPPRESS
+    skip_default: bool | object = False if defaults else argparse.SUPPRESS
 
     parser.add_argument("--log-level", default=log_level, help="Logging level")
     parser.add_argument(
@@ -150,6 +157,45 @@ def add_common_arguments(
     )
     parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
     parser.add_argument("--encoding", default=enc_default, help="File encoding")
+    parser.add_argument(
+        "--base-path",
+        dest="base_path",
+        type=path_argument,
+        default=base_default,
+        help="Base directory for input and output data",
+    )
+    parser.add_argument(
+        "--input-dir",
+        dest="input_dir",
+        type=path_argument,
+        default=input_dir_default,
+        help="Directory containing input artefacts",
+    )
+    parser.add_argument(
+        "--output-dir",
+        dest="output_dir",
+        type=path_argument,
+        default=output_dir_default,
+        help="Directory receiving generated artefacts",
+    )
+    parser.add_argument(
+        "--date",
+        dest="date",
+        default=date_default,
+        help="Date prefix used when constructing default outputs",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=force_default,
+        help="Overwrite outputs even when they already exist",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        default=skip_default,
+        help="Skip processing if the destination file is present",
+    )
     return parser
 
 
@@ -474,6 +520,108 @@ def apply_config_overrides(
     return cfg
 
 
+def _resolve_base_path(value: Path | str | None) -> Path | None:
+    if value in (None, argparse.SUPPRESS):
+        return None
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return (Path.cwd() / path).resolve()
+
+
+def _resolve_directory(
+    directory: Path | str | None,
+    *,
+    base: Path | None,
+) -> Path | None:
+    if directory in (None, argparse.SUPPRESS):
+        return None
+    resolved = Path(directory).expanduser()
+    if resolved.is_absolute():
+        return resolved
+    if base is not None:
+        return (base / resolved).resolve()
+    return resolved.resolve()
+
+
+def _resolve_file(
+    path: Path | str | None,
+    *,
+    directory: Path | None,
+    base: Path | None,
+) -> Path | None:
+    if path in (None, argparse.SUPPRESS):
+        return None
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    if directory is not None:
+        return (directory / candidate).resolve()
+    if base is not None:
+        return (base / candidate).resolve()
+    return candidate
+
+
+def prepare_io_paths(
+    args: argparse.Namespace,
+    *,
+    input_default: str | Path | None = None,
+    output_stem: str | None = None,
+    suffix: str = ".csv",
+) -> None:
+    """Normalize CLI namespace paths and populate derived locations."""
+
+    base_path = _resolve_base_path(getattr(args, "base_path", None))
+    setattr(args, "base_path", base_path)
+
+    input_dir = _resolve_directory(getattr(args, "input_dir", None), base=base_path)
+    setattr(args, "input_dir", input_dir)
+
+    output_dir = _resolve_directory(getattr(args, "output_dir", None), base=base_path)
+    setattr(args, "output_dir", output_dir)
+
+    current_input = getattr(args, "input_csv", None)
+    if current_input in (None, argparse.SUPPRESS) and input_default is not None:
+        current_input = Path(input_default)
+    resolved_input = _resolve_file(current_input, directory=input_dir, base=base_path)
+    if resolved_input is not None:
+        setattr(args, "input_csv", resolved_input)
+
+    current_output = getattr(args, "output_csv", None)
+    resolved_output = _resolve_file(
+        current_output,
+        directory=output_dir,
+        base=base_path,
+    )
+
+    date_value = getattr(args, "date", None)
+    if isinstance(date_value, str):
+        date_str: str | None = date_value
+    else:
+        date_str = None
+
+    if resolved_output is None and output_stem is not None:
+        target_dir = output_dir or base_path
+        if target_dir is not None:
+            effective_date = date_str or datetime.now(timezone.utc).strftime("%Y%m%d")
+            resolved_output = (target_dir / f"{effective_date}_{output_stem}{suffix}").resolve()
+            date_str = effective_date
+
+    if resolved_output is not None:
+        resolved_output = _resolve_file(
+            resolved_output,
+            directory=output_dir,
+            base=base_path,
+        )
+        setattr(args, "output_csv", resolved_output)
+
+    if date_str is not None:
+        setattr(args, "date", date_str)
+
+    setattr(args, "force", bool(getattr(args, "force", False)))
+    setattr(args, "skip_existing", bool(getattr(args, "skip_existing", False)))
+
+
 __all__ = [
     "LoggerConfig",
     "Logger",
@@ -483,4 +631,5 @@ __all__ = [
     "build_root_parser",
     "configure_logger",
     "apply_config_overrides",
+    "prepare_io_paths",
 ]

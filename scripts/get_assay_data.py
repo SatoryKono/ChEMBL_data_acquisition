@@ -44,6 +44,10 @@ from schemas import AssaysSchema, normalize_assays
 __all__ = ["ap", "main"]
 
 
+DEFAULT_INPUT_NAME = "assay.csv"
+DEFAULT_OUTPUT_STEM = "assays"
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute assay retrieval from the ChEMBL API.
 
@@ -185,6 +189,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         size_option="--batch-size",
         size_dest="batch_size",
     )
+    parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser.add_argument(
         "--timeout",
         type=float,
@@ -229,6 +234,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    cli.prepare_io_paths(
+        args,
+        input_default=DEFAULT_INPUT_NAME,
+        output_stem=DEFAULT_OUTPUT_STEM,
+    )
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
     if args.offset < 0:
@@ -254,6 +264,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
+        output_path = Path(
+            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        )
+        args.output_csv = output_path
+        if args.skip_existing and output_path.exists() and not args.force:
+            logger.info("pipeline_skip_existing", output=str(output_path))
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
+            return 0
         logger = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         logger.error(

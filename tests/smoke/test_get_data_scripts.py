@@ -26,6 +26,34 @@ TypeCheck = Callable[[pd.Series], bool]
 
 CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
 
+DEFAULT_DATE = "20240101"
+
+
+def _cli_args(*extra: str, date: str = DEFAULT_DATE, log_level: str = "ERROR") -> list[str]:
+    """Return base CLI arguments extended with ``extra`` tokens."""
+
+    return [
+        "--base-path",
+        ".",
+        "--input-dir",
+        "data/input-smoke",
+        "--output-dir",
+        "data/output-smoke",
+        "--date",
+        date,
+        "--log-level",
+        log_level,
+        "--config",
+        CONFIG_CLI_PATH,
+        *extra,
+    ]
+
+
+def _expected_output(output_dir: Path, stem: str, *, date: str = DEFAULT_DATE) -> Path:
+    """Return the expected output path for ``stem`` and ``date``."""
+
+    return output_dir / f"{date}_{stem}.csv"
+
 
 def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure ``scripts.get_data`` orchestrates all pipelines with mocked steps."""
@@ -154,8 +182,7 @@ def test_get_activity_data_smoke(
 ) -> None:
     """Smoke-test ``get_activity_data`` with bundled identifiers."""
 
-    input_csv = Path("data/input-smoke/activity.csv")
-    output_csv = smoke_output_dir / "activity.csv"
+    output_csv = _expected_output(smoke_output_dir, "activities")
     _cleanup_output(output_csv)
 
     def fake_get_activities(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
@@ -179,20 +206,11 @@ def test_get_activity_data_smoke(
         get_activity_data, "analyze_table_quality", lambda *_, **__: None
     )
 
-    exit_code = get_activity_data.main(
-        [
-            "--input",
-            str(input_csv),
-            "--output",
-            str(output_csv),
-            "--log-level",
-            "ERROR",
-            "--config",
-            CONFIG_CLI_PATH,
-        ]
-    )
+    exit_code = get_activity_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
+    assert output_csv.name == f"{DEFAULT_DATE}_activities.csv"
+    assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -227,8 +245,7 @@ def test_get_assay_data_smoke(
 ) -> None:
     """Smoke-test ``get_assay_data`` using canned assay identifiers."""
 
-    input_csv = Path("data/input-smoke/assay.csv")
-    output_csv = smoke_output_dir / "assay.csv"
+    output_csv = _expected_output(smoke_output_dir, "assays")
     _cleanup_output(output_csv)
 
     def fake_get_assays(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
@@ -248,20 +265,11 @@ def test_get_assay_data_smoke(
     monkeypatch.setattr(get_assay_data.ap, "postprocess_assays", lambda df: df)
     monkeypatch.setattr(get_assay_data, "analyze_table_quality", lambda *_, **__: None)
 
-    exit_code = get_assay_data.main(
-        [
-            "--input",
-            str(input_csv),
-            "--output",
-            str(output_csv),
-            "--log-level",
-            "ERROR",
-            "--config",
-            CONFIG_CLI_PATH,
-        ]
-    )
+    exit_code = get_assay_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
+    assert output_csv.name == f"{DEFAULT_DATE}_assays.csv"
+    assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -294,8 +302,7 @@ def test_get_document_data_smoke(
 ) -> None:
     """Smoke-test the ``chembl`` sub-command of ``get_document_data``."""
 
-    input_csv = Path("data/input-smoke/documents.csv")
-    output_csv = smoke_output_dir / "documents.csv"
+    output_csv = _expected_output(smoke_output_dir, "documents")
     _cleanup_output(output_csv)
 
     def fake_get_documents(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
@@ -319,21 +326,11 @@ def test_get_document_data_smoke(
         get_document_data, "analyze_table_quality", lambda *_, **__: None
     )
 
-    exit_code = get_document_data.main(
-        [
-            "chembl",
-            "--input",
-            str(input_csv),
-            "--output",
-            str(output_csv),
-            "--log-level",
-            "ERROR",
-            "--config",
-            CONFIG_CLI_PATH,
-        ]
-    )
+    exit_code = get_document_data.main(["chembl", *_cli_args()])
     assert exit_code == 0
     assert output_csv.exists()
+    assert output_csv.name == f"{DEFAULT_DATE}_documents.csv"
+    assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -364,8 +361,7 @@ def test_get_target_data_smoke(
 ) -> None:
     """Smoke-test ``get_target_data`` using the ``chembl`` pipeline."""
 
-    input_csv = Path("data/input-smoke/targets.csv")
-    output_csv = smoke_output_dir / "targets.csv"
+    output_csv = _expected_output(smoke_output_dir, "targets")
     _cleanup_output(output_csv)
 
     def fake_get_targets(ids, cfg, client, mapping_cfg, chunk_size, timeout):  # type: ignore[no-untyped-def]
@@ -383,21 +379,11 @@ def test_get_target_data_smoke(
     monkeypatch.setattr(cl, "get_targets", fake_get_targets)
     monkeypatch.setattr(get_target_data, "analyze_table_quality", lambda *_, **__: None)
 
-    exit_code = get_target_data.main(
-        [
-            "chembl",
-            "--input",
-            str(input_csv),
-            "--output",
-            str(output_csv),
-            "--log-level",
-            "ERROR",
-            "--config",
-            CONFIG_CLI_PATH,
-        ]
-    )
+    exit_code = get_target_data.main(["chembl", *_cli_args()])
     assert exit_code == 0
     assert output_csv.exists()
+    assert output_csv.name == f"{DEFAULT_DATE}_targets.csv"
+    assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -429,8 +415,7 @@ def test_get_testitem_data_smoke(
 ) -> None:
     """Smoke-test ``get_testitem_data`` with PubChem augmentation patched."""
 
-    input_csv = Path("data/input-smoke/testitem.csv")
-    output_csv = smoke_output_dir / "testitem.csv"
+    output_csv = _expected_output(smoke_output_dir, "testitems")
     _cleanup_output(output_csv)
 
     polymer_smiles = "POLY-SMILES"
@@ -518,20 +503,11 @@ def test_get_testitem_data_smoke(
         lambda event, **kwargs: warning_events.append((event, kwargs)),
     )
 
-    exit_code = get_testitem_data.main(
-        [
-            "--input",
-            str(input_csv),
-            "--output",
-            str(output_csv),
-            "--log-level",
-            "ERROR",
-            "--config",
-            CONFIG_CLI_PATH,
-        ]
-    )
+    exit_code = get_testitem_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
+    assert output_csv.name == f"{DEFAULT_DATE}_testitems.csv"
+    assert output_csv.parent == smoke_output_dir
     assert polymer_smiles not in smiles_calls
     assert mixture_smiles not in smiles_calls
     assert any(event == "pubchem_skip_polymers" for event, _ in warning_events)
@@ -570,6 +546,65 @@ def test_get_testitem_data_smoke(
     assert polymer_row["pubchem_cid"] == "POLY-CID"
     mixture_row = df.loc[df["molecule_type"] == "Mixture"].iloc[0]
     assert mixture_row["pubchem_cid"] == "MIX-CID"
+
+
+def test_get_activity_data_skip_existing(
+    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure ``--skip-existing`` prevents pipeline execution."""
+
+    output_csv = _expected_output(smoke_output_dir, "activities")
+    _cleanup_output(output_csv)
+    output_csv.write_text("sentinel")
+
+    called = False
+
+    def _unexpected_call(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        nonlocal called
+        called = True
+        raise AssertionError("pipeline should have been skipped")
+
+    monkeypatch.setattr(cl, "get_activities", _unexpected_call)
+
+    exit_code = get_activity_data.main(_cli_args("--skip-existing"))
+    assert exit_code == 0
+    assert not called
+    assert output_csv.read_text() == "sentinel"
+
+
+def test_get_activity_data_force_overrides_skip(
+    smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify ``--force`` re-runs the pipeline despite ``--skip-existing``."""
+
+    output_csv = _expected_output(smoke_output_dir, "activities")
+    _cleanup_output(output_csv)
+    output_csv.write_text("sentinel")
+
+    def fake_get_activities(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
+        rows: list[dict[str, object]] = []
+        for raw_id in ids:
+            rows.append(
+                {
+                    "activity_id": int(str(raw_id)),
+                    "molecule_chembl_id": "CHEMBL_FORCE",
+                    "assay_chembl_id": "CHEMBL_ASSAY_FORCE",
+                    "standard_type": "IC50",
+                    "standard_value": 1.0,
+                    "document_chembl_id": "CHEMBL_DOC_FORCE",
+                }
+            )
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(cl, "get_activities", fake_get_activities)
+    monkeypatch.setattr(
+        get_activity_data, "analyze_table_quality", lambda *_, **__: None
+    )
+
+    exit_code = get_activity_data.main(_cli_args("--skip-existing", "--force"))
+    assert exit_code == 0
+    assert output_csv.exists()
+    assert output_csv.read_text() != "sentinel"
 
 
 def test_run_pipeline_failure_removes_outputs(

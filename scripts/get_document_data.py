@@ -66,6 +66,7 @@ from library.cli import (
     configure_logger,
     path_argument,
     positive_int,
+    prepare_io_paths,
 )
 from library.config import (
     Config,
@@ -95,6 +96,10 @@ from library.rate_limiter import RateLimiter, get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
+
+
+DEFAULT_INPUT_NAME = "document.csv"
+DEFAULT_OUTPUT_STEM = "documents"
 
 
 def _build_fallback_doi_map(
@@ -1445,6 +1450,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         configuration used by :func:`main`.
     """
     root, shared, log_cfg = build_root_parser()
+    root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser = argparse.ArgumentParser(
         description="Document data utilities", parents=[root]
     )
@@ -1637,6 +1643,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    prepare_io_paths(
+        args,
+        input_default=DEFAULT_INPUT_NAME,
+        output_stem=DEFAULT_OUTPUT_STEM,
+    )
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     limit_value = getattr(args, "limit", None)
@@ -1696,6 +1707,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
+        output_path = Path(
+            args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        )
+        args.output_csv = output_path
+        if args.skip_existing and output_path.exists() and not args.force:
+            logger.info("pipeline_skip_existing", output=str(output_path))
+            logger.info("pipeline_done", run_id=log_cfg.run_id)
+            return 0
         logger = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         logger.error("config_override_error", error=str(exc))
