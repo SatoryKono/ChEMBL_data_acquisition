@@ -157,6 +157,109 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         assert path.read_text() == f"{step.name} output\n"
 
 
+def test_get_data_limit_zero_skips_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--limit 0`` should skip writing outputs for every orchestrated step."""
+
+    base_path = tmp_path
+    input_dir = base_path / "input"
+    output_dir = base_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    config_path = base_path / "config.yaml"
+    config_path.write_text("test: true\n")
+
+    for step in get_data._PIPELINE_STEPS:
+        input_path = input_dir / get_data._DEFAULT_INPUT_FILES[step.name]
+        input_path.write_text("id\n1\n")
+
+    invocations: list[str] = []
+
+    def make_stub(
+        name: str, subcommand: str | None
+    ) -> Callable[[Sequence[str] | None], int]:
+        def _main(argv: Sequence[str] | None) -> int:
+            args = list(argv or [])
+            if subcommand is not None:
+                assert args, f"missing subcommand for {name}"
+                assert args[0] == subcommand
+                args = args[1:]
+            parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("--output")
+            parser.add_argument("--limit")
+            ns, _ = parser.parse_known_args(args)
+            assert ns.limit == "0"
+            temp_output = Path(ns.output)
+            assert temp_output.name.startswith(".")
+            assert not temp_output.exists()
+            invocations.append(name)
+            return 0
+
+        return _main
+
+    stub_steps = tuple(
+        get_data.PipelineStep(
+            step.name, make_stub(step.name, step.subcommand), step.subcommand
+        )
+        for step in get_data._PIPELINE_STEPS
+    )
+    monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    dummy_logger = DummyLogger()
+
+    def fake_configure(level_name: str, *, run_id: str | None = None) -> DummyLogger:
+        return dummy_logger
+
+    monkeypatch.setattr(get_data, "_configure_logging", fake_configure)
+
+    exit_code = get_data.main(
+        [
+            "--base-path",
+            str(base_path),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--config",
+            str(config_path),
+            "--date",
+            "20240101",
+            "--log-level",
+            "ERROR",
+            "--limit",
+            "0",
+        ]
+    )
+
+    assert exit_code == 0
+    assert invocations == [step.name for step in stub_steps]
+    for step in stub_steps:
+        final_output = output_dir / (
+            f"output.{get_data._DEFAULT_OUTPUT_STEMS[step.name]}_20240101.csv"
+        )
+        assert not final_output.exists()
+        assert not get_data._temporary_output_path(final_output).exists()
+        meta_path = Path(f"{final_output}.meta.yaml")
+        assert not meta_path.exists()
+        sentinel = get_data._failure_sentinel_path(final_output)
+        assert not sentinel.exists()
+
+
 def test_get_data_forwards_skip_existing_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -520,6 +623,14 @@ def test_get_document_data_smoke(
     output_csv = _expected_output(smoke_output_dir, "documents")
     _cleanup_output(output_csv)
 
+    input_dir = Path("data/input-smoke")
+    source_input = input_dir / "documents.csv"
+    target_input = input_dir / "document.csv"
+    created_input = False
+    if source_input.exists() and not target_input.exists():
+        target_input.write_text(source_input.read_text(), encoding="utf-8")
+        created_input = True
+
     def fake_get_documents(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, doc_id in enumerate(ids, start=1):
@@ -541,7 +652,12 @@ def test_get_document_data_smoke(
         get_document_data, "analyze_table_quality", lambda *_, **__: None
     )
 
-    exit_code = get_document_data.main(["chembl", *_cli_args()])
+    try:
+        exit_code = get_document_data.main(["chembl", *_cli_args()])
+    finally:
+        if created_input:
+            target_input.unlink(missing_ok=True)
+
     assert exit_code == 0
     assert output_csv.exists()
     assert output_csv.name == f"output.documents_{DEFAULT_DATE}.csv"
@@ -579,6 +695,14 @@ def test_get_target_data_smoke(
     output_csv = _expected_output(smoke_output_dir, "targets")
     _cleanup_output(output_csv)
 
+    input_dir = Path("data/input-smoke")
+    source_input = input_dir / "targets.csv"
+    target_input = input_dir / "target.csv"
+    created_input = False
+    if source_input.exists() and not target_input.exists():
+        target_input.write_text(source_input.read_text(), encoding="utf-8")
+        created_input = True
+
     def fake_get_targets(ids, cfg, client, mapping_cfg, chunk_size, timeout):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, target_id in enumerate(ids, start=1):
@@ -594,7 +718,12 @@ def test_get_target_data_smoke(
     monkeypatch.setattr(cl, "get_targets", fake_get_targets)
     monkeypatch.setattr(get_target_data, "analyze_table_quality", lambda *_, **__: None)
 
-    exit_code = get_target_data.main(["chembl", *_cli_args()])
+    try:
+        exit_code = get_target_data.main(["chembl", *_cli_args()])
+    finally:
+        if created_input:
+            target_input.unlink(missing_ok=True)
+
     assert exit_code == 0
     assert output_csv.exists()
     assert output_csv.name == f"output.targets_{DEFAULT_DATE}.csv"
@@ -687,9 +816,18 @@ def test_get_testitem_data_smoke(
         )
 
     monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+    monkeypatch.setattr(get_testitem_data.pipeline.cli, "cl", cl, raising=False)
     monkeypatch.setattr(pc, "init_session", lambda *_, **__: None)
     monkeypatch.setattr(pl, "get_cid_from_smiles", fake_get_cid)
     monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+    monkeypatch.setattr(
+        pl,
+        "resolve",
+        lambda *_args, **_kwargs: pl.PubChemResolution(
+            cid="RES-CID", source="mock", status=200
+        ),
+        raising=False,
+    )
     monkeypatch.setattr(
         get_testitem_data,
         "load_parent_catalog",

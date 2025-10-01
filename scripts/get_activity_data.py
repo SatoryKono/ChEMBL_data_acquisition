@@ -302,6 +302,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
+    if args.limit == 0:
+        logger.info("pipeline_skip_limit", limit=args.limit)
+        return 0
     if args.limit is not None and args.limit < 0:
         # Reject negative limits early to provide clear CLI feedback.
         parser.error("--limit must be zero or a positive integer")
