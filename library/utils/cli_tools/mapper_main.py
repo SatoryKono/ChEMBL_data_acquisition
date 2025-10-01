@@ -13,13 +13,14 @@ from library import io
 from library.cli import (
     LoggerConfig,
     configure_logger,
+    positive_int,
 )
 from library.cli import (
     build_parser as base_parser,
 )
 from library.config import Config, ensure_dirs, print_config
 from library.log import logger
-from library.mapper_library import map_chembl_to_uniprot
+from library.mapper_batch_library import map_chembl_ids_to_uniprot
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:
@@ -55,26 +56,47 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             logger.error("missing_column", column=args.column, path=str(args.input_csv))
             return 1
 
-        uniprot_ids: list[str | None] = []
-        for chembl_id in df[args.column]:
-            if pd.isna(chembl_id) or not str(chembl_id).strip():
-                uniprot_ids.append(None)
-                continue
-            try:
-                uniprot_id = map_chembl_to_uniprot(str(chembl_id), cfg.uniprot_mapping)
-                uniprot_ids.append(uniprot_id)
+        def _normalize(value: object) -> str | None:
+            if pd.isna(value):
+                return None
+            text = str(value).strip()
+            return text or None
+
+        ids_to_map: list[str] = []
+        for value in df[args.column]:
+            normalized = _normalize(value)
+            if normalized is not None:
+                ids_to_map.append(normalized)
+
+        try:
+            mappings = map_chembl_ids_to_uniprot(
+                ids_to_map,
+                cfg.uniprot_mapping,
+                batch_size=args.chunk_size,
+                rps=args.rps,
+                max_workers=args.workers,
+            )
+        except (ValueError, TimeoutError, URLError) as exc:
+            logger.warning("map_failed", error=str(exc))
+            df["mapping_uniprot_id"] = [None for _ in df[args.column]]
+        else:
+            for chembl_id in ids_to_map:
+                uniprot_id = mappings.get(chembl_id)
                 if uniprot_id:
                     logger.info(
                         "mapped",
-                        chembl_id=str(chembl_id),
+                        chembl_id=chembl_id,
                         uniprot_id=uniprot_id,
                     )
                 else:
-                    logger.warning("uniprot_id_missing", chembl_id=str(chembl_id))
-            except (ValueError, TimeoutError, URLError) as exc:
-                logger.warning("map_failed", chembl_id=str(chembl_id), error=str(exc))
-                uniprot_ids.append(None)
-        df["mapping_uniprot_id"] = uniprot_ids
+                    logger.warning("uniprot_id_missing", chembl_id=chembl_id)
+            mapped_values: list[str | None] = []
+            for value in df[args.column]:
+                normalized = _normalize(value)
+                mapped_values.append(
+                    mappings.get(normalized) if normalized is not None else None
+                )
+            df["mapping_uniprot_id"] = mapped_values
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         try:
             io.write_csv(
@@ -106,6 +128,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--key-cols",
         nargs="*",
         help="Columns used to sort the output CSV deterministically",
+    )
+    parser.add_argument("--rps", type=float, default=1.0, help="Max requests per second")
+    parser.add_argument(
+        "--workers",
+        type=positive_int,
+        default=1,
+        help="Number of worker threads",
     )
     parser.set_defaults(func=run)
     return parser, log_cfg
