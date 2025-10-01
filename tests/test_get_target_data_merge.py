@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -86,3 +87,79 @@ def test_iuphar_merge_preserves_ec_number(
     assert merged.loc[0, "protein_class_pred_L1"] == "ClassA"
     assert merged.loc[0, "target_type"] == "Multicellular organism"
     assert classifier.calls
+
+
+def test_fetch_iuphar_prefers_uniprot_values(
+    tmp_path: Path, cfg: Config, monkeypatch: MonkeyPatch
+) -> None:
+    """Ensure UniProt values override ChEMBL data for overlapping fields."""
+
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprot_id": ["P11111"],
+            "isoform_ids": ["CHEMBL_ISO"],
+            "GuidetoPHARMACOLOGY": ["CHEMBL_GUIDE"],
+            "geneName": ["CHEMBL_GENE"],
+            "gene": ["CHEMBL_GENE"],
+            "pref_name": ["Chembl Preferred"],
+            "component_description": ["Chembl Component"],
+            "names": ["Chembl Name"],
+            "synonyms": ["Chembl Synonym"],
+        }
+    )
+    uniprot_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P11111"],
+            "isoform_ids": ["UNIPROT_ISO"],
+            "GuidetoPHARMACOLOGY": ["UNIPROT_GUIDE"],
+            "geneName": ["UniGene"],
+            "gene": ["UniGene"],
+            "pref_name": ["UniProt Preferred"],
+            "component_description": ["UniProt Component"],
+            "names": ["UniProt Name"],
+            "synonyms": ["UniProt Synonym"],
+            "original_id": ["P11111"],
+        }
+    )
+
+    output_csv = tmp_path / "iuphar.csv"
+
+    def fake_run_iuphar(config: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame(
+            {
+                "uniprot_id": ["P11111"],
+                "IUPHAR_class": ["ClassA"],
+            }
+        ).to_csv(
+            args.output_csv,
+            index=False,
+            sep=config.io.csv_sep,
+            encoding=config.io.csv_encoding,
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+
+    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, output_csv)
+
+    assert combined_df.loc[0, "isoform_ids"] == "UNIPROT_ISO"
+    assert combined_df.loc[0, "GuidetoPHARMACOLOGY"] == "UNIPROT_GUIDE"
+    assert combined_df.loc[0, "geneName"] == "UniGene"
+    assert combined_df.loc[0, "pref_name"] == "UniProt Preferred"
+
+    conflicting = {"isoform_ids", "GuidetoPHARMACOLOGY", "geneName", "pref_name"}
+    for base in conflicting:
+        assert f"{base}_chembl" not in combined_df.columns
+        assert f"{base}_uniprot" not in combined_df.columns
+
+    merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
+    processed = tp.postprocess_targets(merged)
+
+    assert processed.loc[0, "isoform_ids"] == "UNIPROT_ISO"
+    assert processed.loc[0, "GuidetoPHARMACOLOGY"] == "UNIPROT_GUIDE"
+    assert processed.loc[0, "geneName"] == "UniGene"
+
+    for base in conflicting:
+        assert f"{base}_chembl" not in processed.columns
+        assert f"{base}_uniprot" not in processed.columns
