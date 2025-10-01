@@ -112,25 +112,45 @@ class IUPHARData:
         return list(rows.unique())
 
     @staticmethod
-    def _normalise_uniprot_values(uniprot_id: str | float | None) -> list[str]:
+    def _normalise_uniprot_values(
+        uniprot_id: str | float | Iterable[str] | None,
+    ) -> list[str]:
         """Split pipe-delimited UniProt accessions into individual entries."""
 
-        if not uniprot_id or (isinstance(uniprot_id, float) and pd.isna(uniprot_id)):
+        if uniprot_id is None:
             return []
-        return [
-            value.strip()
-            for value in str(uniprot_id).split("|")
-            if value and value.strip()
-        ]
+        if isinstance(uniprot_id, Iterable) and not isinstance(
+            uniprot_id, (str, bytes, bytearray)
+        ):
+            values: list[str] = []
+            for item in uniprot_id:
+                values.extend(IUPHARData._normalise_uniprot_values(item))
+            return values
+        if isinstance(uniprot_id, (bytes, bytearray)):
+            text = uniprot_id.decode("utf-8", errors="ignore").strip()
+            if not text:
+                return []
+            return [value.strip() for value in text.split("|") if value and value.strip()]
+        if pd.isna(uniprot_id):
+            return []
+        text = str(uniprot_id).strip()
+        if not text or text.lower() in {"nan", "none", "na"}:
+            return []
+        return [value.strip() for value in text.split("|") if value and value.strip()]
 
-    def target_id_by_uniprot(self, uniprot_id: str) -> str:
-        """Return the first target ID mapped to any of the supplied accessions."""
-
-        for accession in self._normalise_uniprot_values(uniprot_id):
+    def _resolve_target_id_from_accessions(self, accessions: Iterable[str]) -> str:
+        for accession in accessions:
             ids = self._select_target_ids(self.target_df["uniprot_id"].eq(accession))
             if ids:
                 return ids[0]
         return ""
+
+    def target_id_by_uniprot(self, uniprot_id: str | Iterable[str]) -> str:
+        """Return the first target ID mapped to any of the supplied accessions."""
+
+        return self._resolve_target_id_from_accessions(
+            self._normalise_uniprot_values(uniprot_id)
+        )
 
     def target_id_by_hgnc_name(self, hgnc_name: str) -> str:
         """Return target IDs whose HGNC name equals ``hgnc_name``."""
@@ -211,14 +231,31 @@ class IUPHARData:
         implementation.
         """
         uniprot = self.target_id_by_uniprot(row.get("uniprot_id", ""))
-        mapped_uniprot = self.target_id_by_uniprot(row.get("mapping_uniprot_id", ""))
+        mapped_uniprot = self.target_id_by_uniprot(
+            row.get("mapping_uniprot_id", "")
+        )
         hgnc_name = self.target_id_by_hgnc_name(row.get("hgnc_name", ""))
         hgnc_id = self.target_id_by_hgnc_id(row.get("hgnc_id", ""))
+        gene_value = row.get("gene_name", "")
+        if pd.isna(gene_value) or not gene_value:
+            gene_value = row.get("gene", "")
+        gene = self.target_id_by_gene(gene_value)
         name = ""
         synonyms = ""
+        raw_synonyms = row.get("synonyms", "")
+        if raw_synonyms:
+            synonyms = self.target_ids_by_synonyms(str(raw_synonyms).split("|"))
         all_ids = [
             x
-            for x in [uniprot, mapped_uniprot, hgnc_name, hgnc_id, name, synonyms]
+            for x in [
+                uniprot,
+                mapped_uniprot,
+                hgnc_name,
+                hgnc_id,
+                gene,
+                name,
+                synonyms,
+            ]
             if x
         ]
         unique = sorted({i for part in all_ids for i in part.split("|") if i})
