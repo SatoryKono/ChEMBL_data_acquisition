@@ -516,9 +516,9 @@ def fetch_pubmed_records(
                     if pmid:
                         openalex_lookup.setdefault(pmid, []).append(index)
                         openalex_total += 1
-                    crossref_key = doi or ""
-                    crossref_lookup.setdefault(crossref_key, []).append(index)
-                    crossref_total += 1
+                    if doi:
+                        crossref_lookup.setdefault(doi, []).append(index)
+                        crossref_total += 1
 
                 openalex_results: dict[int, dict[str, str]] = {}
                 crossref_results: dict[int, dict[str, str]] = {}
@@ -565,7 +565,7 @@ def fetch_pubmed_records(
                     for idx in indexes:
                         openalex_results[idx] = result
 
-                crossref_jobs = list(crossref_lookup.keys())
+                crossref_jobs = [doi for doi in crossref_lookup.keys() if doi]
                 def _fetch_crossref_job(doi: str) -> dict[str, str]:
                     _acquire_documents(
                         crossref_service_limiter, use_global=False
