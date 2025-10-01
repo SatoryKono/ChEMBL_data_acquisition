@@ -5,10 +5,13 @@ from __future__ import annotations
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from cachetools import TTLCache
 
 from library import pubchem_library as pl
 from library.clients import pubchem as pc
+from library.config import ApiCfg, RetryCfg, session_with_retry
 
 
 class DummyResponse:
@@ -39,6 +42,50 @@ class NoopLimiter:
         return None
 
 
+class DummySession:
+    """Minimal session stub recording close operations."""
+
+    def __init__(self, user_agent: str, closed_log: list[str] | None = None) -> None:
+        self.headers = {"User-Agent": user_agent}
+        self._closed_log = closed_log
+        self.closed = False
+
+    def close(self) -> None:  # pragma: no cover - simple setter
+        self.closed = True
+        if self._closed_log is not None:
+            self._closed_log.append(self.headers["User-Agent"])
+
+
+@pytest.fixture(autouse=True)
+def reset_pubchem_session() -> None:
+    """Restore the shared PubChem session after each test."""
+
+    with pc._SESSION_LOCK:  # type: ignore[attr-defined]
+        original_cfg = pc._SESSION_CFG  # type: ignore[attr-defined]
+        original_signature = pc._SESSION_SIGNATURE  # type: ignore[attr-defined]
+        original_session = pc._session  # type: ignore[attr-defined]
+    try:
+        yield
+    finally:
+        with pc._SESSION_LOCK:  # type: ignore[attr-defined]
+            current_session = pc._session  # type: ignore[attr-defined]
+            pc._SESSION_CFG = original_cfg  # type: ignore[attr-defined]
+            pc._SESSION_SIGNATURE = original_signature  # type: ignore[attr-defined]
+            pc._session = session_with_retry(*original_cfg)  # type: ignore[attr-defined]
+        if current_session is not None:
+            current_session.close()
+
+
+def _configure_session(user_agent: str = "pubchem-tests/1.0 (mailto:tests@example.org)") -> ApiCfg:
+    """Initialise the PubChem session for tests and return the API config."""
+
+    api_cfg = ApiCfg(user_agent=user_agent)
+    retry_cfg = RetryCfg()
+    pc.init_session(api_cfg, retry_cfg)
+    pc.get_session(api_cfg)
+    return api_cfg
+
+
 def test_make_request_serves_cached_results_across_threads(monkeypatch) -> None:
     """Concurrent calls should reuse cached responses safely."""
 
@@ -46,10 +93,13 @@ def test_make_request_serves_cached_results_across_threads(monkeypatch) -> None:
     cfg = pl.PubChemCfg(retries=1, delay=0)
     payload = {"ok": True}
 
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
     monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
     monkeypatch.setattr(pc, "sleep", lambda *_: None)
     monkeypatch.setattr(
-        pc._session,  # type: ignore[attr-defined]
+        session,
         "get",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("cache not used")),
     )
@@ -93,7 +143,10 @@ def test_make_request_cache_reinitialisation_threadsafe(monkeypatch) -> None:
             calls.append(threading.get_ident())
         return DummyResponse(payload)
 
-    monkeypatch.setattr(pc._session, "get", fake_get)
+    api_cfg = _configure_session()
+    session = pc.get_session(api_cfg)
+
+    monkeypatch.setattr(session, "get", fake_get)
     monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
     monkeypatch.setattr(pc, "sleep", lambda *_: None)
 
@@ -117,3 +170,52 @@ def test_make_request_cache_reinitialisation_threadsafe(monkeypatch) -> None:
     assert len(calls) >= 1
     with pc._CACHE_LOCK:
         pc._CACHE = None
+
+
+def test_get_session_initialises_once_under_concurrency(monkeypatch) -> None:
+    """Concurrent access should only create the session a single time."""
+
+    api_cfg = ApiCfg(user_agent="pubchem-tests/2.0 (mailto:tests@example.org)")
+    retry_cfg = RetryCfg()
+    created: list[DummySession] = []
+
+    def fake_session_with_retry(api: ApiCfg, retry: RetryCfg) -> DummySession:
+        session = DummySession(api.user_agent)
+        created.append(session)
+        return session
+
+    monkeypatch.setattr(pc, "session_with_retry", fake_session_with_retry)
+    pc.init_session(api_cfg, retry_cfg)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        sessions = list(pool.map(lambda _: pc.get_session(api_cfg), range(8)))
+
+    assert len(created) == 1
+    assert len({id(session) for session in sessions}) == 1
+
+
+def test_init_session_closes_previous_session(monkeypatch) -> None:
+    """Reinitialising the session should close the previous instance exactly once."""
+
+    retry_cfg = RetryCfg()
+    first_api = ApiCfg(user_agent="pubchem-tests/3.0 (mailto:tests@example.org)")
+    second_api = ApiCfg(user_agent="pubchem-tests/4.0 (mailto:tests@example.org)")
+    closed: list[str] = []
+
+    def fake_session_with_retry(api: ApiCfg, retry: RetryCfg) -> DummySession:
+        return DummySession(api.user_agent, closed)
+
+    monkeypatch.setattr(pc, "session_with_retry", fake_session_with_retry)
+
+    pc.init_session(first_api, retry_cfg)
+    first_session = pc.get_session(first_api)
+    assert isinstance(first_session, DummySession)
+    assert not closed
+
+    pc.init_session(second_api, retry_cfg)
+    second_session = pc.get_session(second_api)
+
+    assert isinstance(second_session, DummySession)
+    assert closed == [first_api.user_agent]
+    assert first_session.closed is True
+    assert second_session.closed is False
