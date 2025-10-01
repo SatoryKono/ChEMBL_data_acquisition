@@ -155,3 +155,152 @@ def test_cli_invalid_config_logs_error(tmp_path: Path, monkeypatch) -> None:
     event, payload = logged[0]
     assert event == "config_error"
     assert payload.get("config") == str(config_path)
+
+
+def test_cli_invalid_chunk_size_logs_error(tmp_path: Path, monkeypatch) -> None:
+    """CLI rejects non-positive chunk sizes with an error message."""
+
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("a\n1\n", encoding="utf-8")
+    output_path = tmp_path / "out.csv"
+
+    logged: list[tuple[str, dict[str, object]]] = []
+
+    def fake_error(event: str, *args: object, **kwargs: object) -> None:
+        logged.append((event, kwargs))
+
+    monkeypatch.setattr(cli.logger, "error", fake_error)
+
+    exit_code = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--chunk-size",
+            "0",
+            "--log-level",
+            "WARNING",
+        ]
+    )
+
+    assert exit_code == 1
+    event, payload = logged[0]
+    assert event == "invalid_chunk_size"
+    assert payload.get("chunk_size") == 0
+
+
+def test_cli_invalid_limit_logs_error(tmp_path: Path, monkeypatch) -> None:
+    """CLI rejects non-positive limits with an error message."""
+
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("a\n1\n", encoding="utf-8")
+    output_path = tmp_path / "out.csv"
+
+    logged: list[tuple[str, dict[str, object]]] = []
+
+    def fake_error(event: str, *args: object, **kwargs: object) -> None:
+        logged.append((event, kwargs))
+
+    monkeypatch.setattr(cli.logger, "error", fake_error)
+
+    exit_code = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--chunk-size",
+            "5",
+            "--limit",
+            "0",
+            "--log-level",
+            "WARNING",
+        ]
+    )
+
+    assert exit_code == 1
+    event, payload = logged[0]
+    assert event == "invalid_limit"
+    assert payload.get("limit") == 0
+
+
+def test_cli_missing_output_directory_logs_error(tmp_path: Path, monkeypatch) -> None:
+    """CLI reports a missing output directory when creation is disabled."""
+
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("a\n1\n", encoding="utf-8")
+    output_path = tmp_path / "missing" / "out.csv"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            local:
+              io:
+                exist_ok: false
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    logged: list[tuple[str, dict[str, object]]] = []
+
+    def fake_error(event: str, *args: object, **kwargs: object) -> None:
+        logged.append((event, kwargs))
+
+    monkeypatch.setattr(cli.logger, "error", fake_error)
+
+    exit_code = cli.main(
+        [
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--chunk-size",
+            "5",
+            "--log-level",
+            "WARNING",
+        ]
+    )
+
+    assert exit_code == 1
+    event, payload = logged[0]
+    assert event == "output_directory_missing"
+    assert payload.get("directory") == str(output_path.parent)
+
+
+def test_cli_output_parent_not_directory_logs_error(tmp_path: Path, monkeypatch) -> None:
+    """CLI reports when the output parent path is not a directory."""
+
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("a\n1\n", encoding="utf-8")
+    parent_path = tmp_path / "not_a_dir"
+    parent_path.write_text("content", encoding="utf-8")
+    output_path = parent_path / "out.csv"
+
+    logged: list[tuple[str, dict[str, object]]] = []
+
+    def fake_error(event: str, *args: object, **kwargs: object) -> None:
+        logged.append((event, kwargs))
+
+    monkeypatch.setattr(cli.logger, "error", fake_error)
+
+    exit_code = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--chunk-size",
+            "5",
+            "--log-level",
+            "WARNING",
+        ]
+    )
+
+    assert exit_code == 1
+    event, payload = logged[0]
+    assert event == "output_directory_not_directory"
+    assert payload.get("directory") == str(parent_path)

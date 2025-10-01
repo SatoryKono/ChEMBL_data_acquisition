@@ -63,9 +63,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the chunked copy operation."""
     try:
         if args.chunk_size <= 0:
-            raise SystemExit("--chunk-size must be a positive integer")
+            logger.error(
+                "invalid_chunk_size",
+                chunk_size=args.chunk_size,
+            )
+            return 1
         if args.limit is not None and args.limit <= 0:
-            raise SystemExit("--limit must be a positive integer")
+            logger.error(
+                "invalid_limit",
+                limit=args.limit,
+            )
+            return 1
 
         output = Path(args.output_csv or default_output_path(args.input_csv, cfg.io))
         parent = output.parent
@@ -73,9 +81,19 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             if cfg.io.exist_ok:
                 parent.mkdir(parents=True, exist_ok=True)
             else:
-                raise SystemExit(f"output directory {parent} does not exist")
+                logger.error(
+                    "output_directory_missing",
+                    directory=str(parent),
+                    output=str(output),
+                )
+                return 1
         elif not parent.is_dir():
-            raise SystemExit(f"output directory {parent} is not a directory")
+            logger.error(
+                "output_directory_not_directory",
+                directory=str(parent),
+                output=str(output),
+            )
+            return 1
         ensure_dirs(cfg)
         rows = process_csv_chunks(
             args.input_csv,
