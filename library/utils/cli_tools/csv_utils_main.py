@@ -88,11 +88,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ns.output_csv = output
     if args.output_csv != output:
         args = args.model_copy(update={"output_csv": output})
+    csv_dtype = getattr(cfg.io, "csv_dtype", str)
     with pd.read_csv(
         args.input_csv,
         sep=sep,
         encoding=encoding,
         chunksize=chunk_size,
+        dtype=csv_dtype,
     ) as reader:
         write_csv_chunks_deterministic(
             reader,
