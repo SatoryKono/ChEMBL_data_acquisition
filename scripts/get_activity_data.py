@@ -215,6 +215,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         inputs={"input_csv": str(args.input_csv)},
         key_columns=["activity_id"],
         table_quality=table_quality,
+        cfg=cfg,
         logger=logger,
     )
 
