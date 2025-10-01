@@ -163,10 +163,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point using :class:`Config` for defaults."""
+    """Entry point using :class:`Config` for defaults.
+
+    Notes
+    -----
+    Relative paths honour ``--base-path``, ``--input-dir`` and ``--output-dir``.
+    """
     parser, log_cfg = build_parser()
 
     args = parser.parse_args(argv)
+    input_path = getattr(args, "input_csv", None)
+    output_stem = Path(input_path).stem if input_path else None
+    cli.prepare_io_paths(args, output_stem=output_stem)
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)

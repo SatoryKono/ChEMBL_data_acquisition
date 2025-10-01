@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 
 from library import cli
 from library.activities import get_activities
@@ -37,7 +38,11 @@ def parse_args(
         action="store_true",
         help="Log actions without generating data",
     )
-    return parser.parse_args(argv), log_cfg
+    args = parser.parse_args(argv)
+    input_path = getattr(args, "input_csv", None)
+    output_stem = Path(input_path).stem if input_path else None
+    cli.prepare_io_paths(args, output_stem=output_stem)
+    return args, log_cfg
 
 
 def run(limit: int, dry_run: bool) -> int:
@@ -65,7 +70,13 @@ def run(limit: int, dry_run: bool) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command-line entry point."""
+    """Command-line entry point.
+
+    Notes
+    -----
+    Path options ``--base-path``, ``--input-dir`` and ``--output-dir`` are
+    respected when resolving CLI inputs.
+    """
     args, log_cfg = parse_args(argv)
     log_cfg.level = args.log_level
     cli.configure_logger(log_cfg)

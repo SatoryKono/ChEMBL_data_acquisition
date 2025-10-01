@@ -8,6 +8,7 @@ scoring logic.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 
 import pandas as pd
 
@@ -78,7 +79,12 @@ def classify_dataframe(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command-line entry point for document type classification."""
+    """Command-line entry point for document type classification.
+
+    Notes
+    -----
+    Relative paths honour ``--base-path``, ``--input-dir`` and ``--output-dir``.
+    """
 
     parser, log_cfg = base_parser(
         __doc__ or "Document type classification", column="chembl_id"
@@ -132,6 +138,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Maximum number of rows to process",
     )
     args = parser.parse_args(argv)
+    input_path = getattr(args, "input_csv", None)
+    output_stem = Path(input_path).stem if input_path else None
+    cli.prepare_io_paths(args, output_stem=output_stem)
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
     log_cfg.level = args.log_level

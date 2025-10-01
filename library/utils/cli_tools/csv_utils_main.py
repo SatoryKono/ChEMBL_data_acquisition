@@ -3,8 +3,10 @@
 This script reads an input CSV file and re-serialises it deterministically
 using :func:`library.csv_utils.write_csv_deterministic`.
 
-If ``--output`` is omitted, a file named
-``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the input.
+The command understands ``--base-path``, ``--input-dir`` and ``--output-dir``
+for resolving relative paths. When ``--output`` is omitted, a file named
+``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the resolved input or
+inside the selected output directory.
 """
 
 from __future__ import annotations
@@ -42,10 +44,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = build_parser()
     ns = parser.parse_args(argv)
-    if ns.output_csv is None:
-        ns.output_csv = Path(ns.input_csv).with_name(
-            f"output.{Path(ns.input_csv).stem}_{date.today():%Y%m%d}.csv"
-        )
+    input_path = getattr(ns, "input_csv", None)
+    output_stem = Path(input_path).stem if input_path else None
+    cli.prepare_io_paths(ns, output_stem=output_stem)
+    if ns.output_csv is None and output_stem is not None:
+        target_dir = ns.output_dir or ns.base_path or Path(ns.input_csv).parent
+        date_value = getattr(ns, "date", None)
+        if date_value is None:
+            date_value = f"{date.today():%Y%m%d}"
+            setattr(ns, "date", date_value)
+        ns.output_csv = (target_dir / f"output.{output_stem}_{date_value}.csv").resolve()
     cfg = cli.apply_config_overrides(
         ns,
         parser,

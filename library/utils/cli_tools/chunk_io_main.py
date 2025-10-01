@@ -125,10 +125,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     -------
     int
         ``0`` for success, ``1`` if an error occurred during processing.
+
+    Notes
+    -----
+    The command honours ``--base-path``, ``--input-dir`` and ``--output-dir``
+    for resolving relative file locations.
     """
 
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    input_path = getattr(args, "input_csv", None)
+    output_stem = Path(input_path).stem if input_path else None
+    cli.prepare_io_paths(args, output_stem=output_stem)
     log_cfg.level = args.log_level
     configure_logger(log_cfg)
     try:
