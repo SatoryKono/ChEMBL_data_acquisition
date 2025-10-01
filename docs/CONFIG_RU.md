@@ -170,7 +170,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `request_limit` | `1000` | Максимальное число объектов в одном запросе API. |
 | `retries` | `5` | Количество повторов при временных ошибках ChEMBL. |
 | `backoff_factor` | `0.5` | Множитель экспоненциальной задержки между повторами. |
-| `fields` | `["molecule_chembl_id", "parent_molecule_chembl_id", "pref_name", "max_phase", "molecule_type", "first_approval", "oral", "parenteral", "topical", "black_box_warning", "structure_type", "molecule_structures.canonical_smiles", "molecule_structures.standard_inchi", "molecule_structures.standard_inchi_key"]` | Список полей, запрашиваемых у ChEMBL. |
+| `fields` | `["molecule_chembl_id", "parent_molecule_chembl_id", "pref_name", "max_phase", "molecule_type", "first_approval", "oral", "parenteral", "topical", "black_box_warning", "structure_type", "molecule_structures.canonical_smiles", "molecule_structures.standard_inchi", "molecule_structures.standard_inchi_key", "pubchem_cid", "pubchem_iupac_name", "pubchem_molecular_formula", "pubchem_isomeric_smiles", "pubchem_canonical_smiles", "pubchem_inchi", "pubchem_inchikey"]` | Список полей, запрашиваемых у ChEMBL. |
 
 Параметры `offset` и `request_limit` помогают управлять пагинацией API: первый задаёт стартовую позицию, второй ограничивает размер одной страницы, который по умолчанию равен максимально допустимым 1000 объектам. Цикл повторов контролируется парами `retries`/`backoff_factor`, позволяя сгладить временные ошибки сервиса. Список `fields` определяет точный набор колонок в ответе и по умолчанию отражает рекомендуемый минимальный профиль тест-объекта.
 
