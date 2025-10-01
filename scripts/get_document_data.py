@@ -24,18 +24,31 @@ The input file must contain a ``PMID`` column.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import argparse
+import sys
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from itertools import chain, islice, tee
+from pathlib import Path
 from typing import cast
 
 import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
+
+
+def _ensure_project_root() -> None:
+    """Ensure the repository root is discoverable when executed as a script."""
+
+    script_path = Path(__file__).resolve()
+    project_root = script_path.parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+
+if __package__ in {None, ""}:
+    _ensure_project_root()
 
 from library import chembl_library as cl
 from library import cli
