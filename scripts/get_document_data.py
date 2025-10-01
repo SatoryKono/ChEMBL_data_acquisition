@@ -30,6 +30,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
 from itertools import chain, islice, tee
+import tempfile
 from pathlib import Path
 
 from threading import Lock, local
@@ -79,10 +80,8 @@ from library.config import (
     SemanticScholarCfg,
     _serialize_paths,
     ensure_dirs,
-    openalex_session,
     print_config,
     session_with_retry,
-    crossref_session,
 )
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
@@ -137,6 +136,26 @@ def limit_iterable(
         return count
 
     return limited_iter, _get_count
+
+
+def _read_csv_chunks(
+    path: Path,
+    *,
+    cfg: Config,
+    chunk_size: int,
+) -> Iterator[pd.DataFrame]:
+    """Yield DataFrame chunks from ``path`` while ensuring the reader closes."""
+
+    reader = pd.read_csv(
+        path,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        chunksize=chunk_size,
+    )
+    try:
+        yield from reader
+    finally:
+        reader.close()
 
 
 def _build_fallback_doi_map(
@@ -402,7 +421,12 @@ def fetch_pubmed_records(
     def _executor_capacity(limiter: RateLimiter | None, burst: int | None) -> int:
         limit = burst if burst is not None else 1
         if limiter is not None:
-            limit = min(limit, limiter.burst)
+            limiter_burst = getattr(limiter, "burst", limit)
+            try:
+                limiter_burst = int(limiter_burst)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                limiter_burst = limit
+            limit = min(limit, limiter_burst)
         return max(1, limit)
 
     class _SessionPool:
@@ -413,27 +437,11 @@ def fetch_pubmed_records(
         ) -> None:
             self._stack = stack
             self._factory = factory
-            self._available: list[requests.Session] = []
-            self._lock = Lock()
-
-        def _acquire(self) -> requests.Session:
-            with self._lock:
-                if self._available:
-                    return self._available.pop()
-            session_cm = self._factory()
-            return self._stack.enter_context(session_cm)
-
-        def _release(self, session: requests.Session) -> None:
-            with self._lock:
-                self._available.append(session)
 
         @contextmanager
         def session(self) -> Iterator[requests.Session]:
-            nested_session = self._acquire()
-            try:
+            with self._factory() as nested_session:
                 yield nested_session
-            finally:
-                self._release(nested_session)
 
     class _ThreadResources:
         def __init__(
@@ -460,15 +468,26 @@ def fetch_pubmed_records(
             session_with_retry(session_cfg.api, session_cfg.retry)
         )
 
+        def _service_factory(mailto: str) -> Callable[[], AbstractContextManager[requests.Session]]:
+            def _factory() -> AbstractContextManager[requests.Session]:
+                @contextmanager
+                def _context() -> Iterator[requests.Session]:
+                    with session_with_retry(
+                        session_cfg.api, session_cfg.retry
+                    ) as derived_session:
+                        if mailto and hasattr(derived_session, "headers"):
+                            derived_session.headers["mailto"] = mailto
+                        yield derived_session
+
+                return _context()
+
+            return _factory
+
         session_factories: dict[
             str, Callable[[], AbstractContextManager[requests.Session]]
         ] = {
-            "openalex": lambda: openalex_session(
-                session_cfg.api, session_cfg.retry, openalex_cfg
-            ),
-            "crossref": lambda: crossref_session(
-                session_cfg.api, session_cfg.retry, crossref_cfg
-            ),
+            "openalex": _service_factory(openalex_cfg.mailto),
+            "crossref": _service_factory(crossref_cfg.mailto),
         }
 
         pools = {
@@ -1537,6 +1556,13 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 for pmid, doi in zip(masked_pmids, masked_dois, strict=True)
             }
     pmids = pubmed_ids.dropna().astype(str).tolist()
+    pubmed_batch_size = getattr(args, "batch_size", all_defaults.batch_size)
+    if pubmed_batch_size is None or pubmed_batch_size <= 0:
+        pubmed_batch_size = all_defaults.batch_size
+    merge_chunk_size = getattr(args, "chunk_size", all_defaults.chunk_size)
+    if merge_chunk_size is None or merge_chunk_size <= 0:
+        merge_chunk_size = all_defaults.chunk_size
+
     pubmed_frames = fetch_pubmed_records(
         pmids,
         cfg,
@@ -1545,20 +1571,38 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         openalex_cfg=cfg.openalex,
         crossref_cfg=cfg.crossref,
         max_workers=getattr(args, "workers", all_defaults.workers),
-        batch_size=getattr(args, "batch_size", all_defaults.batch_size),
+        batch_size=pubmed_batch_size,
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
         return_generator=True,
     )
-    concat_iter = iter(pubmed_frames)
-    try:
-        first_frame = next(concat_iter)
-    except StopIteration:
-        pub_df = build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
-    else:
-        pub_df = pd.concat(chain([first_frame], concat_iter), ignore_index=True)
     doc_df["pubmed_id"] = pubmed_ids.astype("Int64").astype("string").fillna("")
-    merged = merge_with_chembl(doc_df, pub_df)
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="chembl_pubmed_") as tmp_dir:
+            tmp_path = Path(tmp_dir) / "pubmed_metadata.csv"
+            metadata_path = write_csv_chunks_deterministic(
+                pubmed_frames,
+                tmp_path,
+                key_cols=["PubMed.PMID"],
+                chunksize=pubmed_batch_size,
+                merge_chunksize=pubmed_batch_size,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                cfg=cfg,
+            )
+            if metadata_path.exists() and metadata_path.stat().st_size > 0:
+                metadata_iter = _read_csv_chunks(
+                    metadata_path,
+                    cfg=cfg,
+                    chunk_size=merge_chunk_size,
+                )
+            else:
+                metadata_iter = iter(())
+            merged = merge_with_chembl(doc_df, metadata_iter)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        logger.error("pubmed_pipeline_failed", error=str(exc))
+        return 1
     processed = dp.postprocess_documents(merged)
     extra_cols = [c for c in merged.columns if c not in processed.columns]
     if extra_cols:

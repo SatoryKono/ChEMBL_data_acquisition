@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import shutil
 import json
 import sys
 import threading
@@ -435,6 +436,147 @@ def test_run_all_large_limit_streams(
         record.get("event") == "process_limit" and record.get("limit") == 5
         for record in records
     )
+
+
+def test_run_all_streams_pubmed_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PubMed batches are written to disk and merged chunk by chunk."""
+
+    cfg = Config()
+    input_csv = tmp_path / "docs.csv"
+    ids = [f"CHEMBL{i}" for i in range(40)]
+    input_csv.write_text("document_chembl_id\n" + "\n".join(ids))
+
+    monkeypatch.setattr(lib_io, "read_ids", lambda *_args, **_kwargs: iter(ids))
+
+    class DummyClient:
+        def __enter__(self) -> "DummyClient":  # pragma: no cover - simple context
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - simple context
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    def fake_get_documents(
+        ids_iter: Iterable[str],
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        values = list(ids_iter)
+        return pd.DataFrame(
+            {
+                "document_chembl_id": values,
+                "pubmed_id": list(range(len(values))),
+                "doi": [f"10.1000/{idx}" for idx in range(len(values))],
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_documents", fake_get_documents)
+
+    batch_size = 8
+
+    def fake_fetch_pubmed_records(
+        pmids: Sequence[str], *args: object, **kwargs: object
+    ) -> Iterator[pd.DataFrame]:
+        def _generator() -> Iterator[pd.DataFrame]:
+            for start in range(0, len(pmids), batch_size):
+                chunk_pmids = pmids[start : start + batch_size]
+                yield pd.DataFrame(
+                    {
+                        "PubMed.PMID": chunk_pmids,
+                        "PubMed.DOI": [f"10.2000/{pmid}" for pmid in chunk_pmids],
+                    }
+                )
+
+        return _generator()
+
+    monkeypatch.setattr(gdd, "fetch_pubmed_records", fake_fetch_pubmed_records)
+
+    cleanup_flag = {"cleaned": False}
+
+    def tracking_tempdir(*_args: object, **_kwargs: object):
+        base = tmp_path / "pubmed_tmp"
+        if base.exists():
+            shutil.rmtree(base)
+        base.mkdir()
+
+        class _Context:
+            def __enter__(self) -> str:  # pragma: no cover - simple context
+                return str(base)
+
+            def __exit__(
+                self, exc_type: object, exc: object, tb: object | None
+            ) -> None:  # pragma: no cover - simple context
+                shutil.rmtree(base)
+                cleanup_flag["cleaned"] = True
+
+        return _Context()
+
+    monkeypatch.setattr(gdd.tempfile, "TemporaryDirectory", tracking_tempdir)
+
+    metadata_arguments: list[object] = []
+    real_merge = gdd.merge_with_chembl
+
+    def recording_merge(doc_df: pd.DataFrame, metadata: object) -> pd.DataFrame:
+        metadata_arguments.append(metadata)
+        return real_merge(doc_df, metadata)
+
+    monkeypatch.setattr(gdd, "merge_with_chembl", recording_merge)
+
+    captured: dict[str, pd.DataFrame] = {}
+
+    def fake_postprocess(df: pd.DataFrame) -> pd.DataFrame:
+        captured["merged"] = df.copy()
+        return df
+
+    monkeypatch.setattr(gdd.dp, "postprocess_documents", fake_postprocess)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+
+    def fake_finalise_export(
+        df: pd.DataFrame | Iterable[pd.DataFrame], *args: object, **kwargs: object
+    ) -> int:
+        assert isinstance(df, pd.DataFrame)
+        captured["export_rows"] = len(df)
+        return 0
+
+    monkeypatch.setattr(gdd, "_finalise_export", fake_finalise_export)
+
+    monkeypatch.setattr(
+        gdd.pd,
+        "concat",
+        lambda *_args, **_kwargs: pytest.fail("pd.concat not expected"),
+    )
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=tmp_path / "out.csv",
+        fallback_doi_csv=None,
+        fallback_doi_pmid_column="PMID",
+        fallback_doi_value_column="DOI",
+        limit=None,
+        offset=0,
+        chunk_size=batch_size,
+        batch_size=batch_size,
+        column="document_chembl_id",
+    )
+
+    exit_code = gdd.run_all(cfg, args)
+    assert exit_code == 0
+    assert cleanup_flag["cleaned"] is True
+    assert metadata_arguments, "merge_with_chembl should receive streamed metadata"
+    metadata_obj = metadata_arguments[0]
+    assert not isinstance(metadata_obj, pd.DataFrame)
+    assert hasattr(metadata_obj, "__iter__")
+    merged = captured["merged"]
+    assert len(merged) == len(ids)
+    assert set(merged["PubMed.DOI"]) == {
+        f"10.2000/{idx}" for idx in map(str, range(len(ids)))
+    }
+    assert captured["export_rows"] == len(ids)
 
 
 def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:

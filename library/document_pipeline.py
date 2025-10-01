@@ -11,7 +11,7 @@ sub-commands.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -231,42 +231,86 @@ def build_dataframe(
 
 
 def merge_with_chembl(
-    chembl_df: pd.DataFrame, metadata_df: pd.DataFrame
+    chembl_df: pd.DataFrame | Iterable[pd.DataFrame],
+    metadata_df: pd.DataFrame | Iterable[pd.DataFrame],
 ) -> pd.DataFrame:
-    """Merge PubMed style metadata into ``chembl_df``."""
+    """Merge PubMed style metadata into ``chembl_df`` chunk by chunk."""
 
-    if metadata_df.empty or "PubMed.PMID" not in metadata_df.columns:
-        return chembl_df.copy()
+    def _iter_frames(frame_or_iterable: Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+        return iter(frame_or_iterable)
 
-    left = chembl_df.copy()
-    right = metadata_df.copy()
+    if isinstance(chembl_df, pd.DataFrame):
+        result = chembl_df.copy()
+    else:
+        chembl_iter = _iter_frames(chembl_df)
+        try:
+            result = next(chembl_iter).copy()
+        except StopIteration:
+            return pd.DataFrame(columns=DOCUMENT_SCHEMA_COLUMNS)
+        for extra_frame in chembl_iter:
+            if extra_frame.empty:
+                continue
+            result = pd.concat([result, extra_frame], ignore_index=True)
 
-    drop_cols = [col for col in CH_EMBL_COLUMNS if col in right.columns]
-    if drop_cols:
-        right = right.drop(columns=drop_cols)
+    if result.empty:
+        return result
 
-    if "pubmed_id" in left.columns:
-        left["pubmed_id"] = (
-            pd.to_numeric(left["pubmed_id"], errors="coerce")
-            .astype("Int64")
-            .astype("string")
-            .fillna("")
-        )
+    join_key = "pubmed_id" if "pubmed_id" in result.columns else "PubMed.PMID"
+    if join_key not in result.columns:
+        return result
 
-    right["PubMed.PMID"] = (
-        pd.to_numeric(right["PubMed.PMID"], errors="coerce")
+    result[join_key] = (
+        pd.to_numeric(result[join_key], errors="coerce")
         .astype("Int64")
         .astype("string")
         .fillna("")
     )
 
-    merged = left.merge(
-        right,
-        how="left",
-        left_on="pubmed_id" if "pubmed_id" in left.columns else "PubMed.PMID",
-        right_on="PubMed.PMID",
-    )
-    return merged
+    left_columns = list(result.columns)
+    result["__merge_order"] = range(len(result))
+    result = result.set_index(join_key, drop=False)
+
+    if isinstance(metadata_df, pd.DataFrame):
+        metadata_iter = iter((metadata_df,))
+    else:
+        metadata_iter = _iter_frames(metadata_df)
+    metadata_columns: list[str] = []
+
+    for chunk in metadata_iter:
+        if chunk.empty or "PubMed.PMID" not in chunk.columns:
+            continue
+        right = chunk.drop(columns=[col for col in CH_EMBL_COLUMNS if col in chunk.columns])
+        right["PubMed.PMID"] = (
+            pd.to_numeric(right["PubMed.PMID"], errors="coerce")
+            .astype("Int64")
+            .astype("string")
+            .fillna("")
+        )
+        right = right.set_index("PubMed.PMID", drop=False)
+
+        for column in right.columns:
+            if column == join_key:
+                continue
+            if column not in result.columns:
+                result[column] = pd.Series(
+                    [pd.NA] * len(result), index=result.index, dtype="object"
+                )
+            if column not in metadata_columns and column not in left_columns:
+                metadata_columns.append(column)
+            result[column] = result[column].combine_first(right[column])
+
+    result = result.sort_values("__merge_order").drop(columns=["__merge_order"])
+    result = result.reset_index(drop=True)
+
+    base_columns = [col for col in left_columns if col in result.columns]
+    new_columns = [col for col in metadata_columns if col in result.columns]
+    extra_columns = [
+        col
+        for col in result.columns
+        if col not in {"__merge_order", *base_columns, *new_columns}
+    ]
+    ordered = base_columns + new_columns + extra_columns
+    return result[ordered]
 
 
 def dataframe_to_strings(

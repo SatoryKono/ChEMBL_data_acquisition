@@ -1,6 +1,6 @@
 import threading
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from itertools import count
 from pathlib import Path
 
@@ -92,6 +92,46 @@ def test_merge_with_chembl_aligns_pubmed_ids() -> None:
     assert "document_chembl_id_x" not in merged.columns
     assert "document_chembl_id_y" not in merged.columns
     assert merged["document_chembl_id"].iloc[0] == "CHEMBL1"
+
+
+def test_merge_with_chembl_supports_iterables() -> None:
+    """Metadata iterables are consumed lazily during the merge."""
+
+    chembl_df = pd.DataFrame(
+        {
+            "document_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "pubmed_id": ["100", "200"],
+        }
+    )
+
+    class SinglePass:
+        def __init__(self, frames: Sequence[pd.DataFrame]) -> None:
+            self._frames = frames
+            self._used = False
+
+        def __iter__(self) -> Iterator[pd.DataFrame]:
+            if self._used:
+                raise AssertionError("iterator reused")
+            self._used = True
+            yield from self._frames
+
+    chunks = (
+        pd.DataFrame(
+            {
+                "PubMed.PMID": ["100"],
+                "PubMed.DOI": ["10.1/100"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "PubMed.PMID": ["200"],
+                "PubMed.DOI": ["10.1/200"],
+            }
+        ),
+    )
+
+    merged = merge_with_chembl(chembl_df, SinglePass(chunks))
+    assert list(merged["PubMed.DOI"]) == ["10.1/100", "10.1/200"]
 
 
 def test_build_quality_report_counts() -> None:
