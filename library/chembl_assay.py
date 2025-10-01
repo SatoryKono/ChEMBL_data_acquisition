@@ -6,6 +6,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from urllib.parse import urlencode, urljoin
 
 import pandas as pd
+import requests
 
 from library.clients import ChemblClient, _chunked
 from .config import ApiCfg, TESTITEM_FIELD_DEFAULTS
@@ -154,6 +155,83 @@ def _split_chunk_for_url(
 
     if buffer:
         yield buffer
+
+
+def _fetch_testitem_chunk(
+    identifiers: Sequence[str],
+    *,
+    base: str,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    timeout: float,
+) -> list[pd.DataFrame]:
+    """Fetch data for ``identifiers`` with adaptive splitting on HTTP 400."""
+
+    pending: list[list[str]] = [list(identifiers)]
+    frames: list[pd.DataFrame] = []
+    while pending:
+        current = pending.pop()
+        if not current:
+            continue
+        chunk_key = ",".join(current)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&molecule_chembl_id__in={chunk_key}"
+        next_url: str | None = url
+        seen_urls: set[str] = set()
+        chunk_frames: list[pd.DataFrame] = []
+        try:
+            while next_url:
+                absolute_url = urljoin(cfg.chembl_base, next_url)
+                if absolute_url in seen_urls:
+                    logger.warning(
+                        "pagination_loop_detected",
+                        extra={"stage": "chunk_loop", "chunk_key": chunk_key},
+                    )
+                    break
+                seen_urls.add(absolute_url)
+                data = client.request_json(
+                    absolute_url, cfg=cfg, timeout=timeout
+                )
+                items = data.get("molecules") or data.get("molecule") or []
+                if items:
+                    chunk_frames.append(json_normalize_pyarrow(items))
+                page_meta = data.get("page_meta") or {}
+                next_token = page_meta.get("next")
+                next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        except requests.RequestException as exc:
+            response = getattr(exc, "response", None)
+            status_code = response.status_code if response is not None else None
+            if status_code == 400 and len(current) > 1:
+                midpoint = max(1, len(current) // 2)
+                first = current[:midpoint]
+                second = current[midpoint:]
+                logger.warning(
+                    "chunk_http_400_split",
+                    extra={
+                        "stage": "chunk_split",
+                        "chunk_key": chunk_key,
+                        "size": len(current),
+                        "status": status_code,
+                    },
+                )
+                if second:
+                    pending.append(second)
+                if first:
+                    pending.append(first)
+                continue
+            raise
+        if chunk_frames:
+            frames.append(pd.concat(chunk_frames, ignore_index=True))
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
+    return frames
 
 
 def get_assay(
@@ -387,41 +465,15 @@ def get_testitem(
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     for chunk in _chunked(valid, effective_chunk):
         for url_chunk in _split_chunk_for_url(chunk, base):
-            chunk_key = ",".join(url_chunk)
-            logger.info(
-                "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+            records.extend(
+                _fetch_testitem_chunk(
+                    url_chunk,
+                    base=base,
+                    cfg=cfg,
+                    client=client,
+                    timeout=effective_timeout,
+                )
             )
-            url = f"{base}&molecule_chembl_id__in={chunk_key}"
-            next_url: str | None = url
-            seen_urls: set[str] = set()
-            chunk_frames: list[pd.DataFrame] = []
-            while next_url:
-                absolute_url = urljoin(cfg.chembl_base, next_url)
-                if absolute_url in seen_urls:
-                    logger.warning(
-                        "pagination_loop_detected",
-                        extra={"stage": "chunk_loop", "chunk_key": chunk_key},
-                    )
-                    break
-                seen_urls.add(absolute_url)
-                data = client.request_json(
-                    absolute_url, cfg=cfg, timeout=effective_timeout
-                )
-                items = data.get("molecules") or data.get("molecule") or []
-                if items:
-                    chunk_frames.append(json_normalize_pyarrow(items))
-                page_meta = data.get("page_meta") or {}
-                next_token = page_meta.get("next")
-                next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
-            if chunk_frames:
-                records.append(pd.concat(chunk_frames, ignore_index=True))
-                logger.info(
-                    "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
-                )
-            else:
-                logger.info(
-                    "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
-                )
     if not records:
         return pd.DataFrame(columns=TESTITEM_COLUMNS)
     df = pd.concat(records, ignore_index=True)
