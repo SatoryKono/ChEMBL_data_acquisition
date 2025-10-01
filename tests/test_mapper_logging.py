@@ -32,7 +32,14 @@ def test_mapper_main_logs_mapping(
 ) -> None:
     """Mapper CLI emits structured mapping log records."""
 
-    def fake_map(ids: list[str], cfg: object, *, batch_size: int, rps: float, max_workers: int | None) -> dict[str, str | None]:
+    def fake_map(
+        ids: list[str],
+        cfg: object,
+        *,
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
         assert ids == ["CHEMBL1"]
         assert batch_size == 1
         assert rps == 1.0
@@ -78,9 +85,7 @@ def test_mapper_main_concurrent_preserves_order(
 ) -> None:
     """Concurrent path retains mapping order and logging semantics."""
 
-    df = pd.DataFrame(
-        {"chembl_id": ["CHEMBL1", None, "CHEMBL2", " ", "CHEMBL3"]}
-    )
+    df = pd.DataFrame({"chembl_id": ["CHEMBL1", None, "CHEMBL2", " ", "CHEMBL3"]})
     input_path = tmp_path / "in.csv"
     df.to_csv(input_path, index=False)
     output_path = tmp_path / "out.csv"

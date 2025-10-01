@@ -89,9 +89,7 @@ class LimitedTestitemClient:
             raise HTTPError(
                 f"400 Client Error: Bad Request for url: {url}", response=response
             )
-        molecules = [
-            {"molecule_chembl_id": identifier} for identifier in identifiers
-        ]
+        molecules = [{"molecule_chembl_id": identifier} for identifier in identifiers]
         return {"molecules": molecules, "page_meta": {}}
 
 
@@ -137,9 +135,7 @@ def test_get_testitem_splits_requests_when_url_would_exceed_limit() -> None:
     base_params: list[tuple[str, str]] = [("format", "json"), ("limit", "1000")]
     if TESTITEM_QUERY_FIELDS:
         base_params.append(("fields", ",".join(TESTITEM_QUERY_FIELDS)))
-    base = (
-        f"{cfg.chembl_base.rstrip('/')}/molecule.json?{urlencode(base_params)}"
-    )
+    base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?{urlencode(base_params)}"
     prefix = f"{base}&molecule_chembl_id__in="
     assert len(prefix) < MAX_TESTITEM_URL_LENGTH
 

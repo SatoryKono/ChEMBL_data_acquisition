@@ -168,9 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger_inst.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        logger_inst = configure_logger(
-            log_cfg
-        )
+        logger_inst = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         logger.error(
             "config_error",

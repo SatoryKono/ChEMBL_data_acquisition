@@ -17,7 +17,16 @@ from dataclasses import dataclass
 from functools import lru_cache
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sequence
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Sequence,
+)
 
 import pandas as pd
 import requests
@@ -103,6 +112,7 @@ DEFAULT_OUTPUT_STEM = "testitems"
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 
+
 @dataclass
 class ReadInputIdsResult:
     """Container holding the identifier iterator and a diagnostic sample."""
@@ -153,9 +163,7 @@ def _load_molecule_hierarchy_mapping(
 
     csv_path = Path(path)
     if not csv_path.exists():
-        raise FileNotFoundError(
-            f"Molecule hierarchy dictionary not found: {csv_path}"
-        )
+        raise FileNotFoundError(f"Molecule hierarchy dictionary not found: {csv_path}")
 
     try:
         frame = pd.read_csv(
@@ -181,11 +189,7 @@ def _load_molecule_hierarchy_mapping(
     subset = frame.loc[:, list(_MOLECULE_HIERARCHY_COLUMNS)].copy()
     for column in _MOLECULE_HIERARCHY_COLUMNS:
         subset[column] = (
-            subset[column]
-            .fillna("")
-            .astype("string")
-            .str.strip()
-            .str.upper()
+            subset[column].fillna("").astype("string").str.strip().str.upper()
         )
 
     subset = subset[subset["molecule_chembl_id"] != ""]
@@ -301,6 +305,7 @@ def _load_pubchem_cid_cache(
             cache[key] = primary
     return cache
 
+
 def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
     """Return mapping of identifier names to normalised values."""
 
@@ -349,8 +354,9 @@ def resolve_pubchem_cid(
     cfg: PubChemCfg,
     *,
     parent_loader: Callable[[str], pd.Series | None] | None = None,
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
-    | None = None,
+    resolution_cache: (
+        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
+    ) = None,
     visited: set[str] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
@@ -740,7 +746,11 @@ def attach_parent_molecule_ids(
 
     final_source = source_resolved
     if catalog is not None and not missing_ids:
-        if final_source in (None, PARENT_LOOKUP_SOURCE_CACHE, PARENT_LOOKUP_SOURCE_SKIPPED):
+        if final_source in (
+            None,
+            PARENT_LOOKUP_SOURCE_CACHE,
+            PARENT_LOOKUP_SOURCE_SKIPPED,
+        ):
             final_source = PARENT_LOOKUP_SOURCE_LOOKUP
     if full_sync_used:
         final_source = PARENT_LOOKUP_SOURCE_SYNC
@@ -781,8 +791,9 @@ def add_pubchem_data(
     api_cfg: ApiCfg | None = None,
     timeout: float | None = None,
     cid_cache: MutableMapping[str, str | None] | None = None,
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
-    | None = None,
+    resolution_cache: (
+        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
+    ) = None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
     testitem_fields: Sequence[str] | None = None,
     request_limit: int = 1000,
@@ -954,7 +965,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
-
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

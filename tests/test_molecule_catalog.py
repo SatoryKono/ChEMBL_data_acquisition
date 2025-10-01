@@ -152,7 +152,11 @@ def test_fetch_parent_catalog_for_uses_custom_fields(api_cfg: ApiCfg) -> None:
     ]
     client = DummyClient(responses)
     cfg = MoleculeCatalogCfg(
-        fields=("molecule_chembl_id", "molecule_properties", "parent_molecule_chembl_id"),
+        fields=(
+            "molecule_chembl_id",
+            "molecule_properties",
+            "parent_molecule_chembl_id",
+        ),
     )
 
     result = fetch_parent_catalog_for(

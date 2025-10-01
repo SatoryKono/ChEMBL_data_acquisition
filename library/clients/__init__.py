@@ -20,10 +20,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Protocol, Sequence
 
- 
+
 from .pubmed import PubMedClient
- 
- 
+
+
 from .iuphar import (
     download_gtp_to_hgnc_mapping,
     download_gtp_to_uniprot_mapping,
@@ -32,18 +32,17 @@ from .iuphar import (
     load_targets as load_iuphar_targets,
     query_gene_symbol as query_iuphar_gene_symbol,
 )
- 
- 
+
+
 from .crossref import fetch_crossref
 from .openalex import fetch_openalex
 from .semantic_scholar import (
     fetch_semantic_scholar,
     fetch_semantic_scholar_batch,
 )
- 
+
 from .chembl import ChemblClient, _chunked
- 
- 
+
 
 __all__ = [
     "ChemblClient",
@@ -52,7 +51,6 @@ __all__ = [
     "ClientPayload",
     "ClientProtocol",
     "PubMedClient",
- 
     "download_gtp_to_hgnc_mapping",
     "download_gtp_to_uniprot_mapping",
     "init_iuphar_session",
@@ -64,7 +62,6 @@ __all__ = [
     "fetch_semantic_scholar",
     "fetch_semantic_scholar_batch",
     "_chunked",
- 
 ]
 
 
@@ -95,4 +92,3 @@ class ClientProtocol(Protocol):
 
     def fetch(self, *, params: Mapping[str, Any] | None = None) -> ClientPayload:
         """Retrieve data from the upstream service."""
-

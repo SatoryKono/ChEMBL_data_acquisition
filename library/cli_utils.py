@@ -47,7 +47,9 @@ class ValidationResult(Protocol):
 class Validator(Protocol):
     """Callable interface for data frame validators."""
 
-    def __call__(self, df: pd.DataFrame) -> ValidationResult:  # pragma: no cover - Protocol
+    def __call__(
+        self, df: pd.DataFrame
+    ) -> ValidationResult:  # pragma: no cover - Protocol
         ...
 
 
@@ -116,16 +118,16 @@ def run_cli_command(
 
 
 @overload
-def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]:
-    ...
+def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]: ...
 
 
 @overload
-def _as_iterable(source: Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]:
-    ...
+def _as_iterable(source: Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]: ...
 
 
-def _as_iterable(source: pd.DataFrame | Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+def _as_iterable(
+    source: pd.DataFrame | Iterable[pd.DataFrame],
+) -> Iterator[pd.DataFrame]:
     """Return ``source`` as an iterator of data frames."""
 
     if isinstance(source, pd.DataFrame):
@@ -203,7 +205,9 @@ def run_pipeline(
     use_logger = logger or default_logger
 
     required_cols = {
-        name for name, column in getattr(schema, "columns", {}).items() if column.required
+        name
+        for name, column in getattr(schema, "columns", {}).items()
+        if column.required
     }
     optional_cols = set(getattr(schema, "columns", {})) - required_cols
 

@@ -31,9 +31,8 @@ def test_optional_dependencies_are_unique() -> None:
             else:
                 seen.add(normalized)
 
-    assert not duplicates, (
-        "Duplicate optional dependency entries detected: "
-        + ", ".join(
-            f"{group}: {sorted(values)}" for group, values in sorted(duplicates.items())
-        )
+    assert (
+        not duplicates
+    ), "Duplicate optional dependency entries detected: " + ", ".join(
+        f"{group}: {sorted(values)}" for group, values in sorted(duplicates.items())
     )

@@ -181,9 +181,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
     for action in parser._actions:
         if action.dest == "output_csv":
-            action.help = (
-                "Directory for profiling reports (must exist when cfg.io.exist_ok is false)"
-            )
+            action.help = "Directory for profiling reports (must exist when cfg.io.exist_ok is false)"
             action.metavar = "OUTPUT_DIR"
             break
     return parser, log_cfg

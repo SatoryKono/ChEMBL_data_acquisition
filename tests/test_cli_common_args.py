@@ -55,5 +55,7 @@ def test_path_argument_normalises_windows_style(tmp_path: Path) -> None:
     parser = argparse.ArgumentParser()
     add_common_arguments(parser)
     parser.add_argument("--config", default=cfg_path, type=path_argument)
-    args = parser.parse_args(["--config", str(cfg_path), "--input", "data\\input\\file.csv"])
+    args = parser.parse_args(
+        ["--config", str(cfg_path), "--input", "data\\input\\file.csv"]
+    )
     assert args.input_csv == Path("data/input/file.csv")

@@ -304,7 +304,10 @@ def fetch_testitems(
                 fields=fields,
                 page_limit=page_limit,
             )
-        except (requests.RequestException, ValueError) as exc:  # pragma: no cover - network
+        except (
+            requests.RequestException,
+            ValueError,
+        ) as exc:  # pragma: no cover - network
             logger.error(
                 "testitem_fetch_failed",
                 error=str(exc),
@@ -316,7 +319,9 @@ def fetch_testitems(
 
         if "molecule_chembl_id" not in frame.columns:
             frame["molecule_chembl_id"] = pd.Series(dtype="string")
-        frame["molecule_chembl_id"] = frame["molecule_chembl_id"].astype("string").str.upper()
+        frame["molecule_chembl_id"] = (
+            frame["molecule_chembl_id"].astype("string").str.upper()
+        )
 
         duplicated_mask = frame["molecule_chembl_id"].duplicated(keep=False)
         if duplicated_mask.any():
@@ -524,9 +529,7 @@ def _load_molecule_hierarchy_mapping(
 
     csv_path = Path(path)
     if not csv_path.exists():
-        raise FileNotFoundError(
-            f"Molecule hierarchy dictionary not found: {csv_path}"
-        )
+        raise FileNotFoundError(f"Molecule hierarchy dictionary not found: {csv_path}")
 
     try:
         frame = pd.read_csv(
@@ -552,11 +555,7 @@ def _load_molecule_hierarchy_mapping(
     subset = frame.loc[:, list(_MOLECULE_HIERARCHY_COLUMNS)].copy()
     for column in _MOLECULE_HIERARCHY_COLUMNS:
         subset[column] = (
-            subset[column]
-            .fillna("")
-            .astype("string")
-            .str.strip()
-            .str.upper()
+            subset[column].fillna("").astype("string").str.strip().str.upper()
         )
 
     subset = subset[subset["molecule_chembl_id"] != ""]
@@ -879,7 +878,11 @@ def attach_parent_molecule_ids(
 
     final_source = source_resolved
     if catalog is not None and not missing_ids:
-        if final_source in (None, PARENT_LOOKUP_SOURCE_CACHE, PARENT_LOOKUP_SOURCE_SKIPPED):
+        if final_source in (
+            None,
+            PARENT_LOOKUP_SOURCE_CACHE,
+            PARENT_LOOKUP_SOURCE_SKIPPED,
+        ):
             final_source = PARENT_LOOKUP_SOURCE_LOOKUP
     if full_sync_used:
         final_source = PARENT_LOOKUP_SOURCE_SYNC
@@ -1299,8 +1302,9 @@ def resolve_pubchem_cid(
     cfg: PubChemCfg,
     *,
     parent_loader: Callable[[str], pd.Series | None] | None = None,
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
-    | None = None,
+    resolution_cache: (
+        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
+    ) = None,
     visited: set[str] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
@@ -1414,8 +1418,9 @@ def _prepare_pubchem_caches(
     cache_path: Path | str | None,
     cache_ttl_hours: float | None,
     cid_cache: MutableMapping[str, str | None] | None,
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
-    | None,
+    resolution_cache: (
+        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
+    ),
     parent_record_cache: MutableMapping[str, pd.Series | None] | None,
 ) -> tuple[
     MutableMapping[str, str | None],
@@ -1435,15 +1440,12 @@ def _prepare_pubchem_caches(
 
     local_records: pd.DataFrame | None = None
     if "molecule_chembl_id" in frame.columns:
-        prepared_local_records = (
-            frame.assign(
-                __local_molecule=lambda data: data["molecule_chembl_id"]
-                .astype("string")
-                .str.strip()
-                .str.upper()
-            )
-            .dropna(subset=["__local_molecule"])
-        )
+        prepared_local_records = frame.assign(
+            __local_molecule=lambda data: data["molecule_chembl_id"]
+            .astype("string")
+            .str.strip()
+            .str.upper()
+        ).dropna(subset=["__local_molecule"])
         if not prepared_local_records.empty:
             local_records = (
                 prepared_local_records.drop_duplicates("__local_molecule")
@@ -1561,9 +1563,7 @@ def _resolve_pubchem_cids(
             lambda value: _normalise_identifier(value, uppercase=True)
         )
     else:
-        chembl_norm = pd.Series(
-            [None] * len(frame), index=frame.index, dtype="object"
-        )
+        chembl_norm = pd.Series([None] * len(frame), index=frame.index, dtype="object")
 
     def _is_cached(chembl_id: str | None) -> bool:
         return bool(chembl_id) and chembl_id in cid_cache
@@ -1657,7 +1657,9 @@ def _merge_pubchem_properties(
                     try:
                         props = future.result()
                     except Exception as exc:  # pragma: no cover - defensive
-                        logger.warning("pubchem_properties_failed", cid=cid, error=str(exc))
+                        logger.warning(
+                            "pubchem_properties_failed", cid=cid, error=str(exc)
+                        )
                         props = pl.Properties(None, None, None, None, None, None)
                     properties_records[cid] = {
                         "pubchem_iupac_name": _value_or_na(props.IUPACName),
@@ -1671,7 +1673,9 @@ def _merge_pubchem_properties(
                     }
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
-    pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")
+    pubchem_df = cid_series.to_frame("pubchem_cid").join(
+        properties_df, on="pubchem_cid"
+    )
     pubchem_df = pubchem_df.reindex(frame.index)
 
     preserve_mask = skip_mask | prefer_local_mask
@@ -1693,7 +1697,9 @@ def _merge_pubchem_properties(
                     .mask(preserve_mask, original_existing[intersecting_columns])
                 )
             missing_columns = [
-                column for column in existing_columns if column not in pubchem_df.columns
+                column
+                for column in existing_columns
+                if column not in pubchem_df.columns
             ]
             if missing_columns:
                 pubchem_df[missing_columns] = original_existing[missing_columns]
@@ -1709,8 +1715,9 @@ def add_pubchem_data(
     api_cfg: ApiCfg | None = None,
     timeout: float | None = None,
     cid_cache: MutableMapping[str, str | None] | None = None,
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution]
-    | None = None,
+    resolution_cache: (
+        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
+    ) = None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
     testitem_fields: Sequence[str] | None = None,
     request_limit: int = 0,
@@ -2097,12 +2104,19 @@ def run_testitem_pipeline(
 
                     if "molecule_chembl_id" in enriched_df.columns:
                         ids_series = (
-                            enriched_df["molecule_chembl_id"].dropna().astype(str).str.strip()
+                            enriched_df["molecule_chembl_id"]
+                            .dropna()
+                            .astype(str)
+                            .str.strip()
                         )
-                        fetched_ids.update({value.upper() for value in ids_series if value})
+                        fetched_ids.update(
+                            {value.upper() for value in ids_series if value}
+                        )
 
                     yield enriched_df
-            except TestitemFetchError as exc:  # pragma: no cover - propagated network error
+            except (
+                TestitemFetchError
+            ) as exc:  # pragma: no cover - propagated network error
                 raise TestitemPipelineStageError(1, str(exc)) from exc
 
             missing_keys = [key for key in requested_unique if key not in fetched_ids]
@@ -2113,9 +2127,7 @@ def run_testitem_pipeline(
                     count=len(missing_ids),
                     identifiers=missing_ids,
                 )
-                placeholder = pd.DataFrame(
-                    {"molecule_chembl_id": list(missing_ids)}
-                )
+                placeholder = pd.DataFrame({"molecule_chembl_id": list(missing_ids)})
                 rows_counter += len(placeholder)
                 yield placeholder
 
@@ -2155,7 +2167,9 @@ def finalize_output(
     """Normalise, validate, and persist the final dataset from ``chunks``."""
 
     schema_cols = list(TestitemsSchema.columns)
-    required_cols = {name for name, col in TestitemsSchema.columns.items() if col.required}
+    required_cols = {
+        name for name, col in TestitemsSchema.columns.items() if col.required
+    }
     optional_cols = set(TestitemsSchema.columns) - required_cols
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]

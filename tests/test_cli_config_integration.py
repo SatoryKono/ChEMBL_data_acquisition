@@ -27,9 +27,7 @@ def test_table_quality_cli_with_config(tmp_path: Path) -> None:
     assert rc == 0
 
 
-def test_mapper_batch_default_config_outside_repo(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_mapper_batch_default_config_outside_repo(tmp_path: Path, monkeypatch) -> None:
     recorded: dict[str, Path] = {}
 
     def fake_apply_config_overrides(

@@ -154,7 +154,11 @@ def test_run_pipeline_writes_failure_cases(tmp_path: Path) -> None:
         key_cols: list[str],
     ) -> Path:
         frames = list(chunks)
-        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=col_order)
+        df = (
+            pd.concat(frames, ignore_index=True)
+            if frames
+            else pd.DataFrame(columns=col_order)
+        )
         df.to_csv(destination, index=False)
         return destination
 

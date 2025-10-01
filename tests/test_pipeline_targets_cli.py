@@ -291,7 +291,11 @@ def test_write_outputs_streams_large_input(
     ) -> Path:
         recorded["path"] = Path(path)
         recorded["is_generator"] = not isinstance(data, pd.DataFrame)
-        frames = [chunk.copy() for chunk in data] if recorded["is_generator"] else [data.copy()]
+        frames = (
+            [chunk.copy() for chunk in data]
+            if recorded["is_generator"]
+            else [data.copy()]
+        )
         recorded["chunk_sizes"] = [len(frame) for frame in frames]
         return Path(path)
 

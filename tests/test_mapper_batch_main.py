@@ -82,9 +82,7 @@ def test_main_invokes_run_without_print_config(
     assert called["args"].input_csv == input_csv
     assert "cfg" not in printed
     assert len(configured_loggers) >= 2
-    assert any(
-        event == "pipeline_start" for event, _ in configured_loggers[0].events
-    )
+    assert any(event == "pipeline_start" for event, _ in configured_loggers[0].events)
     assert any(
         event == "pipeline_end" and payload.get("exit_code") == 0
         for event, payload in configured_loggers[-1].events

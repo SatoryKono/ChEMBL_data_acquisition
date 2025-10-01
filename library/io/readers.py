@@ -90,7 +90,9 @@ def read_ids(
     marker_set = set(na_markers or cfg.na_markers or ())
     keep_markers = cfg.keep_na_markers if keep_na_markers is None else keep_na_markers
 
-    def _append_candidate(values: Sequence[str] | str | None, seen: set[str], out: list[str]) -> None:
+    def _append_candidate(
+        values: Sequence[str] | str | None, seen: set[str], out: list[str]
+    ) -> None:
         if values is None:
             return
         if isinstance(values, str):

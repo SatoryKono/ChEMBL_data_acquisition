@@ -784,9 +784,7 @@ def _safe_to_int(series: pd.Series, col: str) -> pd.Series:
     try:
         return pd.to_numeric(series, errors="raise").astype("Int64")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning(
-            "dtype_int_conversion_failed", column=col, error=str(exc)
-        )
+        logger.warning("dtype_int_conversion_failed", column=col, error=str(exc))
         return series.astype("string")
 
 
@@ -812,9 +810,7 @@ def _safe_to_float(series: pd.Series, col: str) -> pd.Series:
     try:
         return pd.to_numeric(series, errors="raise").astype("float64")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning(
-            "dtype_float_conversion_failed", column=col, error=str(exc)
-        )
+        logger.warning("dtype_float_conversion_failed", column=col, error=str(exc))
         return series.astype("string")
 
 
@@ -840,9 +836,7 @@ def _safe_to_datetime(series: pd.Series, col: str) -> pd.Series:
     try:
         return pd.to_datetime(series, errors="raise")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning(
-            "dtype_datetime_conversion_failed", column=col, error=str(exc)
-        )
+        logger.warning("dtype_datetime_conversion_failed", column=col, error=str(exc))
         return series.astype("string")
 
 
@@ -881,9 +875,7 @@ def _safe_to_bool(series: pd.Series, col: str) -> pd.Series:
         mapped = series.map(mapper)
         return mapped.astype("boolean")
     except Exception as exc:  # pragma: no cover - rare
-        logger.warning(
-            "dtype_bool_conversion_failed", column=col, error=str(exc)
-        )
+        logger.warning("dtype_bool_conversion_failed", column=col, error=str(exc))
         return series.astype("string")
 
 
@@ -1061,9 +1053,7 @@ def add_pair_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
         ):
             result[col] = 0
         missing = [c for c in (indep_col, type_col) if c not in result.columns]
-        logger.warning(
-            "pair_metric_columns_missing", columns=missing
-        )
+        logger.warning("pair_metric_columns_missing", columns=missing)
     return result
 
 

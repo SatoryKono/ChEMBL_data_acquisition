@@ -11,7 +11,6 @@ from typing import Callable, cast
 from types import ModuleType
 
 
-
 def _resolve_module(module: str) -> ModuleType:
     """Return the module object for the requested CLI tool."""
 

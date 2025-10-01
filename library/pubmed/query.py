@@ -23,7 +23,7 @@ from ..clients import (
     semantic_scholar as semantic_client,
 )
 from ..config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
- 
+
 from .parsing import EMPTY_PUBMED, combine, parse_pubmed_article
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -167,7 +167,6 @@ def fetch_pubmed(
     )[0]
 
 
- 
 def fetch_semantic_scholar(
     session: requests.Session,
     pmid: str,
@@ -187,7 +186,7 @@ def fetch_semantic_scholar_batch(
     """Retrieve Semantic Scholar metadata for multiple PMIDs."""
     return semantic_client.fetch_semantic_scholar_batch(session, pmids, sleep, cfg=cfg)
 
- 
+
 def fetch_openalex(
     session: requests.Session,
     pmid: str,

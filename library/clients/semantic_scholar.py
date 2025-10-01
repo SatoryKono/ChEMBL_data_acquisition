@@ -193,4 +193,3 @@ def fetch_semantic_scholar_batch(
         )
 
     return results
-

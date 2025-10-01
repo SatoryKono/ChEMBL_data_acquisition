@@ -1,20 +1,17 @@
- 
 """Regression tests for streamed CSV exports."""
 
- 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pandas as pd
- 
+
 import pytest
- 
+
 
 from library.csv_utils import write_csv_deterministic
 
 
- 
 def test_write_csv_deterministic_respects_chunksize(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -35,10 +32,9 @@ def test_write_csv_deterministic_respects_chunksize(
 
     assert path.exists()
     assert recorded["chunksize"] == 1
- 
-def test_write_csv_deterministic_uses_chunksize(
-    tmp_path: Path, monkeypatch
-) -> None:
+
+
+def test_write_csv_deterministic_uses_chunksize(tmp_path: Path, monkeypatch) -> None:
     df = pd.DataFrame({"id": [3, 1, 2], "flag": [True, False, True]})
 
     recorded: dict[str, object] = {}
@@ -61,4 +57,3 @@ def test_write_csv_deterministic_uses_chunksize(
 
     assert recorded["chunksize"] == 64
     assert out_path.exists()
- 

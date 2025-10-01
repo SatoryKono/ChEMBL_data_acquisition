@@ -83,9 +83,7 @@ def test_helper_skips_catalog_refresh_when_lock_held(monkeypatch) -> None:
         "_fetch_parent_catalog_chunk",
         lambda *args, **kwargs: {},
     )
-    monkeypatch.setattr(
-        molecule_catalog, "query_parent_catalog", lambda ids, cfg: {}
-    )
+    monkeypatch.setattr(molecule_catalog, "query_parent_catalog", lambda ids, cfg: {})
     monkeypatch.setattr(
         molecule_catalog, "fetch_parent_for_id", lambda *args, **kwargs: None
     )

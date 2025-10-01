@@ -41,9 +41,7 @@ def load_yaml_config(path: str | Path | None = None) -> tuple[dict[str, Any], Pa
         ) from exc
 
     if not isinstance(data, dict):
-        raise ConfigLoaderError(
-            "top-level structure in config file must be a mapping"
-        )
+        raise ConfigLoaderError("top-level structure in config file must be a mapping")
     return data, cfg_path
 
 

@@ -89,9 +89,7 @@ def test_write_csv_chunks_preserves_leading_zeros(tmp_path: Path) -> None:
         key_cols=["chembl_id"],
     )
 
-    chunk_iter = (
-        shuffled.iloc[i : i + 1] for i in range(0, len(shuffled))
-    )
+    chunk_iter = (shuffled.iloc[i : i + 1] for i in range(0, len(shuffled)))
     write_csv_chunks_deterministic(
         chunk_iter,
         path_chunks,
@@ -108,7 +106,9 @@ def test_write_csv_chunks_respects_file_window(tmp_path: Path) -> None:
     rows = 60
     df = pd.DataFrame(
         {
-            "chembl_id": pd.Series((f"CHEMBL{i:05d}" for i in range(rows)), dtype="string"),
+            "chembl_id": pd.Series(
+                (f"CHEMBL{i:05d}" for i in range(rows)), dtype="string"
+            ),
             "value": list(range(rows)),
         }
     )

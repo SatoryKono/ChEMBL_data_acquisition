@@ -124,7 +124,6 @@ def open_atomic(
 
     lock_path = path.with_name(f"{path.name}.lock")
 
-
     with _acquire_lock(lock_path, lock_timeout):
 
         fd, tmp_name = tempfile.mkstemp(

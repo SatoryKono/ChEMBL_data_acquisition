@@ -271,7 +271,9 @@ def test_cli_missing_output_directory_logs_error(tmp_path: Path, monkeypatch) ->
     assert payload.get("directory") == str(output_path.parent)
 
 
-def test_cli_output_parent_not_directory_logs_error(tmp_path: Path, monkeypatch) -> None:
+def test_cli_output_parent_not_directory_logs_error(
+    tmp_path: Path, monkeypatch
+) -> None:
     """CLI reports when the output parent path is not a directory."""
 
     input_path = tmp_path / "input.csv"

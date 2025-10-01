@@ -56,7 +56,9 @@ def test_map_chembl_ids_to_uniprot_logs_failures(
         def acquire(self) -> None:  # pragma: no cover - behaviour is trivial
             pass
 
-    def fake_get_limiter(name: str, rps: float, burst: int | None = None) -> DummyLimiter:
+    def fake_get_limiter(
+        name: str, rps: float, burst: int | None = None
+    ) -> DummyLimiter:
         return DummyLimiter()
 
     def failing_map(cid: str, cfg: UniprotMappingCfg) -> str:

@@ -113,7 +113,6 @@ def test_build_quality_report_counts() -> None:
     assert report["error_counts"]["crossref"] == 1
 
 
-
 def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -147,7 +146,9 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
             def __enter__(self) -> str:  # pragma: no cover - simple context
                 return token
 
-            def __exit__(self, *exc: object) -> None:  # pragma: no cover - simple context
+            def __exit__(
+                self, *exc: object
+            ) -> None:  # pragma: no cover - simple context
                 return None
 
         return _Context()
@@ -239,9 +240,7 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
     monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
     monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
-    monkeypatch.setattr(
-        gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch
-    )
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
     monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
@@ -294,7 +293,9 @@ def test_fetch_pubmed_records_reuses_duplicate_identifiers(
             def __enter__(self) -> str:  # pragma: no cover - simple context
                 return "session"
 
-            def __exit__(self, *_exc: object) -> None:  # pragma: no cover - simple context
+            def __exit__(
+                self, *_exc: object
+            ) -> None:  # pragma: no cover - simple context
                 return None
 
         return _Context()
@@ -384,7 +385,9 @@ def test_fetch_pubmed_records_reuses_duplicate_identifiers(
 
     info_events: list[tuple[str, dict[str, object]]] = []
 
-    def fake_info(event: str, *args: object, extra: dict[str, object] | None = None, **kv: object) -> None:
+    def fake_info(
+        event: str, *args: object, extra: dict[str, object] | None = None, **kv: object
+    ) -> None:
         payload = dict(kv)
         if extra:
             payload.update(extra)
@@ -423,7 +426,9 @@ def test_fetch_pubmed_records_reuses_duplicate_identifiers(
     assert ("crossref", 1) in cache_logs
 
 
-def test_fetch_pubmed_records_logs_compact_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_pubmed_records_logs_compact_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Batch failures expose compact PMID summaries in the structured log."""
 
     pmids = [str(100 + index) for index in range(6)]

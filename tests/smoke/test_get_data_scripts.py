@@ -32,7 +32,9 @@ CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)
 DEFAULT_DATE = "20240101"
 
 
-def _cli_args(*extra: str, date: str = DEFAULT_DATE, log_level: str = "ERROR") -> list[str]:
+def _cli_args(
+    *extra: str, date: str = DEFAULT_DATE, log_level: str = "ERROR"
+) -> list[str]:
     """Return base CLI arguments extended with ``extra`` tokens."""
 
     return [
@@ -72,7 +74,9 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
     invocations: list[str] = []
 
-    def make_stub(name: str, subcommand: str | None) -> Callable[[Sequence[str] | None], int]:
+    def make_stub(
+        name: str, subcommand: str | None
+    ) -> Callable[[Sequence[str] | None], int]:
         def _main(argv: Sequence[str] | None) -> int:
             args = list(argv or [])
             if subcommand is not None:
@@ -99,7 +103,9 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         input_path.write_text("id\n1\n")
 
     stub_steps = tuple(
-        get_data.PipelineStep(step.name, make_stub(step.name, step.subcommand), step.subcommand)
+        get_data.PipelineStep(
+            step.name, make_stub(step.name, step.subcommand), step.subcommand
+        )
         for step in get_data._PIPELINE_STEPS
     )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
@@ -169,7 +175,9 @@ def test_get_data_pipeline_events_include_run_id(
         input_path = input_dir / get_data._DEFAULT_INPUT_FILES[step.name]
         input_path.write_text("id\n1\n")
 
-    def make_stub(name: str, subcommand: str | None) -> Callable[[Sequence[str] | None], int]:
+    def make_stub(
+        name: str, subcommand: str | None
+    ) -> Callable[[Sequence[str] | None], int]:
         def _main(argv: Sequence[str] | None) -> int:
             args = list(argv or [])
             if subcommand is not None:
@@ -188,7 +196,9 @@ def test_get_data_pipeline_events_include_run_id(
         return _main
 
     stub_steps = tuple(
-        get_data.PipelineStep(step.name, make_stub(step.name, step.subcommand), step.subcommand)
+        get_data.PipelineStep(
+            step.name, make_stub(step.name, step.subcommand), step.subcommand
+        )
         for step in get_data._PIPELINE_STEPS
     )
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps)
@@ -227,13 +237,16 @@ def test_get_data_pipeline_events_include_run_id(
     assert exit_code == 0
 
     records = [
-        json.loads(line)
-        for line in stream.getvalue().splitlines()
-        if line.strip()
+        json.loads(line) for line in stream.getvalue().splitlines() if line.strip()
     ]
 
     events = {record["event"] for record in records}
-    assert {"pipeline_start", "pipeline_done", "workflow_complete", "workflow_succeeded"} <= events
+    assert {
+        "pipeline_start",
+        "pipeline_done",
+        "workflow_complete",
+        "workflow_succeeded",
+    } <= events
 
     interesting = [
         record
@@ -596,9 +609,7 @@ def test_get_testitem_data_smoke(
         cfg.pubchem.allow_polymer = False
         return cfg
 
-    monkeypatch.setattr(
-        get_testitem_data.cli, "apply_config_overrides", patched_apply
-    )
+    monkeypatch.setattr(get_testitem_data.cli, "apply_config_overrides", patched_apply)
 
     smiles_calls: list[str] = []
     warning_events: list[tuple[str, dict[str, object]]] = []
@@ -790,7 +801,9 @@ def test_run_pipeline_failure_removes_outputs(
     assert sentinel_path.exists()
 
     failure_final = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
-    failure_working = working_output.with_name(f"{working_output.stem}_failure_cases.csv")
+    failure_working = working_output.with_name(
+        f"{working_output.stem}_failure_cases.csv"
+    )
     assert failure_final.exists()
     assert not failure_working.exists()
 

@@ -111,7 +111,9 @@ def test_run_chembl_limit_streams_ids_without_materialising(
 
     log_calls: list[dict[str, Any]] = []
 
-    def fake_info(event: str, *args: Any, extra: dict[str, Any] | None = None, **kwargs: Any) -> None:
+    def fake_info(
+        event: str, *args: Any, extra: dict[str, Any] | None = None, **kwargs: Any
+    ) -> None:
         log_calls.append({"event": event, "kwargs": kwargs, "extra": extra})
 
     monkeypatch.setattr(gas.logger, "info", fake_info)

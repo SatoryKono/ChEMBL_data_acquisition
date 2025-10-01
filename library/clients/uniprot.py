@@ -42,14 +42,12 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
 
     global _session, _retry_cfg
 
-
     new_session = session_with_retry(api, retry)
     old_session: Session | None = None
     with _session_lock:
         old_session = _session
         _session = new_session
         _retry_cfg = retry
-
 
     if old_session is not None:
         old_session.close()
@@ -86,7 +84,9 @@ def fetch_uniprot(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, Any]:
                     resp.raise_for_status()
                     try:
                         return cast(dict[str, Any], resp.json())
-                    except json.JSONDecodeError as exc:  # pragma: no cover - malformed JSON
+                    except (
+                        json.JSONDecodeError
+                    ) as exc:  # pragma: no cover - malformed JSON
                         raise UniProtFetchError(
                             f"Failed to decode JSON for UniProt {uniprot_id}: {exc}"
                         ) from exc

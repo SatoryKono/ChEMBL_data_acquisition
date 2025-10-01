@@ -22,7 +22,13 @@ from .clients.semantic_scholar import (
 )
 from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
-from .config import Config, ensure_dirs, print_config, session_with_retry, _serialize_paths
+from .config import (
+    Config,
+    ensure_dirs,
+    print_config,
+    session_with_retry,
+    _serialize_paths,
+)
 from .csv_utils import write_csv_chunks_deterministic
 from .metadata import file_sha256, write_meta_yaml
 from .clients.pubmed import PubMedClient
@@ -119,13 +125,19 @@ def _validate_documents(df: pd.DataFrame) -> SchemaValidationResult:
     validated = _PUBMED_SCHEMA.validate(df, lazy=True)
 
     if "PubMed.PMID" not in validated.columns:
-        failures = _build_missing_pmid_failures(pd.Series(dtype=object, index=validated.index))
-        return SchemaValidationResult(validated.iloc[0:0], failures, "PubMedDocumentsSchema")
+        failures = _build_missing_pmid_failures(
+            pd.Series(dtype=object, index=validated.index)
+        )
+        return SchemaValidationResult(
+            validated.iloc[0:0], failures, "PubMedDocumentsSchema"
+        )
 
     pmid_series = validated["PubMed.PMID"].astype("string")
     missing_mask = pmid_series.isna() | pmid_series.str.strip().eq("")
     if not missing_mask.any():
-        return SchemaValidationResult(validated, _empty_failure_cases(), "PubMedDocumentsSchema")
+        return SchemaValidationResult(
+            validated, _empty_failure_cases(), "PubMedDocumentsSchema"
+        )
 
     failure_cases = _build_missing_pmid_failures(pmid_series[missing_mask])
     cleaned = validated.loc[~missing_mask].copy()

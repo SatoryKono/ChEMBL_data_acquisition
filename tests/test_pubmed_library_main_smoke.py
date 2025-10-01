@@ -85,7 +85,9 @@ def test_pubmed_library_main_smoke(
     assert not failure_df.empty
 
     quality_base = output_csv.with_suffix("")
-    quality_report = quality_base.with_name(f"{quality_base.name}_quality_report_table.csv")
+    quality_report = quality_base.with_name(
+        f"{quality_base.name}_quality_report_table.csv"
+    )
     correlation_report = quality_base.with_name(
         f"{quality_base.name}_data_correlation_report_table.csv"
     )

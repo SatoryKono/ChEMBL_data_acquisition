@@ -16,7 +16,9 @@ from scripts import get_target_data as gtd
 class DummyClient:
     """Minimal context manager replacing :class:`~library.clients.ChemblClient`."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - trivial
+    def __init__(
+        self, *args: object, **kwargs: object
+    ) -> None:  # pragma: no cover - trivial
         pass
 
     def __enter__(self) -> object:  # pragma: no cover - trivial
@@ -94,8 +96,12 @@ def test_run_chembl_limit_uses_generator(
     monkeypatch.setattr(gtd, "ChemblClient", DummyClient)
     monkeypatch.setattr(gtd, "normalize_targets", lambda df: df)
     monkeypatch.setattr(gtd, "add_pipeline_metadata", lambda df: df)
-    monkeypatch.setattr(gtd, "_prepare_targets_for_schema", lambda df: (df, set(), set()))
-    monkeypatch.setattr(gtd.TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df))
+    monkeypatch.setattr(
+        gtd, "_prepare_targets_for_schema", lambda df: (df, set(), set())
+    )
+    monkeypatch.setattr(
+        gtd.TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df)
+    )
     monkeypatch.setattr(gtd.io, "write_csv", lambda df, path, **__: path)
     monkeypatch.setattr(gtd, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **__: None)

@@ -198,4 +198,3 @@ class PubMedClient:
         """Retrieve raw XML for a single PMID."""
 
         return fetch_pubmed(session, pmid, sleep, cfg=self.cfg)
-

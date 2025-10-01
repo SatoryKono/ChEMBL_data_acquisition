@@ -222,8 +222,7 @@ def _merge_sorted_csv_group(
                 columns = []
             resolved_sort_cols: list[str] = []
             dtype_names = {
-                col: (dtype_names_override or {}).get(col, "string")
-                for col in columns
+                col: (dtype_names_override or {}).get(col, "string") for col in columns
             }
             with open_atomic(destination, encoding=encoding, newline="") as fh:
                 writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
@@ -308,6 +307,7 @@ def _merge_sorted_csv_group(
     finally:
         for stream in streams:
             stream.close()
+
 
 def write_csv_deterministic(
     df: pd.DataFrame,
@@ -701,7 +701,9 @@ def write_csv_chunks_deterministic(
         iteration = 0
         while len(pending) > merge_file_window:
             next_round: list[Path] = []
-            for batch_index, batch in enumerate(_batched_paths(pending, merge_file_window)):
+            for batch_index, batch in enumerate(
+                _batched_paths(pending, merge_file_window)
+            ):
                 merged_path = Path(tmpdir) / f"merge_{iteration}_{batch_index}.csv"
                 _merge_sorted_csv_group(
                     batch,

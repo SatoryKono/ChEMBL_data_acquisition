@@ -14,7 +14,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def ensure_project_root() -> None:
-  """Insert the project root into :data:`sys.path` if missing."""
-  project_root = str(_PROJECT_ROOT)
-  if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+    """Insert the project root into :data:`sys.path` if missing."""
+    project_root = str(_PROJECT_ROOT)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)

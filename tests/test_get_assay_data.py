@@ -139,7 +139,12 @@ def test_run_chembl_streams_chunks_and_applies_hooks(
     assert hook_calls == {"postprocess": 1, "normalize": 1, "metadata": 1}
     assert validator_calls["count"] == 1
     assert captured["chunk_count"] == 1
-    assert all({"postprocessed", "normalized", "pipeline_version", "timestamp_utc"}.issubset(cols) for cols in captured["columns"])
+    assert all(
+        {"postprocessed", "normalized", "pipeline_version", "timestamp_utc"}.issubset(
+            cols
+        )
+        for cols in captured["columns"]
+    )
     assert captured["key_cols"] == ["assay_chembl_id"]
 
 
@@ -244,6 +249,7 @@ def test_run_chembl_processes_multiple_chunks(
     assert captured["chunk_count"] == 3
     assert captured["rows"] == [["A1"], ["A2"], ["A3"]]
     assert captured["key_cols"] == ["assay_chembl_id"]
+
 
 def test_run_chembl_sorts_output_deterministically(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config

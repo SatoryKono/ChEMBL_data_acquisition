@@ -26,7 +26,9 @@ def test_help_executes() -> None:
 def test_help_executes_file() -> None:
     """The script should run when invoked via its file path."""
     repo_root = Path(__file__).resolve().parents[1]
-    script = repo_root / "library" / "utils" / "cli_tools" / "get_input_initialisation.py"
+    script = (
+        repo_root / "library" / "utils" / "cli_tools" / "get_input_initialisation.py"
+    )
     result = subprocess.run(
         [sys.executable, str(script), "--help"],
         capture_output=True,

@@ -250,7 +250,9 @@ def test_read_ids_uses_locale_encoding_when_config_lacks_fallback(
 
     cfg = IoCfg(csv_encoding="utf-8", csv_fallback_encodings=())
 
-    monkeypatch.setattr(io.locale, "getpreferredencoding", lambda _=False: "windows-1251")
+    monkeypatch.setattr(
+        io.locale, "getpreferredencoding", lambda _=False: "windows-1251"
+    )
 
     ids = list(io.read_ids(path, column="id", cfg=cfg))
     assert ids == ["Ж"]

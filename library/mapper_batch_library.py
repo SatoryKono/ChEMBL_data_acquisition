@@ -83,9 +83,7 @@ def map_chembl_ids_to_uniprot(
             try:
                 results[chembl_id] = map_chembl_to_uniprot(chembl_id, cfg)
             except Exception as exc:  # pragma: no cover - network issues
-                logger.warning(
-                    "batch_map_failed", chembl_id=chembl_id, error=str(exc)
-                )
+                logger.warning("batch_map_failed", chembl_id=chembl_id, error=str(exc))
                 results[chembl_id] = None
         return results
 
