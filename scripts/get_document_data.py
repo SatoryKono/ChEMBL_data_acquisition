@@ -1115,7 +1115,8 @@ def _finalise_export(
     errors.save(failure_path)
 
     rows_dropped = rows_total - rows_kept
-    logger.info("write_done", rows=rows_kept, path=str(csv_path))
+    if exit_code == 0:
+        logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
     try:
         export_ready = _load_export_ready_frame(csv_path, cfg=cfg)
