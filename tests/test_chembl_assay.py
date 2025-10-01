@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import pandas as pd
 
 from library.chembl_assay import (
     MAX_TESTITEM_URL_LENGTH,
+    TESTITEM_QUERY_FIELDS,
+    _split_chunk_for_url,
     get_assays,
     get_testitem,
 )
@@ -101,11 +103,51 @@ def test_get_testitem_splits_requests_when_url_would_exceed_limit() -> None:
     """Large batches must be split to keep request URLs under the limit."""
 
     cfg = ApiCfg()
-    ids = [f"CHEMBL{i}" for i in range(1000, 1700)]
+    base_params: list[tuple[str, str]] = [("format", "json"), ("limit", "1000")]
+    if TESTITEM_QUERY_FIELDS:
+        base_params.append(("fields", ",".join(TESTITEM_QUERY_FIELDS)))
+    base = (
+        f"{cfg.chembl_base.rstrip('/')}/molecule.json?{urlencode(base_params)}"
+    )
+    prefix = f"{base}&molecule_chembl_id__in="
+    assert len(prefix) < MAX_TESTITEM_URL_LENGTH
+
+    ids: list[str] = []
+    buffer_length = 0
+    index = 0
+    while True:
+        identifier = f"CHEMBL{index:07d}"
+        separator = 1 if ids else 0
+        candidate_length = buffer_length + separator + len(identifier)
+        if len(prefix) + candidate_length > MAX_TESTITEM_URL_LENGTH:
+            break
+        ids.append(identifier)
+        buffer_length = candidate_length
+        index += 1
+
+    assert ids, "Base URL must allow at least one identifier"
+    ids.extend([f"CHEMBL{index:07d}", f"CHEMBL{index + 1:07d}"])
+
+    splits = list(_split_chunk_for_url(ids, base))
+    assert len(splits) >= 2
+    for chunk in splits:
+        chunk_url = f"{base}&molecule_chembl_id__in={','.join(chunk)}"
+        assert len(chunk_url) <= MAX_TESTITEM_URL_LENGTH
+    for current, nxt in zip(splits, splits[1:]):
+        merged = current + [nxt[0]]
+        merged_url = f"{base}&molecule_chembl_id__in={','.join(merged)}"
+        assert len(merged_url) > MAX_TESTITEM_URL_LENGTH
+
     client = RecordingTestitemClient()
 
-    df = get_testitem(ids, cfg=cfg, client=client, chunk_size=1000, page_limit=1000)
+    df = get_testitem(
+        ids,
+        cfg=cfg,
+        client=client,
+        chunk_size=len(ids),
+        page_limit=1000,
+    )
 
-    assert len(client.calls) > 1
+    assert len(client.calls) == len(splits)
     assert all(len(url) <= MAX_TESTITEM_URL_LENGTH for url in client.calls)
     assert sorted(df["molecule_chembl_id"].dropna()) == sorted(ids)
