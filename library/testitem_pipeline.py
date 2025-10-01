@@ -77,6 +77,7 @@ _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 _DEFAULT_CATALOG_CFG = MoleculeCatalogCfg()
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
+_MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
 _PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
 
 
@@ -164,6 +165,20 @@ def read_input_ids(
     return 0, ReadInputIdsResult(
         ids_iter=ids_iter,
         sample_ids=sample_ids,
+    )
+
+
+def _log_missing_identifier_summary(identifiers: Sequence[str]) -> None:
+    """Log a truncated list of missing identifiers including their total count."""
+
+    if not identifiers:
+        return
+
+    sample = list(islice(identifiers, _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE))
+    logger.warning(
+        "chembl_missing_identifiers",
+        total=len(identifiers),
+        sample=sample,
     )
 
 
@@ -2005,6 +2020,7 @@ def run_testitem_pipeline(
             requested_unique.setdefault(upper_key, identifier)
 
         fetched_ids: set[str] = set()
+
         missing_ids = []
         parent_stats_holder: dict[str, ParentLookupStats] = {
             "value": ParentLookupStats(

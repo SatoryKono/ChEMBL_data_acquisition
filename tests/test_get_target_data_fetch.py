@@ -81,6 +81,90 @@ def test_fetch_chembl_custom_chunk_size(
     assert cfg.target.chembl.chunk_size == original_chunk
 
 
+def test_run_chembl_streams_chunks(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    cfg.target.chembl.chunk_size = 2
+    cfg.target.chembl.limit = None
+    cfg.target.chembl.column = "target_chembl_id"
+
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text(
+        "target_chembl_id\nCHEMBL1\nCHEMBL2\nCHEMBL3\nCHEMBL4\nCHEMBL5\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    output_csv = tmp_path / "chembl.csv"
+    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv, offset=0)
+
+    chunk_calls: list[list[str]] = []
+
+    def fake_get_targets(
+        chunk_ids: list[str],
+        *,
+        cfg: object,
+        client: object,
+        mapping_cfg: object,
+        chunk_size: int,
+        timeout: float | None,
+    ) -> pd.DataFrame:
+        ids = list(chunk_ids)
+        chunk_calls.append(ids)
+        return pd.DataFrame({"target_chembl_id": ids})
+
+    class DummyClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "DummyClient":
+            return self
+
+        def __exit__(
+            self,
+            exc_type: object,
+            exc: object,
+            tb: object,
+        ) -> bool:
+            return False
+
+    frames_to_write: list[pd.DataFrame] = []
+
+    def fake_write_csv(
+        df: pd.DataFrame | list[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str | None = None,
+        encoding: str | None = None,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        chunksize: int | None = None,
+    ) -> Path:
+        assert not isinstance(df, pd.DataFrame)
+        chunks = list(df)
+        frames_to_write.extend(chunks)
+        destination = Path(path)
+        destination.write_text("dummy", encoding=encoding or cfg.io.csv_encoding)
+        return destination
+
+    monkeypatch.setattr(gtd.cl, "get_targets", fake_get_targets)
+    monkeypatch.setattr(gtd, "ChemblClient", DummyClient)
+    monkeypatch.setattr(gtd.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(
+        TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df)
+    )
+
+    exit_code = gtd.run_chembl(cfg, args)
+
+    assert exit_code == 0
+    assert chunk_calls == [
+        ["CHEMBL1", "CHEMBL2"],
+        ["CHEMBL3", "CHEMBL4"],
+        ["CHEMBL5"],
+    ]
+    assert [df["target_chembl_id"].tolist() for df in frames_to_write] == chunk_calls
+
+
 def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
     chembl_df = pd.DataFrame({"uniprot_id": ["P12345"]})
     out = tmp_path / "uniprot.csv"

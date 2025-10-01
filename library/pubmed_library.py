@@ -7,7 +7,9 @@ implementation located in :mod:`library.pubmed`.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from copy import deepcopy
+from functools import partial
 from datetime import date
 from pathlib import Path
 
@@ -20,8 +22,8 @@ from .clients.semantic_scholar import (
 )
 from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
-from .config import Config, ensure_dirs, print_config, session_with_retry
-from .csv_utils import write_csv_deterministic
+from .config import Config, ensure_dirs, print_config, session_with_retry, _serialize_paths
+from .csv_utils import write_csv_chunks_deterministic
 from .clients.pubmed import PubMedClient
 from .pubmed import (
     EMPTY_PUBMED,
@@ -38,7 +40,13 @@ from .pubmed import (
     read_pmids,
     text_or_none,
 )
-from .rate_limiter import get_limiter
+from .rate_limiter import RateLimiter, get_limiter
+from .cli_utils import run_pipeline
+from .table_quality import analyze_table_quality
+from .pipeline_metadata import add_pipeline_metadata
+from .normalization import normalize_documents
+from .validation import ValidationResult as SchemaValidationResult
+from schemas import DocumentsSchema
 
 __all__ = [
     "Config",
@@ -60,6 +68,71 @@ __all__ = [
     "parse_args",
     "main",
 ]
+
+
+_PUBMED_SCHEMA = deepcopy(DocumentsSchema)
+for _column in _PUBMED_SCHEMA.columns.values():
+    _column.required = False
+
+
+def _validate_documents(df: pd.DataFrame) -> SchemaValidationResult:
+    """Validate PubMed document chunks using the relaxed schema."""
+
+    validated = _PUBMED_SCHEMA.validate(df, lazy=True)
+    return SchemaValidationResult(
+        validated, pd.DataFrame(), "PubMedDocumentsSchema"
+    )
+
+
+def _stream_pubmed_batches(
+    *,
+    pmids: Sequence[str],
+    batch_size: int,
+    delay: float,
+    pubmed_client: PubMedClient,
+    limiter: RateLimiter,
+    semantic_scholar_cfg,
+    openalex_cfg,
+    crossref_cfg,
+    dump_level: str,
+    openalex_limiter: RateLimiter,
+    crossref_limiter: RateLimiter,
+    api_cfg,
+    retry_cfg,
+) -> Iterator[pd.DataFrame]:
+    """Yield combined metadata for ``pmids`` one batch at a time."""
+
+    with session_with_retry(api_cfg, retry_cfg) as session:
+        for i in range(0, len(pmids), batch_size):
+            batch_pmids = pmids[i : i + batch_size]
+            limiter.acquire()
+            pubmed_list = fetch_pubmed_batch(
+                session, batch_pmids, delay, client=pubmed_client
+            )
+            limiter.acquire()
+            semsch_list = fetch_semantic_scholar_batch(
+                session, batch_pmids, delay, cfg=semantic_scholar_cfg
+            )
+            semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
+            combined_records: list[dict[str, str]] = []
+            for pubmed in pubmed_list:
+                pmid = pubmed.get("PubMed.PMID", "")
+                semsch = semsch_map.get(pmid, {})
+
+                openalex = fetch_openalex(
+                    session, pmid, cfg=openalex_cfg, limiter=openalex_limiter
+                )
+                doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
+                crossref = fetch_crossref(
+                    session, doi, cfg=crossref_cfg, limiter=crossref_limiter
+                )
+
+                combined = merge_records(pubmed, semsch, openalex, crossref)
+                combined_records.append(combined)
+
+            if combined_records:
+                print_results(combined_records, level=dump_level)
+                yield pd.DataFrame.from_records(combined_records)
 
 
 def parse_args(
@@ -123,8 +196,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    limiter = get_limiter("global", cfg.rate.global_rps, cfg.rate.global_burst)
-    delay = 1.0 / cfg.rate.global_rps if cfg.rate.global_rps > 0 else 0.0
+    pubmed_rps = cfg.pubmed.rps or cfg.rate.global_rps
+    pubmed_burst = cfg.pubmed.burst or cfg.rate.global_burst
+    limiter = get_limiter("pubmed", pubmed_rps, pubmed_burst)
+    delay = 1.0 / pubmed_rps if pubmed_rps > 0 else 0.0
 
     pmid_df = read_pmids(args.input_csv, cfg=cfg.pubmed)
     pmids = pmid_df["PMID"].tolist()
@@ -132,47 +207,83 @@ def main(argv: Sequence[str] | None = None) -> int:
     crossref_limiter = get_limiter("crossref", cfg.crossref.rps, cfg.crossref.burst)
     pubmed_client = PubMedClient(cfg.pubmed)
 
-    records: list[dict[str, str]] = []
     batch_size = cfg.document.pubmed.batch_size
     dump_level = "INFO" if args.keep_verbose_dumps else "DEBUG"
-    with session_with_retry(cfg.api, cfg.retry) as session:
-        for i in range(0, len(pmids), batch_size):
-            batch_pmids = pmids[i : i + batch_size]
-            limiter.acquire()
-            pubmed_list = fetch_pubmed_batch(
-                session, batch_pmids, delay, client=pubmed_client
-            )
-            limiter.acquire()
-            semsch_list = fetch_semantic_scholar_batch(
-                session, batch_pmids, delay, cfg=cfg.semantic_scholar
-            )
-            semsch_map = {s.get("scholar.PMID"): s for s in semsch_list}
-            for pubmed in pubmed_list:
-                pmid = pubmed.get("PubMed.PMID", "")
-                semsch = semsch_map.get(pmid, {})
 
-                openalex = fetch_openalex(
-                    session, pmid, cfg=cfg.openalex, limiter=openalex_limiter
-                )
-                doi = pubmed.get("PubMed.DOI") or semsch.get("scholar.DOI") or ""
-                crossref = fetch_crossref(
-                    session, doi, cfg=cfg.crossref, limiter=crossref_limiter
-                )
-
-                combined = merge_records(pubmed, semsch, openalex, crossref)
-                print_results([combined], level=dump_level)
-                records.append(combined)
-
-    df = pd.DataFrame.from_records(records)
     output_path = (
         Path(args.output_csv)
         if args.output_csv
         else Path(f"output.{Path(args.input_csv).stem}_{date.today():%Y%m%d}.csv")
     )
-    write_csv_deterministic(df, output_path, key_cols=sorted(df.columns))
-    logger.info("file_written", path=str(output_path))
-    logger.info("pipeline_done", run_id=log_cfg.run_id)
-    return 0
+    failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
+
+    def fetcher() -> Iterable[pd.DataFrame]:
+        return _stream_pubmed_batches(
+            pmids=pmids,
+            batch_size=batch_size,
+            delay=delay,
+            pubmed_client=pubmed_client,
+            limiter=limiter,
+            semantic_scholar_cfg=cfg.semantic_scholar,
+            openalex_cfg=cfg.openalex,
+            crossref_cfg=cfg.crossref,
+            dump_level=dump_level,
+            openalex_limiter=openalex_limiter,
+            crossref_limiter=crossref_limiter,
+            api_cfg=cfg.api,
+            retry_cfg=cfg.retry,
+        )
+
+    metadata_hooks = [normalize_documents, add_pipeline_metadata]
+    validators = [_validate_documents]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Sequence[str],
+        key_cols: Sequence[str],
+    ) -> Path:
+        sort_columns = list(key_cols) or sorted(col_order)
+        return write_csv_chunks_deterministic(
+            chunks,
+            destination,
+            key_cols=sort_columns,
+            col_order=col_order,
+            chunksize=cfg.io.csv_chunksize,
+            sort_chunksize=cfg.io.csv_chunksize,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
+
+    table_quality = partial(
+        analyze_table_quality,
+        table_name=str(output_path.with_suffix("")),
+    )
+
+    command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=_PUBMED_SCHEMA,
+        schema_name="PubMedDocumentsSchema",
+        validators=validators,
+        metadata_hooks=metadata_hooks,
+        writer=writer,
+        output_path=output_path,
+        failure_path=failure_path,
+        command=command,
+        config_snapshot=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        key_columns=["PubMed.PMID"],
+        table_quality=table_quality,
+        logger=logger,
+    )
+    if exit_code == 0:
+        logger.info("file_written", path=str(output_path))
+        logger.info("pipeline_done", run_id=log_cfg.run_id)
+    else:
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

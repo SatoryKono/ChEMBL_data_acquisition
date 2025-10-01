@@ -245,6 +245,28 @@ def test_fetch_testitems_logs_missing_summary(
     assert not missing
 
 
+def test_log_missing_identifier_summary_limits_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(pipeline.logger, "warning", fake_warning)
+
+    pipeline._log_missing_identifier_summary([])
+    assert captured == []
+
+    identifiers = [f"CHEMBL{index}" for index in range(20)]
+    pipeline._log_missing_identifier_summary(identifiers)
+
+    assert len(captured) == 1
+    event, payload = captured[0]
+    assert event == "chembl_missing_identifiers"
+    assert payload["total"] == len(identifiers)
+    assert payload["sample"] == identifiers[:10]
+    assert "identifiers" not in payload
+
+
 def test_fetch_parent_catalog_skips_single_when_parentless(
     cfg: Config,
 ) -> None:
