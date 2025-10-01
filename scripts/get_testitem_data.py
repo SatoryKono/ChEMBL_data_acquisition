@@ -8,9 +8,17 @@ exit codes rather than terminating the interpreter to simplify orchestration.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from collections import ChainMap
+from dataclasses import dataclass
+from functools import lru_cache
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sequence
+
+import pandas as pd
+import requests
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -18,21 +26,31 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
+from library import molecule_catalog
+from library import pubchem_library as pl
 from library.cli import LoggerConfig
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
-from library.config import Config
+from library.config import ApiCfg, Config, IoCfg, MoleculeCatalogCfg, PubChemCfg
 from library.log import logger
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
+from library import testitem_pipeline as pipeline
+from library.chembl_client import ChemblClient
 from library.testitem_pipeline import (
+    PUBCHEM_CID_CACHE_ENCODING as _pipeline_pubchem_cid_cache_encoding,
     ReadInputIdsResult as _ReadInputIdsResult,
     TestitemPipelineOptions,
     analyze_table_quality as _analyze_table_quality,
+    file_sha256 as _pipeline_file_sha256,
     fetch_testitems as _fetch_testitems,
-    load_parent_catalog as _load_parent_catalog,
+    load_molecule_hierarchy_lookup as _pipeline_load_molecule_hierarchy_lookup,
     query_parent_catalog as _query_parent_catalog,
     read_input_ids as _read_input_ids,
     run_testitem_pipeline,
+    update_parent_catalog_cache as _pipeline_update_parent_catalog_cache,
+    write_meta_yaml as _pipeline_write_meta_yaml,
+    write_parent_catalog_cache as _pipeline_write_parent_catalog_cache,
+    load_parent_catalog as _load_parent_catalog,
 )
 from library.testitem_pipeline import (
     _prepare_pubchem_api_cfg as _pipeline_prepare_pubchem_api_cfg,
@@ -51,16 +69,12 @@ _load_pubchem_cid_cache = _pipeline_load_pubchem_cid_cache
 analyze_table_quality = _analyze_table_quality
 _integrate_missing_identifiers = _integrate_missing_identifiers
 
-
-load_parent_catalog = pipeline.load_parent_catalog
-query_parent_catalog = pipeline.query_parent_catalog
-update_parent_catalog_cache = pipeline.update_parent_catalog_cache
-write_parent_catalog_cache = pipeline.write_parent_catalog_cache
-analyze_table_quality = pipeline.analyze_table_quality
-add_pubchem_data = pipeline.add_pubchem_data
-load_molecule_hierarchy_lookup = pipeline.load_molecule_hierarchy_lookup
-file_sha256 = pipeline.file_sha256
-write_meta_yaml = pipeline.write_meta_yaml
+update_parent_catalog_cache = _pipeline_update_parent_catalog_cache
+write_parent_catalog_cache = _pipeline_write_parent_catalog_cache
+load_molecule_hierarchy_lookup = _pipeline_load_molecule_hierarchy_lookup
+file_sha256 = _pipeline_file_sha256
+write_meta_yaml = _pipeline_write_meta_yaml
+PUBCHEM_CID_CACHE_ENCODING = _pipeline_pubchem_cid_cache_encoding
 
 
 # ===== Parameters =====
@@ -832,7 +846,20 @@ def add_pubchem_data(
     testitem_fields: Sequence[str] | None = None,
     request_limit: int = 1000,
 ) -> pd.DataFrame:
-    """Augment ChEMBL records with PubChem information.
+    """Augment ChEMBL records with PubChem information."""
+
+    return pipeline.add_pubchem_data(
+        df,
+        cfg,
+        client=client,
+        api_cfg=api_cfg,
+        timeout=timeout,
+        cid_cache=cid_cache,
+        resolution_cache=resolution_cache,
+        parent_record_cache=parent_record_cache,
+        testitem_fields=testitem_fields,
+        request_limit=request_limit,
+    )
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
