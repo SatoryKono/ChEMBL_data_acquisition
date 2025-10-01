@@ -6,7 +6,7 @@ import json
 import sys
 import threading
 import time
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -409,6 +409,97 @@ def test_build_fallback_doi_map() -> None:
     result = gdd._build_fallback_doi_map(df, pmid_column="PMID", doi_column="DOI")
 
     assert result == {"1": "10.1000/xyz"}
+
+
+def test_fetch_pubmed_records_generator_yields_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure PubMed fetch returns ordered batches when requested."""
+
+    cfg = Config()
+    pmids = ["1", "2", "3", "4"]
+    release_first = threading.Event()
+
+    monkeypatch.setattr(
+        gdd,
+        "get_limiter",
+        lambda *_, **__: DummyLimiter(burst=2),
+    )
+
+    class DummySessionContext:
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(
+            self,
+            exc_type: object | None,
+            exc: object | None,
+            tb: object | None,
+        ) -> bool:
+            return False
+
+    monkeypatch.setattr(
+        gdd,
+        "session_with_retry",
+        lambda *args, **kwargs: DummySessionContext(),
+    )
+
+    def fake_fetch_pubmed_batch(
+        _session: object,
+        batch: Sequence[str],
+        _sleep: float | None,
+        *,
+        cfg: PubMedCfg,
+    ) -> list[dict[str, str]]:
+        if batch[0] == "1":
+            release_first.wait(timeout=1)
+        else:
+            release_first.set()
+        return [{"PubMed.PMID": pmid} for pmid in batch]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_fetch_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", lambda *_, **__: [])
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", lambda *_, **__: {})
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", lambda *_, **__: {})
+
+    def fake_merge_metadata(
+        pubmed: Mapping[str, str],
+        *_: Mapping[str, str],
+    ) -> dict[str, str]:
+        return {"PubMed.PMID": pubmed.get("PubMed.PMID", "")}
+
+    monkeypatch.setattr(gdd, "merge_metadata", fake_merge_metadata)
+
+    def fake_build_dataframe(
+        records: Sequence[Mapping[str, str]],
+        *,
+        columns: Sequence[str],
+    ) -> pd.DataFrame:
+        frame = pd.DataFrame(records)
+        for column in columns:
+            if column not in frame.columns:
+                frame[column] = pd.NA
+        return frame[list(columns)]
+
+    monkeypatch.setattr(gdd, "build_dataframe", fake_build_dataframe)
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=cfg.pubmed,
+        semantic_scholar_cfg=cfg.semantic_scholar,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        max_workers=2,
+        batch_size=2,
+        return_generator=True,
+    )
+
+    frames = list(generator)
+    assert len(frames) == 2
+    observed = [frame["PubMed.PMID"].dropna().tolist() for frame in frames]
+    assert observed == [["1", "2"], ["3", "4"]]
 
 
 def test_run_pubmed_uses_fallback_csv(
