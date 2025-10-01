@@ -1,5 +1,8 @@
 import pandas as pd
 
+from library.config import Config
+import scripts.get_document_data as document_script
+
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     build_dataframe,
@@ -94,3 +97,78 @@ def test_build_quality_report_counts() -> None:
     assert report["publication_class_counts"]["review"] == 1
     assert report["error_counts"]["pubmed"] == 1
     assert report["error_counts"]["crossref"] == 1
+
+
+def test_fetch_pubmed_records_skips_empty_openalex_requests(monkeypatch) -> None:
+    """``fetch_pubmed_records`` should ignore blank PMIDs when querying OpenAlex."""
+
+    cfg = Config()
+
+    pubmed_records = [
+        {"PubMed.PMID": "123", "PubMed.DOI": "10.1/abc"},
+        {"PubMed.PMID": "", "PubMed.DOI": ""},
+    ]
+
+    class DummyLimiter:
+        def __init__(self, burst: int | None) -> None:
+            self.burst = burst if burst is not None else 1
+
+        def acquire(self) -> None:
+            return None
+
+    class DummySession:
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    def fake_session_with_retry(*_args, **_kwargs) -> DummySession:
+        return DummySession()
+
+    def fake_get_limiter(_name: str, _rps: int, burst: int | None) -> DummyLimiter:
+        return DummyLimiter(burst)
+
+    def fake_fetch_pubmed_batch(*_args, **_kwargs) -> list[dict[str, str]]:
+        return pubmed_records
+
+    monkeypatch.setattr(document_script, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(document_script, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(document_script.pl, "fetch_pubmed_batch", fake_fetch_pubmed_batch)
+    monkeypatch.setattr(
+        document_script.ssl,
+        "fetch_semantic_scholar_batch",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        document_script.ssl,
+        "fetch_semantic_scholar",
+        lambda *args, **kwargs: {},
+    )
+
+    openalex_calls: list[str] = []
+
+    def fake_fetch_openalex(
+        _session: object,
+        pmid: str,
+        _cfg: object,
+        _limiter: object,
+    ) -> dict[str, str]:
+        openalex_calls.append(pmid)
+        return {"OpenAlex.PMID": pmid}
+
+    monkeypatch.setattr(document_script.ocl, "fetch_openalex", fake_fetch_openalex)
+    monkeypatch.setattr(document_script.ocl, "fetch_crossref", lambda *args, **kwargs: {})
+
+    document_script.fetch_pubmed_records(
+        ["123", ""],
+        sleep=0.0,
+        semantic_scholar_cfg=cfg.semantic_scholar,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        pubmed_cfg=cfg.pubmed,
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert openalex_calls == ["123"]
