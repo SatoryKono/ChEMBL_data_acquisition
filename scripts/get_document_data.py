@@ -566,69 +566,74 @@ def fetch_pubmed_records(
     openalex_executor: ThreadPoolExecutor | None = None
     crossref_executor: ThreadPoolExecutor | None = None
 
-    iterator = (p for p in pmids if p)
-
-    tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
-    completed: dict[int, list[dict[str, str]]] = {}
-    next_to_emit = 0
-    processed = 0
     max_in_flight = max(1, max_workers * 2)
 
-    with ExitStack() as stack:
-        batch_executor = stack.enter_context(
-            ThreadPoolExecutor(max_workers=max_workers)
-        )
-        if openalex_capacity > 1:
-            openalex_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=openalex_capacity)
+    def _iter_records() -> Iterator[list[dict[str, str]]]:
+        nonlocal openalex_executor, crossref_executor
+
+        iterator = (p for p in pmids if p)
+
+        tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
+        completed: dict[int, list[dict[str, str]]] = {}
+        next_to_emit = 0
+        processed = 0
+        batch_index = 0
+
+        with ExitStack() as stack:
+            batch_executor = stack.enter_context(
+                ThreadPoolExecutor(max_workers=max_workers)
             )
-        if crossref_capacity > 1:
-            crossref_executor = stack.enter_context(
-                ThreadPoolExecutor(max_workers=crossref_capacity)
-            )
+            if openalex_capacity > 1:
+                openalex_executor = stack.enter_context(
+                    ThreadPoolExecutor(max_workers=openalex_capacity)
+                )
+            if crossref_capacity > 1:
+                crossref_executor = stack.enter_context(
+                    ThreadPoolExecutor(max_workers=crossref_capacity)
+                )
 
-        offset = 0
-        pending: set[Future[list[dict[str, str]]]] = set()
+            pending: set[Future[list[dict[str, str]]]] = set()
 
-        def _drain_future(
-            done_future: Future[list[dict[str, str]]],
-        ) -> Iterator[list[dict[str, str]]]:
-            nonlocal processed, next_to_emit
+            def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
+                nonlocal next_to_emit
 
-            pending.remove(done_future)
-            batch_id, batch_pmids = tasks.pop(done_future)
-            completed[batch_id] = done_future.result()
-            processed += len(batch_pmids)
-            logger.info("documents_processed", count=processed)
+                while next_to_emit in completed:
+                    yield completed.pop(next_to_emit)
+                    next_to_emit += 1
 
-            while next_to_emit in completed:
-                yield completed.pop(next_to_emit)
-                next_to_emit += 1
+            def _drain_future(
+                done_future: Future[list[dict[str, str]]],
+            ) -> Iterator[list[dict[str, str]]]:
+                nonlocal processed
 
-        for batch in _chunked(iterator, batch_size):
-            if not batch:
-                continue
-            future = batch_executor.submit(_fetch_batch, batch)
-            tasks[future] = (offset, batch)
-            pending.add(future)
-            offset += len(batch)
-            if len(pending) >= max_in_flight:
+                pending.remove(done_future)
+                batch_id, batch_pmids = tasks.pop(done_future)
+                completed[batch_id] = done_future.result()
+                processed += len(batch_pmids)
+                logger.info("documents_processed", count=processed)
 
-                done_future = next(as_completed(list(pending)))
+                yield from _emit_ready_batches()
+
+            for batch in _chunked(iterator, batch_size):
+                if not batch:
+                    continue
+                future = batch_executor.submit(_fetch_batch, batch)
+                tasks[future] = (batch_index, batch)
+                pending.add(future)
+                batch_index += 1
+                if len(pending) >= max_in_flight:
+
+                    done_future = next(as_completed(list(pending)))
+                    yield from _drain_future(done_future)
+
+                yield from _emit_ready_batches()
+
+            for done_future in as_completed(pending):
                 yield from _drain_future(done_future)
 
-            while next_to_emit in completed:
-                yield completed.pop(next_to_emit)
-                next_to_emit += 1
+            pending.clear()
 
-        for done_future in as_completed(pending):
-            yield from _drain_future(done_future)
-
-        pending.clear()
-
-        while next_to_emit in completed:
-            yield completed.pop(next_to_emit)
-            next_to_emit += 1
+            yield from _emit_ready_batches()
 
     def _iter_frames() -> Iterator[pd.DataFrame]:
         for records_batch in _iter_records():
