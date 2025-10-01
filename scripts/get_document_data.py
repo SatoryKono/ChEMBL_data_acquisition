@@ -360,6 +360,15 @@ def fetch_pubmed_records(
 
         batch_list = _coerce_batch_argument(first, *rest)
 
+        def _summarise_batch(pmids: Sequence[str]) -> dict[str, object]:
+            sample_limit = 5
+            sample = [pmids[index] for index in range(min(len(pmids), sample_limit))]
+            if len(pmids) > sample_limit:
+                sample.append("...")
+            return {"pmids_count": len(pmids), "pmids_sample": sample}
+
+        batch_summary = _summarise_batch(batch_list)
+
         def _invoke_with_session(
             fetcher: Callable[
                 [requests.Session, str, Any, RateLimiter | None], dict[str, str]
@@ -542,14 +551,14 @@ def fetch_pubmed_records(
         except requests.RequestException as exc:  # pragma: no cover - network errors
             logger.warning(
                 "pubmed_batch_request_failed",
-                pmids=batch_list,
+                **batch_summary,
                 error=str(exc),
             )
             return _failure_records(batch_list, str(exc))
         except Exception as exc:  # pragma: no cover - defensive safety net
             logger.warning(
                 "pubmed_batch_unexpected_error",
-                pmids=batch_list,
+                **batch_summary,
                 error=str(exc),
             )
             return _failure_records(batch_list, str(exc))

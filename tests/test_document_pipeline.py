@@ -4,6 +4,7 @@ from itertools import count
 
 import pandas as pd
 import pytest
+import requests
 
 from library.config import Config
 import scripts.get_document_data as document_script
@@ -414,3 +415,66 @@ def test_fetch_pubmed_records_reuses_duplicate_identifiers(
     }
     assert ("openalex", 1) in cache_logs
     assert ("crossref", 1) in cache_logs
+
+
+def test_fetch_pubmed_records_logs_compact_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batch failures expose compact PMID summaries in the structured log."""
+
+    pmids = [str(100 + index) for index in range(6)]
+
+    class DummySession:
+        def __enter__(self) -> "DummySession":  # pragma: no cover - trivial context
+            return self
+
+        def __exit__(self, *_exc: object) -> None:  # pragma: no cover - trivial context
+            return None
+
+    class DummyLimiter:
+        def acquire(self) -> None:  # pragma: no cover - simple synchronisation
+            return None
+
+    warning_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_session_with_retry(*_args: object, **_kwargs: object) -> DummySession:
+        return DummySession()
+
+    def fake_get_limiter(*_args: object, **_kwargs: object) -> DummyLimiter:
+        return DummyLimiter()
+
+    def fail_pubmed_batch(*_args: object, **_kwargs: object) -> list[dict[str, str]]:
+        raise requests.RequestException("boom")
+
+    def fake_warning(
+        event: str,
+        *args: object,
+        extra: dict[str, object] | None = None,
+        **payload: object,
+    ) -> None:
+        record = dict(payload)
+        if extra:
+            record.update(extra)
+        warning_events.append((event, record))
+
+    monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
+    monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fail_pubmed_batch)
+    monkeypatch.setattr(gdd.logger, "warning", fake_warning)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=len(pmids),
+    )
+
+    assert len(df) == len(pmids)
+    assert warning_events
+    event, payload = warning_events[0]
+    assert event == "pubmed_batch_request_failed"
+    assert payload["error"] == "boom"
+    assert payload["pmids_count"] == len(pmids)
+    assert payload["pmids_sample"] == pmids[:5] + ["..."]
