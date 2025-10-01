@@ -294,19 +294,29 @@ class Logger:
 # Public factory
 
 
-def configure_logger(cfg: LoggerConfig) -> Logger:
+_STRUCTURED_LOGGER_NAME = "library.structured"
+
+
+def configure_logger(cfg: LoggerConfig, replace_root: bool = True) -> Logger:
     """Return a :class:`Logger` instance configured with ``cfg``.
 
-    The root :mod:`logging` logger is configured to forward records to the
-    structured :class:`Logger` instance. This ensures a single log format is
-    used for both direct :class:`Logger` calls and the standard :mod:`logging`
-    module, including messages originating from :func:`warnings.warn` when
-    :func:`logging.captureWarnings` is enabled.
+    When ``replace_root`` is :data:`True`, the root :mod:`logging` logger is
+    configured to forward records to the structured :class:`Logger` instance.
+    This ensures a single log format is used for both direct :class:`Logger`
+    calls and the standard :mod:`logging` module, including messages
+    originating from :func:`warnings.warn` when :func:`logging.captureWarnings`
+    is enabled. When ``replace_root`` is :data:`False`, the handler is instead
+    attached to the ``"library.structured"`` logger leaving the root logger
+    and ``py.warnings`` configuration untouched.
 
     Parameters
     ----------
     cfg:
         Logger configuration.
+    replace_root:
+        If :data:`True` (default), replace handlers on the root logger and the
+        ``py.warnings`` logger. If :data:`False`, attach the handler to a
+        dedicated ``"library.structured"`` logger.
 
     Returns
     -------
@@ -328,21 +338,27 @@ def configure_logger(cfg: LoggerConfig) -> Logger:
             extras["logger"] = record.name
             logger.log(record.levelname, record.getMessage(), extra=extras)
 
-    root_logger = logging.getLogger()
     handler = _ForwardHandler()
-    root_logger.handlers = [handler]
-    root_logger.setLevel(_level_no(cfg.level))
+    if replace_root:
+        root_logger = logging.getLogger()
+        root_logger.handlers = [handler]
+        root_logger.setLevel(_level_no(cfg.level))
 
-    # Route ``warnings.warn`` calls through the structured logger.  ``logging``
-    # redirects warnings to the ``py.warnings`` logger when captureWarnings is
-    # enabled.  We attach the same handler used for the root logger to ensure
-    # a single JSON-formatted output.
-    logging.captureWarnings(True)
-    warnings.simplefilter("default")
-    warnings_logger = logging.getLogger("py.warnings")
-    warnings_logger.handlers.clear()
-    warnings_logger.addHandler(handler)
-    warnings_logger.setLevel(_level_no(cfg.level))
-    warnings_logger.propagate = False
+        # Route ``warnings.warn`` calls through the structured logger.
+        # ``logging`` redirects warnings to the ``py.warnings`` logger when
+        # captureWarnings is enabled.  We attach the same handler used for the
+        # root logger to ensure a single JSON-formatted output.
+        logging.captureWarnings(True)
+        warnings.simplefilter("default")
+        warnings_logger = logging.getLogger("py.warnings")
+        warnings_logger.handlers.clear()
+        warnings_logger.addHandler(handler)
+        warnings_logger.setLevel(_level_no(cfg.level))
+        warnings_logger.propagate = False
+    else:
+        structured_logger = logging.getLogger(_STRUCTURED_LOGGER_NAME)
+        structured_logger.handlers = [handler]
+        structured_logger.setLevel(_level_no(cfg.level))
+        structured_logger.propagate = False
 
     return logger
