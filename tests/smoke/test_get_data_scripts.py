@@ -735,6 +735,7 @@ def test_run_pipeline_failure_removes_outputs(
         config_path=config_path,
         date_prefix="20240101",
         log_level="ERROR",
+        limit=None,
         force=False,
         skip_existing=False,
     )
@@ -794,6 +795,79 @@ def test_run_pipeline_failure_removes_outputs(
     assert not failure_working.exists()
 
 
+def test_run_pipeline_system_exit_cleans_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SystemExit raised by a step should trigger cleanup and reporting."""
+
+    base_dir = tmp_path
+    input_dir = base_dir / "input"
+    output_dir = base_dir / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_dir / "config.yaml"
+    config_path.write_text("pipeline: test\n")
+
+    input_csv = input_dir / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+
+    cfg = get_data.PipelineRunConfig(
+        base_path=base_dir,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+        date_prefix="20240101",
+        log_level="ERROR",
+        limit=None,
+        force=False,
+        skip_existing=False,
+    )
+
+    final_output = cfg.output_path("activity")
+    working_output = final_output.with_name(f".{final_output.name}.tmp")
+    sentinel_path = final_output.with_name(f"{final_output.name}.failed")
+
+    def aborting_main(argv: list[str] | None) -> int:
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--output")
+        parser.add_argument("--input")
+        parser.add_argument("--config")
+        parser.add_argument("--log-level")
+        ns = parser.parse_args(argv)
+        Path(ns.output).write_text("temporary output\n")
+        raise SystemExit(3)
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def exception(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_STEPS",
+        (get_data.PipelineStep("activity", aborting_main, None),),
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", DummyLogger())
+
+    status = get_data.run_pipeline(cfg)
+
+    assert status == 3
+    assert not final_output.exists()
+    assert not working_output.exists()
+    assert sentinel_path.exists()
+
+
 def test_run_pipeline_success_promotes_sidecars(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -817,6 +891,7 @@ def test_run_pipeline_success_promotes_sidecars(
         config_path=config_path,
         date_prefix="20240101",
         log_level="ERROR",
+        limit=None,
         force=False,
         skip_existing=False,
     )
