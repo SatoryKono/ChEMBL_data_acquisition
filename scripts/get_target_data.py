@@ -1173,28 +1173,73 @@ def fetch_iuphar(
         suffixes=("_chembl", "_uniprot"),
     )
 
+    merge_suffix_priority = ("_uniprot", "_chembl")
+
+    def _base_name(column: str) -> str | None:
+        for suffix in merge_suffix_priority:
+            if column.endswith(suffix):
+                return column[: -len(suffix)]
+        return None
+
+    def _coalesce_column(df: pd.DataFrame, column: str) -> None:
+        preferred: pd.Series | None = None
+        for suffix in merge_suffix_priority:
+            candidate_name = f"{column}{suffix}"
+            if candidate_name not in df.columns:
+                continue
+            candidate = df.pop(candidate_name).astype(object)
+            if preferred is None:
+                preferred = candidate
+            else:
+                preferred = _prefer_primary(preferred, candidate)
+        if preferred is not None:
+            df[column] = preferred
+
+    critical_columns = set(TARGETS_COLUMN_ORDER)
+    critical_columns.update(
+        {
+            "gene",
+            "gene_name",
+            "synonyms",
+            "component_description",
+            "chembl_alternative_name",
+            "names",
+            "mapping_uniprot_id",
+            "ec_numbers",
+            "reaction_ec_numbers",
+            "ec_code",
+        }
+    )
+
+    suffixed_columns = [
+        column
+        for column in combined_df.columns
+        if _base_name(column) is not None
+    ]
+    base_columns = {_base_name(column) for column in suffixed_columns if _base_name(column)}
+
+    for column in sorted(base_columns & critical_columns):
+        _coalesce_column(combined_df, column)
+
+    for column in sorted(base_columns - critical_columns):
+        _coalesce_column(combined_df, column)
+
+    remaining_suffixes = [
+        column
+        for column in combined_df.columns
+        if _base_name(column) is not None
+    ]
+    if remaining_suffixes:
+        rename_map = {
+            column: _base_name(column)
+            for column in remaining_suffixes
+            if _base_name(column)
+        }
+        combined_df = combined_df.rename(columns=rename_map)
+
     combined_df = combined_df.drop(columns=[lookup_column], errors="ignore")
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
-
-    overlap_columns = sorted(
-        set(chembl_for_merge.columns)
-        & (set(uniprot_df.columns) - {"original_id"})
-    )
-    for column in overlap_columns:
-        chembl_col = f"{column}_chembl"
-        uniprot_col = f"{column}_uniprot"
-        chembl_series = (
-            combined_df.pop(chembl_col)
-            if chembl_col in combined_df.columns
-            else None
-        )
-        uniprot_series = (
-            combined_df.pop(uniprot_col)
-            if uniprot_col in combined_df.columns
-            else None
-        )
-        combined_df[column] = _prefer_primary(uniprot_series, chembl_series)
 
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
