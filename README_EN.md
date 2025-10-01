@@ -76,25 +76,40 @@ for usage guidelines.
 
    Git hooks ensure formatting, linting, static type checks and tests run before each commit.
 
-3. **Run a sample script**
+3. **Explore the installed console scripts**
+
+   After running `pip install .`, the package exposes dedicated entry points for each pipeline. The commands mirror the
+   `python -m …` launches used during development:
+
+   | Console script | Module equivalent |
+   | -------------- | ----------------- |
+   | `get-data` | `python -m scripts.get_data` |
+   | `get-activity-data` | `python -m scripts.get_activity_data` |
+   | `get-assay-data` | `python -m scripts.get_assay_data` |
+   | `get-document-data` | `python -m scripts.get_document_data` |
+   | `get-target-data` | `python -m scripts.get_target_data` |
+   | `get-testitem-data` | `python -m scripts.get_testitem_data` |
+
+   Use `--help` to inspect the interface and run smoke-grade exports straight from the shell:
+
+   ```bash
+   get-activity-data --input tests/data/activity_ids_small.csv \
+       --output out/activities.csv --limit 10 --log-level INFO
+   get-document-data pubmed --input tests/data/pmids.csv \
+       --output out/documents.csv --limit 5 --log-level INFO
+   ```
+
+   The console scripts accept the same options as their module counterparts, so existing `python -m …` workflows remain valid:
 
    ```bash
    python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
-   ```
-
-   This lightweight helper only emits structured log messages describing the dummy activity rows it would generate; it neither
-   reads input files nor writes outputs. Use it to verify logging configuration and CLI wiring before launching full pipelines.
-   Common CLI flags include `--limit` to cap processed records, `--log-level` for verbosity, `--sep` for CSV delimiters and
-   `--encoding` for file encoding. For end-to-end exports that create files, run one of the data pipelines, for example:
-
-   ```bash
    python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
        --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
    python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
        --output out/quality --table-name chembl_targets --log-level INFO
    ```
 
-   In the second example the `--output` argument must point to a directory where the report files will be created.
+   In the reporting example above the `--output` argument must point to a directory where the report files will be created.
 
 4. **Run the tests** – see [Tests](#tests).
 
@@ -149,6 +164,9 @@ as a CI artifact.
 ## Usage
 
 The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--output` and `--limit`.
+After installing the project with `pip install .`, the same pipelines can be started via the console scripts listed in the
+[Quick Start](#quick-start) table—for example, `get-activity-data --help` is equivalent to `python -m scripts.get_activity_data --help`.
+Both forms accept identical arguments, so feel free to swap between them depending on your environment.
 
 ### `scripts/get_document_data.py`
 
