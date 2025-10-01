@@ -1108,13 +1108,14 @@ def _write_pubchem_cid_cache(
 
     if path is None:
         return
-    serialisable: dict[str, str] = {}
+    serialisable: dict[str, str | None] = {}
     for key, value in cache.items():
         if not key:
             continue
         if value is None:
-            continue
-        serialisable[key] = value
+            serialisable[key] = None
+        else:
+            serialisable[key] = value
     try:
         with open_atomic(path, encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
             payload = {
@@ -1471,7 +1472,7 @@ def _resolve_pubchem_cids(
         )
 
     def _is_cached(chembl_id: str | None) -> bool:
-        return bool(chembl_id and cid_cache.get(chembl_id))
+        return bool(chembl_id) and chembl_id in cid_cache
 
     cached_mask = chembl_norm.map(_is_cached)
     needs_lookup_mask = (
@@ -1492,9 +1493,10 @@ def _resolve_pubchem_cids(
     cache_dirty = False
     for idx, chembl_id in chembl_norm[cached_mask].items():
         cached_value = cid_cache.get(chembl_id)
-        if cached_value:
-            cid_series.loc[idx] = cached_value
-            lookup_cids.add(cached_value)
+        if cached_value is None:
+            continue
+        cid_series.loc[idx] = cached_value
+        lookup_cids.add(cached_value)
 
     for progress, row in enumerate(frame.loc[needs_lookup_mask].itertuples(), start=1):
         logger.info("pubchem_progress", current=progress, total=total)
