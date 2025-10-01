@@ -4,6 +4,8 @@ import argparse
 import io
 import json
 import sys
+import threading
+import time
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,9 @@ from scripts import get_document_data as gdd
 
 
 class DummyLimiter:
+    def __init__(self, burst: int = 1) -> None:
+        self.burst = burst
+
     def acquire(self) -> None:
         return None
 
@@ -1077,6 +1082,11 @@ def test_finalise_export_falls_back_to_default_key(
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd,
+        "_load_export_ready_frame",
+        lambda path, cfg: df.copy(),
+    )
     monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
 
     exit_code = gdd._finalise_export(
@@ -1135,6 +1145,11 @@ def test_finalise_export_accepts_generator(
     monkeypatch.setattr(gdd, "build_quality_report", lambda df: {"rows": len(df)})
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd,
+        "_load_export_ready_frame",
+        lambda path, cfg: pd.concat(frames, ignore_index=True),
+    )
 
     exit_code = gdd._finalise_export(
         iter(frames),
@@ -1153,6 +1168,65 @@ def test_finalise_export_accepts_generator(
         ["101"],
         ["102"],
     ]
+
+
+def test_finalise_export_streaming_is_deterministic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Streaming export should preserve deterministic ordering and payload."""
+
+    cfg = Config()
+    output = tmp_path / "documents.csv"
+
+    def frame_generator() -> Iterator[pd.DataFrame]:
+        yield pd.DataFrame(
+            {
+                "document_chembl_id": ["CHEMBL2"],
+                "PubMed.PMID": ["102"],
+            }
+        )
+        yield pd.DataFrame(
+            {
+                "document_chembl_id": ["CHEMBL1"],
+                "PubMed.PMID": ["101"],
+            }
+        )
+
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "deadbeef")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+
+    def fake_build_quality_report(df: pd.DataFrame) -> dict[str, Any]:
+        captured["quality_df"] = df.copy()
+        return {"rows": len(df)}
+
+    monkeypatch.setattr(gdd, "build_quality_report", fake_build_quality_report)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+
+    def fake_analyze_table_quality(df: pd.DataFrame, table_name: str) -> None:
+        captured["quality_table_name"] = table_name
+        captured["quality_table_df"] = df.copy()
+        return None
+
+    monkeypatch.setattr(gdd, "analyze_table_quality", fake_analyze_table_quality)
+
+    exit_code = gdd._finalise_export(
+        frame_generator(),
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=["PubMed.PMID"],
+        chunk_size=1,
+    )
+
+    exported = pd.read_csv(output, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding)
+
+    assert exit_code == 0
+    assert exported["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
+    assert captured["quality_df"]["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
+    assert captured["quality_table_df"]["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
@@ -1253,3 +1327,133 @@ def test_fetch_pubmed_records_accepts_executor_context(
     )
 
     assert sorted(df["PubMed.PMID"].tolist()) == pmids
+
+
+def test_fetch_pubmed_records_parallel_enrichment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAlex and CrossRef lookups should run in parallel and preserve order."""
+
+    pmids = ["100", "200", "300"]
+
+    monkeypatch.setattr(rl, "sleep", lambda _delay: None)
+
+    def fake_pubmed_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": f"10.1234/{pmid}",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+                "PubMed.PublicationType": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: Any,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": f"10.1234/{pmid}",
+                "scholar.PublicationTypes": "",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.PublicationTypes": "",
+            "scholar.Error": "",
+        },
+    )
+
+    openalex_threads: list[str] = []
+    openalex_completion: list[str] = []
+
+    def fake_openalex(
+        _session: Any,
+        pmid: str,
+        cfg: OpenAlexCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        openalex_threads.append(threading.current_thread().name)
+        if pmid == "100":
+            time.sleep(0.01)
+        openalex_completion.append(pmid)
+        return {
+            "OpenAlex.PublicationTypes": "",
+            "OpenAlex.TypeCrossref": "",
+            "OpenAlex.Genre": "",
+            "OpenAlex.Id": pmid,
+            "OpenAlex.Venue": f"Venue {pmid}",
+            "OpenAlex.MeshDescriptors": "",
+            "OpenAlex.MeshQualifiers": "",
+            "OpenAlex.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+
+    crossref_threads: list[str] = []
+    crossref_completion: list[str] = []
+
+    def fake_crossref(
+        _session: Any,
+        doi: str,
+        cfg: CrossRefCfg,
+        limiter: rl.RateLimiter | None = None,
+    ) -> dict[str, str]:
+        crossref_threads.append(threading.current_thread().name)
+        pmid = doi.rsplit("/", 1)[-1] if doi else ""
+        if pmid == "200":
+            time.sleep(0.01)
+        crossref_completion.append(pmid)
+        return {
+            "crossref.Type": "",
+            "crossref.Subtype": "",
+            "crossref.Title": f"Title {pmid}",
+            "crossref.Subtitle": "",
+            "crossref.Subject": "",
+            "crossref.Error": "",
+        }
+
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=3,
+    )
+
+    assert df["PubMed.PMID"].tolist() == pmids
+    assert df["OpenAlex.Venue"].tolist() == [f"Venue {pmid}" for pmid in pmids]
+    assert df["crossref.Title"].tolist() == [f"Title {pmid}" for pmid in pmids]
+
+    assert openalex_completion != pmids
+    assert crossref_completion != pmids
+
+    assert openalex_threads
+    assert crossref_threads
+    assert all(name.startswith("ThreadPoolExecutor") for name in openalex_threads)
+    assert all(name.startswith("ThreadPoolExecutor") for name in crossref_threads)

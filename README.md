@@ -1,9 +1,13 @@
 # ChEMBL Data Acquisition Utilities
 
-Основная документация и описательные материалы перенесены в каталог [docs/](docs/).
+The README is available in multiple languages:
 
-## Особенности
+| Language | Link |
+|----------|------|
+| English  | [README_EN.md](README_EN.md) |
+| Русский  | [README_RU.md](README_RU.md) |
 
+ 
 * Командные скрипты с унифицированными флагами `--input`, `--output`,
   `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
   `--print-config` для управления загрузкой настроек. Размер пакетной
@@ -732,3 +736,6 @@ MIT License. См. файл `LICENSE` (если присутствует).
 
 
 При обновлении справочных материалов добавляйте их непосредственно в папку `docs`.
+ 
+Additional reference materials live in the [docs/](docs/) directory.
+ 

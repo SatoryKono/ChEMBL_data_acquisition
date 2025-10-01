@@ -380,15 +380,26 @@ def fetch_pubmed_records(
                         semsch_map[pmid] = fallback_record
 
                 combined_records: list[dict[str, str]] = []
-                for pubmed in pubmed_list:
+
+                def _pool_workers(
+                    total: int,
+                    limiter: RateLimiter | None,
+                    burst: int,
+                ) -> int:
+                    if total <= 0:
+                        return 0
+                    limit = burst
+                    if limiter is not None:
+                        limit = min(limit, limiter.burst)
+                    return max(1, min(total, limit))
+
+                plan: list[tuple[int, dict[str, str], dict[str, str]]] = []
+                openalex_jobs: list[tuple[int, str]] = []
+                crossref_jobs: list[tuple[int, str]] = []
+
+                for index, pubmed in enumerate(pubmed_list):
                     pmid = pubmed.get("PubMed.PMID", "")
                     semsch = semsch_map.get(pmid, {}) if pmid else {}
-
-                    # Still fetching these individually for now
-
-                    openalex = ocl.fetch_openalex(
-                        session, pmid, openalex_cfg, openalex_limiter
-                    )
                     fallback_doi = ""
                     if fallback_doi_map:
                         fallback_doi = fallback_doi_map.get(pmid, "")
@@ -398,10 +409,54 @@ def fetch_pubmed_records(
                         or fallback_doi
                         or ""
                     )
-                    crossref = ocl.fetch_crossref(
-                        session, doi, crossref_cfg, crossref_limiter
-                    )
+                    plan.append((index, pubmed, semsch))
+                    openalex_jobs.append((index, pmid))
+                    crossref_jobs.append((index, doi))
 
+                openalex_results: dict[int, dict[str, str]] = {}
+                crossref_results: dict[int, dict[str, str]] = {}
+
+                openalex_workers = _pool_workers(
+                    len(openalex_jobs), openalex_limiter, openalex_cfg.burst
+                )
+                if openalex_jobs and openalex_workers > 0:
+                    with ThreadPoolExecutor(max_workers=openalex_workers) as pool:
+                        future_to_index = {
+                            pool.submit(
+                                ocl.fetch_openalex,
+                                session,
+                                pmid,
+                                openalex_cfg,
+                                openalex_limiter,
+                            ): index
+                            for index, pmid in openalex_jobs
+                        }
+                        for future in as_completed(future_to_index):
+                            idx = future_to_index[future]
+                            openalex_results[idx] = future.result()
+
+                crossref_workers = _pool_workers(
+                    len(crossref_jobs), crossref_limiter, crossref_cfg.burst
+                )
+                if crossref_jobs and crossref_workers > 0:
+                    with ThreadPoolExecutor(max_workers=crossref_workers) as pool:
+                        future_to_index = {
+                            pool.submit(
+                                ocl.fetch_crossref,
+                                session,
+                                doi,
+                                crossref_cfg,
+                                crossref_limiter,
+                            ): index
+                            for index, doi in crossref_jobs
+                        }
+                        for future in as_completed(future_to_index):
+                            idx = future_to_index[future]
+                            crossref_results[idx] = future.result()
+
+                for index, pubmed, semsch in plan:
+                    openalex = openalex_results.get(index, {})
+                    crossref = crossref_results.get(index, {})
                     combined = merge_metadata(pubmed, semsch, openalex, crossref)
                     combined_records.append(combined)
                 return combined_records
@@ -705,6 +760,23 @@ def _write_export_chunks(
     )
 
 
+def _load_export_ready_frame(path: Path, *, cfg: Config) -> pd.DataFrame:
+    """Load the streamed CSV export for quality reporting."""
+
+    try:
+        loaded = pd.read_csv(
+            path,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+    except pd.errors.EmptyDataError:
+        loaded = pd.DataFrame(columns=list(_EXPORT_COLUMNS))
+    missing = [column for column in _EXPORT_COLUMNS if column not in loaded.columns]
+    for column in missing:
+        loaded[column] = ""
+    return loaded[_EXPORT_COLUMNS]
+
+
 def _finalise_export(
     df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
@@ -760,10 +832,10 @@ def _finalise_export(
     rows_total = 0
     rows_kept = 0
     exit_code = 0
-    validated_chunks: list[pd.DataFrame] = []
+    emitted_chunk = False
 
     def _validated_chunks() -> Iterator[pd.DataFrame]:
-        nonlocal rows_total, rows_kept, exit_code
+        nonlocal rows_total, rows_kept, exit_code, emitted_chunk
         for frame in process_iter:
             with_metadata = add_pipeline_metadata(frame)
             ordered = build_dataframe(
@@ -789,8 +861,18 @@ def _finalise_export(
             cleaned = build_dataframe(
                 validated, columns=DOCUMENT_SCHEMA_COLUMNS, fill_missing=False
             )
-            validated_chunks.append(cleaned)
             for chunk in _iter_export_chunks(cleaned, chunk_size=stream_chunk):
+                emitted_chunk = True
+                yield chunk
+
+        if not emitted_chunk:
+            empty = build_dataframe(
+                add_pipeline_metadata(pd.DataFrame()),
+                columns=DOCUMENT_SCHEMA_COLUMNS,
+                fill_missing=False,
+            )
+            for chunk in _iter_export_chunks(empty, chunk_size=stream_chunk):
+                emitted_chunk = True
                 yield chunk
 
     export_generator = _validated_chunks()
@@ -832,22 +914,11 @@ def _finalise_export(
     rows_dropped = rows_total - rows_kept
     logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
-    if not validated_chunks:
-        export_ready = build_dataframe(
-            add_pipeline_metadata(pd.DataFrame()),
-            columns=DOCUMENT_SCHEMA_COLUMNS,
-            fill_missing=False,
-        )
-    elif len(validated_chunks) == 1:
-        export_ready = validated_chunks[0]
-    else:
-        export_ready = pd.concat(validated_chunks, ignore_index=True)
-
-    renamed_columns = {
-        column: _EXPORT_COLUMN_RENAMES.get(column, column)
-        for column in export_ready.columns
-    }
-    final_column_names = set(renamed_columns.values())
+    try:
+        export_ready = _load_export_ready_frame(csv_path, cfg=cfg)
+    except (OSError, ValueError) as exc:
+        logger.error("quality_frame_load_failed", error=str(exc), path=str(csv_path))
+        return 1
 
     stats: Stats = {
         "rows_total": rows_total,

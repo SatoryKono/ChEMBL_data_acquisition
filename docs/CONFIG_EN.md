@@ -12,7 +12,7 @@
 | --- | --- |
 | `sources` | Connectivity details for external services such as ChEMBL, UniProt, CrossRef, PubChem and PubMed. |
 | `local` | Paths to local resources, CSV defaults and initialisation workbooks. |
-| `system` | Logging, retry policy, global rate limiting and document classification weights. |
+| `system` | Logging, retry policy, global rate limiting, table quality profiling and document classification weights. |
 
 Sensitive values (API tokens, personal e-mails) should be injected via environment variables rather than committed to the repository.
 
@@ -346,6 +346,10 @@ IUPHAR and UniProt lookups are stored there by default.
 | `retry` | `max_attempts` | `3` | Number of retry attempts for recoverable errors. |
 |  | `backoff_factor` | `0.5` | Base multiplier for exponential backoff. |
 |  | `status_forcelist` | `[429, 500, 502, 503, 504]` | HTTP status codes that trigger retries. |
+| `doc_quality` | `enable` | `true` | Toggle generation of table quality reports. |
+|  | `sample_rows` | `null` | Limit analysis to the first `N` rows; `null` processes the full dataset. |
+|  | `include_columns` | `null` | Optional allow list of column names to profile. |
+|  | `exclude_columns` | `null` | Optional deny list of column names to skip. |
 | `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Weighting applied to document sources. |
 |  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Minimum counts for document type classification. |
 |  | `limit` | `null` | Optional limit on classified records. |

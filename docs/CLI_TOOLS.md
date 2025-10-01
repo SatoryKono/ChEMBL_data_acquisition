@@ -19,7 +19,7 @@ while preserving direct module execution for ad-hoc debugging.
 | `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv --output mapped.csv` | Map ChEMBL identifiers to UniProt accessions using batch configuration. |
 | `library.utils.cli_tools.mapper_main` | `python -m library.utils.cli_tools.mapper_main --input ids.csv --output mapped.csv` | Lightweight interactive mapper for quick lookups and diagnostics. |
 | `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Run the cached target pipeline harness to refresh stored artefacts. |
-| `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Generate column-level quality reports for arbitrary CSV datasets. |
+| `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Generate column-level quality reports for arbitrary CSV datasets with optional sampling and column filters. |
 
 All modules continue to expose a `main` function so they can still be wired into
 `pyproject.toml` entry points. When invoking them programmatically, import the

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import argparse
 import os
+from argparse import BooleanOptionalAction
 from collections.abc import Sequence
 
 import pandas as pd
@@ -52,6 +53,46 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
 
+        doc_cfg = cfg.system.doc_quality
+        enable = getattr(args, "doc_quality_enable", None)
+        if enable is None:
+            enable = doc_cfg.enable
+        if not enable:
+            logger.info("doc_quality_disabled", table_name=args.table_name)
+            return 0
+
+        sample_rows = getattr(args, "sample_rows", None)
+        if sample_rows is None:
+            sample_rows = doc_cfg.sample_rows
+        include_columns = getattr(args, "include_columns", None)
+        if include_columns is None:
+            include_columns = doc_cfg.include_columns
+        exclude_columns = getattr(args, "exclude_columns", None)
+        if exclude_columns is None:
+            exclude_columns = doc_cfg.exclude_columns
+
+        if sample_rows is not None:
+            df = df.head(sample_rows)
+
+        include_columns = tuple(include_columns) if include_columns else None
+        exclude_columns = tuple(exclude_columns) if exclude_columns else None
+
+        if include_columns is not None:
+            missing = sorted(set(include_columns) - set(df.columns))
+            if missing:
+                logger.warning("include_columns_missing", columns=missing)
+            df = df.loc[:, [col for col in df.columns if col in include_columns]]
+
+        if exclude_columns is not None:
+            missing = sorted(set(exclude_columns) - set(df.columns))
+            if missing:
+                logger.warning("exclude_columns_missing", columns=missing)
+            excluded = set(exclude_columns)
+            df = df.loc[:, [col for col in df.columns if col not in excluded]]
+
+        if df.shape[1] == 0:
+            logger.warning("no_columns_after_filter", table_name=args.table_name)
+
         original_cwd = Path.cwd()
         try:
             args.output_csv.mkdir(parents=True, exist_ok=True)
@@ -73,6 +114,32 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         required=True,
         help="Base name used for output report files",
     )
+    parser.add_argument(
+        "--doc-quality-enable",
+        dest="doc_quality_enable",
+        action=BooleanOptionalAction,
+        default=None,
+        help="Enable or disable table profiling (config: system.doc_quality.enable)",
+    )
+    parser.add_argument(
+        "--sample-rows",
+        dest="sample_rows",
+        type=cli.positive_int,
+        default=None,
+        help="Limit profiling to the first N rows",
+    )
+    parser.add_argument(
+        "--include-columns",
+        nargs="+",
+        default=None,
+        help="Only analyse the specified columns",
+    )
+    parser.add_argument(
+        "--exclude-columns",
+        nargs="+",
+        default=None,
+        help="Exclude the specified columns from analysis",
+    )
     parser.set_defaults(func=run, output_csv=Path("."), encoding="utf-8-sig")
     return parser, log_cfg
 
@@ -85,7 +152,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
-        cfg: Config = cli.apply_config_overrides(args, parser, args.config)
+        cfg: Config = cli.apply_config_overrides(
+            args,
+            parser,
+            args.config,
+            mapping={
+                "doc_quality_enable": "system.doc_quality.enable",
+                "sample_rows": "system.doc_quality.sample_rows",
+                "include_columns": "system.doc_quality.include_columns",
+                "exclude_columns": "system.doc_quality.exclude_columns",
+            },
+        )
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg, fmt=cfg.log.format, datefmt=cfg.log.datefmt)

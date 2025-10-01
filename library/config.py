@@ -414,6 +414,13 @@ class DocTypeCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class DocQualityCfg(_BaseModel):
+    enable: bool = True
+    sample_rows: int | None = Field(default=None, ge=1)
+    include_columns: tuple[str, ...] | None = None
+    exclude_columns: tuple[str, ...] | None = None
+
+
 class ResourcesCfg(_BaseModel):
     dictionary_dir: Path = Field(default_factory=_dictionary_resource)
     iuphar_target_csv: Path = Field(
@@ -902,6 +909,7 @@ class SystemCfg(_BaseModel):
     rate: RateCfg = Field(default_factory=lambda: RateCfg())
     retry: RetryCfg = Field(default_factory=lambda: RetryCfg())
     doc_type: DocTypeCfg = Field(default_factory=lambda: DocTypeCfg())
+    doc_quality: DocQualityCfg = Field(default_factory=lambda: DocQualityCfg())
 
 
 class Config(_BaseModel):
@@ -972,6 +980,10 @@ class Config(_BaseModel):
     @property
     def doc_type(self) -> DocTypeCfg:
         return self.system.doc_type
+
+    @property
+    def doc_quality(self) -> DocQualityCfg:
+        return self.system.doc_quality
 
     @property
     def resources(self) -> ResourcesCfg:
@@ -1543,6 +1555,7 @@ __all__ = [
     "PubMedCfg",
     "SemanticScholarCfg",
     "DocTypeCfg",
+    "DocQualityCfg",
     "ActivityCfg",
     "ActivityActionTypeCfg",
     "ActivityEnrichmentCfg",
