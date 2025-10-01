@@ -27,6 +27,16 @@ jobs:
         run: ruff format --check .
       - name: Lint
         run: ruff check .
+      - name: Docstring coverage
+        run: >-
+          ruff check
+          --select D100,D101,D102,D103
+          scripts/get_activity_data.py
+          scripts/get_assay_data.py
+          scripts/get_document_data.py
+          scripts/get_target_data.py
+          scripts/get_testitem_data.py
+          library/io/paths.py
       - name: Type check
         run: mypy --strict library
       - name: Run tests
