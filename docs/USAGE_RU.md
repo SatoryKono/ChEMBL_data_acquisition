@@ -6,6 +6,19 @@
 ## Общие параметры CLI
 
 Все команды `scripts/get_*_data.py` поддерживают единый набор аргументов.
+После установки пакета командой `pip install .` каждый пайплайн доступен
+и как консольный скрипт:
+
+| Консольная команда | Запуск через `python -m` |
+| ------------------ | ------------------------ |
+| `get-data` | `python -m scripts.get_data` |
+| `get-activity-data` | `python -m scripts.get_activity_data` |
+| `get-assay-data` | `python -m scripts.get_assay_data` |
+| `get-document-data` | `python -m scripts.get_document_data` |
+| `get-target-data` | `python -m scripts.get_target_data` |
+| `get-testitem-data` | `python -m scripts.get_testitem_data` |
+
+Выбирайте подходящий формат — оба варианта принимают идентичные аргументы.
 Подкоманды для выбора источника (`chembl`, `uniprot`, `iuphar`, `all`)
 доступны только у `scripts/get_document_data.py` и
 `scripts/get_target_data.py`; остальные скрипты (`get_activity_data.py`,
@@ -55,7 +68,7 @@ CLI без вложенных подкоманд.
 Для онлайн-контроля направляйте вывод через `jq` или аналогичный инструмент:
 
 ```bash
-python scripts/get_document_data.py all --input documents.csv --column document_chembl_id \
+get-document-data all --input documents.csv --column document_chembl_id \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
@@ -63,8 +76,19 @@ python scripts/get_document_data.py all --input documents.csv --column document_
 
 ## Данные активностей (`get_activity_data.py`)
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_activity_data.py \
+get-activity-data --input tests/data/activity_ids_small.csv \
+  --column activity_id \
+  --batch-size 25 \
+  --timeout 45
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_activity_data \
   --input tests/data/activity_ids_small.csv \
   --column activity_id \
   --batch-size 25 \
@@ -80,8 +104,18 @@ python scripts/get_activity_data.py \
 
 ## Описания ассайев (`get_assay_data.py`)
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_assay_data.py \
+get-assay-data --input path/to/assay_ids.csv \
+  --column assay_chembl_id \
+  --batch-size 25
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_assay_data \
   --input path/to/assay_ids.csv \
   --column assay_chembl_id \
   --batch-size 25
@@ -91,8 +125,18 @@ python scripts/get_assay_data.py \
 
 ## Метаданные документов (`get_document_data.py`)
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_document_data.py all \
+get-document-data all --input path/to/documents.csv \
+  --column document_chembl_id \
+  --batch-size 20
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
   --batch-size 20
@@ -104,20 +148,33 @@ python scripts/get_document_data.py all \
 
 ```bash
 CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
-  python scripts/get_document_data.py all \
-    --input path/to/documents.csv \
+  get-document-data all --input path/to/documents.csv \
     --column document_chembl_id
 ```
 
 Альтернативно обновите значение в `config/config.yaml`.
 
 Выберите подкоманду `pubmed`, `chembl` или `all` в зависимости от требуемых источников.
-Сводку и список ключей смотрите в справке: `python scripts/get_document_data.py --help`
-и `python scripts/get_document_data.py <подкоманда> --help`
+Сводку и список ключей смотрите в справке: `get-document-data --help`
+и `get-document-data <подкоманда> --help`
 (например, `--batch-size` управляет размером пакета для PubMed).
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_document_data.py pubmed \
+get-document-data pubmed --input path/to/documents.csv \
+  --column PMID \
+  --openalex-rps 2.5 \
+  --crossref-rps 1.5 \
+  --fallback-doi-csv path/to/doi_overrides.csv \
+  --fallback-doi-pmid-column pmid_override \
+  --fallback-doi-value-column doi_override
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
   --openalex-rps 2.5 \
@@ -133,8 +190,17 @@ python scripts/get_document_data.py pubmed \
 
 ## Агрегация таргетов (`get_target_data.py`)
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_target_data.py chembl \
+get-target-data chembl --input path/to/targets.csv \
+  --column target_chembl_id
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_target_data chembl \
   --input path/to/targets.csv \
   --column target_chembl_id
 ```
@@ -163,8 +229,17 @@ python -m library.utils.cli_tools.pipeline_targets_main \
 
 ## Обогащение тест-объектов (`get_testitem_data.py`)
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_testitem_data.py \
+get-testitem-data --input tests/data/input-smoke/testitem.csv \
+  --column molecule_chembl_id
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_testitem_data \
   --input tests/data/input-smoke/testitem.csv \
   --column molecule_chembl_id
 ```
@@ -188,8 +263,19 @@ sources:
 
 Пример запуска с кастомными настройками:
 
+Вариант консольного скрипта:
+
 ```bash
-python scripts/get_testitem_data.py \
+get-testitem-data --config config/config.yaml \
+  --input data/input/testitem_ids.csv \
+  --batch-size 750 \
+  --offset 500
+```
+
+Запуск через модуль:
+
+```bash
+python -m scripts.get_testitem_data \
   --config config/config.yaml \
   --input data/input/testitem_ids.csv \
   --batch-size 750 \
@@ -268,7 +354,7 @@ CLI-флаги покрывают задокументированные арг�
 `--batch-size`, `--timeout`, `--limit`, `--dry-run`:
 
 ```bash
-python scripts/get_activity_data.py --batch-size 25 --timeout 45
+get-activity-data --batch-size 25 --timeout 45
 ```
 
 Вложенные параметры меняются через `config/config.yaml` или переменные окружения. Чтобы временно увеличить лимит запросов
@@ -276,7 +362,7 @@ python scripts/get_activity_data.py --batch-size 25 --timeout 45
 
 ```bash
 export CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10
-python scripts/get_activity_data.py
+get-activity-data
 ```
 
 При необходимости проверьте итоговую конфигурацию флагом `--print-config` до запуска пайплайна.

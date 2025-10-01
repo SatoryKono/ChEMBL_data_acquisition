@@ -2,8 +2,21 @@
 
 ## Shared CLI options
 
-All `scripts/get_*_data.py` commands share a common interface. Only
-`scripts/get_document_data.py` and `scripts/get_target_data.py` expose
+All `scripts/get_*_data.py` commands share a common interface. After
+installing the package with `pip install .`, each pipeline is also
+available as a console entry point:
+
+| Console script | Module form |
+| -------------- | ----------- |
+| `get-data` | `python -m scripts.get_data` |
+| `get-activity-data` | `python -m scripts.get_activity_data` |
+| `get-assay-data` | `python -m scripts.get_assay_data` |
+| `get-document-data` | `python -m scripts.get_document_data` |
+| `get-target-data` | `python -m scripts.get_target_data` |
+| `get-testitem-data` | `python -m scripts.get_testitem_data` |
+
+Pick whichever style fits your environment; both accept identical options.
+Only `scripts/get_document_data.py` and `scripts/get_target_data.py` expose
 source-selection sub-commands (`chembl`, `uniprot`, `iuphar`, or `all`);
 the remaining pipelines (`get_activity_data.py`, `get_assay_data.py`, and
 `get_testitem_data.py`) are single-command CLIs that accept options
@@ -54,7 +67,7 @@ diagnose problematic batches.
 Pipe the output through `jq` or similar tooling for real-time monitoring:
 
 ```bash
-python scripts/get_document_data.py all --input docs.csv --column document_chembl_id \
+get-document-data all --input docs.csv --column document_chembl_id \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
@@ -62,8 +75,20 @@ Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the de
 
 ## Activity data (`get_activity_data.py`)
 
+Console form:
+
 ```bash
-python scripts/get_activity_data.py \
+get-activity-data --input tests/data/activity_ids_small.csv \
+  --column activity_id \
+  --batch-size 25 \
+  --timeout 45 \
+  --offset 5
+```
+
+Module form:
+
+```bash
+python -m scripts.get_activity_data \
   --input tests/data/activity_ids_small.csv \
   --column activity_id \
   --batch-size 25 \
@@ -80,8 +105,18 @@ python scripts/get_activity_data.py \
 
 ## Assay descriptions (`get_assay_data.py`)
 
+Console form:
+
 ```bash
-python scripts/get_assay_data.py \
+get-assay-data --input path/to/assay_ids.csv \
+  --column assay_chembl_id \
+  --batch-size 25
+```
+
+Module form:
+
+```bash
+python -m scripts.get_assay_data \
   --input path/to/assay_ids.csv \
   --column assay_chembl_id \
   --batch-size 25
@@ -91,8 +126,18 @@ Fetches assay metadata from ChEMBL using the configured identifier column. Prepa
 
 ## Document metadata (`get_document_data.py`)
 
+Console form:
+
 ```bash
-python scripts/get_document_data.py all \
+get-document-data all --input path/to/documents.csv \
+  --column document_chembl_id \
+  --batch-size 20
+```
+
+Module form:
+
+```bash
+python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
   --batch-size 20
@@ -103,19 +148,32 @@ example:
 
 ```bash
 CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
-  python scripts/get_document_data.py all \
-    --input path/to/documents.csv \
+  get-document-data all --input path/to/documents.csv \
     --column document_chembl_id
 ```
 
 The same effect can be achieved by editing `sources.chembl.pipelines.document.pubmed.batch_size` in `config/config.yaml`.
 Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sources.
-Consult `python scripts/get_document_data.py --help` for a summary and
-`python scripts/get_document_data.py <sub-command> --help` for the
+Consult `get-document-data --help` for a summary and
+`get-document-data <sub-command> --help` for the
 allowed switches (for example, `--batch-size` for PubMed batching).
 
+Console form:
+
 ```bash
-python scripts/get_document_data.py pubmed \
+get-document-data pubmed --input path/to/documents.csv \
+  --column PMID \
+  --openalex-rps 2.5 \
+  --crossref-rps 1.5 \
+  --fallback-doi-csv path/to/doi_overrides.csv \
+  --fallback-doi-pmid-column pmid_override \
+  --fallback-doi-value-column doi_override
+```
+
+Module form:
+
+```bash
+python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
   --openalex-rps 2.5 \
@@ -130,8 +188,17 @@ CSV parameters plug in a minimal PMID→DOI mapping before the remote services a
  
 ## Target aggregation (`get_target_data.py`)
 
+Console form:
+
 ```bash
-python scripts/get_target_data.py chembl \
+get-target-data chembl --input path/to/targets.csv \
+  --column target_chembl_id
+```
+
+Module form:
+
+```bash
+python -m scripts.get_target_data chembl \
   --input path/to/targets.csv \
   --column target_chembl_id
 ```
@@ -162,8 +229,17 @@ before hitting external APIs.
 
 ## Test item enrichment (`get_testitem_data.py`)
 
+Console form:
+
 ```bash
-python scripts/get_testitem_data.py \
+get-testitem-data --input tests/data/input-smoke/testitem.csv \
+  --column molecule_chembl_id
+```
+
+Module form:
+
+```bash
+python -m scripts.get_testitem_data \
   --input tests/data/input-smoke/testitem.csv \
   --column molecule_chembl_id
 ```
@@ -187,8 +263,19 @@ sources:
 
 Run a configuration-backed export with the tuned settings:
 
+Console form:
+
 ```bash
-python scripts/get_testitem_data.py \
+get-testitem-data --config config/config.yaml \
+  --input data/input/testitem_ids.csv \
+  --batch-size 750 \
+  --offset 500
+```
+
+Module form:
+
+```bash
+python -m scripts.get_testitem_data \
   --config config/config.yaml \
   --input data/input/testitem_ids.csv \
   --batch-size 750 \
@@ -274,7 +361,7 @@ CLI flags cover the documented arguments for each script. For example, the activ
 `--batch-size`, `--timeout`, `--limit` and `--dry-run`:
 
 ```bash
-python scripts/get_activity_data.py --batch-size 25 --timeout 45
+get-activity-data --batch-size 25 --timeout 45
 ```
 
 Nested configuration values are adjusted via `config/config.yaml` or environment variables. To temporarily raise the
@@ -282,7 +369,7 @@ ChEMBL API rate limit without editing the file, export an override and execute t
 
 ```bash
 export CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10
-python scripts/get_activity_data.py
+get-activity-data
 ```
 
 Inspect the effective configuration with `--print-config` before running the pipeline when needed.

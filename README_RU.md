@@ -75,22 +75,39 @@ pre-commit install
 
    Git-хуки гарантируют запуск форматирования, линтеров, статических проверок и тестов перед каждым коммитом.
 
-3. **Запустите демонстрационный скрипт**
+3. **Изучите установленные консольные скрипты**
+
+   После выполнения `pip install .` пакет публикует точки входа для каждого пайплайна. Команды полностью повторяют запуск через `python -m …`, используемый в разработке:
+
+   | Консольная команда | Эквивалент модуля |
+   | ------------------ | ----------------- |
+   | `get-data` | `python -m scripts.get_data` |
+   | `get-activity-data` | `python -m scripts.get_activity_data` |
+   | `get-assay-data` | `python -m scripts.get_assay_data` |
+   | `get-document-data` | `python -m scripts.get_document_data` |
+   | `get-target-data` | `python -m scripts.get_target_data` |
+   | `get-testitem-data` | `python -m scripts.get_testitem_data` |
+
+   Используйте `--help`, чтобы изучить интерфейс, и запускайте дымовые проверки напрямую из консоли:
+
+   ```bash
+   get-activity-data --input tests/data/activity_ids_small.csv \
+       --output out/activities.csv --limit 10 --log-level INFO
+   get-document-data pubmed --input tests/data/pmids.csv \
+       --output out/documents.csv --limit 5 --log-level INFO
+   ```
+
+   Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
 
    ```bash
    python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
-   ```
-
-   Лёгкий хелпер выводит структурированные логи о фиктивных строках активностей и не выполняет чтение/запись файлов. Используйте его для проверки настроек логирования и обвязки CLI перед запуском полноценных пайплайнов. Распространённые флаги: `--limit` для ограничения записей, `--log-level` для детализации, `--sep` для разделителей CSV и `--encoding` для кодировок. Для полной выгрузки запустите один из рабочих пайплайнов, например:
-
-   ```bash
    python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
        --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
    python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
        --output out/quality --table-name chembl_targets --log-level INFO
    ```
 
-   Во втором примере аргумент `--output` должен указывать на каталог, куда будут сохранены файлы отчёта.
+   В примере с отчётностью аргумент `--output` должен указывать на каталог, где будут сохранены результаты.
 
 4. **Запустите тесты** — см. раздел [Тесты](#тесты).
 
@@ -139,6 +156,10 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ## Использование
 
 Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--output`, `--limit`).
+После установки пакета через `pip install .` те же пайплайны доступны в виде консольных скриптов из таблицы в разделе
+[Быстрый старт](#быстрый-старт) — например, `get-activity-data --help` полностью эквивалентен
+`python -m scripts.get_activity_data --help`. Оба варианта принимают одинаковые аргументы, поэтому выбирайте форму, удобную
+для вашей среды.
 
 ### `scripts/get_document_data.py`
 

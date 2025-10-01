@@ -21,6 +21,31 @@ The README is available in multiple languages:
 * Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование
   `black`, проверка типов `mypy`, юнит‑тесты `pytest`.
 
+## Console entry points / Консольные точки входа
+
+**EN.** Installing the project via `pip install .` registers dedicated
+console scripts for each pipeline. Use them interchangeably with the
+`python -m …` invocations shown throughout the documentation.
+
+**RU.** После установки `pip install .` для каждого пайплайна становятся
+доступны консольные команды. Их можно использовать вместо вызовов
+`python -m …`, приведённых в примерах ниже.
+
+| Console script | Module equivalent | Назначение |
+| -------------- | ----------------- | ---------- |
+| `get-data` | `python -m scripts.get_data` | Orchestrates the full export / Оркестратор всех этапов |
+| `get-activity-data` | `python -m scripts.get_activity_data` | Activity data export / Выгрузка активностей |
+| `get-assay-data` | `python -m scripts.get_assay_data` | Assay metadata / Метаданные ассайев |
+| `get-document-data` | `python -m scripts.get_document_data` | Document metadata / Метаданные документов |
+| `get-target-data` | `python -m scripts.get_target_data` | Target aggregation / Агрегация таргетов |
+| `get-testitem-data` | `python -m scripts.get_testitem_data` | Test item enrichment / Обогащение тест-объектов |
+| `csv-utils` | `python -m library.utils.cli_tools.csv_utils_main` | CSV helpers / Утилиты работы с CSV |
+| `mapper` | `python -m library.utils.cli_tools.mapper_main` | Identifier mapping / Маппинг идентификаторов |
+| `table-quality` | `python -m library.utils.cli_tools.table_quality_main` | Quality reports / Отчёты качества |
+| `chunk-io` | `python -m library.utils.cli_tools.chunk_io_main` | Chunked IO harness / Обвязка чтения чанков |
+| `get-activities` | `python -m library.utils.cli_tools.get_activities` | Smoke logger / Демонстрация логов |
+| `check-determinism` | `python -m library.utils.cli_tools.check_determinism` | Determinism checks / Проверка детерминизма |
+
 ## Требования
 
 | Компонент     | Минимальная версия | Последняя протестированная |
