@@ -241,6 +241,8 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         return None
     logger.debug("cache_miss", url=url, rps=cfg.rps, status="miss")
 
+    api_cfg = ApiCfg(user_agent=cfg.user_agent)
+
     total_attempts = cfg.retries + 1
     if total_attempts <= 0:
         total_attempts = 1
@@ -289,7 +291,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         )
         get_limiter("pubchem", cfg.rps, cfg.burst).acquire()
         try:
-            session = get_session()
+            session = get_session(api_cfg)
             with session.get(
                 url, timeout=(cfg.timeout_connect, cfg.timeout_read)
             ) as response:
