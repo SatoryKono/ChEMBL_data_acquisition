@@ -321,6 +321,23 @@ def test_unknown_key_warning_non_strict(tmp_path: Path) -> None:
     assert "Unknown configuration key" in msg
 
 
+def test_optional_unknown_key_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text("legacy: true\n")
+    monkeypatch.setattr(config_module, "_OPTIONAL_UNKNOWN_KEYS", {"legacy"})
+    buf = io.StringIO()
+    configure_logger(LoggerConfig(stream=buf))
+    cfg = load_config(path, strict=True)
+    assert isinstance(cfg, Config)
+    lines = buf.getvalue().splitlines()
+    assert lines
+    record = json.loads(lines[-1])
+    assert record.get("event") == "config_unknown_ignored"
+    assert record.get("keys") == "legacy"
+
+
 def test_unknown_key_error(tmp_path: Path) -> None:
     path = tmp_path / "cfg.yaml"
     path.write_text("unknown: 1\n")
