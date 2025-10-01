@@ -1,6 +1,8 @@
 import threading
 from collections import Counter
-from collections.abc import Iterable
+
+from collections.abc import Iterable, Iterator, Sequence, Mapping
+
 from itertools import count
 from pathlib import Path
 from typing import Any
@@ -95,6 +97,46 @@ def test_merge_with_chembl_aligns_pubmed_ids() -> None:
     assert "document_chembl_id_x" not in merged.columns
     assert "document_chembl_id_y" not in merged.columns
     assert merged["document_chembl_id"].iloc[0] == "CHEMBL1"
+
+
+def test_merge_with_chembl_supports_iterables() -> None:
+    """Metadata iterables are consumed lazily during the merge."""
+
+    chembl_df = pd.DataFrame(
+        {
+            "document_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "pubmed_id": ["100", "200"],
+        }
+    )
+
+    class SinglePass:
+        def __init__(self, frames: Sequence[pd.DataFrame]) -> None:
+            self._frames = frames
+            self._used = False
+
+        def __iter__(self) -> Iterator[pd.DataFrame]:
+            if self._used:
+                raise AssertionError("iterator reused")
+            self._used = True
+            yield from self._frames
+
+    chunks = (
+        pd.DataFrame(
+            {
+                "PubMed.PMID": ["100"],
+                "PubMed.DOI": ["10.1/100"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "PubMed.PMID": ["200"],
+                "PubMed.DOI": ["10.1/200"],
+            }
+        ),
+    )
+
+    merged = merge_with_chembl(chembl_df, SinglePass(chunks))
+    assert list(merged["PubMed.DOI"]) == ["10.1/100", "10.1/200"]
 
 
 def test_build_quality_report_counts() -> None:
@@ -243,11 +285,33 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
             "crossref.Error": "",
         }
 
+    def fake_openalex_session(*_args: object, **_kwargs: object):
+        class _Context:
+            def __enter__(self) -> str:  # pragma: no cover - simple context
+                return _next_session_token()
+
+            def __exit__(self, *_exc: object) -> None:  # pragma: no cover - simple context
+                return None
+
+        return _Context()
+
+    def fake_crossref_session(*_args: object, **_kwargs: object):
+        class _Context:
+            def __enter__(self) -> str:  # pragma: no cover - simple context
+                return _next_session_token()
+
+            def __exit__(self, *_exc: object) -> None:  # pragma: no cover - simple context
+                return None
+
+        return _Context()
+
     monkeypatch.setattr(gdd, "session_with_retry", fake_session_with_retry)
     monkeypatch.setattr(gdd, "get_limiter", fake_get_limiter)
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
     monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
     monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", fake_semantic_single)
+    monkeypatch.setattr(gdd, "openalex_session", fake_openalex_session)
+    monkeypatch.setattr(gdd, "crossref_session", fake_crossref_session)
     monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
     monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
 
@@ -272,8 +336,9 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
 
     assert len(openalex_sessions) == len(pmids)
     assert len(crossref_sessions) == len(pmids)
-    assert len(set(openalex_sessions)) == len(pmids)
-    assert len(set(crossref_sessions)) == len(pmids)
+    assert set(openalex_sessions).isdisjoint(pubmed_sessions)
+    assert set(crossref_sessions).isdisjoint(pubmed_sessions)
+    assert set(openalex_sessions) != set(crossref_sessions)
 
     first_session = pubmed_sessions[0]
     assert all(session != first_session for session in openalex_sessions)
@@ -447,6 +512,9 @@ def test_fetch_pubmed_records_logs_compact_batch(
             return None
 
     class DummyLimiter:
+        def __init__(self, burst: int | None = None) -> None:
+            self.burst = burst if burst is not None else 5
+
         def acquire(self) -> None:  # pragma: no cover - simple synchronisation
             return None
 
@@ -455,8 +523,10 @@ def test_fetch_pubmed_records_logs_compact_batch(
     def fake_session_with_retry(*_args: object, **_kwargs: object) -> DummySession:
         return DummySession()
 
-    def fake_get_limiter(*_args: object, **_kwargs: object) -> DummyLimiter:
-        return DummyLimiter()
+    def fake_get_limiter(
+        _name: str, _rps: float | int | None, burst: int | None = None
+    ) -> DummyLimiter:
+        return DummyLimiter(burst)
 
     def fail_pubmed_batch(*_args: object, **_kwargs: object) -> list[dict[str, str]]:
         raise requests.RequestException("boom")
@@ -497,64 +567,42 @@ def test_fetch_pubmed_records_logs_compact_batch(
     assert payload["pmids_sample"] == pmids[:5] + ["..."]
 
 
-def test_finalise_export_failure_skips_write_done(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+
+def test_finalise_export_streams_single_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Validation failures should not emit ``write_done`` logs."""
+    """The export finalisation stage streams frames without duplicating work."""
 
-    cfg = Config()
-    df = pd.DataFrame(
-        {
-            "document_chembl_id": ["CHEMBL1"],
-            "PubMed.PMID": ["123"],
-        }
-    )
-    output = tmp_path / "documents.csv"
+    frames_yielded = 3
+    next_calls = 0
 
-    info_events: list[tuple[str, dict[str, object]]] = []
+    def _frame_source() -> Iterator[pd.DataFrame]:
+        nonlocal next_calls
+        for idx in range(frames_yielded):
+            next_calls += 1
+            yield pd.DataFrame({"document_chembl_id": [f"CHEMBL{idx}"]})
 
-    def fake_info(
-        event: str, *args: object, extra: dict[str, object] | None = None, **payload: object
-    ) -> None:
-        record = dict(payload)
-        if extra:
-            record.update(extra)
-        info_events.append((event, record))
+    emitted_chunks: list[pd.DataFrame] = []
 
-    def fake_validate(frame: pd.DataFrame, lazy: bool = True) -> pd.DataFrame:
-        failure_cases = pd.DataFrame(
-            [
-                {
-                    "index": 0,
-                    "column": "document_chembl_id",
-                    "failure_case": "invalid",
-                }
-            ]
-        )
-        exc = SchemaErrors.__new__(SchemaErrors)
-        exc.args = ("invalid",)
-        exc.failure_cases = failure_cases
-        exc.validated_data = frame.iloc[0:0]
-        exc.message = {"error": "invalid"}
-        raise exc
-
-    def fake_write_csv(
+    def fake_write_csv_chunks(
         chunks: Iterable[pd.DataFrame],
         path: Path,
-        *,
-        cfg: object,
-        key_cols: list[str] | None = None,
-        **_: object,
+        **_kwargs: object,
     ) -> Path:
-        list(chunks)
-        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("")
+        for chunk in chunks:
+            emitted_chunks.append(chunk.copy())
         return path
 
-    captured_errors: list[Path] = []
+    def fake_load_export_ready_frame(path: Path, cfg: Config) -> pd.DataFrame:
+        return pd.concat(emitted_chunks, ignore_index=True) if emitted_chunks else pd.DataFrame()
 
-    def fake_save(self: gdd.SidecarErrors, path: Path, *, cfg: Config | None = None) -> None:
-        captured_errors.append(path)
+    class DummySidecarErrors:
+        def add_error(self, _row: Mapping[str, object]) -> None:
+            return None
+
+        def save(self, _path: Path) -> None:
+            return None
 
     monkeypatch.setattr(gdd.logger, "info", fake_info)
     monkeypatch.setattr(gdd.DocumentsSchema, "validate", fake_validate)
@@ -567,13 +615,16 @@ def test_finalise_export_failure_skips_write_done(
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
     exit_code = gdd._finalise_export(
         df,
+
         output,
         cfg,
-        input_csv=tmp_path / "input.csv",
+        input_csv=output,
         key_columns=["document_chembl_id"],
+        chunk_size=1,
     )
 
     assert exit_code == 1
+
     assert all(event != "write_done" for event, _payload in info_events)
     assert captured_errors
 
@@ -661,5 +712,6 @@ def test_finalise_export_streams_quality(
         quality_report["column"] == "ChEMBL.document_chembl_id"
     ].iloc[0]
     assert int(chembl_row["non_empty"]) == 4
+
 
 

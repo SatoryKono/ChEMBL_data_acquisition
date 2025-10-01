@@ -52,6 +52,33 @@ def test_read_ids_missing_column_lists_available(tmp_path: Path) -> None:
     )
 
 
+def test_read_ids_falls_back_to_alternative_separator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``read_ids`` retries with configured fallback separators."""
+
+    path = tmp_path / "ids.tsv"
+    path.write_text("id\tvalue\nCHEMBL1\tignored\n", encoding="utf-8")
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def _record(event: str, *args: object, **data: object) -> None:
+        calls.append((event, data))
+
+    from library.io import readers as io_readers
+
+    monkeypatch.setattr(io_readers.logger, "info", _record)
+
+    ids = list(io.read_ids(path, column="id", cfg=IoCfg()))
+    assert ids == ["CHEMBL1"]
+    assert any(
+        event == "csv_separator_fallback_used"
+        and data.get("path") == str(path)
+        and data.get("separator") == "\t"
+        for event, data in calls
+    )
+
+
 def test_read_csv_types_and_na_values() -> None:
     path = Path("tests/data/io_types.csv")
     schema = pa.DataFrameSchema(

@@ -37,12 +37,14 @@ console scripts for each pipeline. Use them interchangeably with the
 | `get-activity-data` | `python -m scripts.get_activity_data` | Activity data export / Выгрузка активностей |
 | `get-assay-data` | `python -m scripts.get_assay_data` | Assay metadata / Метаданные ассайев |
 | `get-document-data` | `python -m scripts.get_document_data` | Document metadata / Метаданные документов |
+| `get-document-type` | `python -m library.utils.cli_tools.get_document_type` | Document type classification / Классификация документов по типам публикаций |
 | `get-target-data` | `python -m scripts.get_target_data` | Target aggregation / Агрегация таргетов |
 | `get-testitem-data` | `python -m scripts.get_testitem_data` | Test item enrichment / Обогащение тест-объектов |
 | `csv-utils` | `python -m library.utils.cli_tools.csv_utils_main` | CSV helpers / Утилиты работы с CSV |
 | `mapper` | `python -m library.utils.cli_tools.mapper_main` | Identifier mapping / Маппинг идентификаторов |
 | `table-quality` | `python -m library.utils.cli_tools.table_quality_main` | Quality reports / Отчёты качества |
 | `chunk-io` | `python -m library.utils.cli_tools.chunk_io_main` | Chunked IO harness / Обвязка чтения чанков |
+| `get-input-initialisation` | `python -m library.utils.cli_tools.get_input_initialisation` | Combine init workbooks into pair/entity tables / Объединение Excel инициализации в пары и сущности |
 | `get-activities` | `python -m library.utils.cli_tools.get_activities` | Smoke logger / Демонстрация логов |
 | `check-determinism` | `python -m library.utils.cli_tools.check_determinism` | Determinism checks / Проверка детерминизма |
 
@@ -682,8 +684,8 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 
 Most options also provide short aliases for backwards compatibility. The table
 lists every supported alias and the canonical key it maps to. See
-[`_ALIAS_OVERRIDES`](library/config.py#L1531-L1597) and
-[`_ALIAS_MAP`](library/config.py#L1599-L1602) for the authoritative source:
+[`_ALIAS_OVERRIDES`](library/config.py#L1544-L1616) and
+[`_ALIAS_MAP`](library/config.py#L1618-L1620) for the authoritative source:
 
 | Alias | Equivalent key |
 |-------|----------------|
@@ -712,9 +714,14 @@ lists every supported alias and the canonical key it maps to. See
 | `CHEMBL_DA_OPENALEX_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__OPENALEX__TIMEOUT_READ` |
 | `CHEMBL_DA_OUTDIR` | `CHEMBL_DA__LOCAL__IO__OUTPUT_DIR` |
 | `CHEMBL_DA_PUBCHEM_BASE` | `CHEMBL_DA__SOURCES__PUBCHEM__BASE` |
+| `CHEMBL_DA_PUBCHEM_USER_AGENT` | `CHEMBL_DA__SOURCES__PUBCHEM__USER_AGENT` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `CHEMBL_DA__SYSTEM__RETRY__BACKOFF_FACTOR` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `CHEMBL_DA__SYSTEM__RETRY__MAX_ATTEMPTS` |
 | `CHEMBL_DA_RPS` | `CHEMBL_DA__SOURCES__CHEMBL__API__RPS` |
+| `CHEMBL_DA_PUBMED_RPS` | `CHEMBL_DA__SOURCES__PUBMED__RPS` |
+| `CHEMBL_DA_PUBMED_BURST` | `CHEMBL_DA__SOURCES__PUBMED__BURST` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_RPS` | `CHEMBL_DA__SOURCES__SEMANTIC_SCHOLAR__RPS` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_BURST` | `CHEMBL_DA__SOURCES__SEMANTIC_SCHOLAR__BURST` |
 | `CHEMBL_DA_TARGETS_TYPE_CSV` | `CHEMBL_DA__LOCAL__RESOURCES__TARGETS_TYPE_CSV` |
 | `CHEMBL_DA_TIMEOUT_CONNECT` | `CHEMBL_DA__SOURCES__CHEMBL__API__TIMEOUT_CONNECT` |
 | `CHEMBL_DA_TIMEOUT_READ` | `CHEMBL_DA__SOURCES__CHEMBL__API__TIMEOUT_READ` |

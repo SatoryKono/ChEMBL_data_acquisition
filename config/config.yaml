@@ -210,6 +210,9 @@ local:
     cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
     csv_sep: ","  # CSV field separator
     csv_encoding: "utf-8-sig"  # Encoding for CSV files
+    csv_fallback_separators:
+      - "\t"
+      - ";"
     csv_chunksize: 10000  # Rows per batch when streaming deterministic CSV exports
     na_markers:
       - "#N/A"

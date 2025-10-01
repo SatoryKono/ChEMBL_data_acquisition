@@ -55,15 +55,22 @@ class PipelineConfig(BaseModel):
     sep: str | None = None
     encoding: str | None = None
     na_markers: list[str] | None = None
-    limit: int | None = Field(default=None, ge=1)
+    limit: int | None = Field(default=None, ge=0)
 
 
-def _positive_int(value: str) -> int:
+def _non_negative_int(value: str) -> int:
     try:
         parsed = int(value)
     except ValueError as exc:  # pragma: no cover - delegated to argparse
         raise argparse.ArgumentTypeError(str(exc)) from exc
-    if parsed <= 0:
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
+def _positive_int(value: str) -> int:
+    parsed = _non_negative_int(value)
+    if parsed == 0:
         raise argparse.ArgumentTypeError("value must be positive")
     return parsed
 
@@ -100,9 +107,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     )
     parser.add_argument(
         "--limit",
-        type=_positive_int,
+        type=_non_negative_int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help="Maximum number of identifiers to process (0 skips processing)",
     )
     parser.add_argument(
         "--na-marker",
@@ -235,8 +242,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.print_config:
         print_config(cfg)
         return 0
-    ensure_dirs(cfg)
     try:
+        ensure_dirs(cfg)
         options = PipelineConfig.model_validate(
             {
                 "input_csv": args.input_csv,
@@ -250,6 +257,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "limit": args.limit,
             }
         )
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        pipeline_logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+        )
+        pipeline_logger.info("pipeline_done", exit_code=1)
+        return 1
     except ValidationError as exc:
         parser.error(str(exc))
     exit_code = run(cfg, options)

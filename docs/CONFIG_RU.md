@@ -309,6 +309,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `output_dir` | `data/output` | Каталог для результирующих наборов данных. |
 | `cache_dir` | `.cache` | Каталог HTTP-кэша. |
 | `csv_sep` | `,` | Разделитель CSV по умолчанию. |
+| `csv_fallback_separators` | `["\t", ";"]` | Дополнительные разделители, которые пробуются, если основной не раскрывает требуемый столбец. |
 | `csv_encoding` | `utf-8-sig` | Кодировка экспорта CSV. |
 | `csv_chunksize` | `10000` | Размер чанка (строк) при детерминированной записи CSV; значение задано в [`config/config.yaml`](../config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Дополнительные маркеры пропусков при чтении CSV. |
@@ -356,6 +357,10 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 | --- | --- |
 | `CHEMBL_DA_BASE` | `sources.chembl.api.chembl_base` |
 | `CHEMBL_DA_RPS` | `sources.chembl.api.rps` |
+| `CHEMBL_DA_PUBMED_RPS` | `sources.pubmed.rps` |
+| `CHEMBL_DA_PUBMED_BURST` | `sources.pubmed.burst` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_RPS` | `sources.semantic_scholar.rps` |
+| `CHEMBL_DA_SEMANTIC_SCHOLAR_BURST` | `sources.semantic_scholar.burst` |
 | `CHEMBL_DA_BURST` | `sources.chembl.api.burst` |
 | `CHEMBL_DA_TIMEOUT_CONNECT` | `sources.chembl.api.timeout_connect` |
 | `CHEMBL_DA_TIMEOUT_READ` | `sources.chembl.api.timeout_read` |
@@ -386,6 +391,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 | `CHEMBL_DA_UNIPROT_BASE` | `sources.uniprot.api.base` |
 | `CHEMBL_DA_IUPHAR_BASE` | `sources.iuphar.base` |
 | `CHEMBL_DA_PUBCHEM_BASE` | `sources.pubchem.base` |
+| `CHEMBL_DA_PUBCHEM_USER_AGENT` | `sources.pubchem.user_agent` |
 
 Любой другой ключ можно задать в длинной форме `CHEMBL_DA__...`.
 

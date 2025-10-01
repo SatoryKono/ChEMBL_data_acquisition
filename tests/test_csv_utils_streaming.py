@@ -10,6 +10,7 @@ import pytest
 
 
 from library.csv_utils import write_csv_deterministic
+from library.utils.cli_tools import csv_utils_main as cli
 
 
 def test_write_csv_deterministic_respects_chunksize(
@@ -57,3 +58,23 @@ def test_write_csv_deterministic_uses_chunksize(tmp_path: Path, monkeypatch) -> 
 
     assert recorded["chunksize"] == 64
     assert out_path.exists()
+
+
+def test_cli_preserves_leading_zeroes(tmp_path: Path) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id,value\n001,a\n010,b\n", encoding="utf8")
+    output_csv = tmp_path / "out.csv"
+
+    rc = cli.main([
+        "--input",
+        str(input_csv),
+        "--output",
+        str(output_csv),
+        "--key-cols",
+        "id",
+    ])
+
+    assert rc == 0
+    contents = output_csv.read_text(encoding="utf8").splitlines()
+    assert contents[1].startswith("001,")
+    assert contents[2].startswith("010,")

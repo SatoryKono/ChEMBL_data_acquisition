@@ -114,6 +114,10 @@ class PipelineStep:
         args.extend(["--log-level", cfg.log_level])
         if cfg.limit is not None:
             args.extend(["--limit", str(cfg.limit)])
+        if cfg.force:
+            args.append("--force")
+        if cfg.skip_existing:
+            args.append("--skip-existing")
         if self.subcommand is not None:
             return [self.subcommand, *args]
         return args

@@ -25,6 +25,17 @@ class _EncodingDecodeError(Exception):
         self.error = error
 
 
+class _MissingColumnError(ValueError):
+    """Raised when the expected identifier column is absent."""
+
+    def __init__(self, column: str, path: Path, fieldnames: Sequence[str] | None) -> None:
+        message = f"column '{column}' not found in {path}; available columns: {fieldnames}"
+        super().__init__(message)
+        self.column = column
+        self.path = path
+        self.fieldnames = fieldnames
+
+
 class _CollectedId(NamedTuple):
     """Result of parsing a single identifier row."""
 
@@ -48,9 +59,7 @@ def _collect_ids_with_encoding(
         with path.open("r", encoding=encoding, newline="") as fh:
             reader = csv.DictReader(fh, delimiter=sep)
             if reader.fieldnames is None or column not in reader.fieldnames:
-                raise ValueError(
-                    f"column '{column}' not found in {path}; available columns: {reader.fieldnames}"
-                )
+                raise _MissingColumnError(column, path, reader.fieldnames)
             for row in reader:
                 value = (row.get(column) or "").strip()
                 if not value:
@@ -123,45 +132,71 @@ def read_ids(
 
     path_obj = Path(path)
 
+    sep_candidates: list[str] = []
+    seen_seps: set[str] = set()
+    _append_candidate(sep, seen_seps, sep_candidates)
+    _append_candidate(getattr(cfg, "csv_fallback_separators", None), seen_seps, sep_candidates)
+    if not sep_candidates:
+        sep_candidates.append(cfg.csv_sep)
+
     def _resolve_candidates() -> Iterator[_CollectedId]:
         last_error: UnicodeDecodeError | None = None
-        for candidate in candidates:
-            try:
-                collected = _collect_ids_with_encoding(
-                    path_obj,
-                    column=column,
-                    sep=sep,
-                    encoding=candidate,
-                    marker_set=marker_set,
-                    keep_na_markers=keep_markers,
-                )
+        last_missing: _MissingColumnError | None = None
+        for sep_candidate in sep_candidates:
+            missing_error: _MissingColumnError | None = None
+            for candidate in candidates:
                 try:
-                    first_item = next(collected)
-                except StopIteration:
-                    return iter(())
+                    collected = _collect_ids_with_encoding(
+                        path_obj,
+                        column=column,
+                        sep=sep_candidate,
+                        encoding=candidate,
+                        marker_set=marker_set,
+                        keep_na_markers=keep_markers,
+                    )
+                    try:
+                        first_item = next(collected)
+                    except StopIteration:
+                        return iter(())
 
-                def _with_peek() -> Iterator[_CollectedId]:
-                    yield first_item
-                    yield from collected
+                    def _with_peek() -> Iterator[_CollectedId]:
+                        yield first_item
+                        yield from collected
 
-                return _with_peek()
-            except _EncodingDecodeError as exc:
-                last_error = exc.error
-                logger.warning(
-                    "csv_decode_failed",
-                    path=str(path_obj),
-                    encoding=exc.encoding,
-                    error=str(exc.error),
-                )
+                    if sep_candidate != sep:
+                        logger.info(
+                            "csv_separator_fallback_used",
+                            path=str(path_obj),
+                            separator=sep_candidate,
+                        )
+                    return _with_peek()
+                except _MissingColumnError as exc:
+                    missing_error = exc
+                    if last_missing is None:
+                        last_missing = exc
+                    break
+                except _EncodingDecodeError as exc:
+                    last_error = exc.error
+                    logger.warning(
+                        "csv_decode_failed",
+                        path=str(path_obj),
+                        encoding=exc.encoding,
+                        error=str(exc.error),
+                    )
+                    continue
+                except LookupError as exc:
+                    logger.warning(
+                        "csv_encoding_lookup_failed",
+                        path=str(path_obj),
+                        encoding=candidate,
+                        error=str(exc),
+                    )
+                    continue
+            if missing_error is None:
+                # Encoding fallbacks exhausted for this separator; try the next separator.
                 continue
-            except LookupError as exc:
-                logger.warning(
-                    "csv_encoding_lookup_failed",
-                    path=str(path_obj),
-                    encoding=candidate,
-                    error=str(exc),
-                )
-                continue
+        if last_missing is not None:
+            raise last_missing
         attempted = ", ".join(candidates)
         message = (
             f"failed to decode CSV {path_obj} with encodings: {attempted}. "

@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from library.config import Config
 from library.csv_utils import write_csv_deterministic
 
 psutil = pytest.importorskip("psutil")
@@ -17,7 +18,9 @@ def _worker(path: str, use_copy: bool, n: int) -> None:
     df = pd.DataFrame({"a": range(n), "b": range(n)})
     if use_copy:
         df = df.copy()
-    write_csv_deterministic(df, Path(path), key_cols=["a", "b"])
+    cfg = Config()
+    cfg.io.exist_ok = False
+    write_csv_deterministic(df, Path(path), key_cols=["a", "b"], cfg=cfg)
 
 
 def _peak_memory(n: int, use_copy: bool, path: Path) -> int:
