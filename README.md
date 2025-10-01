@@ -153,6 +153,45 @@ Before running the smoke command, create a `chembl_ids.csv` file with a header `
   and PubChem data. / **RU.** `get_testitem_data.py` обогащает соединения
   структурными атрибутами и данными PubChem.
 
+### Управляющий скрипт get_data
+
+**EN.** `get_data.py` orchestrates the five production pipelines, forwarding a
+single set of CLI options to each step. / **RU.** `get_data.py` запускает все
+пять пайплайнов последовательно, прокидывая единые параметры командной строки
+в каждый модуль.
+
+Common options / Общие параметры:
+
+* `--base-path` — **EN.** base directory for inputs and outputs. / **RU.**
+  корневой каталог данных.
+* `--input-dir`, `--output-dir` — **EN.** sub-directories for source CSV files
+  and generated artefacts. / **RU.** подкаталоги с исходными CSV и
+  выгруженными файлами.
+* `--config` — **EN.** path to the shared YAML configuration. / **RU.** путь к
+  общей YAML-конфигурации.
+* `--date` — **EN.** date or prefix used in output filenames. / **RU.** дата
+  или префикс, добавляемый к именам выгрузок.
+* `--log-level`, `--force`, `--skip-existing` — **EN.** logging verbosity and
+  overwrite policy. / **RU.** уровень логирования и политика перезаписи.
+
+Example / Пример запуска:
+
+```bash
+python -m scripts.get_data \
+    --base-path data \
+    --input-dir input \
+    --output-dir output \
+    --config config/config.yaml \
+    --date 20240101 \
+    --log-level INFO
+```
+
+The command reads files such as `data/input/document.csv`, writes outputs like
+`data/output/20240101_documents.csv` and stops if any step fails. / Команда
+использует входы вида `data/input/document.csv`, сохраняет результаты в
+файлы `data/output/20240101_documents.csv` и прерывает выполнение при ошибке
+любого шага.
+
 **EN.** `library.utils.cli_tools.pipeline_targets_main` is a cached harness
 that reuses the CLI contract of the production target pipeline while working
 solely with local files and prepared identifier batches. / **RU.**
