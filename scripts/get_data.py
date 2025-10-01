@@ -296,17 +296,118 @@ def _coerce_exit_code(value: object) -> int:
     return 1
 
 
-def _sidecar_paths(base: Path) -> dict[str, Path]:
-    """Return known auxiliary artefacts generated from ``base``."""
+@dataclass
+class SidecarArtefact:
+    """Describe auxiliary files associated with a pipeline output."""
 
-    stemless = str(base.with_suffix(""))
-    return {
-        "meta": base.with_name(base.name + ".meta.yaml"),
-        "failure": base.with_name(f"{base.stem}_failure_cases.csv"),
-        "quality_json": base.with_suffix(".quality.json"),
-        "quality_table": Path(f"{stemless}_quality_report_table.csv"),
-        "corr_table": Path(f"{stemless}_data_correlation_report_table.csv"),
+    destination: Path
+    final_path: Path | None = None
+    working_path: Path | None = None
+
+
+def _discover_sidecars(final_output: Path, working_output: Path) -> dict[Path, SidecarArtefact]:
+    """Return all auxiliary files derived from ``final_output`` and ``working_output``."""
+
+    final_dir = final_output.parent
+    working_dir = working_output.parent
+    sentinel_name = _failure_sentinel_path(final_output).name
+    patterns = {
+        final_output.name,
+        final_output.with_suffix("").name,
+        working_output.name,
+        working_output.with_suffix("").name,
     }
+    replacements = (
+        (working_output.name, final_output.name),
+        (working_output.with_suffix("").name, final_output.with_suffix("").name),
+    )
+    main_outputs = {final_output.resolve(), working_output.resolve()}
+
+    def _normalise_relative(path: Path) -> Path:
+        parts: list[str] = []
+        for part in path.parts:
+            normalised = part
+            for old, new in replacements:
+                if old == new or old not in normalised:
+                    continue
+                normalised = normalised.replace(old, new)
+            parts.append(normalised)
+        return Path(*parts)
+
+    def _collect(base_dir: Path) -> dict[Path, Path]:
+        collected: dict[Path, Path] = {}
+        if not base_dir.exists():
+            return collected
+        for candidate in base_dir.rglob("*"):
+            if not candidate.is_file():
+                continue
+            try:
+                resolved = candidate.resolve()
+            except OSError:  # pragma: no cover - filesystem race protection
+                continue
+            if resolved in main_outputs:
+                continue
+            name = candidate.name
+            if name == sentinel_name:
+                continue
+            if not any(name.startswith(pattern) for pattern in patterns):
+                continue
+            rel_path = candidate.relative_to(base_dir)
+            collected[rel_path] = candidate
+        return collected
+
+    sidecars: dict[Path, SidecarArtefact] = {}
+
+    for rel_path, path in _collect(final_dir).items():
+        canonical_rel = _normalise_relative(rel_path)
+        destination = final_dir / canonical_rel
+        entry = sidecars.get(canonical_rel)
+        if entry is None:
+            entry = SidecarArtefact(destination=destination)
+            sidecars[canonical_rel] = entry
+        entry.final_path = path
+
+    for rel_path, path in _collect(working_dir).items():
+        canonical_rel = _normalise_relative(rel_path)
+        destination = final_dir / canonical_rel
+        entry = sidecars.get(canonical_rel)
+        if entry is None:
+            entry = SidecarArtefact(destination=destination)
+            sidecars[canonical_rel] = entry
+        entry.working_path = path
+
+    return sidecars
+
+
+def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
+    """Remove empty directories upward from ``path`` until reaching ``root``."""
+
+    try:
+        root_resolved = root.resolve()
+    except OSError:  # pragma: no cover - path vanished concurrently
+        return
+    current = path
+    while True:
+        try:
+            current_resolved = current.resolve()
+        except FileNotFoundError:
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+            continue
+        except OSError:  # pragma: no cover - defensive guard
+            break
+        if current_resolved == root_resolved or current == root:
+            break
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
 
 
 def _run_step(
@@ -342,21 +443,35 @@ def _finalize_step_success(
 ) -> None:
     """Rename temporary outputs into place and clear failure sentinels."""
 
-    final_sidecars = _sidecar_paths(final_output)
-    working_sidecars = _sidecar_paths(working_output)
+    sidecars = _discover_sidecars(final_output, working_output)
+    working_dir = working_output.parent
+    final_dir = final_output.parent
 
     if working_output.exists():
         if final_output.exists():
             final_output.unlink()
         working_output.replace(final_output)
 
-    for name, working_path in working_sidecars.items():
-        if not working_path.exists():
+    for sidecar in sidecars.values():
+        working_path = sidecar.working_path
+        if working_path is None or not working_path.exists():
             continue
-        final_path = final_sidecars[name]
-        if final_path.exists():
+        destination = sidecar.destination
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            destination.unlink()
+        original_parent = working_path.parent
+        working_path.replace(destination)
+        _cleanup_empty_directories(original_parent, root=working_dir)
+        final_path = sidecar.final_path
+        if (
+            final_path is not None
+            and final_path.exists()
+            and final_path != destination
+        ):
+            final_parent = final_path.parent
             final_path.unlink()
-        working_path.replace(final_path)
+            _cleanup_empty_directories(final_parent, root=final_dir)
     if sentinel_path.exists():
         sentinel_path.unlink()
 
@@ -370,8 +485,9 @@ def _cleanup_failed_step(
 ) -> None:
     """Remove partial outputs and persist a failure sentinel."""
 
-    final_sidecars = _sidecar_paths(final_output)
-    working_sidecars = _sidecar_paths(working_output)
+    sidecars = _discover_sidecars(final_output, working_output)
+    working_dir = working_output.parent
+    final_dir = final_output.parent
 
     candidates = [working_output]
     if executed:
@@ -387,30 +503,54 @@ def _cleanup_failed_step(
                     error=str(exc),
                 )
 
-    for name, working_path in working_sidecars.items():
-        final_path = final_sidecars[name]
-        if name == "failure":
-            if working_path.exists():
+    for sidecar in sidecars.values():
+        destination = sidecar.destination
+        is_failure = destination.name.endswith("_failure_cases.csv")
+        working_path = sidecar.working_path
+        final_path = sidecar.final_path
+
+        if is_failure:
+            if working_path is not None and working_path.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
                 try:
-                    if final_path.exists():
-                        final_path.unlink()
+                    if destination.exists():
+                        destination.unlink()
                 except OSError as exc:  # pragma: no cover - defensive guard
                     _LOGGER.warning(
                         "failure_sidecar_cleanup_failed",
-                        path=str(final_path),
+                        path=str(destination),
                         error=str(exc),
                     )
                 try:
-                    working_path.replace(final_path)
+                    original_parent = working_path.parent
+                    working_path.replace(destination)
+                    _cleanup_empty_directories(original_parent, root=working_dir)
                 except OSError as exc:  # pragma: no cover - defensive guard
                     _LOGGER.warning(
                         "failure_sidecar_promote_failed",
                         path=str(working_path),
                         error=str(exc),
                     )
-            elif executed and final_path.exists():
+            elif executed and destination.exists():
                 try:
+                    destination.unlink()
+                except OSError as exc:  # pragma: no cover - defensive guard
+                    _LOGGER.warning(
+                        "failure_sidecar_cleanup_failed",
+                        path=str(destination),
+                        error=str(exc),
+                    )
+                else:
+                    _cleanup_empty_directories(destination.parent, root=final_dir)
+            if (
+                final_path is not None
+                and final_path.exists()
+                and final_path != destination
+            ):
+                try:
+                    final_parent = final_path.parent
                     final_path.unlink()
+                    _cleanup_empty_directories(final_parent, root=final_dir)
                 except OSError as exc:  # pragma: no cover - defensive guard
                     _LOGGER.warning(
                         "failure_sidecar_cleanup_failed",
@@ -419,19 +559,33 @@ def _cleanup_failed_step(
                     )
             continue
 
-        paths_to_remove = [working_path]
+        if working_path is not None and working_path.exists():
+            try:
+                original_parent = working_path.parent
+                working_path.unlink()
+                _cleanup_empty_directories(original_parent, root=working_dir)
+            except OSError as exc:  # pragma: no cover - defensive guard
+                _LOGGER.warning(
+                    "step_cleanup_failed",
+                    path=str(working_path),
+                    error=str(exc),
+                )
         if executed:
-            paths_to_remove.append(final_path)
-        for path in paths_to_remove:
-            if path.exists():
-                try:
-                    path.unlink()
-                except OSError as exc:  # pragma: no cover - defensive guard
-                    _LOGGER.warning(
-                        "step_cleanup_failed",
-                        path=str(path),
-                        error=str(exc),
-                    )
+            removal_targets = {destination}
+            if final_path is not None:
+                removal_targets.add(final_path)
+            for path in removal_targets:
+                if path.exists():
+                    try:
+                        parent = path.parent
+                        path.unlink()
+                        _cleanup_empty_directories(parent, root=final_dir)
+                    except OSError as exc:  # pragma: no cover - defensive guard
+                        _LOGGER.warning(
+                            "step_cleanup_failed",
+                            path=str(path),
+                            error=str(exc),
+                        )
     try:
         sentinel_path.touch()
     except OSError as exc:  # pragma: no cover - defensive guard

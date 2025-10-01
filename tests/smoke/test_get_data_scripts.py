@@ -945,6 +945,11 @@ def test_run_pipeline_system_exit_cleans_up(
         parser.add_argument("--log-level")
         ns = parser.parse_args(argv)
         Path(ns.output).write_text("temporary output\n")
+        out_path = Path(ns.output)
+        reports_dir = out_path.parent / "reports" / out_path.with_suffix("").name
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = reports_dir / f"{out_path.with_suffix('').name}_profile.json"
+        profile_path.write_text("{}\n", encoding="utf-8")
         raise SystemExit(3)
 
     class DummyLogger:
@@ -976,6 +981,11 @@ def test_run_pipeline_system_exit_cleans_up(
     assert not final_output.exists()
     assert not working_output.exists()
     assert sentinel_path.exists()
+
+    profile_final_dir = output_dir / "reports" / final_output.with_suffix("").name
+    assert not profile_final_dir.exists()
+    profile_working_dir = output_dir / "reports" / working_output.with_suffix("").name
+    assert not profile_working_dir.exists()
 
 
 def test_run_pipeline_success_promotes_sidecars(
@@ -1028,6 +1038,10 @@ def test_run_pipeline_success_promotes_sidecars(
             f"{out_path.with_suffix('')}_data_correlation_report_table.csv"
         )
         corr_table.write_text("corr\n", encoding="utf-8")
+        reports_dir = out_path.parent / "reports" / out_path.with_suffix("").name
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = reports_dir / f"{out_path.with_suffix('').name}_profile.json"
+        profile_path.write_text("{}\n", encoding="utf-8")
         return 0
 
     class DummyLogger:
@@ -1067,11 +1081,16 @@ def test_run_pipeline_success_promotes_sidecars(
     corr_table_final = Path(
         f"{final_output.with_suffix('')}_data_correlation_report_table.csv"
     )
+    profile_final_dir = output_dir / "reports" / final_output.with_suffix("").name
+    profile_final = profile_final_dir / (
+        f"{final_output.with_suffix('').name}_profile.json"
+    )
 
     assert meta_final.exists()
     assert quality_json_final.exists()
     assert quality_table_final.exists()
     assert corr_table_final.exists()
+    assert profile_final.exists()
 
     meta_working = working_output.with_name(working_output.name + ".meta.yaml")
     quality_json_working = working_output.with_suffix(".quality.json")
@@ -1081,8 +1100,14 @@ def test_run_pipeline_success_promotes_sidecars(
     corr_table_working = Path(
         f"{working_output.with_suffix('')}_data_correlation_report_table.csv"
     )
+    profile_working_dir = output_dir / "reports" / working_output.with_suffix("").name
+    profile_working = profile_working_dir / (
+        f"{working_output.with_suffix('').name}_profile.json"
+    )
 
     assert not meta_working.exists()
     assert not quality_json_working.exists()
     assert not quality_table_working.exists()
     assert not corr_table_working.exists()
+    assert not profile_working.exists()
+    assert not profile_working_dir.exists()
