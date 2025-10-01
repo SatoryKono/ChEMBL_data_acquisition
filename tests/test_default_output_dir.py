@@ -33,9 +33,16 @@ def test_mapper_run_defaults_to_io_output_dir(
         sep=",",
         encoding="utf8",
         key_cols=None,
+        chunk_size=1,
+        rps=1.0,
+        workers=1,
     )
 
-    monkeypatch.setattr(mapper_main, "map_chembl_to_uniprot", lambda _i, _cfg: "P12345")
+    monkeypatch.setattr(
+        mapper_main,
+        "map_chembl_ids_to_uniprot",
+        lambda ids, _cfg, *, batch_size, rps, max_workers: {ids[0]: "P12345"},
+    )
     monkeypatch.setattr(io, "write_meta_yaml", lambda *_a, **_k: None)
 
     rc = mapper_main.run(cfg, args)

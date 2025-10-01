@@ -30,6 +30,9 @@ def test_run_logs_exception(monkeypatch, tmp_path: Path, cfg: Config) -> None:
         sep=",",
         encoding="utf8",
         key_cols=None,
+        chunk_size=1,
+        rps=1.0,
+        workers=1,
     )
     exit_code = mapper_main.run(cfg_ns, args)
     assert exit_code == 1
