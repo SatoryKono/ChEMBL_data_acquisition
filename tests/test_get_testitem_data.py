@@ -172,6 +172,58 @@ def test_fetch_testitems_passes_fields_and_limit(
     assert requested_ids == ("CHEMBL1", "CHEMBL2")
 
 
+def test_fetch_testitems_logs_missing_summary(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(gtd.logger, "warning", fake_warning)
+
+    def fake_get_testitem(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+        fields: Sequence[str] | None = None,
+        page_limit: int = 0,
+    ) -> pd.DataFrame:
+        _ = list(ids)
+        return pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+
+    status, df = gtd.fetch_testitems(
+        iter(["CHEMBL1", "chembl2", "CHEMBL3"]),
+        api_cfg=cfg.api,
+        batch_size=2,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        sample_ids=("CHEMBL1",),
+        fields=cfg.testitem.fields,
+        page_limit=500,
+    )
+
+    assert status == 0
+    assert df is not None
+
+    missing = next(
+        (record for record in captured if record[0] == "chembl_missing_identifiers"),
+        None,
+    )
+
+    assert missing is not None
+    _, missing_data = missing
+
+    assert missing_data["missing_count"] == 2
+    assert missing_data["sample_missing_ids"] == ["CHEMBL2", "CHEMBL3"]
+    assert "missing_ids" not in missing_data
+
+
 def test_fetch_parent_catalog_skips_single_when_parentless(
     cfg: Config,
 ) -> None:
