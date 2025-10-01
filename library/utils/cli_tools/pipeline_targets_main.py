@@ -235,8 +235,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.print_config:
         print_config(cfg)
         return 0
-    ensure_dirs(cfg)
     try:
+        ensure_dirs(cfg)
         options = PipelineConfig.model_validate(
             {
                 "input_csv": args.input_csv,
@@ -250,6 +250,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "limit": args.limit,
             }
         )
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        pipeline_logger.error(
+            "directory_setup_failed",
+            error=str(exc),
+        )
+        pipeline_logger.info("pipeline_done", exit_code=1)
+        return 1
     except ValidationError as exc:
         parser.error(str(exc))
     exit_code = run(cfg, options)
