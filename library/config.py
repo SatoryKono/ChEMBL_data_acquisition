@@ -376,6 +376,11 @@ class PubChemCfg(_BaseModel):
         ge=0,
         description="Time-to-live for the in-memory PubChem request cache in seconds",
     )
+    cache_maxsize: int = Field(
+        1024,
+        ge=1,
+        description="Maximum number of entries stored in the PubChem in-memory cache",
+    )
     cache_ttl_hours: float | None = Field(
         None,
         ge=0,
