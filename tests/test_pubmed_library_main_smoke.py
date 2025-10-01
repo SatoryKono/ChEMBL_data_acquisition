@@ -21,7 +21,7 @@ def test_pubmed_library_main_smoke(
     def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None, *, client=None):
         return [
             {
-                "PubMed.PMID": pid,
+                "PubMed.PMID": pid if pid != "2" else "",
                 "PubMed.DOI": "10.1000/example",
                 "PubMed.ArticleTitle": "Example",
             }
@@ -73,14 +73,24 @@ def test_pubmed_library_main_smoke(
             "INFO",
         ]
     )
-    assert exit_code == 0
+    assert exit_code == 1
     assert levels
     assert all(level == "DEBUG" for level in levels)
     assert output_csv.exists()
     df = pd.read_csv(output_csv)
     assert not df.empty
     failure_path = output_csv.with_name(f"{output_csv.stem}_failure_cases.csv")
-    assert not failure_path.exists()
+    assert failure_path.exists()
+    failure_df = pd.read_csv(failure_path)
+    assert not failure_df.empty
+
+    quality_base = output_csv.with_suffix("")
+    quality_report = quality_base.with_name(f"{quality_base.name}_quality_report_table.csv")
+    correlation_report = quality_base.with_name(
+        f"{quality_base.name}_data_correlation_report_table.csv"
+    )
+    assert quality_report.exists()
+    assert correlation_report.exists()
 
     meta_path = output_csv.with_name(output_csv.name + ".meta.yaml")
     assert meta_path.exists()
@@ -102,7 +112,7 @@ def test_pubmed_library_main_smoke(
             "--keep-verbose-dumps",
         ]
     )
-    assert exit_code_verbose == 0
+    assert exit_code_verbose == 1
     verbose_levels = levels[start_idx:]
     assert verbose_levels
     assert all(level == "INFO" for level in verbose_levels)
@@ -117,7 +127,7 @@ def test_pubmed_library_main_smoke(
             "INFO",
         ]
     )
-    assert second_exit_code == 0
+    assert second_exit_code == 1
     assert second_output.exists()
     assert output_csv.read_bytes() == second_output.read_bytes()
     second_digest = hashlib.sha256(second_output.read_bytes()).hexdigest()
