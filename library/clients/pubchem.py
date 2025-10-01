@@ -43,9 +43,21 @@ def _config_signature(api: ApiCfg, retry: RetryCfg) -> str:
     return json.dumps({"api": api_dump, "retry": retry_dump}, sort_keys=True)
 
 
+@dataclass(frozen=True)
+class _CacheEntry:
+    """Cache entry capturing both payload and outcome."""
+
+    payload: dict[str, Any] | None
+    outcome: str
+
+    @property
+    def is_hit(self) -> bool:
+        return self.payload is not None
+
+
 # Cache is initialised lazily to allow configuration of the TTL via
 # :class:`PubChemCfg`. The cache is recreated when the TTL changes.
-_CACHE: TTLCache[str, dict[str, Any]] | None = None
+_CACHE: TTLCache[str, _CacheEntry] | None = None
 _CACHE_LOCK = Lock()
 
 _SESSION_LOCK = Lock()
@@ -164,13 +176,20 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
 
     global _CACHE
     with _CACHE_LOCK:
-        if _CACHE is None or _CACHE.ttl != cfg.cache_ttl:
-            _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
-        cache = _CACHE
+        cache = _ensure_cache(cfg.cache_ttl)
         cached = cache.get(url) if cache is not None else None
     if cached is not None:
-        logger.info("cache_hit", url=url, rps=cfg.rps, status="hit")
-        return cast(dict[str, Any], cached)
+        if cached.is_hit:
+            logger.info("cache_hit", url=url, rps=cfg.rps, status="hit")
+            return cast(dict[str, Any], cached.payload)
+        logger.info(
+            "cache_hit",
+            url=url,
+            rps=cfg.rps,
+            status="miss",
+            outcome=cached.outcome,
+        )
+        return None
     logger.info("cache_miss", url=url, rps=cfg.rps, status="miss")
 
     total_attempts = cfg.retries + 1
@@ -190,6 +209,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 total_attempts=total_attempts,
                 rps=cfg.rps,
             )
+            _store_cache_miss(url, cfg, "timeout")
             logger.info(
                 "request_fail",
                 url=url,
@@ -237,6 +257,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         status = response.status_code
         if status == 404:
             logger.info("request_not_found", url=url, status=status, rps=cfg.rps)
+            _store_cache_miss(url, cfg, "not_found")
             logger.info(
                 "request_fail",
                 url=url,
@@ -334,14 +355,31 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             rps=cfg.rps,
         )
         with _CACHE_LOCK:
-            cache = _CACHE
-            if cache is None or cache.ttl != cfg.cache_ttl:
-                cache = _CACHE = TTLCache(maxsize=1024, ttl=cfg.cache_ttl)
-            cache[url] = data
-        logger.info("cache_set", url=url, rps=cfg.rps)
+            cache = _ensure_cache(cfg.cache_ttl)
+            cache[url] = _CacheEntry(payload=data, outcome="hit")
+        logger.info("cache_set", url=url, rps=cfg.rps, status="hit")
         return data
 
     return None
+
+
+def _ensure_cache(ttl: float) -> TTLCache[str, _CacheEntry]:
+    """Return the shared cache instance, recreating it when TTL changes."""
+
+    global _CACHE
+    cache = _CACHE
+    if cache is None or cache.ttl != ttl:
+        cache = _CACHE = TTLCache(maxsize=1024, ttl=ttl)
+    return cache
+
+
+def _store_cache_miss(url: str, cfg: PubChemCfg, outcome: str) -> None:
+    """Persist a cached miss outcome for ``url``."""
+
+    with _CACHE_LOCK:
+        cache = _ensure_cache(cfg.cache_ttl)
+        cache[url] = _CacheEntry(payload=None, outcome=outcome)
+    logger.info("cache_set", url=url, rps=cfg.rps, status="miss", outcome=outcome)
 
 
 def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:

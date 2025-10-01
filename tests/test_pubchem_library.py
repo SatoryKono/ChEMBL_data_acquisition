@@ -426,3 +426,22 @@ def test_cache_entry_expires(monkeypatch: pytest.MonkeyPatch) -> None:
     time.sleep(1.1)
     pl.make_request(url, cfg)
     assert calls["n"] == 2  # cache expired
+
+
+@responses.activate
+def test_make_request_caches_missing_results() -> None:
+    """Missing PubChem responses should be cached as misses."""
+
+    pc._CACHE = None
+
+    cfg = pl.PubChemCfg(delay=0, retries=0)
+    url = "https://example.org/missing"
+
+    responses.add(responses.GET, url, status=404)
+
+    first = pl.make_request(url, cfg)
+    second = pl.make_request(url, cfg)
+
+    assert first is None
+    assert second is None
+    assert len(responses.calls) == 1
