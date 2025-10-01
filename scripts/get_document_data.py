@@ -423,7 +423,8 @@ def fetch_pubmed_records(
                         or ""
                     )
                     plan.append((index, pubmed, semsch))
-                    openalex_jobs.append((index, pmid))
+                    if pmid:
+                        openalex_jobs.append((index, pmid))
                     crossref_jobs.append((index, doi))
 
                 openalex_results: dict[int, dict[str, str]] = {}
