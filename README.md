@@ -618,6 +618,10 @@ Running the CLI saves ``data_quality_report_table.csv`` and
 
     python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 
+Use ``--output`` to redirect these artefacts to another directory. The value must be a
+directory path (do not include the final file name). When ``local.io.exist_ok`` is set to
+``false`` the directory has to exist beforehand; otherwise it is created automatically.
+
 All scripts share a common set of flags:
 
 ## Configuration

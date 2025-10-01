@@ -177,3 +177,92 @@ def test_table_quality_run_handles_mixed_types(tmp_path: Path) -> None:
 
     assert actual_mixed["numeric_cov"] == pytest.approx(expected_mixed["numeric_cov"])
     assert actual_mixed["numeric_mean"] == pytest.approx(expected_mixed["numeric_mean"])
+
+
+def test_table_quality_run_rejects_output_with_suffix(tmp_path: Path) -> None:
+    df = pd.DataFrame({"value": [1, 2, 3]})
+    csv_path = tmp_path / "input.csv"
+    df.to_csv(csv_path, index=False)
+
+    cfg = Config()
+
+    output_path = tmp_path / "report.csv"
+
+    args = Namespace(
+        input_csv=csv_path,
+        sep=",",
+        encoding="utf-8-sig",
+        output_csv=output_path,
+        table_name="invalid",
+        doc_quality_enable=None,
+        sample_rows=None,
+        include_columns=None,
+        exclude_columns=None,
+    )
+
+    exit_code = run(cfg, args)
+
+    assert exit_code == 1
+    assert not output_path.exists()
+
+
+def test_table_quality_run_requires_existing_directory_when_disallowed(
+    tmp_path: Path,
+) -> None:
+    df = pd.DataFrame({"value": [1, 2, 3]})
+    csv_path = tmp_path / "input.csv"
+    df.to_csv(csv_path, index=False)
+
+    cfg = Config()
+    cfg.io.exist_ok = False
+
+    output_dir = tmp_path / "reports"
+
+    args = Namespace(
+        input_csv=csv_path,
+        sep=",",
+        encoding="utf-8-sig",
+        output_csv=output_dir,
+        table_name="deny",
+        doc_quality_enable=None,
+        sample_rows=None,
+        include_columns=None,
+        exclude_columns=None,
+    )
+
+    exit_code = run(cfg, args)
+
+    assert exit_code == 1
+    assert not output_dir.exists()
+
+
+def test_table_quality_run_creates_directory_when_allowed(tmp_path: Path) -> None:
+    df = pd.DataFrame({"value": [1, 2, 3]})
+    csv_path = tmp_path / "input.csv"
+    df.to_csv(csv_path, index=False)
+
+    cfg = Config()
+    cfg.io.exist_ok = True
+
+    output_dir = tmp_path / "reports"
+
+    args = Namespace(
+        input_csv=csv_path,
+        sep=",",
+        encoding="utf-8-sig",
+        output_csv=output_dir,
+        table_name="created",
+        doc_quality_enable=None,
+        sample_rows=None,
+        include_columns=None,
+        exclude_columns=None,
+    )
+
+    exit_code = run(cfg, args)
+
+    assert exit_code == 0
+    assert output_dir.is_dir()
+    report = output_dir / "created_quality_report_table.csv"
+    correlation = output_dir / "created_data_correlation_report_table.csv"
+    assert report.exists()
+    assert correlation.exists()
