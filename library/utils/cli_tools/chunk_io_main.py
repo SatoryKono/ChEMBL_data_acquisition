@@ -6,6 +6,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
+from library import cli
 from library.chunk_io import process_csv_chunks
 from library.cli import (
     LoggerConfig,
@@ -13,7 +14,8 @@ from library.cli import (
     configure_logger,
     path_argument,
 )
-from library.config import Config, ensure_dirs
+from library.config import Config, ensure_dirs, print_config
+from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from library.io.paths import default_output_path
 from library.log import logger
 
@@ -41,6 +43,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=path_argument,
         default=Path("checkpoint.json"),
         help="Path to checkpoint file",
+    )
+    parser.add_argument(
+        "--config",
+        dest="config",
+        type=path_argument,
+        default=DEFAULT_CONFIG_RELATIVE,
+        help="YAML configuration file",
+    )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective configuration and exit",
     )
     return parser, LoggerConfig(level="INFO")
 
@@ -99,7 +113,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     log_cfg.level = args.log_level
     configure_logger(log_cfg)
-    cfg = Config()
+    try:
+        cfg = cli.apply_config_overrides(args, parser, args.config)
+    except (TypeError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        return 1
+    if args.print_config:
+        print_config(cfg)
+        return 0
     return run(cfg, args)
 
 
