@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from library.config import Config
 from library.table_quality import analyze_table_quality
@@ -131,3 +132,48 @@ def test_table_quality_run_respects_sampling_and_filters(tmp_path: Path) -> None
     assert set(report["column"]) == {"keep"}
     non_null = int(report.loc[report["column"] == "keep", "non_null"].iloc[0])
     assert non_null == 2
+
+
+def test_table_quality_run_handles_mixed_types(tmp_path: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "mixed": [1, "2", 3.5, None],
+            "identifier": ["0001", "0002", "ABC123", None],
+        }
+    )
+    csv_path = tmp_path / "mixed.csv"
+    df.to_csv(csv_path, index=False)
+
+    cfg = Config()
+
+    args = Namespace(
+        input_csv=csv_path,
+        sep=",",
+        encoding="utf-8-sig",
+        output_csv=tmp_path,
+        table_name="mixed",
+        doc_quality_enable=None,
+        sample_rows=None,
+        include_columns=None,
+        exclude_columns=None,
+    )
+
+    exit_code = run(cfg, args)
+    assert exit_code == 0
+
+    report_path = tmp_path / "mixed_quality_report_table.csv"
+    assert report_path.exists()
+    report = pd.read_csv(report_path)
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        expected_quality, _ = analyze_table_quality(df, table_name="expected")
+    finally:
+        os.chdir(cwd)
+
+    expected_mixed = expected_quality.loc[expected_quality["column"] == "mixed"].iloc[0]
+    actual_mixed = report.loc[report["column"] == "mixed"].iloc[0]
+
+    assert actual_mixed["numeric_cov"] == pytest.approx(expected_mixed["numeric_cov"])
+    assert actual_mixed["numeric_mean"] == pytest.approx(expected_mixed["numeric_mean"])
