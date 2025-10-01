@@ -12,6 +12,7 @@ from collections.abc import Sequence
 import pandas as pd
 
 from library import cli
+from library import io
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -42,7 +43,13 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     """
     try:
         try:
-            df = pd.read_csv(args.input_csv, sep=args.sep, encoding=args.encoding)
+            df = io.read_csv(
+                args.input_csv,
+                cfg=cfg.io,
+                sep=args.sep,
+                encoding=args.encoding,
+                dtype=str,
+            )
         except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
             logger.error(
                 "input_read_failed",
@@ -108,7 +115,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """Create the command-line argument parser."""
-    parser, log_cfg = base_parser("Table quality analysis", column="chembl_id")
+    parser, log_cfg = base_parser(
+        "Table quality analysis (reads CSV data as strings to preserve identifiers)",
+        column="chembl_id",
+    )
     parser.add_argument(
         "--table-name",
         required=True,
