@@ -389,7 +389,7 @@ All CLI scripts share a common set of flags:
 python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 ```
 
-`--output` defaults to `output_<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. For additional
+`--output` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. For additional
 examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version: [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
 ## Project structure
@@ -504,7 +504,7 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-`--output` defaults to `output_<input_name>_YYYYMMDD.csv` in the directory specified by `local.io.output_dir`.
+`--output` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory specified by `local.io.output_dir`.
 For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version: [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
 ## Output and metadata

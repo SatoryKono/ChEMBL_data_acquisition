@@ -716,7 +716,7 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-`--output` по умолчанию формируется как `output_<имя_входа>_YYYYMMDD.csv`
+`--output` по умолчанию формируется как `output.<имя_входа>_YYYYMMDD.csv`
 в каталоге, заданном `local.io.output_dir`.
 Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md) и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
 

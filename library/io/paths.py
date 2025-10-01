@@ -13,4 +13,4 @@ def default_output_path(input_path: str | Path, cfg: IoCfg) -> Path:
 
     inp = Path(input_path)
     date_str = datetime.now().strftime("%Y%m%d")
-    return Path(cfg.output_dir) / f"output_{inp.stem}_{date_str}.csv"
+    return Path(cfg.output_dir) / f"output.{inp.stem}_{date_str}.csv"

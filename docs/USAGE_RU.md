@@ -18,7 +18,7 @@ CLI без вложенных подкоманд.
 | `--print-config` | Вывести итоговую конфигурацию после переопределений и завершить работу. |
 | `--log-level` | Уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 | `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
-| `--output` | Выходной CSV. Если не указан, создаётся `output_<stem>_<YYYYMMDD>.csv` в `local.io.output_dir`. |
+| `--output` | Выходной CSV. Если не указан, создаётся `output.<stem>_<YYYYMMDD>.csv` в `local.io.output_dir`. |
 | `--sep` | Разделитель CSV; записывается в `cfg.io.csv_sep`. |
 | `--encoding` | Кодировка файла; записывается в `cfg.io.csv_encoding`. |
 | `--column` | Название колонки с идентификаторами. Значение подтягивается из конфигурации на этапе запуска. |
