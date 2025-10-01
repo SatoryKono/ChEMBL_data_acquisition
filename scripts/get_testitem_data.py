@@ -1,4 +1,9 @@
-"""Command line interface for retrieving ChEMBL and PubChem compound data."""
+"""Command line interface for retrieving ChEMBL test item data.
+
+The module wraps :func:`library.testitem_pipeline.run_testitem_pipeline` while
+exposing helpers that tests can import directly. Entry points return numeric
+exit codes rather than terminating the interpreter to simplify orchestration.
+"""
 
 from __future__ import annotations
 
@@ -48,7 +53,21 @@ _integrate_missing_identifiers = _integrate_missing_identifiers
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
-    """Invoke the reusable test item pipeline with CLI parameters."""
+    """Invoke the reusable test item pipeline with CLI parameters.
+
+    Parameters
+    ----------
+    cfg : Config
+        Application configuration containing ChEMBL, PubChem and IO settings.
+    args : argparse.Namespace
+        Parsed command-line arguments produced by :func:`build_parser`.
+
+    Returns
+    -------
+    int
+        ``0`` on success. Non-zero values indicate that identifier loading,
+        network requests or CSV export failed inside the test item pipeline.
+    """
 
     output_csv = getattr(args, "output_csv", None)
     options = TestitemPipelineOptions(
@@ -59,7 +78,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Create the command-line argument parser."""
+    """Create the command-line argument parser.
+
+    Returns
+    -------
+    tuple[argparse.ArgumentParser, LoggerConfig]
+        Parser configured with the common CLI options and the associated logging
+        configuration used by :func:`main`.
+    """
 
     parser, log_cfg = base_parser(
         "ChEMBL and PubChem compound data utilities",
@@ -91,7 +117,24 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Command line entry point using :class:`Config` for defaults."""
+    """Command line entry point using :class:`Config` for defaults.
+
+    Parameters
+    ----------
+    argv : Sequence[str] | None, optional
+        Command-line arguments to parse. When ``None`` the values from
+        :data:`sys.argv` are used.
+
+    Returns
+    -------
+    int
+        ``0`` when the pipeline finishes successfully, non-zero otherwise.
+
+    Raises
+    ------
+    SystemExit
+        Raised when invalid command-line options are provided.
+    """
 
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
