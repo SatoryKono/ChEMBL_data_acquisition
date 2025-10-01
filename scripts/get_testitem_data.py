@@ -46,7 +46,6 @@ from library.testitem_pipeline import (
     _DEFAULT_CATALOG_CFG,
     _FETCH_ERROR_SAMPLE_SIZE,
     _MOLECULE_HIERARCHY_COLUMNS,
-    _PLACEHOLDER_CONTACT_EMAIL,
     _PUBCHEM_CACHE_SCHEMA_VERSION,
     _TYPO_PARENT_COLUMN,
     analyze_table_quality as _analyze_table_quality,
@@ -97,8 +96,6 @@ DEFAULT_OUTPUT_STEM = "testitems"
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 
-_PLACEHOLDER_CONTACT_EMAIL = "contact@example.org"
-
 @dataclass
 class ReadInputIdsResult:
     """Container holding the identifier iterator and a diagnostic sample."""
@@ -137,34 +134,6 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     if not normalised:
         return None
     return normalised.upper() if uppercase else normalised
-
-
-def _is_placeholder_user_agent(user_agent: str | None) -> bool:
-    """Return ``True`` if *user_agent* still uses the default placeholder contact."""
-
-    if not user_agent:
-        return True
-    return _PLACEHOLDER_CONTACT_EMAIL in user_agent
-
-
-def _prepare_pubchem_api_cfg(cfg: Config, api_cfg: ApiCfg) -> ApiCfg:
-    """Return an :class:`ApiCfg` with a valid PubChem user agent."""
-
-    pubchem_user_agent = cfg.pubchem.user_agent.strip()
-    api_user_agent = api_cfg.user_agent.strip()
-
-    if not _is_placeholder_user_agent(pubchem_user_agent):
-        if pubchem_user_agent != api_user_agent:
-            return api_cfg.model_copy(update={"user_agent": pubchem_user_agent})
-        return api_cfg
-
-    if not _is_placeholder_user_agent(api_user_agent):
-        return api_cfg
-
-    raise ValueError(
-        "PubChem configuration requires a user_agent with real contact details; "
-        "set sources.pubchem.user_agent or api.user_agent in config.yaml.",
-    )
 
 
 @lru_cache(maxsize=None)
