@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 import hashlib
 
 import pandas as pd
@@ -8,6 +9,8 @@ import pytest
 import yaml
 
 from library import pubmed_library as pl
+from library.clients import pubmed as pubmed_client
+from library.config import RetryCfg
 
 
 def test_pubmed_library_main_smoke(
@@ -18,7 +21,18 @@ def test_pubmed_library_main_smoke(
     output_csv = tmp_path / "out.csv"
     verbose_output_csv = tmp_path / "out_verbose.csv"
 
-    def fake_fetch_pubmed_batch(session, pmids, delay, cfg=None, *, client=None):
+    seen_retry_cfg: list[RetryCfg | None] = []
+
+    def fake_fetch_pubmed_batch(
+        session,
+        pmids,
+        delay,
+        cfg=None,
+        *,
+        retry_cfg: RetryCfg | None = None,
+        client=None,
+    ):
+        seen_retry_cfg.append(retry_cfg)
         return [
             {
                 "PubMed.PMID": pid if pid != "2" else "",
@@ -140,3 +154,77 @@ def test_pubmed_library_main_smoke(
     second_meta = yaml.safe_load(second_meta_path.read_text())
     assert second_meta["stats"]["output_sha256"] == second_digest
     assert second_meta["schema"] == "PubMedDocumentsSchema"
+
+    assert seen_retry_cfg
+    assert all(cfg is not None for cfg in seen_retry_cfg)
+    expected_backoff = pl.Config().retry.backoff_factor
+    assert all(
+        cfg.backoff_factor == pytest.approx(expected_backoff)
+        for cfg in seen_retry_cfg
+        if cfg is not None
+    )
+
+
+def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PubMed client should log retry delay with jitter for 429 responses."""
+
+    responses = iter(
+        [
+            (429, "Too Many Requests", None, ""),
+            (200, "<xml/>", "<xml/>", ""),
+        ]
+    )
+
+    def fake_make_request(*_args: Any, **_kwargs: Any) -> tuple[int, str, Any, str]:
+        try:
+            return next(responses)
+        except StopIteration:  # pragma: no cover - defensive
+            raise AssertionError("Unexpected request count")
+
+    sleep_calls: list[float] = []
+
+    class RecordingLogger:
+        def __init__(self) -> None:
+            self.records: list[tuple[str, str, dict[str, Any]]] = []
+
+        def info(
+            self, event: str, *args: Any, extra: dict[str, Any] | None = None, **kwargs: Any
+        ) -> None:
+            self.records.append(("info", event, extra.copy() if extra else {}))
+
+        def debug(
+            self, event: str, *args: Any, extra: dict[str, Any] | None = None, **kwargs: Any
+        ) -> None:
+            self.records.append(("debug", event, extra.copy() if extra else {}))
+
+    monkeypatch.setattr(pubmed_client, "_make_request", fake_make_request)
+    monkeypatch.setattr(pubmed_client, "sleep", lambda value: sleep_calls.append(value))
+    monkeypatch.setattr(pubmed_client.random, "uniform", lambda _a, _b: 0.2)
+
+    fake_logger = RecordingLogger()
+    monkeypatch.setattr(pubmed_client, "logger", fake_logger)
+
+    retry_cfg = RetryCfg(max_attempts=2, backoff_factor=0.5)
+    data, error = pubmed_client._do_request(
+        session=object(),
+        url="http://example",
+        delay=0.3,
+        expect_json=False,
+        retries=1,
+        timeout=(1, 5),
+        retry_cfg=retry_cfg,
+    )
+
+    assert data == "<xml/>"
+    assert error == ""
+
+    base = retry_cfg.backoff_factor * (2 ** (1 - 1))
+    expected_delay = pytest.approx(max(0.3, base + 0.2))
+    assert sleep_calls == [expected_delay]
+
+    retry_records = [r for r in fake_logger.records if r[1] == "request_retry"]
+    assert retry_records and "delay" in retry_records[0][2]
+    assert retry_records[0][2]["delay"] == expected_delay
+
+    sleep_logs = [r for r in fake_logger.records if r[1] == "retry_sleep"]
+    assert sleep_logs and sleep_logs[0][2]["delay"] == expected_delay

@@ -211,6 +211,8 @@ def test_fetch_pubmed_records_uses_fresh_sessions_per_job(
         batch: list[str],
         _sleep: float,
         cfg: PubMedCfg | None = None,
+        *,
+        retry_cfg=None,
     ) -> list[dict[str, str]]:
         pubmed_sessions.append(session)
         return [
@@ -381,6 +383,8 @@ def test_fetch_pubmed_records_reuses_duplicate_identifiers(
         batch: list[str],
         _sleep: float,
         cfg: PubMedCfg | None = None,
+        *,
+        retry_cfg=None,
     ) -> list[dict[str, str]]:
         return [
             {
