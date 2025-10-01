@@ -12,6 +12,11 @@ from itertools import islice
 import requests
 from pandera.errors import SchemaErrors
 
+# Ensure repository package imports work when the script is executed directly.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import cli
