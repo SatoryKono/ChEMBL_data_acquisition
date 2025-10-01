@@ -10,9 +10,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, TextIO
 
-if os.name == "nt":  # pragma: no cover - platform-specific import
+try:  # pragma: no cover - optional dependency
+    import portalocker
+except ModuleNotFoundError:  # pragma: no cover - fallback path
+    portalocker = None
+
+if os.name == "nt":  # pragma: no cover - platform dependent
     import msvcrt
-else:  # pragma: no cover - platform-specific import
+else:  # pragma: no cover - platform dependent
+    import errno
+
     import fcntl
 
 _LOCK_TIMEOUT_SECONDS = 10.0
@@ -117,11 +124,9 @@ def open_atomic(
 
     lock_path = path.with_name(f"{path.name}.lock")
 
-    with FileLock(
-        lock_path,
-        timeout=lock_timeout,
-        poll_interval=_LOCK_POLL_INTERVAL_SECONDS,
-    ):
+
+    with _acquire_lock(lock_path, lock_timeout):
+
         fd, tmp_name = tempfile.mkstemp(
             dir=path.parent,
             prefix=f".{path.name}.",
@@ -140,3 +145,78 @@ def open_atomic(
                 os.unlink(tmp_name)
             except FileNotFoundError:
                 pass
+
+
+@contextmanager
+def _acquire_lock(lock_path: Path, timeout: float) -> Iterator[None]:
+    """Acquire a filesystem lock with an optional portalocker fallback."""
+
+    if portalocker is not None:
+        with portalocker.Lock(
+            str(lock_path),
+            mode="w",
+            timeout=timeout,
+        ):
+            yield
+        return
+
+    start = time.monotonic()
+    with open(lock_path, "a+", encoding="utf-8") as lock_file:
+        _prepare_lock_file(lock_file)
+        _wait_for_lock(lock_file, timeout, start)
+        try:
+            yield
+        finally:
+            _release_lock(lock_file)
+
+
+def _wait_for_lock(lock_file: TextIO, timeout: float, start_time: float) -> None:
+    """Attempt to obtain the lock, respecting the timeout."""
+
+    while True:
+        try:
+            _lock_file(lock_file)
+        except BlockingIOError as exc:  # pragma: no cover - dependent on timing
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise TimeoutError("timed out acquiring file lock") from exc
+            time.sleep(0.1)
+        except OSError as exc:  # pragma: no cover - platform dependent
+            if os.name == "nt":
+                if exc.winerror not in {32, 33}:  # sharing violation / lock violation
+                    raise
+            else:
+                if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise TimeoutError("timed out acquiring file lock") from exc
+            time.sleep(0.1)
+        else:
+            break
+
+
+def _lock_file(lock_file: TextIO) -> None:
+    """Lock the file in a platform-specific manner."""
+
+    if os.name == "nt":  # pragma: no branch - platform specific
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _release_lock(lock_file: TextIO) -> None:
+    """Release the platform-specific file lock."""
+
+    if os.name == "nt":  # pragma: no branch - platform specific
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _prepare_lock_file(lock_file: TextIO) -> None:
+    """Ensure the lock file has a byte to lock and reset the pointer."""
+
+    lock_file.seek(0, os.SEEK_END)
+    if lock_file.tell() == 0:
+        lock_file.write("0")
+        lock_file.flush()
+    lock_file.seek(0)
