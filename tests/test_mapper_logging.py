@@ -185,3 +185,77 @@ def test_mapper_main_concurrent_preserves_order(
         ("mapped", "CHEMBL2"),
         ("uniprot_id_missing", "CHEMBL3"),
     ]
+
+
+def test_mapper_main_returns_error_on_mapping_failure(
+    tmp_path: Path, monkeypatch: Any, cfg: Config
+) -> None:
+    """Mapping failures keep diagnostics but result in non-zero exit."""
+
+    df = pd.DataFrame({"chembl_id": ["CHEMBL1", "CHEMBL2"]})
+    input_path = tmp_path / "in.csv"
+    df.to_csv(input_path, index=False)
+    output_path = tmp_path / "out.csv"
+
+    def failing_map(*_a: Any, **_k: Any) -> dict[str, str]:
+        raise TimeoutError("request timed out")
+
+    monkeypatch.setattr(mapper_main, "map_chembl_ids_to_uniprot", failing_map)
+
+    captured: dict[str, Any] = {}
+
+    def fake_write_csv(
+        df_out: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str,
+        encoding: str,
+        key_cols: Any,
+    ) -> Path:
+        captured["df"] = df_out.copy()
+        captured["path"] = path
+        captured["key_cols"] = key_cols
+        return path
+
+    monkeypatch.setattr(mapper_main.io, "write_csv", fake_write_csv)
+
+    args = argparse.Namespace(
+        input_csv=input_path,
+        output_csv=output_path,
+        column="chembl_id",
+        sep=",",
+        encoding="utf8",
+        key_cols=None,
+        chunk_size=2,
+        rps=5.0,
+        workers=2,
+    )
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(stream=buffer, level="INFO"))
+
+    cfg_ns = SimpleNamespace(
+        io=cfg.io,
+        uniprot_mapping=cfg.uniprot_mapping,
+        to_dict=lambda: {},
+    )
+
+    exit_code = mapper_main.run(cfg_ns, args)
+
+    assert exit_code == 1
+
+    output_df = captured["df"]
+    assert "mapping_uniprot_id" in output_df.columns
+    assert output_df["mapping_uniprot_id"].isna().all()
+    assert captured["path"] == output_path
+    assert captured["key_cols"] is None
+
+
+def test_mapper_help_mentions_retry_guidance() -> None:
+    """Help output should include retry guidance for failed mappings."""
+
+    parser, _ = mapper_main.build_parser()
+    help_text = parser.format_help().lower()
+    assert "retry" in help_text
+    assert "chunk-size" in help_text
