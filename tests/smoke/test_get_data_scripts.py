@@ -52,7 +52,7 @@ def _cli_args(*extra: str, date: str = DEFAULT_DATE, log_level: str = "ERROR") -
 def _expected_output(output_dir: Path, stem: str, *, date: str = DEFAULT_DATE) -> Path:
     """Return the expected output path for ``stem`` and ``date``."""
 
-    return output_dir / f"{date}_{stem}.csv"
+    return output_dir / f"output.{stem}_{date}.csv"
 
 
 def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -136,7 +136,9 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert exit_code == 0
     assert invocations == [step.name for step in stub_steps]
     for step in stub_steps:
-        path = output_dir / f"20240101_{get_data._DEFAULT_OUTPUT_STEMS[step.name]}.csv"
+        path = output_dir / (
+            f"output.{get_data._DEFAULT_OUTPUT_STEMS[step.name]}_20240101.csv"
+        )
         assert path.exists()
         assert path.read_text() == f"{step.name} output\n"
 
@@ -209,7 +211,7 @@ def test_get_activity_data_smoke(
     exit_code = get_activity_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
-    assert output_csv.name == f"{DEFAULT_DATE}_activities.csv"
+    assert output_csv.name == f"output.activities_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
@@ -268,7 +270,7 @@ def test_get_assay_data_smoke(
     exit_code = get_assay_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
-    assert output_csv.name == f"{DEFAULT_DATE}_assays.csv"
+    assert output_csv.name == f"output.assays_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
@@ -329,7 +331,7 @@ def test_get_document_data_smoke(
     exit_code = get_document_data.main(["chembl", *_cli_args()])
     assert exit_code == 0
     assert output_csv.exists()
-    assert output_csv.name == f"{DEFAULT_DATE}_documents.csv"
+    assert output_csv.name == f"output.documents_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
@@ -382,7 +384,7 @@ def test_get_target_data_smoke(
     exit_code = get_target_data.main(["chembl", *_cli_args()])
     assert exit_code == 0
     assert output_csv.exists()
-    assert output_csv.name == f"{DEFAULT_DATE}_targets.csv"
+    assert output_csv.name == f"output.targets_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
 
     df = pd.read_csv(output_csv)
@@ -506,7 +508,7 @@ def test_get_testitem_data_smoke(
     exit_code = get_testitem_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
-    assert output_csv.name == f"{DEFAULT_DATE}_testitems.csv"
+    assert output_csv.name == f"output.testitems_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
     assert polymer_smiles not in smiles_calls
     assert mixture_smiles not in smiles_calls

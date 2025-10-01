@@ -604,7 +604,8 @@ def prepare_io_paths(
         target_dir = output_dir or base_path
         if target_dir is not None:
             effective_date = date_str or datetime.now(timezone.utc).strftime("%Y%m%d")
-            resolved_output = (target_dir / f"{effective_date}_{output_stem}{suffix}").resolve()
+            filename = f"output.{output_stem}_{effective_date}{suffix}"
+            resolved_output = (target_dir / filename).resolve()
             date_str = effective_date
 
     if resolved_output is not None:

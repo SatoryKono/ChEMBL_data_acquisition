@@ -16,6 +16,9 @@ def test_default_output_path_uses_output_dir(tmp_path: Path) -> None:
     result = io.default_output_path(tmp_path / "input.csv", cfg)
     assert result.parent == tmp_path
     assert result.name.startswith("output.input_")
+    stem_prefix, date_part = result.stem.split("_", maxsplit=1)
+    assert stem_prefix == "output.input"
+    assert len(date_part) == 8 and date_part.isdigit()
 
 
 def test_mapper_run_defaults_to_io_output_dir(
@@ -50,5 +53,9 @@ def test_mapper_run_defaults_to_io_output_dir(
 
     expected = io.default_output_path(input_path, cfg.io)
     assert expected.exists()
+    assert expected.name.startswith("output.data_")
+    stem_prefix, date_part = expected.stem.split("_", maxsplit=1)
+    assert stem_prefix == "output.data"
+    assert len(date_part) == 8 and date_part.isdigit()
     df = pd.read_csv(expected)
     assert "mapping_uniprot_id" in df.columns
