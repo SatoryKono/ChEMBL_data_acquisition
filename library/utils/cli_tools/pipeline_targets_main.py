@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable, Iterator, Sequence
-from itertools import islice
+from itertools import chain, islice
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -35,7 +35,7 @@ from library.io.readers import read_ids
 from library.io.writers import write_csv
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
-from library.pipeline_targets import PipelineResult, run_pipeline
+from library.pipeline_targets import run_pipeline
 
 
 class PipelineConfig(BaseModel):
@@ -123,6 +123,18 @@ def _chunk_iterator(cfg: Config, options: PipelineConfig) -> Iterator[Iterable[s
     yield from _chunked(ids, options.chunk_size)
 
 
+def _chembl_frame_stream(chunks: Iterator[Iterable[str]]) -> Iterator[pd.DataFrame]:
+    """Yield one dataframe per ``chunks`` entry with ChEMBL metadata added."""
+
+    for chunk in chunks:
+        ids = list(chunk)
+        if not ids:
+            continue
+        frame = pd.DataFrame({"target_chembl_id": ids})
+        frame["source"] = "chembl"
+        yield frame
+
+
 def _cached_chembl_fetch(
     chunks: Iterator[Iterable[str]],
     cfg: Config,
@@ -133,26 +145,55 @@ def _cached_chembl_fetch(
     """Return a deterministic frame for the provided ``chunks``.
 
     The wrapper mimics the behaviour of the production fetcher which caches
-    results on disk.  In this trimmed-down CLI variant we simply flatten the
-    incoming chunk iterator into a dataframe while keeping the API compatible
-    with :func:`library.pipeline_targets.run_pipeline`.
+    results on disk.  In this trimmed-down CLI variant we lazily convert the
+    incoming chunk iterator into dataframes and concatenate them on demand
+    while keeping the API compatible with
+    :func:`library.pipeline_targets.run_pipeline`.
     """
 
-    ids = [item for chunk in chunks for item in chunk]
-    df = pd.DataFrame({"target_chembl_id": ids})
-    if df.empty:
-        return df
-    df["source"] = "chembl"
-    return df
+    frames = _chembl_frame_stream(chunks)
+    try:
+        first = next(frames)
+    except StopIteration:
+        return pd.DataFrame(
+            {
+                "target_chembl_id": pd.Series(dtype="string"),
+                "source": pd.Series(dtype="string"),
+            }
+        )
+    return pd.concat(chain([first], frames), ignore_index=True)
 
 
 def _write_outputs(
-    cfg: Config, options: PipelineConfig, result: PipelineResult
+    cfg: Config, options: PipelineConfig, frames: Iterable[pd.DataFrame]
 ) -> Path:
     output = options.output_csv or default_output_path(options.input_csv, cfg.io)
-    annotated = add_pipeline_metadata(result.chembl)
+    iterator = iter(frames)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        empty = add_pipeline_metadata(
+            pd.DataFrame(
+                {
+                    "target_chembl_id": pd.Series(dtype="string"),
+                    "source": pd.Series(dtype="string"),
+                }
+            )
+        )
+        write_csv(
+            empty,
+            output,
+            cfg=cfg,
+            sep=options.sep,
+            encoding=options.encoding,
+        )
+        return output
+
+    annotated_first = add_pipeline_metadata(first)
+    annotated_rest = (add_pipeline_metadata(chunk) for chunk in iterator)
+    annotated_chunks = chain([annotated_first], annotated_rest)
     write_csv(
-        annotated,
+        annotated_chunks,
         output,
         cfg=cfg,
         sep=options.sep,
@@ -162,14 +203,15 @@ def _write_outputs(
 
 
 def run(cfg: Config, options: PipelineConfig) -> int:
-    result = run_pipeline(
-        lambda: _chunk_iterator(cfg, options),
+    chunk_factory = lambda: _chunk_iterator(cfg, options)
+    _ = run_pipeline(
+        chunk_factory,
         cfg,
         chembl_fetcher=_cached_chembl_fetch,
         chembl_kwargs={"chunk_size": options.chunk_size},
         batch_size=options.batch_size,
     )
-    output = _write_outputs(cfg, options, result)
+    output = _write_outputs(cfg, options, _chembl_frame_stream(chunk_factory()))
     logger.info("write_done", extra={"path": str(output)})
     return 0
 
