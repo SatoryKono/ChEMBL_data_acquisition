@@ -65,8 +65,13 @@ def init_session(api: ApiCfg, retry: RetryCfg) -> None:
     """Initialise the shared HTTP session used by the IUPHAR client."""
 
     global _session
+    old_session: Session | None = None
     with _session_lock:
+        old_session = _session
         _session = session_with_retry(api, retry)
+
+    if old_session is not None and old_session is not _session:
+        old_session.close()
 
 
 def _validate_columns(df: pd.DataFrame, expected: Iterable[str]) -> None:
