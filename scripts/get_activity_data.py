@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from functools import partial
 from itertools import islice
 from pathlib import Path
-from tempfile import TemporaryDirectory
-
-import pandas as pd
 
 
 def _ensure_project_root() -> None:
@@ -25,8 +23,8 @@ def _ensure_project_root() -> None:
 if __package__ in {None, ""}:
     _ensure_project_root()
 
+import pandas as pd
 import requests
-from pandera.errors import SchemaErrors
 
 from library import chembl_library as cl
 from library import cli
@@ -40,19 +38,10 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.config import (
-    ActivityActionTypeCfg,
-    ActivityBoundsCfg,
-    ActivityPropertiesCfg,
-    Config,
-    _serialize_paths,
-    ensure_dirs,
-    print_config,
-)
+from library.cli_utils import PipelineError, run_pipeline
+from library.config import Config, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
-from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
 from library.processing.activity import (
@@ -94,70 +83,50 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("dry_run", limit=expected)
         return 0
 
-    # Configure HTTP session with the supplied User-Agent and retry policy
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-        try:
-            ids_iter = io.read_ids(
-                args.input_csv, column=cfg.activity.column, cfg=cfg.io
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            logger.error(
-                "read_fail",
-                error=str(exc),
-                path=str(args.input_csv),
-            )
-            return 1
+    try:
+        ids_iter = io.read_ids(args.input_csv, column=cfg.activity.column, cfg=cfg.io)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "read_fail",
+            error=str(exc),
+            path=str(args.input_csv),
+        )
+        return 1
 
-        offset = getattr(args, "offset", 0)
-        if offset:
-            ids_iter = islice(ids_iter, offset, None)
-            logger.info("process_offset", offset=offset)
+    offset = getattr(args, "offset", 0)
+    if offset:
+        ids_iter = islice(ids_iter, offset, None)
+        logger.info("process_offset", offset=offset)
 
-        # Apply the ``limit`` without materialising the entire iterator first.
-        ids = islice(ids_iter, limit) if limit is not None else ids_iter
+    processed_ids = 0
 
-        enrichment_cfg = cfg.activity_enrichment
-        extra_columns: list[str] = []
-        action_cfg = enrichment_cfg.action_type
-        if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
-            extra_columns.append(action_cfg.column)
-        extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
+    def _iter_ids() -> Iterator[str]:
+        nonlocal processed_ids
+        for identifier in ids_iter:
+            processed_ids += 1
+            yield identifier
 
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    limited_ids: Iterator[str]
+    if limit is not None:
+        limited_ids = islice(_iter_ids(), limit)
+    else:
+        limited_ids = _iter_ids()
 
-        processed_ids = 0
+    id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
 
-        def _iter_ids() -> Iterator[str]:
-            nonlocal processed_ids
-            for identifier in ids:
-                processed_ids += 1
-                yield identifier
+    enrichment_cfg = cfg.activity_enrichment
+    extra_columns: list[str] = []
+    action_cfg = enrichment_cfg.action_type
+    if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
+        extra_columns.append(action_cfg.column)
+    extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
 
-        id_chunks = _chunked(_iter_ids(), cfg.activity.batch_size)
+    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
-        required_cols = {
-            name for name, col in ActivitiesSchema.columns.items() if col.required
-        }
-        optional_cols = set(ActivitiesSchema.columns) - required_cols
-        present_columns: set[str] = set()
-        total_failures = 0
-        rows_total = 0
-        rows_kept = 0
-        rows_dropped = 0
-        exit_code = 0
-        failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
-        errors = SidecarErrors()
-
-        chunk_paths: list[Path] = []
-        all_columns: set[str] = set()
-
-        validation_enabled = True
-        missing_required_columns: set[str] = set()
-
-        csv_path: Path | None = None
-        with TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            for chunk_index, chunk_ids in enumerate(id_chunks):
+    def fetcher() -> Iterator[pd.DataFrame]:
+        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            for chunk_ids in id_chunks:
                 try:
                     chunk_df = cl.get_activities(
                         chunk_ids,
@@ -175,160 +144,73 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         batch_size=cfg.activity.batch_size,
                         timeout=cfg.activity.timeout,
                     )
-                    return 1
+                    raise PipelineError(str(exc)) from exc
+                yield chunk_df
 
-                chunk_df = normalize_activities(chunk_df)
-                chunk_df = add_pipeline_metadata(chunk_df)
-                chunk_df = compute_activity_bounds(chunk_df, cfg.activity_bounds)
-                chunk_df = apply_activity_annotations(
-                    chunk_df,
-                    action_cfg=enrichment_cfg.action_type,
-                    properties_cfg=enrichment_cfg.activity_properties,
-                )
+    def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
+        return compute_activity_bounds(frame, cfg.activity_bounds)
 
-                chunk_columns = set(chunk_df.columns)
-                present_columns.update(chunk_columns)
-                missing_chunk_required = required_cols - chunk_columns
-                if missing_chunk_required:
-                    missing_required_columns.update(missing_chunk_required)
-                    validation_enabled = False
-
-                rows_total += len(chunk_df)
-
-                validated_chunk = chunk_df
-                if validation_enabled and not chunk_df.empty:
-                    try:
-                        validation_result = validate_activities(
-                            chunk_df, return_result=True
-                        )
-                    except SchemaErrors as exc:
-                        for row in exc.failure_cases.to_dict("records"):
-                            errors.add_error(row)
-                        total_failures += len(exc.failure_cases)
-                        logger.error(
-                            "validation_failed",
-                            failures=len(exc.failure_cases),
-                            path=str(failure_path),
-                        )
-                        validated_chunk = getattr(exc, "validated_data", chunk_df)
-                        exit_code = 1
-                    else:
-                        validated_chunk = validation_result.data
-                        if not validation_result.failure_cases.empty:
-                            cases = validation_result.failure_cases.to_dict("records")
-                            for row in cases:
-                                errors.add_error(row)
-                            total_failures += len(cases)
-                            logger.error(
-                                "validation_failed",
-                                failures=len(cases),
-                                path=str(failure_path),
-                            )
-                            exit_code = 1
-
-                rows_kept += len(validated_chunk)
-                rows_dropped += len(chunk_df) - len(validated_chunk)
-                present_columns.update(validated_chunk.columns)
-                all_columns.update(validated_chunk.columns)
-
-                chunk_path = Path(tmpdir) / f"chunk_{chunk_index}.pkl"
-                validated_chunk.to_pickle(chunk_path)
-                chunk_paths.append(chunk_path)
-
-            if not chunk_paths:
-                empty_chunk = apply_activity_annotations(
-                    compute_activity_bounds(
-                        add_pipeline_metadata(pd.DataFrame()), cfg.activity_bounds
-                    ),
-                    action_cfg=enrichment_cfg.action_type,
-                    properties_cfg=enrichment_cfg.activity_properties,
-                )
-                present_columns.update(empty_chunk.columns)
-                all_columns.update(empty_chunk.columns)
-                chunk_path = Path(tmpdir) / "chunk_0.pkl"
-                empty_chunk.to_pickle(chunk_path)
-                chunk_paths.append(chunk_path)
-
-            schema_cols = list(ActivitiesSchema.columns)
-            head = [c for c in schema_cols if c in all_columns]
-            tail = sorted(c for c in all_columns if c not in schema_cols)
-            col_order = head + tail
-
-            def _iter_validated_chunks() -> Iterator[pd.DataFrame]:
-                for path in chunk_paths:
-                    df_chunk = pd.read_pickle(path)
-                    if col_order:
-                        df_chunk = df_chunk.reindex(columns=col_order)
-                    yield df_chunk
-
-            try:
-                key_cols = [c for c in ["activity_id"] if c in col_order]
-                sort_columns = key_cols or sorted(col_order)
-                csv_path = write_csv_chunks_deterministic(
-                    _iter_validated_chunks(),
-                    output,
-                    key_cols=sort_columns,
-                    col_order=col_order,
-                    chunksize=cfg.io.csv_chunksize,
-                    sort_chunksize=cfg.io.csv_chunksize,
-                    sep=cfg.io.csv_sep,
-                    encoding=cfg.io.csv_encoding,
-                    cfg=cfg,
-                )
-                logger.info("write_done", rows=rows_kept, path=str(csv_path))
-            except OSError as exc:
-                logger.error(
-                    "write_fail",
-                    error=str(exc),
-                    path=str(output),
-                )
-                return 1
-
-        if limit is not None:
-            logger.info("process_limit", limit=processed_ids)
-
-        if missing_required_columns:
-            logger.warning(
-                "validation_skipped",
-                missing_columns=sorted(missing_required_columns),
-            )
-            validation_enabled = False
-        elif optional_cols - present_columns:
-            logger.warning(
-                "optional_columns_missing",
-                columns=sorted(optional_cols - present_columns),
-            )
-
-        if total_failures:
-            errors.save(failure_path)
-
-        assert csv_path is not None
-
-        stats: Stats = {
-            "rows_total": rows_total,
-            "rows_kept": rows_kept,
-            "rows_dropped": rows_dropped,
-            "output_sha256": file_sha256(csv_path),
-        }
-        write_meta_yaml(
-            csv_path=csv_path,
-            command=" ".join(sys.argv),
-            config_subset=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            stats=stats,
-            schema="ActivitiesSchema",
+    def _apply_annotations(frame: pd.DataFrame) -> pd.DataFrame:
+        return apply_activity_annotations(
+            frame,
+            action_cfg=enrichment_cfg.action_type,
+            properties_cfg=enrichment_cfg.activity_properties,
         )
 
-        try:
-            analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
-        except ValueError as exc:
-            logger.error(
-                "quality_report_failed",
-                error=str(exc),
-                path=str(output),
-            )
-            return 1
-        return exit_code
+    metadata_hooks = [
+        normalize_activities,
+        add_pipeline_metadata,
+        _compute_bounds,
+        _apply_annotations,
+    ]
+
+    validators = [partial(validate_activities, return_result=True)]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Sequence[str],
+        key_cols: Sequence[str],
+    ) -> Path:
+        sort_columns = list(key_cols) or sorted(col_order)
+        return write_csv_chunks_deterministic(
+            chunks,
+            destination,
+            key_cols=sort_columns,
+            col_order=col_order,
+            chunksize=cfg.io.csv_chunksize,
+            sort_chunksize=cfg.io.csv_chunksize,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
+
+    table_quality = partial(
+        analyze_table_quality,
+        table_name=str(Path(output).with_suffix("")),
+    )
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=ActivitiesSchema,
+        schema_name="ActivitiesSchema",
+        validators=validators,
+        metadata_hooks=metadata_hooks,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command=" ".join(sys.argv),
+        config_snapshot=_serialize_paths(cfg.to_dict()),
+        inputs={"input_csv": str(args.input_csv)},
+        key_columns=["activity_id"],
+        table_quality=table_quality,
+        logger=logger,
+    )
+
+    if limit is not None:
+        logger.info("process_limit", limit=processed_ids)
+
+    return exit_code
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:

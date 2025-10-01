@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+import library.cli_utils as cli_utils
 from library import chembl_library as cl
 from library import io
 from library.config import Config
@@ -43,12 +45,12 @@ def test_run_chembl_respects_limit(
 
     monkeypatch.setattr(
         gad,
-        "write_csv_deterministic",
+        "write_csv_chunks_deterministic",
         lambda df, output, *, key_cols, col_order, chunksize, sort_chunksize, sep, encoding, cfg, **__: output,
     )
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
     rc = gad.run_chembl(cfg, args)
     assert rc == 0
@@ -108,8 +110,8 @@ def test_run_chembl_column_order(
 
     monkeypatch.setattr(cl, "get_activities", lambda *_, **__: df)
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
     captured: dict[str, list[str]] = {}
 
@@ -129,7 +131,7 @@ def test_run_chembl_column_order(
         captured["col_order"] = list(col_order or [])
         return output
 
-    monkeypatch.setattr(gad, "write_csv_deterministic", fake_write_csv)
+    monkeypatch.setattr(gad, "write_csv_chunks_deterministic", fake_write_csv)
 
     rc = gad.run_chembl(cfg, args)
     assert rc == 0
@@ -196,13 +198,13 @@ def test_run_chembl_streams_large_output(
         lambda df, return_result: _Result(df),
     )
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(gad, "write_meta_yaml", lambda **kwargs: None)
-    monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
+    monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
     captured: dict[str, object] = {}
 
     def fake_write_csv(
-        df: pd.DataFrame,
+        df: Iterable[pd.DataFrame],
         output: Path,
         *,
         key_cols,
@@ -214,18 +216,20 @@ def test_run_chembl_streams_large_output(
         cfg,
         **__,
     ) -> Path:
-        chunk_count = (len(df) + chunksize - 1) // chunksize if chunksize else 1
+        frames = list(df)
+        rows = sum(len(frame) for frame in frames)
+        chunk_count = len(frames)
         captured.update(
             {
                 "chunksize": chunksize,
                 "sort_chunksize": sort_chunksize,
                 "chunk_count": chunk_count,
-                "rows": len(df),
+                "rows": rows,
             }
         )
         return output
 
-    monkeypatch.setattr(gad, "write_csv_deterministic", fake_write_csv)
+    monkeypatch.setattr(gad, "write_csv_chunks_deterministic", fake_write_csv)
 
     args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
     rc = gad.run_chembl(cfg, args)
