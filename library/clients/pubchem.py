@@ -61,7 +61,7 @@ _CACHE: TTLCache[str, _CacheEntry] | None = None
 _CACHE_LOCK = Lock()
 
 _SESSION_LOCK = Lock()
-_DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/0.1 (mailto:contact@example.org)")
+_DEFAULT_API_CFG = ApiCfg(user_agent="chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)")
 _DEFAULT_RETRY_CFG = RetryCfg()
 _SESSION_CFG: tuple[ApiCfg, RetryCfg] = (_DEFAULT_API_CFG, _DEFAULT_RETRY_CFG)
 _SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)

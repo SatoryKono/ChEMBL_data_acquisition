@@ -33,7 +33,7 @@ def test_testitem_salt_flags_smoke(
     output_csv = smoke_output_dir / "testitem_flags.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for mol_id in ids:
             if mol_id == "CHEMBL1":

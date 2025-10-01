@@ -38,7 +38,7 @@ def test_get_testitem_parent_catalog(
     output_csv = smoke_output_dir / "testitem_parent.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             rows.append(
@@ -161,7 +161,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
     output_csv = smoke_output_dir / "testitem_parent_present.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             rows.append(
@@ -265,7 +265,7 @@ def test_get_testitem_refreshes_outdated_parents(
     output_csv = smoke_output_dir / "testitem_parent_refresh.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             rows.append(
