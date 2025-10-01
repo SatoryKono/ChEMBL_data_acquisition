@@ -31,8 +31,10 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
 from itertools import chain, islice, tee
 from pathlib import Path
-from threading import Lock
+
+from threading import Lock, local
 from typing import Any, cast, TypeVar
+
 
 import pandas as pd
 import requests
@@ -403,6 +405,85 @@ def fetch_pubmed_records(
             limit = min(limit, limiter.burst)
         return max(1, limit)
 
+    class _SessionPool:
+        def __init__(
+            self,
+            stack: ExitStack,
+            factory: Callable[[], AbstractContextManager[requests.Session]],
+        ) -> None:
+            self._stack = stack
+            self._factory = factory
+            self._available: list[requests.Session] = []
+            self._lock = Lock()
+
+        def _acquire(self) -> requests.Session:
+            with self._lock:
+                if self._available:
+                    return self._available.pop()
+            session_cm = self._factory()
+            return self._stack.enter_context(session_cm)
+
+        def _release(self, session: requests.Session) -> None:
+            with self._lock:
+                self._available.append(session)
+
+        @contextmanager
+        def session(self) -> Iterator[requests.Session]:
+            nested_session = self._acquire()
+            try:
+                yield nested_session
+            finally:
+                self._release(nested_session)
+
+    class _ThreadResources:
+        def __init__(
+            self,
+            stack: ExitStack,
+            base_session: requests.Session,
+            session_pools: dict[str, _SessionPool],
+        ) -> None:
+            self.stack = stack
+            self.base_session = base_session
+            self.session_pools = session_pools
+
+    thread_local_state = local()
+    thread_resources: list[_ThreadResources] = []
+    thread_resources_lock = Lock()
+
+    def _get_thread_resources() -> _ThreadResources:
+        resources = getattr(thread_local_state, "resources", None)
+        if resources is not None:
+            return resources
+
+        session_stack = ExitStack()
+        base_session = session_stack.enter_context(
+            session_with_retry(session_cfg.api, session_cfg.retry)
+        )
+
+        session_factories: dict[
+            str, Callable[[], AbstractContextManager[requests.Session]]
+        ] = {
+            "openalex": lambda: openalex_session(
+                session_cfg.api, session_cfg.retry, openalex_cfg
+            ),
+            "crossref": lambda: crossref_session(
+                session_cfg.api, session_cfg.retry, crossref_cfg
+            ),
+        }
+
+        pools = {
+            service: _SessionPool(session_stack, factory)
+            for service, factory in session_factories.items()
+        }
+
+        resources = _ThreadResources(session_stack, base_session, pools)
+        setattr(thread_local_state, "resources", resources)
+
+        with thread_resources_lock:
+            thread_resources.append(resources)
+
+        return resources
+
     def _fetch_batch(
         first: object,
         *rest: object,
@@ -429,230 +510,182 @@ def fetch_pubmed_records(
 
         batch_summary = _summarise_batch(batch_list)
 
-        class _SessionPool:
-            def __init__(
-                self,
-                stack: ExitStack,
-                factory: Callable[[], AbstractContextManager[requests.Session]],
-            ) -> None:
-                self._stack = stack
-                self._factory = factory
-                self._available: list[requests.Session] = []
-                self._lock = Lock()
-
-            def _acquire(self) -> requests.Session:
-                with self._lock:
-                    if self._available:
-                        return self._available.pop()
-                session_cm = self._factory()
-                return self._stack.enter_context(session_cm)
-
-            def _release(self, session: requests.Session) -> None:
-                with self._lock:
-                    self._available.append(session)
-
-            @contextmanager
-            def session(self) -> Iterator[requests.Session]:
-                nested_session = self._acquire()
-                try:
-                    yield nested_session
-                finally:
-                    self._release(nested_session)
-
         try:
-            with ExitStack() as session_stack:
-                base_session = session_stack.enter_context(
-                    session_with_retry(__cfg.api, __cfg.retry)
+            resources = _get_thread_resources()
+            base_session = resources.base_session
+            session_pools = resources.session_pools
+
+            def _invoke_with_session(
+                factory: Callable[[], AbstractContextManager[requests.Session]],
+                fetcher: Callable[
+                    [requests.Session, str, Any, RateLimiter | None], dict[str, str]
+                ],
+                identifier: str,
+                *,
+                cfg_obj: Any,
+                limiter: RateLimiter | None,
+            ) -> dict[str, str]:
+                with factory() as nested_session:
+                    return fetcher(nested_session, identifier, cfg_obj, limiter)
+            _acquire_documents(pubmed_service_limiter)
+            pubmed_list = pl.fetch_pubmed_batch(
+                base_session, batch_list, sleep, cfg=pubmed_cfg
+            )
+
+            pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
+            semantic_pmids = [pmid for pmid in pmids_in_batch if pmid]
+
+            semsch_map: dict[str, dict[str, str]] = {}
+            if semantic_pmids:
+                # Fetch Semantic Scholar data in a single batch
+                _acquire_documents(semantic_service_limiter)
+                semsch_list = ssl.fetch_semantic_scholar_batch(
+                    base_session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
                 )
 
-                session_factories: dict[
-                    str, Callable[[], AbstractContextManager[requests.Session]]
-                ] = {
-                    "openalex": lambda: openalex_session(
-                        __cfg.api, __cfg.retry, openalex_cfg
-                    ),
-                    "crossref": lambda: crossref_session(
-                        __cfg.api, __cfg.retry, crossref_cfg
-                    ),
+                # Create a map for easy lookup
+                semsch_map = {
+                    s.get("scholar.PMID"): s
+                    for s in semsch_list
+                    if s.get("scholar.PMID")
                 }
 
-                session_pools = {
-                    service: _SessionPool(session_stack, factory)
-                    for service, factory in session_factories.items()
-                }
-
-                def _invoke_with_session(
-                    factory: Callable[[], AbstractContextManager[requests.Session]],
-                    fetcher: Callable[
-                        [requests.Session, str, Any, RateLimiter | None], dict[str, str]
-                    ],
-                    identifier: str,
-                    *,
-                    cfg_obj: Any,
-                    limiter: RateLimiter | None,
-                ) -> dict[str, str]:
-                    with factory() as nested_session:
-                        return fetcher(nested_session, identifier, cfg_obj, limiter)
-
-                _acquire_documents(pubmed_service_limiter)
-                pubmed_list = pl.fetch_pubmed_batch(
-                    base_session, batch_list, sleep, cfg=pubmed_cfg
-                )
-
-                pmids_in_batch = [p.get("PubMed.PMID", "") for p in pubmed_list]
-                semantic_pmids = [pmid for pmid in pmids_in_batch if pmid]
-
-                semsch_map: dict[str, dict[str, str]] = {}
-                if semantic_pmids:
-                    # Fetch Semantic Scholar data in a single batch
+                # Fallback to the single-record endpoint when the batch request fails
+                fallback_pmids: list[str] = []
+                seen: set[str] = set()
+                for pmid in semantic_pmids:
+                    if pmid in seen:
+                        continue
+                    seen.add(pmid)
+                    record = semsch_map.get(pmid)
+                    if record is None or record.get("scholar.Error"):
+                        fallback_pmids.append(pmid)
+                for pmid in fallback_pmids:
                     _acquire_documents(semantic_service_limiter)
-                    semsch_list = ssl.fetch_semantic_scholar_batch(
-                        base_session, semantic_pmids, sleep, cfg=semantic_scholar_cfg
+                    fallback_record = ssl.fetch_semantic_scholar(
+                        base_session, pmid, sleep, cfg=semantic_scholar_cfg
                     )
+                    semsch_map[pmid] = fallback_record
 
-                    # Create a map for easy lookup
-                    semsch_map = {
-                        s.get("scholar.PMID"): s
-                        for s in semsch_list
-                        if s.get("scholar.PMID")
+            combined_records: list[dict[str, str]] = []
+
+            plan: list[tuple[int, dict[str, str], dict[str, str], str, str]] = []
+            openalex_lookup: dict[str, list[int]] = {}
+            crossref_lookup: dict[str, list[int]] = {}
+            openalex_total = 0
+            crossref_total = 0
+
+            for index, pubmed in enumerate(pubmed_list):
+                pmid = pubmed.get("PubMed.PMID", "")
+                semsch = semsch_map.get(pmid, {}) if pmid else {}
+                fallback_doi = ""
+                if fallback_doi_map:
+                    fallback_doi = fallback_doi_map.get(pmid, "")
+                doi = (
+                    pubmed.get("PubMed.DOI")
+                    or semsch.get("scholar.DOI")
+                    or fallback_doi
+                    or ""
+                )
+                plan.append((index, pubmed, semsch, pmid, doi))
+                if pmid:
+                    openalex_lookup.setdefault(pmid, []).append(index)
+                    openalex_total += 1
+                if doi:
+                    crossref_lookup.setdefault(doi, []).append(index)
+                    crossref_total += 1
+
+            openalex_results: dict[int, dict[str, str]] = {}
+            crossref_results: dict[int, dict[str, str]] = {}
+
+            openalex_jobs = list(openalex_lookup.keys())
+
+            def _fetch_openalex_job(pmid: str) -> dict[str, str]:
+                _acquire_documents(openalex_service_limiter, use_global=False)
+                return _invoke_with_session(
+                    session_pools["openalex"].session,
+                    ocl.fetch_openalex,
+                    pmid,
+                    cfg_obj=openalex_cfg,
+                    limiter=openalex_limiter,
+                )
+
+            if openalex_total:
+                logger.info(
+                    "documents_cache_reuse",
+                    service="openalex",
+                    total=openalex_total,
+                    unique=len(openalex_jobs),
+                    hits=openalex_total - len(openalex_jobs),
+                )
+
+            openalex_by_key: dict[str, dict[str, str]] = {}
+
+            if openalex_jobs:
+                if openalex_executor is None:
+                    for pmid in openalex_jobs:
+                        openalex_by_key[pmid] = _fetch_openalex_job(pmid)
+                else:
+                    future_to_key = {
+                        openalex_executor.submit(_fetch_openalex_job, pmid): pmid
+                        for pmid in openalex_jobs
                     }
+                    for future in as_completed(future_to_key):
+                        key = future_to_key[future]
+                        openalex_by_key[key] = future.result()
 
-                    # Fallback to the single-record endpoint when the batch request fails
-                    fallback_pmids: list[str] = []
-                    seen: set[str] = set()
-                    for pmid in semantic_pmids:
-                        if pmid in seen:
-                            continue
-                        seen.add(pmid)
-                        record = semsch_map.get(pmid)
-                        if record is None or record.get("scholar.Error"):
-                            fallback_pmids.append(pmid)
-                    for pmid in fallback_pmids:
-                        _acquire_documents(semantic_service_limiter)
-                        fallback_record = ssl.fetch_semantic_scholar(
-                            base_session, pmid, sleep, cfg=semantic_scholar_cfg
-                        )
-                        semsch_map[pmid] = fallback_record
+            for pmid, indexes in openalex_lookup.items():
+                result = openalex_by_key.get(pmid, {})
+                for idx in indexes:
+                    openalex_results[idx] = result
 
-                combined_records: list[dict[str, str]] = []
+            crossref_jobs = [doi for doi in crossref_lookup.keys() if doi]
 
-                plan: list[tuple[int, dict[str, str], dict[str, str], str, str]] = []
-                openalex_lookup: dict[str, list[int]] = {}
-                crossref_lookup: dict[str, list[int]] = {}
-                openalex_total = 0
-                crossref_total = 0
+            def _fetch_crossref_job(doi: str) -> dict[str, str]:
+                _acquire_documents(crossref_service_limiter, use_global=False)
+                return _invoke_with_session(
+                    session_pools["crossref"].session,
+                    ocl.fetch_crossref,
+                    doi,
+                    cfg_obj=crossref_cfg,
+                    limiter=crossref_limiter,
+                )
 
-                for index, pubmed in enumerate(pubmed_list):
-                    pmid = pubmed.get("PubMed.PMID", "")
-                    semsch = semsch_map.get(pmid, {}) if pmid else {}
-                    fallback_doi = ""
-                    if fallback_doi_map:
-                        fallback_doi = fallback_doi_map.get(pmid, "")
-                    doi = (
-                        pubmed.get("PubMed.DOI")
-                        or semsch.get("scholar.DOI")
-                        or fallback_doi
-                        or ""
-                    )
-                    plan.append((index, pubmed, semsch, pmid, doi))
-                    if pmid:
-                        openalex_lookup.setdefault(pmid, []).append(index)
-                        openalex_total += 1
-                    if doi:
-                        crossref_lookup.setdefault(doi, []).append(index)
-                        crossref_total += 1
+            if crossref_total:
+                logger.info(
+                    "documents_cache_reuse",
+                    service="crossref",
+                    total=crossref_total,
+                    unique=len(crossref_jobs),
+                    hits=crossref_total - len(crossref_jobs),
+                )
 
-                openalex_results: dict[int, dict[str, str]] = {}
-                crossref_results: dict[int, dict[str, str]] = {}
+            crossref_by_key: dict[str, dict[str, str]] = {}
 
-                openalex_jobs = list(openalex_lookup.keys())
+            if crossref_jobs:
+                if crossref_executor is None:
+                    for doi in crossref_jobs:
+                        crossref_by_key[doi] = _fetch_crossref_job(doi)
+                else:
+                    future_to_key = {
+                        crossref_executor.submit(_fetch_crossref_job, doi): doi
+                        for doi in crossref_jobs
+                    }
+                    for future in as_completed(future_to_key):
+                        key = future_to_key[future]
+                        crossref_by_key[key] = future.result()
 
-                def _fetch_openalex_job(pmid: str) -> dict[str, str]:
-                    _acquire_documents(openalex_service_limiter, use_global=False)
-                    return _invoke_with_session(
-                        session_pools["openalex"].session,
-                        ocl.fetch_openalex,
-                        pmid,
-                        cfg_obj=openalex_cfg,
-                        limiter=openalex_limiter,
-                    )
+            for doi, indexes in crossref_lookup.items():
+                result = crossref_by_key.get(doi, {})
+                for idx in indexes:
+                    crossref_results[idx] = result
 
-                if openalex_total:
-                    logger.info(
-                        "documents_cache_reuse",
-                        service="openalex",
-                        total=openalex_total,
-                        unique=len(openalex_jobs),
-                        hits=openalex_total - len(openalex_jobs),
-                    )
-
-                openalex_by_key: dict[str, dict[str, str]] = {}
-
-                if openalex_jobs:
-                    if openalex_executor is None:
-                        for pmid in openalex_jobs:
-                            openalex_by_key[pmid] = _fetch_openalex_job(pmid)
-                    else:
-                        future_to_key = {
-                            openalex_executor.submit(_fetch_openalex_job, pmid): pmid
-                            for pmid in openalex_jobs
-                        }
-                        for future in as_completed(future_to_key):
-                            key = future_to_key[future]
-                            openalex_by_key[key] = future.result()
-
-                for pmid, indexes in openalex_lookup.items():
-                    result = openalex_by_key.get(pmid, {})
-                    for idx in indexes:
-                        openalex_results[idx] = result
-
-                crossref_jobs = [doi for doi in crossref_lookup.keys() if doi]
-
-                def _fetch_crossref_job(doi: str) -> dict[str, str]:
-                    _acquire_documents(crossref_service_limiter, use_global=False)
-                    return _invoke_with_session(
-                        session_pools["crossref"].session,
-                        ocl.fetch_crossref,
-                        doi,
-                        cfg_obj=crossref_cfg,
-                        limiter=crossref_limiter,
-                    )
-
-                if crossref_total:
-                    logger.info(
-                        "documents_cache_reuse",
-                        service="crossref",
-                        total=crossref_total,
-                        unique=len(crossref_jobs),
-                        hits=crossref_total - len(crossref_jobs),
-                    )
-
-                crossref_by_key: dict[str, dict[str, str]] = {}
-
-                if crossref_jobs:
-                    if crossref_executor is None:
-                        for doi in crossref_jobs:
-                            crossref_by_key[doi] = _fetch_crossref_job(doi)
-                    else:
-                        future_to_key = {
-                            crossref_executor.submit(_fetch_crossref_job, doi): doi
-                            for doi in crossref_jobs
-                        }
-                        for future in as_completed(future_to_key):
-                            key = future_to_key[future]
-                            crossref_by_key[key] = future.result()
-
-                for doi, indexes in crossref_lookup.items():
-                    result = crossref_by_key.get(doi, {})
-                    for idx in indexes:
-                        crossref_results[idx] = result
-
-                for index, pubmed, semsch, pmid, _ in plan:
-                    openalex = openalex_results.get(index, {}) if pmid else {}
-                    crossref = crossref_results.get(index, {})
-                    combined = merge_metadata(pubmed, semsch, openalex, crossref)
-                    combined_records.append(combined)
-                return combined_records
+            for index, pubmed, semsch, pmid, _ in plan:
+                openalex = openalex_results.get(index, {}) if pmid else {}
+                crossref = crossref_results.get(index, {})
+                combined = merge_metadata(pubmed, semsch, openalex, crossref)
+                combined_records.append(combined)
+            return combined_records
         except requests.RequestException as exc:  # pragma: no cover - network errors
             logger.warning(
                 "pubmed_batch_request_failed",
@@ -753,6 +786,11 @@ def fetch_pubmed_records(
                 yield build_dataframe(records_batch, columns=DOCUMENT_SCHEMA_COLUMNS)
         finally:
             stack.close()
+            with thread_resources_lock:
+                resources_to_close = list(thread_resources)
+                thread_resources.clear()
+            for resources in resources_to_close:
+                resources.stack.close()
 
     frame_iter = _iter_frames()
     if return_generator:
@@ -1144,10 +1182,11 @@ def _finalise_export(
         logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
 
-    errors.save(failure_path)
+    errors.save(failure_path, cfg=cfg)
 
     rows_dropped = rows_total - rows_kept
-    logger.info("write_done", rows=rows_kept, path=str(csv_path))
+    if exit_code == 0:
+        logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
     try:
         export_ready = _load_export_ready_frame(csv_path, cfg=cfg)
@@ -1578,7 +1617,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     pubmed.add_argument(
         "--offset",
@@ -1640,7 +1681,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     chembl.add_argument(
         "--offset",
@@ -1689,7 +1732,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     all_cmd.add_argument(
         "--offset",
@@ -1751,8 +1796,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparser_map = getattr(parser, "subparsers_map", {})
     subparser = subparser_map.get(args.command, parser)
     limit_value = getattr(args, "limit", None)
-    if limit_value is not None and limit_value <= 0:
-        subparser.error("--limit must be a positive integer")
+    if limit_value is not None and limit_value < 0:
+        subparser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
         subparser.error("--offset must be zero or a positive integer")

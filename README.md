@@ -260,7 +260,9 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ## Usage
 
 The examples below illustrate how to run the main CLI tools with common
-options like ``--input``, ``--output`` and ``--limit``.
+options like ``--input``, ``--output`` and ``--limit``. Passing
+``--limit 0`` is permitted and skips processing after validation, which is
+handy for configuration smoke tests.
 
 ### scripts/get_document_data.py
 

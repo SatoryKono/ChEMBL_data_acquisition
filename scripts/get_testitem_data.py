@@ -867,7 +867,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of identifiers to process",
+        help=(
+            "Maximum number of identifiers to process; use 0 to skip processing"
+        ),
     )
     parser.add_argument(
         "--offset",
@@ -908,8 +910,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_stem=DEFAULT_OUTPUT_STEM,
     )
 
-    if args.limit is not None and args.limit <= 0:
-        parser.error("--limit must be a positive integer")
+    if args.limit is not None and args.limit < 0:
+        parser.error("--limit must be zero or a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or a positive integer")
 

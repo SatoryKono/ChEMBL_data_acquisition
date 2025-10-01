@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 
+from library.config import Config, _mask_secrets, _serialize_paths
 from library.cli_utils import build_parser, run_pipeline
 from schemas import AssaysSchema
 
@@ -26,6 +28,13 @@ def test_cli_utils_flags_and_help() -> None:
         "--key-cols",
         "--chunk-size",
         "--merge-chunk-size",
+        "--base-path",
+        "--date",
+        "--force",
+        "--input-dir",
+        "--output-dir",
+        "--print-config",
+        "--skip-existing",
     }
     assert set(actions) == expected
     assert actions["--log-level"].help == "Logging level"
@@ -55,7 +64,7 @@ class _ValidationResult:
         self.failure_cases = failure_cases
 
 
-def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path) -> None:
+def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
     frames = [
@@ -112,6 +121,7 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path) -> None:
         inputs={},
         key_columns=["assay_chembl_id"],
         table_quality=quality,
+        cfg=cfg,
     )
 
     assert exit_code == 0
@@ -129,7 +139,7 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path) -> None:
     assert meta_path.exists()
 
 
-def test_run_pipeline_writes_failure_cases(tmp_path: Path) -> None:
+def test_run_pipeline_writes_failure_cases(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
 
@@ -176,6 +186,7 @@ def test_run_pipeline_writes_failure_cases(tmp_path: Path) -> None:
         inputs={},
         key_columns=["assay_chembl_id"],
         table_quality=lambda path: None,
+        cfg=cfg,
     )
 
     assert exit_code == 1
@@ -183,9 +194,15 @@ def test_run_pipeline_writes_failure_cases(tmp_path: Path) -> None:
     failure_csv = failure_path.read_text()
     assert "column" in failure_csv
     assert "value" in failure_csv
+    meta_path = Path(str(failure_path) + ".meta.yaml")
+    assert meta_path.exists()
+    meta = yaml.safe_load(meta_path.read_text(encoding="utf8"))
+    expected_config = _mask_secrets(_serialize_paths(cfg.to_dict()))
+    normalized_expected = yaml.safe_load(yaml.safe_dump(expected_config))
+    assert meta["config"] == normalized_expected
 
 
-def test_run_pipeline_missing_required_columns(tmp_path: Path) -> None:
+def test_run_pipeline_missing_required_columns(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
 
@@ -219,6 +236,7 @@ def test_run_pipeline_missing_required_columns(tmp_path: Path) -> None:
         inputs={},
         key_columns=["assay_chembl_id"],
         table_quality=quality,
+        cfg=cfg,
     )
 
     assert exit_code == 1

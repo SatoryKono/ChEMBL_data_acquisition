@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from threading import Lock
 from time import monotonic
 from typing import Any, cast
@@ -49,10 +51,35 @@ class _CacheEntry:
 
     payload: dict[str, Any] | None
     outcome: str
+    details: dict[str, Any] | None = None
 
     @property
     def is_hit(self) -> bool:
         return self.payload is not None
+
+
+def _retry_after_seconds(value: str | None, *, now: datetime | None = None) -> float | None:
+    """Return the delay in seconds represented by ``Retry-After`` header ``value``."""
+
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        seconds = float(text)
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(text)
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        reference = now or datetime.now(timezone.utc)
+        seconds = (parsed - reference).total_seconds()
+    if seconds < 0:
+        return 0.0
+    return seconds
 
 
 # Cache is initialised lazily to allow configuration of the TTL via
@@ -67,6 +94,23 @@ _SESSION_CFG: tuple[ApiCfg, RetryCfg] = (_DEFAULT_API_CFG, _DEFAULT_RETRY_CFG)
 _SESSION_SIGNATURE = _config_signature(*_SESSION_CFG)
 _SESSION_INITIALISED = False
 _session: Session | None = session_with_retry(*_SESSION_CFG)
+
+_PLACEHOLDER_CONTACT = "contact@example.org"
+_USER_AGENT_ERROR = (
+    "PubChem client requires a custom User-Agent; "
+    "call init_session with contact details before making requests."
+)
+
+
+def _has_contact_details(user_agent: str | None) -> bool:
+    """Return ``True`` when *user_agent* contains usable contact details."""
+
+    if not user_agent:
+        return False
+    lowered = user_agent.casefold()
+    if _PLACEHOLDER_CONTACT in lowered:
+        return False
+    return "@" in lowered
 
 
 def init_session(api: ApiCfg, retry: RetryCfg) -> None:
@@ -97,31 +141,26 @@ def get_session(cfg: ApiCfg | None = None) -> Session:
         needs_refresh = signature != _SESSION_SIGNATURE or _session is None
         _SESSION_CFG = (target_api, current_retry)
         if needs_refresh:
-            if (
-                target_api.user_agent == _DEFAULT_API_CFG.user_agent
-                and not _SESSION_INITIALISED
+            if not _SESSION_INITIALISED and not _has_contact_details(
+                target_api.user_agent
             ):
-                raise ValueError(
-                    "PubChem client requires a custom User-Agent; "
-                    "call init_session with contact details before making requests."
-                )
+                raise ValueError(_USER_AGENT_ERROR)
             new_session = session_with_retry(target_api, current_retry)
             old_session = _session
             _session = new_session
             _SESSION_SIGNATURE = signature
+            if not _SESSION_INITIALISED:
+                _SESSION_INITIALISED = True
         session = _session
     if old_session is not None:
         old_session.close()
     if session is None:
         raise RuntimeError("Failed to initialise PubChem session")
-    if (
-        session.headers.get("User-Agent") == _DEFAULT_API_CFG.user_agent
-        and not _SESSION_INITIALISED
-    ):
-        raise ValueError(
-            "PubChem client requires a custom User-Agent; "
-            "call init_session with contact details before making requests."
-        )
+    if not _SESSION_INITIALISED:
+        user_agent = session.headers.get("User-Agent")
+        if not _has_contact_details(user_agent):
+            raise ValueError(_USER_AGENT_ERROR)
+        _SESSION_INITIALISED = True
     return session
 
 
@@ -190,12 +229,14 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
         if cached.is_hit:
             logger.debug("cache_hit", url=url, rps=cfg.rps, status="hit")
             return cast(dict[str, Any], cached.payload)
+        miss_details = cached.details or {}
         logger.debug(
             "cache_hit",
             url=url,
             rps=cfg.rps,
             status="miss",
             outcome=cached.outcome,
+            **miss_details,
         )
         return None
     logger.debug("cache_miss", url=url, rps=cfg.rps, status="miss")
@@ -207,6 +248,16 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     deadline: float | None = None
     if cfg.timeout_seconds > 0:
         deadline = monotonic() + cfg.timeout_seconds
+    last_failure_details: dict[str, Any] | None = None
+
+    def details_excluding(*keys: str) -> dict[str, Any]:
+        if not last_failure_details:
+            return {}
+        return {
+            key: value
+            for key, value in last_failure_details.items()
+            if key not in keys
+        }
 
     for attempt in range(1, total_attempts + 1):
         if deadline is not None and monotonic() >= deadline:
@@ -216,14 +267,16 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 attempt=attempt,
                 total_attempts=total_attempts,
                 rps=cfg.rps,
+                **(last_failure_details or {}),
             )
-            _store_cache_miss(url, cfg, "timeout")
+            _store_cache_miss(url, cfg, "timeout", last_failure_details)
             logger.debug(
                 "request_fail",
                 url=url,
                 status=None,
                 total_attempts=total_attempts,
                 rps=cfg.rps,
+                **details_excluding("status"),
             )
             return None
         event = "request_start" if attempt == 1 else "request_retry"
@@ -242,19 +295,31 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
             ) as response:
                 status = response.status_code
                 if status == 404:
+                    last_failure_details = {"reason": "not_found", "status": status}
                     logger.info(
-                        "request_not_found", url=url, status=status, rps=cfg.rps
+                        "request_not_found",
+                        url=url,
+                        rps=cfg.rps,
+                        status=status,
+                        **details_excluding("status"),
                     )
-                    _store_cache_miss(url, cfg, "not_found")
+                    _store_cache_miss(url, cfg, "not_found", last_failure_details)
                     logger.debug(
                         "request_fail",
                         url=url,
-                        status=status,
                         total_attempts=total_attempts,
                         rps=cfg.rps,
+                        status=status,
+                        **details_excluding("status"),
                     )
                     return None
                 if status == 429 or 500 <= status < 600:
+                    retry_after_header = response.headers.get("Retry-After")
+                    retry_after = _retry_after_seconds(retry_after_header)
+                    reason = "rate_limited" if status == 429 else "server_error"
+                    last_failure_details = {"reason": reason, "status": status}
+                    if retry_after is not None:
+                        last_failure_details["retry_after"] = retry_after
                     event_name = (
                         "request_rate_limited"
                         if status == 429
@@ -267,34 +332,49 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         attempt=attempt,
                         total_attempts=total_attempts,
                         rps=cfg.rps,
+                        **({"retry_after": retry_after}
+                          if retry_after is not None
+                          else {}),
                     )
                     if attempt >= total_attempts:
                         logger.debug(
                             "request_fail",
                             url=url,
-                            status=status,
                             total_attempts=total_attempts,
                             rps=cfg.rps,
+                            status=status,
+                            **details_excluding("status"),
                         )
                         return None
-                    delay = backoff_delay if backoff_delay > 0 else cfg.delay
+                    if retry_after is not None:
+                        delay = retry_after
+                        backoff_delay = delay * 2 if delay > 0 else backoff_delay
+                    else:
+                        delay = backoff_delay if backoff_delay > 0 else cfg.delay
+                        if delay > 0:
+                            backoff_delay = delay * 2
                     if delay > 0:
                         sleep(delay)
-                        backoff_delay = delay * 2
                     continue
                 if status >= 400:
+                    last_failure_details = {
+                        "reason": "unexpected_status",
+                        "status": status,
+                    }
                     logger.warning(
                         "request_unexpected_status",
                         url=url,
-                        status=status,
                         rps=cfg.rps,
+                        status=status,
+                        **details_excluding("status"),
                     )
                     logger.debug(
                         "request_fail",
                         url=url,
-                        status=status,
                         total_attempts=total_attempts,
                         rps=cfg.rps,
+                        status=status,
+                        **details_excluding("status"),
                     )
                     return None
 
@@ -302,6 +382,11 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     response.raise_for_status()
                     data = cast(dict[str, Any], response.json())
                 except requests.RequestException as exc:  # pragma: no cover - network
+                    last_failure_details = {
+                        "reason": "response_error",
+                        "status": status,
+                        "error": str(exc),
+                    }
                     if attempt >= total_attempts:
                         logger.error(
                             "request_error",
@@ -314,27 +399,34 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         logger.debug(
                             "request_fail",
                             url=url,
-                            status=status,
                             total_attempts=total_attempts,
                             rps=cfg.rps,
+                            status=status,
+                            **details_excluding("status"),
                         )
                         return None
                     if cfg.delay > 0:
                         sleep(cfg.delay)
                     continue
                 except ValueError:
+                    last_failure_details = {
+                        "reason": "response_not_json",
+                        "status": status,
+                    }
                     logger.warning(
                         "response_not_json",
                         url=url,
-                        status=status,
                         rps=cfg.rps,
+                        status=status,
+                        **details_excluding("status"),
                     )
                     logger.debug(
                         "request_fail",
                         url=url,
-                        status=status,
                         total_attempts=total_attempts,
                         rps=cfg.rps,
+                        status=status,
+                        **details_excluding("status"),
                     )
                     return None
 
@@ -350,6 +442,11 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                 logger.info("cache_set", url=url, rps=cfg.rps, status="hit")
                 return data
         except requests.RequestException as exc:  # pragma: no cover - network
+            last_failure_details = {
+                "reason": "network_error",
+                "status": None,
+                "error": str(exc),
+            }
             if attempt >= total_attempts:
                 logger.error(
                     "request_error",
@@ -365,6 +462,7 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                     status=None,
                     total_attempts=total_attempts,
                     rps=cfg.rps,
+                    **details_excluding("status"),
                 )
                 return None
             if cfg.delay > 0:
@@ -384,13 +482,24 @@ def _ensure_cache(ttl: float) -> TTLCache[str, _CacheEntry]:
     return cache
 
 
-def _store_cache_miss(url: str, cfg: PubChemCfg, outcome: str) -> None:
-    """Persist a cached miss outcome for ``url``."""
+def _store_cache_miss(
+    url: str, cfg: PubChemCfg, outcome: str, details: dict[str, Any] | None = None
+) -> None:
+    """Persist a cached miss outcome for ``url`` including optional details."""
 
+    details_copy = dict(details) if details else None
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl)
-        cache[url] = _CacheEntry(payload=None, outcome=outcome)
-    logger.info("cache_set", url=url, rps=cfg.rps, status="miss", outcome=outcome)
+        cache[url] = _CacheEntry(payload=None, outcome=outcome, details=details_copy)
+    log_data: dict[str, Any] = {
+        "url": url,
+        "rps": cfg.rps,
+        "status": "miss",
+        "outcome": outcome,
+    }
+    if details_copy:
+        log_data.update(details_copy)
+    logger.info("cache_set", **log_data)
 
 
 def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:
