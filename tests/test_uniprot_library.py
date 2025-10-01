@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Thread
 
@@ -13,7 +15,7 @@ responses = pytest.importorskip("responses")
 
 from library import uniprot_library as ul  # noqa: E402
 from library.clients import uniprot as uniprot_client  # noqa: E402
-from library.config import IupharCfg, RetryCfg, UniprotCfg  # noqa: E402
+from library.config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg  # noqa: E402
 
 
 def test_extract_names() -> None:
@@ -128,6 +130,78 @@ def test_fetch_uniprot_retries_with_backoff(monkeypatch: pytest.MonkeyPatch) -> 
     assert limiter_calls == [(cfg.rps, cfg.burst), (cfg.rps, cfg.burst)]
     assert acquire_calls == 2
     assert sleeps == [pytest.approx(0.7)]
+
+
+def test_init_session_waits_for_inflight_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0)
+    retry_cfg = RetryCfg(max_attempts=1, backoff_factor=0.0)
+    entry_event = threading.Event()
+    release_event = threading.Event()
+    close_calls: list[str] = []
+
+    class DummyResponse:
+        def __init__(self, payload: dict[str, object]):
+            self._payload = payload
+
+        def __enter__(self) -> "DummyResponse":
+            return self
+
+        def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> bool:
+            return False
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class BlockingSession:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.closed = False
+
+        def get(self, _url: str, timeout: tuple[int, int]) -> DummyResponse:
+            entry_event.set()
+            release_event.wait()
+            return DummyResponse({"primaryAccession": "P12345"})
+
+        def close(self) -> None:
+            self.closed = True
+            close_calls.append(self.label)
+
+    class DummyLimiter:
+        def acquire(self) -> None:
+            return None
+
+    monkeypatch.setattr(uniprot_client, "_session", BlockingSession("old"))
+    monkeypatch.setattr(uniprot_client, "_retry_cfg", retry_cfg)
+    monkeypatch.setattr(uniprot_client, "get_limiter", lambda *_args, **_kwargs: DummyLimiter())
+    monkeypatch.setattr(
+        uniprot_client,
+        "session_with_retry",
+        lambda *_args, **_kwargs: BlockingSession("new"),
+    )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fetch_future = executor.submit(ul.fetch_uniprot, "P12345", cfg=cfg)
+            assert entry_event.wait(timeout=5.0)
+            init_future = executor.submit(uniprot_client.init_session, ApiCfg(), retry_cfg)
+            assert not init_future.done()
+            release_event.set()
+            result = fetch_future.result(timeout=5.0)
+            assert result == {"primaryAccession": "P12345"}
+            init_future.result(timeout=5.0)
+    finally:
+        release_event.set()
+
+    assert close_calls == ["old"]
+    with uniprot_client._session_lock:  # type: ignore[attr-defined]
+        current_session = uniprot_client._session
+
+    assert isinstance(current_session, BlockingSession)
+    assert current_session.label == "new"
+    assert current_session.closed is False
 
 
 @responses.activate
