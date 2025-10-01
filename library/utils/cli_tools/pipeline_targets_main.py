@@ -1,4 +1,8 @@
-"""CLI wrapper for :mod:`library.pipeline_targets`."""
+"""CLI wrapper for :mod:`library.pipeline_targets`.
+
+The interface honours ``--base-path``, ``--input-dir`` and ``--output-dir`` when
+resolving file locations.
+"""
 
 from __future__ import annotations
 
@@ -219,6 +223,9 @@ def run(cfg: Config, options: PipelineConfig) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    input_path = getattr(args, "input_csv", None)
+    output_stem = Path(input_path).stem if input_path else None
+    cli.prepare_io_paths(args, output_stem=output_stem)
     log_cfg.level = args.log_level
     log_cfg = LoggerConfig(level=log_cfg.level, run_id=log_cfg.run_id)
     logger_inst = configure_logger(log_cfg)

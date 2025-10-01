@@ -230,6 +230,69 @@ def test_cli_uses_configured_delimiter(
     assert called["write_chunksize"] == 256
 
 
+def test_cli_resolves_paths_with_base_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    base_dir = tmp_path / "workspace"
+    input_dir = base_dir / "input"
+    output_dir = base_dir / "output"
+    input_dir.mkdir(parents=True)
+    output_dir.mkdir(parents=True)
+    input_csv = input_dir / "dataset.csv"
+    input_csv.write_text("a,b\n1,2\n", encoding="utf8")
+    called: dict[str, Path | str] = {}
+
+    def fake_read_csv(
+        path: Path | str,
+        sep: str,
+        encoding: str,
+        chunksize: int,
+        *args: Any,
+        **kwargs: Any,
+    ) -> DummyReader:
+        called["path"] = path
+        return DummyReader([pd.DataFrame({"a": [1], "b": [2]})])
+
+    def fake_write(
+        chunks: Iterable[pd.DataFrame],
+        output: Path | str,
+        col_order: list[str] | None = None,
+        key_cols: list[str] | None = None,
+        chunksize: int | None = None,
+        merge_chunksize: int | None = None,
+        drop_unexpected_cols: bool = False,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        called["output"] = output
+        list(chunks)
+
+    monkeypatch.setattr(pd, "read_csv", fake_read_csv)
+    monkeypatch.setattr(cli, "write_csv_chunks_deterministic", fake_write)
+
+    rc = cli.main(
+        [
+            "--base-path",
+            str(base_dir),
+            "--input-dir",
+            "input",
+            "--output-dir",
+            "output",
+            "--input",
+            "dataset.csv",
+            "--date",
+            "20240203",
+            "--key-cols",
+            "a",
+        ]
+    )
+
+    assert rc == 0
+    assert called["path"] == input_csv
+    expected = (output_dir / "output.dataset_20240203.csv").resolve()
+    assert Path(called["output"]) == expected
+
+
 def test_cli_does_not_leak_file_descriptors(tmp_path: Path) -> None:
     input_csv = tmp_path / "input.csv"
     input_csv.write_text("id,value\n1,a\n2,b\n", encoding="utf8")
