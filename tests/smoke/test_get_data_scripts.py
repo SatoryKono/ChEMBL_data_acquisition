@@ -121,6 +121,8 @@ def _cleanup_output(path: Path) -> None:
         path.with_name(path.name + ".meta.yaml"),
         path.with_suffix(".quality.json"),
         path.with_name(f"{path.stem}_failure_cases.csv"),
+        Path(f"{path.with_suffix('')}_quality_report_table.csv"),
+        Path(f"{path.with_suffix('')}_data_correlation_report_table.csv"),
     ]
     for candidate in candidates:
         if candidate.exists() and candidate.is_file():
@@ -610,6 +612,10 @@ def test_run_pipeline_failure_removes_outputs(
         ns = parser.parse_args(argv)
         Path(ns.output).write_text("temporary output\n")
         final_output.write_text("unexpected final output\n")
+        failure_tmp = Path(ns.output).with_name(
+            f"{Path(ns.output).stem}_failure_cases.csv"
+        )
+        failure_tmp.write_text("errors\n", encoding="utf-8")
         return 2
 
     class DummyLogger:
@@ -641,3 +647,117 @@ def test_run_pipeline_failure_removes_outputs(
     assert not final_output.exists()
     assert not working_output.exists()
     assert sentinel_path.exists()
+
+    failure_final = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
+    failure_working = working_output.with_name(f"{working_output.stem}_failure_cases.csv")
+    assert failure_final.exists()
+    assert not failure_working.exists()
+
+
+def test_run_pipeline_success_promotes_sidecars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure successful steps promote sidecars from the working prefix."""
+
+    base_dir = tmp_path
+    input_dir = base_dir / "input"
+    output_dir = base_dir / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_dir / "config.yaml"
+    config_path.write_text("pipeline: test\n")
+
+    input_csv = input_dir / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+
+    cfg = get_data.PipelineRunConfig(
+        base_path=base_dir,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+        date_prefix="20240101",
+        log_level="ERROR",
+        force=False,
+        skip_existing=False,
+    )
+
+    final_output = cfg.output_path("activity")
+    working_output = final_output.with_name(f".{final_output.name}.tmp")
+
+    def successful_main(argv: list[str] | None) -> int:
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--output")
+        parser.add_argument("--input")
+        parser.add_argument("--config")
+        parser.add_argument("--log-level")
+        ns = parser.parse_args(argv)
+        out_path = Path(ns.output)
+        out_path.write_text("activity_id\n1\n")
+        meta_path = out_path.with_name(out_path.name + ".meta.yaml")
+        meta_path.write_text("meta: 1\n", encoding="utf-8")
+        quality_json = out_path.with_suffix(".quality.json")
+        quality_json.write_text("{}\n", encoding="utf-8")
+        quality_table = Path(f"{out_path.with_suffix('')}_quality_report_table.csv")
+        quality_table.write_text("col\n", encoding="utf-8")
+        corr_table = Path(
+            f"{out_path.with_suffix('')}_data_correlation_report_table.csv"
+        )
+        corr_table.write_text("corr\n", encoding="utf-8")
+        return 0
+
+    class DummyLogger:
+        def info(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def debug(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def error(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def warning(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+        def exception(self, *args, **kwargs) -> None:  # pragma: no cover - simple stub
+            pass
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_STEPS",
+        (get_data.PipelineStep("activity", successful_main, None),),
+    )
+    monkeypatch.setattr(get_data, "_LOGGER", DummyLogger())
+
+    status = get_data.run_pipeline(cfg)
+
+    assert status == 0
+    assert final_output.exists()
+    assert not working_output.exists()
+
+    meta_final = final_output.with_name(final_output.name + ".meta.yaml")
+    quality_json_final = final_output.with_suffix(".quality.json")
+    quality_table_final = Path(
+        f"{final_output.with_suffix('')}_quality_report_table.csv"
+    )
+    corr_table_final = Path(
+        f"{final_output.with_suffix('')}_data_correlation_report_table.csv"
+    )
+
+    assert meta_final.exists()
+    assert quality_json_final.exists()
+    assert quality_table_final.exists()
+    assert corr_table_final.exists()
+
+    meta_working = working_output.with_name(working_output.name + ".meta.yaml")
+    quality_json_working = working_output.with_suffix(".quality.json")
+    quality_table_working = Path(
+        f"{working_output.with_suffix('')}_quality_report_table.csv"
+    )
+    corr_table_working = Path(
+        f"{working_output.with_suffix('')}_data_correlation_report_table.csv"
+    )
+
+    assert not meta_working.exists()
+    assert not quality_json_working.exists()
+    assert not quality_table_working.exists()
+    assert not corr_table_working.exists()
