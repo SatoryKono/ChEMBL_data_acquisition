@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from collections import ChainMap
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -1300,20 +1301,37 @@ def add_pubchem_data(
     def _value_or_na(value: str | None) -> object:
         return value if value not in (None, "") else pd.NA
 
-    properties: dict[str, pl.Properties] = {}
-    for cid in sorted(lookup_cids):
-        properties[cid] = pl.get_properties(cid, cfg)
-
     properties_records: dict[str, dict[str, object]] = {}
-    for cid, props in properties.items():
-        properties_records[cid] = {
-            "pubchem_iupac_name": _value_or_na(props.IUPACName),
-            "pubchem_molecular_formula": _value_or_na(props.MolecularFormula),
-            "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
-            "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
-            "pubchem_inchi": _value_or_na(props.InChI),
-            "pubchem_inchikey": _value_or_na(props.InChIKey),
-        }
+
+    lookup_order = sorted(lookup_cids)
+    if lookup_order:
+        batch_size = max(int(getattr(cfg, "rps", 1)), 1)
+
+        def _fetch_properties(cid: str) -> pl.Properties:
+            return pl.get_properties(cid, cfg)
+
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            for start in range(0, len(lookup_order), batch_size):
+                batch = lookup_order[start : start + batch_size]
+                future_map = {
+                    executor.submit(_fetch_properties, cid): cid for cid in batch
+                }
+                for future, cid in future_map.items():
+                    try:
+                        props = future.result()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        logger.warning("pubchem_properties_failed", cid=cid, error=str(exc))
+                        props = pl.Properties(None, None, None, None, None, None)
+                    properties_records[cid] = {
+                        "pubchem_iupac_name": _value_or_na(props.IUPACName),
+                        "pubchem_molecular_formula": _value_or_na(
+                            props.MolecularFormula
+                        ),
+                        "pubchem_isomeric_smiles": _value_or_na(props.iSMILES),
+                        "pubchem_canonical_smiles": _value_or_na(props.cSMILES),
+                        "pubchem_inchi": _value_or_na(props.InChI),
+                        "pubchem_inchikey": _value_or_na(props.InChIKey),
+                    }
 
     properties_df = pd.DataFrame.from_dict(properties_records, orient="index")
     pubchem_df = cid_series.to_frame("pubchem_cid").join(properties_df, on="pubchem_cid")

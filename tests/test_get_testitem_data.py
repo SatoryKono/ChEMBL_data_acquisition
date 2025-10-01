@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+import threading
+import time
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -1002,6 +1004,78 @@ def test_add_pubchem_data_preserves_existing_values(
     assert result.loc[1, "pubchem_cid"] == "222"
     assert result.loc[1, "pubchem_iupac_name"] == "mixture"
     assert result.loc[2, "pubchem_cid"] == "333"
+
+
+def test_add_pubchem_data_fetches_properties_in_parallel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "molecule_chembl_id": [
+                "CHEMBL1",
+                "CHEMBL2",
+                "CHEMBL3",
+                "CHEMBL4",
+            ],
+            "canonical_smiles": ["C", "CC", "CCC", "CCCC"],
+        }
+    )
+    cfg = pl.PubChemCfg(delay=0, rps=2)
+
+    monkeypatch.setattr(pipeline, "_load_pubchem_cid_cache", lambda *_, **__: {})
+    monkeypatch.setattr(pipeline, "_write_pubchem_cid_cache", lambda *_, **__: None)
+
+    cid_map = {
+        "C": "1",
+        "CC": "2",
+        "CCC": "3",
+        "CCCC": "4",
+    }
+
+    def fake_resolve(
+        row: pd.Series,
+        cache: MutableMapping[str, str | None],
+        cfg: pl.PubChemCfg,
+        **_: object,
+    ) -> str:
+        cid = cid_map[row["canonical_smiles"]]
+        chembl_id = row["molecule_chembl_id"]
+        if chembl_id:
+            cache[chembl_id] = cid
+        return cid
+
+    monkeypatch.setattr(pipeline, "resolve_pubchem_cid", fake_resolve)
+
+    lock = threading.Lock()
+    active = 0
+    peak_active = 0
+    call_order: list[str] = []
+    sleep_duration = 0.1
+
+    def fake_get_properties(cid: str, pubchem_cfg: pl.PubChemCfg) -> pl.Properties:
+        nonlocal active, peak_active
+        with lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        call_order.append(cid)
+        time.sleep(sleep_duration)
+        with lock:
+            active -= 1
+        return pl.Properties(f"name-{cid}", None, None, None, None, None)
+
+    monkeypatch.setattr(pl, "get_properties", fake_get_properties)
+
+    start = time.perf_counter()
+    result = pipeline.add_pubchem_data(df, cfg)
+    elapsed = time.perf_counter() - start
+
+    assert peak_active <= cfg.rps
+    assert peak_active > 1
+    assert sorted(call_order) == sorted(cid_map.values())
+    assert elapsed < sleep_duration * len(cid_map) * 0.75
+
+    expected_names = [f"name-{cid_map[value]}" for value in df["canonical_smiles"]]
+    assert result["pubchem_iupac_name"].tolist() == expected_names
 
 
 def test_resolve_pubchem_cid_prefers_inchikey(
