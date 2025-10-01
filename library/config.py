@@ -47,6 +47,29 @@ def _dictionary_resource(*parts: str) -> Path:
     return Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+_PLACEHOLDER_EMAIL_DOMAINS = {
+    "example.com",
+    "example.net",
+    "example.org",
+    "test.com",
+    "test.net",
+    "test.org",
+}
+
+
+def _require_non_placeholder_email(service: str, value: str) -> str:
+    """Ensure *value* is a real contact email for *service*."""
+
+    if not value or not _EMAIL_RE.fullmatch(value):
+        raise ValueError(f"{service}.mailto must be a valid email")
+    _, domain = value.rsplit("@", 1)
+    domain = domain.lower()
+    if domain in _PLACEHOLDER_EMAIL_DOMAINS or domain.endswith(".example"):
+        raise ValueError(
+            f"{service}.mailto must not use placeholder domain {domain}; "
+            "configure a real contact email."
+        )
+    return value
 
 
 def _valid_url(url: str) -> bool:
@@ -192,7 +215,7 @@ class OpenAlexCfg(_BaseModel):
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
-    mailto: str = "contact@example.org"
+    mailto: str = "chembl-data@ebi.ac.uk"
 
     @field_validator("base")
     @classmethod
@@ -204,9 +227,7 @@ class OpenAlexCfg(_BaseModel):
     @field_validator("mailto")
     @classmethod
     def _email(cls, v: str) -> str:
-        if not v or not _EMAIL_RE.fullmatch(v):
-            raise ValueError("openalex.mailto must be a valid email")
-        return v
+        return _require_non_placeholder_email("openalex", v)
 
 
 class CrossRefCfg(_BaseModel):
@@ -216,7 +237,7 @@ class CrossRefCfg(_BaseModel):
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
-    mailto: str = "contact@example.org"
+    mailto: str = "chembl-data@ebi.ac.uk"
 
     @field_validator("base")
     @classmethod
@@ -228,9 +249,7 @@ class CrossRefCfg(_BaseModel):
     @field_validator("mailto")
     @classmethod
     def _email(cls, v: str) -> str:
-        if not v or not _EMAIL_RE.fullmatch(v):
-            raise ValueError("crossref.mailto must be a valid email")
-        return v
+        return _require_non_placeholder_email("crossref", v)
 
 
 class UniprotCfg(_BaseModel):

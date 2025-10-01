@@ -120,7 +120,7 @@ sources:
     retries: 3  # Retry attempts
     rps: 5  # Requests per second limit (env: CHEMBL_DA_OPENALEX_RPS)
     burst: 5  # Burst size for rate limiter (env: CHEMBL_DA_OPENALEX_BURST)
-    mailto: "contact@example.org"  # Required contact email (env: CHEMBL_DA_OPENALEX_MAILTO)
+    mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_OPENALEX_MAILTO). Placeholder domains such as example.org are rejected.
   crossref:
     base: "https://api.crossref.org"  # CrossRef API root URL (env: CHEMBL_DA_CROSSREF_BASE)
     timeout_connect: 5  # (env: CHEMBL_DA_CROSSREF_TIMEOUT_CONNECT)
@@ -128,7 +128,7 @@ sources:
     retries: 3
     rps: 5  # (env: CHEMBL_DA_CROSSREF_RPS)
     burst: 5  # (env: CHEMBL_DA_CROSSREF_BURST)
-    mailto: "contact@example.org"  # Required contact email (env: CHEMBL_DA_CROSSREF_MAILTO)
+    mailto: "chembl-data@ebi.ac.uk"  # Required contact email; replace with your team's address before production use (env: CHEMBL_DA_CROSSREF_MAILTO). Placeholder domains such as example.org are rejected.
   uniprot:
     api:
       base: "https://rest.uniprot.org"  # UniProt REST API root (env: CHEMBL_DA_UNIPROT_BASE)

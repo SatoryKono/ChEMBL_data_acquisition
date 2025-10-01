@@ -240,7 +240,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Раздел | Базовый URL | Ключевые параметры |
 | --- | --- | --- |
-| `openalex` | `https://api.openalex.org` | `timeout_connect=5`, `timeout_read=30`, `retries=3`, `rps=5`, `burst=5`, `mailto="contact@example.org"`. |
+| `openalex` | `https://api.openalex.org` | `timeout_connect=5`, `timeout_read=30`, `retries=3`, `rps=5`, `burst=5`, `mailto="chembl-data@ebi.ac.uk"` (в проде замените на свой контакт; домены-заглушки вроде `example.org` отвергаются). |
 | `crossref` | `https://api.crossref.org` | Та же структура, важно указать персональный `mailto`. |
 | `uniprot.api` | `https://rest.uniprot.org` | `timeout_connect=5`, `timeout_read=30`, `rps=25`, `burst=25`, `delay=0.25`. |
 | `uniprot.mapping` | `https://rest.uniprot.org/idmapping` | `poll_interval=0.5`, `timeout=300.0`, `cache_ttl=null`. |
