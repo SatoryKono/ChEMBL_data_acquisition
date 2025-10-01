@@ -18,7 +18,7 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 
 | Component | Minimum supported | Latest tested |
 |-----------|-------------------|---------------|
-| Python    | 3.11              | 3.12          |
+| Python    | ≥3.11             | 3.12          |
 | numpy     | 2.3.3             | 2.3.3         |
 | pandas    | 2.3.2             | 2.3.2         |
 | requests  | 2.32.5            | 2.32.5        |
