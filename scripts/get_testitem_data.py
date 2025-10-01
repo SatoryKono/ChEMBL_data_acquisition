@@ -31,6 +31,17 @@ from typing import (
 import pandas as pd
 import requests
 
+
+# ===== Parameters =====
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_INPUT_NAME = "testitem.csv"
+DEFAULT_OUTPUT_STEM = "testitems"
+
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from library.utils.bootstrap import ensure_project_root
 
 
@@ -102,12 +113,6 @@ file_sha256 = _pipeline_file_sha256
 write_meta_yaml = _pipeline_write_meta_yaml
 PUBCHEM_CID_CACHE_ENCODING = _pipeline_pubchem_cid_cache_encoding
 _TYPO_PARENT_COLUMN = _pipeline_typo_parent_column
-
-
-# ===== Parameters =====
-
-DEFAULT_INPUT_NAME = "testitem.csv"
-DEFAULT_OUTPUT_STEM = "testitems"
 
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
