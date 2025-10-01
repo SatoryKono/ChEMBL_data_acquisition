@@ -24,6 +24,7 @@ from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
 from .config import Config, ensure_dirs, print_config, session_with_retry, _serialize_paths
 from .csv_utils import write_csv_chunks_deterministic
+from .metadata import file_sha256, write_meta_yaml
 from .clients.pubmed import PubMedClient
 from .pubmed import (
     EMPTY_PUBMED,
@@ -75,13 +76,60 @@ for _column in _PUBMED_SCHEMA.columns.values():
     _column.required = False
 
 
+_FAILURE_COLUMNS = [
+    "schema_context",
+    "column",
+    "check",
+    "check_number",
+    "failure_case",
+    "index",
+]
+
+
+def _empty_failure_cases() -> pd.DataFrame:
+    """Return an empty failure case frame matching pandera layout."""
+
+    return pd.DataFrame(columns=_FAILURE_COLUMNS)
+
+
+def _build_missing_pmid_failures(series: pd.Series) -> pd.DataFrame:
+    """Return failure cases for rows missing ``PubMed.PMID`` values."""
+
+    if series.empty:
+        return _empty_failure_cases()
+
+    failures: list[dict[str, object]] = []
+    for index, value in series.items():
+        failures.append(
+            {
+                "schema_context": "PubMedDocumentsSchema",
+                "column": "PubMed.PMID",
+                "check": "not_null",
+                "check_number": 0,
+                "failure_case": value,
+                "index": index,
+            }
+        )
+    return pd.DataFrame(failures, columns=_FAILURE_COLUMNS)
+
+
 def _validate_documents(df: pd.DataFrame) -> SchemaValidationResult:
     """Validate PubMed document chunks using the relaxed schema."""
 
     validated = _PUBMED_SCHEMA.validate(df, lazy=True)
-    return SchemaValidationResult(
-        validated, pd.DataFrame(), "PubMedDocumentsSchema"
-    )
+
+    if "PubMed.PMID" not in validated.columns:
+        failures = _build_missing_pmid_failures(pd.Series(dtype=object, index=validated.index))
+        return SchemaValidationResult(validated.iloc[0:0], failures, "PubMedDocumentsSchema")
+
+    pmid_series = validated["PubMed.PMID"].astype("string")
+    missing_mask = pmid_series.isna() | pmid_series.str.strip().eq("")
+    if not missing_mask.any():
+        return SchemaValidationResult(validated, _empty_failure_cases(), "PubMedDocumentsSchema")
+
+    failure_cases = _build_missing_pmid_failures(pmid_series[missing_mask])
+    cleaned = validated.loc[~missing_mask].copy()
+    return SchemaValidationResult(cleaned, failure_cases, "PubMedDocumentsSchema")
 
 
 def _stream_pubmed_batches(
@@ -235,7 +283,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     metadata_hooks = [normalize_documents, add_pipeline_metadata]
-    validators = [_validate_documents]
+
+    stats_tracker = {"rows_total": 0, "rows_kept": 0}
+
+    def _validator_with_stats(chunk: pd.DataFrame) -> SchemaValidationResult:
+        stats_tracker["rows_total"] += len(chunk)
+        result = _validate_documents(chunk)
+        stats_tracker["rows_kept"] += len(result.data)
+        return result
+
+    validators = [_validator_with_stats]
 
     def writer(
         chunks: Iterable[pd.DataFrame],
@@ -262,6 +319,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
+    config_snapshot = _serialize_paths(cfg.to_dict())
+    inputs = {"input_csv": str(args.input_csv)}
     exit_code = run_pipeline(
         fetcher=fetcher,
         schema=_PUBMED_SCHEMA,
@@ -272,12 +331,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_path=output_path,
         failure_path=failure_path,
         command=command,
-        config_snapshot=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
+        config_snapshot=config_snapshot,
+        inputs=inputs,
         key_columns=["PubMed.PMID"],
         table_quality=table_quality,
         logger=logger,
     )
+    if output_path.exists():
+        rows_total = stats_tracker["rows_total"]
+        rows_kept = stats_tracker["rows_kept"]
+        rows_dropped = max(rows_total - rows_kept, 0)
+        stats = {
+            "rows_total": rows_total,
+            "rows_kept": rows_kept,
+            "rows_dropped": rows_dropped,
+            "output_sha256": file_sha256(output_path),
+        }
+        write_meta_yaml(
+            csv_path=output_path,
+            command=command,
+            config_subset=config_snapshot,
+            inputs=inputs,
+            stats=stats,
+            schema="PubMedDocumentsSchema",
+        )
     if exit_code == 0:
         logger.info("file_written", path=str(output_path))
         logger.info("pipeline_done", run_id=log_cfg.run_id)
