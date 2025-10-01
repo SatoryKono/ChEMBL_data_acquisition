@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from library import chembl_library as cl
 from library import cli as base_cli
 from library import pubchem_library as pl
 from library.clients import pubchem as pc
+from library.config import IoCfg
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 
 _ORIGINAL_APPLY = base_cli.apply_config_overrides
@@ -29,6 +31,37 @@ def _cleanup_output(path: Path) -> None:
             candidate.unlink()
 
 
+def test_read_input_ids_handles_large_input(tmp_path: Path) -> None:
+    """Ensure identifiers are collected once even for large inputs."""
+
+    total_ids = 1500
+    input_csv = tmp_path / "testitem_large.csv"
+    with input_csv.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["chembl_id"])
+        for index in range(total_ids):
+            writer.writerow([f"CHEMBL{index}"])
+
+    status, result = get_testitem_data.read_input_ids(
+        input_csv,
+        column="chembl_id",
+        io_cfg=IoCfg(),
+        limit=None,
+    )
+
+    assert status == 0
+    assert result is not None
+    assert isinstance(result.ids, list)
+    assert len(result.ids) == total_ids
+    assert result.requested_ids is result.ids
+    assert list(result.ids_iter) == result.ids
+    expected_sample_size = min(
+        total_ids,
+        get_testitem_data._FETCH_ERROR_SAMPLE_SIZE,
+    )
+    assert result.sample_ids == tuple(result.ids[:expected_sample_size])
+
+
 def test_get_testitem_parent_catalog(
     smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -38,7 +71,7 @@ def test_get_testitem_parent_catalog(
     output_csv = smoke_output_dir / "testitem_parent.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             rows.append(
@@ -83,7 +116,14 @@ def test_get_testitem_parent_catalog(
     monkeypatch.setattr(
         get_testitem_data, "load_parent_catalog", fail_load_parent_catalog
     )
-    monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
+    def fake_query_parent_catalog(*args: object, **kwargs: object) -> dict[str, str]:  # type: ignore[no-untyped-def]
+        return {}
+
+    monkeypatch.setattr(
+        get_testitem_data,
+        "query_parent_catalog",
+        fake_query_parent_catalog,
+    )
     fetch_calls: list[list[str]] = []
     mapping = {
         "CHEMBL1": "CHEMBL9001",
@@ -115,6 +155,55 @@ def test_get_testitem_parent_catalog(
         get_testitem_data,
         "update_parent_catalog_cache",
         lambda data, cfg: None,
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "load_molecule_hierarchy_lookup",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        get_testitem_data.prepare_parent_enrichment.__globals__["molecule_catalog"],
+        "fetch_parent_catalog_for",
+        fake_fetch_parent_catalog_for,
+    )
+    monkeypatch.setitem(
+        get_testitem_data.prepare_parent_enrichment.__globals__,
+        "query_parent_catalog",
+        fake_query_parent_catalog,
+    )
+    monkeypatch.setattr(
+        get_testitem_data.run_parent_enrichment.__globals__["molecule_catalog"],
+        "fetch_parent_catalog_for",
+        fake_fetch_parent_catalog_for,
+    )
+    monkeypatch.setitem(
+        get_testitem_data.run_parent_enrichment.__globals__,
+        "query_parent_catalog",
+        fake_query_parent_catalog,
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "apply_testitem_enrichment",
+        lambda frame, *, enrichment_cfg, io_cfg: (0, frame),
+    )
+    def fake_run_parent_enrichment(prep, **kwargs):  # type: ignore[no-untyped-def]
+        df = prep.df.copy()
+        df["parent_molecule_chembl_id"] = (
+            df["molecule_chembl_id"].map(mapping).astype("string")
+        )
+        stats = get_testitem_data.ParentLookupStats(
+            source=get_testitem_data.PARENT_LOOKUP_SOURCE_LOOKUP,
+            missing=0,
+            unique=len(df["molecule_chembl_id"].unique()),
+            attached=len(df),
+            uncovered=0,
+        )
+        return 0, get_testitem_data.ParentEnrichmentResult(df=df, parent_stats=stats)
+
+    monkeypatch.setattr(
+        get_testitem_data,
+        "run_parent_enrichment",
+        fake_run_parent_enrichment,
     )
     monkeypatch.setattr(
         get_testitem_data, "analyze_table_quality", lambda *_, **__: None
@@ -161,7 +250,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
     output_csv = smoke_output_dir / "testitem_parent_present.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             rows.append(
@@ -265,7 +354,7 @@ def test_get_testitem_refreshes_outdated_parents(
     output_csv = smoke_output_dir / "testitem_parent_refresh.csv"
     _cleanup_output(output_csv)
 
-    def fake_get_testitem(ids, cfg, client, chunk_size, timeout):  # type: ignore[no-untyped-def]
+    def fake_get_testitem(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, mol_id in enumerate(ids, start=1):
             rows.append(
@@ -323,6 +412,11 @@ def test_get_testitem_refreshes_outdated_parents(
         lambda data, cfg: None,
     )
     monkeypatch.setattr(
+        get_testitem_data,
+        "load_molecule_hierarchy_lookup",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
         get_testitem_data, "analyze_table_quality", lambda *_, **__: None
     )
     monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
@@ -337,6 +431,52 @@ def test_get_testitem_refreshes_outdated_parents(
         get_testitem_data.cli,
         "apply_config_overrides",
         patched_apply_config_overrides,
+    )
+
+    monkeypatch.setattr(
+        get_testitem_data.prepare_parent_enrichment.__globals__["molecule_catalog"],
+        "fetch_parent_catalog_for",
+        fake_fetch_parent_catalog_for,
+    )
+    monkeypatch.setitem(
+        get_testitem_data.prepare_parent_enrichment.__globals__,
+        "query_parent_catalog",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        get_testitem_data.run_parent_enrichment.__globals__["molecule_catalog"],
+        "fetch_parent_catalog_for",
+        fake_fetch_parent_catalog_for,
+    )
+    monkeypatch.setitem(
+        get_testitem_data.run_parent_enrichment.__globals__,
+        "query_parent_catalog",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        get_testitem_data,
+        "apply_testitem_enrichment",
+        lambda frame, *, enrichment_cfg, io_cfg: (0, frame),
+    )
+
+    def fake_run_parent_enrichment(prep, **kwargs):  # type: ignore[no-untyped-def]
+        df = prep.df.copy()
+        df["parent_molecule_chembl_id"] = (
+            df["molecule_chembl_id"].map(mapping).astype("string")
+        )
+        stats = get_testitem_data.ParentLookupStats(
+            source=get_testitem_data.PARENT_LOOKUP_SOURCE_LOOKUP,
+            missing=0,
+            unique=len(df["molecule_chembl_id"].unique()),
+            attached=len(df),
+            uncovered=0,
+        )
+        return 0, get_testitem_data.ParentEnrichmentResult(df=df, parent_stats=stats)
+
+    monkeypatch.setattr(
+        get_testitem_data,
+        "run_parent_enrichment",
+        fake_run_parent_enrichment,
     )
 
     exit_code = get_testitem_data.main(

@@ -7,11 +7,12 @@ import sys
 
 import argparse
 from collections import OrderedDict, deque
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from itertools import islice, tee
+from itertools import islice
 from functools import lru_cache
-from typing import Any, NamedTuple
+import json
+from typing import Any, Mapping, MutableMapping, NamedTuple
 
 import pandas as pd
 import requests
@@ -22,7 +23,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from library import chembl_library as cl
 from library import cli
-from library import io
+from library import io, molecule_catalog, testitem_enrichment
+from library import pubchem_library as pl
+from library.table_quality import analyze_table_quality
 
 from library.clients import pubchem as pc
 from library.chembl_client import ChemblClient
@@ -37,6 +40,12 @@ from library.cli import (
 from library.config import ApiCfg, Config, IoCfg, _serialize_paths, ensure_dirs, print_config
 from library.log import logger
 from schemas import TestitemsSchema
+from library.molecule_catalog import (
+    load_parent_catalog,
+    query_parent_catalog,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
+)
 from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_CACHE,
     PARENT_LOOKUP_SOURCE_LOOKUP,
@@ -61,11 +70,27 @@ _FETCH_ERROR_SAMPLE_SIZE = 10
 
 @dataclass
 class ReadInputIdsResult:
-    """Container holding the identifier iterator and a diagnostic sample."""
+    """Container holding the collected identifiers and diagnostic sample."""
 
-    ids_iter: Iterator[str]
+    ids: list[str]
     sample_ids: tuple[str, ...]
-    requested_ids: tuple[str, ...]
+
+    @property
+    def ids_iter(self) -> Iterator[str]:
+        """Return a fresh iterator over the stored identifiers."""
+
+        return iter(self.ids)
+
+    @property
+    def requested_ids(self) -> list[str]:
+        """Expose the stored identifiers without copying."""
+
+        return self.ids
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over the collected identifiers without extra allocations."""
+
+        return iter(self.ids)
 
 
 
@@ -115,6 +140,8 @@ PUBCHEM_COLUMNS = [
 ]
 
 
+ENCODING_UTF8 = "utf-8"
+PUBCHEM_CID_CACHE_ENCODING = ENCODING_UTF8
 _CID_CACHE_MISSING = object()
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
@@ -1179,20 +1206,24 @@ def read_input_ids(
     """Load identifiers from ``input_csv`` honouring ``limit`` when provided."""
 
     try:
-        ids_iter = io.read_ids(
+        ids_source = io.read_ids(
             input_csv,
             column=column,
             cfg=io_cfg,
             keep_na_markers=io_cfg.keep_na_markers,
         )
         if offset:
-            ids_iter = islice(ids_iter, offset, None)
+            ids_source = islice(ids_source, offset, None)
             logger.info("process_offset", offset=offset)
         if limit is not None:
-            ids_iter = islice(ids_iter, limit)
-        ids_iter, sample_iter, capture_iter = tee(ids_iter, 3)
-        sample_ids = tuple(islice(sample_iter, _FETCH_ERROR_SAMPLE_SIZE))
-        requested_ids = tuple(capture_iter)
+            ids_source = islice(ids_source, limit)
+
+        collected_ids: list[str] = []
+        sample_buffer: list[str] = []
+        for index, identifier in enumerate(ids_source):
+            collected_ids.append(identifier)
+            if index < _FETCH_ERROR_SAMPLE_SIZE:
+                sample_buffer.append(identifier)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
@@ -1202,9 +1233,8 @@ def read_input_ids(
         return 1, None
 
     return 0, ReadInputIdsResult(
-        ids_iter=ids_iter,
-        sample_ids=sample_ids,
-        requested_ids=requested_ids,
+        ids=collected_ids,
+        sample_ids=tuple(sample_buffer),
     )
 
 
@@ -1269,7 +1299,7 @@ def _integrate_missing_identifiers(
 
 
 def fetch_testitems(
-    ids_iter: Iterable[str],
+    ids: Sequence[str],
     *,
     api_cfg: ApiCfg,
     batch_size: int,
@@ -1282,11 +1312,9 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter``."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    ids_iter, capture_iter = tee(ids_iter)
-    requested_ids_raw = list(capture_iter)
     try:
         df = cl.get_testitem(
-            ids_iter,
+            iter(ids),
             cfg=api_cfg,
             client=client,
             chunk_size=batch_size,
@@ -1310,7 +1338,7 @@ def fetch_testitems(
 
     original_id_lookup: dict[str, str] = {}
     requested_ids: list[str] = []
-    for identifier in requested_ids_raw:
+    for identifier in ids:
         normalised = str(identifier).strip().upper()
         requested_ids.append(normalised)
         original_id_lookup[normalised] = str(identifier)
@@ -1382,7 +1410,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     pc.init_session(api_cfg, cfg.retry)
 
-    requested_ids: tuple[str, ...] = ()
+    requested_ids: list[str] = []
     missing_ids: list[str] = []
 
     with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
@@ -1398,7 +1426,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
         requested_ids = read_result.requested_ids
         fetch_status, df = fetch_testitems(
-            read_result.ids_iter,
+            requested_ids,
             api_cfg=api_cfg,
             batch_size=cfg.testitem.batch_size,
             timeout=cfg.testitem.timeout,
