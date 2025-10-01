@@ -27,6 +27,7 @@ from library import assay_postprocessing as ap
 from library import chembl_library as cl
 from library import cli
 from library import io
+from library.csv_utils import write_csv_chunks_deterministic
 from library.clients import ChemblClient
 from library.cli import (
     LoggerConfig,
@@ -136,18 +137,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         col_order: Sequence[str],
         key_cols: Sequence[str],
     ) -> Path:
-        frames = [chunk for chunk in chunks]
-        if frames:
-            df = pd.concat(frames, ignore_index=True)
-        else:
-            df = pd.DataFrame(columns=col_order)
-        resolved_keys = list(key_cols) or None
-        return io.write_csv(
-            df,
+        sort_columns = list(key_cols) or sorted(col_order)
+        return write_csv_chunks_deterministic(
+            chunks,
             destination,
-            cfg=cfg,
-            key_cols=resolved_keys,
+            key_cols=sort_columns,
             col_order=col_order,
+            chunksize=cfg.io.csv_chunksize,
+            sort_chunksize=cfg.io.csv_chunksize,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
         )
 
     table_quality = partial(
