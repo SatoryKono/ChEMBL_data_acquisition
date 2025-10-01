@@ -162,3 +162,55 @@ def test_cli_limit_restricts_rows(
     assert captured["batch_size"] == 100
     assert captured["chunks"] == [["CHEMBL1", "CHEMBL2"]]
     assert captured["written_path"] == output_csv
+
+
+def test_cli_does_not_print_config_when_flag_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf8")
+    output_csv = tmp_path / "out.csv"
+
+    def fake_run_pipeline(
+        chunk_iterator: Any,
+        cfg: Config,
+        *,
+        chembl_fetcher: Any,
+        batch_size: int | None,
+        **_: Any,
+    ) -> PipelineResult:
+        next(chunk_iterator())
+        return PipelineResult(chembl=pd.DataFrame({"target_chembl_id": ["CHEMBL1"]}))
+
+    def fake_write_csv(
+        df: pd.DataFrame,
+        path: Path | str,
+        *,
+        cfg: Config,
+        sep: str | None = None,
+        encoding: str | None = None,
+    ) -> Path:
+        return Path(path)
+
+    dummy_logger = _DummyLogger()
+    monkeypatch.setattr(cli, "configure_logger", lambda cfg: dummy_logger)
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *a: Config())
+    monkeypatch.setattr(cli, "ensure_dirs", lambda cfg: None)
+
+    def fail_print_config(_: Config) -> None:
+        raise AssertionError("print_config should not be called")
+
+    monkeypatch.setattr(cli, "print_config", fail_print_config)
+    monkeypatch.setattr(cli, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(cli, "write_csv", fake_write_csv)
+
+    args = [
+        "--input",
+        str(input_csv),
+        "--output",
+        str(output_csv),
+    ]
+    exit_code = cli.main(args)
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""

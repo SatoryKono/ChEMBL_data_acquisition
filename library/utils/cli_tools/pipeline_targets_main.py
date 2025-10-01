@@ -183,10 +183,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     pipeline_logger = logger_inst.bind(stage="pipeline")
     pipeline_logger.info("pipeline_start")
     cfg = cli.apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
-    print_config(cfg)
     if args.print_config:
+        print_config(cfg)
         return 0
+    ensure_dirs(cfg)
     try:
         options = PipelineConfig.model_validate(
             {
