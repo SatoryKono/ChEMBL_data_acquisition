@@ -133,6 +133,16 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
     assert requested_ids == ()
 
 
+def test_ensure_no_parant_column_raises() -> None:
+    df = pd.DataFrame([{"parant_molecule_id": "CHEMBL1"}])
+
+    with pytest.raises(
+        ValueError,
+        match="unexpected column 'parant_molecule_id'; use 'parent_molecule_id' instead",
+    ):
+        gtd.ensure_no_parant_column(df)
+
+
 def test_fetch_testitems_passes_fields_and_limit(
     monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:

@@ -56,6 +56,7 @@ from library.testitem_pipeline import (
     _prepare_pubchem_api_cfg as _pipeline_prepare_pubchem_api_cfg,
     _load_pubchem_cid_cache as _pipeline_load_pubchem_cid_cache,
     integrate_missing_identifiers as _integrate_missing_identifiers,
+    _TYPO_PARENT_COLUMN as _pipeline_typo_parent_column,
 )
 
 # Re-export helpers consumed directly by unit tests.
@@ -75,6 +76,7 @@ load_molecule_hierarchy_lookup = _pipeline_load_molecule_hierarchy_lookup
 file_sha256 = _pipeline_file_sha256
 write_meta_yaml = _pipeline_write_meta_yaml
 PUBCHEM_CID_CACHE_ENCODING = _pipeline_pubchem_cid_cache_encoding
+_TYPO_PARENT_COLUMN = _pipeline_typo_parent_column
 
 
 # ===== Parameters =====
