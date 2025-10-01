@@ -114,6 +114,24 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert called["write_encoding"] == "latin1"
 
 
+def test_chunk_size_rejects_zero(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = cli.build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["--chunk-size", "0", "--key-cols", "id"])
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "chunk size must be a positive integer" in err
+
+
+def test_merge_chunk_size_rejects_negative(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = cli.build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["--merge-chunk-size", "-5", "--key-cols", "id"])
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "chunk size must be a positive integer" in err
+
+
 def test_cli_generates_output_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
