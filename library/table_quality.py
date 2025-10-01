@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import re
 import warnings
-from collections.abc import Sized
+from collections import Counter
+from collections.abc import Iterable, Sized
 from pathlib import Path
 from typing import Any
 
@@ -195,8 +196,361 @@ def _top_values(series: pd.Series) -> str:
     return "; ".join(parts)
 
 
+class _ColumnAccumulator:
+    """Incrementally gather profiling metrics for a single column."""
+
+    __slots__ = (
+        "name",
+        "total",
+        "non_null",
+        "non_empty",
+        "string_count",
+        "pattern_counts",
+        "bool_like_matches",
+        "unique_hashes",
+        "top_counter",
+        "numeric_values",
+        "numeric_full",
+        "numeric_valid",
+        "date_values",
+        "date_valid",
+        "text_lengths",
+        "numeric_cov",
+    )
+
+    def __init__(self, name: str, prefilled: int = 0) -> None:
+        self.name = name
+        self.total = 0
+        self.non_null = 0
+        self.non_empty = 0
+        self.string_count = 0
+        self.pattern_counts = {
+            "doi": 0,
+            "issn": 0,
+            "isbn": 0,
+            "url": 0,
+            "email": 0,
+        }
+        self.bool_like_matches = 0
+        self.unique_hashes: set[int] = set()
+        self.top_counter: Counter[str] = Counter()
+        self.numeric_values: list[float] = []
+        self.numeric_full: list[float] = []
+        self.numeric_valid = 0
+        self.date_values: list[pd.Timestamp] = []
+        self.date_valid = 0
+        self.text_lengths: list[int] = []
+        self.numeric_cov = 0.0
+        if prefilled:
+            self.pad(prefilled)
+
+    def pad(self, count: int) -> None:
+        """Register ``count`` missing values for future chunks."""
+
+        if count <= 0:
+            return
+        self.total += count
+        self.numeric_full.extend([np.nan] * count)
+
+    def process(self, series: pd.Series) -> None:
+        """Update statistics based on ``series`` values."""
+
+        length = len(series)
+        self.total += length
+        if length == 0:
+            return
+
+        self.non_null += int(series.notna().sum())
+
+        mask = _non_empty_mask(series)
+        non_empty = int(mask.sum())
+        self.non_empty += non_empty
+
+        strings = _string_values(series, mask)
+        string_len = len(strings)
+        if string_len:
+            self.string_count += string_len
+            self.pattern_counts["doi"] += int(strings.str.match(_DOI_RE).sum())
+            self.pattern_counts["issn"] += int(strings.str.match(_ISSN_RE).sum())
+            self.pattern_counts["url"] += int(strings.str.match(_URL_RE).sum())
+            self.pattern_counts["email"] += int(strings.str.match(_EMAIL_RE).sum())
+            isbn_matches = strings.map(_is_isbn)
+            self.pattern_counts["isbn"] += int(isbn_matches.sum())
+            lower = strings.str.lower()
+            bool_mask = lower.isin(BOOL_LIKE)
+            self.bool_like_matches += int(bool_mask.sum())
+
+        non_na = series.dropna()
+        if not non_na.empty:
+            trimmed = non_na.map(lambda x: str(x).strip())
+            self.top_counter.update(trimmed)
+            self.text_lengths.extend(trimmed.map(len).tolist())
+            try:
+                hashes = pd.util.hash_pandas_object(non_na, index=False)
+            except TypeError:
+                hashes = pd.util.hash_pandas_object(
+                    non_na.map(lambda x: str(x)), index=False
+                )
+            self.unique_hashes.update(hashes.astype(np.uint64).tolist())
+
+        numeric = pd.to_numeric(series, errors="coerce").astype(float)
+        self.numeric_full.extend(numeric.tolist())
+        numeric_valid = numeric.dropna()
+        valid_len = len(numeric_valid)
+        if valid_len:
+            self.numeric_valid += valid_len
+            self.numeric_values.extend(numeric_valid.tolist())
+
+        def _normalise(val: object) -> object:
+            if isinstance(val, str) and re.fullmatch(r"\d{4}", val.strip()):
+                return f"{val.strip()}-07-01"
+            return val
+
+        normalised = series.map(_normalise)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Parsed string.*included an un-recognized timezone",
+                category=FutureWarning,
+            )
+            dates = pd.to_datetime(normalised, errors="coerce", utc=True, format="mixed")
+
+        valid_dates = dates.dropna()
+        if not valid_dates.empty:
+            naive = valid_dates.dt.tz_convert(None)
+            self.date_values.extend(naive.tolist())
+            self.date_valid += len(naive)
+
+    def finalize(self) -> dict[str, object]:
+        """Return a summary row mirroring ``analyze_table_quality`` output."""
+
+        empty_pct = float(1 - self.non_empty / self.total) if self.total else 0.0
+        unique_cnt = len(self.unique_hashes)
+        unique_pct = float(unique_cnt / self.non_empty) if self.non_empty else np.nan
+
+        doi_cov = (
+            float(self.pattern_counts["doi"] / self.string_count)
+            if self.string_count
+            else 0.0
+        )
+        issn_cov = (
+            float(self.pattern_counts["issn"] / self.string_count)
+            if self.string_count
+            else 0.0
+        )
+        isbn_cov = (
+            float(self.pattern_counts["isbn"] / self.string_count)
+            if self.string_count
+            else 0.0
+        )
+        url_cov = (
+            float(self.pattern_counts["url"] / self.string_count)
+            if self.string_count
+            else 0.0
+        )
+        email_cov = (
+            float(self.pattern_counts["email"] / self.string_count)
+            if self.string_count
+            else 0.0
+        )
+        bool_like_cov = (
+            float(self.bool_like_matches / self.string_count)
+            if self.string_count
+            else 0.0
+        )
+
+        numeric_cov = float(self.numeric_valid / self.total) if self.total else 0.0
+        self.numeric_cov = numeric_cov
+        if self.numeric_values:
+            numeric_arr = np.array(self.numeric_values, dtype=float)
+            numeric_min = float(np.min(numeric_arr))
+            numeric_p50 = float(np.quantile(numeric_arr, 0.5))
+            numeric_p95 = float(np.quantile(numeric_arr, 0.95))
+            numeric_max = float(np.max(numeric_arr))
+            numeric_mean = float(np.mean(numeric_arr))
+            numeric_std = float(np.std(numeric_arr, ddof=0))
+        else:
+            numeric_min = np.nan
+            numeric_p50 = np.nan
+            numeric_p95 = np.nan
+            numeric_max = np.nan
+            numeric_mean = np.nan
+            numeric_std = np.nan
+
+        date_cov = float(self.date_valid / self.total) if self.total else 0.0
+        if self.date_values:
+            date_series = pd.Series(self.date_values)
+            date_min = date_series.min()
+            date_p50 = date_series.quantile(0.5)
+            date_max = date_series.max()
+        else:
+            date_min = np.nan
+            date_p50 = np.nan
+            date_max = np.nan
+
+        if self.text_lengths:
+            lengths = np.array(self.text_lengths, dtype=float)
+            text_len_min = float(lengths.min())
+            text_len_p50 = float(np.quantile(lengths, 0.5))
+            text_len_p95 = float(np.quantile(lengths, 0.95))
+            text_len_max = float(lengths.max())
+        else:
+            text_len_min = np.nan
+            text_len_p50 = np.nan
+            text_len_p95 = np.nan
+            text_len_max = np.nan
+
+        roles: list[str] = []
+        if url_cov > 0:
+            roles.append("url")
+        if doi_cov > 0:
+            roles.append("doi")
+        if issn_cov > 0:
+            roles.append("issn")
+        if isbn_cov > 0:
+            roles.append("isbn")
+        if email_cov > 0:
+            roles.append("email")
+        if bool_like_cov >= 0.8:
+            roles.append("boolean")
+        if date_cov >= 0.8:
+            roles.append("date")
+        if numeric_cov >= 0.8:
+            roles.append("numeric")
+        if self.non_empty and unique_cnt / self.non_empty >= 0.98:
+            roles.append("identifier-like")
+        elif unique_cnt <= min(100, 0.05 * self.non_empty):
+            roles.append("categorical")
+        else:
+            roles.append("free-text")
+
+        parts = [
+            f"{value[:60]} ({count})"
+            for value, count in self.top_counter.most_common(3)
+        ]
+        top_values = "; ".join(parts)
+
+        return {
+            "column": self.name,
+            "non_null": self.non_null,
+            "non_empty": self.non_empty,
+            "empty_pct": empty_pct,
+            "unique_cnt": unique_cnt,
+            "unique_pct_of_non_empty": unique_pct,
+            "pattern_cov_doi": doi_cov,
+            "pattern_cov_issn": issn_cov,
+            "pattern_cov_isbn": isbn_cov,
+            "pattern_cov_url": url_cov,
+            "pattern_cov_email": email_cov,
+            "bool_like_cov": bool_like_cov,
+            "numeric_cov": numeric_cov,
+            "numeric_min": numeric_min,
+            "numeric_p50": numeric_p50,
+            "numeric_p95": numeric_p95,
+            "numeric_max": numeric_max,
+            "numeric_mean": numeric_mean,
+            "numeric_std": numeric_std,
+            "date_cov": date_cov,
+            "date_min": date_min,
+            "date_p50": date_p50,
+            "date_max": date_max,
+            "text_len_min": text_len_min,
+            "text_len_p50": text_len_p50,
+            "text_len_p95": text_len_p95,
+            "text_len_max": text_len_max,
+            "guessed_roles": "|".join(roles),
+            "top_values": top_values,
+        }
+
+
+class TableQualityProfiler:
+    """Accumulate quality metrics across streamed ``DataFrame`` chunks."""
+
+    def __init__(self) -> None:
+        self._columns: list[str] = []
+        self._accumulators: dict[str, _ColumnAccumulator] = {}
+        self._rows_processed = 0
+
+    def consume(self, frame: pd.DataFrame) -> None:
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError("TableQualityProfiler.consume expects a pandas DataFrame")
+
+        new_columns = [col for col in frame.columns if col not in self._accumulators]
+        for column in new_columns:
+            accumulator = _ColumnAccumulator(column, prefilled=self._rows_processed)
+            self._columns.append(column)
+            self._accumulators[column] = accumulator
+
+        missing_columns = [col for col in self._columns if col not in frame.columns]
+        for column in missing_columns:
+            self._accumulators[column].pad(len(frame))
+
+        for column in frame.columns:
+            self._accumulators[column].process(frame[column])
+
+        self._rows_processed += len(frame)
+
+    def build(self, table_name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        rows: list[dict[str, object]] = []
+        numeric_candidates: dict[str, pd.Series] = {}
+        for column in self._columns:
+            accumulator = self._accumulators[column]
+            row = accumulator.finalize()
+            rows.append(row)
+            if accumulator.numeric_cov >= 0.8:
+                numeric_candidates[column] = pd.Series(
+                    accumulator.numeric_full, dtype=float
+                )
+
+        column_order = [
+            "column",
+            "non_null",
+            "non_empty",
+            "empty_pct",
+            "unique_cnt",
+            "unique_pct_of_non_empty",
+            "pattern_cov_doi",
+            "pattern_cov_issn",
+            "pattern_cov_isbn",
+            "pattern_cov_url",
+            "pattern_cov_email",
+            "bool_like_cov",
+            "numeric_cov",
+            "numeric_min",
+            "numeric_p50",
+            "numeric_p95",
+            "numeric_max",
+            "numeric_mean",
+            "numeric_std",
+            "date_cov",
+            "date_min",
+            "date_p50",
+            "date_max",
+            "text_len_min",
+            "text_len_p50",
+            "text_len_p95",
+            "text_len_max",
+            "guessed_roles",
+            "top_values",
+        ]
+        quality_report = pd.DataFrame(rows, columns=column_order)
+        quality_path = f"{table_name}_quality_report_table.csv"
+        quality_report.to_csv(quality_path, index=False, encoding="utf-8-sig")
+
+        if numeric_candidates:
+            corr_report = pd.DataFrame(numeric_candidates).corr(method="pearson")
+        else:
+            corr_report = pd.DataFrame()
+
+        corr_path = f"{table_name}_data_correlation_report_table.csv"
+        corr_report.reset_index().to_csv(corr_path, index=False, encoding="utf-8-sig")
+
+        return quality_report, corr_report
+
+
 def analyze_table_quality(
-    table: pd.DataFrame | str | Path, table_name: str
+    table: pd.DataFrame | str | Path | Iterable[pd.DataFrame] | TableQualityProfiler,
+    table_name: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Profile ``table`` and compute correlations for numeric columns.
 
@@ -217,131 +571,29 @@ def analyze_table_quality(
     # level import was stripped by the execution environment.
     import pandas as pd
 
-    df = _load_table(table)
-    rows: list[dict[str, object]] = []
-    numeric_candidates: dict[str, pd.Series] = {}
-    for column in df.columns:
-        series = df[column]
-        non_null = int(series.notna().sum())
-        mask = _non_empty_mask(series)
-        non_empty = int(mask.sum())
-        empty_pct = float(1 - non_empty / len(series)) if len(series) else 0.0
-        try:
-            unique_cnt = int(series.dropna().nunique())
-        except TypeError:
-            # ``nunique`` requires hashable values; fall back to string representation
-            unique_cnt = int(series.dropna().map(str).nunique())
-        unique_pct = float(unique_cnt / non_empty) if non_empty else np.nan
-
-        strings = _string_values(series, mask)
-        pattern_cov_doi = _pattern_cov(strings, _DOI_RE)
-        pattern_cov_issn = _pattern_cov(strings, _ISSN_RE)
-        pattern_cov_isbn = _isbn_cov(strings)
-        pattern_cov_url = _pattern_cov(strings, _URL_RE)
-        pattern_cov_email = _pattern_cov(strings, _EMAIL_RE)
-
-        bool_like_cov = _bool_like_cov(strings)
-
-        numeric_series, numeric_cov, num_stats = _numeric_stats(series)
-        if numeric_cov >= 0.8:
-            numeric_candidates[column] = numeric_series
-
-        date_cov, date_stats = _parse_dates(series)
-
-        text_stats = _text_length_stats(series)
-
-        roles: list[str] = []
-        if pattern_cov_url > 0:
-            roles.append("url")
-        if pattern_cov_doi > 0:
-            roles.append("doi")
-        if pattern_cov_issn > 0:
-            roles.append("issn")
-        if pattern_cov_isbn > 0:
-            roles.append("isbn")
-        if pattern_cov_email > 0:
-            roles.append("email")
-        if bool_like_cov >= 0.8:
-            roles.append("boolean")
-        if date_cov >= 0.8:
-            roles.append("date")
-        if numeric_cov >= 0.8:
-            roles.append("numeric")
-        if non_empty and unique_cnt / non_empty >= 0.98:
-            roles.append("identifier-like")
-        elif unique_cnt <= min(100, 0.05 * non_empty):
-            roles.append("categorical")
-        else:
-            roles.append("free-text")
-
-        row: dict[str, object] = {
-            "column": column,
-            "non_null": non_null,
-            "non_empty": non_empty,
-            "empty_pct": empty_pct,
-            "unique_cnt": unique_cnt,
-            "unique_pct_of_non_empty": unique_pct,
-            "pattern_cov_doi": pattern_cov_doi,
-            "pattern_cov_issn": pattern_cov_issn,
-            "pattern_cov_isbn": pattern_cov_isbn,
-            "pattern_cov_url": pattern_cov_url,
-            "pattern_cov_email": pattern_cov_email,
-            "bool_like_cov": bool_like_cov,
-            "numeric_cov": numeric_cov,
-            **num_stats,
-            "date_cov": date_cov,
-            **date_stats,
-            **text_stats,
-            "guessed_roles": "|".join(roles),
-            "top_values": _top_values(series),
-        }
-        rows.append(row)
-
-    column_order = [
-        "column",
-        "non_null",
-        "non_empty",
-        "empty_pct",
-        "unique_cnt",
-        "unique_pct_of_non_empty",
-        "pattern_cov_doi",
-        "pattern_cov_issn",
-        "pattern_cov_isbn",
-        "pattern_cov_url",
-        "pattern_cov_email",
-        "bool_like_cov",
-        "numeric_cov",
-        "numeric_min",
-        "numeric_p50",
-        "numeric_p95",
-        "numeric_max",
-        "numeric_mean",
-        "numeric_std",
-        "date_cov",
-        "date_min",
-        "date_p50",
-        "date_max",
-        "text_len_min",
-        "text_len_p50",
-        "text_len_p95",
-        "text_len_max",
-        "guessed_roles",
-        "top_values",
-    ]
-    quality_report = pd.DataFrame(rows, columns=column_order)
-    quality_path = f"{table_name}_quality_report_table.csv"
-    quality_report.to_csv(quality_path, index=False, encoding="utf-8-sig")
-
-    if numeric_candidates:
-        corr_report = pd.DataFrame(numeric_candidates).corr(method="pearson")
-        corr_path = f"{table_name}_data_correlation_report_table.csv"
-        corr_report.reset_index().to_csv(corr_path, index=False, encoding="utf-8-sig")
+    profiler: TableQualityProfiler
+    if isinstance(table, TableQualityProfiler):
+        profiler = table
     else:
-        corr_report = pd.DataFrame()
-        corr_path = f"{table_name}_data_correlation_report_table.csv"
-        corr_report.to_csv(corr_path, index=False, encoding="utf-8-sig")
+        profiler = TableQualityProfiler()
+        if isinstance(table, pd.DataFrame):
+            profiler.consume(table)
+        elif isinstance(table, (str, Path)):
+            df = _load_table(table)
+            profiler.consume(df)
+        elif isinstance(table, Iterable):
+            for frame in table:
+                if not isinstance(frame, pd.DataFrame):
+                    raise TypeError(
+                        "Streaming quality analysis requires pandas DataFrame chunks"
+                    )
+                profiler.consume(frame)
+        else:
+            raise TypeError(
+                "Unsupported table type. Expected DataFrame, path or chunk iterable."
+            )
 
-    return quality_report, corr_report
+    return profiler.build(table_name)
 
 
 if __name__ == "__main__":  # pragma: no cover - illustrative usage

@@ -3,6 +3,7 @@ from collections import Counter
 from collections.abc import Iterable
 from itertools import count
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -14,11 +15,13 @@ import scripts.get_document_data as document_script
 
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
+    DocumentQualityAccumulator,
     build_dataframe,
     build_quality_report,
     merge_metadata,
     merge_with_chembl,
 )
+from library.table_quality import TableQualityProfiler
 from library.config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
 import scripts.get_document_data as gdd
 
@@ -559,15 +562,9 @@ def test_finalise_export_failure_skips_write_done(
     monkeypatch.setattr(gdd.SidecarErrors, "save", fake_save, raising=False)
     monkeypatch.setattr(gdd, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **_: None)
-    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(
-        gdd,
-        "_load_export_ready_frame",
-        lambda path, cfg: pd.DataFrame(columns=list(gdd._EXPORT_COLUMNS)),
-    )
-
     exit_code = gdd._finalise_export(
         df,
         output,
@@ -579,3 +576,90 @@ def test_finalise_export_failure_skips_write_done(
     assert exit_code == 1
     assert all(event != "write_done" for event, _payload in info_events)
     assert captured_errors
+
+
+def test_finalise_export_streams_quality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Quality analysis consumes stream without re-reading the CSV."""
+
+    cfg = Config()
+    frames = [
+        pd.DataFrame(
+            {
+                "document_chembl_id": ["CHEMBL1", "CHEMBL2"],
+                "PubMed.PMID": ["101", "102"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "document_chembl_id": ["CHEMBL3", "CHEMBL4"],
+                "PubMed.PMID": ["103", "104"],
+            }
+        ),
+    ]
+    output = tmp_path / "documents.csv"
+
+    captured: dict[str, Any] = {}
+
+    def fake_write_csv(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Any,
+        **_: Any,
+    ) -> Path:
+        materialised = list(chunks)
+        captured["chunk_lengths"] = [len(chunk) for chunk in materialised]
+        path.write_text("")
+        return path
+
+    def fake_build_quality_report(data: Any) -> dict[str, Any]:
+        captured["quality_input"] = data
+        return {}
+
+    def fake_analyze_table_quality(data: Any, table_name: str) -> None:
+        captured["quality_analyzer_input"] = data
+        captured["quality_table_name"] = table_name
+        return None
+
+    def fail_read_csv(*_args: Any, **_kwargs: Any) -> pd.DataFrame:
+        raise AssertionError("pd.read_csv should not be called")
+
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv)
+    monkeypatch.setattr(gdd, "build_quality_report", fake_build_quality_report)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "analyze_table_quality", fake_analyze_table_quality)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd.pd, "read_csv", fail_read_csv)
+
+    exit_code = gdd._finalise_export(
+        iter(frames),
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=["document_chembl_id"],
+        chunk_size=2,
+    )
+
+    assert exit_code == 0
+    assert captured["chunk_lengths"] == [2, 2]
+
+    quality_input = captured["quality_input"]
+    assert isinstance(quality_input, DocumentQualityAccumulator)
+    assert quality_input.rows_total == 4
+
+    analyzer_input = captured["quality_analyzer_input"]
+    assert isinstance(analyzer_input, TableQualityProfiler)
+    assert analyzer_input._rows_processed == 4
+
+    table_name = captured["quality_table_name"]
+    quality_report, _ = analyzer_input.build(table_name)
+    assert "ChEMBL.document_chembl_id" in quality_report["column"].tolist()
+    chembl_row = quality_report.loc[
+        quality_report["column"] == "ChEMBL.document_chembl_id"
+    ].iloc[0]
+    assert int(chembl_row["non_empty"]) == 4
+
+

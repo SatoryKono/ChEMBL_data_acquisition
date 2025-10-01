@@ -11,6 +11,7 @@ sub-commands.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -290,69 +291,101 @@ def dataframe_to_strings(
 # Quality reporting
 
 
-def build_quality_report(df: pd.DataFrame) -> dict[str, Any]:
+class DocumentQualityAccumulator:
+    """Incrementally compute summary metrics for document exports."""
+
+    def __init__(self) -> None:
+        self.rows_total = 0
+        self._doi_truthy = 0
+        self._doi_total = 0
+        self._class_counts: Counter[str] = Counter()
+        self._error_counts: Counter[str] = Counter()
+
+    def consume(self, frame: pd.DataFrame) -> None:
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError("DocumentQualityAccumulator.consume expects a DataFrame")
+
+        row_count = len(frame)
+        self.rows_total += row_count
+        if row_count == 0:
+            return
+
+        if "doi" in frame.columns:
+            doi_series = frame["doi"].astype(str).str.strip()
+        elif "doi_normalised" in frame.columns:
+            doi_series = frame["doi_normalised"].astype(str).str.strip()
+        else:
+            doi_series = None
+        if doi_series is not None:
+            self._doi_truthy += int((doi_series != "").sum())
+            self._doi_total += len(doi_series)
+
+        publication_class = frame.get("publication_class")
+        if publication_class is not None:
+            cleaned = (
+                publication_class.fillna("unknown")
+                .astype(str)
+                .str.strip()
+                .replace("", "unknown")
+            )
+            self._class_counts.update(cleaned.value_counts().to_dict())
+
+        for column, key in (
+            ("PubMed.Error", "pubmed"),
+            ("scholar.Error", "semantic_scholar"),
+            ("OpenAlex.Error", "openalex"),
+            ("crossref.Error", "crossref"),
+        ):
+            series = frame.get(column)
+            if series is None:
+                continue
+            truthy = (
+                series.astype(str)
+                .str.strip()
+                .astype(bool)
+                .sum()
+            )
+            self._error_counts[key] += int(truthy)
+
+    def build(self) -> dict[str, Any]:
+        doi_coverage = (
+            float(self._doi_truthy / self._doi_total) if self._doi_total else 0.0
+        )
+        return {
+            "rows_total": int(self.rows_total),
+            "doi_coverage": doi_coverage,
+            "publication_class_counts": dict(self._class_counts),
+            "error_counts": {
+                "pubmed": int(self._error_counts.get("pubmed", 0)),
+                "semantic_scholar": int(
+                    self._error_counts.get("semantic_scholar", 0)
+                ),
+                "openalex": int(self._error_counts.get("openalex", 0)),
+                "crossref": int(self._error_counts.get("crossref", 0)),
+            },
+        }
+
+
+def build_quality_report(
+    df: pd.DataFrame | Iterable[pd.DataFrame] | DocumentQualityAccumulator,
+) -> dict[str, Any]:
     """Return a JSON serialisable quality summary for ``df``."""
 
-    total = int(len(df))
+    if isinstance(df, DocumentQualityAccumulator):
+        accumulator = df
+    else:
+        accumulator = DocumentQualityAccumulator()
+        frames: Iterable[pd.DataFrame]
+        if isinstance(df, pd.DataFrame):
+            frames = (df,)
+        elif isinstance(df, Iterable):
+            frames = df
+        else:
+            raise TypeError("Unsupported input for build_quality_report")
+        for frame in frames:
+            accumulator.consume(frame)
 
-    def _coverage(series: pd.Series) -> float:
-        if series.empty:
-            return 0.0
-        mask = series.astype(str).str.strip().astype(bool)
-        return float(mask.mean())
-
-    doi_series = (
-        df["doi"]
-        if "doi" in df.columns
-        else df.get("doi_normalised", pd.Series(dtype=str))
-    )
-    class_counts = (
-        df.get("publication_class", pd.Series(dtype=str))
-        .fillna("unknown")
-        .astype(str)
-        .str.strip()
-        .replace("", "unknown")
-        .value_counts()
-        .to_dict()
-    )
-
-    error_counts = {
-        "pubmed": int(
-            df.get("PubMed.Error", pd.Series(dtype=str))
-            .astype(str)
-            .str.strip()
-            .astype(bool)
-            .sum()
-        ),
-        "semantic_scholar": int(
-            df.get("scholar.Error", pd.Series(dtype=str))
-            .astype(str)
-            .str.strip()
-            .astype(bool)
-            .sum()
-        ),
-        "openalex": int(
-            df.get("OpenAlex.Error", pd.Series(dtype=str))
-            .astype(str)
-            .str.strip()
-            .astype(bool)
-            .sum()
-        ),
-        "crossref": int(
-            df.get("crossref.Error", pd.Series(dtype=str))
-            .astype(str)
-            .str.strip()
-            .astype(bool)
-            .sum()
-        ),
-    }
-
-    return {
-        "rows_total": total,
-        "doi_coverage": _coverage(doi_series),
-        "publication_class_counts": class_counts,
-        "error_counts": error_counts,
-    }
+    return accumulator.build()
 
 
 def save_quality_report(report: Mapping[str, Any], path: Path) -> Path:
