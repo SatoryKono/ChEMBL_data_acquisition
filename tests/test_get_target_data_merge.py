@@ -102,6 +102,8 @@ def test_fetch_iuphar_prioritises_uniprot_columns(
             "isoform_names": ["ChemblIso"],
             "GuidetoPHARMACOLOGY": ["chembl_gtop"],
             "gene": ["CHEMBLGENE"],
+            "geneName": ["ChemblGeneName"],
+            "family": ["chembl_family"],
         }
     )
     uniprot_df = pd.DataFrame(
@@ -112,6 +114,8 @@ def test_fetch_iuphar_prioritises_uniprot_columns(
             "isoform_names": [""],
             "GuidetoPHARMACOLOGY": ["uni_gtop"],
             "gene": ["UNIPROTGENE"],
+            "geneName": ["UniGeneName"],
+            "family": ["uni_family"],
         }
     )
     out = tmp_path / "iuphar.csv"
@@ -126,14 +130,24 @@ def test_fetch_iuphar_prioritises_uniprot_columns(
 
     combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
 
-    assert all(
-        not column.endswith("_chembl") and not column.endswith("_uniprot")
+    allowed_suffix_columns = {"xref_chembl", "xref_uniprot"}
+    disallowed_combined = [
+        column
         for column in combined_df.columns
-    )
+        if (
+            column.endswith("_chembl") and column not in allowed_suffix_columns
+        )
+        or (
+            column.endswith("_uniprot") and column not in allowed_suffix_columns
+        )
+    ]
+    assert not disallowed_combined
     assert combined_df.loc[0, "isoform_ids"] == "UNI_ISO"
     assert combined_df.loc[0, "isoform_names"] == "ChemblIso"
     assert combined_df.loc[0, "GuidetoPHARMACOLOGY"] == "uni_gtop"
     assert combined_df.loc[0, "gene"] == "UNIPROTGENE"
+    assert combined_df.loc[0, "geneName"] == "UniGeneName"
+    assert combined_df.loc[0, "family"] == "uni_family"
 
     merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
     processed = tp.postprocess_targets(merged)
@@ -141,4 +155,19 @@ def test_fetch_iuphar_prioritises_uniprot_columns(
     assert processed.loc[0, "isoform_ids"].lower() == "uni_iso"
     assert processed.loc[0, "isoform_names"].lower() == "chembliso"
     assert processed.loc[0, "GuidetoPHARMACOLOGY"] == "uni_gtop"
-    assert processed.loc[0, "gene"] == "UNIPROTGENE"
+    gene_value = processed.loc[0, "gene"]
+    assert gene_value.startswith("UNIPROTGENE")
+    assert "UNIGENENAME" in gene_value
+    assert processed.loc[0, "geneName"] == "UniGeneName"
+    assert processed.loc[0, "family"] == "uni_family"
+    disallowed_processed = [
+        column
+        for column in processed.columns
+        if (
+            column.endswith("_chembl") and column not in allowed_suffix_columns
+        )
+        or (
+            column.endswith("_uniprot") and column not in allowed_suffix_columns
+        )
+    ]
+    assert not disallowed_processed
