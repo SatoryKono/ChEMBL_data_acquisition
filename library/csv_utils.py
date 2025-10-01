@@ -26,6 +26,7 @@ from pandas.api import types as ptypes
 from .config import Config
 from .io.metadata import write_meta_yaml
 from .log import logger
+from .utils.atomic import open_atomic
 
 
 def _normalise_bool(series: pd.Series) -> pd.Series:
@@ -553,7 +554,7 @@ def write_csv_chunks_deterministic(
                     )
                     heapq.heappush(heap, (key, idx, 0))
 
-            with out_path.open("w", encoding=encoding, newline="") as fh:
+            with open_atomic(out_path, encoding=encoding, newline="") as fh:
                 writer = csv.writer(fh, delimiter=sep, lineterminator="\n")
                 writer.writerow(columns)
                 while heap:
