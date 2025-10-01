@@ -5,9 +5,10 @@ from __future__ import annotations
 import random
 import threading
 from collections.abc import Iterable, Iterator
+from itertools import islice
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import requests
 from cachetools import TTLCache
@@ -198,13 +199,17 @@ class ChemblClient:
             self.cache.clear()
 
 
-def _chunked(items: Iterable[str], size: int) -> Iterator[list[str]]:
+T = TypeVar("T")
+
+
+def _chunked(items: Iterable[T], size: int) -> Iterator[list[T]]:
     """Yield ``size``-sized lists from *items*.
 
     Parameters
     ----------
     items:
-        Iterable of identifiers to split.
+        Iterable of identifiers to split. Accepts generators and other lazy
+        iterables.
     size:
         Desired chunk size; must be positive.
 
@@ -222,13 +227,11 @@ def _chunked(items: Iterable[str], size: int) -> Iterator[list[str]]:
     if size <= 0:
         raise ValueError("size must be a positive integer")
 
-    chunk: list[str] = []
-    for item in items:
-        chunk.append(item)
-        if len(chunk) == size:
-            yield chunk
-            chunk = []
-    if chunk:
+    iterator = iter(items)
+    while True:
+        chunk = list(islice(iterator, size))
+        if not chunk:
+            break
         yield chunk
 
 
