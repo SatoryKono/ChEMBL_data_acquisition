@@ -1021,6 +1021,15 @@ def fetch_iuphar(
         elif right_series is not None:
             combined_df["uniprot_id"] = right_series
 
+    if "mapping_uniprot_id" in combined_df.columns:
+        combined_df["mapping_uniprot_id"] = combined_df["mapping_uniprot_id"].fillna("")
+    else:
+        combined_df["mapping_uniprot_id"] = pd.Series(
+            "",
+            index=combined_df.index,
+            dtype=object,
+        )
+
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
             UNIPROT_MISSING_VALUE,

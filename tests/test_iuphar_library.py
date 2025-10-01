@@ -157,6 +157,40 @@ def test_query_gene_symbol_backoff(monkeypatch):
     assert sleeps == [pytest.approx(1.0)]
 
 
+def test_map_uniprot_file_uses_mapping_uniprot(tmp_path):
+    target_df = pd.DataFrame(
+        {
+            "target_id": ["T1"],
+            "uniprot_id": ["P12345"],
+            "family_id": ["F1"],
+            "target_name": ["Target One"],
+            "type": ["Enzyme.Transferase"],
+        }
+    )
+    family_df = pd.DataFrame(
+        {
+            "family_id": ["F1", "ROOT"],
+            "family_name": ["Family", "Root"],
+            "parent_family_id": ["ROOT", pd.NA],
+            "type": ["Enzyme.Transferase", "Other Protein Target"],
+        }
+    )
+    data = ii.IUPHARData(target_df=target_df, family_df=family_df)
+
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    pd.DataFrame(
+        {"uniprot_id": [""], "mapping_uniprot_id": ["P12345|Q99999"]}
+    ).to_csv(source, index=False)
+
+    result = data.map_uniprot_file(source, output)
+
+    assert result.loc[0, "target_id"] == "T1"
+    assert result.loc[0, "mapping_uniprot_id"] == "P12345|Q99999"
+    assert result.loc[0, "IUPHAR_family_id"] == "F1"
+    assert result.loc[0, "IUPHAR_type"] == "Enzyme.Transferase"
+
+
 def test_iuphar_upload_retries(monkeypatch) -> None:
     """``iuphar_upload`` retries failed downloads with backoff."""
 

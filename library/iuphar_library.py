@@ -111,9 +111,41 @@ class IUPHARData:
         rows = self.target_df.loc[mask, "target_id"].dropna().astype(str)
         return list(rows.unique())
 
+    @staticmethod
+    def _split_pipe_values(value: Any) -> list[str]:
+        """Return non-empty items from a pipe-delimited string."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw = value
+        else:
+            if pd.isna(value):
+                return []
+            raw = str(value)
+        return [item.strip() for item in raw.split("|") if item and item.strip()]
+
+    def _target_ids_from_uniprot_values(self, values: Iterable[str]) -> list[str]:
+        """Collect unique target identifiers resolved from UniProt accessions."""
+
+        resolved: list[str] = []
+        for value in values:
+            for accession in self._split_pipe_values(value):
+                ids = self._select_target_ids(
+                    self.target_df["uniprot_id"].eq(accession)
+                )
+                for identifier in ids:
+                    if identifier not in resolved:
+                        resolved.append(identifier)
+        return resolved
+
     def target_id_by_uniprot(self, uniprot_id: str) -> str:
-        """Return the first target ID mapped to ``uniprot_id``."""
-        ids = self._select_target_ids(self.target_df["uniprot_id"].eq(uniprot_id))
+        """Return the first target ID mapped to ``uniprot_id``.
+
+        Pipe-delimited accession lists are resolved sequentially until a
+        matching target is found, mirroring the Power Query fallback logic.
+        """
+
+        ids = self._target_ids_from_uniprot_values([uniprot_id])
         return ids[0] if ids else ""
 
     def target_id_by_hgnc_name(self, hgnc_name: str) -> str:
@@ -194,12 +226,21 @@ class IUPHARData:
         identifiers, mirroring the behaviour of the legacy Power Query
         implementation.
         """
-        uniprot = self.target_id_by_uniprot(row.get("uniprot_id", ""))
+        mapping_ids = self._target_ids_from_uniprot_values(
+            [row.get("mapping_uniprot_id", "")]
+        )
+        mapping = "|".join(mapping_ids) if mapping_ids else ""
+        uniprot_ids = self._target_ids_from_uniprot_values([
+            row.get("uniprot_id", "")
+        ])
+        uniprot = "|".join(uniprot_ids) if uniprot_ids else ""
         hgnc_name = self.target_id_by_hgnc_name(row.get("hgnc_name", ""))
         hgnc_id = self.target_id_by_hgnc_id(row.get("hgnc_id", ""))
         name = ""
         synonyms = ""
-        all_ids = [x for x in [uniprot, hgnc_name, hgnc_id, name, synonyms] if x]
+        all_ids = [
+            x for x in [mapping, uniprot, hgnc_name, hgnc_id, name, synonyms] if x
+        ]
         unique = sorted({i for part in all_ids for i in part.split("|") if i})
         if not unique:
             return "N/A"
@@ -257,6 +298,12 @@ class IUPHARData:
             df["target_id"] = df["GuidetoPHARMACOLOGY"].str.split("|").str[0]
         else:
             df["target_id"] = ""
+
+        if "mapping_uniprot_id" in df.columns:
+            mask = df["target_id"].eq("")
+            df.loc[mask, "target_id"] = df.loc[mask, "mapping_uniprot_id"].apply(
+                self.target_id_by_uniprot
+            )
 
         # Resolve remaining identifiers with a series of fallbacks. The search
         # order mirrors the Power Query logic: UniProt accession, HGNC name,
