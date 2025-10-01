@@ -11,7 +11,7 @@ import pytest
 
 from library import iuphar_library as ii
 from library.clients import iuphar as ci
-from library.config import IupharCfg
+from library.config import ApiCfg, IupharCfg, RetryCfg
 
 
 class DummyResponse:
@@ -118,3 +118,45 @@ def test_session_serialization(monkeypatch: pytest.MonkeyPatch) -> None:
         t.join()
 
     assert order == ["start", "end", "start", "end"]
+
+
+def test_init_session_closes_previous_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reinitialising the session should close the previous instance exactly once."""
+
+    closed: list[str] = []
+
+    class DummySession:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+            closed.append(self.name)
+
+    dummy_initial = DummySession("initial")
+    monkeypatch.setattr(ci, "_session", dummy_initial, raising=False)
+
+    def fake_session_with_retry(api: ApiCfg, retry: RetryCfg) -> DummySession:
+        return DummySession(api.user_agent)
+
+    monkeypatch.setattr(ci, "session_with_retry", fake_session_with_retry)
+
+    retry_cfg = RetryCfg()
+    first_api = ApiCfg(user_agent="chembl-tests/1.0 (mailto:tests@ebi.ac.uk)")
+    second_api = ApiCfg(user_agent="chembl-tests/2.0 (mailto:tests@ebi.ac.uk)")
+
+    ci.init_session(first_api, retry_cfg)
+    first_session = ci._session
+
+    assert isinstance(first_session, DummySession)
+    assert closed == ["initial"]
+    assert dummy_initial.closed is True
+
+    ci.init_session(second_api, retry_cfg)
+    second_session = ci._session
+
+    assert isinstance(second_session, DummySession)
+    assert closed == ["initial", first_api.user_agent]
+    assert first_session.closed is True
+    assert second_session.closed is False
