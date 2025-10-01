@@ -167,10 +167,16 @@ def test_run_chembl_streams_chunks(
 
 
 def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
-    chembl_df = pd.DataFrame({"uniprot_id": ["P12345"]})
+    chembl_df = pd.DataFrame(
+        {"uniprot_id": ["P12345", ""], "mapping_uniprot_id": ["", "P12345"]}
+    )
     out = tmp_path / "uniprot.csv"
 
+    captured: dict[str, pd.DataFrame] = {}
+
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
+        input_df = pd.read_csv(args.input_csv)
+        captured["input"] = input_df
         pd.DataFrame({"uniprot_id": ["P12345"], "names": ["Foo"]}).to_csv(
             args.output_csv, index=False
         )
@@ -178,6 +184,10 @@ def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) ->
 
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     df = gtd.fetch_uniprot(cfg, chembl_df, out)
+    assert "input" in captured
+    assert list(captured["input"].columns) == ["uniprot_id", "original_id"]
+    assert list(captured["input"]["uniprot_id"]) == ["P12345"]
+    assert list(captured["input"]["original_id"]) == ["P12345"]
     assert list(df["original_id"]) == ["P12345"]
 
 
@@ -347,6 +357,43 @@ def test_fetch_iuphar_missing_uniprot_column(
     assert merge_column in combined_df.columns
     assert combined_df.loc[0, merge_column] == gtd.UNIPROT_MISSING_VALUE
     assert iuphar_df.empty
+
+
+def test_fetch_iuphar_uses_mapping_when_uniprot_empty(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["C1"],
+            "uniprot_id": [""],
+            "mapping_uniprot_id": ["P1"],
+            "pref_name": [""],
+            "component_description": [""],
+            "gene": [""],
+            "chembl_alternative_name": [""],
+            "names": [""],
+            "secondaryAccessionNames": [""],
+            "ec_numbers": [""],
+            "reaction_ec_numbers": [""],
+        }
+    )
+    uniprot_df = pd.DataFrame(
+        {"uniprot_id": ["P1"], "original_id": ["P1"], "names": ["Protein"]}
+    )
+    out = tmp_path / "iuphar.csv"
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame({"uniprot_id": ["P1"], "IUPHAR_class": ["Enzyme"]}).to_csv(
+            args.output_csv, index=False
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    assert combined_df.loc[0, "uniprot_id"] == "P1"
+    assert "synonyms" in combined_df.columns
+    assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
 
 
 def test_run_all_preserves_reaction_ec_numbers(
