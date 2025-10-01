@@ -85,6 +85,7 @@ from library.config import (
 )
 from library.document_pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
+    DocumentQualityAccumulator,
     build_dataframe,
     build_quality_report,
     dataframe_to_strings,
@@ -98,7 +99,7 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import RateLimiter, get_limiter
 from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.table_quality import TableQualityProfiler, analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
 
 
@@ -1052,23 +1053,6 @@ def _write_export_chunks(
     )
 
 
-def _load_export_ready_frame(path: Path, *, cfg: Config) -> pd.DataFrame:
-    """Load the streamed CSV export for quality reporting."""
-
-    try:
-        loaded = pd.read_csv(
-            path,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-        )
-    except pd.errors.EmptyDataError:
-        loaded = pd.DataFrame(columns=list(_EXPORT_COLUMNS))
-    missing = [column for column in _EXPORT_COLUMNS if column not in loaded.columns]
-    for column in missing:
-        loaded[column] = ""
-    return loaded[_EXPORT_COLUMNS]
-
-
 def _finalise_export(
     df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
@@ -1102,6 +1086,8 @@ def _finalise_export(
     rows_kept = 0
     exit_code = 0
     emitted_chunk = False
+    quality_profiler = TableQualityProfiler()
+    quality_summary = DocumentQualityAccumulator()
 
     def _validated_chunks() -> Iterator[pd.DataFrame]:
         nonlocal rows_total, rows_kept, exit_code, emitted_chunk
@@ -1140,6 +1126,8 @@ def _finalise_export(
             )
             for chunk in _iter_export_chunks(cleaned, chunk_size=stream_chunk):
                 emitted_chunk = True
+                quality_profiler.consume(chunk)
+                quality_summary.consume(chunk)
                 yield chunk
 
         if not emitted_chunk:
@@ -1151,6 +1139,8 @@ def _finalise_export(
             _update_column_sets(empty)
             for chunk in _iter_export_chunks(empty, chunk_size=stream_chunk):
                 emitted_chunk = True
+                quality_profiler.consume(chunk)
+                quality_summary.consume(chunk)
                 yield chunk
 
     export_generator = _validated_chunks()
@@ -1207,12 +1197,6 @@ def _finalise_export(
     if exit_code == 0:
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
 
-    try:
-        export_ready = _load_export_ready_frame(csv_path, cfg=cfg)
-    except (OSError, ValueError) as exc:
-        logger.error("quality_frame_load_failed", error=str(exc), path=str(csv_path))
-        return 1
-
     stats: Stats = {
         "rows_total": rows_total,
         "rows_kept": rows_kept,
@@ -1230,7 +1214,7 @@ def _finalise_export(
 
     quality_path = csv_path.with_suffix(".quality.json")
     try:
-        report = build_quality_report(export_ready)
+        report = build_quality_report(quality_summary)
         save_quality_report(report, quality_path)
     except (OSError, TypeError, ValueError) as exc:
         logger.error(
@@ -1241,7 +1225,7 @@ def _finalise_export(
         return 1
 
     try:
-        analyze_table_quality(export_ready, table_name=str(csv_path.with_suffix("")))
+        analyze_table_quality(quality_profiler, table_name=str(csv_path.with_suffix("")))
     except ValueError as exc:
         logger.error("quality_report_generation_failed", error=str(exc))
         return 1

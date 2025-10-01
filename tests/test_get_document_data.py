@@ -125,10 +125,7 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
-    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
-    monkeypatch.setattr(
-        gdd, "_load_export_ready_frame", lambda path, cfg: pd.DataFrame()
-    )
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
     monkeypatch.setattr(gdd, "ensure_dirs", lambda cfg: None)
 
     rc = gdd.main(
@@ -911,10 +908,7 @@ def test_write_csv_column_order(
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
-    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
-    monkeypatch.setattr(
-        gdd, "_load_export_ready_frame", lambda path, cfg: pd.DataFrame()
-    )
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
 
     cfg = Config()
     args = argparse.Namespace(
@@ -1834,14 +1828,9 @@ def test_finalise_export_falls_back_to_default_key(
     monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "hash")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
-    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {})
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(
-        gdd,
-        "_load_export_ready_frame",
-        lambda path, cfg: df.copy(),
-    )
     monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
 
     exit_code = gdd._finalise_export(
@@ -1901,14 +1890,13 @@ def test_finalise_export_accepts_generator(
     monkeypatch.setattr(gdd.DocumentsSchema, "validate", fake_validate)
     monkeypatch.setattr(gdd, "file_sha256", lambda path: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
-    monkeypatch.setattr(gdd, "build_quality_report", lambda df: {"rows": len(df)})
+    def fake_build_report(data: Any) -> dict[str, Any]:
+        rows = getattr(data, "rows_total", len(data)) if hasattr(data, "__len__") else getattr(data, "rows_total", 0)
+        return {"rows": rows}
+
+    monkeypatch.setattr(gdd, "build_quality_report", fake_build_report)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
-    monkeypatch.setattr(
-        gdd,
-        "_load_export_ready_frame",
-        lambda path, cfg: pd.concat(frames, ignore_index=True),
-    )
 
     exit_code = gdd._finalise_export(
         iter(frames),
@@ -1957,16 +1945,20 @@ def test_finalise_export_streaming_is_deterministic(
     monkeypatch.setattr(gdd, "file_sha256", lambda path: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
 
-    def fake_build_quality_report(df: pd.DataFrame) -> dict[str, Any]:
-        captured["quality_df"] = df.copy()
-        return {"rows": len(df)}
+    def fake_build_quality_report(data: Any) -> dict[str, Any]:
+        captured["quality_input"] = data
+        if isinstance(data, pd.DataFrame):
+            captured["quality_df"] = data.copy()
+            return {"rows": len(data)}
+        rows = getattr(data, "rows_total", 0)
+        return {"rows": rows}
 
     monkeypatch.setattr(gdd, "build_quality_report", fake_build_quality_report)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
 
-    def fake_analyze_table_quality(df: pd.DataFrame, table_name: str) -> None:
+    def fake_analyze_table_quality(data: Any, table_name: str) -> None:
         captured["quality_table_name"] = table_name
-        captured["quality_table_df"] = df.copy()
+        captured["quality_analyzer_input"] = data
         return None
 
     monkeypatch.setattr(gdd, "analyze_table_quality", fake_analyze_table_quality)
@@ -1984,11 +1976,11 @@ def test_finalise_export_streaming_is_deterministic(
 
     assert exit_code == 0
     assert exported["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
-    assert captured["quality_df"]["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
-    assert captured["quality_table_df"]["PubMed.PMID"].astype(str).tolist() == [
-        "101",
-        "102",
-    ]
+    quality_input = captured["quality_input"]
+    assert getattr(quality_input, "rows_total", 0) == 2
+    analyzer_input = captured["quality_analyzer_input"]
+    quality_report, _ = analyzer_input.build(captured["quality_table_name"])
+    assert quality_report["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])
