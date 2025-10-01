@@ -16,3 +16,9 @@ def test_chunked_splits_list() -> None:
 def test_chunked_size_validation() -> None:
     with pytest.raises(ValueError):
         list(cl._chunked(["a"], 0))
+
+
+def test_chunked_supports_generators() -> None:
+    items = (str(i) for i in range(5))
+    chunks = list(cl._chunked(items, 2))
+    assert chunks == [["0", "1"], ["2", "3"], ["4"]]
