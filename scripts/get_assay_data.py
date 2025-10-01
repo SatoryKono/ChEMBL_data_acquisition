@@ -104,24 +104,26 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def fetcher() -> Iterable[pd.DataFrame]:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            try:
-                df = cl.get_assays(
-                    ids_source,
-                    cfg=cfg.api,
-                    client=client,
-                    chunk_size=cfg.assay.batch_size,
-                    timeout=cfg.assay.timeout,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error(
-                    "assay_fetch_failed",
-                    extra={"msg": str(exc)},
-                    error=str(exc),
-                    batch_size=cfg.assay.batch_size,
-                    timeout=cfg.assay.timeout,
-                )
-                raise PipelineError(str(exc)) from exc
-            yield df
+            chunk_iter = cl._chunked(ids_source, cfg.assay.batch_size)
+            for chunk_ids in chunk_iter:
+                try:
+                    df = cl.get_assays(
+                        chunk_ids,
+                        cfg=cfg.api,
+                        client=client,
+                        chunk_size=cfg.assay.batch_size,
+                        timeout=cfg.assay.timeout,
+                    )
+                except (requests.RequestException, ValueError) as exc:
+                    logger.error(
+                        "assay_fetch_failed",
+                        extra={"msg": str(exc)},
+                        error=str(exc),
+                        batch_size=cfg.assay.batch_size,
+                        timeout=cfg.assay.timeout,
+                    )
+                    raise PipelineError(str(exc)) from exc
+                yield df
 
     metadata_hooks = [
         ap.postprocess_assays,
