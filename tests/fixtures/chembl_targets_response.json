@@ -1,0 +1,16 @@
+[
+  {
+    "pref_name": "Alpha receptor",
+    "target_chembl_id": "CHEMBL1",
+    "gene": "GENE1",
+    "component_description": "Alpha component",
+    "uniprot_id_primary": "-"
+  },
+  {
+    "pref_name": "Beta receptor",
+    "target_chembl_id": "CHEMBL2",
+    "gene": "GENE2",
+    "component_description": "Beta component",
+    "uniprot_id_primary": "P12345"
+  }
+]
