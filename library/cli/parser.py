@@ -155,6 +155,13 @@ def add_common_arguments(
         default=output_default,
         help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
     )
+    parser.add_argument(
+        "--out",
+        dest="_deprecated_out",
+        type=path_argument,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--sep", default=sep_default, help="CSV delimiter")
     parser.add_argument("--encoding", default=enc_default, help="File encoding")
     parser.add_argument(
@@ -579,6 +586,13 @@ def prepare_io_paths(
 
     output_dir = _resolve_directory(getattr(args, "output_dir", None), base=base_path)
     setattr(args, "output_dir", output_dir)
+
+    deprecated_out = getattr(args, "_deprecated_out", argparse.SUPPRESS)
+    if deprecated_out is not argparse.SUPPRESS:
+        current_output = getattr(args, "output_csv", None)
+        if current_output in (None, argparse.SUPPRESS):
+            setattr(args, "output_csv", deprecated_out)
+        setattr(args, "_out_alias_used", True)
 
     current_input = getattr(args, "input_csv", None)
     if current_input in (None, argparse.SUPPRESS) and input_default is not None:
