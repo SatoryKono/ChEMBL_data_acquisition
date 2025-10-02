@@ -32,8 +32,9 @@ from contextlib import ExitStack, contextmanager, AbstractContextManager
 from itertools import chain, islice, tee
 import tempfile
 from pathlib import Path
+import weakref
 
-from threading import Lock, local
+from threading import local
 from typing import Any, cast, TypeVar
 
 
@@ -447,8 +448,12 @@ def fetch_pubmed_records(
             self.session_pools = session_pools
 
     thread_local_state = local()
-    thread_resources: list[_ThreadResources] = []
-    thread_resources_lock = Lock()
+
+    def _close_thread_resources(resources: _ThreadResources) -> None:
+        try:
+            resources.stack.close()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("thread_resources_close_failed")
 
     def _get_thread_resources() -> _ThreadResources:
         resources = getattr(thread_local_state, "resources", None)
@@ -490,8 +495,10 @@ def fetch_pubmed_records(
         resources = _ThreadResources(session_stack, base_session, pools)
         setattr(thread_local_state, "resources", resources)
 
-        with thread_resources_lock:
-            thread_resources.append(resources)
+        finalizer = weakref.finalize(
+            thread_local_state, _close_thread_resources, resources
+        )
+        setattr(thread_local_state, "resources_finalizer", finalizer)
 
         return resources
 
@@ -807,11 +814,14 @@ def fetch_pubmed_records(
                 yield build_dataframe(records_batch, columns=DOCUMENT_SCHEMA_COLUMNS)
         finally:
             stack.close()
-            with thread_resources_lock:
-                resources_to_close = list(thread_resources)
-                thread_resources.clear()
-            for resources in resources_to_close:
-                resources.stack.close()
+            finalizer = getattr(thread_local_state, "resources_finalizer", None)
+            if finalizer is not None:
+                try:
+                    finalizer()
+                finally:
+                    delattr(thread_local_state, "resources_finalizer")
+            if hasattr(thread_local_state, "resources"):
+                delattr(thread_local_state, "resources")
 
     frame_iter = _iter_frames()
     if return_generator:

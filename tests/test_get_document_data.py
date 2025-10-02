@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import io
 import shutil
 import json
@@ -1040,6 +1041,100 @@ def test_fetch_pubmed_records_returns_generator_in_order(
     )
 
     assert combined["PubMed.PMID"].tolist() == pmids
+
+
+def test_fetch_pubmed_records_closes_sessions_when_generator_gc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generator GC should release thread resources and close sessions."""
+
+    pmids = ["1", "2", "3"]
+
+    class TrackingSession:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class TrackingContext:
+        def __init__(self, session: TrackingSession) -> None:
+            self._session = session
+
+        def __enter__(self) -> TrackingSession:
+            sessions.append(self._session)
+            return self._session
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - deterministic
+            self._session.close()
+
+    sessions: list[TrackingSession] = []
+
+    monkeypatch.setattr(
+        gdd,
+        "session_with_retry",
+        lambda *_, **__: TrackingContext(TrackingSession()),
+    )
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        retry_cfg: Any | None = None,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar_batch",
+        lambda *_, **__: [],
+    )
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+        return_generator=True,
+    )
+
+    next(generator)
+    assert any(not session.closed for session in sessions)
+
+    del generator
+    gc.collect()
+
+    deadline = time.time() + 1.0
+    while any(not session.closed for session in sessions) and time.time() < deadline:
+        gc.collect()
+        time.sleep(0.01)
+
+    assert sessions and all(session.closed for session in sessions)
 
 
 def test_fetch_pubmed_records_drains_pending_batches(
