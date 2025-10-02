@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import pytest
 import yaml
 
 from library.config import Config, _mask_secrets, _serialize_paths
-from library.cli_utils import build_parser, run_pipeline
+from library.cli_utils import build_parser, resolve_invocation, run_pipeline
 from library.logging_setup import LoggerConfig, configure_logger as setup_logger
 from schemas import AssaysSchema
 
@@ -62,6 +63,12 @@ def test_cli_utils_flags_and_help() -> None:
     )
 
 
+def test_resolve_invocation_normalises_arguments() -> None:
+    invocation = resolve_invocation("tool", ["--flag", "value with space"])
+    assert invocation == ("tool", "--flag", "value with space")
+
+
+
 class _ValidationResult:
     def __init__(self, data: pd.DataFrame, failure_cases: pd.DataFrame) -> None:
         self.data = data
@@ -93,6 +100,12 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
 
     received_chunks: list[pd.DataFrame] = []
     received_order: list[str] | None = None
+    events: list[tuple[str, tuple[str, ...]]] = []
+    observed_orders: list[list[str]] = []
+
+    def tracking_hook(df: pd.DataFrame) -> pd.DataFrame:
+        events.append(("process", tuple(df.get("assay_chembl_id", []))))
+        return df
 
     def writer(
         chunks: Iterable[pd.DataFrame],
@@ -101,9 +114,17 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
         key_cols: list[str],
     ) -> Path:
         nonlocal received_order
-        received_order = col_order
         for chunk in chunks:
+            events.append(("write", tuple(chunk.get("assay_chembl_id", []))))
+            if col_order:
+                chunk = chunk.reindex(columns=col_order)
+            observed_orders.append(list(chunk.columns))
             received_chunks.append(chunk)
+        received_order = list(col_order) if col_order is not None else None
+        if received_order is not None:
+            for idx, chunk in enumerate(received_chunks):
+                received_chunks[idx] = chunk.reindex(columns=received_order)
+                observed_orders[idx] = list(received_chunks[idx].columns)
         combined = pd.concat(received_chunks, ignore_index=True)
         combined.to_csv(destination, index=False)
         return destination
@@ -113,7 +134,7 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
         schema=AssaysSchema,
         schema_name="AssaysSchema",
         validators=[validator],
-        metadata_hooks=None,
+        metadata_hooks=[tracking_hook],
         writer=writer,
         output_path=output,
         failure_path=failure_path,
@@ -128,7 +149,13 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
     assert exit_code == 0
     assert received_order is not None
     assert len(received_chunks) == 2
-    assert all(list(chunk.columns) == received_order for chunk in received_chunks)
+    assert all(order == received_order for order in observed_orders)
+    assert events == [
+        ("process", ("A1", "A2")),
+        ("write", ("A1", "A2")),
+        ("process", ("A3",)),
+        ("write", ("A3",)),
+    ]
 
     written = pd.read_csv(output)
     assert sorted(written["assay_chembl_id"]) == ["A1", "A2", "A3"]
@@ -213,6 +240,49 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> N
 
     meta_path = output.with_name(output.name + ".meta.yaml")
     assert meta_path.exists()
+
+
+def test_run_pipeline_records_invocation(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frame = pd.DataFrame({"assay_chembl_id": ["A1"], "value": [1]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        frames = list(chunks)
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        df.to_csv(destination, index=False)
+        return destination
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="",  # ignored when schema is None
+        validators=None,
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        invocation=("tool", "--flag", "value with space"),
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _path: None,
+        cfg=cfg,
+    )
+
+    assert exit_code == 0
+    meta_path = output.with_name(output.name + ".meta.yaml")
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["command"] == "tool --flag 'value with space'"
 
 
 def test_run_pipeline_removes_outputs_on_table_quality_failure(

@@ -503,6 +503,15 @@ def test_get_activity_data_smoke(
     output_csv = _expected_output(smoke_output_dir, "activities")
     _cleanup_output(output_csv)
 
+    configured: list[LoggerConfig] = []
+    original_configure = get_activity_data.cli.configure_logger
+
+    def _capture_configure_logger(
+        cfg: LoggerConfig, *args: object, **kwargs: object
+    ) -> object:
+        configured.append(cfg)
+        return original_configure(cfg, *args, **kwargs)
+
     def fake_get_activities(ids, cfg, client, chunk_size, timeout, **kwargs):  # type: ignore[no-untyped-def]
         rows: list[dict[str, object]] = []
         for idx, raw_id in enumerate(ids, start=1):
@@ -523,6 +532,13 @@ def test_get_activity_data_smoke(
     monkeypatch.setattr(
         get_activity_data, "analyze_table_quality", lambda *_, **__: None
     )
+    monkeypatch.setattr(get_activity_data, "configure_logger", _capture_configure_logger)
+    monkeypatch.setattr(
+        get_activity_data.cli,
+        "configure_logger",
+        _capture_configure_logger,
+    )
+    monkeypatch.setattr("library.cli.configure_logger", _capture_configure_logger)
 
     exit_code = get_activity_data.main(_cli_args())
     assert exit_code == 0
@@ -556,6 +572,8 @@ def test_get_activity_data_smoke(
             "timestamp_utc": ptypes.is_object_dtype,
         },
     )
+
+    assert configured, "configure_logger should be invoked during the pipeline"
 
 
 def test_get_assay_data_smoke(

@@ -21,12 +21,15 @@ from typing import (
     Any,
     Callable,
     Iterable,
-    Iterator,
     Mapping,
     MutableMapping,
     NamedTuple,
     Sequence,
+    Hashable,
+    cast,
 )
+
+import logging
 
 import pandas as pd
 import requests
@@ -49,6 +52,7 @@ if __package__ in {None, ""}:
     ensure_project_root()
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
+from library import io
 from library import molecule_catalog
 from library import pubchem_library as pl
 from library.cli import LoggerConfig
@@ -66,8 +70,8 @@ from library.clients import pubchem as pc  # noqa: F401 - patched in tests
 import library.testitem_pipeline as pipeline
 from library.chembl_client import ChemblClient
 from library.testitem_pipeline import (
+    PUBCHEM_CID_CACHE_ENCODING,
     PUBCHEM_COLUMNS,
-    PUBCHEM_CID_CACHE_ENCODING as _pipeline_pubchem_cid_cache_encoding,
     ReadInputIdsResult,
     TestitemPipelineOptions,
     _DEFAULT_CATALOG_CFG,
@@ -75,72 +79,26 @@ from library.testitem_pipeline import (
     _MOLECULE_HIERARCHY_COLUMNS,
     _PUBCHEM_CACHE_SCHEMA_VERSION,
     _TYPO_PARENT_COLUMN,
-    analyze_table_quality as _analyze_table_quality,
-    file_sha256 as _pipeline_file_sha256,
-    fetch_testitems as _fetch_testitems,
-    load_molecule_hierarchy_lookup as _pipeline_load_molecule_hierarchy_lookup,
-    query_parent_catalog as _query_parent_catalog,
-    read_input_ids as _read_input_ids,
+    analyze_table_quality,
+    ensure_no_parant_column,
+    file_sha256,
+    fetch_testitems,
+    integrate_missing_identifiers,
+    load_parent_catalog,
+    query_parent_catalog,
+    read_input_ids,
     run_testitem_pipeline,
-    update_parent_catalog_cache as _pipeline_update_parent_catalog_cache,
-    write_meta_yaml as _pipeline_write_meta_yaml,
-    write_parent_catalog_cache as _pipeline_write_parent_catalog_cache,
-    load_parent_catalog as _load_parent_catalog,
+    update_parent_catalog_cache,
+    write_meta_yaml,
+    write_parent_catalog_cache,
+    _prepare_pubchem_api_cfg,
+    _write_pubchem_cid_cache,
+    PARENT_LOOKUP_SOURCE_CACHE,
+    PARENT_LOOKUP_SOURCE_LOOKUP,
+    PARENT_LOOKUP_SOURCE_PARTIAL,
+    PARENT_LOOKUP_SOURCE_SKIPPED,
+    PARENT_LOOKUP_SOURCE_SYNC,
 )
-from library.testitem_pipeline import (
-    _prepare_pubchem_api_cfg as _pipeline_prepare_pubchem_api_cfg,
-    _load_pubchem_cid_cache as _pipeline_load_pubchem_cid_cache,
-    _write_pubchem_cid_cache as _pipeline_write_pubchem_cid_cache,
-    integrate_missing_identifiers as _integrate_missing_identifiers,
-    _TYPO_PARENT_COLUMN as _pipeline_typo_parent_column,
-)
-
-# Re-export helpers consumed directly by unit tests.
-read_input_ids = _read_input_ids
-fetch_testitems = _fetch_testitems
-load_parent_catalog = _load_parent_catalog
-query_parent_catalog = _query_parent_catalog
-_prepare_pubchem_api_cfg = _pipeline_prepare_pubchem_api_cfg
-_load_pubchem_cid_cache = _pipeline_load_pubchem_cid_cache
-analyze_table_quality = _analyze_table_quality
-_integrate_missing_identifiers = _integrate_missing_identifiers
-
-update_parent_catalog_cache = _pipeline_update_parent_catalog_cache
-write_parent_catalog_cache = _pipeline_write_parent_catalog_cache
-_write_pubchem_cid_cache = _pipeline_write_pubchem_cid_cache
-load_molecule_hierarchy_lookup = _pipeline_load_molecule_hierarchy_lookup
-file_sha256 = _pipeline_file_sha256
-write_meta_yaml = _pipeline_write_meta_yaml
-PUBCHEM_CID_CACHE_ENCODING = _pipeline_pubchem_cid_cache_encoding
-_TYPO_PARENT_COLUMN = _pipeline_typo_parent_column
-
-
-_FETCH_ERROR_SAMPLE_SIZE = 10
-
-
-@dataclass
-class ReadInputIdsResult:
-    """Container holding the identifier iterator and a diagnostic sample."""
-
-    ids_iter: Iterator[str]
-    sample_ids: tuple[str, ...]
-
-
-def ensure_no_parant_column(df: pd.DataFrame) -> None:
-    """Raise a :class:`ValueError` if the legacy typo column is present."""
-
-    if _TYPO_PARENT_COLUMN in df.columns:
-        raise ValueError(
-            "unexpected column 'parant_molecule_id'; use 'parent_molecule_id' instead"
-        )
-
-
-PARENT_LOOKUP_SOURCE_CACHE = "cache"
-PARENT_LOOKUP_SOURCE_LOOKUP = "lookup"
-PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
-PARENT_LOOKUP_SOURCE_SYNC = "sync"
-PARENT_LOOKUP_SOURCE_SKIPPED = "skipped"
-
 
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     """Return ``value`` normalised for PubChem lookup."""
@@ -336,7 +294,7 @@ def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
     }
 
 
-def _pubchem_resolution_key(row: pd.Series) -> tuple[str | None, ...]:
+def _pubchem_resolution_key(row: pd.Series) -> Hashable:
     """Return a hashable key describing identifiers used for PubChem lookup."""
 
     identifiers = _pubchem_identifiers(row)
@@ -359,9 +317,7 @@ def resolve_pubchem_cid(
     cfg: PubChemCfg,
     *,
     parent_loader: Callable[[str], pd.Series | None] | None = None,
-    resolution_cache: (
-        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
-    ) = None,
+    resolution_cache: MutableMapping[Hashable, pl.PubChemResolution] | None = None,
     visited: set[str] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
@@ -521,8 +477,13 @@ def load_molecule_hierarchy_lookup(
     encoding: str | None = None,
     delimiter: str | None = None,
     catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, str]:
-    """Return child → parent mapping loaded from a local hierarchy file."""
+) -> dict[str, str | None]:
+    """Return child → parent mapping loaded from a local hierarchy file.
+
+    The returned mapping mirrors
+    :func:`library.testitem_pipeline.load_molecule_hierarchy_lookup` where
+    values may be ``None`` when no parent is listed in the hierarchy.
+    """
 
     cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
     resolved_path_value = path or cfg_source.hierarchy_lookup_path
@@ -797,14 +758,17 @@ def add_pubchem_data(
     api_cfg: ApiCfg | None = None,
     timeout: float | None = None,
     cid_cache: MutableMapping[str, str | None] | None = None,
-    resolution_cache: (
-        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
-    ) = None,
+    resolution_cache: MutableMapping[Hashable, pl.PubChemResolution] | None = None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
     testitem_fields: Sequence[str] | None = None,
     request_limit: int = 1000,
 ) -> pd.DataFrame:
-    """Augment ChEMBL records with PubChem information."""
+    """Augment ChEMBL records with PubChem information.
+
+    Delegates to :func:`library.testitem_pipeline.add_pubchem_data` while
+    relaxing the ``resolution_cache`` type to align with
+    :func:`library.pubchem_library.resolve_pubchem_record`.
+    """
 
     return pipeline.add_pubchem_data(
         df,
@@ -813,7 +777,10 @@ def add_pubchem_data(
         api_cfg=api_cfg,
         timeout=timeout,
         cid_cache=cid_cache,
-        resolution_cache=resolution_cache,
+        resolution_cache=cast(
+            MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None,
+            resolution_cache,
+        ),
         parent_record_cache=parent_record_cache,
         testitem_fields=testitem_fields,
         request_limit=request_limit,
@@ -951,7 +918,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_cfg=log_cfg,
         mapping=mapping,
         run=run,
-        logger=logger,
+        logger=cast(logging.Logger, logger),
     )
 
 
