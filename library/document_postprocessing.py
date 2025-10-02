@@ -14,6 +14,7 @@ import pandas as pd
 
 from . import validation
 from .config import IoCfg
+from .csv_utils import write_csv_deterministic
 
 # Columns that should be treated as text
 TEXT_COLUMNS: list[str] = [
@@ -296,4 +297,12 @@ def postprocess_file(
     encoding = encoding or cfg.csv_encoding
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_documents(df)
-    processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
+    write_csv_deterministic(
+        processed,
+        output_path,
+        col_order=list(processed.columns),
+        key_cols=["document_chembl_id"],
+        sep=sep,
+        encoding=encoding,
+        cfg=None,
+    )
