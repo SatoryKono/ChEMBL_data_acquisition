@@ -857,6 +857,7 @@ class ActivityCfg(_BoolModel):
     workers: int = Field(1, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
+    offset: int = Field(0, ge=0)
     dry_run: bool = False
 
     @field_validator("dry_run", mode="before")
