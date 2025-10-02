@@ -465,6 +465,21 @@ def _finalize_step_success(
             continue
         destination = sidecar.destination
         destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            same_location = working_path.resolve() == destination.resolve()
+        except OSError:
+            same_location = False
+        if same_location:
+            final_path = sidecar.final_path
+            if (
+                final_path is not None
+                and final_path.exists()
+                and final_path != destination
+            ):
+                final_parent = final_path.parent
+                final_path.unlink()
+                _cleanup_empty_directories(final_parent, root=final_dir)
+            continue
         if destination.exists():
             destination.unlink()
         original_parent = working_path.parent
