@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import time
 from collections.abc import Iterable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -10,6 +12,7 @@ import pytest
 import library.cli_utils as cli_utils
 from library import chembl_library as cl
 from library import io
+from library import rate_limiter as rl
 from library.config import Config
 from schemas import ActivitiesSchema
 from scripts import get_activity_data as gad
@@ -39,7 +42,15 @@ def test_run_chembl_respects_limit(
         data = list(ids)
         captured["ids"] = data
         captured["extra_columns"] = kwargs.get("extra_columns")
-        return pd.DataFrame({"activity_id": data})
+        return pd.DataFrame(
+            {
+                "activity_id": data,
+                "assay_chembl_id": [f"A{i}" for i in data],
+                "molecule_chembl_id": [f"M{i}" for i in data],
+                "standard_value": [1.0] * len(data),
+                "standard_type": ["IC50"] * len(data),
+            }
+        )
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
 
@@ -172,6 +183,8 @@ def test_run_chembl_streams_large_output(
         return pd.DataFrame(
             {
                 "activity_id": data,
+                "assay_chembl_id": [f"A{i}" for i in data],
+                "molecule_chembl_id": [f"M{i}" for i in data],
                 "standard_value": [1.0] * len(data),
                 "standard_type": ["IC50"] * len(data),
             }
@@ -239,3 +252,113 @@ def test_run_chembl_streams_large_output(
     assert captured["chunksize"] == chunk_size
     assert captured["sort_chunksize"] == chunk_size
     assert captured["chunk_count"] > 1
+
+
+def test_run_chembl_workers_preserve_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("")
+
+    cfg.activity.batch_size = 2
+    cfg.activity.workers = 2
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(
+        io, "read_ids", lambda *_, **__: (str(i) for i in range(1, 7))
+    )
+
+    delays = {("1", "2"): 0.05, ("3", "4"): 0.0, ("5", "6"): 0.0}
+
+    def fake_get(ids, cfg, client, chunk_size, timeout, **kwargs):
+        key = tuple(ids)
+        time.sleep(delays.get(key, 0.0))
+        return pd.DataFrame({"activity_id": list(ids)})
+
+    monkeypatch.setattr(cl, "get_activities", fake_get)
+
+    captured_chunks: list[list[str]] = []
+
+    def fake_run_pipeline(*, fetcher, **kwargs):
+        for chunk in fetcher():
+            captured_chunks.append(list(chunk["activity_id"]))
+        return 0
+
+    monkeypatch.setattr(gad, "run_pipeline", fake_run_pipeline)
+
+    rc = gad.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert captured_chunks == [["1", "2"], ["3", "4"], ["5", "6"]]
+
+
+def test_run_chembl_workers_respect_rate_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("")
+
+    cfg.activity.batch_size = 1
+    cfg.activity.workers = 3
+    cfg.sources.chembl.api.rps = 1
+    cfg.sources.chembl.api.burst = 1
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(
+        io, "read_ids", lambda *_, **__: (str(i) for i in range(3))
+    )
+
+    clock = SimpleNamespace(now=0.0, sleeps=[])
+
+    def _monotonic() -> float:
+        return clock.now
+
+    def _sleep(delay: float) -> None:
+        clock.sleeps.append(delay)
+        clock.now += delay
+
+    monkeypatch.setattr(rl, "time", SimpleNamespace(monotonic=_monotonic))
+    monkeypatch.setattr(rl, "sleep", _sleep)
+
+    with rl._limiters_lock:
+        rl._limiters.clear()
+
+    class DummyClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *_args) -> bool:
+            return False
+
+        def request_json(self, url: str, *, cfg, timeout=None):
+            limiter = rl.get_limiter("chembl", cfg.rps, cfg.burst)
+            limiter.acquire()
+            return {"activities": []}
+
+    monkeypatch.setattr(gad, "ChemblClient", DummyClient)
+
+    def fake_get(ids, cfg, client, chunk_size, timeout, **kwargs):
+        client.request_json(f"chunk:{','.join(ids)}", cfg=cfg, timeout=timeout)
+        return pd.DataFrame({"activity_id": list(ids)})
+
+    monkeypatch.setattr(cl, "get_activities", fake_get)
+
+    processed: list[list[str]] = []
+
+    def fake_run_pipeline(*, fetcher, **kwargs):
+        for chunk in fetcher():
+            processed.append(list(chunk["activity_id"]))
+        return 0
+
+    monkeypatch.setattr(gad, "run_pipeline", fake_run_pipeline)
+
+    rc = gad.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert processed == [["0"], ["1"], ["2"]]
+    assert clock.sleeps == pytest.approx([1.0, 1.0])
