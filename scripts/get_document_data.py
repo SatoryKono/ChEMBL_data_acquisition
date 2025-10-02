@@ -95,6 +95,7 @@ from schemas import DocumentsSchema, normalize_documents
 
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
+DOCUMENT_PROGRESS_INFO_INTERVAL = 100
 
 
 T = TypeVar("T")
@@ -727,6 +728,7 @@ def fetch_pubmed_records(
     completed: dict[int, list[dict[str, str]]] = {}
     next_to_emit = 0
     processed = 0
+    completed_batches = 0
     max_in_flight = max(1, max_workers * 2)
 
     stack = ExitStack()
@@ -746,13 +748,18 @@ def fetch_pubmed_records(
     def _drain_future(
         done_future: Future[list[dict[str, str]]],
     ) -> Iterator[list[dict[str, str]]]:
-        nonlocal processed, next_to_emit
+        nonlocal processed, next_to_emit, completed_batches
 
         pending.remove(done_future)
         batch_id, batch_pmids = tasks.pop(done_future)
         completed[batch_id] = done_future.result()
         processed += len(batch_pmids)
-        logger.info("documents_processed", count=processed)
+        completed_batches += 1
+        log_kwargs = {"count": processed, "batches": completed_batches}
+        if completed_batches % DOCUMENT_PROGRESS_INFO_INTERVAL == 0:
+            logger.info("documents_processed", **log_kwargs)
+        else:
+            logger.debug("documents_processed", **log_kwargs)
 
         while next_to_emit in completed:
             records = completed.pop(next_to_emit)
