@@ -807,7 +807,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
 
 
 def test_load_molecule_hierarchy_lookup_missing_columns(
-    tmp_path: Path, cfg: Config
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "hierarchy_invalid.csv"
     path.write_text(
@@ -815,10 +815,20 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
         encoding=cfg.io.csv_encoding,
     )
 
-    with pytest.raises(ValueError) as excinfo:
-        pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+    captured: list[tuple[str, dict[str, object]]] = []
 
-    assert "invalid hierarchy lookup" in str(excinfo.value)
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(pipeline.logger, "warning", fake_warning)
+
+    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+
+    assert result == {"CHEMBL1": None}
+    assert captured
+    event, payload = captured[-1]
+    assert event == "molecule_hierarchy_missing_parent_column"
+    assert payload.get("column") == "parent_molecule_chembl_id"
 
 
 def test_prepare_pubchem_caches_primes_local_parent_cache(
