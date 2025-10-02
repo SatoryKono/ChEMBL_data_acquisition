@@ -387,10 +387,19 @@ def _prepare_targets_for_schema(
         columns that were injected.
     """
 
-    missing_required = TARGETS_REQUIRED_COLUMNS - set(df.columns)
+    columns_present = set(df.columns)
+    missing_required = TARGETS_REQUIRED_COLUMNS - columns_present
     missing_optional = {
-        column for column in TARGETS_OPTIONAL_COLUMNS if column not in df.columns
+        column for column in TARGETS_OPTIONAL_COLUMNS if column not in columns_present
     }
+
+    extra_preserve: dict[str, pd.Series] = {}
+
+    if "uniprot_id_primary" not in df.columns and "uniprot_id" in df.columns:
+        extra_preserve["uniprot_id_primary"] = df["uniprot_id"].astype(object)
+
+    if "mapping_uniprot_id" in df.columns:
+        extra_preserve["mapping_uniprot_id"] = df["mapping_uniprot_id"].astype(object)
 
     if missing_optional:
         fill_values = {
@@ -405,7 +414,16 @@ def _prepare_targets_for_schema(
     else:
         prepared = df.copy()
 
-    prepared = prepared.reindex(columns=TARGETS_COLUMN_ORDER)
+    reindex_columns = TARGETS_COLUMN_ORDER
+    if extra_preserve:
+        reindex_columns = reindex_columns + [column for column in extra_preserve if column not in TARGETS_COLUMN_ORDER]
+
+    prepared = prepared.reindex(columns=reindex_columns)
+
+    if extra_preserve:
+        for column, series in extra_preserve.items():
+            prepared[column] = series.reindex(prepared.index)
+
     for column in TARGETS_OBJECT_COLUMNS & set(prepared.columns):
         prepared[column] = prepared[column].astype(object)
     return prepared, missing_required, missing_optional
@@ -1472,7 +1490,7 @@ def fetch_chembl(
     id_cols: Sequence[str] | None = None,
     chunk_size: int | None = None,
     offset: int = 0,
-    normalize_at_export: bool = False,
+    normalize_at_export: bool = True,
     no_reindex_raw: bool = False,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
@@ -1495,7 +1513,9 @@ def fetch_chembl(
     Returns
     -------
     pandas.DataFrame
-        Retrieved ChEMBL data loaded from ``final_out``.
+        Retrieved ChEMBL data loaded from ``final_out``. The export is
+        normalised by default to ensure that downstream steps receive the
+        canonical schema (including columns such as ``uniprot_id``).
 
     Raises
     ------

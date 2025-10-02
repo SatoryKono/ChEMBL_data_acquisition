@@ -103,6 +103,7 @@ def test_run_all_uses_local_inputs(
     recorded: dict[str, int] = {}
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        assert args.normalize_at_export is True
         recorded["chunk_size"] = cfg.target.chembl.chunk_size
         df = pd.read_csv(chembl_data)
         df["type"] = "Legacy"
