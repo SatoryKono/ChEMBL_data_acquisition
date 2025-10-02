@@ -35,8 +35,7 @@ directly.
 | `--output` / `--out` | Destination flag for commands that have not yet adopted `--final-out`. `--out` remains as a deprecated alias and emits a warning on each invocation. |
 | `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`; other commands will surface it once the shared parser is extended. Skipped when omitted. |
 | `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. Available in the same entry points as `--raw-out`. |
-| `--no-reindex-raw` | Skip column reindexing when persisting the raw snapshot so the API column order is retained. Defaults to reindexing; currently honoured by the target pipeline entry points. |
-| `--normalize-at-export` / `--no-normalize-at-export` | Toggle the final normalisation stage. The target pipeline defaults to `--normalize-at-export`; pass `--no-normalize-at-export` to keep the raw payload, in which case the CLI copies the raw snapshot to `--final-out`. Other pipelines ignore the switches until staged support lands. |
+| `--no-reindex-raw` | Preserve the API column order in the raw snapshot instead of reindexing alphabetically for deterministic layouts. Exposed alongside `--raw-out`. |
 | `--date` | Override the auto-generated `YYYYMMDD` suffix when building default output filenames. |
 | `--force` | Overwrite outputs even when they already exist. |
 | `--skip-existing` | Skip processing if the destination file is already present. |
@@ -44,6 +43,7 @@ directly.
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
 | `--id-cols` | Comma-separated list of identifier columns to preserve in the raw snapshot before cleanup. Currently surfaced by the target pipeline helpers. |
+| `--normalize-at-export` / `--no-normalize-at-export` | Boolean pair controlling whether the final CSV is normalised immediately before writing (default: normalise). Disabling the flag keeps the final artefact byte-identical to the raw snapshot while validation still runs against the normalised view. |
 | `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
 | `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
 
@@ -68,9 +68,9 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
 ```
 
-In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, `--no-reindex-raw` preserves the API column order, and `--final-out` writes the cleaned table after normalisation and validation. Normalisation runs by default (`--normalize-at-export`); pass `--no-normalize-at-export` to keep the raw payload, in which case the CLI still writes the raw snapshot and copies it to `--final-out` for parity. The legacy `--output`/`--out` switches remain wired in for compatibility but emit deprecation warnings. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines will add the staged switches once the shared parser is extended.
+In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out` writes the cleaned table after normalisation and validation. Raw dumps reindex columns alphabetically unless `--no-reindex-raw` preserves the API order for forensic comparisons. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether the final CSV is normalised immediately before writing (default) or copied byte-for-byte from the raw snapshot—validation still inspects the normalised view even when the export stays raw. The legacy `--output`/`--out` switches remain wired in for compatibility but emit deprecation warnings. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines will add the staged switches once the shared parser is extended.
 
-> **Note.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the `--normalize-at-export` / `--no-normalize-at-export` pair are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
+> **Note.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
 
 
 During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preserved in the raw snapshot and counted in the metadata under `error_placeholder_counts` while being removed from the final export.
@@ -249,9 +249,8 @@ python -m scripts.get_target_data chembl \
 Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository. Swap `chembl` in the example for `uniprot`, `iuphar` or `all` to choose a different source mix.
 
 * Use `--offset` on any sub-command to skip identifiers that have already been processed in a previous run.
-* Pair `--raw-out` with `--no-reindex-raw` when you need to compare the snapshot against upstream payloads without column reindexing. The switch is optional; leaving it unset reorders columns to the canonical schema layout.
-* Normalisation runs by default (`--normalize-at-export`). Pass `--no-normalize-at-export` to keep the raw payload untouched; the CLI writes the raw snapshot and copies it to `--final-out` so downstream consumers inspect the same file. Explicitly adding `--normalize-at-export` is useful in scripted jobs to document that the default behaviour is expected.
-* Omitting `--raw-out` skips the staging file entirely. When provided, the metadata YAML still records the chosen format and whether reindexing was performed regardless of the normalisation mode.
+* Preserve API column order in the raw snapshot with `--no-reindex-raw` when reproducing upstream payloads; leave it off to keep deterministic alphabetical layouts.
+* `--normalize-at-export` is active by default so the final CSV reflects the cleaned schema. Invoke `--no-normalize-at-export` when the downstream consumer expects the exact raw payload (validation still checks the normalised view and metadata records both files).
 
 ## Target pipeline harness (`library.utils.cli_tools.pipeline_targets_main`)
 
@@ -269,7 +268,11 @@ while exercising `library.pipeline_targets.run_pipeline` with cached ChemBL
 chunks only. It reads identifiers via `read_ids`, honours `--chunk-size`,
 `--limit`, delimiter/encoding overrides, forwards the batch size to the
 pipeline and writes the resulting table with `add_pipeline_metadata` and
-`write_csv`, keeping determinism identical to the production pipeline.
+`write_csv`, keeping determinism identical to the production pipeline. The
+harness exposes the same staging switches (`--raw-out`, `--raw-format`,
+`--id-cols`, `--no-reindex-raw`, and the boolean pair
+`--normalize-at-export` / `--no-normalize-at-export`) so you can dry-run the
+raw/normalised split without calling external services.
 Use it to validate configuration overrides, logging and batching behaviour
 before hitting external APIs.
 

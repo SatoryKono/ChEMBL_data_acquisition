@@ -652,8 +652,11 @@ python -m library.utils.cli_tools.table_quality_main \
 
 `--final-out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory specified by `local.io.output_dir`. Legacy
 aliases `--output`/`--out` continue to resolve to the same path but issue a deprecation warning. Target pipeline invocations can
-use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. For additional
-examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
+use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. Raw dumps reindex
+columns alphabetically for deterministic layouts unless `--no-reindex-raw` keeps the API order. The final CSV is normalised by
+default; toggle the boolean pair `--normalize-at-export` / `--no-normalize-at-export` when the export should either undergo the
+clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md)
+(Russian version:
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
 
