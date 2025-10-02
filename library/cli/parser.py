@@ -446,8 +446,6 @@ def _normalize_path(path: str) -> str:
 _DEFAULT_OVERRIDES: dict[str, str] = {
     key: _normalize_path(value)
     for key, value in {
-        "base_path": "io.base_path",
-        "input_dir": "io.input_dir",
         "output_dir": "io.output_dir",
         "cache_dir": "io.cache_dir",
         "sep": "io.csv_sep",
