@@ -20,8 +20,8 @@ from pytest import MonkeyPatch
 
 from library import protein_classification as pc
 from library.config import Config
-from schemas import TargetsSchema
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.schemas import TargetsSchema
+from library.schemas.targets import TARGETS_COLUMN_ORDER
 from scripts import get_target_data as gtd
 
 

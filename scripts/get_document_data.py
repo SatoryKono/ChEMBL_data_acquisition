@@ -103,7 +103,7 @@ from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import TableQualityProfiler, analyze_table_quality
-from schemas import DocumentsSchema, normalize_documents
+from library.schemas import DocumentsSchema, normalize_documents
 
 
 DEFAULT_INPUT_NAME = "document.csv"

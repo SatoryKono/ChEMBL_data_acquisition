@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 from . import organism_classification
 from .config import Config, IoCfg

@@ -75,8 +75,8 @@ from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import ValidationResult
-from schemas import TargetsSchema, normalize_targets
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.schemas import TargetsSchema, normalize_targets
+from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
 @contextmanager

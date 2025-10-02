@@ -15,7 +15,7 @@ from library import chembl_library as cl
 from library import io
 from library import rate_limiter as rl
 from library.config import Config
-from schemas import ActivitiesSchema
+from library.schemas import ActivitiesSchema
 from scripts import get_activity_data as gad
 
 
