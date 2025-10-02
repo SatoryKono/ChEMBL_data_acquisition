@@ -34,10 +34,10 @@ CLI без вложенных подкоманд.
 | `--input-dir` | Каталог с входными артефактами; относительный путь сочетается с `--base-path`. |
 | `--output-dir` | Каталог для сохранения артефактов; относительный путь сочетается с `--base-path`. |
 | `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
-| `--output` / `--out` | Выходной CSV. Если не указан, создаётся `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. |
+| `--final-out` | Основной путь финального экспорта. При отсутствии формируется `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. Эквивалентен устаревшим `--output`/`--out`, которые сохраняются для совместимости, но выводят предупреждения. |
+| `--output` / `--out` | Устаревшие алиасы `--final-out`. Поведение и значения по умолчанию совпадают, однако при использовании выводятся предупреждения; после завершения миграции будут удалены. |
 | `--raw-out` | Путь для «сырого» снимка до очистки и нормализации. Сейчас флаг доступен в `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`; остальные команды получат его после расширения парсера. Если флаг опущен, этап пропускается. |
 | `--raw-format` | Формат снимка: `csv` (по умолчанию) или `parquet`. Поддерживается теми же точками входа, что и `--raw-out`. |
-| `--final-out` | Путь финального нормализованного экспорта. При отсутствии использует `--output` / `--out`. На данный момент флаг реализован в пайплайне таргетов. |
 | `--date` | Заменяет автогенерируемый суффикс `YYYYMMDD` при формировании имени файла по умолчанию. |
 | `--force` | Перезаписывать выходные файлы, даже если они уже существуют. |
 | `--skip-existing` | Пропускать выполнение, если целевой файл уже существует. |
@@ -68,7 +68,7 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Очистка идентификаторов"] --> Normalize --> Validate --> Final["Финальный экспорт"]
 ```
 
-В пайплайне таргетов `--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out`/`--out` записывает нормализованную таблицу после валидации. Если `--raw-out` не указан, этап выгрузки «сырых» данных пропускается для совместимости со старыми сценариями. Остальные скрипты пока используют `--output` до расширения общего парсера.
+В пайплайне таргетов `--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out` формирует нормализованную таблицу после валидации. Устаревшие алиасы `--output`/`--out` пока остаются для совместимости, но сопровождаются предупреждениями. Если `--raw-out` не указан, этап выгрузки «сырых» данных пропускается. Остальные скрипты получат аналогичные стадии после обновления общего парсера.
 
 > **Примечание.** Флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` реализованы в `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`. Остальные CLI получат их после обновления общего интерфейса.
 
@@ -158,7 +158,7 @@ python -m scripts.get_assay_data \
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -168,7 +168,7 @@ get-document-data all --input path/to/documents.csv \
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -196,7 +196,7 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -210,7 +210,7 @@ get-document-data pubmed --input path/to/documents.csv \
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -230,7 +230,7 @@ python -m scripts.get_document_data pubmed \
 get-target-data chembl --input path/to/targets.csv \
   --column target_chembl_id \
   --raw-out out/targets.raw.csv \
-  --out out/targets.final.csv
+  --final-out out/targets.final.csv
 ```
 
 Запуск через модуль:
@@ -240,7 +240,7 @@ python -m scripts.get_target_data chembl \
   --input path/to/targets.csv \
   --column target_chembl_id \
   --raw-out out/targets.raw.csv \
-  --out out/targets.final.csv
+  --final-out out/targets.final.csv
 ```
 
 Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`. Соберите CSV с колонкой `target_chembl_id` (по одной записи в строке); готовый smoke-набор отсутствует.
@@ -250,7 +250,7 @@ python -m scripts.get_target_data chembl \
 ```bash
 python -m library.utils.cli_tools.pipeline_targets_main \
   --input tests/data/chembl_targets_min.csv \
-  --out out/targets_cached.csv \
+  --final-out out/targets_cached.csv \
   --chunk-size 50 \
   --batch-size 50 \
   --limit 200

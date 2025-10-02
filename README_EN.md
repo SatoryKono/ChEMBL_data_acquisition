@@ -5,9 +5,10 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 ## Features
 
 
-* Unified CLI flags such as `--input`, `--output`/`--out`, `--log-level`, `--sep`, `--encoding`, `--column`, plus
-  `--config` and `--print-config` to manage configuration files. Batch size is controlled via `--chunk-size` or
-  `--batch-size` depending on the pipeline. The new `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols`
+* Unified CLI flags such as `--input`, `--final-out` (primary destination flag; the legacy `--output`/`--out`
+  aliases remain for compatibility but now emit deprecation warnings), `--log-level`, `--sep`, `--encoding`,
+  `--column`, plus `--config` and `--print-config` to manage configuration files. Batch size is controlled via
+  `--chunk-size` or `--batch-size` depending on the pipeline. The `--raw-out`, `--raw-format`, and `--id-cols`
   switches are currently available through the target pipeline; other commands will expose them once the shared
   CLI is extended.
 
@@ -107,11 +108,10 @@ for usage guidelines.
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-
-      --output out/activities.csv \
+      --final-out out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --output out/documents.csv \
+      --final-out out/documents.csv \
       --limit 5 --log-level INFO
 
   ```
@@ -121,15 +121,16 @@ for usage guidelines.
 
    The console scripts accept the same options as their module counterparts, so existing `python -m …` workflows remain valid:
 
-   ```bash
-   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
+  ```bash
+  python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --out out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --out out/quality --table-name chembl_targets --log-level INFO
+      --final-out out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  In the reporting example above the `--out`/`--output` argument must point to a directory where the report files will be created.
+  In the reporting example above `--final-out` must point to the directory where the report files will be created. The legacy
+  `--output`/`--out` aliases remain available for compatibility but now raise deprecation warnings when invoked.
 
 4. **Run the tests** – see [Tests](#tests).
 
@@ -146,7 +147,7 @@ pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --output out/mapped.csv --log-level INFO
+    --final-out out/mapped.csv --log-level INFO
 ```
 
 Before running the smoke command, create a `chembl_ids.csv` file with a `chembl_id` header and the required identifiers.
@@ -170,7 +171,7 @@ Example full pipeline execution:
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --output data/output/activities.csv --limit 10 --log-level INFO
+    --final-out data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 The command reads data from the ChEMBL API, writes the CSV table and the accompanying `*.meta.yaml`. Development utilities are in
@@ -184,19 +185,20 @@ as a CI artifact.
 ## Usage
 
 
-The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--out`/`--output`, and
-`--limit`. Using `--limit 0` now short-circuits processing before any network or filesystem access, which is useful for
-smoke-testing configuration overrides. The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, and
-`--id-cols`; the remaining commands continue to rely on `--output` until the shared parser is extended.
+The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--final-out`, and
+`--limit`. The compatibility aliases `--output`/`--out` are still recognised but now emit deprecation warnings. Using `--limit 0`
+short-circuits processing before any network or filesystem access, which is useful for smoke-testing configuration overrides.
+The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols`; the remaining commands will pick
+up the staged switches as the shared parser is extended.
 After installing the project with `pip install .`, the same pipelines can be started via the console scripts listed in the
 [Quick Start](#quick-start) table—for example, `get-activity-data --help` is equivalent to `python -m scripts.get_activity_data --help`.
 Both forms accept identical arguments, so feel free to swap between them depending on your environment.
 
 Within the target pipeline the staged export surfaces separate destinations for raw payloads and cleaned tables. Use
 `--raw-out` to persist the unprocessed API response, optionally changing the `--raw-format` between `csv` (default) and
-`parquet`, and `--final-out` to override the normalised export while keeping the metadata sidecars. When you only need a
-single output switch, `--out` acts as a short alias for `--output`. Multi-identifier payloads accept multiple columns via
-`--id-cols`, allowing you to keep composite keys in the raw snapshot before the cleanup step runs.
+`parquet`, and `--final-out` to override the normalised export while keeping the metadata sidecars. The legacy
+`--output`/`--out` aliases act as compatibility shims for now but emit a warning on each invocation. Multi-identifier payloads
+accept multiple columns via `--id-cols`, allowing you to keep composite keys in the raw snapshot before the cleanup step runs.
 
 
 ### `scripts/get_document_data.py`
@@ -206,7 +208,7 @@ Retrieve document metadata for a list of PubMed IDs using the bundled sample fil
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -218,7 +220,7 @@ You can also run the PubMed pipeline directly via the library module:
 ```bash
 python -m library.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --log-level INFO
 ```
 
@@ -232,15 +234,15 @@ Fetch basic target information from ChEMBL:
 ```bash
 python -m scripts.get_target_data chembl \
     --input path/to/targets.csv \
-    --out out/targets.final.csv \
+    --final-out out/targets.final.csv \
     --raw-out out/targets.raw.csv \
     --limit 5 \
     --log-level INFO
 ```
 
 Replace `path/to/targets.csv` with a CSV containing a `target_chembl_id` column. The `--raw-out` switch keeps the
-pre-normalised snapshot for debugging, while `--out` (alias for `--output`) produces the cleaned export aligned with the
-validation schemas.
+pre-normalised snapshot for debugging, while `--final-out` produces the cleaned export aligned with the validation schemas.
+The compatibility aliases `--output`/`--out` remain for migration support and issue warnings when used.
 
 ### `library.utils.cli_tools.pipeline_targets_main`
 
@@ -249,7 +251,7 @@ Exercise the chunking and batch configuration used by the production target pipe
 ```bash
 python -m library.utils.cli_tools.pipeline_targets_main \
     --input tests/data/chembl_targets_min.csv \
-    --output out/targets_cached.csv \
+    --final-out out/targets_cached.csv \
     --chunk-size 25 \
     --batch-size 25 \
     --limit 100
@@ -285,7 +287,8 @@ flowchart LR
 * **Cleanup IDs** – trim, deduplicate and patch placeholder identifiers before downstream work.
 * **Normalize** – harmonise text, relations and datatypes so validation is deterministic.
 * **Validate** – run `pandera` schemas, routing failures to the sidecar files recorded in the metadata YAML.
-* **Final export** – write the cleaned table to `--final-out`/`--out` alongside metadata and quality reports.
+* **Final export** – write the cleaned table to `--final-out` alongside metadata and quality reports. Deprecated
+  aliases `--output`/`--out` continue to function but emit warnings during the migration period.
 
 > **Note.** At the moment `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are available through
 > `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt the same
@@ -337,7 +340,7 @@ Run a script with automatic configuration loading:
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.csv
+    --final-out out/assays.csv
 ```
 
 The `assay_ids.csv` file must contain an `assay_chembl_id` column with the required identifiers, for example:
@@ -429,7 +432,7 @@ Set the log level via the `--log-level` flag or the `CHEMBL_DA_LOG_LEVEL` enviro
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --out out/assays.final.csv
+    --final-out out/assays.final.csv
 ```
 
 Sample log entry:
@@ -484,9 +487,10 @@ All CLI scripts share a common set of flags:
 python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 ```
 
-`--output`/`--out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. Target
-pipeline invocations can override the raw snapshot via `--raw-out` (with optional `--raw-format parquet`) and the cleaned
-export via `--final-out`. For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
+`--final-out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. The legacy
+`--output`/`--out` aliases continue to map to the same path but now emit deprecation warnings. Target pipeline invocations can
+override the raw snapshot via `--raw-out` (with optional `--raw-format parquet`) and the cleaned export via `--final-out`. For
+additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
 
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
@@ -608,9 +612,10 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-`--output`/`--out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory specified by `local.io.output_dir`.
-Target pipeline invocations can use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be
-separated explicitly. For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
+`--final-out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory specified by `local.io.output_dir`. Legacy
+aliases `--output`/`--out` continue to resolve to the same path but issue a deprecation warning. Target pipeline invocations can
+use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. For additional
+examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
 
