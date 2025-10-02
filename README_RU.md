@@ -4,9 +4,10 @@
 
 ## Особенности
 
-* Унифицированные CLI-флаги `--input`, `--output`/`--out`, `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`,
-  `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и `--print-config` для управления конфигурацией.
-  Размер партий задаётся параметрами `--chunk-size` или `--batch-size` в зависимости от пайплайна.
+* Унифицированные CLI-флаги `--input`, `--output`/`--out`, `--log-level`, `--sep`, `--encoding`, `--column`, а также
+  `--config` и `--print-config` для управления конфигурацией. Размер партий задаётся параметрами `--chunk-size`
+  или `--batch-size` в зависимости от пайплайна. Новые переключатели `--raw-out`, `--final-out`, `--raw-format` и
+  `--id-cols` уже доступны в пайплайне таргетов; остальные команды получат их после расширения общего CLI.
 * Потоковая обработка крупных CSV-файлов с детерминированным выводом.
 * Валидаторы схем в [`schemas/`](schemas/) и словари в [`dictionary/`](dictionary/) для проверки типов, диапазонов и справочных данных.
 * Конфигурация через `config/config.yaml`, переменные окружения и CLI-переопределения.
@@ -97,12 +98,11 @@ pre-commit install
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-      --out out/activities.final.csv --raw-out out/activities.raw.csv \
+      --output out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --raw-out out/documents.raw.parquet --raw-format parquet \
-      --final-out out/documents.final.csv --id-cols PMID doi --limit 5 \
-      --log-level INFO
+      --output out/documents.csv \
+      --limit 5 --log-level INFO
   ```
 
    Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
@@ -163,17 +163,17 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 ## Использование
 
-Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--out`/`--output`, `--raw-out`, `--limit`). Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации.
+Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--out`/`--output`, `--limit`). Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации. Пайплайн таргетов уже поддерживает `--raw-out`, `--final-out`, `--raw-format` и `--id-cols`; остальные команды будут полагаться на `--output` до расширения общего парсера.
 После установки пакета через `pip install .` те же пайплайны доступны в виде консольных скриптов из таблицы в разделе
 [Быстрый старт](#быстрый-старт) — например, `get-activity-data --help` полностью эквивалентен
 `python -m scripts.get_activity_data --help`. Оба варианта принимают одинаковые аргументы, поэтому выбирайте форму, удобную
 для вашей среды.
 
-Обновлённая конвейерная обработка разделяет необработанные и нормализованные артефакты. Параметр `--raw-out` сохраняет
-ответы API до любых преобразований, формат задаётся через `--raw-format` (`csv` по умолчанию, либо `parquet`). Опция
-`--final-out` переопределяет путь нормализованного экспорта, сохраняя побочные файлы метаданных. Для одиночного переключателя
-подойдёт короткий алиас `--out`, полностью эквивалентный `--output`. Пайплайны с составными ключами принимают список столбцов
-через `--id-cols`, чтобы фиксировать исходные идентификаторы в «сыром» снимке до очистки.
+Обновлённая конвейерная обработка в пайплайне таргетов разделяет необработанные и нормализованные артефакты. Параметр
+`--raw-out` сохраняет ответы API до любых преобразований, формат задаётся через `--raw-format` (`csv` по умолчанию, либо
+`parquet`). Опция `--final-out` переопределяет путь нормализованного экспорта, сохраняя побочные файлы метаданных. Для
+одиночного переключателя подойдёт короткий алиас `--out`, полностью эквивалентный `--output`. Пайплайны с составными
+ключами принимают список столбцов через `--id-cols`, чтобы фиксировать исходные идентификаторы в «сыром» снимке до очистки.
 
 ### `scripts/get_document_data.py`
 
@@ -182,10 +182,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --raw-out out/documents.raw.parquet \
-    --raw-format parquet \
-    --final-out out/documents.final.csv \
-    --id-cols PMID doi \
+    --output out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -197,8 +194,7 @@ python -m scripts.get_document_data pubmed \
 ```bash
 python -m library.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --raw-out out/documents.raw.csv \
-    --final-out out/documents.final.csv \
+    --output out/documents.csv \
     --log-level INFO
 ```
 
@@ -253,11 +249,15 @@ flowchart LR
 ```
 
 * **Fetch** — чтение идентификаторов (одиночных либо составных через `--id-cols`) и обращение к внешним сервисам.
-* **Raw CSV / Parquet** — сохранение необработанного ответа в `--raw-out` с заданным `--raw-format`.
+* **Raw CSV / Parquet** — при наличии соответствующих флагов сохранение необработанного ответа в `--raw-out` с заданным
+  `--raw-format`.
 * **Очистка идентификаторов** — обрезка пробелов, дедупликация и пометка заглушек до дальнейшей обработки.
 * **Normalize** — выравнивание текста, операторов и типов для детерминированной валидации.
 * **Validate** — применение схем `pandera`, перенос ошибочных строк в sidecar-файлы, описанные в YAML метаданных.
 * **Финальный экспорт** — запись очищенной таблицы в `--final-out`/`--out` вместе с метаданными и отчётами о качестве.
+
+> **Примечание.** Сейчас флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` доступны в `get-target-data`
+> и `library.utils.cli_tools.pipeline_targets_main`. Остальные точки входа получат их после расширения общего CLI.
 
 Если `--raw-out` не указан, снимок «сырых» данных пропускается для обратной совместимости. Sidecar-файлы по-прежнему
 содержат параметры запуска, конфигурационные диффы и хеши независимо от выбранных форматов.
@@ -443,8 +443,8 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
 ```
 
 По умолчанию `--output`/`--out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
-При необходимости разделяйте «сырой» и чистый вывод флагами `--raw-out` (с `--raw-format`) и `--final-out`. Дополнительные примеры
-приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+Пайплайн таргетов может разделять «сырой» и чистый вывод флагами `--raw-out` (с `--raw-format`) и `--final-out`. Дополнительные
+примеры приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Структура проекта
 
@@ -551,9 +551,10 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-По умолчанию `--output`/`--out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. При необходимости
-используйте `--raw-out` и `--final-out`, чтобы явно развести «сырые» и чистые артефакты (при желании указав `--raw-format`).
-Дополнительные примеры см. в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+По умолчанию `--output`/`--out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Пайплайн
+таргетов может использовать `--raw-out` и `--final-out`, чтобы явно развести «сырые» и чистые артефакты (при желании указав
+`--raw-format`). Дополнительные примеры см. в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия —
+[`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Вывод и метаданные
 

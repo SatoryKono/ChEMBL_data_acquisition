@@ -35,16 +35,16 @@ CLI без вложенных подкоманд.
 | `--output-dir` | Каталог для сохранения артефактов; относительный путь сочетается с `--base-path`. |
 | `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
 | `--output` / `--out` | Выходной CSV. Если не указан, создаётся `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. |
-| `--raw-out` | Путь для «сырого» снимка до очистки и нормализации. Если флаг опущен, этап пропускается. |
-| `--raw-format` | Формат снимка: `csv` (по умолчанию) или `parquet`. |
-| `--final-out` | Путь финального нормализованного экспорта. При отсутствии использует `--output` / `--out`. |
+| `--raw-out` | Путь для «сырого» снимка до очистки и нормализации. Сейчас флаг доступен в `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`; остальные команды получат его после расширения парсера. Если флаг опущен, этап пропускается. |
+| `--raw-format` | Формат снимка: `csv` (по умолчанию) или `parquet`. Поддерживается теми же точками входа, что и `--raw-out`. |
+| `--final-out` | Путь финального нормализованного экспорта. При отсутствии использует `--output` / `--out`. На данный момент флаг реализован в пайплайне таргетов. |
 | `--date` | Заменяет автогенерируемый суффикс `YYYYMMDD` при формировании имени файла по умолчанию. |
 | `--force` | Перезаписывать выходные файлы, даже если они уже существуют. |
 | `--skip-existing` | Пропускать выполнение, если целевой файл уже существует. |
 | `--sep` | Разделитель CSV; записывается в `cfg.io.csv_sep`. |
 | `--encoding` | Кодировка файла; записывается в `cfg.io.csv_encoding`. |
 | `--column` | Название колонки с идентификаторами. Значение подтягивается из конфигурации на этапе запуска. |
-| `--id-cols` | Список колонок идентификаторов (через запятую) для сохранения в «сыром» снимке до очистки. |
+| `--id-cols` | Список колонок идентификаторов (через запятую) для сохранения в «сыром» снимке до очистки. Доступно в таргет-пайплайне и его вспомогательной обвязке. |
 | `--batch-size` / `--chunk-size` | Максимальное число идентификаторов в одном запросе (название опции зависит от пайплайна). |
 | `--offset` | Сколько идентификаторов пропустить перед обработкой — полезно для возобновления прерванных запусков. |
 
@@ -68,7 +68,9 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Очистка идентификаторов"] --> Normalize --> Validate --> Final["Финальный экспорт"]
 ```
 
-`--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out`/`--out` записывает нормализованную таблицу после валидации. Если `--raw-out` не указан, этап выгрузки «сырых» данных пропускается для совместимости со старыми сценариями.
+В пайплайне таргетов `--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out`/`--out` записывает нормализованную таблицу после валидации. Если `--raw-out` не указан, этап выгрузки «сырых» данных пропускается для совместимости со старыми сценариями. Остальные скрипты пока используют `--output` до расширения общего парсера.
+
+> **Примечание.** Флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` реализованы в `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`. Остальные CLI получат их после обновления общего интерфейса.
 
 Во время очистки временные идентификаторы (например, `CHEMBL_PENDING`) остаются только в «сыром» снимке и учитываются в метаданных (`error_placeholder_counts`), тогда как финальный экспорт содержит уже проверенные значения.
 
@@ -93,8 +95,8 @@ flowchart LR
 Для онлайн-контроля направляйте вывод через `jq` или аналогичный инструмент:
 
 ```bash
-get-document-data all --input documents.csv --column document_chembl_id \
-  --raw-out out/documents.raw.csv --final-out out/documents.final.csv \
+get-target-data all --input documents.csv --column target_chembl_id \
+  --raw-out out/targets.raw.csv --final-out out/targets.final.csv \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
@@ -156,9 +158,7 @@ python -m scripts.get_assay_data \
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --raw-out out/documents.raw.parquet \
-  --raw-format parquet \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --batch-size 20
 ```
 
@@ -168,8 +168,7 @@ get-document-data all --input path/to/documents.csv \
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --raw-out out/documents.raw.csv \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --batch-size 20
 ```
 
@@ -195,9 +194,7 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --raw-out out/documents.raw.parquet \
-  --raw-format parquet \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -211,8 +208,7 @@ get-document-data pubmed --input path/to/documents.csv \
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --raw-out out/documents.raw.csv \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
