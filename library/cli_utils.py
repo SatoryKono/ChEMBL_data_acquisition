@@ -39,42 +39,6 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 
 SchemaT = TypeVar("SchemaT")
 
-
-
-def resolve_invocation(
-    prog: str | None,
-    argv: Sequence[object] | None,
-) -> tuple[str, ...]:
-
-    """Return a normalised tuple describing the CLI invocation.
-
-    The helper captures the effective command line as a tuple of strings.
-    ``prog`` is optional to accommodate ``argparse`` defaults, while
-    ``argv`` may be ``None`` to mirror ``argparse`` behaviour where the
-    process arguments are used implicitly.
-    """
-
-    parts: list[str] = []
-    if prog:
-        parts.append(str(prog))
-
-
-    if argv is None:
-        argv_iterable: Sequence[object] = sys.argv[1:]
-    else:
-        argv_iterable = argv
-
-    parts.extend(str(arg) for arg in argv_iterable)
-    return tuple(parts)
-
-    resolved: list[str] = []
-    if prog:
-        resolved.append(str(prog))
-    resolved.extend(str(arg) for arg in argv)
-    return tuple(resolved)
-
-
-
 class ValidationResult(Protocol):
     """Protocol describing the return type of validator callables."""
 
@@ -226,6 +190,7 @@ def run_pipeline(
     output_path: Path,
     failure_path: Path,
     command: str | None = None,
+    invocation: Sequence[str] | None = None,
     config_snapshot: Mapping[str, object],
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
@@ -262,6 +227,10 @@ def run_pipeline(
         Path for persisting validation failure cases.
     command:
         Command used to launch the pipeline.  Stored in metadata output.
+    invocation:
+        Optional command invocation captured as a sequence of arguments. When
+        provided it is persisted to metadata alongside the joined ``command``
+        string.
     config_snapshot:
         Mapping of configuration values persisted to metadata.
     inputs:
@@ -271,10 +240,6 @@ def run_pipeline(
         columns present in the final dataset are forwarded to ``writer``.
     table_quality:
         Callable invoked after writing the CSV to compute quality metrics.
-    invocation:
-        Optional command invocation captured as a sequence of arguments. When
-        provided it is persisted to metadata alongside the joined ``command``
-        string.
     cfg:
         Optional application configuration forwarded to sidecar metadata.
     logger:
