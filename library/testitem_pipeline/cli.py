@@ -693,25 +693,6 @@ def finalize_output(
         for raw_chunk in chunk_iter:
             yield _process_chunk(raw_chunk)
 
-    try:
-        csv_path = write_csv_chunks_deterministic(
-            _validated_chunks(),
-            output,
-            col_order=col_order,
-            key_cols=key_cols,
-            chunksize=csv_chunksize,
-            sort_chunksize=csv_chunksize,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-            cfg=cfg,
-        )
-        logger.info("write_done", rows=rows_written, path=str(csv_path))
-    except TestitemPipelineStageError:
-        return 1
-    except (OSError, ValueError) as exc:
-        logger.error("write_fail", error=str(exc), path=str(output))
-        return 1
-
     missing_required = required_cols - columns_seen
     if missing_required:
         logger.warning(
@@ -735,6 +716,28 @@ def finalize_output(
             failures=failure_count,
             path=str(failure_path),
         )
+
+    if exit_code != 0:
+        return exit_code
+
+    try:
+        csv_path = write_csv_chunks_deterministic(
+            _validated_chunks(),
+            output,
+            col_order=col_order,
+            key_cols=key_cols,
+            chunksize=csv_chunksize,
+            sort_chunksize=csv_chunksize,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+            cfg=cfg,
+        )
+        logger.info("write_done", rows=rows_written, path=str(csv_path))
+    except TestitemPipelineStageError:
+        return 1
+    except (OSError, ValueError) as exc:
+        logger.error("write_fail", error=str(exc), path=str(output))
+        return 1
 
     rows_dropped = rows_total - rows_written
     parent_stats = parent_stats_supplier()

@@ -163,14 +163,7 @@ def test_run_pipeline_writes_failure_cases(tmp_path: Path, cfg: Config) -> None:
         col_order: list[str],
         key_cols: list[str],
     ) -> Path:
-        frames = list(chunks)
-        df = (
-            pd.concat(frames, ignore_index=True)
-            if frames
-            else pd.DataFrame(columns=col_order)
-        )
-        df.to_csv(destination, index=False)
-        return destination
+        pytest.fail("writer should not run when validation fails")
 
     exit_code = run_pipeline(
         fetcher=fetcher,
@@ -194,6 +187,9 @@ def test_run_pipeline_writes_failure_cases(tmp_path: Path, cfg: Config) -> None:
     failure_csv = failure_path.read_text()
     assert "column" in failure_csv
     assert "value" in failure_csv
+    assert not output.exists()
+    output_meta = output.with_name(output.name + ".meta.yaml")
+    assert not output_meta.exists()
     meta_path = Path(str(failure_path) + ".meta.yaml")
     assert meta_path.exists()
     meta = yaml.safe_load(meta_path.read_text(encoding="utf8"))
