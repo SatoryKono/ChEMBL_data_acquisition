@@ -178,7 +178,8 @@ def _download_csv(url: str, cfg: IupharCfg, retry: RetryCfg) -> pd.DataFrame:
             with _session_context() as session:
                 with session.get(url, timeout=timeout) as resp:
                     resp.raise_for_status()
-                    return pd.read_csv(io.StringIO(resp.text))
+                    csv_buffer = io.StringIO(resp.text)
+                    return pd.read_csv(csv_buffer, dtype=str).fillna("")
         except requests.RequestException as exc:  # pragma: no cover - network
             if attempt >= retry.max_attempts:
                 logger.error(

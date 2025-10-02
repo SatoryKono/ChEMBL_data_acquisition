@@ -57,14 +57,14 @@ def test_websearch_gene_to_id_uses_cfg2(monkeypatch) -> None:
 
 @responses.activate
 def test_iuphar_upload_uses_cfg(monkeypatch):
-    target_df = pd.DataFrame({"target_id": [1], "family_id": ["F1"]})
+    target_df = pd.DataFrame({"target_id": ["001"], "family_id": ["F01"]})
     family_df = pd.DataFrame(
-        {"family_id": ["F1"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
+        {"family_id": ["F01"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
     )
     data = ii.IUPHARData(target_df=target_df, family_df=family_df)
     calls: list[tuple[str, tuple[int, int]]] = []
-    uni_csv = "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
-    hgnc_csv = "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
+    uni_csv = "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n001,001,P12345\n"
+    hgnc_csv = "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n001,HG01,Name\n"
 
     def fake_get(url: str, timeout: tuple[int, int]) -> object:
         calls.append((url, timeout))
@@ -114,6 +114,9 @@ def test_iuphar_upload_uses_cfg(monkeypatch):
     assert calls[0][0] == "https://example.org/DATA/GtP_to_UniProt_mapping.csv"
     assert calls[0][1] == (1, 2)
     assert calls[1][0] == "https://example.org/DATA/GtP_to_HGNC_mapping.csv"
+    assert df["GtoPdb IUPHAR ID"].dropna().tolist() == ["001"]
+    assert df["Target id"].dropna().tolist() == ["001"]
+    assert df["chembl_hgnc_id"].dropna().tolist() == ["HG01"]
     assert sleeps == []
 
 
@@ -162,9 +165,9 @@ def test_query_gene_symbol_backoff(monkeypatch):
 def test_iuphar_upload_retries(monkeypatch) -> None:
     """``iuphar_upload`` retries failed downloads with backoff."""
 
-    target_df = pd.DataFrame({"target_id": [1], "family_id": ["F1"]})
+    target_df = pd.DataFrame({"target_id": ["001"], "family_id": ["F01"]})
     family_df = pd.DataFrame(
-        {"family_id": ["F1"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
+        {"family_id": ["F01"], "family_name": ["Fam"], "parent_family_id": [pd.NA]}
     )
     data = ii.IUPHARData(target_df=target_df, family_df=family_df)
 
@@ -189,9 +192,9 @@ def test_iuphar_upload_retries(monkeypatch) -> None:
             raise requests.RequestException("boom")
 
         text = (
-            "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n1,1,P12345\n"
+            "GtoPdb IUPHAR ID,IUPHAR ID,UniProtKB ID\n001,001,P12345\n"
             if "UniProt" in url
-            else "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n1,HG1,Name\n"
+            else "GtoPdb IUPHAR ID,HGNC ID,IUPHAR Name\n001,HG01,Name\n"
         )
 
         class Resp:
@@ -217,6 +220,7 @@ def test_iuphar_upload_retries(monkeypatch) -> None:
     )
 
     df = data.iuphar_upload(cfg, retry)
+    assert df["Target id"].dropna().tolist() == ["001"]
 
     assert not df.empty
     assert sleeps == [pytest.approx(1.0)]
