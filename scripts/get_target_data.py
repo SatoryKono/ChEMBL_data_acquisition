@@ -510,13 +510,17 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
             default=normalize_default,
             help="Apply normalisation immediately before writing the final output",
         )
-        parser_obj.add_argument(
-            "--out",
-            dest="final_out_alias",
-            type=path_argument,
-            default=argparse.SUPPRESS,
-            help=argparse.SUPPRESS,
+        has_out_alias = any(
+            "--out" in action.option_strings for action in parser_obj._actions
         )
+        if not has_out_alias:
+            parser_obj.add_argument(
+                "--out",
+                dest="final_out_alias",
+                type=path_argument,
+                default=argparse.SUPPRESS,
+                help=argparse.SUPPRESS,
+            )
 
     _add_output_arguments(root, defaults=True)
     _add_output_arguments(shared, defaults=False)
