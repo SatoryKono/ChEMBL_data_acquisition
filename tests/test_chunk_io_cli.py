@@ -6,6 +6,7 @@ from pathlib import Path
 import textwrap
 
 import pandas as pd
+import pytest
 import yaml
 
 from library.utils.cli_tools import chunk_io_main as cli
@@ -157,72 +158,58 @@ def test_cli_invalid_config_logs_error(tmp_path: Path, monkeypatch) -> None:
     assert payload.get("config") == str(config_path)
 
 
-def test_cli_invalid_chunk_size_logs_error(tmp_path: Path, monkeypatch) -> None:
-    """CLI rejects non-positive chunk sizes with an error message."""
+def test_cli_invalid_chunk_size_exits_with_usage(tmp_path: Path, capsys) -> None:
+    """CLI exits with a usage error when chunk size is not positive."""
 
     input_path = tmp_path / "input.csv"
     input_path.write_text("a\n1\n", encoding="utf-8")
     output_path = tmp_path / "out.csv"
 
-    logged: list[tuple[str, dict[str, object]]] = []
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(
+            [
+                "--input",
+                str(input_path),
+                "--output",
+                str(output_path),
+                "--chunk-size",
+                "0",
+                "--log-level",
+                "WARNING",
+            ]
+        )
 
-    def fake_error(event: str, *args: object, **kwargs: object) -> None:
-        logged.append((event, kwargs))
-
-    monkeypatch.setattr(cli.logger, "error", fake_error)
-
-    exit_code = cli.main(
-        [
-            "--input",
-            str(input_path),
-            "--output",
-            str(output_path),
-            "--chunk-size",
-            "0",
-            "--log-level",
-            "WARNING",
-        ]
-    )
-
-    assert exit_code == 1
-    event, payload = logged[0]
-    assert event == "invalid_chunk_size"
-    assert payload.get("chunk_size") == 0
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "chunk size must be a positive integer" in captured.err
 
 
-def test_cli_invalid_limit_logs_error(tmp_path: Path, monkeypatch) -> None:
-    """CLI rejects non-positive limits with an error message."""
+def test_cli_invalid_limit_exits_with_usage(tmp_path: Path, capsys) -> None:
+    """CLI exits with a usage error when limit is not positive."""
 
     input_path = tmp_path / "input.csv"
     input_path.write_text("a\n1\n", encoding="utf-8")
     output_path = tmp_path / "out.csv"
 
-    logged: list[tuple[str, dict[str, object]]] = []
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(
+            [
+                "--input",
+                str(input_path),
+                "--output",
+                str(output_path),
+                "--chunk-size",
+                "5",
+                "--limit",
+                "0",
+                "--log-level",
+                "WARNING",
+            ]
+        )
 
-    def fake_error(event: str, *args: object, **kwargs: object) -> None:
-        logged.append((event, kwargs))
-
-    monkeypatch.setattr(cli.logger, "error", fake_error)
-
-    exit_code = cli.main(
-        [
-            "--input",
-            str(input_path),
-            "--output",
-            str(output_path),
-            "--chunk-size",
-            "5",
-            "--limit",
-            "0",
-            "--log-level",
-            "WARNING",
-        ]
-    )
-
-    assert exit_code == 1
-    event, payload = logged[0]
-    assert event == "invalid_limit"
-    assert payload.get("limit") == 0
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "chunk size must be a positive integer" in captured.err
 
 
 def test_cli_missing_output_directory_logs_error(tmp_path: Path, monkeypatch) -> None:
