@@ -228,6 +228,7 @@ applies exponential backoff between attempts before surfacing the error.
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
+|  | `id_cols` | `["target_chembl_id", "uniprot_id", "uniprot_id_primary", "mapping_uniprot_id", "uniProtkbId", "uniprotkb_Id", "iuphar_target_id", "iuphar_family_id", "gtop_target_id"]` | Identifier columns with placeholder sanitisation applied before exports. |
 | `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
 |  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |

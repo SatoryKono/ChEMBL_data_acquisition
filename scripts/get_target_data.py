@@ -12,7 +12,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import islice
@@ -48,6 +48,7 @@ from library.cli import (
 )
 from library.config import (
     Config,
+    TargetChemblCfg,
     _serialize_paths,
 )
 from library.csv_utils import write_csv_deterministic
@@ -75,6 +76,12 @@ TARGETS_OBJECT_COLUMNS: set[str] = {
 }
 
 UNIPROT_MISSING_VALUE = ""
+
+ID_PLACEHOLDERS: frozenset[str] = frozenset(
+    {"-", "—", "N/A", "NA", "None", "NULL", "null"}
+)
+
+DEFAULT_ID_COLS: tuple[str, ...] = tuple(TargetChemblCfg().id_cols)
 
 
 DEFAULT_INPUT_NAME = "target.csv"
@@ -319,6 +326,29 @@ def _prepare_targets_for_schema(
     return prepared, missing_required, missing_optional
 
 
+def replace_placeholders_in_id_cols(
+    df: pd.DataFrame,
+    id_cols: Sequence[str],
+    placeholders: Collection[str] = ID_PLACEHOLDERS,
+) -> pd.DataFrame:
+    """Return a copy of ``df`` with placeholders removed from identifier columns."""
+
+    if not id_cols:
+        return df
+
+    existing_columns = [column for column in dict.fromkeys(id_cols) if column in df.columns]
+    if not existing_columns:
+        return df
+
+    placeholder_values = {str(value).strip() for value in placeholders}
+    cleaned = df.copy()
+    for column in existing_columns:
+        series = cleaned[column].astype(pd.StringDtype())
+        stripped = series.fillna("").str.strip()
+        cleaned[column] = stripped.where(~stripped.isin(placeholder_values), "")
+    return cleaned
+
+
 def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
     """Write ``df`` to a uniquely named snapshot CSV file with metadata.
 
@@ -485,6 +515,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=0,
         help="Number of identifiers to skip before processing",
     )
+    chembl.add_argument(
+        "--id-cols",
+        nargs="+",
+        default=list(DEFAULT_ID_COLS),
+        metavar="COLUMN",
+        help=(
+            "Identifier columns to sanitise when removing placeholders "
+            "(default: config target.chembl.id_cols)"
+        ),
+    )
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
@@ -603,6 +643,16 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=int,
         default=0,
         help="Number of identifiers to skip before processing",
+    )
+    all_cmd.add_argument(
+        "--id-cols",
+        nargs="+",
+        default=list(DEFAULT_ID_COLS),
+        metavar="COLUMN",
+        help=(
+            "Identifier columns to sanitise when removing placeholders "
+            "(default: config target.chembl.id_cols)"
+        ),
     )
     all_cmd.set_defaults(func=run_all)
 
@@ -828,6 +878,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     missing_optional_columns: set[str] = set()
 
+    arg_id_cols = getattr(args, "id_cols", None)
+    if arg_id_cols is None:
+        id_columns = tuple(cfg.target.chembl.id_cols)
+    else:
+        id_columns = tuple(arg_id_cols)
+
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
         prepared, _, missing_optional = _prepare_targets_for_schema(frame)
         missing_optional_columns.update(missing_optional)
@@ -844,6 +900,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 "TargetsSchema",
             )
         return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
+
+    def _clean_identifier_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        return replace_placeholders_in_id_cols(frame, id_columns, ID_PLACEHOLDERS)
 
     def fetcher() -> Iterator[pd.DataFrame]:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
@@ -893,6 +952,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     )
 
     metadata_hooks = [
+        _clean_identifier_columns,
         normalize_targets,
         add_pipeline_metadata,
         _prepare_chunk,
@@ -1064,7 +1124,10 @@ def fetch_chembl(
 
     logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
     chembl_args = argparse.Namespace(
-        input_csv=input_csv, output_csv=output_csv, offset=offset
+        input_csv=input_csv,
+        output_csv=output_csv,
+        offset=offset,
+        id_cols=tuple(cfg.target.chembl.id_cols),
     )
     original_limit = cfg.target.chembl.limit
     original_chunk_size = cfg.target.chembl.chunk_size
@@ -1511,7 +1574,13 @@ def merge_results(
     return final_df
 
 
-def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
+def validate_and_write(
+    df: pd.DataFrame,
+    output: Path,
+    cfg: Config,
+    *,
+    id_columns: Sequence[str] | None = None,
+) -> int:
     """Normalise, validate and export the target table.
 
     Parameters
@@ -1522,6 +1591,10 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         Destination CSV path.
     cfg : Config
         Application configuration providing schema definitions and IO settings.
+    id_columns : Sequence[str], optional
+        Columns treated as identifiers where placeholder values should be
+        cleared instead of replaced with a hyphen. When ``None`` the value from
+        ``cfg.target.chembl.id_cols`` is used.
 
     Returns
     -------
@@ -1563,7 +1636,11 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
+    identifier_columns = tuple(id_columns or cfg.target.chembl.id_cols)
     final_df = final_df.fillna("-")
+    final_df = replace_placeholders_in_id_cols(
+        final_df, identifier_columns, ID_PLACEHOLDERS
+    )
     final_df = final_df.drop_duplicates()
     io.write_csv(
         final_df,
@@ -1621,6 +1698,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
+    arg_id_cols = getattr(args, "id_cols", None)
+    if arg_id_cols is None:
+        id_columns = tuple(cfg.target.chembl.id_cols)
+    else:
+        id_columns = tuple(arg_id_cols)
+
     try:
         output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
         chembl_out = cfg.target.all.chembl_out or output.with_name(
@@ -1644,7 +1727,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
-        exit_code = validate_and_write(merged, output, cfg)
+        exit_code = validate_and_write(merged, output, cfg, id_columns=id_columns)
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
@@ -1727,6 +1810,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "chunk_size": "target.chembl.chunk_size",
             "timeout": "target.chembl.timeout",
             "limit": "target.chembl.limit",
+            "id_cols": "target.chembl.id_cols",
         }
     elif args.command == "iuphar":
         mapping = {
@@ -1745,6 +1829,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "uniprot_out": "target.all.uniprot_out",
             "iuphar_out": "target.all.iuphar_out",
             "limit": "target.all.limit",
+            "id_cols": "target.chembl.id_cols",
         }
     return run_cli_command(
         args=args,

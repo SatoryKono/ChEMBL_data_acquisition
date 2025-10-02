@@ -885,6 +885,19 @@ class TargetUniprotCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+TARGET_DEFAULT_ID_COLUMNS: tuple[str, ...] = (
+    "target_chembl_id",
+    "uniprot_id",
+    "uniprot_id_primary",
+    "mapping_uniprot_id",
+    "uniProtkbId",
+    "uniprotkb_Id",
+    "iuphar_target_id",
+    "iuphar_family_id",
+    "gtop_target_id",
+)
+
+
 class TargetChemblCfg(_BaseModel):
     """Defaults for fetching ChEMBL targets.
 
@@ -897,6 +910,7 @@ class TargetChemblCfg(_BaseModel):
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
+    id_cols: tuple[str, ...] = Field(default=TARGET_DEFAULT_ID_COLUMNS)
 
 
 class TargetIupharCfg(_BaseModel):
