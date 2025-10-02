@@ -956,10 +956,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
+    column_name = getattr(args, "column", cfg.target.chembl.column)
     try:
-        ids_iter = io.read_ids(
-            args.input_csv, column=cfg.target.chembl.column, cfg=cfg.io
-        )
+        ids_iter = io.read_ids(args.input_csv, column=column_name, cfg=cfg.io)
     except (FileNotFoundError, ValueError) as exc:
         logger.error(
             "read_fail",
@@ -1005,29 +1004,34 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_chunks: list[pd.DataFrame] = []
     parsed_chunks: list[pd.DataFrame] = []
 
-    if limited_ids:
-        try:
-            with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
-                    limited_ids,
-                    cfg=cfg.api,
-                    client=client,
-                    mapping_cfg=cfg.uniprot_mapping,
-                    chunk_size=cfg.target.chembl.chunk_size,
-                    timeout=cfg.target.chembl.timeout,
-                ):
-                    if not raw_chunk.empty:
-                        raw_chunks.append(raw_chunk)
-                    if not parsed_chunk.empty:
-                        parsed_chunks.append(parsed_chunk)
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "chembl_fetch_failed",
-                error=str(exc),
+    try:
+        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            if not limited_ids:
+                logger.error(
+                    "chembl_no_identifiers",
+                    path=str(args.input_csv),
+                )
+                return 1
+            for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                limited_ids,
+                cfg=cfg.api,
+                client=client,
+                mapping_cfg=cfg.uniprot_mapping,
                 chunk_size=cfg.target.chembl.chunk_size,
                 timeout=cfg.target.chembl.timeout,
-            )
-            return 1
+            ):
+                if not raw_chunk.empty:
+                    raw_chunks.append(raw_chunk)
+                if not parsed_chunk.empty:
+                    parsed_chunks.append(parsed_chunk)
+    except (requests.RequestException, ValueError) as exc:
+        logger.error(
+            "chembl_fetch_failed",
+            error=str(exc),
+            chunk_size=cfg.target.chembl.chunk_size,
+            timeout=cfg.target.chembl.timeout,
+        )
+        return 1
 
     raw_df = (
         pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
@@ -2338,7 +2342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     SystemExit
         Raised when invalid command-line options are provided to the parser.
     """
-    parser, log_cfg = build_parser()
+    parser, base_log_cfg = build_parser()
     args = parser.parse_args(argv)
     prepare_io_paths(
         args,
@@ -2353,83 +2357,91 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"get_target_data_{date_value}.log"
     with log_path.open("a", encoding="utf-8") as log_stream:
-        log_cfg.stream = log_stream
-        configure_logger(log_cfg)
-
-        limit_value = getattr(args, "limit", None)
-        if limit_value == 0:
-            logger.info("pipeline_skip_limit", limit=limit_value)
-            return 0
-        subparser_map = getattr(parser, "subparsers_map", {})
-        subparser = subparser_map.get(args.command, parser)
-        if limit_value is not None and limit_value < 0:
-            subparser.error("--limit must be zero or a positive integer")
-        offset_value = getattr(args, "offset", 0)
-        if offset_value < 0:
-            subparser.error("--offset must be zero or a positive integer")
-        mapping: dict[str, str] = {}
-        if args.command == "uniprot":
-            mapping = {
-                "column": "target.uniprot.column",
-                "data_dir": "target.uniprot.data_dir",
-                "limit": "target.uniprot.limit",
-            }
-        elif args.command == "chembl":
-            mapping = {
-                "column": "target.chembl.column",
-                "chunk_size": "target.chembl.chunk_size",
-                "timeout": "target.chembl.timeout",
-                "limit": "target.chembl.limit",
-            }
-        elif args.command == "iuphar":
-            mapping = {
-                "target_csv": "target.iuphar.target_csv",
-                "family_csv": "target.iuphar.family_csv",
-                "limit": "target.iuphar.limit",
-            }
-        elif args.command == "all":
-            mapping = {
-                "timeout": "target.all.timeout",
-                "data_dir": "target.all.data_dir",
-                "target_csv": "target.all.target_csv",
-                "family_csv": "target.all.family_csv",
-                "uniprot_column": "target.all.uniprot_column",
-                "chembl_out": "target.all.chembl_out",
-                "uniprot_out": "target.all.uniprot_out",
-                "iuphar_out": "target.all.iuphar_out",
-                "limit": "target.all.limit",
-            }
-        args_dict = vars(args).copy()
-        output_candidate = args_dict.get("output_csv")
-        if output_candidate in (
-            None,
-            argparse.SUPPRESS,
-        ):
-            final_value = args_dict.get("final_out")
-            if final_value in (None, argparse.SUPPRESS):
-                date_token = args_dict.get(
-                    "date", datetime.now(timezone.utc).strftime("%Y%m%d")
-                )
-                inferred = Path(args_dict["input_csv"]).with_name(
-                    f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
-                )
-                args_dict["final_out"] = inferred
-                args_dict["output_csv"] = inferred
-            else:
-                candidate = Path(final_value)
-                args_dict["final_out"] = candidate
-                args_dict["output_csv"] = candidate
-        else:
-            args_dict["output_csv"] = Path(output_candidate)
-        exit_code = run_cli_command(
-            args=argparse.Namespace(**args_dict),
-            parser=subparser,
-            base_parser=parser,
-            log_cfg=log_cfg,
-            mapping=mapping,
-            run=run,
-            logger=logger,
+        file_log_cfg = LoggerConfig(
+            level=base_log_cfg.level,
+            run_id=base_log_cfg.run_id,
+            stream=log_stream,
         )
+        configure_logger(file_log_cfg)
+        try:
+            limit_value = getattr(args, "limit", None)
+            if limit_value == 0:
+                logger.info("pipeline_skip_limit", limit=limit_value)
+                return 0
+            subparser_map = getattr(parser, "subparsers_map", {})
+            subparser = subparser_map.get(args.command, parser)
+            if limit_value is not None and limit_value < 0:
+                subparser.error("--limit must be zero or a positive integer")
+            offset_value = getattr(args, "offset", 0)
+            if offset_value < 0:
+                subparser.error("--offset must be zero or a positive integer")
+            mapping: dict[str, str] = {}
+            if args.command == "uniprot":
+                mapping = {
+                    "column": "target.uniprot.column",
+                    "data_dir": "target.uniprot.data_dir",
+                    "limit": "target.uniprot.limit",
+                }
+            elif args.command == "chembl":
+                mapping = {
+                    "column": "target.chembl.column",
+                    "chunk_size": "target.chembl.chunk_size",
+                    "timeout": "target.chembl.timeout",
+                    "limit": "target.chembl.limit",
+                }
+            elif args.command == "iuphar":
+                mapping = {
+                    "target_csv": "target.iuphar.target_csv",
+                    "family_csv": "target.iuphar.family_csv",
+                    "limit": "target.iuphar.limit",
+                }
+            elif args.command == "all":
+                mapping = {
+                    "timeout": "target.all.timeout",
+                    "data_dir": "target.all.data_dir",
+                    "target_csv": "target.all.target_csv",
+                    "family_csv": "target.all.family_csv",
+                    "uniprot_column": "target.all.uniprot_column",
+                    "chembl_out": "target.all.chembl_out",
+                    "uniprot_out": "target.all.uniprot_out",
+                    "iuphar_out": "target.all.iuphar_out",
+                    "limit": "target.all.limit",
+                }
+            args_dict = vars(args).copy()
+            output_candidate = args_dict.get("output_csv")
+            if output_candidate in (
+                None,
+                argparse.SUPPRESS,
+            ):
+                final_value = args_dict.get("final_out")
+                if final_value in (None, argparse.SUPPRESS):
+                    date_token = args_dict.get(
+                        "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                    )
+                    inferred = Path(args_dict["input_csv"]).with_name(
+                        f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
+                    )
+                    args_dict["final_out"] = inferred
+                    args_dict["output_csv"] = inferred
+                else:
+                    candidate = Path(final_value)
+                    args_dict["final_out"] = candidate
+                    args_dict["output_csv"] = candidate
+            else:
+                args_dict["output_csv"] = Path(output_candidate)
+            exit_code = run_cli_command(
+                args=argparse.Namespace(**args_dict),
+                parser=subparser,
+                base_parser=parser,
+                log_cfg=file_log_cfg,
+                mapping=mapping,
+                run=run,
+                logger=logger,
+            )
+        finally:
+            configure_logger(
+                LoggerConfig(level=base_log_cfg.level, run_id=base_log_cfg.run_id)
+            )
 
     return exit_code
 

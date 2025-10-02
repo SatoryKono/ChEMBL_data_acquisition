@@ -136,13 +136,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Destination CSV aligned to TargetsSchema",
     )
-    parser.add_argument(
-        "--out",
-        dest="final_out",
-        type=path_argument,
-        default=argparse.SUPPRESS,
-        help=argparse.SUPPRESS,
-    )
     return parser, log_cfg
 
 
@@ -371,6 +364,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     setattr(args, "raw_out", resolved_raw)
     final_candidate = getattr(args, "final_out", None)
+    legacy_final = getattr(args, "_deprecated_out", None)
+    if legacy_final not in (None, argparse.SUPPRESS):
+        final_candidate = legacy_final
     if final_candidate in (None, argparse.SUPPRESS):
         final_candidate = getattr(args, "output_csv", None)
     resolved_final = _resolve_optional_output(
