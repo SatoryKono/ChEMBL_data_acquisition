@@ -116,8 +116,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         limited_ids = _iter_ids()
 
-    id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
-
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
     action_cfg = enrichment_cfg.action_type
@@ -138,8 +136,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
-            for chunk_ids in id_chunks:
-
+            def _fetch_chunk(chunk_ids: list[str]) -> pd.DataFrame:
                 try:
                     return cl.get_activities(
                         chunk_ids,
@@ -159,35 +156,44 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     raise PipelineError(str(exc)) from exc
 
-            workers = max(1, cfg.activity.workers)
-            if workers == 1:
-                for chunk_ids in id_chunks:
+            def _run_sequential(chunks: Iterator[list[str]]) -> Iterator[pd.DataFrame]:
+                for chunk_ids in chunks:
                     yield _fetch_chunk(chunk_ids)
-                return
 
-            pending: dict[Future[pd.DataFrame], int] = {}
-            completed: dict[int, pd.DataFrame] = {}
-            next_index = 0
+            def _run_parallel(
+                chunks: Iterator[list[str]], workers: int
+            ) -> Iterator[pd.DataFrame]:
+                pending: dict[Future[pd.DataFrame], int] = {}
+                completed: dict[int, pd.DataFrame] = {}
+                next_index = 0
 
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                for index, chunk_ids in enumerate(id_chunks):
-                    future = executor.submit(_fetch_chunk, list(chunk_ids))
-                    pending[future] = index
-                    if len(pending) >= workers:
-                        done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
-                        for finished in done:
-                            chunk_index = pending.pop(finished)
-                            completed[chunk_index] = finished.result()
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    for index, chunk_ids in enumerate(chunks):
+                        future = executor.submit(_fetch_chunk, chunk_ids)
+                        pending[future] = index
+                        if len(pending) >= workers:
+                            done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+                            for finished in done:
+                                chunk_index = pending.pop(finished)
+                                completed[chunk_index] = finished.result()
+                            while next_index in completed:
+                                yield completed.pop(next_index)
+                                next_index += 1
+
+                    for future in as_completed(list(pending)):
+                        chunk_index = pending.pop(future)
+                        completed[chunk_index] = future.result()
                         while next_index in completed:
                             yield completed.pop(next_index)
                             next_index += 1
 
-                for future in as_completed(list(pending)):
-                    chunk_index = pending.pop(future)
-                    completed[chunk_index] = future.result()
-                    while next_index in completed:
-                        yield completed.pop(next_index)
-                        next_index += 1
+            chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
+            workers = max(1, cfg.activity.workers)
+            if workers == 1:
+                yield from _run_sequential(chunk_iter)
+                return
+
+            yield from _run_parallel(chunk_iter, workers)
 
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)
