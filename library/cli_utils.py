@@ -61,6 +61,12 @@ TableQualityHook = Callable[[Path], None]
 Fetcher = Callable[[], Iterable[pd.DataFrame] | pd.DataFrame]
 
 
+def _callable_name(func: Callable[..., object]) -> str:
+    """Return a human readable name for ``func``."""
+
+    return getattr(func, "__qualname__", getattr(func, "__name__", repr(func)))
+
+
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
 
@@ -240,6 +246,9 @@ def run_pipeline(
         iterable = _as_iterable(fetcher())
     except PipelineError:
         return 1
+    except Exception as exc:  # pragma: no cover - exercised in integration tests
+        use_logger.error("fetch_failed", error=str(exc))
+        return 1
 
     with TemporaryDirectory() as tmpdir_name:
         tmpdir = Path(tmpdir_name)
@@ -254,7 +263,15 @@ def run_pipeline(
                 rows_total += chunk_rows_total
 
                 for hook in metadata_hooks:
-                    chunk = hook(chunk)
+                    try:
+                        chunk = hook(chunk)
+                    except Exception as exc:
+                        use_logger.error(
+                            "metadata_hook_failed",
+                            hook=_callable_name(hook),
+                            error=str(exc),
+                        )
+                        return 1
 
                 chunk_columns = set(chunk.columns)
                 present_columns.update(chunk_columns)
@@ -311,6 +328,12 @@ def run_pipeline(
                 chunk_paths.append(chunk_path)
         except PipelineError:
             return 1
+        except Exception as exc:
+            use_logger.error(
+                "chunk_processing_failed",
+                error=str(exc),
+            )
+            return 1
 
         if missing_required_columns:
             use_logger.warning(
@@ -322,7 +345,15 @@ def run_pipeline(
         if not chunk_paths:
             empty = pd.DataFrame()
             for hook in metadata_hooks:
-                empty = hook(empty)
+                try:
+                    empty = hook(empty)
+                except Exception as exc:
+                    use_logger.error(
+                        "metadata_hook_failed",
+                        hook=_callable_name(hook),
+                        error=str(exc),
+                    )
+                    return 1
             present_columns.update(empty.columns)
             all_columns.update(empty.columns)
             chunk_path = tmpdir / "chunk_0.pkl"
@@ -362,8 +393,10 @@ def run_pipeline(
                 yield df
 
         try:
-            csv_path = writer(_iter_validated(), output_path, col_order, resolved_keys)
-        except OSError as exc:
+            csv_path = writer(
+                _iter_validated(), output_path, col_order, resolved_keys
+            )
+        except Exception as exc:
             use_logger.error(
                 "write_fail",
                 error=str(exc),
