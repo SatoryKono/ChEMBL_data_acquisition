@@ -424,11 +424,12 @@ def run_pipeline(
 
     try:
         table_quality(csv_path)
-    except ValueError as exc:
-        use_logger.error(
+    except Exception as exc:  # pragma: no cover - exercised via dedicated test
+        use_logger.exception(
             "quality_report_failed",
             error=str(exc),
             path=str(output_path),
+            exc=exc,
         )
         return 1
 
