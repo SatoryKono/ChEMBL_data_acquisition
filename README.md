@@ -200,9 +200,15 @@ flowchart LR
 
 ## Tests / Тесты
 
-**EN.** The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in the QA process documents: [English](docs/QA_PROCESS_EN.md) / [Русский](docs/QA_PROCESS_RU.md).
+**EN.** The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in the QA process documents listed below.
 
-**RU.** Команда `pre-commit` запускает форматирование, линтеры и проверку типов. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Детеминизм и smoke-проверки доступны в отдельных CLI. Актуальный список проверок опубликован в документах по QA: [English](docs/QA_PROCESS_EN.md) / [Русский](docs/QA_PROCESS_RU.md).
+**RU.** Команда `pre-commit` запускает форматирование, линтеры и проверку типов. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Детеминизм и smoke-проверки доступны в отдельных CLI. Актуальный список проверок приведён в документах по процессу обеспечения качества ниже.
+
+| Language / Язык | Checklist / Чек-лист |
+|-----------------|----------------------|
+| English         | [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md) |
+| Русский         | [docs/QA_PROCESS_RU.md](docs/QA_PROCESS_RU.md) |
+
 
 ```bash
 pre-commit run --all-files
