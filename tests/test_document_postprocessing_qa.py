@@ -11,6 +11,9 @@ import pytest
 
 
 from library import document_postprocessing as dp
+from library.config import IoCfg
+
+import qa.check_document_postprocessing as qa_module
 
 from qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
 
@@ -143,51 +146,102 @@ def test_run_document_postprocessing_check_failure(
     assert "- Column order identical:" in markdown
     assert result.diff_csv.name in markdown
 
+def test_structure_metrics_detects_missing_candidate_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
+
+    original_postprocess = dp.postprocess_file
+
+    def drop_column_postprocess(
+        source: Path,
+        target_dir: Path,
+        *,
+        cfg: IoCfg,
+        ref_document_path: Path,
+    ) -> Path:
+        processed_path = original_postprocess(
+            source,
+            target_dir,
+            cfg=cfg,
+            ref_document_path=ref_document_path,
+        )
+        processed_df = pd.read_csv(processed_path, dtype=str)
+        if "doi" in processed_df.columns:
+            processed_df = processed_df.drop(columns=["doi"])
+        processed_df.to_csv(processed_path, index=False)
+        return processed_path
+
+    monkeypatch.setattr(dp, "postprocess_file", drop_column_postprocess)
+
+    result = run_document_postprocessing_check(
+        base_path=base_dir,
+        reference_path=reference_path,
+        candidate_path=candidate_path,
+    )
+
+    assert result.passed is False
+
+    with result.report_json.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    assert payload["structure"]["columns_equal"] is False
+    assert any(
+        issue.startswith("Candidate missing columns") and "doi" in issue
+        for issue in payload["issues"]
+    )
 
 def test_diff_extract_limited_by_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
 
-    candidate_template = pd.read_csv(candidate_path, dtype=str)
-    candidate_rows: list[pd.Series] = []
+    rows: list[dict[str, str]] = []
     for idx in range(150):
-        record = candidate_template.iloc[0].copy()
-        record["ChEMBL.document_chembl_id"] = f"DOC{idx:05d}"
-        record["ChEMBL.doi"] = f"10.1000/{idx:03d}"
-        record["ChEMBL.pubmed_id"] = f"{100000 + idx}"
-        record["PubMed.PMID"] = f"{100000 + idx}"
-        record["PubMed.YearCompleted"] = "2020"
-        record["PubMed.MonthCompleted"] = "01"
-        record["PubMed.DayCompleted"] = "01"
-        record["ChEMBL.year"] = "2020"
-        record["ChEMBL.volume"] = "1"
-        record["ChEMBL.issue"] = "1"
-        record["ChEMBL.first_page"] = "1"
-        record["ChEMBL.last_page"] = "2"
-        candidate_rows.append(record)
-    candidate_raw = pd.DataFrame(candidate_rows)
-    candidate_raw.to_csv(candidate_path, index=False)
+        row = {column: "" for column in dp.FINAL_COLUMN_ORDER}
+        row["PMID"] = f"{100000 + idx}"
+        row["document_chembl_id"] = f"DOC{idx:05d}"
+        row["completed"] = "2020-01-01"
+        row["doi"] = f"10.1000/{idx:03d}"
+        row["reference"] = "Journal, 1(1), p.1-2"
+        row["sortorder.document"] = f"ISSN:{idx:08d}"
+        row["review"] = "false"
+        row["experimental"] = "true"
+        row["document_contains_external_links"] = "false"
+        row["invalid"] = "false"
+        row["invalid.doi"] = "false"
+        row["invalid.PMID"] = "false"
+        row["invalid.reference"] = "false"
+        row["year"] = "2020"
+        row["month"] = "01"
+        row["day"] = "01"
+        rows.append(row)
 
-    original = dp.postprocess_documents
+    expected_df = pd.DataFrame(rows)
+    actual_df = expected_df.copy()
+    actual_df["doi"] = actual_df["doi"] + ".mismatch"
 
-    def mutate(
-        frame,
+    expected_df.to_csv(candidate_path, index=False)
+
+    monkeypatch.setattr(
+        qa_module,
+        "_power_query_expected",
+        lambda ref_document, out_document: expected_df.copy(),
+    )
+
+    def fake_postprocess_file(
+        source: Path,
+        target_dir: Path,
         *,
-        required_columns=None,
-        ref_document=None,
-        ref_document_path=None,
-    ):
-        processed = original(
-            frame,
-            required_columns=required_columns,
-            ref_document=ref_document,
-            ref_document_path=ref_document_path,
-        )
-        processed["doi"] = processed["doi"].astype(str) + ".mismatch"
-        return processed
+        cfg: IoCfg,
+        ref_document_path: Path,
+    ) -> Path:
+        processed_path = source.with_name(f"preprocessed_{source.name}")
+        actual_df.to_csv(processed_path, index=False)
+        return processed_path
 
-    monkeypatch.setattr(dp, "postprocess_documents", mutate)
+    monkeypatch.setattr(dp, "postprocess_file", fake_postprocess_file)
+
 
     result = run_document_postprocessing_check(
         base_path=base_dir,
@@ -237,7 +291,8 @@ def test_cli_exit_codes(
             "--base-path",
             str(base_dir),
             "--out",
-            "output\\document\\output.document_20230101.csv",
+            str(candidate_path.relative_to(base_dir)),
+
         ]
     )
 

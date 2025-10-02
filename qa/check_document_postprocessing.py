@@ -557,6 +557,12 @@ def run_document_postprocessing_check(
     missing_in_actual = sorted(set(all_columns) - set(actual_df.columns))
     missing_in_expected = sorted(set(all_columns) - set(expected_df.columns))
 
+    structure_metrics = {
+        "columns_equal": set(expected_df.columns) == set(actual_df.columns),
+        "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
+    }
+
+
     reference_summary = _summarise_dataset(
         frame=expected_df,
         canonical=reference_canonical,
@@ -568,7 +574,7 @@ def run_document_postprocessing_check(
         frame=actual_df,
         canonical=candidate_canonical,
         key_columns=key_columns,
-        path=str(candidate_resolved),
+        path=str(processed_path),
         duplicate_count=candidate_duplicates,
     )
 
@@ -622,8 +628,10 @@ def run_document_postprocessing_check(
     metrics: dict[str, Any] = {
         "status": status,
         "date_code": resolved_date_code,
+        "structure": structure_metrics,
 
         "structure": structure_metrics,
+
         "reference": reference_summary,
         "candidate": candidate_summary,
 
