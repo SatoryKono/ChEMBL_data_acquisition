@@ -368,6 +368,13 @@ def _render_markdown(metrics: Mapping[str, Any], diff_path: Path | None) -> str:
             parts.append(f"{column} [{value_text}]")
         return "; ".join(parts)
 
+    def _format_bool_optional(flag: Any | None) -> str:
+        if flag is None:
+            return "n/a"
+        if isinstance(flag, bool):
+            return _format_bool(flag)
+        return _format_bool(bool(flag))
+
     def _format_share_block(summary: Mapping[str, Any], total_rows: int) -> str:
         if not summary.get("available"):
             return "n/a"
@@ -381,13 +388,14 @@ def _render_markdown(metrics: Mapping[str, Any], diff_path: Path | None) -> str:
     lines.append(f"- Status: **{metrics['status']}**")
     lines.append(f"- Reference rows: {ref_rows}")
     lines.append(f"- Candidate rows: {cand_rows}")
+    structure = metrics.get("structure", {})
     lines.append(
         "- Column sets identical: "
-        + _format_bool(metrics["structure"]["columns_equal"])
+        + _format_bool_optional(structure.get("columns_equal"))
     )
     lines.append(
         "- Column order identical: "
-        + _format_bool(metrics["structure"]["column_order_equal"])
+        + _format_bool_optional(structure.get("column_order_equal"))
     )
     lines.append(
         "- Cells different: "
@@ -556,6 +564,7 @@ def run_document_postprocessing_check(
         "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
     }
 
+
     reference_summary = _summarise_dataset(
         frame=expected_df,
         canonical=reference_canonical,
@@ -567,9 +576,14 @@ def run_document_postprocessing_check(
         frame=actual_df,
         canonical=candidate_canonical,
         key_columns=key_columns,
-        path=str(candidate_resolved),
+        path=str(processed_path),
         duplicate_count=candidate_duplicates,
     )
+
+    structure_metrics = {
+        "columns_equal": set(expected_df.columns) == set(actual_df.columns),
+        "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
+    }
 
     issues: list[str] = []
     if cells_different:
@@ -616,6 +630,8 @@ def run_document_postprocessing_check(
     metrics: dict[str, Any] = {
         "status": status,
         "date_code": resolved_date_code,
+        "structure": structure_metrics,
+
         "structure": structure_metrics,
 
         "reference": reference_summary,
