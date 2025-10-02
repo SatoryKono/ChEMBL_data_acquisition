@@ -106,9 +106,12 @@ def test_testitem_salt_flags_smoke(
             hierarchy=hierarchy, catalog=catalog
         ),
     )
-    monkeypatch.setattr(
-        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
-    )
+    quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_quality(*args: object, **kwargs: object) -> None:
+        quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", _capture_quality)
 
     exit_code = get_testitem_data.main(
         [
@@ -125,6 +128,11 @@ def test_testitem_salt_flags_smoke(
 
     assert exit_code == 0
     assert output_csv.exists()
+
+    assert quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = quality_calls[-1]
+    assert Path(quality_args[0]) == output_csv
+    assert Path(quality_kwargs.get("destination_dir")).resolve() == output_csv.parent.resolve()
 
     df = pd.read_csv(output_csv)
     assert {"salt_chembl_id", "natural_product"}.issubset(df.columns)

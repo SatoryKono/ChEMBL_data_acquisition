@@ -1460,8 +1460,17 @@ def _finalise_export(
         )
         return 1
 
+    doc_quality_cfg = cfg.system.doc_quality
     try:
-        analyze_table_quality(quality_profiler, table_name=str(csv_path.with_suffix("")))
+        if doc_quality_cfg.enable:
+            analyze_table_quality(
+                quality_profiler,
+                table_name=str(csv_path.with_suffix("")),
+                destination_dir=csv_path.parent,
+                sample_rows=doc_quality_cfg.sample_rows,
+                include_columns=doc_quality_cfg.include_columns,
+                exclude_columns=doc_quality_cfg.exclude_columns,
+            )
     except Exception as exc:
         logger.exception(
             "quality_report_generation_failed",

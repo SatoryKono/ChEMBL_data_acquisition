@@ -35,7 +35,9 @@ def test_run_chembl_orders_columns(
     )
     monkeypatch.setattr(cl, "get_assays", lambda *_, **__: df)
     monkeypatch.setattr(gas.ap, "postprocess_assays", lambda df: df)
-    monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gas, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
@@ -106,7 +108,9 @@ def test_run_chembl_streams_chunks_and_applies_hooks(
         return _Result(frame)
 
     monkeypatch.setattr(gas, "validate_assays", fake_validate)
-    monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gas, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
@@ -212,7 +216,9 @@ def test_run_chembl_processes_multiple_chunks(
         return _Result(frame)
 
     monkeypatch.setattr(gas, "validate_assays", fake_validate)
-    monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gas, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
@@ -271,7 +277,9 @@ def test_run_chembl_sorts_output_deterministically(
 
     monkeypatch.setattr(cl, "get_assays", lambda *_, **__: df)
     monkeypatch.setattr(gas.ap, "postprocess_assays", lambda frame: frame)
-    monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gas, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 

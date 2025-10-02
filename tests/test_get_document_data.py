@@ -128,7 +128,9 @@ def test_cli_uses_custom_column(
     monkeypatch.setattr(gdd, "_write_export_chunks", fake_write_export_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
     monkeypatch.setattr(gdd, "ensure_dirs", lambda cfg: None)
@@ -911,7 +913,9 @@ def test_write_csv_column_order(
     monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
     monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
 
@@ -2105,7 +2109,9 @@ def test_finalise_export_falls_back_to_default_key(
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
 
     exit_code = gdd._finalise_export(
@@ -2295,7 +2301,9 @@ def test_finalise_export_accepts_generator(
 
     monkeypatch.setattr(gdd, "build_quality_report", fake_build_report)
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
 
     exit_code = gdd._finalise_export(
         iter(frames),

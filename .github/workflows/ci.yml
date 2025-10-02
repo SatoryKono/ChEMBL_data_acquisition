@@ -41,6 +41,8 @@ jobs:
         run: mypy --strict library
       - name: Run tests
         run: pytest
+      - name: Determinism smoke test
+        run: python scripts/check_determinism.py --limit 5
       - name: Smoke test get_data orchestrator
         run: pytest -k "get_data_main_smoke"
       - name: Smoke CLI entry points

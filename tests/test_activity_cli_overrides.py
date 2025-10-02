@@ -81,7 +81,9 @@ def _run(
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
     monkeypatch.setattr(io, "write_csv", fake_write)
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gad, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gad, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gad, "write_meta_yaml", lambda **__: None)
     rc = gad.main(["--config", str(config_path), "--input", str(input_csv), *extra])

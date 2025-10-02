@@ -84,7 +84,9 @@ def test_assay_timeout_override(
         "write_csv",
         lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
     )
-    monkeypatch.setattr(gas, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gas, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gas, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gas, "write_meta_yaml", lambda **__: None)
     rc = gas.main(
@@ -143,7 +145,9 @@ def test_document_timeout_override(
         "write_csv",
         lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
     )
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gdd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
     rc = gdd.main(
@@ -216,7 +220,9 @@ def test_testitem_timeout_override(
         "write_csv",
         lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
     )
-    monkeypatch.setattr(gtdt, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gtdt, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gtdt, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gtdt, "write_meta_yaml", lambda **__: None)
     rc = gtdt.main(
@@ -275,7 +281,9 @@ def test_target_timeout_override(
         "write_csv",
         lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gtd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **__: None)
     rc = gtd.main(
@@ -335,7 +343,9 @@ def test_target_chunk_size_override(
         "write_csv",
         lambda df, path, *, cfg, sep=None, encoding=None, **k: path,
     )
-    monkeypatch.setattr(gtd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gtd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(gtd, "file_sha256", lambda p: "deadbeef")
     monkeypatch.setattr(gtd, "write_meta_yaml", lambda **__: None)
     rc = gtd.main(

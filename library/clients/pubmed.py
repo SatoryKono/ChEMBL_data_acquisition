@@ -185,15 +185,20 @@ def _do_request(
 ) -> tuple[dict[str, Any] | str | None, str]:
     """Perform an HTTP request with retry logic."""
 
-    retry_policy = retry_cfg or RetryCfg()
+    active_retry_cfg = retry_cfg or RetryCfg()
     retry_after_delay: float | None = None
     for attempt in range(retries + 1):
         event = "request_start" if attempt == 0 else "request_retry"
         extra = {"stage": event, "url": url, "attempt": attempt + 1}
 
         if attempt:
-
-            retry_delay = _retry_delay(attempt, delay, retry_cfg, timeout)
+            header_delay = retry_after_delay
+            retry_after_delay = None
+            retry_delay = (
+                header_delay
+                if header_delay is not None
+                else _retry_delay(attempt, delay, active_retry_cfg, timeout)
+            )
             extra["delay"] = retry_delay
             logger.info(event, extra=extra)
             if retry_delay > 0:

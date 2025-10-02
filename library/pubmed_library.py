@@ -337,11 +337,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg=cfg,
         )
 
+
     def table_quality(destination: Path) -> None:
         analyze_table_quality(
             destination,
             table_name=str(output_path.with_suffix("")),
         )
+
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
     config_snapshot = _serialize_paths(cfg.to_dict())
