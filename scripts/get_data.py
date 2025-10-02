@@ -29,6 +29,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Sequence
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if __package__ in {None, ""}:
+    project_root_str = str(_PROJECT_ROOT)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
 from library.utils.bootstrap import ensure_project_root
 
 
