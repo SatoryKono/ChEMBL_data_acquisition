@@ -506,9 +506,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         )
         parser_obj.add_argument(
             "--normalize-at-export",
-            action="store_true",
+            dest="normalize_at_export",
+            action=argparse.BooleanOptionalAction,
             default=normalize_default,
-            help="Apply normalisation immediately before writing the final output",
+            help=(
+                "Apply normalisation immediately before writing the final output. "
+                "Use --no-normalize-at-export to keep the raw payload."
+            ),
         )
     _add_output_arguments(root, defaults=True)
     _add_output_arguments(shared, defaults=False)
@@ -593,30 +597,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=0,
         help="Number of identifiers to skip before processing",
     )
-    chembl.add_argument(
-        "--id-cols",
-        nargs="+",
-        dest="id_cols",
-        default=None,
-        help="Columns used to identify and sort rows in the output",
-    )
-    chembl.add_argument(
-        "--normalize-at-export",
-        dest="normalize_at_export",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help=(
-            "Apply normalization and schema validation before writing the final export. "
-            "Use --no-normalize-at-export to emit raw payload output."
-        ),
-    )
-    chembl.add_argument(
-        "--no-reindex-raw",
-        dest="reindex_raw",
-        action="store_false",
-        default=True,
-        help="Preserve raw payload column order when writing dumps.",
-    )
+    chembl.set_defaults(normalize_at_export=True)
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
@@ -2318,8 +2299,30 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "iuphar_out": "target.all.iuphar_out",
                 "limit": "target.all.limit",
             }
+        args_dict = vars(args).copy()
+        output_candidate = args_dict.get("output_csv")
+        if output_candidate in (
+            None,
+            argparse.SUPPRESS,
+        ):
+            final_value = args_dict.get("final_out")
+            if final_value in (None, argparse.SUPPRESS):
+                date_token = args_dict.get(
+                    "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                )
+                inferred = Path(args_dict["input_csv"]).with_name(
+                    f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
+                )
+                args_dict["final_out"] = inferred
+                args_dict["output_csv"] = inferred
+            else:
+                candidate = Path(final_value)
+                args_dict["final_out"] = candidate
+                args_dict["output_csv"] = candidate
+        else:
+            args_dict["output_csv"] = Path(output_candidate)
         exit_code = run_cli_command(
-            args=args,
+            args=argparse.Namespace(**args_dict),
             parser=subparser,
             base_parser=parser,
             log_cfg=log_cfg,
