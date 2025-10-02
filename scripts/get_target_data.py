@@ -88,6 +88,17 @@ RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
 
 
+def _run_pipeline_with_meta(**kwargs: object) -> int:
+    """Execute :func:`run_pipeline` with metadata writer override."""
+
+    original_cli_write_meta = cli_utils_module.write_meta_yaml
+    cli_utils_module.write_meta_yaml = write_meta_yaml
+    try:
+        return run_pipeline(**kwargs)
+    finally:
+        cli_utils_module.write_meta_yaml = original_cli_write_meta
+
+
 @dataclass(frozen=True)
 class _UniprotCandidate:
     """Container describing a UniProt identifier candidate for a target row."""
@@ -1001,14 +1012,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_df = (
         pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
     )
-
-    def _run_pipeline_with_meta(**kwargs: object) -> int:
-        original_cli_write_meta = cli_utils_module.write_meta_yaml
-        cli_utils_module.write_meta_yaml = write_meta_yaml
-        try:
-            return run_pipeline(**kwargs)
-        finally:
-            cli_utils_module.write_meta_yaml = original_cli_write_meta
 
     if normalize_at_export:
         try:
