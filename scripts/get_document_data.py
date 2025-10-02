@@ -1033,10 +1033,31 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     return result
 
 
+def _collapse_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Combine duplicate-named columns while preserving the first occurrence."""
+
+    if not df.columns.has_duplicates:
+        return df
+
+    collapsed_columns: dict[str, pd.Series] = {}
+    for column in dict.fromkeys(df.columns):
+        column_data = df.loc[:, column]
+        if isinstance(column_data, pd.Series):
+            collapsed_columns[column] = column_data
+            continue
+
+        combined = column_data.iloc[:, 0]
+        for position in range(1, column_data.shape[1]):
+            combined = combined.combine_first(column_data.iloc[:, position])
+        collapsed_columns[column] = combined
+
+    return pd.DataFrame(collapsed_columns, index=df.index)
+
+
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
-    frame = df.copy()
+    frame = _collapse_duplicate_columns(df.copy())
 
     rename_map: dict[str, str] = {}
     for source, target in _EXPORT_COLUMN_RENAMES.items():
