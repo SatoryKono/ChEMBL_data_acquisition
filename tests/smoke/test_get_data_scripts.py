@@ -1002,6 +1002,7 @@ def test_run_pipeline_failure_removes_outputs(
         limit=None,
         force=False,
         skip_existing=False,
+        dry_run=False,
     )
 
     final_output = cfg.output_path("activity")
@@ -1087,6 +1088,7 @@ def test_run_pipeline_system_exit_cleans_up(
         limit=None,
         force=False,
         skip_existing=False,
+        dry_run=False,
     )
 
     final_output = cfg.output_path("activity")
@@ -1170,6 +1172,7 @@ def test_run_pipeline_success_promotes_sidecars(
         limit=None,
         force=False,
         skip_existing=False,
+        dry_run=False,
     )
 
     final_output = cfg.output_path("activity")
