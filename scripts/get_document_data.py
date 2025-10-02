@@ -1033,29 +1033,41 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     return result
 
 
-def _collapse_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Combine duplicate-named columns while preserving the first occurrence."""
 
-    if not df.columns.has_duplicates:
-        return df
+def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Return a single series for ``column`` consolidating duplicate columns."""
 
-    collapsed_columns: dict[str, pd.Series] = {}
-    for column in dict.fromkeys(df.columns):
-        column_data = df.loc[:, column]
-        if isinstance(column_data, pd.Series):
-            collapsed_columns[column] = column_data
-            continue
+    if column not in frame.columns:
+        return pd.Series(index=frame.index, dtype=object)
 
-        combined = column_data.iloc[:, 0]
-        for position in range(1, column_data.shape[1]):
-            combined = combined.combine_first(column_data.iloc[:, position])
-        collapsed_columns[column] = combined
+    selected = frame[column]
+    if isinstance(selected, pd.Series):
+        return selected
 
-    return pd.DataFrame(collapsed_columns, index=df.index)
+    if selected.shape[1] == 1:
+        return selected.iloc[:, 0]
+
+    consolidated = (
+        selected.replace("", pd.NA)
+        .bfill(axis=1)
+        .ffill(axis=1)
+        .iloc[:, 0]
+        .fillna("")
+    )
+    return consolidated
 
 
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
+
+
+
+    return pd.DataFrame(collapsed_columns, index=df.index)
+
+
+    # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
+    # keeping existing data intact.
+
 
     frame = _collapse_duplicate_columns(df.copy())
 
@@ -1063,14 +1075,29 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     for source, target in _EXPORT_COLUMN_RENAMES.items():
         if source not in frame.columns:
             continue
-        if target in frame.columns and target != source:
-            frame[target] = _coalesce_columns(frame, [target, source])
+
+        if target in frame.columns:
+
+            target_series = _resolve_duplicate_column(frame, target)
+            source_series = _resolve_duplicate_column(frame, source)
+            frame[target] = target_series.combine_first(source_series)
+            if pd.api.types.is_object_dtype(target_series.dtype) or pd.api.types.is_string_dtype(
+                target_series.dtype
+            ):
+                mask = target_series.fillna("") == ""
+                if mask.any():
+                    frame.loc[mask, target] = source_series.loc[mask]
+
+
             frame = frame.drop(columns=[source])
             continue
         rename_map[source] = target
     if rename_map:
         frame = frame.rename(columns=rename_map)
 
+
+    if frame.columns.duplicated().any():
+        frame = frame.loc[:, ~frame.columns.duplicated()]
 
     for target, sources in _EXPORT_COALESCE_SOURCES.items():
         frame[target] = _coalesce_columns(frame, sources)
