@@ -27,13 +27,13 @@ flowchart LR
 ```
 
 * **Fetch** — pull identifiers (single or composite via `--id-cols`) and call external services or local caches.
-* **Raw CSV / Parquet** — when the CLI exposes staging switches, persist the untouched payload to the optional `--raw-out` path (`--raw-format parquet` supported).
+* **Raw CSV / Parquet** — when the CLI exposes staging switches, persist the untouched payload to the optional `--raw-out` path (`--raw-format parquet` supported). Add `--no-reindex-raw` when the raw snapshot must retain the API column order for debugging.
 * **Cleanup IDs** — trim whitespace, deduplicate rows and isolate placeholder identifiers while retaining them in raw snapshots.
-* **Normalize** — harmonise datatypes, operators and casing to prepare deterministic validation.
+* **Normalize** — harmonise datatypes, operators and casing to prepare deterministic validation. Controlled through the `--normalize-at-export` / `--no-normalize-at-export` pair in the target pipeline.
 * **Validate** — run the Pandera schemas, routing violations to sidecar CSVs referenced in the metadata YAML.
 * **Final export** — write the cleaned table to `--final-out`/`--out`, append metadata and table-quality diagnostics.
 
-> **Note.** The new staging switches (`--raw-out`, `--final-out`, `--raw-format`, `--id-cols`) are currently available via `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt them once the shared CLI is extended.
+> **Note.** The new staging switches (`--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the `--normalize-at-export` / `--no-normalize-at-export` pair) are currently available via `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt them once the shared CLI is extended.
 
 Placeholder identifiers such as temporary ChEMBL or PubMed IDs are converted into explicit placeholder rows during the cleanup
 stage. The raw export retains them for auditing, while the final output omits them and surfaces aggregate counts via
