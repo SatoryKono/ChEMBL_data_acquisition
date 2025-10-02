@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -141,6 +141,69 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> N
 
     meta_path = output.with_name(output.name + ".meta.yaml")
     assert meta_path.exists()
+
+
+def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    chunk_a = pd.DataFrame(
+        {
+            "assay_chembl_id": ["A1"],
+            "document_chembl_id": ["D1"],
+        }
+    )
+    chunk_b = pd.DataFrame(
+        {
+            "assay_chembl_id": ["A2"],
+            "document_chembl_id": ["D2"],
+            "extra": ["value"],
+        }
+    )
+
+    def fetcher() -> Iterable[pd.DataFrame]:
+        return [chunk_a, chunk_b]
+
+    captured: list[pd.DataFrame] = []
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Sequence[str] | None,
+        key_cols: Sequence[str],
+    ) -> Path:
+        for chunk in chunks:
+            captured.append(chunk.copy())
+        if captured:
+            pd.concat(captured, ignore_index=True).to_csv(destination, index=False)
+        else:
+            pd.DataFrame(columns=list(col_order or [])).to_csv(destination, index=False)
+        return destination
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="AssaysSchema",
+        validators=None,
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda path: None,
+        cfg=cfg,
+    )
+
+    assert exit_code == 0
+    assert len(captured) == 2
+    assert list(captured[0].columns) == list(captured[1].columns)
+    assert "extra" in captured[0].columns
+    assert captured[0]["extra"].isna().all()
+    assert captured[1]["extra"].tolist() == ["value"]
+    assert output.exists()
 
 
 def test_run_pipeline_removes_stale_failure_outputs(tmp_path: Path, cfg: Config) -> None:
