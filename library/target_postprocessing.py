@@ -15,6 +15,7 @@ from schemas.targets import TARGETS_COLUMN_ORDER
 
 from . import organism_classification
 from .config import Config, IoCfg
+from .csv_utils import write_csv_deterministic
 from .log import logger
 
 # Columns removed in the final export
@@ -501,7 +502,15 @@ def postprocess_file(
     encoding = encoding or cfg.csv_encoding
     df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_targets(df, chembl_col=chembl_col)
-    processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
+    write_csv_deterministic(
+        processed,
+        output_path,
+        col_order=list(processed.columns),
+        key_cols=[chembl_col],
+        sep=sep,
+        encoding=encoding,
+        cfg=None,
+    )
 
 
 def finalise_targets(
@@ -674,4 +683,12 @@ def finalise_file(
         phylum_col=phylum_col,
         class_col=class_col,
     )
-    processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
+    write_csv_deterministic(
+        processed,
+        output_path,
+        col_order=list(processed.columns),
+        key_cols=[chembl_col],
+        sep=sep,
+        encoding=encoding,
+        cfg=cfg,
+    )

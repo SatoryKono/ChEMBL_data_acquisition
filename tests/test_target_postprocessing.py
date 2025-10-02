@@ -173,6 +173,9 @@ def test_finalise_file_roundtrip(tmp_path: Path, cfg: Config) -> None:
     result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     pd.testing.assert_frame_equal(result, expected)
 
+    meta_path = Path(f"{output_path}.meta.yaml")
+    assert meta_path.exists()
+
 
 def test_finalise_targets_no_downcast_warning() -> None:
     """``finalise_targets`` should not emit downcast warnings during replace."""

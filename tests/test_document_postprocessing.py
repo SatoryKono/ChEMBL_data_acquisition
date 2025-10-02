@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from library import document_postprocessing as dp
+from library.config import IoCfg
 
 
 def test_postprocess_documents_creates_flags_and_sorts() -> None:
@@ -32,3 +33,37 @@ def test_postprocess_documents_creates_flags_and_sorts() -> None:
         "OpenAlex.PublicationTypes",
     ]:
         assert col not in result.columns
+
+
+def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
+    """``postprocess_file`` writes metadata and normalises NA handling."""
+
+    df = pd.DataFrame(
+        {
+            "document_chembl_id": ["DOC1", "DOC2"],
+            "title": ["Example", None],
+            "PubMed.PublicationType": ["Review", ""],
+            "scholar.PublicationTypes": ["Review", None],
+            "OpenAlex.PublicationTypes": ["review-article", ""],
+            "Index": [0, 1],
+        }
+    )
+    cfg = IoCfg(csv_sep=";", csv_encoding="utf8")
+    input_path = tmp_path / "in.csv"
+    df.to_csv(input_path, index=False, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
+    output_path = tmp_path / "out.csv"
+
+    dp.postprocess_file(input_path, output_path, cfg=cfg)
+
+    result = pd.read_csv(
+        output_path,
+        sep=cfg.csv_sep,
+        encoding=cfg.csv_encoding,
+        keep_default_na=False,
+    )
+    assert result["title"].tolist() == ["Example", "nan"]
+    assert not result.isna().any().any()
+    assert result["PubMed.MonthCompleted"].tolist() == ["", ""]
+
+    meta_path = Path(f"{output_path}.meta.yaml")
+    assert meta_path.exists()
