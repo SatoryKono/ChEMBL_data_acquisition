@@ -9,11 +9,14 @@ The README is available in multiple languages:
 
  
 * Командные скрипты с унифицированными флагами `--input`, `--output`/`--out`,
-  `--final-out`, `--log-level`,
-  `--sep`, `--encoding`, `--column`, а также `--config` и `--print-config`
-  для управления загрузкой настроек. Размер пакетной выборки задаётся
-  параметрами `--chunk-size` или `--batch-size` в зависимости от конкретного
-  пайплайна.
+
+  `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
+  `--print-config` для управления загрузкой настроек. Размер пакетной
+  выборки задаётся параметрами `--chunk-size` или `--batch-size` в зависимости
+  от конкретного пайплайна. Новые переключатели `--raw-out`, `--final-out`,
+  `--raw-format` и `--id-cols` уже доступны в пайплайне таргетов; остальные
+  команды получат их после расширения общего CLI.
+
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
 * Отдельный «сырой» снимок (`--raw-out`) доступен для пайплайна таргетов;
   поддержка остальных конвейеров запланирована и будет объявлена отдельно.
@@ -167,15 +170,24 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs / Очистка ID"] --> Normalize --> Validate --> Final["Final export / Финальный экспорт"]
 ```
 
-**EN.** The target pipeline currently exercises the full staged contract: `--raw-out` (optionally with `--raw-format parquet`)
-captures the raw payload, `--id-cols` keeps composite keys, and `--final-out`/`--out` receives the cleaned export. Activity,
-assay and document pipelines already run the same logical stages but omit the dedicated raw snapshot until their adapters are
-updated.
 
-**RU.** Полный набор стадий сейчас реализован в пайплайне таргетов: `--raw-out` (при необходимости с `--raw-format parquet`)
-сохраняет исходный ответ, `--id-cols` фиксирует составные ключи, а `--final-out`/`--out` получают нормализованный экспорт.
-Пайплайны активностей, ассайев и документов проходят те же логические шаги, но пока пропускают отдельный «сырой» снимок до
-обновления адаптеров.
+**EN.** The target pipeline already follows the staged contract with dedicated destinations for raw and cleaned artefacts. Use
+`--raw-out` (optionally with `--raw-format parquet`) to capture the raw payload, list composite keys via `--id-cols`, and direct
+the cleaned export to `--final-out` or the shorter alias `--out`. Placeholder identifiers remain in the raw snapshot and are
+counted in the metadata (`error_placeholder_counts`), while the final export includes only validated values. Other pipelines keep
+using `--output` until the shared CLI is extended.
+
+**RU.** Пайплайн таргетов уже использует поэтапный контракт с разделением «сырого» и нормализованного вывода. Флаг `--raw-out`
+(при необходимости с `--raw-format parquet`) сохраняет исходный ответ, `--id-cols` перечисляет составные ключи, а чистый экспорт
+направляется в `--final-out` либо сокращённый алиас `--out`. Временные идентификаторы остаются в «сыром» снимке и учитываются в
+метаданных (`error_placeholder_counts`), тогда как финальная таблица содержит только прошедшие валидацию значения. Прочие
+пайплайны пока используют `--output` до расширения общего CLI.
+
+> **EN.** `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are currently exposed via `get-target-data` and
+> `library.utils.cli_tools.pipeline_targets_main`. Other commands will adopt these switches once the shared parser lands.
+> **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` уже доступны в `get-target-data` и
+> `library.utils.cli_tools.pipeline_targets_main`. Остальные команды получат их после доработки общего парсера.
+
 
 
 ## Tests / Тесты
@@ -300,9 +312,11 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ## Usage
 
 The examples below illustrate how to run the main CLI tools with common
-options like ``--input``, ``--out``/``--output``, ``--raw-out`` and ``--limit``. Passing
+options like ``--input``, ``--out``/``--output`` and ``--limit``. Passing
 ``--limit 0`` short-circuits processing before any network or filesystem
-access, which is handy for configuration smoke tests.
+access, which is handy for configuration smoke tests. The target pipeline
+already exposes ``--raw-out``, ``--final-out``, ``--raw-format`` and ``--id-cols``;
+other commands will gain them once the shared CLI is extended.
 
 ### scripts/get_document_data.py
 
@@ -663,11 +677,11 @@ Running the CLI saves ``data_quality_report_table.csv`` and
 
     python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 
-Use ``--output``/``--out`` to redirect these artefacts to another directory or combine
-them with ``--raw-out`` / ``--final-out`` when raw and cleaned exports have different
-destinations. The value must be a directory path (do not include the final file name).
-When ``local.io.exist_ok`` is set to ``false`` the directory has to exist beforehand;
-otherwise it is created automatically.
+Use ``--output``/``--out`` to redirect these artefacts to another directory. The value must be a
+directory path (do not include the final file name). When ``local.io.exist_ok`` is set to ``false`` the
+directory has to exist beforehand; otherwise it is created automatically. The target pipeline uses the
+additional ``--raw-out``/``--final-out`` switches to separate staging outputs until the shared CLI is
+updated for the remaining commands.
 
 All scripts share a common set of flags:
 
@@ -816,10 +830,10 @@ python -m library.utils.cli_tools.table_quality_main \
 ```
 
 `--output`/`--out` по умолчанию формируется как `output.<имя_входа>_YYYYMMDD.csv`
-в каталоге, заданном `local.io.output_dir`. При необходимости
-используйте `--raw-out` и `--final-out` (с `--raw-format`) для разведения
-«сырого» снимка и финального экспорта.
-Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md) и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
+в каталоге, заданном `local.io.output_dir`. Пайплайн таргетов может использовать
+`--raw-out` и `--final-out` (с `--raw-format`) для разведения «сырого» снимка и
+финального экспорта. Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md)
+и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
 
 ## Структура проекта
 

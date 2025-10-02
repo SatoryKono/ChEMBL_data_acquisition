@@ -32,16 +32,16 @@ directly.
 | `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
 | `--output` / `--out` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `--output-dir` or `--base-path`. |
-| `--raw-out` | Target pipeline only: path for the raw snapshot written before cleanup and normalisation. Ignored by other pipelines until raw support lands. |
-| `--raw-format` | Target pipeline only: format of the raw snapshot (`csv` by default, `parquet` when supplied). |
-| `--final-out` | Path for the final cleaned export. When omitted, falls back to `--output` / `--out`. |
+| `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`; other commands will surface it once the shared parser is extended. Skipped when omitted. |
+| `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. Available in the same entry points as `--raw-out`. |
+| `--final-out` | Path for the final cleaned export. When omitted, falls back to `--output` / `--out`. Currently exposed by the target pipeline helpers. |
 | `--date` | Override the auto-generated `YYYYMMDD` suffix when building default output filenames. |
 | `--force` | Overwrite outputs even when they already exist. |
 | `--skip-existing` | Skip processing if the destination file is already present. |
 | `--sep` | CSV delimiter forwarded to `cfg.io.csv_sep`. |
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
-| `--id-cols` | Comma-separated list of identifier columns to preserve in the raw snapshot before cleanup. |
+| `--id-cols` | Comma-separated list of identifier columns to preserve in the raw snapshot before cleanup. Currently surfaced by the target pipeline helpers. |
 | `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
 | `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
 
@@ -66,10 +66,10 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
 ```
 
-When running the target pipeline, `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols`
-keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and
-validation. Pipelines without raw support currently skip the stage entirely; the existing flags remain reserved for future
-adapters.
+In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and validation. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines continue to rely on `--output` until the shared parser is extended.
+
+> **Note.** `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
+
 
 During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preserved in the raw snapshot and counted in the metadata under `error_placeholder_counts` while being removed from the final export.
 
@@ -95,7 +95,7 @@ diagnose problematic batches.
 Pipe the output through `jq` or similar tooling for real-time monitoring:
 
 ```bash
-get-target-data chembl --input docs.csv --column target_chembl_id \
+get-target-data all --input docs.csv --column target_chembl_id \
   --raw-out out/targets.raw.csv --final-out out/targets.final.csv \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
@@ -160,7 +160,7 @@ Console form:
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --batch-size 20
 ```
 
@@ -170,7 +170,7 @@ Module form:
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --batch-size 20
 ```
 
@@ -197,7 +197,7 @@ Console form:
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -211,7 +211,7 @@ Module form:
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --final-out out/documents.final.csv \
+  --output out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
