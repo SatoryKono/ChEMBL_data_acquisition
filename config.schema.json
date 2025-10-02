@@ -711,6 +711,11 @@
           ],
           "default": null,
           "title": "Exclude Columns"
+        },
+        "fatal_on_error": {
+          "default": false,
+          "title": "Fatal On Error",
+          "type": "boolean"
         }
       },
       "title": "DocQualityCfg",
@@ -965,6 +970,32 @@
     "IoCfg": {
       "additionalProperties": false,
       "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Path"
+        },
+        "input_dir": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Dir"
+        },
         "output_dir": {
           "default": "$CHEMBL_DA_BASE_PATH/output",
           "format": "path",
@@ -1458,6 +1489,15 @@
           "title": "Backoff Factor",
           "type": "number"
         },
+        "backoff_cap": {
+          "default": null,
+          "minimum": 0,
+          "title": "Backoff Cap",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "status_forcelist": {
           "items": {
             "type": "integer"
@@ -1792,6 +1832,31 @@
       "title": "TargetUniprotCfg",
       "type": "object"
     },
+    "TestitemBatchRetryCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": false,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "shrink_factor": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "title": "Shrink Factor",
+          "type": "number"
+        },
+        "min_size": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Min Size",
+          "type": "integer"
+        }
+      },
+      "title": "TestitemBatchRetryCfg",
+      "type": "object"
+    },
     "TestitemCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1887,6 +1952,9 @@
           ],
           "default": null,
           "title": "Backoff Factor"
+        },
+        "batch_retry": {
+          "$ref": "#/$defs/TestitemBatchRetryCfg"
         }
       },
       "title": "TestitemCfg",

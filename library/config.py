@@ -651,6 +651,7 @@ class DocQualityCfg(_BaseModel):
     sample_rows: int | None = Field(default=None, ge=1)
     include_columns: tuple[str, ...] | None = None
     exclude_columns: tuple[str, ...] | None = None
+    fatal_on_error: bool = False
 
 
 class ResourcesCfg(_BaseModel):
@@ -777,6 +778,7 @@ class RateCfg(_BaseModel):
 class RetryCfg(_BaseModel):
     max_attempts: int = Field(3, ge=1)
     backoff_factor: float = Field(0.5, ge=0)
+    backoff_cap: float | None = Field(default=None, ge=0)
     status_forcelist: list[StrictInt] = Field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
@@ -980,6 +982,17 @@ class AssayCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class TestitemBatchRetryCfg(_BoolModel):
+    enable: bool = False
+    shrink_factor: float = Field(0.5, gt=0, lt=1)
+    min_size: int = Field(1, ge=1)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
     batch_size: int = Field(1000, ge=1, le=1000)
@@ -990,6 +1003,9 @@ class TestitemCfg(_BaseModel):
     request_limit: int = Field(1000, ge=1, le=1000)
     retries: int | None = Field(default=None, ge=0)
     backoff_factor: float | None = Field(default=None, ge=0)
+    batch_retry: TestitemBatchRetryCfg = Field(
+        default_factory=lambda: TestitemBatchRetryCfg()
+    )
 
     @field_validator("fields", mode="before")
     @classmethod
@@ -1877,6 +1893,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
     "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["system", "retry", "max_attempts"],
     "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["system", "retry", "backoff_factor"],
+    "CHEMBL_DA_RETRY_BACKOFF_CAP": ["system", "retry", "backoff_cap"],
 }
 
 _ALIAS_MAP: dict[str, list[str]] = {
@@ -1905,6 +1922,7 @@ __all__ = [
     "ActivityPropertiesCfg",
     "AssayCfg",
     "TestitemCfg",
+    "TestitemBatchRetryCfg",
     "TestitemMoleculeEnrichmentCfg",
     "TestitemMoleculeEnrichmentFlagsCfg",
     "TestitemMoleculeEnrichmentLoggingCfg",

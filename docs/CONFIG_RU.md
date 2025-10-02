@@ -33,6 +33,7 @@
 | `timeout_read` | `30` | Таймаут ожидания ответа (сек.). |
 | `retries` | `3` | Максимум попыток, выполняемых клиентскими обёртками; общий HTTP-адаптер повторы не делает. |
 | `backoff_factor` | `0.5` | Множитель экспоненциального backoff между повторами. |
+| `backoff_cap` | `null` | Максимальная задержка экспоненциального backoff (сек.). |
 | `rps` | `20` | Лимит запросов в секунду для rate limiter. |
 | `burst` | `20` | Размер «ведра» токенов. |
 | `user_agent` | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | Заголовок User-Agent. Перед продакшеном замените контакт на собственный адрес; валидатор по-прежнему отвергает шаблон `contact@example.org`. Задайте через `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
@@ -177,6 +178,9 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `request_limit` | `1000` | Максимальное число объектов в одном запросе API. |
 | `retries` | `5` | Количество повторов при временных ошибках ChEMBL. |
 | `backoff_factor` | `0.5` | Множитель экспоненциальной задержки между повторами. |
+| `batch_retry.enable` | `false` | При `true` перед ошибкой выполняется повтор с уменьшенным размером батча. |
+| `batch_retry.shrink_factor` | `0.5` | Во сколько раз уменьшать батч при повторном запросе, если `batch_retry.enable=true`. |
+| `batch_retry.min_size` | `1` | Минимальный размер батча при повторных попытках. |
 | `fields` | `["molecule_chembl_id", "parent_molecule_chembl_id", "pref_name", "max_phase", "molecule_type", "first_approval", "oral", "parenteral", "topical", "black_box_warning", "structure_type", "molecule_structures.canonical_smiles", "molecule_structures.standard_inchi", "molecule_structures.standard_inchi_key", "pubchem_cid", "pubchem_iupac_name", "pubchem_molecular_formula", "pubchem_isomeric_smiles", "pubchem_canonical_smiles", "pubchem_inchi", "pubchem_inchikey"]` | Список полей, запрашиваемых у ChEMBL и PubChem. |
 
 Параметры `offset` и `request_limit` помогают управлять пагинацией API: первый задаёт стартовую позицию, второй ограничивает размер одной страницы, который по умолчанию равен максимально допустимым 1000 объектам. Цикл повторов контролируется парами `retries`/`backoff_factor`, позволяя сгладить временные ошибки сервиса. Список `fields` определяет точный набор колонок в ответе и по умолчанию отражает рекомендуемый минимальный профиль тест-объекта.
@@ -344,6 +348,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 |  | `limiter_cache_ttl` | `600` | TTL записей кэша (сек.). |
 | `retry` | `max_attempts` | `3` | Количество повторов при ошибках. |
 |  | `backoff_factor` | `0.5` | Базовый множитель экспоненциальной задержки. |
+|  | `backoff_cap` | `null` | Максимальная задержка между повторами (сек.). |
 |  | `status_forcelist` | `[429, 500, 502, 503, 504]` | Коды HTTP, инициирующие повтор. |
 | `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Веса источников документации. |
 |  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Минимальные пороги классификации. |
@@ -382,6 +387,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 | `CHEMBL_DA_LOG_LEVEL` | `system.log.level` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `system.retry.max_attempts` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `system.retry.backoff_factor` |
+| `CHEMBL_DA_RETRY_BACKOFF_CAP` | `system.retry.backoff_cap` |
 | `CHEMBL_DA_DICT_DIR` | `local.resources.dictionary_dir` |
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |

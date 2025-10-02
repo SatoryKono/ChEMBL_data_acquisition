@@ -59,3 +59,25 @@ def test_path_argument_normalises_windows_style(tmp_path: Path) -> None:
         ["--config", str(cfg_path), "--input", "data\\input\\file.csv"]
     )
     assert args.input_csv == Path("data/input/file.csv")
+
+
+def test_output_dir_override_updates_config(tmp_path: Path) -> None:
+    cfg_path = _write_config(tmp_path)
+    parser = argparse.ArgumentParser()
+    add_common_arguments(parser)
+    parser.add_argument("--config", default=cfg_path, type=path_argument)
+    args = parser.parse_args(
+        [
+            "--config",
+            str(cfg_path),
+            "--base-path",
+            str(tmp_path),
+            "--output-dir",
+            "processed",
+        ]
+    )
+    cli.prepare_io_paths(args)
+    cfg = cli.apply_config_overrides(args, parser, args.config)
+    expected = (tmp_path / "processed").resolve()
+    assert args.output_dir == expected
+    assert cfg.io.output_dir == expected

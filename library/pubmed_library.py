@@ -25,6 +25,7 @@ from .cli import build_parser as base_parser
 from .config import (
     ApiCfg,
     Config,
+    ConfigError,
     CrossRefCfg,
     OpenAlexCfg,
     RetryCfg,
@@ -241,6 +242,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "chunk_size": "document.pubmed.batch_size",
             },
         )
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    try:
         cfg = Config.model_validate(cfg.model_dump())
         if args.print_config:
             print_config(cfg)
@@ -313,12 +324,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     metadata_hooks: list[MetadataHook] = [normalize_documents, add_pipeline_metadata]
 
     stats_tracker = {"rows_total": 0, "rows_kept": 0}
+    validation_failures: list[pd.DataFrame] = []
 
     def _validator_with_stats(chunk: pd.DataFrame) -> SchemaValidationResult:
         stats_tracker["rows_total"] += len(chunk)
         result = _validate_documents(chunk)
         stats_tracker["rows_kept"] += len(result.data)
-        return result
+        if not result.failure_cases.empty:
+            validation_failures.append(result.failure_cases)
+            logger.error(
+                "validation_failed",
+                failures=len(result.failure_cases),
+                path=str(failure_path),
+            )
+        return SchemaValidationResult(
+            result.data,
+            _empty_failure_cases(),
+            "PubMedDocumentsSchema",
+        )
 
     validators: list[Validator] = [cast(Validator, _validator_with_stats)]
 
@@ -390,6 +413,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             stats=stats,
             schema="PubMedDocumentsSchema",
         )
+    if validation_failures:
+        failure_df = pd.concat(validation_failures, ignore_index=True)
+        failure_df.to_csv(failure_path, index=False)
+        exit_code = 1
+
     if exit_code == 0:
         logger.info("file_written", path=str(output_path))
         logger.info("pipeline_done", run_id=log_cfg.run_id)

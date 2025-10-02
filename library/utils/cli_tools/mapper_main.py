@@ -21,7 +21,7 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.log import logger
 from library.mapper_batch_library import map_chembl_ids_to_uniprot
 
@@ -46,6 +46,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     try:
+        marker_values = list(cfg.io.na_markers or ())
+        keep_markers = bool(getattr(cfg.io, "keep_na_markers", False))
+        na_values = marker_values if marker_values and not keep_markers else None
         try:
             df = io.read_csv(
                 args.input_csv,
@@ -53,7 +56,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 sep=args.sep,
                 encoding=args.encoding,
                 dtype=str,
-                na_values=["#N/A", ""],
+                na_values=na_values,
             )
         except (FileNotFoundError, OSError) as exc:
             logger.error("read_fail", error=str(exc))
@@ -62,11 +65,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             logger.error("missing_column", column=args.column, path=str(args.input_csv))
             return 1
 
+        marker_set = set(marker_values)
+
         def _normalize(value: object) -> str | None:
             if pd.isna(value):
                 return None
             text = str(value).strip()
-            return text or None
+            if not text:
+                return None
+            if not keep_markers and text in marker_set:
+                return None
+            return text
 
         row_ids: list[str | None] = []
         unique_ids: OrderedDict[str, None] = OrderedDict()
@@ -215,6 +224,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.info("pipeline_start", run_id=log_cfg.run_id)
     try:
         cfg: Config = cli.apply_config_overrides(args, parser, args.config)
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    try:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg)
@@ -223,7 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ensure_dirs(cfg)
         logger = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
-        logger.error("config_error", error=str(exc))
+        logger.error("config_error", error=str(exc), config=str(args.config))
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
     except (FileNotFoundError, NotADirectoryError) as exc:

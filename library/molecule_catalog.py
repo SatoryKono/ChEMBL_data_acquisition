@@ -354,14 +354,25 @@ def _fetch_parent_catalog_via_helper(
 
         if outstanding:
             single_requests = len(outstanding)
-            if retry_chunk_size:
-                max_workers = max(
-                    1, min(len(outstanding), _PARENT_LOOKUP_SINGLE_CONCURRENCY)
-                )
-            else:
-                max_workers = 1
+            max_workers = max(
+                1,
+                min(
+                    len(outstanding),
+                    _PARENT_LOOKUP_SINGLE_CONCURRENCY,
+                    max(1, api_cfg.rps),
+                ),
+            )
+
+            resolution_cache: dict[str, tuple[str, str] | None] = {}
+            resolution_lock = threading.Lock()
+            resolved: dict[str, tuple[str, str] | None] = {}
 
             def _fetch_with_retry(chembl_id: str) -> tuple[str, str] | None:
+                with resolution_lock:
+                    if chembl_id in resolution_cache:
+                        return resolution_cache[chembl_id]
+
+                pair: tuple[str, str] | None = None
                 for attempt in range(1, attempts + 1):
                     try:
                         pair = fetch_parent_for_id(
@@ -377,14 +388,16 @@ def _fetch_parent_catalog_via_helper(
                                 "parent_lookup_single_failed",
                                 extra={"chembl_id": chembl_id, "error": str(exc)},
                             )
-                            return None
+                            pair = None
+                            break
                         if delay:
                             sleep(delay * (2 ** (attempt - 1)))
                         continue
-                    if pair is None:
-                        return None
-                    return pair
-                return None
+                    break
+
+                with resolution_lock:
+                    resolution_cache[chembl_id] = pair
+                return pair
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_map = {
@@ -392,21 +405,24 @@ def _fetch_parent_catalog_via_helper(
                     for chembl_id in outstanding
                 }
                 for future in as_completed(future_map):
+                    chembl_id = future_map[future]
                     try:
-                        pair = future.result()
+                        resolved[chembl_id] = future.result()
                     except Exception as exc:  # pragma: no cover - defensive logging
                         logger.warning(
                             "parent_lookup_single_failed",
-                            extra={
-                                "chembl_id": future_map[future],
-                                "error": str(exc),
-                            },
+                            extra={"chembl_id": chembl_id, "error": str(exc)},
                         )
-                        continue
-                    if not pair:
-                        continue
-                    child_id, parent_id = pair
-                    result[child_id] = parent_id
+                        with resolution_lock:
+                            resolution_cache.setdefault(chembl_id, None)
+                        resolved[chembl_id] = None
+
+            for chembl_id in outstanding:
+                pair = resolved.get(chembl_id)
+                if not pair:
+                    continue
+                child_id, parent_id = pair
+                result[child_id] = parent_id
     finally:
         elapsed = perf_counter() - fallback_start
         logger.info(

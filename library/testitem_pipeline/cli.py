@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import traceback
 from collections import OrderedDict, deque
 from dataclasses import dataclass
 from itertools import chain, islice
@@ -21,12 +22,18 @@ from library.config import (
     Config,
     IoCfg,
     RetryCfg,
+    TestitemBatchRetryCfg,
     TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
 )
 from library.csv_utils import write_csv_chunks_deterministic
 from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.metadata import (
+    Stats,
+    file_sha256,
+    write_meta_yaml,
+    record_quality_failure,
+)
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import get_global_limiter
 from library.sidecar import SidecarErrors
@@ -251,6 +258,7 @@ def fetch_testitems(
     sample_ids: Sequence[str],
     fields: Sequence[str] | None,
     page_limit: int,
+    retry_cfg: TestitemBatchRetryCfg,
 ) -> tuple[int, Iterator[pd.DataFrame] | None, tuple[str, ...]]:
     """Retrieve ChEMBL test item records for ``ids_iter`` in chunks."""
 
@@ -266,13 +274,28 @@ def fetch_testitems(
     seen_ids: set[str] = set()
     duplicate_ids: set[str] = set()
 
-    def _load_chunk(batch: Sequence[str]) -> pd.DataFrame:
+    min_retry_size = max(1, retry_cfg.min_size) if retry_cfg.enable else 1
+
+    def _should_retry(current_size: int) -> bool:
+        if not retry_cfg.enable:
+            return False
+        return current_size > min_retry_size
+
+    def _next_chunk_size(current_size: int) -> int:
+        if not retry_cfg.enable:
+            return current_size
+        reduced = max(min_retry_size, int(current_size * retry_cfg.shrink_factor))
+        if reduced >= current_size and current_size > min_retry_size:
+            reduced = current_size - 1
+        return max(min_retry_size, reduced)
+
+    def _load_chunk(batch: Sequence[str], chunk_size: int) -> pd.DataFrame:
         try:
             frame = cl.get_testitem(
                 batch,
                 cfg=api_cfg,
                 client=client,
-                chunk_size=batch_size,
+                chunk_size=chunk_size,
                 timeout=timeout,
                 fields=fields,
                 page_limit=page_limit,
@@ -281,14 +304,33 @@ def fetch_testitems(
             requests.RequestException,
             ValueError,
         ) as exc:  # pragma: no cover - network
-            logger.error(
-                "testitem_fetch_failed",
+            if not _should_retry(chunk_size):
+                logger.error(
+                    "testitem_fetch_failed",
+                    error=str(exc),
+                    batch_size=chunk_size,
+                    timeout=timeout,
+                    sample_ids=list(sample_ids),
+                )
+                raise TestitemFetchError(str(exc)) from exc
+            next_chunk_size = _next_chunk_size(chunk_size)
+            if next_chunk_size >= chunk_size:
+                logger.error(
+                    "testitem_fetch_failed",
+                    error=str(exc),
+                    batch_size=chunk_size,
+                    timeout=timeout,
+                    sample_ids=list(sample_ids),
+                )
+                raise TestitemFetchError(str(exc)) from exc
+            logger.warning(
+                "testitem_fetch_retry_reduced_batch",
                 error=str(exc),
-                batch_size=batch_size,
-                timeout=timeout,
-                sample_ids=list(sample_ids),
+                previous_chunk_size=chunk_size,
+                next_chunk_size=next_chunk_size,
+                identifier_count=len(batch),
             )
-            raise TestitemFetchError(str(exc)) from exc
+            return _load_chunk(batch, next_chunk_size)
 
         if "molecule_chembl_id" not in frame.columns:
             frame["molecule_chembl_id"] = pd.Series(dtype="string")
@@ -346,9 +388,9 @@ def fetch_testitems(
     prefetched: list[pd.DataFrame] = []
 
     try:
-        prefetched.append(_load_chunk(first_batch))
+        prefetched.append(_load_chunk(first_batch, batch_size))
     except TestitemFetchError:
-        return 1, None, tuple(requested_ids_original)
+        return 1, None, tuple()
 
     rows_counter = 0
 
@@ -360,7 +402,7 @@ def fetch_testitems(
                     rows_counter += len(prefetched_chunk)
                     yield prefetched_chunk
             for batch in batched_iter:
-                chunk_df = _load_chunk(batch)
+                chunk_df = _load_chunk(batch, batch_size)
                 if not chunk_df.empty:
                     rows_counter += len(chunk_df)
                     yield chunk_df
@@ -467,6 +509,7 @@ def run_testitem_pipeline(
             sample_ids=read_result.sample_ids,
             fields=cfg.testitem.fields,
             page_limit=cfg.testitem.request_limit,
+            retry_cfg=cfg.testitem.batch_retry,
         )
         if fetch_status != 0 or chunk_iter is None:
             return fetch_status
@@ -762,8 +805,16 @@ def finalize_output(
     if missing_ids_tuple:
         stats["missing_molecule_ids"] = list(missing_ids_tuple)
         stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
+    if parent_stats.failed_ids:
+        stats["parent_lookup_failed_ids"] = list(parent_stats.failed_ids)
+        stats["parent_lookup_failed_count"] = len(parent_stats.failed_ids)
+        logger.info(
+            "parent_lookup_failures_recorded",
+            count=len(parent_stats.failed_ids),
+            meta_key="parent_lookup_failed_ids",
+        )
 
-    write_meta_yaml(
+    meta_path = write_meta_yaml(
         csv_path=csv_path,
         command=" ".join(sys.argv),
         config_subset=_serialize_paths(cfg.to_dict()),
@@ -773,6 +824,7 @@ def finalize_output(
     )
 
     doc_quality_cfg = cfg.system.doc_quality
+    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
     try:
         if doc_quality_cfg.enable:
             analyze_table_quality(
@@ -784,12 +836,24 @@ def finalize_output(
                 exclude_columns=doc_quality_cfg.exclude_columns,
             )
     except Exception as exc:
-        logger.exception(
-            "quality_report_failed",
+        tb = traceback.format_exc()
+        record_quality_failure(
+            meta_path,
             error=str(exc),
-            path=str(output),
-            exc=exc,
+            error_type=exc.__class__.__name__,
+            traceback=tb,
+            fatal=fatal_quality_error,
         )
-        return 1
+        log_kwargs = {
+            "error": str(exc),
+            "error_type": exc.__class__.__name__,
+            "path": str(output),
+            "traceback": tb,
+        }
+        if fatal_quality_error:
+            log_kwargs["fatal"] = True
+        logger.warning("quality_report_failed", **log_kwargs)
+        if fatal_quality_error:
+            return 1
 
     return exit_code

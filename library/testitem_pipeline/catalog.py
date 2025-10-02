@@ -73,6 +73,7 @@ class ParentLookupStats:
     unique: int
     attached: int
     uncovered: int
+    failed_ids: tuple[str, ...] = ()
 
 
 class ParentLookupPreparedData(NamedTuple):
@@ -95,12 +96,16 @@ def _merge_parent_stats(base: ParentLookupStats, update: ParentLookupStats) -> P
         resolved_source = update.source
     else:
         resolved_source = base.source
+    combined_failed = tuple(
+        dict.fromkeys((*base.failed_ids, *update.failed_ids))
+    )
     return ParentLookupStats(
         source=resolved_source,
         missing=base.missing + update.missing,
         unique=base.unique + update.unique,
         attached=base.attached + update.attached,
         uncovered=base.uncovered + update.uncovered,
+        failed_ids=combined_failed,
     )
 
 
@@ -369,7 +374,10 @@ def attach_parent_molecule_ids(
             existing_parent.isna() | existing_parent.eq("")
         )
 
-    unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
+    raw_unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
+    unique_children = tuple(
+        value for value in raw_unique_children if not pd.isna(value)
+    )
     catalog_data: MutableMapping[str, str]
     used_partial_cache = False
     needs_full_sync = False
@@ -377,13 +385,24 @@ def attach_parent_molecule_ids(
     full_sync_used = False
     uncovered_children = 0
 
+    from library import testitem_pipeline as pipeline_module
+
+    load_catalog_fn = getattr(pipeline_module, "load_parent_catalog", load_parent_catalog)
+    query_catalog_fn = getattr(pipeline_module, "query_parent_catalog", query_parent_catalog)
+    update_cache_fn = getattr(
+        pipeline_module, "update_parent_catalog_cache", update_parent_catalog_cache
+    )
+    write_cache_fn = getattr(
+        pipeline_module, "write_parent_catalog_cache", write_parent_catalog_cache
+    )
+
     if catalog is not None:
         base_view = {key: catalog[key] for key in unique_children if key in catalog}
         catalog_data = ChainMap({}, base_view)
     else:
         catalog_data = {}
         if unique_children:
-            queried = query_parent_catalog(unique_children, catalog_cfg)
+            queried = query_catalog_fn(unique_children, catalog_cfg)
             if queried:
                 catalog_data.update(queried)
                 used_partial_cache = True
@@ -422,16 +441,16 @@ def attach_parent_molecule_ids(
             missing_ids = [key for key in unique_children if key not in parent_map]
             uncovered_children = len(missing_ids)
             if used_partial_cache:
-                update_parent_catalog_cache(fetched, catalog_cfg)
+                update_cache_fn(fetched, catalog_cfg)
             else:
-                write_parent_catalog_cache(catalog_data, catalog_cfg)
+                write_cache_fn(catalog_data, catalog_cfg)
                 used_partial_cache = True
 
     needs_full_sync = catalog is None and uncovered_children > 0
 
     if missing_ids and catalog is None and needs_full_sync:
         cache_before_load = _cache_state(catalog_cfg.cache_path)
-        catalog_data = load_parent_catalog(
+        catalog_data = load_catalog_fn(
             client=client,
             api_cfg=api_cfg,
             catalog_cfg=catalog_cfg,
@@ -503,6 +522,7 @@ def attach_parent_molecule_ids(
         unique=int(len(unique_children)),
         attached=int(attached),
         uncovered=int(uncovered_children),
+        failed_ids=tuple(missing_ids),
     )
 
     logger.info(

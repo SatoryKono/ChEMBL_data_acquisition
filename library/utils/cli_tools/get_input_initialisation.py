@@ -41,7 +41,7 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.log import logger
 from library.table_quality import analyze_table_quality
 
@@ -200,6 +200,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "dictionary_dir": "resources.dictionary_dir",
             },
         )
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    try:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg)
