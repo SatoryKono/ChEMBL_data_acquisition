@@ -15,7 +15,15 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 
-from library.utils.bootstrap import ensure_project_root
+try:
+    from library.utils.bootstrap import ensure_project_root
+except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
+    def ensure_project_root() -> None:
+        """Add the repository root to ``sys.path`` when executed as a script."""
+
+        project_root = str(Path(__file__).resolve().parent.parent)
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
 
 
 if __package__ in {None, ""}:
