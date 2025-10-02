@@ -1037,9 +1037,16 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
     frame = df.copy()
-    rename_map = {k: v for k, v in _EXPORT_COLUMN_RENAMES.items() if k in frame.columns}
-    if rename_map:
-        frame = frame.rename(columns=rename_map)
+
+    # ===== Normalise ChEMBL column aliases =====
+    for source, target in _EXPORT_COLUMN_RENAMES.items():
+        if source not in frame.columns:
+            continue
+        if target in frame.columns:
+            frame[target] = _coalesce_columns(frame, [target, source])
+            frame = frame.drop(columns=[source])
+        else:
+            frame = frame.rename(columns={source: target})
 
     for target, sources in _EXPORT_COALESCE_SOURCES.items():
         frame[target] = _coalesce_columns(frame, sources)
