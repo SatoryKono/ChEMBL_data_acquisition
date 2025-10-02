@@ -19,6 +19,22 @@ from library import rate_limiter as rl  # noqa: E402
 from library.logging_setup import LoggerConfig, configure_logger  # noqa: E402
 
 
+class MonotonicStub:
+    """Simple monotonic clock stub with queued values."""
+
+    def __init__(self) -> None:
+        self._queue: list[float] = []
+        self._current = 0.0
+
+    def queue(self, *values: float) -> None:
+        self._queue.extend(values)
+
+    def __call__(self) -> float:
+        if self._queue:
+            self._current = self._queue.pop(0)
+        return self._current
+
+
 @responses.activate
 def test_get_cid_from_smiles_uses_base() -> None:
     """Ensure the configured base URL is used for PubChem requests."""
@@ -444,4 +460,70 @@ def test_make_request_caches_missing_results() -> None:
 
     assert first is None
     assert second is None
+    assert len(responses.calls) == 1
+
+
+def test_make_request_timeout_not_cached_without_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Timeout outcomes should not persist when no backoff is configured."""
+
+    clock = MonotonicStub()
+    monkeypatch.setattr(pc, "monotonic", clock)
+    pc._CACHE = None
+
+    cfg = pl.PubChemCfg(
+        delay=0,
+        retries=0,
+        cache_ttl=30,
+        timeout_seconds=1,
+        backoff_initial_seconds=0,
+    )
+    url = "https://example.org/timeout"
+
+    clock.queue(0.0, 5.0, 5.0)
+    first = pl.make_request(url, cfg)
+
+    assert first is None
+    with pc._CACHE_LOCK:
+        cache = pc._ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
+        assert url not in cache
+
+    clock.queue(0.0, 5.0, 5.0)
+    second = pl.make_request(url, cfg)
+
+    assert second is None
+
+
+@responses.activate
+def test_make_request_timeout_uses_exponential_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Timeout cache entries should enforce exponential backoff before retry."""
+
+    clock = MonotonicStub()
+    monkeypatch.setattr(pc, "monotonic", clock)
+    pc._CACHE = None
+
+    cfg = pl.PubChemCfg(
+        delay=0,
+        retries=0,
+        cache_ttl=60,
+        timeout_seconds=10,
+        backoff_initial_seconds=2,
+    )
+    url = "https://example.org/backoff"
+
+    responses.add(responses.GET, url, json={"data": 42}, status=200)
+
+    clock.queue(0.0, 5.0, 5.0)
+    assert pl.make_request(url, cfg) is None
+
+    clock.queue(6.0)
+    assert pl.make_request(url, cfg) is None
+
+    clock.queue(8.5, 8.5, 9.0)
+    data = pl.make_request(url, cfg)
+
+    assert data == {"data": 42}
     assert len(responses.calls) == 1
