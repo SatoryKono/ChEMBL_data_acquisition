@@ -1047,11 +1047,12 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     try:
         analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
+    except Exception as exc:
+        logger.exception(
             "quality_report_failed",
             error=str(exc),
             path=str(output),
+            exc=exc,
         )
         return 1
     return 0
@@ -1592,11 +1593,12 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             tmp_path.unlink(missing_ok=True)
     try:
         analyze_table_quality(output, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error(
+    except Exception as exc:
+        logger.exception(
             "quality_report_failed",
             error=str(exc),
             path=str(output),
+            exc=exc,
         )
         return 1
     return 0
@@ -2459,11 +2461,12 @@ def validate_and_write(
             analyze_table_quality(
                 final_df, table_name=str(normalized_output.with_suffix(""))
             )
-        except ValueError as exc:
-            logger.error(
+        except Exception as exc:
+            logger.exception(
                 "quality_report_failed",
                 error=str(exc),
                 path=str(normalized_output),
+                exc=exc,
             )
             return 1
     logger.info("validate_write_done", rows=len(final_df))

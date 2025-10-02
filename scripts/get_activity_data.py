@@ -10,15 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-import threading
 from collections.abc import Iterable, Iterator, Sequence
-from concurrent.futures import (
-    FIRST_COMPLETED,
-    Future,
-    ThreadPoolExecutor,
-    as_completed,
-    wait,
-)
 
 from functools import partial
 from itertools import islice
@@ -71,7 +63,6 @@ from library.cli_utils import (
 from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
-from library.clients import ChemblClient, _chunked
 from library.config import Config, _serialize_paths
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
@@ -175,172 +166,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
 
-    def fetcher() -> Iterator[pd.DataFrame]:
-
-        id_batches = list(_chunked(limited_ids, cfg.activity.batch_size))
-        if not id_batches:
-            return
-
-        id_sequence = [str(identifier) for batch in id_batches for identifier in batch]
-        id_order = {identifier: index for index, identifier in enumerate(id_sequence)}
-        id_chunks = iter(id_batches)
-        primary_key = tuple(str(identifier) for identifier in id_batches[0])
-        primary_done = threading.Event()
-        cache_lock = threading.Lock()
-        cached_chunks: dict[tuple[str, ...], list[pd.DataFrame]] = {}
-
-        global_limiter = get_global_limiter(
-            cfg.rate.global_rps, cfg.rate.global_burst
-        )
-
-        with ChemblClient(
-            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
-        ) as client:
-
-
-            def _fetch_chunk(chunk_ids: Sequence[str]) -> list[pd.DataFrame]:
-                key = tuple(str(identifier) for identifier in chunk_ids)
-                with cache_lock:
-                    cached = cached_chunks.pop(key, None)
-                if cached is not None:
-                    return cached
-                if key != primary_key and not primary_done.is_set():
-                    primary_done.wait()
-                    with cache_lock:
-                        cached = cached_chunks.pop(key, None)
-                    if cached is not None:
-                        return cached
-
-                try:
-
-                    result = cl.get_activities(
-
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        chunk_size=cfg.activity.batch_size,
-                        timeout=cfg.activity.timeout,
-                        **extra_kwargs,
-                    )
-                    if isinstance(result, pd.DataFrame):
-                        frames = [result]
-                    elif result is None:
-                        frames = []
-                    else:
-                        frames = [frame for frame in result]
-                    if not frames:
-                        return []
-
-                    chunk_map: dict[tuple[str, ...], list[pd.DataFrame]] = {}
-                    for frame in frames:
-                        if frame is None or frame.empty:
-                            continue
-                        if "activity_id" not in frame.columns:
-                            chunk_map.setdefault(key, []).append(frame)
-                            continue
-                        column = frame["activity_id"].astype(str)
-                        matched: set[str] = set()
-                        for value in column:
-                            if value in id_order:
-                                matched.add(value)
-                                continue
-                            for identifier in id_order:
-                                if value.endswith(identifier):
-                                    matched.add(identifier)
-                                    break
-                        if not matched:
-                            matched = set(key)
-                        matched_ids = tuple(
-                            sorted(
-                                matched,
-                                key=lambda identifier: id_order.get(identifier, len(id_order)),
-                            )
-                        )
-                        mask = column.apply(
-                            lambda value, ids=matched_ids: value in ids
-                            or any(value.endswith(identifier) for identifier in ids)
-                        )
-                        if mask.any():
-                            chunk_map.setdefault(matched_ids, []).append(frame.loc[mask])
-
-                    with cache_lock:
-                        for chunk_key, chunk_frames in chunk_map.items():
-                            cached_chunks.setdefault(chunk_key, []).extend(chunk_frames)
-                        frames_for_key = cached_chunks.pop(key, [])
-                except (requests.RequestException, ValueError) as exc:
-                    logger.error(
-                        "activity_fetch_failed",
-                        extra={
-                            "msg": str(exc),
-                            "chunk_ids": list(chunk_ids),
-                        },
-                        error=str(exc),
-                        batch_size=cfg.activity.batch_size,
-                        timeout=cfg.activity.timeout,
-                    )
-                    raise PipelineError(str(exc)) from exc
-                finally:
-                    if key == primary_key:
-                        primary_done.set()
-
-                return frames_for_key
-
-
-            workers = max(1, cfg.activity.workers)
-            if workers == 1:
-
-                for chunk_ids in id_chunks:
-                    for frame in _fetch_chunk(list(chunk_ids)):
-                        yield frame
-                return
-
-
-            pending: dict[Future[list[pd.DataFrame]], int] = {}
-            completed: dict[int, list[pd.DataFrame]] = {}
-            next_index = 0
-
-            def _cancel_pending() -> None:
-                for future in list(pending):
-                    future.cancel()
-
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-
-                try:
-                    for index, chunk_ids in enumerate(id_chunks):
-                        chunk_list = list(chunk_ids)
-                        future = executor.submit(_fetch_chunk, chunk_list)
-                        pending[future] = index
-                        if len(pending) >= workers:
-                            done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
-                            for finished in done:
-                                chunk_index = pending.pop(finished)
-                                try:
-                                    completed[chunk_index] = finished.result()
-                                except PipelineError:
-                                    _cancel_pending()
-                                    raise
-                            while next_index in completed:
-                                frames = completed.pop(next_index)
-                                for frame in frames:
-                                    yield frame
-                                next_index += 1
-
-                    for future in as_completed(list(pending)):
-                        chunk_index = pending.pop(future)
-                        try:
-                            completed[chunk_index] = future.result()
-                        except PipelineError:
-                            _cancel_pending()
-                            raise
-                        while next_index in completed:
-                            frames = completed.pop(next_index)
-                            for frame in frames:
-                                yield frame
-                            next_index += 1
-                finally:
-                    pending.clear()
-
-
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)
 
@@ -359,6 +184,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ]
 
     validators = [partial(validate_activities, return_result=True)]
+
 
 
     def writer(
@@ -383,6 +209,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if not path_obj.exists():
             raise PipelineError(f"writer failed to create output: {path_obj}")
         return path_obj
+
 
 
     table_quality = partial(
@@ -432,10 +259,31 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             workers=max(1, worker_count),
         )
 
+        def _write_chunks(
+            chunks: Iterable[pd.DataFrame],
+            destination: Path,
+            *,
+            col_order: Sequence[str] | None,
+            key_cols: Sequence[str] | None,
+            **kwargs,
+        ) -> Path:
+            path = write_csv_chunks_deterministic(
+                chunks,
+                destination,
+                col_order=col_order,
+                key_cols=key_cols,
+                **kwargs,
+            )
+            path_obj = Path(path)
+            if not path_obj.exists():
+                raise PipelineError(f"writer failed to create output: {path_obj}")
+            return path_obj
+
         writer_config = CsvWriterConfig(
             writer=writer,
             kwargs={},
             ensure_destination=False,
+
         )
 
         fetcher, writer = prepare_chunked_pipeline(

@@ -424,8 +424,11 @@ def run_testitem_pipeline(
         api_overrides["backoff_factor"] = cfg.testitem.backoff_factor
     api_cfg = cfg.api.model_copy(update=api_overrides) if api_overrides else cfg.api
 
-    pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
-    pc.init_session(pubchem_api_cfg, cfg.retry)
+    pubchem_enabled = getattr(cfg.pubchem, "enable", True)
+    pubchem_api_cfg = api_cfg
+    if pubchem_enabled:
+        pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
+        pc.init_session(pubchem_api_cfg, cfg.retry)
 
     requested_ids: tuple[str, ...] = ()
     missing_ids: list[str] = []
@@ -536,16 +539,17 @@ def run_testitem_pipeline(
                         parent_stats_holder["value"], parent_result.parent_stats
                     )
 
-                    current = augment_pubchem(
-                        current,
-                        pubchem_cfg=cfg.pubchem,
-                        api_cfg=pubchem_api_cfg,
-                        retry_cfg=cfg.retry,
-                        timeout=parent_timeout,
-                        client=client,
-                        fields=cfg.testitem.fields,
-                        request_limit=cfg.testitem.request_limit,
-                    )
+                    if pubchem_enabled:
+                        current = augment_pubchem(
+                            current,
+                            pubchem_cfg=cfg.pubchem,
+                            api_cfg=pubchem_api_cfg,
+                            retry_cfg=cfg.retry,
+                            timeout=parent_timeout,
+                            client=client,
+                            fields=cfg.testitem.fields,
+                            request_limit=cfg.testitem.request_limit,
+                        )
 
                     enrichment_status, enriched_df = apply_testitem_enrichment(
                         current,
@@ -773,8 +777,13 @@ def finalize_output(
 
     try:
         analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error("quality_report_failed", error=str(exc), path=str(output))
+    except Exception as exc:
+        logger.exception(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+            exc=exc,
+        )
         return 1
 
     return exit_code

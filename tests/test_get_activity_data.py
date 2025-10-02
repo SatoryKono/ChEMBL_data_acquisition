@@ -333,6 +333,7 @@ def test_run_chembl_writer_missing_output(
         sep,
         encoding,
         cfg,
+
     ):
         return destination
 

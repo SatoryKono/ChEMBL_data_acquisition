@@ -68,6 +68,78 @@ class _ValidationResult:
         self.failure_cases = failure_cases
 
 
+def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    chunk_one = pd.DataFrame(
+        {
+            "assay_chembl_id": ["A1", "A2"],
+            "document_chembl_id": ["D1", "D2"],
+        }
+    )
+    chunk_two = pd.DataFrame(
+        {
+            "assay_chembl_id": ["A3"],
+            "new_field": ["N"],
+        }
+    )
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [chunk_one, chunk_two]
+
+    def validator(df: pd.DataFrame) -> _ValidationResult:
+        return _ValidationResult(df, pd.DataFrame())
+
+    received_chunks: list[pd.DataFrame] = []
+    received_order: list[str] | None = None
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        nonlocal received_order
+        received_order = col_order
+        for chunk in chunks:
+            received_chunks.append(chunk)
+        combined = pd.concat(received_chunks, ignore_index=True)
+        combined.to_csv(destination, index=False)
+        return destination
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[validator],
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _path: None,
+        cfg=cfg,
+    )
+
+    assert exit_code == 0
+    assert received_order is not None
+    assert len(received_chunks) == 2
+    assert all(list(chunk.columns) == received_order for chunk in received_chunks)
+
+    written = pd.read_csv(output)
+    assert sorted(written["assay_chembl_id"]) == ["A1", "A2", "A3"]
+
+    meta_path = output.with_name(output.name + ".meta.yaml")
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["stats"]["rows_total"] == 3
+    assert metadata["stats"]["rows_kept"] == 3
+    assert metadata["stats"]["rows_dropped"] == 0
+
+
 def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
@@ -141,6 +213,68 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> N
 
     meta_path = output.with_name(output.name + ".meta.yaml")
     assert meta_path.exists()
+
+
+def test_run_pipeline_removes_outputs_on_table_quality_failure(
+    tmp_path: Path, cfg: Config
+) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frames = [
+        pd.DataFrame(
+            {
+                "assay_chembl_id": ["A1"],
+                "document_chembl_id": ["D1"],
+            }
+        )
+    ]
+
+    def fetcher() -> list[pd.DataFrame]:
+        return frames
+
+    def validator(df: pd.DataFrame) -> _ValidationResult:
+        return _ValidationResult(df, pd.DataFrame())
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str],
+        key_cols: list[str],
+    ) -> Path:
+        frames = list(chunks)
+        pd.concat(frames, ignore_index=True).to_csv(destination, index=False)
+        return destination
+
+    quality_calls: list[Path] = []
+
+    def table_quality(path: Path) -> None:
+        quality_calls.append(path)
+        raise RuntimeError("quality failed")
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[validator],
+        metadata_hooks=[lambda df: df],
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=table_quality,
+        cfg=cfg,
+    )
+
+    meta_path = output.with_name(output.name + ".meta.yaml")
+
+    assert exit_code == 1
+    assert quality_calls == [output]
+    assert not output.exists()
+    assert not meta_path.exists()
 
 
 def test_run_pipeline_removes_stale_failure_outputs(tmp_path: Path, cfg: Config) -> None:
@@ -416,3 +550,73 @@ def test_run_pipeline_writer_failure(tmp_path: Path, cfg: Config) -> None:
     write_errors = [record for record in records if record.get("event") == "write_fail"]
     assert write_errors
     assert write_errors[-1]["error"] == "writer boom"
+
+
+def test_run_pipeline_table_quality_failure(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frames = [
+        pd.DataFrame(
+            {
+                "assay_chembl_id": ["A1"],
+                "document_chembl_id": ["D1"],
+            }
+        )
+    ]
+
+    def fetcher() -> list[pd.DataFrame]:
+        return frames
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        collected = list(chunks)
+        if collected:
+            df = pd.concat(collected, ignore_index=True)
+        else:
+            df = pd.DataFrame(columns=col_order or [])
+        df.to_csv(destination, index=False)
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    def failing_quality(_: Path) -> None:
+        raise RuntimeError("quality boom")
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="",
+        validators=[],
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=[],
+        table_quality=failing_quality,
+        cfg=cfg,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert output.exists()
+    assert not failure_path.exists()
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert lines
+    records = [json.loads(line) for line in lines]
+    quality_errors = [
+        record for record in records if record.get("event") == "quality_report_failed"
+    ]
+    assert quality_errors
+    last_record = quality_errors[-1]
+    assert last_record["error"] == "quality boom"
+    assert last_record.get("traceback")
