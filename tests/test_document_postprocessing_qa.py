@@ -11,8 +11,12 @@ import pytest
 
 
 from library import document_postprocessing as dp
+from library.config import IoCfg
 
 import qa.check_document_postprocessing as qa_module
+
+import qa.check_document_postprocessing as qa_module
+
 from qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
 
 from qa.check_document_postprocessing import main as qa_main
@@ -95,6 +99,8 @@ def test_run_document_postprocessing_check_pass(tmp_path: Path) -> None:
 
     markdown = result.report_markdown.read_text(encoding="utf-8")
     assert "- Status: **passed**" in markdown
+    assert "- Column sets identical: ✅ yes" in markdown
+    assert "- Column order identical: ✅ yes" in markdown
     assert "- Diff excerpt: not generated" in markdown
 
 
@@ -140,8 +146,54 @@ def test_run_document_postprocessing_check_failure(
 
     markdown = result.report_markdown.read_text(encoding="utf-8")
     assert "- Status: **failed**" in markdown
+    assert "- Column sets identical:" in markdown
+    assert "- Column order identical:" in markdown
     assert result.diff_csv.name in markdown
 
+def test_structure_metrics_detects_missing_candidate_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
+
+    original_postprocess = dp.postprocess_file
+
+    def drop_column_postprocess(
+        source: Path,
+        target_dir: Path,
+        *,
+        cfg: IoCfg,
+        ref_document_path: Path,
+    ) -> Path:
+        processed_path = original_postprocess(
+            source,
+            target_dir,
+            cfg=cfg,
+            ref_document_path=ref_document_path,
+        )
+        processed_df = pd.read_csv(processed_path, dtype=str)
+        if "doi" in processed_df.columns:
+            processed_df = processed_df.drop(columns=["doi"])
+        processed_df.to_csv(processed_path, index=False)
+        return processed_path
+
+    monkeypatch.setattr(dp, "postprocess_file", drop_column_postprocess)
+
+    result = run_document_postprocessing_check(
+        base_path=base_dir,
+        reference_path=reference_path,
+        candidate_path=candidate_path,
+    )
+
+    assert result.passed is False
+
+    with result.report_json.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    assert payload["structure"]["columns_equal"] is False
+    assert any(
+        issue.startswith("Candidate missing columns") and "doi" in issue
+        for issue in payload["issues"]
+    )
 
 def test_diff_extract_limited_by_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -168,7 +220,6 @@ def test_diff_extract_limited_by_keys(
     candidate_df = reference_df.copy()
     candidate_df["doi"] = candidate_df["doi"] + ".mismatch"
     candidate_df.to_csv(candidate_path, index=False)
-
     expected = reference_df.copy()
     actual = candidate_df.copy()
 
