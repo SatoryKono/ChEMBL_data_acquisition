@@ -339,3 +339,61 @@ def test_mapper_main_log_each_emits_per_id_logs(
     assert payload["mapped"] == 1
     assert payload["missing"] == 1
     assert payload["sample_missing"] == ["CHEMBL2"]
+
+
+def test_mapper_main_timeout_logs_missing_summary(
+    tmp_path: Path, monkeypatch: Any, cfg: Config
+) -> None:
+    df = pd.DataFrame({"chembl_id": ["CHEMBL1", "CHEMBL2"]})
+    input_path = tmp_path / "in.csv"
+    df.to_csv(input_path, index=False)
+
+    def raise_timeout(
+        ids: list[str],
+        cfg_mapping: object,
+        *,
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
+        raise TimeoutError("network timeout")
+
+    monkeypatch.setattr(mapper_main, "map_chembl_ids_to_uniprot", raise_timeout)
+
+    args = argparse.Namespace(
+        input_csv=input_path,
+        output_csv=tmp_path / "out.csv",
+        column="chembl_id",
+        sep=",",
+        encoding="utf8",
+        key_cols=None,
+        chunk_size=2,
+        rps=5.0,
+        workers=3,
+    )
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(stream=buffer, level="INFO"))
+
+    cfg_ns = SimpleNamespace(
+        io=cfg.io,
+        uniprot_mapping=cfg.uniprot_mapping,
+        to_dict=lambda: {},
+    )
+
+    exit_code = mapper_main.run(cfg_ns, args)
+    assert exit_code == 1
+
+    records = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+    summary = [record for record in records if record["event"] == "mapper_summary"]
+    assert summary
+    payload = summary[0]
+    assert payload["total"] == 2
+    assert payload["mapped"] == 0
+    assert payload["missing"] == 2
+    assert payload["sample_missing"] == ["CHEMBL1", "CHEMBL2"]
+    assert not [
+        record
+        for record in records
+        if record["event"] in {"mapped", "uniprot_id_missing"}
+    ]

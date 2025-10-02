@@ -33,3 +33,33 @@ def test_sidecar_skips_empty(tmp_path: Path) -> None:
     sc.save(path)
     assert not path.exists()
     assert not Path(str(path) + ".meta.yaml").exists()
+
+
+def test_sidecar_streams_large_batches(
+    tmp_path: Path, cfg: Config
+) -> None:
+    path = tmp_path / "errors.csv"
+    sc = SidecarErrors(chunk_size=10)
+    total = 105
+    max_buffer = 0
+    for index in range(total):
+        row: dict[str, str | int] = {
+            "col": f"value_{index}",
+            "msg": str(index),
+        }
+        if index == 60:
+            row["extra"] = "boom"
+        sc.add_error(row)
+        max_buffer = max(max_buffer, len(sc._errors))
+
+    sc.save(path, cfg=cfg)
+
+    assert max_buffer <= 10
+    contents = path.read_text(encoding="utf8").splitlines()
+    assert len(contents) == total + 1
+    assert contents[0] == "col,extra,msg"
+
+    meta = Path(str(path) + ".meta.yaml")
+    assert meta.exists()
+    meta_data = yaml.safe_load(meta.read_text(encoding="utf8"))
+    assert meta_data["columns"] == ["col", "extra", "msg"]

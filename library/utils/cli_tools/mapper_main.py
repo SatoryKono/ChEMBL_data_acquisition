@@ -83,7 +83,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         mapped_count = 0
         missing_count = 0
         missing_sample: list[str] = []
-
+        mapping_failed = False
 
         mapping_failed = False
         try:
@@ -99,6 +99,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             df["mapping_uniprot_id"] = [None for _ in df[args.column]]
             missing_count = total_ids
             missing_sample = normalized_ids[:SUMMARY_SAMPLE_LIMIT]
+
             mapping_failed = True
         else:
             for chembl_id in row_ids:
@@ -155,7 +156,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         except OSError as exc:
             logger.error("write_fail", error=str(exc))
             return 1
-        return 0 if not mapping_failed else 1
+        return 1 if mapping_failed else 0
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("run_fail", exc=exc)
         return 1

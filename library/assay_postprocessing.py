@@ -16,6 +16,7 @@ import pandas as pd
 from schemas import AssayPostprocessSchema
 
 from .config import IoCfg
+from .csv_utils import write_csv_deterministic
 from .log import logger
 from .pandas_utils import read_csv_pyarrow
 
@@ -83,4 +84,12 @@ def postprocess_file(
     except ImportError:  # pragma: no cover - pyarrow optional
         df = pd.read_csv(input_path, sep=sep, encoding=encoding, dtype=str)
     processed = postprocess_assays(df)
-    processed.to_csv(output_path, index=False, sep=sep, encoding=encoding)
+    write_csv_deterministic(
+        processed,
+        output_path,
+        col_order=list(processed.columns),
+        key_cols=["assay_chembl_id"],
+        sep=sep,
+        encoding=encoding,
+        cfg=None,
+    )

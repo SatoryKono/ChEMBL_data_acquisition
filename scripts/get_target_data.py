@@ -50,6 +50,7 @@ from library.config import (
     Config,
     _serialize_paths,
 )
+from library.csv_utils import write_csv_deterministic
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
@@ -319,11 +320,13 @@ def _prepare_targets_for_schema(
 
 
 def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path:
-    """Write ``df`` to a uniquely named snapshot CSV file.
+    """Write ``df`` to a uniquely named snapshot CSV file with metadata.
 
     The file is created alongside ``base`` using the pattern
     ``<base>_<step>_<n>.csv`` where ``n`` increments to avoid overwriting
-    existing files.
+    existing files. Snapshot exports respect the configured CSV separator and
+    encoding, and a ``.meta.yaml`` sidecar is generated containing minimal
+    provenance details for reproducibility.
 
     Parameters
     ----------
@@ -335,8 +338,7 @@ def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path
     step:
         Descriptive label inserted into the snapshot file name.
     cfg:
-        Application configuration (currently unused but kept for API
-        compatibility).
+        Application configuration providing CSV export options.
 
     Returns
     -------
@@ -349,8 +351,41 @@ def _save_snapshot(df: pd.DataFrame, base: Path, step: str, cfg: Config) -> Path
     while True:
         candidate = base.with_name(f"{stem}_{step}_{index}{suffix}")
         if not candidate.exists():
-            df.to_csv(candidate, index=False)
-            return candidate
+            work = df.copy()
+            if work.columns.empty:
+                key_cols: list[str] = []
+            else:
+                key_cols = [
+                    column
+                    for column in TARGETS_COLUMN_ORDER
+                    if column in work.columns
+                ]
+                if not key_cols:
+                    key_cols = list(work.columns)
+            csv_path = write_csv_deterministic(
+                work,
+                candidate,
+                col_order=list(df.columns),
+                key_cols=key_cols,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                cfg=None,
+            )
+            stats: Stats = {
+                "rows_total": len(df),
+                "rows_kept": len(df),
+                "rows_dropped": 0,
+                "output_sha256": file_sha256(csv_path),
+            }
+            write_meta_yaml(
+                csv_path=csv_path,
+                command=" ".join(sys.argv),
+                config_subset=_serialize_paths(cfg.to_dict()),
+                inputs={"base": str(base), "step": step},
+                stats=stats,
+                schema="TargetSnapshot",
+            )
+            return csv_path
         index += 1
 
 

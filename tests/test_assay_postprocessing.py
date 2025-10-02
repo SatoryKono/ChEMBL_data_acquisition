@@ -46,6 +46,7 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
             "document_chembl_id": ["doc1", "doc1"],
             "target_chembl_id": ["t1", "t1"],
             "assay_chembl_id": ["a1", "a2"],
+            "notes": [None, "info"],
         }
     )
     cfg = IoCfg(csv_sep=";", csv_encoding="utf8")
@@ -55,8 +56,17 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
 
     ap.postprocess_file(input_path, output_path, cfg=cfg)
 
-    result = pd.read_csv(output_path, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
+    result = pd.read_csv(
+        output_path,
+        sep=cfg.csv_sep,
+        encoding=cfg.csv_encoding,
+        keep_default_na=False,
+    )
     assert list(result["assay_with_same_target"]) == [2, 2]
+    assert result["notes"].tolist() == ["", "info"]
+
+    meta_path = Path(f"{output_path}.meta.yaml")
+    assert meta_path.exists()
 
 
 def test_assay_postprocess_schema() -> None:
