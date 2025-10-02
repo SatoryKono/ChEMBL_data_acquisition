@@ -8,6 +8,7 @@ import json
 import sys
 import threading
 import time
+from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future
 from pathlib import Path
@@ -923,6 +924,29 @@ def test_write_csv_column_order(
     assert rc == 0
     assert captured["columns"] == gdd._EXPORT_COLUMNS
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
+
+
+def test_prepare_export_frame_merges_duplicate_columns() -> None:
+    """Export preparation should not emit duplicate ChEMBL columns."""
+
+    df = pd.DataFrame(
+        {
+            "document_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "ChEMBL.title": ["", "existing"],
+            "title": ["fallback", "ignored"],
+            "ChEMBL.abstract": ["pref", ""],
+            "abstract": ["", "fallback abstract"],
+        }
+    )
+
+    result = gdd._prepare_export_frame(df)
+
+    duplicates = [name for name, count in Counter(result.columns).items() if count > 1]
+    assert duplicates == []
+    assert result.loc[0, "ChEMBL.title"] == "fallback"
+    assert result.loc[1, "ChEMBL.title"] == "existing"
+    assert result.loc[0, "ChEMBL.abstract"] == "pref"
+    assert result.loc[1, "ChEMBL.abstract"] == "fallback abstract"
 
 
 def test_fetch_pubmed_records_handles_generic_error(
