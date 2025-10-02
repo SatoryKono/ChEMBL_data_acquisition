@@ -1449,6 +1449,8 @@ def _finalise_export(
     rows_dropped = rows_total - rows_kept
     if exit_code == 0:
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
+        if csv_path.name.startswith("output.document_"):
+            _maybe_run_document_postprocessing(csv_path)
 
     stats: Stats = {
         "rows_total": rows_total,
