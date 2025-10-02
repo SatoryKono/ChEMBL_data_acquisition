@@ -45,6 +45,7 @@ def resolve_invocation(
     prog: str | None,
     argv: Sequence[object] | None,
 ) -> tuple[str, ...]:
+
     """Return a normalised tuple describing the CLI invocation.
 
     The helper captures the effective command line as a tuple of strings.
@@ -57,6 +58,7 @@ def resolve_invocation(
     if prog:
         parts.append(str(prog))
 
+
     if argv is None:
         argv_iterable: Sequence[object] = sys.argv[1:]
     else:
@@ -64,6 +66,12 @@ def resolve_invocation(
 
     parts.extend(str(arg) for arg in argv_iterable)
     return tuple(parts)
+
+    resolved: list[str] = []
+    if prog:
+        resolved.append(str(prog))
+    resolved.extend(str(arg) for arg in argv)
+    return tuple(resolved)
 
 
 
@@ -130,7 +138,6 @@ def resolve_invocation(
         argv = sys.argv[1:]
     parts.extend(str(arg) for arg in argv)
     return tuple(parts)
-
 
 
 def run_cli_command(
@@ -283,12 +290,15 @@ def run_pipeline(
 
     use_logger = logger or default_logger
 
+    invocation_tuple: tuple[str, ...] = ()
     if invocation is not None:
-        quoted = [shlex.quote(str(part)) for part in invocation]
-        command_str = " ".join(quoted)
-    else:
+        invocation_tuple = tuple(str(part) for part in invocation)
+
+    if command is not None:
         command_str = command
-    if command_str is None:
+    elif invocation_tuple:
+        command_str = " ".join(shlex.quote(part) for part in invocation_tuple)
+    else:
         raise ValueError("run_pipeline requires either 'command' or 'invocation'")
 
     metadata_hooks = list(metadata_hooks or [])
@@ -485,9 +495,11 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
-    resolved_invocation = (
-        resolve_invocation(None, invocation) if invocation is not None else ()
-    )
+ 
+    resolved_invocation = invocation_tuple
+ 
+ 
+ 
 
     meta_path = write_meta_yaml(
         csv_path=csv_path,
