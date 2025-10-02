@@ -136,10 +136,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
-            def _fetch_chunk(chunk_ids: list[str]) -> pd.DataFrame:
+
+
+            def _fetch_chunk(ids: Sequence[str]) -> pd.DataFrame:
+
                 try:
                     return cl.get_activities(
-                        chunk_ids,
+                        ids,
                         cfg=cfg.api,
                         client=client,
                         chunk_size=cfg.activity.batch_size,
@@ -160,29 +163,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 for chunk_ids in chunks:
                     yield _fetch_chunk(chunk_ids)
 
-            def _run_parallel(
-                chunks: Iterator[list[str]], workers: int
-            ) -> Iterator[pd.DataFrame]:
-                pending: dict[Future[pd.DataFrame], int] = {}
-                completed: dict[int, pd.DataFrame] = {}
-                next_index = 0
 
-                with ThreadPoolExecutor(max_workers=workers) as executor:
-                    for index, chunk_ids in enumerate(chunks):
-                        future = executor.submit(_fetch_chunk, chunk_ids)
-                        pending[future] = index
-                        if len(pending) >= workers:
-                            done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
-                            for finished in done:
-                                chunk_index = pending.pop(finished)
-                                completed[chunk_index] = finished.result()
-                            while next_index in completed:
-                                yield completed.pop(next_index)
-                                next_index += 1
+            pending: dict[Future[pd.DataFrame], int] = {}
+            completed: dict[int, pd.DataFrame] = {}
+            next_index = 0
 
-                    for future in as_completed(list(pending)):
-                        chunk_index = pending.pop(future)
-                        completed[chunk_index] = future.result()
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                for index, chunk_ids in enumerate(id_chunks):
+                    future = executor.submit(_fetch_chunk, chunk_ids)
+                    pending[future] = index
+                    if len(pending) >= workers:
+                        done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+                        for finished in done:
+                            chunk_index = pending.pop(finished)
+                            completed[chunk_index] = finished.result()
+
                         while next_index in completed:
                             yield completed.pop(next_index)
                             next_index += 1
