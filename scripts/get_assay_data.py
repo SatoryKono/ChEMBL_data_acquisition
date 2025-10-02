@@ -43,7 +43,7 @@ from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.config import Config, _serialize_paths
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
-from library.table_quality import analyze_table_quality
+from library.table_quality import analyze_table_quality, build_pipeline_table_quality_hook
 from library.validation import validate_assays
 from schemas import AssaysSchema, normalize_assays
 from library.pipeline_helpers import (
@@ -125,9 +125,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     validators = [partial(validate_assays, return_result=True)]
 
-    table_quality = partial(
-        analyze_table_quality,
+    table_quality = build_pipeline_table_quality_hook(
         table_name=str(Path(output).with_suffix("")),
+        output_path=output,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
     )
 
     global_limiter = get_global_limiter(

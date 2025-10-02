@@ -71,7 +71,7 @@ from library.processing.activity import (
     compute_activity_bounds,
 )
 from library.rate_limiter import get_global_limiter
-from library.table_quality import analyze_table_quality
+from library.table_quality import analyze_table_quality, build_pipeline_table_quality_hook
 from library.validation import validate_activities
 from schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 
@@ -221,9 +221,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
 
 
-    table_quality = partial(
-        analyze_table_quality,
+    doc_quality_cfg = cfg.system.doc_quality
+    table_quality = build_pipeline_table_quality_hook(
         table_name=str(Path(output).with_suffix("")),
+        output_path=output,
+        doc_quality_cfg=doc_quality_cfg,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
     )
 
     global_limiter = get_global_limiter(

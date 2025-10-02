@@ -73,7 +73,7 @@ from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.table_quality import analyze_table_quality, build_pipeline_table_quality_hook
 from library.validation import ValidationResult
 from schemas import TargetsSchema, normalize_targets
 from schemas.targets import TARGETS_COLUMN_ORDER
@@ -1140,8 +1140,15 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             output=str(output),
         )
         return 1
+    table_quality = build_pipeline_table_quality_hook(
+        table_name=str(Path(output).with_suffix("")),
+        output_path=output,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
+    )
     try:
-        analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
+        table_quality(out_df)
     except Exception as exc:
         logger.exception(
             "quality_report_failed",
@@ -1544,10 +1551,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = normalized_output.with_name(
         f"{normalized_output.stem}_failure_cases.csv"
     )
-    table_quality = partial(
-        analyze_table_quality,
-
+    table_quality = build_pipeline_table_quality_hook(
         table_name=str(final_output.with_suffix("")),
+        output_path=final_output,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
     )
 
     metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
@@ -1689,8 +1698,15 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
+    table_quality = build_pipeline_table_quality_hook(
+        table_name=str(Path(output).with_suffix("")),
+        output_path=output,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
+    )
     try:
-        analyze_table_quality(output, table_name=str(output.with_suffix("")))
+        table_quality(output)
     except Exception as exc:
         logger.exception(
             "quality_report_failed",
@@ -2555,10 +2571,15 @@ def validate_and_write(
             table=str(normalized_output.with_suffix("")),
         )
     else:
+        table_quality = build_pipeline_table_quality_hook(
+            table_name=str(normalized_output.with_suffix("")),
+            output_path=normalized_output,
+            doc_quality_cfg=cfg.system.doc_quality,
+            io_cfg=cfg.io,
+            analyze_fn=analyze_table_quality,
+        )
         try:
-            analyze_table_quality(
-                final_df, table_name=str(normalized_output.with_suffix(""))
-            )
+            table_quality(final_df)
         except Exception as exc:
             logger.exception(
                 "quality_report_failed",

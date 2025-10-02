@@ -34,7 +34,7 @@ from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import get_global_limiter
 from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
+from library.table_quality import analyze_table_quality, build_pipeline_table_quality_hook
 from library.validation import validate_testitems
 from schemas import TestitemsSchema, normalize_testitems
 
@@ -775,8 +775,15 @@ def finalize_output(
         schema="TestitemsSchema",
     )
 
+    table_quality = build_pipeline_table_quality_hook(
+        table_name=str(output.with_suffix("")),
+        output_path=output,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
+    )
     try:
-        analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
+        table_quality(csv_path)
     except Exception as exc:
         logger.exception(
             "quality_report_failed",

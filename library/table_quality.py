@@ -13,13 +13,16 @@ import warnings
 from collections import Counter
 from collections.abc import Iterable, Sized
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 from pandas.errors import DtypeWarning
 
 from .log import logger
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from .config import DocQualityCfg, IoCfg
 
 # Precompiled regular expressions for pattern coverage
 _DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
@@ -611,6 +614,84 @@ def analyze_table_quality(
             )
 
     return profiler.build(table_name, destination_dir=destination_dir)
+
+
+def build_pipeline_table_quality_hook(
+    *,
+    table_name: str,
+    output_path: Path | str,
+    doc_quality_cfg: "DocQualityCfg",
+    io_cfg: "IoCfg",
+    analyze_fn: Callable[..., tuple[pd.DataFrame, pd.DataFrame]] = analyze_table_quality,
+) -> Callable[[Path | str | pd.DataFrame | TableQualityProfiler], None]:
+    """Return a pipeline callback for table quality analysis."""
+
+    if not doc_quality_cfg.enable:
+        return lambda *_args, **_kwargs: None
+
+    destination_dir = Path(output_path).resolve().parent
+    sample_rows = doc_quality_cfg.sample_rows
+    include_columns = tuple(doc_quality_cfg.include_columns or ())
+    exclude_columns = tuple(doc_quality_cfg.exclude_columns or ())
+
+    include_set = set(include_columns) if include_columns else None
+    exclude_set = set(exclude_columns) if exclude_columns else None
+
+    def _callback(table: Path | str | pd.DataFrame | TableQualityProfiler) -> None:
+        if isinstance(table, TableQualityProfiler):
+            table_input: pd.DataFrame | Path | str | TableQualityProfiler = table
+            if any((sample_rows, include_set, exclude_set)):
+                logger.warning(
+                    "doc_quality_profiler_filters_ignored",
+                    table_name=table_name,
+                )
+        elif isinstance(table, pd.DataFrame):
+            frame = table.copy()
+            if include_set is not None:
+                missing = sorted(include_set - set(frame.columns))
+                if missing:
+                    logger.warning("include_columns_missing", columns=missing)
+                frame = frame.loc[:, [col for col in frame.columns if col in include_set]]
+            if exclude_set is not None:
+                missing = sorted(exclude_set - set(frame.columns))
+                if missing:
+                    logger.warning("exclude_columns_missing", columns=missing)
+                frame = frame.loc[:, [col for col in frame.columns if col not in exclude_set]]
+            if frame.shape[1] == 0:
+                logger.warning("no_columns_after_filter", table_name=table_name)
+            if sample_rows is not None:
+                frame = frame.head(sample_rows)
+            table_input = frame
+        else:
+            if sample_rows is None and include_set is None and exclude_set is None:
+                table_input = table
+            else:
+                from . import io
+
+                frame = io.read_csv(table, cfg=io_cfg, dtype=str)
+                if include_set is not None:
+                    missing = sorted(include_set - set(frame.columns))
+                    if missing:
+                        logger.warning("include_columns_missing", columns=missing)
+                    frame = frame.loc[:, [col for col in frame.columns if col in include_set]]
+                if exclude_set is not None:
+                    missing = sorted(exclude_set - set(frame.columns))
+                    if missing:
+                        logger.warning("exclude_columns_missing", columns=missing)
+                    frame = frame.loc[:, [col for col in frame.columns if col not in exclude_set]]
+                if frame.shape[1] == 0:
+                    logger.warning("no_columns_after_filter", table_name=table_name)
+                if sample_rows is not None:
+                    frame = frame.head(sample_rows)
+                table_input = frame
+
+        analyze_fn(
+            table_input,
+            table_name=table_name,
+            destination_dir=destination_dir,
+        )
+
+    return _callback
 
 
 if __name__ == "__main__":  # pragma: no cover - illustrative usage

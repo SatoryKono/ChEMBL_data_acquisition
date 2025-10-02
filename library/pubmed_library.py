@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 from collections.abc import Iterable, Iterator, Sequence
 from copy import deepcopy
-from functools import partial
 from datetime import date
 from pathlib import Path
 
@@ -49,7 +48,7 @@ from .pubmed import (
 )
 from .rate_limiter import RateLimiter, get_limiter
 from .cli_utils import run_pipeline
-from .table_quality import analyze_table_quality
+from .table_quality import analyze_table_quality, build_pipeline_table_quality_hook
 from .pipeline_metadata import add_pipeline_metadata
 from .normalization import normalize_documents
 from .validation import ValidationResult as SchemaValidationResult
@@ -329,9 +328,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg=cfg,
         )
 
-    table_quality = partial(
-        analyze_table_quality,
+    table_quality = build_pipeline_table_quality_hook(
         table_name=str(output_path.with_suffix("")),
+        output_path=output_path,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
     )
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))

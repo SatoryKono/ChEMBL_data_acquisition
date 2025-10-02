@@ -102,7 +102,11 @@ from library.postprocessing.document import preprocess_documents_csv
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.sidecar import SidecarErrors
-from library.table_quality import TableQualityProfiler, analyze_table_quality
+from library.table_quality import (
+    TableQualityProfiler,
+    analyze_table_quality,
+    build_pipeline_table_quality_hook,
+)
 from schemas import DocumentsSchema, normalize_documents
 
 
@@ -1460,8 +1464,15 @@ def _finalise_export(
         )
         return 1
 
+    table_quality = build_pipeline_table_quality_hook(
+        table_name=str(csv_path.with_suffix("")),
+        output_path=csv_path,
+        doc_quality_cfg=cfg.system.doc_quality,
+        io_cfg=cfg.io,
+        analyze_fn=analyze_table_quality,
+    )
     try:
-        analyze_table_quality(quality_profiler, table_name=str(csv_path.with_suffix("")))
+        table_quality(quality_profiler)
     except Exception as exc:
         logger.exception(
             "quality_report_generation_failed",
