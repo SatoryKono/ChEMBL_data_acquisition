@@ -197,7 +197,7 @@ def _do_request(
             retry_delay = (
                 header_delay
                 if header_delay is not None
-                else _retry_delay(attempt, delay, retry_cfg, timeout)
+                else _retry_delay(attempt, delay, retry_policy, timeout)
             )
             extra["delay"] = retry_delay
             logger.info(event, extra=extra)
