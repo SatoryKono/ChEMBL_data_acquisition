@@ -248,7 +248,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 Допустимо указывать как короткий алиас `CHEMBL_DA_BASE`, так и полное имя
 `CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; обе переменные настраивают одно
 и то же значение. Полный список доступных алиасов приведён в
-[`library/config.py`](library/config.py#L1531-L1602).
+[`library/config.py`](library/config.py#L1531-L1634).
 
 Типовые переменные с контактными e-mail приведены в `.env.example`.
 
@@ -429,7 +429,7 @@ ChEMBL_data_acquisition/
 export CHEMBL_DA__LOG__LEVEL=DEBUG
 ```
 
-Большинство опций имеют короткие алиасы для обратной совместимости. Таблица перечисляет все поддерживаемые алиасы и их канонические ключи. См. [`_ALIAS_OVERRIDES`](library/config.py#L1544-L1616) и [`_ALIAS_MAP`](library/config.py#L1618-L1620) как первоисточник:
+Большинство опций имеют короткие алиасы для обратной совместимости. Таблица перечисляет все поддерживаемые алиасы и их канонические ключи. См. [`_ALIAS_OVERRIDES`](library/config.py#L1569-L1634) и [`_ALIAS_MAP`](library/config.py#L1637-L1640) как первоисточник:
 
 | Alias | Эквивалентный ключ |
 |-------|--------------------|
