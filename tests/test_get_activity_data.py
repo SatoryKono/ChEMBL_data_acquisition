@@ -322,20 +322,21 @@ def test_run_chembl_writer_missing_output(
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
-    def fake_write_csv(
+    def fake_write_csv_chunks(
         chunks,
         destination,
         *,
-        cfg,
-        key_cols,
         col_order,
-        chunksize,
-        sep,
-        encoding,
+        key_cols,
+        **kwargs,
     ):
         return destination
 
-    monkeypatch.setattr(gad.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(
+        gad,
+        "write_csv_chunks_deterministic",
+        fake_write_csv_chunks,
+    )
 
     rc = gad.run_chembl(cfg, args)
 
