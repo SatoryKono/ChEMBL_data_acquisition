@@ -6,7 +6,7 @@ import pytest
 from library.config import ActivityBoundsCfg
 from library.log import logger as activity_logger
 from library.processing.activity import compute_activity_bounds
-from schemas import normalize_activities
+from library.schemas import normalize_activities
 
 
 def _compute_frame(

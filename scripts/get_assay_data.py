@@ -47,7 +47,7 @@ from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
-from schemas import AssaysSchema, normalize_assays
+from library.schemas import AssaysSchema, normalize_assays
 from library.pipeline_helpers import (
     ChunkedFetchConfig,
     CsvWriterConfig,
@@ -66,7 +66,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute assay retrieval from the ChEMBL API.
 
     The output CSV arranges columns so that fields defined in
-    :class:`~schemas.assays.AssaysSchema` appear first. Any additional columns
+    :class:`~library.schemas.assays.AssaysSchema` appear first. Any additional columns
     are appended alphabetically.
 
     Parameters

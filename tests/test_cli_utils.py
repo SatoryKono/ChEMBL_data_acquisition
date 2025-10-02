@@ -13,7 +13,7 @@ import yaml
 from library.config import Config, _mask_secrets, _serialize_paths
 from library.cli_utils import build_parser, resolve_invocation, run_pipeline
 from library.logging_setup import LoggerConfig, configure_logger as setup_logger
-from schemas import AssaysSchema
+from library.schemas import AssaysSchema
 
 
 def test_cli_utils_flags_and_help() -> None:

@@ -9,7 +9,7 @@ directory.
 
 from __future__ import annotations
 
-from . import io, validation
+from . import io, qa, schemas, validation
 from .config import Config, load_config
 from .csv_utils import (
     sha256_file,
@@ -47,6 +47,8 @@ __all__ = [
     "compute_scores",
     "decide_label",
     "io",
+    "qa",
+    "schemas",
     "validation",
     "Config",
     "load_config",

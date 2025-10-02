@@ -13,14 +13,12 @@ import pytest
 from library import document_postprocessing as dp
 from library.config import IoCfg
 
-import qa.check_document_postprocessing as qa_module
+import library.qa.check_document_postprocessing as qa_module
 
-import qa.check_document_postprocessing as qa_module
+from library.qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
 
-from qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
-
-from qa.check_document_postprocessing import main as qa_main
-from qa.check_document_postprocessing import run_document_postprocessing_check
+from library.qa.check_document_postprocessing import main as qa_main
+from library.qa.check_document_postprocessing import run_document_postprocessing_check
 
 
 FIXTURE_DIR = Path("tests/data/postprocessing_document")

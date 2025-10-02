@@ -75,7 +75,7 @@ from library.processing.activity import (
 from library.rate_limiter import get_global_limiter
 from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
-from schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
+from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 DEFAULT_INPUT_NAME = "activity.csv"

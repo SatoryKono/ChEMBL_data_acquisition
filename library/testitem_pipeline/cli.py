@@ -39,7 +39,7 @@ from library.rate_limiter import get_global_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
-from schemas import TestitemsSchema, normalize_testitems
+from library.schemas import TestitemsSchema, normalize_testitems
 
 from .catalog import (
     PARENT_LOOKUP_SOURCE_CACHE,

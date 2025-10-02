@@ -16,7 +16,7 @@ from hypothesis.extra.pandas import column, data_frames, range_indexes
 from pandera.errors import SchemaError, SchemaErrors
 
 from library.normalization import normalize_activities
-from schemas import (
+from library.schemas import (
     ActivitiesSchema,
     AssaysSchema,
     DocumentsSchema,
@@ -24,7 +24,7 @@ from schemas import (
     TestitemsSchema,
     configure_activity_schema,
 )
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
 DEFAULT_ACTION_TYPE_METRICS = {

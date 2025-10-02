@@ -75,8 +75,6 @@ include-package-data = true
 include = [
   "library",
   "library.*",
-  "schemas",
-  "schemas.*",
   "config",
   "dictionary",
   "scripts",
@@ -87,6 +85,7 @@ include = [
 "config" = ["config.yaml"]
 "dictionary" = ["**/*"]
 "library" = ["py.typed"]
+"library.qa" = ["document_schema_crosswalk.yaml"]
 
 [tool.black]
 line-length = 88

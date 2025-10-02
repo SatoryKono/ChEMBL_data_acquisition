@@ -59,7 +59,7 @@ from .table_quality import analyze_table_quality
 from .pipeline_metadata import add_pipeline_metadata
 from .normalization import normalize_documents
 from .validation import ValidationResult as SchemaValidationResult
-from schemas import DocumentsSchema
+from library.schemas import DocumentsSchema
 
 __all__ = [
     "Config",

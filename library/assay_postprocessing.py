@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from schemas import AssayPostprocessSchema
+from library.schemas import AssayPostprocessSchema
 
 from .config import IoCfg
 from .csv_utils import write_csv_deterministic
