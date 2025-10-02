@@ -293,6 +293,41 @@ def test_run_chembl_workers_preserve_order(
     assert captured_chunks == [["1", "2"], ["3", "4"], ["5", "6"]]
 
 
+def test_run_chembl_workers_chunk_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("")
+
+    cfg.activity.batch_size = 2
+    cfg.activity.workers = 2
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(
+        io, "read_ids", lambda *_, **__: (str(i) for i in range(1, 7))
+    )
+
+    def fake_get(ids, cfg, client, chunk_size, timeout, **kwargs):
+        items = list(ids)
+        if items and items[0] == "3":
+            raise ValueError("boom")
+        return pd.DataFrame({"activity_id": items})
+
+    monkeypatch.setattr(cl, "get_activities", fake_get)
+
+    def fake_run_pipeline(*, fetcher, **kwargs):
+        with pytest.raises(cli_utils.PipelineError):
+            list(fetcher())
+        return 1
+
+    monkeypatch.setattr(gad, "run_pipeline", fake_run_pipeline)
+
+    rc = gad.run_chembl(cfg, args)
+
+    assert rc == 1
+
+
 def test_run_chembl_workers_respect_rate_limit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
