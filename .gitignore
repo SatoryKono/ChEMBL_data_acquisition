@@ -19,3 +19,4 @@ uniprot/
 # Local development files
 python
 exists.csv
+logs/get_target_data_20251002.log
