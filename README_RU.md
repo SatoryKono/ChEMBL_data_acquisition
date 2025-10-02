@@ -4,9 +4,10 @@
 
 ## Особенности
 
-* Унифицированные CLI-флаги `--input`, `--final-out` (основной флаг назначения; устаревшие алиасы `--output`/`--out`
-  сохранены для совместимости и теперь сопровождаются предупреждением), `--log-level`, `--sep`, `--encoding`,
-  `--column`, а также `--config` и `--print-config` для управления конфигурацией. Размер партий задаётся параметрами
+* Унифицированные CLI-флаги `--input`, `--output` (основной флаг назначения; `--final-out` пока доступен только в
+  `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`, а устаревший алиас `--out`
+  сохранён для совместимости и сопровождается предупреждением), `--log-level`, `--sep`, `--encoding`, `--column`,
+  а также `--config` и `--print-config` для управления конфигурацией. Размер партий задаётся параметрами
   `--chunk-size` или `--batch-size` в зависимости от пайплайна. Переключатели `--raw-out`, `--raw-format` и `--id-cols`
   уже доступны в пайплайне таргетов; остальные команды получат их после расширения общего CLI.
 
@@ -102,28 +103,29 @@ pre-commit install
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-      --final-out out/activities.csv \
+      --output out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --final-out out/documents.csv \
+      --output out/documents.csv \
       --limit 5 --log-level INFO
   ```
 
-  Выделенный «сырой» снимок сейчас поддерживает только таргет-пайплайн; остальные команды принимают `--raw-out`/`--raw-format`
-  для совместимости, но игнорируют их до появления соответствующей реализации.
+  Таргет-пайплайн остаётся единственным, кто понимает `--raw-out`, `--raw-format` и `--final-out`. Остальные команды
+  используют `--output` (или устаревший алиас `--out`) до расширения общего парсера.
 
    Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
 
   ```bash
   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --final-out out/quality --table-name chembl_targets --log-level INFO
+      --output out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  В примере с отчётностью `--final-out` задаёт каталог, где будут сохранены результаты. Устаревшие алиасы
-  `--output`/`--out` остаются для совместимости, но теперь сопровождаются предупреждением об удалении.
+  В примере с отчётностью путь задаёт `--output`. Флаг `--final-out` сейчас реализован только в
+  `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`. Алиас `--out`
+  сохранён для совместимости, но сопровождается предупреждением об удалении.
 
 4. **Запустите тесты** — см. раздел [Тесты](#тесты).
 
@@ -138,7 +140,7 @@ pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --final-out out/mapped.csv --log-level INFO
+    --output out/mapped.csv --log-level INFO
 ```
 
 Перед запуском smoke-команды создайте `chembl_ids.csv` с заголовком `chembl_id` и нужными идентификаторами.
@@ -162,7 +164,7 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --final-out data/output/activities.csv --limit 10 --log-level INFO
+    --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 Команда обращается к API ChEMBL, сохраняет таблицу и сопровождающий `*.meta.yaml`. Утилиты разработки находятся в `library/utils/cli_tools/`; например, модуль `get_activities` предназначен лишь для демонстрационного логирования и не выполняет файловых операций. См. [`docs/CLI_TOOLS.md`](docs/CLI_TOOLS.md) для кратких описаний и типовых команд. Каталог результатов игнорируется Git и публикуется как артефакт CI.
@@ -171,7 +173,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 ## Использование
 
-Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--final-out`, `--limit`). Устаревшие алиасы `--output`/`--out` остаются доступными, но при использовании выводят предупреждения. Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации. Пайплайн таргетов уже поддерживает `--raw-out`, `--final-out`, `--raw-format` и `--id-cols`; остальные команды получат эти переключатели после расширения общего парсера.
+Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--output`, `--limit`). Флаг `--final-out` сейчас реализован только в `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`. Устаревший алиас `--out` остаётся доступным, но при использовании выводит предупреждение. Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации. Пайплайн таргетов уже поддерживает `--raw-out`, `--final-out`, `--raw-format` и `--id-cols`; остальные команды получат эти переключатели после расширения общего парсера.
 После установки пакета через `pip install .` те же пайплайны доступны в виде консольных скриптов из таблицы в разделе
 [Быстрый старт](#быстрый-старт) — например, `get-activity-data --help` полностью эквивалентен
 `python -m scripts.get_activity_data --help`. Оба варианта принимают одинаковые аргументы, поэтому выбирайте форму, удобную
@@ -191,8 +193,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --final-out out/documents.csv \
-
+    --output out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -204,7 +205,7 @@ python -m scripts.get_document_data pubmed \
 ```bash
 python -m library.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --final-out out/documents.csv \
+    --output out/documents.csv \
     --log-level INFO
 ```
 
@@ -316,7 +317,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \
-    --final-out out/assays.csv
+    --output out/assays.csv
 ```
 
 Файл `assay_ids.csv` должен содержать столбец `assay_chembl_id` с нужными идентификаторами, например:
@@ -405,7 +406,7 @@ CLI-хелперы настраивают структурированное JSO
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --final-out out/assays.final.csv
+    --output out/assays.final.csv
 ```
 
 Пример строки лога:
@@ -457,9 +458,10 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
     --table-name activity
 ```
 
-По умолчанию `--final-out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
-Устаревшие алиасы `--output`/`--out` продолжают работать, но сопровождаются предупреждениями. Пайплайн таргетов может
-разделять «сырой» и чистый вывод флагами `--raw-out` (с `--raw-format`) и `--final-out`. Дополнительные примеры приведены в
+По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
+Устаревший алиас `--out` продолжает работать, но сопровождается предупреждениями. Таргет-пайплайн также принимает
+`--final-out`, чтобы разделять директории при наличии «сырого» снимка. Флаг `--raw-out` (с `--raw-format`) управляет
+сохранением необработанных данных. Дополнительные примеры приведены в
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 
@@ -568,9 +570,10 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-По умолчанию `--final-out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Устаревшие алиасы
-`--output`/`--out` продолжают работать и предупреждают о грядущем удалении. Пайплайн таргетов может использовать `--raw-out` и
-`--final-out`, чтобы явно развести «сырые» и чистые артефакты (при желании указав `--raw-format`). Дополнительные примеры см. в
+По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Устаревший алиас
+`--out` сохраняется для совместимости и предупреждает о грядущем удалении. Таргет-пайплайн дополнительно принимает `--final-out`,
+который использует тот же шаблон пути и позволяет разделять директории после добавления «сырого» снимка. Комбинируйте его с
+`--raw-out` (и опциональным `--raw-format parquet`), чтобы сохранять необработанный ответ. Дополнительные примеры см. в
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Вывод и метаданные
