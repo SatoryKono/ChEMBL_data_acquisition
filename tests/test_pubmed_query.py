@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import requests
 
-from library import rate_limiter as rl
+from library.common import rate_limiter as rl
 
 from library.clients import pubmed as pc
 from library.config import Config, PubMedCfg, RetryCfg, SemanticScholarCfg

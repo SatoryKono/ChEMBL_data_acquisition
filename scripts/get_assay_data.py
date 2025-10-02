@@ -29,31 +29,31 @@ from library.utils.bootstrap import ensure_project_root
 if __package__ in {None, ""}:
     ensure_project_root()
 
-from library import assay_postprocessing as ap
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
+from library.pipelines.assay import postprocessing as ap
 from library import cli
 from library import io
-from library.csv_utils import write_csv_chunks_deterministic
-from library.chembl_assay import ASSAY_COLUMNS
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.pipelines.assay.chembl_assay import ASSAY_COLUMNS
 from library.clients import ChemblClient
-from library.rate_limiter import get_global_limiter
+from library.common.rate_limiter import get_global_limiter
 from library.cli import (
     LoggerConfig,
 )
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command, run_pipeline
 from library.config import Config, _serialize_paths
-from library.log import logger
-from library.pipeline_metadata import add_pipeline_metadata
+from library.common.log import logger
+from library.pipelines.common import add_pipeline_metadata
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
 from library.schemas import AssaysSchema, normalize_assays
-from library.pipeline_helpers import (
+from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
     prepare_chunked_pipeline,
 )
-from library.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 __all__ = ["ap", "main", "run", "run_chembl"]
 

@@ -7,8 +7,8 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import library.csv_utils as csv_utils
-from library.csv_utils import write_csv_chunks_deterministic
+import library.common.csv_utils as csv_utils
+from library.common.csv_utils import write_csv_chunks_deterministic
 
 
 def test_write_csv_chunks_failure_preserves_original(

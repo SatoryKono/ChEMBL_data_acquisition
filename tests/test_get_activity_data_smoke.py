@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
 from scripts import get_activity_data
 
 

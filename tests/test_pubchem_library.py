@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.pubchem_library`."""
+"""Tests for :mod:`library.integration.pubchem_library`."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ import requests
 responses = pytest.importorskip("responses")
 
 
-from library import pubchem_library as pl  # noqa: E402
+from library.integration import pubchem_library as pl  # noqa: E402
 from library.clients import pubchem as pc  # noqa: E402
-from library import rate_limiter as rl  # noqa: E402
-from library.logging_setup import LoggerConfig, configure_logger  # noqa: E402
+from library.common import rate_limiter as rl  # noqa: E402
+from library.common.logging_setup import LoggerConfig, configure_logger  # noqa: E402
 
 
 class MonotonicStub:

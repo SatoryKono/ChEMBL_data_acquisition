@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 
-from .log import logger
+from .common.log import logger
 
 
 def require_python_version(min_version: tuple[int, int] = (3, 11)) -> None:

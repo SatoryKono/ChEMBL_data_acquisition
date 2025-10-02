@@ -1,4 +1,4 @@
-"""Thread-safety tests for :mod:`library.iuphar_library`."""
+"""Thread-safety tests for :mod:`library.integration.iuphar_library`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import pytest
 
-from library import iuphar_library as ii
+from library.integration import iuphar_library as ii
 from library.clients import iuphar as ci
 from library.config import ApiCfg, IupharCfg, RetryCfg
 

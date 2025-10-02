@@ -1,10 +1,10 @@
-"""Tests for :mod:`library.chembl_document`."""
+"""Tests for :mod:`library.pipelines.document.chembl_document`."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from library.chembl_document import get_documents
+from library.pipelines.document.chembl_document import get_documents
 from library.config import ApiCfg
 
 

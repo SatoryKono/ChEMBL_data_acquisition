@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 
 from ...config import ActivityBoundsCfg
-from ...log import logger
-from ...pandas_utils import merge_series_prefer_left
+from ...common.log import logger
+from ...common.pandas_utils import merge_series_prefer_left
 
 __all__ = ["compute_activity_bounds"]
 

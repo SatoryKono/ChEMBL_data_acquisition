@@ -11,19 +11,20 @@ from __future__ import annotations
 
 from . import io, qa, schemas, validation
 from .config import Config, load_config
-from .csv_utils import (
+from .common.csv_utils import (
     sha256_file,
     write_csv_chunks_deterministic,
     write_csv_deterministic,
 )
-from .document_type_classifier import compute_scores, decide_label
-from .document_type_terms import (
+from .common.logging_setup import Logger, LoggerConfig, configure_logger
+from .common.timing import log_duration
+from .pipelines.document.type_classifier import compute_scores, decide_label
+from .pipelines.document.type_terms import (
     EXPERIMENTAL_TERMS,
     REVIEW_TERMS,
     UNKNOWN_TERMS,
     parse_terms,
 )
-from .logging_setup import Logger, LoggerConfig, configure_logger
 from .organism_classification import (
     TYPE_MULTICELLULAR,
     TYPE_UNICELLULAR,
@@ -37,7 +38,6 @@ from .organism_classification import (
 )
 from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors
-from .timing import log_duration
 
 __all__ = [
     "parse_terms",

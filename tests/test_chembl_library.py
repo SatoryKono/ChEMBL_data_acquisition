@@ -1,10 +1,10 @@
-"""Tests for :mod:`library.chembl_library`."""
+"""Tests for :mod:`library.integration.chembl_library`."""
 
 from __future__ import annotations
 
 import pytest
 
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
 
 
 def test_chunked_splits_list() -> None:

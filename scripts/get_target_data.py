@@ -45,17 +45,17 @@ import requests
 from pandera.errors import SchemaErrors
 
 import library.cli_utils as cli_utils_module
-from library import chembl_library as cl
 from library import cli
 from library import io
-from library import iuphar_library as ii
+from library.integration import chembl_library as cl
+from library.integration import iuphar_library as ii
+from library.integration import uniprot_library as uu
 from library import protein_classification as pc
-from library import target_postprocessing as tp
-from library import uniprot_library as uu
+from library.pipelines.target import postprocessing as tp
 from library.clients import ChemblClient
-from library.rate_limiter import get_global_limiter
+from library.common.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
-from library.chembl_target import normalize_reaction_ec_numbers
+from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
     build_root_parser,
@@ -68,10 +68,10 @@ from library.config import (
     Config,
     _serialize_paths,
 )
-from library.csv_utils import write_csv_deterministic
-from library.log import logger
+from library.common.csv_utils import write_csv_deterministic
+from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
-from library.pipeline_metadata import add_pipeline_metadata
+from library.pipelines.common import add_pipeline_metadata
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import ValidationResult
@@ -2400,7 +2400,7 @@ def merge_results(
         ``uniprot_id``.
     cfg : Config
         Application configuration providing classifier settings.
-    classifier : library.iuphar_library.IUPHARClassifier, optional
+    classifier : library.integration.iuphar_library.IUPHARClassifier, optional
         Pre-initialised classifier. When ``None`` a classifier is created from
         ``cfg``.
 

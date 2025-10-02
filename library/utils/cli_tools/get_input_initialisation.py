@@ -32,7 +32,7 @@ from library.utils import bootstrap
 bootstrap.ensure_project_root()
 
 from library import cli
-from library import input_initialisation_library as lib
+from library.integration import input_initialisation_library as lib
 from library.cli import (
     LoggerConfig,
     configure_logger,
@@ -42,7 +42,7 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.log import logger
+from library.common.log import logger
 from library.table_quality import analyze_table_quality
 
 

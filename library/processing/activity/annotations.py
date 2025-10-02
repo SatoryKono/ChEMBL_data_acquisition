@@ -10,7 +10,7 @@ from typing import Any
 import pandas as pd
 
 from ...config import ActivityActionTypeCfg, ActivityPropertiesCfg
-from ...log import logger
+from ...common.log import logger
 
 __all__ = [
     "apply_activity_annotations",

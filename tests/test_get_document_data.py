@@ -24,9 +24,9 @@ import requests
 
 responses = pytest.importorskip("responses")
 
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
 from library import io as lib_io
-from library import rate_limiter as rl
+from library.common import rate_limiter as rl
 from library.cli import LoggerConfig, configure_logger
 from library.config import (
     Config,

@@ -8,7 +8,11 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .config import Config
-from .iuphar_library import ClassificationRecord, IUPHARClassifier, IUPHARData
+from .integration.iuphar_library import (
+    ClassificationRecord,
+    IUPHARClassifier,
+    IUPHARData,
+)
 
 PREDICTION_COLUMNS: tuple[str, ...] = (
     "protein_class_pred_L1",

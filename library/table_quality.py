@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from pandas.errors import DtypeWarning
 
-from .log import logger
+from .common.log import logger
 
 # Precompiled regular expressions for pattern coverage
 _DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")

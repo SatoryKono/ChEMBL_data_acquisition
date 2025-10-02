@@ -6,7 +6,7 @@ pd = pytest.importorskip("pandas")
 requests = pytest.importorskip("requests")
 responses = pytest.importorskip("responses")
 
-from library import iuphar_library as ii  # noqa: E402
+from library.integration import iuphar_library as ii  # noqa: E402
 from library.clients import iuphar as ci  # noqa: E402
 from library.config import IupharCfg, RetryCfg  # noqa: E402
 

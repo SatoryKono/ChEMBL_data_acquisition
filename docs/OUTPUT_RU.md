@@ -70,7 +70,7 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Детерминированная запись CSV
 
-`library.io.write_csv` вызывает `library.csv_utils.write_csv_deterministic`,
+`library.io.write_csv` вызывает `library.common.csv_utils.write_csv_deterministic`,
 который сортирует строки и колонки по явным ключам и учитывает параметры
 `cfg.io.csv_sep`, `cfg.io.csv_encoding`, а также опциональные `key_cols` и
 `col_order`, переданные пайплайном.
@@ -78,7 +78,7 @@ Acquisition, а также вспомогательные модули, отве
 ## Технические колонки пайплайна
 
 Перед валидацией в таблицы добавляются `pipeline_version` и `timestamp_utc`
-(функция `library.pipeline_metadata.add_pipeline_metadata`). Колонки описаны в
+(функция `library.pipelines.common.add_pipeline_metadata`). Колонки описаны в
 схемах активностей, документов, тест-объектов и других сущностей, поэтому они
 присутствуют даже при пустой выгрузке.
 
@@ -90,7 +90,7 @@ Acquisition, а также вспомогательные модули, отве
 ## Классификация публикаций
 
 `scripts/get_document_data.py` обогащает документные выгрузки баллами и метками,
-которые рассчитывает `library.document_pipeline.merge_metadata`.
+которые рассчитывает `library.pipelines.document.pipeline.merge_metadata`.
 В таблице и схеме появляются поля:
 
 | Колонка | Описание |
@@ -124,7 +124,7 @@ Acquisition, а также вспомогательные модули, отве
 ## JSON-отчёт о качестве документов
 
 Документный пайплайн записывает `<base>.quality.json`.
-`library.document_pipeline.build_quality_report`
+`library.pipelines.document.pipeline.build_quality_report`
 формирует сводку, а `save_quality_report` сохраняет её в стабильном формате для
 сравнения между запусками. Структура отчёта:
 
@@ -149,7 +149,7 @@ Acquisition, а также вспомогательные модули, отве
 
 Утилита `library.utils.cli_tools.pipeline_targets_main` повторяет аргументы боевого таргет-пайплайна,
 но работает только с кешированными чанками ChEMBL. Идентификаторы читаются через
-`read_ids`, далее вызывается `library.pipeline_targets.run_pipeline`, добавляются
+`read_ids`, далее вызывается `library.pipelines.target.pipeline.run_pipeline`, добавляются
 метаданные и выполняется детерминированная запись CSV/sidecar. Инструмент полезен
 для проверки конфигурации и параметров батчирования без обращений к внешним
 сервисам.

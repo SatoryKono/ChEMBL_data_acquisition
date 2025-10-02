@@ -1,4 +1,4 @@
-"""Concurrency regression tests for :mod:`library.molecule_catalog`."""
+"""Concurrency regression tests for :mod:`library.integration.molecule_catalog`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import threading
 from collections.abc import Mapping
 
 from library.config import ApiCfg, MoleculeCatalogCfg
-from library import molecule_catalog
+from library.integration import molecule_catalog
 
 
 def test_load_parent_catalog_serialises_concurrent_calls(tmp_path, monkeypatch) -> None:

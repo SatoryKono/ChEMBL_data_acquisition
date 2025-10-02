@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from library.config import Config
-from library.csv_utils import write_csv_deterministic
+from library.common.csv_utils import write_csv_deterministic
 
 psutil = pytest.importorskip("psutil")
 

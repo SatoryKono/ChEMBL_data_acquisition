@@ -9,7 +9,7 @@ import pandas as pd
 
 from . import io
 from .config import IoCfg, TestitemMoleculeEnrichmentCfg
-from .log import logger
+from .common.log import logger
 
 _FLAG_COLUMNS: tuple[str, ...] = ("natural_product", "prodrug", "polymer_flag")
 _TRUE_VALUES: frozenset[str] = frozenset({"1", "true", "t", "yes", "y"})
