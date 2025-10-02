@@ -326,13 +326,13 @@ def dataframe_to_strings(
 
     skip_set = set(skip or [])
     result = df.copy()
-    for col in result.columns:
+    dtypes = result.dtypes
+    for idx, col in enumerate(result.columns):
         if col in skip_set:
             continue
-        series = result[col]
-        if pd.api.types.is_numeric_dtype(series.dtype):
+        if pd.api.types.is_numeric_dtype(dtypes.iloc[idx]):
             continue
-        result[col] = series.astype(str)
+        result.iloc[:, idx] = result.iloc[:, idx].astype(str)
     return result
 
 

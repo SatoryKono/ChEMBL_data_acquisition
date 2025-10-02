@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
@@ -71,6 +71,8 @@ def write_meta_yaml(
     inputs: Mapping[str, Any],
     stats: Stats,
     schema: str,
+    *,
+    invocation: Sequence[str] | None = None,
 ) -> Path:
     """Write metadata for ``csv_path`` to ``<csv_path>.meta.yaml``.
 
@@ -89,6 +91,9 @@ def write_meta_yaml(
         Summary statistics about the output table.
     schema:
         Name of the schema applied to the output data.
+    invocation:
+        Optional tuple describing the exact CLI invocation. Persisted when
+        provided to aid reproducibility.
 
     Returns
     -------
@@ -123,6 +128,8 @@ def write_meta_yaml(
             "schema": schema,
         }
     )
+    if invocation:
+        metadata["invocation"] = list(invocation)
 
     with open_atomic(meta_path, encoding="utf-8") as fh:
         yaml.safe_dump(metadata, fh, sort_keys=False)
