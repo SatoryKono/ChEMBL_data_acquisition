@@ -370,19 +370,27 @@ def _coverage_status(score: int, has_error: bool) -> str:
 def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     """Return analytics-oriented projection of ``df``."""
 
-    validate_columns(df, REQUIRED_INPUT_COLUMNS)
-    if df.empty:
+    frame = df
+    if (
+        "document_chembl_id" not in frame.columns
+        and "ChEMBL.document_chembl_id" in frame.columns
+    ):
+        frame = frame.copy()
+        frame["document_chembl_id"] = frame["ChEMBL.document_chembl_id"]
+
+    validate_columns(frame, REQUIRED_INPUT_COLUMNS)
+    if frame.empty:
         result = pd.DataFrame(columns=list(PREPROCESSED_COLUMN_ORDER))
         return result
 
-    result = pd.DataFrame(index=df.index)
-    result["document_chembl_id"] = _string_series(df["document_chembl_id"])
+    result = pd.DataFrame(index=frame.index)
+    result["document_chembl_id"] = _string_series(frame["document_chembl_id"])
 
     for target, columns in COALESCE_PRIORITIES.items():
-        result[target] = _coalesce_columns(df, columns)
+        result[target] = _coalesce_columns(frame, columns)
 
-    if "publication_class" in df.columns:
-        result["publication_class"] = _string_series(df["publication_class"])
+    if "publication_class" in frame.columns:
+        result["publication_class"] = _string_series(frame["publication_class"])
     else:
         result["publication_class"] = pd.Series([""] * len(df), index=df.index, dtype="string")
 
@@ -392,17 +400,17 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
             result["publication_class"].str.lower() == "review"
         )
     for column in REVIEW_COLUMNS:
-        if column in df.columns:
-            review_series = review_series | _series_to_bool(df[column])
+        if column in frame.columns:
+            review_series = review_series | _series_to_bool(frame[column])
     result["is_review"] = review_series
 
-    metadata_series, metadata_flags = _build_metadata_flags(df)
+    metadata_series, metadata_flags = _build_metadata_flags(frame)
     result["metadata_sources"] = metadata_series
     result["metadata_source_count"] = metadata_flags.pop("metadata_source_count")
     for column, mask in metadata_flags.items():
         result[column] = mask
 
-    error_sources, has_error = _build_error_sources(df)
+    error_sources, has_error = _build_error_sources(frame)
     result["error_sources"] = error_sources
     result["has_error"] = has_error
 
@@ -415,8 +423,8 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     ]
     result["coverage_status"] = pd.Series(status_values, index=df.index, dtype="string")
 
-    mesh_columns = [column for column in MESH_TERM_COLUMNS if column in df.columns]
-    result["mesh_terms"] = _aggregate_terms(df, mesh_columns)
+    mesh_columns = [column for column in MESH_TERM_COLUMNS if column in frame.columns]
+    result["mesh_terms"] = _aggregate_terms(frame, mesh_columns)
 
     if "publication_year" in result.columns:
         publication_year = result["publication_year"].replace("", pd.NA)
@@ -427,21 +435,21 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
         result["publication_year"] = pd.Series([pd.NA] * len(df), index=df.index, dtype="Int64")
 
     for column in PASS_THROUGH_COLUMNS:
-        if column not in df.columns:
+        if column not in frame.columns:
             if column == "Index":
                 result[column] = pd.Series([""] * len(df), index=df.index, dtype="string")
             else:
                 result[column] = pd.Series([""] * len(df), index=df.index, dtype="string")
             continue
         if column == "Index":
-            index_series = df[column]
+            index_series = frame[column]
             if pd.api.types.is_numeric_dtype(index_series):
                 padded = index_series.fillna(0).astype(int).astype(str)
             else:
                 padded = _string_series(index_series)
             result[column] = padded.str.zfill(INDEX_PAD_WIDTH)
         else:
-            result[column] = _string_series(df[column])
+            result[column] = _string_series(frame[column])
 
     existing_columns = [
         column for column in PREPROCESSED_COLUMN_ORDER if column in result.columns
