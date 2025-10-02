@@ -54,10 +54,10 @@ console scripts for each pipeline. Use them interchangeably with the
 | Компонент     | Минимальная версия | Последняя протестированная |
 |---------------|--------------------|-----------------------------|
 | Python        | ≥3.11              | 3.12                        |
-| numpy         | 2.3.3              | 2.3.3                       |
-| pandas        | 2.3.2              | 2.3.2                       |
-| requests      | 2.32.5             | 2.32.5                      |
-| PyYAML        | 6.0.2              | 6.0.2                       |
+| numpy         | ≥1.26              | 2.3.3                       |
+| pandas        | ≥2.0               | 2.3.3                       |
+| requests      | ≥2.31              | 2.32.5                      |
+| PyYAML        | ≥6.0               | 6.0.3                       |
 
 Полный список приведён в `requirements-dev.txt` или `pyproject.toml`.
 

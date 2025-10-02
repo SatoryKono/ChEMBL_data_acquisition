@@ -19,10 +19,10 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 | Component | Minimum supported | Latest tested |
 |-----------|-------------------|---------------|
 | Python    | ≥3.11             | 3.12          |
-| numpy     | 2.3.3             | 2.3.3         |
-| pandas    | 2.3.2             | 2.3.2         |
-| requests  | 2.32.5            | 2.32.5        |
-| PyYAML    | 6.0.2             | 6.0.2         |
+| numpy     | ≥1.26             | 2.3.3         |
+| pandas    | ≥2.0              | 2.3.3         |
+| requests  | ≥2.31             | 2.32.5        |
+| PyYAML    | ≥6.0              | 6.0.3         |
 
 See `requirements-dev.txt` or `pyproject.toml` for the full list. Runtime dependencies follow compatible release ranges so patch
 updates within each minor version remain supported. Continuous integration validates both the minimum and latest rows above.
