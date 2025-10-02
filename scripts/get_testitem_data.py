@@ -140,16 +140,29 @@ def _load_molecule_hierarchy_mapping(
             "Unable to read molecule hierarchy dictionary; verify the CSV format."
         ) from exc
 
-    missing_columns = [
-        column for column in _MOLECULE_HIERARCHY_COLUMNS if column not in frame.columns
-    ]
-    if missing_columns:
+    child_column, parent_column = _MOLECULE_HIERARCHY_COLUMNS
+    child_missing = child_column not in frame.columns
+    parent_missing = parent_column not in frame.columns
+
+    if child_missing:
         raise ValueError(
             "Molecule hierarchy dictionary missing required columns: "
-            + ", ".join(missing_columns)
+            + child_column
         )
 
-    subset = frame.loc[:, list(_MOLECULE_HIERARCHY_COLUMNS)].copy()
+    if parent_missing:
+        logger.warning(
+            "molecule_hierarchy_missing_parent_column",
+            column=parent_column,
+            path=str(csv_path),
+        )
+
+    subset = frame.loc[:, [child_column]].copy()
+    if parent_missing:
+        subset[parent_column] = pd.Series(pd.NA, index=subset.index, dtype="string")
+    else:
+        subset[parent_column] = frame[parent_column].copy()
+
     for column in _MOLECULE_HIERARCHY_COLUMNS:
         subset[column] = (
             subset[column].fillna("").astype("string").str.strip().str.upper()
