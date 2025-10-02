@@ -53,6 +53,7 @@ from library import protein_classification as pc
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
 from library.clients import ChemblClient
+from library.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
@@ -1041,9 +1042,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_chunks: list[pd.DataFrame] = []
     parsed_chunks: list[pd.DataFrame] = []
 
+    global_limiter = get_global_limiter(cfg.rate.global_rps, cfg.rate.global_burst)
+
     if limited_ids:
         try:
-            with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            with ChemblClient(
+                cfg.api,
+                cfg.retry,
+                cfg.chembl,
+                global_limiter=global_limiter,
+            ) as client:
                 for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
                     limited_ids,
                     cfg=cfg.api,
@@ -1227,7 +1235,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             yield pd.DataFrame(columns=TARGETS_COLUMN_ORDER)
             return
 
-        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        with ChemblClient(
+            cfg.api,
+            cfg.retry,
+            cfg.chembl,
+            global_limiter=global_limiter,
+        ) as client:
             try:
                 for _, _, parsed_chunk in cl.iter_target_batches(
                     limited_ids,

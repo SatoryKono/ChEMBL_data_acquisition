@@ -91,7 +91,7 @@ from library.document_pipeline import (
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
-from library.rate_limiter import RateLimiter, get_limiter
+from library.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import TableQualityProfiler, analyze_table_quality
 from schemas import DocumentsSchema, normalize_documents
@@ -335,8 +335,8 @@ def fetch_pubmed_records(
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
 
-    documents_limiter = get_limiter(
-        "documents_global", rate_cfg.global_rps, rate_cfg.global_burst
+    global_limiter = get_global_limiter(
+        rate_cfg.global_rps, rate_cfg.global_burst
     )
 
     def _service_limiter(
@@ -382,8 +382,8 @@ def fetch_pubmed_records(
     def _acquire_documents(
         limiter: RateLimiter | None, *, use_global: bool = True
     ) -> None:
-        if use_global and documents_limiter is not None:
-            documents_limiter.acquire()
+        if use_global and global_limiter is not None:
+            global_limiter.acquire()
         if limiter is not None:
             limiter.acquire()
 
@@ -1419,7 +1419,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Configure session for ChEMBL requests
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+    with ChemblClient(
+        cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
+    ) as client:
         try:
             ids_iter = io.read_ids(
                 args.input_csv,
@@ -1535,7 +1537,9 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     sample_ids = list(islice(iterator, sample_size))
     ids_for_fetch = chain(sample_ids, iterator)
     try:
-        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        with ChemblClient(
+            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
+        ) as client:
             doc_df = cl.get_documents(
                 ids_for_fetch,
                 cfg=cfg.api,

@@ -32,6 +32,7 @@ from library.csv_utils import write_csv_chunks_deterministic
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipeline_metadata import add_pipeline_metadata
+from library.rate_limiter import get_global_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
@@ -440,7 +441,13 @@ def run_testitem_pipeline(
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
     offset = options.offset if options.offset is not None else cfg.testitem.offset
 
-    with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps, cfg.rate.global_burst
+    )
+
+    with ChemblClient(
+        api_cfg, cfg.retry, cfg.chembl, global_limiter=global_limiter
+    ) as client:
         read_status, read_result = read_input_ids(
             input_csv,
             column=cfg.testitem.column,

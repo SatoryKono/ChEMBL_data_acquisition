@@ -27,6 +27,7 @@ from . import chembl_library as cl
 from library.clients import ChemblClient
 from .config import Config
 from .log import logger
+from .rate_limiter import get_global_limiter
 
 # Default sample identifiers for each dataset.  These are deliberately minimal
 # and can be overridden via the ``samples`` argument to :func:`inspect_dtypes`.
@@ -69,7 +70,11 @@ def inspect_dtypes(
     # ``ChemblClient`` manages HTTP connections and retries.  The context
     # manager ensures the underlying ``requests.Session`` is properly closed
     # even if one of the retrieval functions fails.
-    with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+    global_limiter = get_global_limiter(cfg.rate.global_rps, cfg.rate.global_burst)
+
+    with ChemblClient(
+        cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
+    ) as client:
         df = cl.get_activities(combined["activities"], cfg=cfg.api, client=client)
         results["activities"] = _dtype_map(df)
         logger.info("dtypes", dataset="activities", dtypes=results["activities"])
