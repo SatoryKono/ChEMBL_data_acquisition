@@ -15,7 +15,7 @@
 | `library.utils.cli_tools.get_input_initialisation` | `python -m library.utils.cli_tools.get_input_initialisation --same-doc path.xlsx --all-doc path.xlsx` | Объединяет Excel-книги, которые готовят пары входных данных для последующего QA. |
 | `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv --output mapped.csv` | Сопоставляет идентификаторы ChEMBL с акцессиями UniProt по пакетной конфигурации. |
 | `library.utils.cli_tools.mapper_main` | `python -m library.utils.cli_tools.mapper_main --input ids.csv --output mapped.csv` | Лёгкий интерактивный маппер для быстрых запросов и диагностики. |
-| `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Запускает закешированную обвязку таргет-пайплайна для обновления сохранённых артефактов. |
+| `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Запускает закешированную обвязку таргет-пайплайна и позволяет проверить стадийные флаги (`--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, `--normalize-at-export` / `--no-normalize-at-export`). |
 | `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Формирует отчёты о качестве по столбцам для произвольных CSV-наборов. |
 
 Все модули по-прежнему экспортируют функцию `main`, поэтому их можно подключать к точкам входа в `pyproject.toml`. При программном вызове импортируйте модуль из `library.utils.cli_tools` и передавайте `main(argv)`, чтобы переиспользовать интерфейс командной строки в тестах.

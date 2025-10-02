@@ -17,13 +17,17 @@ The README is available in multiple languages:
   `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
   `--print-config` для управления загрузкой настроек. Размер пакетной
   выборки задаётся параметрами `--chunk-size` или `--batch-size` в зависимости
-  от конкретного пайплайна. Новые переключатели `--raw-out`, `--raw-format` и
-  `--id-cols` уже доступны в пайплайне таргетов; остальные команды получат их
-  после расширения общего CLI.
+  от конкретного пайплайна. Новые переключатели `--raw-out`, `--raw-format`,
+  `--id-cols`, `--no-reindex-raw`, а также пара `--normalize-at-export` /
+  `--no-normalize-at-export` уже доступны в пайплайне таргетов; остальные
+  команды получат их после расширения общего CLI.
 
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
 * Отдельный «сырой» снимок (`--raw-out`) доступен для пайплайна таргетов;
   поддержка остальных конвейеров запланирована и будет объявлена отдельно.
+  По умолчанию «сырой» дамп переупорядочивает столбцы для стабильности
+  (`--no-reindex-raw` отключает это), а итоговая таблица нормализуется перед
+  записью (`--no-normalize-at-export` сохраняет исходное состояние данных).
 * Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
 * Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
@@ -187,22 +191,28 @@ flowchart LR
 
 **EN.** The target pipeline already follows the staged contract with dedicated destinations for raw and cleaned artefacts. Use
 `--raw-out` (optionally with `--raw-format parquet`) to capture the raw payload, list composite keys via `--id-cols`, and direct
-the cleaned export to `--final-out`. The legacy `--output`/`--out` aliases stay wired in for compatibility but now emit
-deprecation warnings when used. Placeholder identifiers remain in the raw snapshot and are counted in the metadata
-(`error_placeholder_counts`), while the final export includes only validated values. Other pipelines will surface
-`--final-out` once their shared CLI is extended; until then the deprecated aliases remain available with matching warnings.
+the cleaned export to `--final-out`. Raw dumps reindex columns alphabetically for deterministic layouts unless
+`--no-reindex-raw` keeps the API order. The final CSV is normalized by default; flip the boolean pair
+`--normalize-at-export` / `--no-normalize-at-export` when you need the final artefact to mirror the raw payload byte-for-byte.
+Placeholder identifiers remain in the raw snapshot and are counted in the metadata (`error_placeholder_counts`), while the
+normalized export includes only validated values. Other pipelines will surface `--final-out` once their shared CLI is extended;
+until then the deprecated aliases remain available with matching warnings.
 
 **RU.** Пайплайн таргетов уже использует поэтапный контракт с разделением «сырого» и нормализованного вывода. Флаг `--raw-out`
 (при необходимости с `--raw-format parquet`) сохраняет исходный ответ, `--id-cols` перечисляет составные ключи, а чистый экспорт
-направляется в `--final-out`. Алиасы `--output`/`--out` сохранены для совместимости, однако при их использовании CLI выводит
-предупреждение об устаревании. Временные идентификаторы остаются в «сыром» снимке и учитываются в метаданных
-(`error_placeholder_counts`), тогда как финальная таблица содержит только прошедшие валидацию значения. Прочие пайплайны
+направляется в `--final-out`. По умолчанию «сырой» дамп переупорядочивает столбцы в алфавитном порядке — флаг
+`--no-reindex-raw` сохраняет исходную раскладку. Финальный CSV нормализуется автоматически; переключение пары
+`--normalize-at-export` / `--no-normalize-at-export` позволяет либо выполнить нормализацию непосредственно перед записью, либо
+сохранить артефакт идентичным «сырому» снимку. Временные идентификаторы остаются в «сыром» файле и учитываются в метаданных
+(`error_placeholder_counts`), тогда как нормализованный экспорт содержит только прошедшие валидацию значения. Прочие пайплайны
 получат `--final-out` после расширения общего CLI; до тех пор устаревшие алиасы остаются доступными и сопровождаются теми же
 предупреждениями.
 
-> **EN.** `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are currently exposed via `get-target-data` and
+> **EN.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair
+> `--normalize-at-export` / `--no-normalize-at-export` are currently exposed via `get-target-data` and
 > `library.utils.cli_tools.pipeline_targets_main`. Other commands will adopt these switches once the shared parser lands.
-> **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` уже доступны в `get-target-data` и
+> **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, а также пара
+> `--normalize-at-export` / `--no-normalize-at-export` уже доступны в `get-target-data` и
 > `library.utils.cli_tools.pipeline_targets_main`. Остальные команды получат их после доработки общего парсера.
 
 
