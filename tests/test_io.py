@@ -18,6 +18,17 @@ from library.config import Config, IoCfg
 from library.logging_setup import LoggerConfig, configure_logger
 
 
+def _bind_io_logger(monkeypatch: pytest.MonkeyPatch) -> StringIO:
+    """Return a stream capturing ``library.io.readers`` log output."""
+
+    from library.io import readers as io_readers
+
+    stream = StringIO()
+    test_logger = configure_logger(LoggerConfig(level="INFO", stream=stream))
+    monkeypatch.setattr(io_readers, "logger", test_logger)
+    return stream
+
+
 def test_read_csv_validates_columns(tmp_path: Path) -> None:
     path = tmp_path / "data.csv"
     with path.open("w", newline="") as fh:
@@ -120,6 +131,46 @@ def test_read_csv_with_schema(tmp_path: Path) -> None:
     bad_schema = pa.DataFrameSchema({"a": pa.Column(int), "c": pa.Column(str)})
     with pytest.raises(pa.errors.SchemaError):
         io.read_csv(path, cfg=IoCfg(), schema=bad_schema)
+
+
+def test_read_csv_missing_file_logs_and_exits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = IoCfg()
+    stream = _bind_io_logger(monkeypatch)
+    missing = tmp_path / "missing.csv"
+
+    with pytest.raises(SystemExit) as exc:
+        io.read_csv(missing, cfg=cfg)
+
+    assert exc.value.code == 1
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert records, "read_csv should emit a read_fail log"
+    record = records[-1]
+    assert record["event"] == "read_fail"
+    assert record["path"] == str(missing)
+    assert record["encoding"] == cfg.csv_encoding
+
+
+def test_read_csv_parser_error_logs_and_exits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = IoCfg()
+    stream = _bind_io_logger(monkeypatch)
+    malformed = tmp_path / "malformed.csv"
+    malformed.write_text("value\n\"unterminated", encoding=cfg.csv_encoding)
+
+    with pytest.raises(SystemExit) as exc:
+        io.read_csv(malformed, cfg=cfg)
+
+    assert exc.value.code == 1
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert records, "read_csv should emit a read_fail log"
+    record = records[-1]
+    assert record["event"] == "read_fail"
+    assert record["path"] == str(malformed)
+    assert record["encoding"] == cfg.csv_encoding
+    assert "error" in record
 
 
 def test_write_csv_creates_metadata_file(tmp_path: Path, cfg: Config) -> None:
