@@ -12,6 +12,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import sys
+import shutil
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from functools import partial
@@ -453,6 +454,73 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     """
 
     root, shared, log_cfg = build_root_parser()
+
+    def _add_output_arguments(
+        parser_obj: argparse.ArgumentParser, *, defaults: bool
+    ) -> None:
+        final_default: object = None if defaults else argparse.SUPPRESS
+        raw_default: object = None if defaults else argparse.SUPPRESS
+        raw_format_default: object = "csv" if defaults else argparse.SUPPRESS
+        id_cols_default: object = None if defaults else argparse.SUPPRESS
+        no_reindex_default: object = False if defaults else argparse.SUPPRESS
+        normalize_default: object = False if defaults else argparse.SUPPRESS
+        parser_obj.add_argument(
+            "--final-out",
+            dest="final_out",
+            type=path_argument,
+            default=final_default,
+            help=(
+                "Destination for the validated target export "
+                "(default: derived from input name)"
+            ),
+        )
+        parser_obj.add_argument(
+            "--raw-out",
+            dest="raw_out",
+            type=path_argument,
+            default=raw_default,
+            help=(
+                "Location for the raw combined dataset prior to final "
+                "normalisation"
+            ),
+        )
+        parser_obj.add_argument(
+            "--raw-format",
+            dest="raw_format",
+            choices=("csv", "parquet"),
+            default=raw_format_default,
+            help="Format used when writing the raw dataset (default: csv)",
+        )
+        parser_obj.add_argument(
+            "--id-cols",
+            dest="id_cols",
+            nargs="+",
+            default=id_cols_default,
+            help="Identifier columns used for deterministic ordering",
+        )
+        parser_obj.add_argument(
+            "--no-reindex-raw",
+            action="store_true",
+            default=no_reindex_default,
+            help="Skip column reindexing when exporting the raw dataset",
+        )
+        parser_obj.add_argument(
+            "--normalize-at-export",
+            action="store_true",
+            default=normalize_default,
+            help="Apply normalisation immediately before writing the final output",
+        )
+        parser_obj.add_argument(
+            "--out",
+            dest="final_out_alias",
+            type=path_argument,
+            default=argparse.SUPPRESS,
+            help=argparse.SUPPRESS,
+        )
+
+    _add_output_arguments(root, defaults=True)
+    _add_output_arguments(shared, defaults=False)
+
     root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser = argparse.ArgumentParser(
         description="Target data utilities", parents=[root]
@@ -983,12 +1051,36 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return exit_code
 
-    id_columns_input = getattr(args, "id_cols", None)
-    if id_columns_input:
-        id_columns = list(dict.fromkeys(id_columns_input))
+
+    final_candidate = getattr(args, "final_out", None)
+    if final_candidate in (None, argparse.SUPPRESS):
+        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
     else:
-        id_columns = ["target_chembl_id"]
-    logger.info("chembl_id_columns", columns=id_columns)
+        final_output = Path(final_candidate)
+
+    raw_candidate = getattr(args, "raw_out", None)
+    if raw_candidate in (None, argparse.SUPPRESS):
+        raw_output = final_output
+    else:
+        raw_output = Path(raw_candidate)
+
+    raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
+    if raw_format not in {"csv", "parquet"}:
+        logger.warning(
+            "unsupported_raw_format", format=raw_format, fallback="csv"
+        )
+        raw_format = "csv"
+    reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
+    normalize_at_export = bool(getattr(args, "normalize_at_export", False))
+    id_cols_value = getattr(args, "id_cols", None)
+    if id_cols_value in (None, argparse.SUPPRESS):
+        key_columns = ["target_chembl_id"]
+    elif isinstance(id_cols_value, str):
+        key_columns = [id_cols_value]
+    else:
+        key_columns = list(id_cols_value) or ["target_chembl_id"]
+    failure_path = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
+
 
     missing_optional_columns: set[str] = set()
     placeholder_replacements = 0
@@ -1063,31 +1155,94 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         col_order: Sequence[str] | None,
         key_cols: Sequence[str],
     ) -> Path:
-        key_columns = list(key_cols)
-        return io.write_csv(
-            chunks,
-            destination,
-            cfg=cfg,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-            key_cols=key_columns or None,
-            col_order=col_order,
-            chunksize=cfg.io.csv_chunksize,
-        )
+        resolved_keys = list(key_cols) if key_cols else key_columns
+        column_order: Sequence[str] | None = col_order if reindex_raw else None
+
+        if raw_format == "csv" and not normalize_at_export:
+            raw_path = io.write_csv(
+                chunks,
+                raw_output,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=resolved_keys or None,
+                col_order=column_order,
+                chunksize=cfg.io.csv_chunksize,
+            )
+            if final_output != raw_output:
+                shutil.copy2(raw_path, final_output)
+                return final_output
+            return raw_path
+
+        frames: list[pd.DataFrame] = []
+        for chunk in chunks:
+            working = chunk
+            if column_order is not None:
+                working = working.reindex(columns=column_order)
+            frames.append(working)
+
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame(columns=column_order or [])
+
+        if resolved_keys:
+            missing_keys = [col for col in resolved_keys if col not in combined.columns]
+            if not missing_keys:
+                combined = combined.sort_values(by=resolved_keys).reset_index(drop=True)
+
+        if raw_format == "parquet":
+            try:
+                combined.to_parquet(raw_output, index=False)
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ValueError(
+                    "Parquet export requires optional pyarrow or fastparquet"
+                ) from exc
+            raw_path = raw_output
+        else:
+            raw_path = io.write_csv(
+                combined,
+                raw_output,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=resolved_keys or None,
+                col_order=column_order,
+            )
+
+        final_df = combined
+        if normalize_at_export:
+            final_df = normalize_targets(final_df)
+            final_df, _, missing_optional = _prepare_targets_for_schema(final_df)
+            missing_optional_columns.update(missing_optional)
+
+        if final_output == raw_output and not normalize_at_export and raw_format == "parquet":
+            final_path = raw_path
+        else:
+            final_path = io.write_csv(
+                final_df,
+                final_output,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=resolved_keys or None,
+                col_order=TARGETS_COLUMN_ORDER,
+            )
+        return final_path
 
     failure_path = normalized_output.with_name(
         f"{normalized_output.stem}_failure_cases.csv"
     )
     table_quality = partial(
         analyze_table_quality,
-        table_name=str(normalized_output.with_suffix("")),
+
+        table_name=str(final_output.with_suffix("")),
     )
 
-    metadata_hooks = [
-        _normalize_chunk,
-        add_pipeline_metadata,
-        _prepare_chunk,
-    ]
+    metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
+    if not normalize_at_export:
+        metadata_hooks.insert(0, normalize_targets)
+
 
     exit_code = run_pipeline(
         fetcher=fetcher,
@@ -1096,12 +1251,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         validators=[_validate_chunk],
         metadata_hooks=metadata_hooks,
         writer=writer,
-        output_path=normalized_output,
+
+        output_path=raw_output,
+
         failure_path=failure_path,
         command=" ".join(sys.argv),
         config_snapshot=_serialize_paths(cfg.to_dict()),
         inputs={"input_csv": str(args.input_csv)},
-        key_columns=id_columns,
+ч
+        key_columns=key_columns,
 
         table_quality=table_quality,
         cfg=cfg,
@@ -1232,11 +1390,16 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
 def fetch_chembl(
     cfg: Config,
     input_csv: Path,
-    output_csv: Path,
+    final_out: Path,
     limit: int | None = None,
     *,
+    raw_out: Path | None = None,
+    raw_format: str = "csv",
+    id_cols: Sequence[str] | None = None,
     chunk_size: int | None = None,
     offset: int = 0,
+    normalize_at_export: bool = False,
+    no_reindex_raw: bool = False,
 ) -> pd.DataFrame:
     """Fetch target information from ChEMBL.
 
@@ -1246,7 +1409,7 @@ def fetch_chembl(
         Application configuration used to drive the ChEMBL pipeline.
     input_csv : pathlib.Path
         Source CSV containing target identifiers.
-    output_csv : pathlib.Path
+    final_out : pathlib.Path
         Destination path used by :func:`run_chembl` to persist results.
     limit : int, optional
         Maximum number of identifiers to process. ``None`` processes all rows.
@@ -1258,7 +1421,7 @@ def fetch_chembl(
     Returns
     -------
     pandas.DataFrame
-        Retrieved ChEMBL data loaded from ``output_csv``.
+        Retrieved ChEMBL data loaded from ``final_out``.
 
     Raises
     ------
@@ -1266,9 +1429,16 @@ def fetch_chembl(
         Raised when :func:`run_chembl` reports a non-zero exit code.
     """
 
-    logger.info("fetch_chembl_start", input=str(input_csv), output=str(output_csv))
+    logger.info("fetch_chembl_start", input=str(input_csv), output=str(final_out))
     chembl_args = argparse.Namespace(
-        input_csv=input_csv, output_csv=output_csv, offset=offset
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=raw_out,
+        raw_format=raw_format,
+        id_cols=list(id_cols) if id_cols is not None else None,
+        offset=offset,
+        normalize_at_export=normalize_at_export,
+        no_reindex_raw=no_reindex_raw,
     )
     original_limit = cfg.target.chembl.limit
     original_chunk_size = cfg.target.chembl.chunk_size
@@ -1286,10 +1456,9 @@ def fetch_chembl(
             cfg.target.chembl.chunk_size = original_chunk_size
     normalized_output = _normalized_output_path(output_csv)
     df = pd.read_csv(
-        normalized_output,
-        sep=cfg.io.csv_sep,
-        encoding=cfg.io.csv_encoding,
-        dtype=str,
+
+        final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+
     )
     logger.info("fetch_chembl_done", rows=len(df))
     return df
@@ -1629,6 +1798,51 @@ def fetch_iuphar(
             combined_df["mapping_uniprot_id"].fillna("").astype(str)
         )
 
+    resolved_ids = lookup_series.reindex(
+        chembl_df.index, fill_value=UNIPROT_MISSING_VALUE
+    )
+    if merge_column in combined_df.columns:
+        combined_df[merge_column] = combined_df[merge_column].fillna(
+            UNIPROT_MISSING_VALUE
+        )
+    if merge_column == "uniprot_id":
+        combined_df[merge_column] = resolved_ids.reindex(
+            combined_df.index, fill_value=UNIPROT_MISSING_VALUE
+        )
+        if "mapping_uniprot_id" in combined_df.columns:
+            empty_mask = (
+                combined_df[merge_column].astype(str).str.strip()
+                == UNIPROT_MISSING_VALUE
+            )
+            combined_df.loc[empty_mask, merge_column] = combined_df.loc[
+                empty_mask, "mapping_uniprot_id"
+            ]
+
+    chembl_reactions = chembl_df.get(
+        "reaction_ec_numbers", pd.Series(dtype=object)
+    ).reindex(combined_df.index, fill_value=UNIPROT_MISSING_VALUE)
+    uniprot_reaction_map = (
+        uniprot_df.set_index("uniprot_id")
+        if "uniprot_id" in uniprot_df.columns
+        else pd.DataFrame()
+    )
+    if "reaction_ec_numbers" in uniprot_reaction_map.columns:
+        uniprot_reactions = resolved_ids.reindex(
+            combined_df.index, fill_value=UNIPROT_MISSING_VALUE
+        ).map(uniprot_reaction_map["reaction_ec_numbers"])
+        uniprot_reactions = uniprot_reactions.fillna(UNIPROT_MISSING_VALUE)
+    else:
+        uniprot_reactions = pd.Series(
+            UNIPROT_MISSING_VALUE,
+            index=combined_df.index,
+            dtype=object,
+        )
+
+    combined_df["reaction_ec_numbers"] = [
+        normalize_reaction_ec_numbers([u, c])
+        for u, c in zip(uniprot_reactions, chembl_reactions)
+    ]
+
     from tempfile import NamedTemporaryFile
 
     with NamedTemporaryFile(
@@ -1719,7 +1933,16 @@ def merge_results(
     return final_df
 
 
-def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
+def validate_and_write(
+    df: pd.DataFrame,
+    output: Path,
+    cfg: Config,
+    *,
+    raw_out: Path | None = None,
+    id_cols: Sequence[str] | None = None,
+    raw_format: str = "csv",
+    reindex_raw: bool = True,
+) -> int:
     """Normalise, validate and export the target table.
 
     Parameters
@@ -1739,7 +1962,36 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     """
 
     logger.info("validate_write_start", output=str(output))
-    input_rows = len(df)
+
+    key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
+
+    if raw_out is not None:
+        raw_format_value = (raw_format or "csv").lower()
+        raw_frame = df.copy()
+        raw_order: Sequence[str] | None = (
+            TARGETS_COLUMN_ORDER if reindex_raw else None
+        )
+        if raw_order is not None:
+            raw_frame = raw_frame.reindex(columns=raw_order)
+        if raw_format_value == "parquet":
+            try:
+                raw_frame.to_parquet(raw_out, index=False)
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ValueError(
+                    "Parquet export requires optional pyarrow or fastparquet"
+                ) from exc
+        else:
+            io.write_csv(
+                raw_frame,
+                raw_out,
+                cfg=cfg,
+                sep=cfg.io.csv_sep,
+                encoding=cfg.io.csv_encoding,
+                key_cols=key_columns or None,
+                col_order=raw_order,
+            )
+
+
     normalized = normalize_targets(df)
     normalized_rows = len(normalized)
     logger.info(
@@ -1854,6 +2106,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         sep=cfg.io.csv_sep,
         encoding=cfg.io.csv_encoding,
         col_order=TARGETS_COLUMN_ORDER,
+        key_cols=key_columns or None,
     )
     if final_df.empty:
         logger.info(
@@ -1906,16 +2159,36 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     try:
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-        chembl_out = cfg.target.all.chembl_out or output.with_name(
-            output.stem + "_chembl.csv"
+        final_candidate = getattr(args, "final_out", None)
+        if final_candidate in (None, argparse.SUPPRESS):
+            final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        else:
+            final_output = Path(final_candidate)
+
+        raw_candidate = getattr(args, "raw_out", None)
+        if raw_candidate in (None, argparse.SUPPRESS):
+            raw_output: Path | None = None
+        else:
+            raw_output = Path(raw_candidate)
+        chembl_out = cfg.target.all.chembl_out or final_output.with_name(
+            final_output.stem + "_chembl.csv"
         )
-        uniprot_out = cfg.target.all.uniprot_out or output.with_name(
-            output.stem + "_uniprot.csv"
+        uniprot_out = cfg.target.all.uniprot_out or final_output.with_name(
+            final_output.stem + "_uniprot.csv"
         )
-        iuphar_out = cfg.target.all.iuphar_out or output.with_name(
-            output.stem + "_iuphar.csv"
+        iuphar_out = cfg.target.all.iuphar_out or final_output.with_name(
+            final_output.stem + "_iuphar.csv"
         )
+
+        raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
+        reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
+        id_cols_value = getattr(args, "id_cols", None)
+        if id_cols_value in (None, argparse.SUPPRESS):
+            key_columns = ["target_chembl_id"]
+        elif isinstance(id_cols_value, str):
+            key_columns = [id_cols_value]
+        else:
+            key_columns = list(id_cols_value) or ["target_chembl_id"]
 
         chembl_df = fetch_chembl(
             cfg,
@@ -1924,11 +2197,20 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             limit=limit,
             chunk_size=cfg.target.all.chunk_size,
             offset=getattr(args, "offset", 0),
+            id_cols=key_columns,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
         combined_df, iuphar_df = fetch_iuphar(cfg, chembl_df, uniprot_df, iuphar_out)
         merged = merge_results(combined_df, iuphar_df, cfg)
-        exit_code = validate_and_write(merged, output, cfg)
+        exit_code = validate_and_write(
+            merged,
+            final_output,
+            cfg,
+            raw_out=raw_output,
+            id_cols=key_columns,
+            raw_format=raw_format,
+            reindex_raw=reindex_raw,
+        )
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
@@ -1936,7 +2218,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             error=str(exc),
             step="all",
             input=str(args.input_csv),
-            output=str(args.output_csv or output),
+            output=str(final_output),
         )
         return 1
 
@@ -1944,12 +2226,15 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the selected target pipeline applying CLI policies."""
 
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
-    args.output_csv = output_path
-    if args.skip_existing and output_path.exists() and not args.force:
-        logger.info("pipeline_skip_existing", output=str(output_path))
+    final_candidate = getattr(args, "final_out", None)
+    if final_candidate in (None, argparse.SUPPRESS):
+        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+    else:
+        final_output = Path(final_candidate)
+    args.final_out = final_output
+    args.output_csv = final_output
+    if args.skip_existing and final_output.exists() and not args.force:
+        logger.info("pipeline_skip_existing", output=str(final_output))
         return 0
     if getattr(args, "_out_alias_used", False):
         logger.warning(

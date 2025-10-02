@@ -106,7 +106,7 @@ def test_run_all_uses_local_inputs(
         recorded["chunk_size"] = cfg.target.chembl.chunk_size
         df = pd.read_csv(chembl_data)
         df["type"] = "Legacy"
-        df.to_csv(args.output_csv, index=False)
+        df.to_csv(args.final_out, index=False)
         return 0
 
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
@@ -150,7 +150,15 @@ def test_run_all_uses_local_inputs(
     input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding)
     output_csv = tmp_path / "out.csv"
 
-    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        raw_out=None,
+        raw_format="csv",
+        id_cols=None,
+        no_reindex_raw=False,
+        normalize_at_export=False,
+    )
     exit_code = gtd.run_all(cfg, args)
     assert exit_code == 0
     assert recorded["chunk_size"] == cfg.target.all.chunk_size

@@ -52,7 +52,9 @@ def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         normalized = gtd._normalized_output_path(Path(args.output_csv))
         pd.DataFrame({"target_chembl_id": ["C1"], "uniprot_id": ["P1"]}).to_csv(
-            normalized, index=False
+ч
+            args.final_out, index=False
+
         )
         return 0
 
@@ -72,9 +74,10 @@ def test_fetch_chembl_custom_chunk_size(
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         recorded["chunk_size"] = cfg.target.chembl.chunk_size
-        normalized = gtd._normalized_output_path(Path(args.output_csv))
+
         pd.DataFrame({"target_chembl_id": ["C1"]}).to_csv(
-            normalized, index=False
+            args.final_out, index=False
+
         )
         return 0
 
@@ -100,7 +103,16 @@ def test_run_chembl_streams_chunks(
         encoding=cfg.io.csv_encoding,
     )
     output_csv = tmp_path / "chembl.csv"
-    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv, offset=0)
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        raw_out=output_csv,
+        raw_format="csv",
+        offset=0,
+        id_cols=None,
+        no_reindex_raw=False,
+        normalize_at_export=False,
+    )
 
     chunk_calls: list[list[str]] = []
 
@@ -522,7 +534,7 @@ def test_run_all_preserves_reaction_ec_numbers(
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         df = pd.read_csv(chembl_data)
         df["type"] = "Legacy"
-        df.to_csv(args.output_csv, index=False)
+        df.to_csv(args.final_out, index=False)
         return 0
 
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
@@ -561,7 +573,15 @@ def test_run_all_preserves_reaction_ec_numbers(
     input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding=cfg.io.csv_encoding)
     output_csv = tmp_path / "out.csv"
 
-    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=output_csv,
+        raw_out=None,
+        raw_format="csv",
+        id_cols=None,
+        no_reindex_raw=False,
+        normalize_at_export=False,
+    )
     exit_code = gtd.run_all(cfg, args)
     assert exit_code == 0
 
