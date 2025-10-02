@@ -52,15 +52,21 @@ updates within each minor version remain supported. Continuous integration valid
 
 ### Steps
 
-Clone the repository, change into it and install the package with development extras. Afterwards enable pre-commit hooks so
-formatting, linting, type checking and unit tests run automatically.
+Clone the repository, change into it and install dependencies from the lock file.
+Afterwards enable pre-commit hooks so formatting, linting, type checking and unit
+tests run automatically.
 
 ```bash
 git clone https://github.com/<org>/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install .[dev]
+pip install -r requirements-lock.txt
 pre-commit install
 ```
+
+Installing from `requirements-lock.txt` keeps local development and CI in sync.
+Whenever dependency ranges change in `pyproject.toml`, generate a fresh lock by
+creating a clean virtual environment, running `pip install .[dev]` and freezing
+the result via `pip freeze > requirements-lock.txt`.
 
 Sensitive configuration such as API tokens belongs in a local `.env` file – see [Configuration via `.env`](#configuration-via-env)
 for usage guidelines.
@@ -281,12 +287,13 @@ auditing.
 Refresh pinned dependencies periodically and confirm compatibility:
 
 ```bash
-pip install -U .[dev]
+pip install -r requirements-lock.txt --upgrade
 pre-commit run --all-files
 ```
 
-The first command upgrades runtime and development dependencies to the newest minor releases allowed by the version ranges. The
-second command formats code, lints, runs static type checks and executes the test suite to confirm nothing broke during the upgrade.
+The first command reinstalls the exact versions recorded in the lock and fails early if constraints drift. To adopt newer
+releases, update `pyproject.toml`, recreate `requirements-lock.txt` as described in the installation section and commit the
+refreshed lock alongside the source changes.
 
 ## Configuration via `.env`
 

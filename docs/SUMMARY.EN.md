@@ -86,7 +86,7 @@ add_pipeline_metadata → write_csv_deterministic →
 ## Installation & tooling
 
 1. Create and activate a Python ≥3.11 virtual environment.
-2. Install the project with development extras: `pip install .[dev]`.
+2. Install dependencies from the lock file: `pip install -r requirements-lock.txt`.
 3. Enable the quality gate: `pre-commit install`.
 4. Recommended ad-hoc checks (see [Quality Assurance Process](QA_PROCESS_EN.md) for the living checklist):
    * `pre-commit run --all-files`
@@ -94,7 +94,7 @@ add_pipeline_metadata → write_csv_deterministic →
    * `ruff check`, `black --check .`, `mypy`
 
 Dependency versions and optional tooling are declared in `pyproject.toml` and
-`requirements-dev.txt`.
+mirrored in `requirements-lock.txt` for reproducible environments.
 
 ## Usage highlights
 
