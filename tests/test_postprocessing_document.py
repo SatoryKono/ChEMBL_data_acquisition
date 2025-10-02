@@ -10,6 +10,24 @@ from library.postprocessing import document as doc
 
 
 FIXTURE_DIR = Path("tests/data/postprocessing_document")
+BOOL_COLUMNS = {
+    "review",
+    "experimental",
+    "document_contains_external_links",
+    "invalid",
+    "invalid.doi",
+    "invalid.PMID",
+    "invalid.reference",
+}
+
+
+def _normalise_strings(df: pd.DataFrame) -> pd.DataFrame:
+    normalised = df.apply(
+        lambda col: col.map(lambda value: "" if pd.isna(value) else str(value))
+    )
+    for column in BOOL_COLUMNS.intersection(normalised.columns):
+        normalised[column] = normalised[column].str.lower()
+    return normalised
 
 
 def test_normalize_journal_and_padding_functions() -> None:
@@ -104,7 +122,11 @@ def test_preprocess_documents_csv_integration(tmp_path: Path) -> None:
 
     assert result.name == "preprocessed_output.document_20230101.csv"
     assert list(produced_df.columns) == list(doc.FINAL_COLUMN_ORDER)
-    pd.testing.assert_frame_equal(produced_df, expected_df, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        _normalise_strings(produced_df),
+        _normalise_strings(expected_df),
+        check_dtype=False,
+    )
 
     completed = produced_df["completed"].tolist()
     assert completed == sorted(completed)

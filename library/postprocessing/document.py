@@ -581,7 +581,7 @@ CSV_DELIMITER = ","
 DEFAULT_BASE_PATH = "e:\\github\\ChEMBL_data_acquisition\\data\\"
 DEFAULT_REF_RELATIVE = "input\\full\\document.csv"
 DEFAULT_OUTPUT_RELATIVE = "output\\document\\output.document_YYYYMMDD.csv"
-DEFAULT_QA_REFERENCE_RELATIVE = "input\\full\\ref_document.csv"
+DEFAULT_QA_REFERENCE_RELATIVE = "input\\full\\document.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -1270,7 +1270,7 @@ def preprocess_documents_csv(
                 qa_result = run_document_postprocessing_check(
                     base_path=base_dir,
                     reference_path=qa_reference_path,
-                    candidate_path=target_path,
+                    candidate_path=out_path,
                     output_dir=target_path.parent,
                     delimiter=CSV_DELIMITER,
                 )
