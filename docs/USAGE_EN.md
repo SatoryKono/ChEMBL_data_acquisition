@@ -27,8 +27,14 @@ directly.
 | `--config` | Path to the YAML configuration file (default: `config/config.yaml`). |
 | `--print-config` | Print the effective configuration after overrides and exit. |
 | `--log-level` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+| `--base-path` | Base directory applied before resolving input and output paths. |
+| `--input-dir` | Directory containing input artefacts; resolved against `--base-path` when relative. |
+| `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
-| `--output` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `local.io.output_dir`. |
+| `--output` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `--output-dir` or `--base-path`. |
+| `--date` | Override the auto-generated `YYYYMMDD` suffix when building default output filenames. |
+| `--force` | Overwrite outputs even when they already exist. |
+| `--skip-existing` | Skip processing if the destination file is already present. |
 | `--sep` | CSV delimiter forwarded to `cfg.io.csv_sep`. |
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
