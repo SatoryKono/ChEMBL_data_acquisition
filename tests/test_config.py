@@ -275,6 +275,30 @@ def test_cli_path_override(tmp_path: Path) -> None:
     assert cfg.io.output_dir == out
 
 
+def test_config_paths_relative_to_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_dir = tmp_path / "config_dir"
+    work_dir = tmp_path / "work_dir"
+    base_dir.mkdir()
+    work_dir.mkdir()
+
+    cfg_path = base_dir / "cfg.yaml"
+    cfg_path.write_text(
+        "local:\n"
+        "  io:\n"
+        "    output_dir: results/output\n"
+        "    cache_dir: cache\n"
+    )
+
+    monkeypatch.chdir(work_dir)
+
+    cfg = load_config(cfg_path)
+
+    assert cfg.io.output_dir == (base_dir / "results/output").resolve()
+    assert cfg.io.cache_dir == (base_dir / "cache").resolve()
+
+
 def test_doc_type_cli_override(tmp_path: Path) -> None:
     """CLI overrides should update document type settings."""
 

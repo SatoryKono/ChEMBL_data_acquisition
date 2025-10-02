@@ -21,7 +21,8 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from importlib import resources
 from pathlib import Path
-from typing import Any, Mapping
+from types import UnionType
+from typing import Any, Mapping, Union, get_args, get_origin
 from urllib.parse import urlparse
 
 import yaml
@@ -40,6 +41,90 @@ from urllib3.util.retry import Retry
 
 from .log import logger
 from .utils.config import ConfigLoaderError, load_yaml_config
+
+
+def _annotation_is_path(annotation: Any) -> bool:
+    """Return ``True`` if *annotation* represents a :class:`~pathlib.Path`."""
+
+    try:
+        return issubclass(annotation, Path)
+    except TypeError:
+        return False
+
+
+def _annotation_is_model(annotation: Any) -> bool:
+    """Return ``True`` if *annotation* is a :class:`pydantic.BaseModel`."""
+
+    try:
+        return issubclass(annotation, BaseModel)
+    except TypeError:
+        return False
+
+
+def _collect_path_field_paths(
+    model: type[BaseModel], prefix: tuple[str, ...] = ()
+) -> set[tuple[str, ...]]:
+    """Return dotted paths for ``Path`` fields within *model*."""
+
+    paths: set[tuple[str, ...]] = set()
+    for name, field in model.model_fields.items():
+        annotation = field.annotation
+        origin = get_origin(annotation)
+        if origin in {UnionType, Union}:
+            args = [arg for arg in get_args(annotation) if arg is not type(None)]
+            if any(_annotation_is_path(arg) for arg in args):
+                paths.add((*prefix, name))
+                continue
+            if any(_annotation_is_model(arg) for arg in args):
+                for arg in args:
+                    if _annotation_is_model(arg):
+                        paths.update(_collect_path_field_paths(arg, (*prefix, name)))
+                continue
+        if _annotation_is_path(annotation):
+            paths.add((*prefix, name))
+            continue
+        if _annotation_is_model(annotation):
+            paths.update(_collect_path_field_paths(annotation, (*prefix, name)))
+    return paths
+
+
+def _absolutise_path_value(value: Any, base_dir: Path) -> Any:
+    """Return *value* converted to an absolute path relative to *base_dir*."""
+
+    if value is None:
+        return value
+    if isinstance(value, str):
+        path = Path(value)
+        if path.is_absolute():
+            return value
+        return str((base_dir / path).resolve())
+    if isinstance(value, os.PathLike):
+        path = Path(value)
+        if path.is_absolute():
+            return path
+        return (base_dir / path).resolve()
+    return value
+
+
+def _absolutise_config_paths(data: Mapping[str, Any], base_dir: Path) -> None:
+    """Normalise relative ``Path`` entries in *data* using *base_dir*."""
+
+    for path in _CONFIG_PATH_FIELDS:
+        current: Mapping[str, Any] | Any = data
+        for key in path[:-1]:
+            if not isinstance(current, Mapping):
+                current = None
+                break
+            current = current.get(key)
+        if not isinstance(current, Mapping):
+            continue
+        final_key = path[-1]
+        if final_key not in current:
+            continue
+        value = current[final_key]
+        if isinstance(current, dict):
+            current[final_key] = _absolutise_path_value(value, base_dir)
+
 
 _RESOURCE_STACK = ExitStack()
 atexit.register(_RESOURCE_STACK.close)
@@ -1106,6 +1191,10 @@ class Config(_BaseModel):
         return self.sources.chembl.pipelines.target
 
 
+# Dotted paths for configuration fields that are defined as ``Path`` types.
+_CONFIG_PATH_FIELDS: set[tuple[str, ...]] = _collect_path_field_paths(Config)
+
+
 # ---------------------------------------------------------------------------
 # Utility functions
 # ---------------------------------------------------------------------------
@@ -1382,6 +1471,9 @@ def load_config(
     if cli_overrides:
         for key, val in cli_overrides.items():
             _set_by_path(data, key.split("."), val)
+
+    base_dir = resolved_path.parent.resolve()
+    _absolutise_config_paths(data, base_dir)
 
     unknown = _collect_unknown_keys(data, Config)
     ignored_unknown = [
