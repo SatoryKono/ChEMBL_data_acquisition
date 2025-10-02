@@ -7,80 +7,102 @@ from pathlib import Path
 import pandas as pd
 
 from library import document_postprocessing as dp
-from library.postprocessing import document as document_export_postprocessing
 from library.config import IoCfg
 
 
-def test_postprocess_documents_creates_flags_and_sorts() -> None:
-    """``postprocess_documents`` sorts rows and detects review articles."""
+FIXTURE_DIR = Path("tests/data/postprocessing_document")
 
-    path = Path("tests/data/documents_postprocess.csv")
-    df = pd.read_csv(path, dtype=str)
-    result = dp.postprocess_documents(df)
-
-    # Rows sorted by computed date_code
-    assert result["document_chembl_id"].tolist() == ["DOC2", "DOC1"]
-    assert result["date_code"].tolist() == ["2018-08-15", "2020-05-12"]
-    # Index column is zero-padded
-    assert result["Index"].tolist() == ["0000", "0001"]
-    # Review detection from multiple sources
-    assert result["PubMed.is_review"].tolist() == [False, True]
-    assert result["scholar.is_review"].tolist() == [False, True]
-    assert result["OpenAlex.is_review"].tolist() == [False, True]
-    # Original publication type columns have been removed
-    for col in [
-        "PubMed.PublicationType",
-        "scholar.PublicationTypes",
-        "OpenAlex.PublicationTypes",
-    ]:
-        assert col not in result.columns
+BOOL_COLUMNS = {
+    "review",
+    "experimental",
+    "document_contains_external_links",
+    "invalid",
+    "invalid.doi",
+    "invalid.PMID",
+    "invalid.reference",
+}
 
 
-def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
-    """``postprocess_file`` writes metadata and normalises NA handling."""
+def _frame_from_csv(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path, dtype=str)
 
-    df = pd.DataFrame(
-        {
-            "document_chembl_id": ["DOC1", "DOC2"],
-            "title": ["Example", None],
-            "PubMed.PublicationType": ["Review", ""],
-            "scholar.PublicationTypes": ["Review", None],
-            "OpenAlex.PublicationTypes": ["review-article", ""],
-            "Index": [0, 1],
-        }
+
+def _normalise_strings(df: pd.DataFrame) -> pd.DataFrame:
+    normalised = df.apply(
+        lambda col: col.map(lambda value: "" if pd.isna(value) else str(value))
     )
-    cfg = IoCfg(csv_sep=";", csv_encoding="utf8")
-    input_path = tmp_path / "in.csv"
-    df.to_csv(input_path, index=False, sep=cfg.csv_sep, encoding=cfg.csv_encoding)
-    output_path = tmp_path / "out.csv"
-
-    dp.postprocess_file(input_path, output_path, cfg=cfg)
-
-    result = pd.read_csv(
-        output_path,
-        sep=cfg.csv_sep,
-        encoding=cfg.csv_encoding,
-        keep_default_na=False,
-    )
-    assert result["title"].tolist() == ["Example", "nan"]
-    assert not result.isna().any().any()
-    assert result["PubMed.MonthCompleted"].tolist() == ["", ""]
-
-    meta_path = Path(f"{output_path}.meta.yaml")
-    assert meta_path.exists()
+    for column in BOOL_COLUMNS.intersection(normalised.columns):
+        normalised[column] = normalised[column].str.lower()
+    return normalised
 
 
-def test_preprocess_document_export_accepts_chembl_alias() -> None:
-    """``preprocess_document_export`` tolerates renamed ChEMBL identifiers."""
+def test_helper_functions_match_m_script_behaviour() -> None:
+    """Utility helpers mimic the Power Query guards."""
 
-    df = pd.DataFrame(
-        {
-            "ChEMBL.document_chembl_id": ["DOC-001", "DOC-002"],
-            "ChEMBL.title": ["Alpha", "Beta"],
-            "PubMed.PMID": ["100", "200"],
-        }
+    assert dp.null_or_empty("")
+    assert dp.null_or_empty(0)
+    assert not dp.null_or_empty("1")
+
+    assert dp.normalize_journal(" Journal. Of Testing. ") == "journal of testing"
+    assert dp.pad4("5") == "0005"
+    assert dp.pad2(9) == "09"
+    assert dp.pad_pmid8(123) == "00000123"
+
+    assert dp.eq_text("abc", "abc") is True
+    assert dp.eq_text("", "abc") is False
+    assert dp.ne_text("abc", "def") is True
+    assert dp.ne_text("", "def") is False
+
+
+def test_postprocess_documents_matches_stage_pipeline() -> None:
+    """The Python port produces the same result as the Stage pipeline."""
+
+    ref_frame = _frame_from_csv(FIXTURE_DIR / "document.csv")
+    out_frame = _frame_from_csv(FIXTURE_DIR / "output.document_20230101.csv")
+    expected = _frame_from_csv(
+        FIXTURE_DIR / "preprocessed_output.document_20230101.csv"
     )
 
-    result = document_export_postprocessing.preprocess_document_export(df)
+    result = dp.postprocess_documents(out_frame, ref_document=ref_frame)
 
-    assert result["document_chembl_id"].tolist() == ["DOC-001", "DOC-002"]
+    assert list(result.columns) == list(dp.FINAL_COLUMN_ORDER)
+    pd.testing.assert_frame_equal(
+        _normalise_strings(result),
+        _normalise_strings(expected),
+        check_dtype=False,
+    )
+
+    indexed = result.set_index("document_chembl_id")
+    assert bool(indexed.loc["DOC1", "review"]) is True
+    assert bool(indexed.loc["DOC1", "experimental"]) is False
+    assert bool(indexed.loc["DOC2", "invalid.doi"]) is True
+    assert bool(indexed.loc["DOC2", "invalid.reference"]) is True
+    assert bool(indexed.loc["DOC3", "document_contains_external_links"]) is True
+
+
+def test_postprocess_file_creates_prefixed_output(tmp_path: Path) -> None:
+    """``postprocess_file`` writes UTF-8 CSV files using the expected prefix."""
+
+    input_path = FIXTURE_DIR / "output.document_20230101.csv"
+    ref_path = FIXTURE_DIR / "document.csv"
+    cfg = IoCfg(csv_sep=",", csv_encoding="utf-8")
+
+    destination = dp.postprocess_file(
+        input_path,
+        tmp_path,
+        cfg=cfg,
+        ref_document_path=ref_path,
+    )
+
+    assert destination.name.startswith(dp.OUTPUT_PREFIX)
+
+    produced = pd.read_csv(destination, dtype=str)
+    expected = _frame_from_csv(
+        FIXTURE_DIR / "preprocessed_output.document_20230101.csv"
+    )
+    pd.testing.assert_frame_equal(
+        _normalise_strings(produced),
+        _normalise_strings(expected),
+        check_dtype=False,
+    )
+
