@@ -581,6 +581,7 @@ class DocQualityCfg(_BaseModel):
     sample_rows: int | None = Field(default=None, ge=1)
     include_columns: tuple[str, ...] | None = None
     exclude_columns: tuple[str, ...] | None = None
+    fatal_on_error: bool = False
 
 
 class ResourcesCfg(_BaseModel):

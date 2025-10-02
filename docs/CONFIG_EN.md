@@ -355,6 +355,7 @@ Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke
 |  | `sample_rows` | `null` | Limit analysis to the first `N` rows; `null` processes the full dataset. |
 |  | `include_columns` | `null` | Optional allow list of column names to profile. |
 |  | `exclude_columns` | `null` | Optional deny list of column names to skip. |
+|  | `fatal_on_error` | `false` | Treat profiling errors as fatal pipeline failures. |
 | `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Weighting applied to document sources. |
 |  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Minimum counts for document type classification. |
 |  | `limit` | `null` | Optional limit on classified records. |
