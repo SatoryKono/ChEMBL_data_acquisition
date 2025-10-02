@@ -87,14 +87,14 @@ add_pipeline_metadata → write_csv_deterministic →
 ## Установка и инструменты
 
 1. Создайте и активируйте виртуальное окружение Python ≥ 3.11.
-2. Установите проект с dev-зависимостями: `pip install .[dev]`.
+2. Установите зависимости из lock-файла: `pip install -r requirements-lock.txt`.
 3. Включите контроль качества: `pre-commit install`.
 4. Рекомендуемые проверки (см. живой список в [QA_PROCESS_EN.md](QA_PROCESS_EN.md)):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
 
-Версии зависимостей описаны в `pyproject.toml` и `requirements-dev.txt`.
+Версии зависимостей описаны в `pyproject.toml` и зеркалируются в `requirements-lock.txt` для воспроизводимых окружений.
 
 ## Использование
 

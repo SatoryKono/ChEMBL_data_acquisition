@@ -5,12 +5,16 @@ services, pipelines or policies so other guides can simply link here instead of 
 
 ## 1. Environment
 
-1. Install the project with development extras:
+1. Install the pinned dependencies:
    ```bash
-   pip install -e .[dev]
+   pip install -r requirements-lock.txt
    ```
-2. Export `PYTHONPATH=.` so helper scripts and deterministic writers resolve package imports consistently.
-3. Ensure required optional dependencies (``responses``, ``hypothesis``, ``psutil``, ``pytest-benchmark``) are available when you
+2. Optionally add the editable package for local entry points:
+   ```bash
+   pip install -e .
+   ```
+3. Export `PYTHONPATH=.` so helper scripts and deterministic writers resolve package imports consistently.
+4. Ensure required optional dependencies (``responses``, ``hypothesis``, ``psutil``, ``pytest-benchmark``) are available when you
    expect those test suites to run; otherwise they will be skipped.
 
 ## 2. Static analysis and formatting

@@ -94,9 +94,19 @@ console scripts for each pipeline. Use them interchangeably with the
 ```bash
 git clone https://github.com/<org>/ChEMBL_data_acquisition.git
 cd ChEMBL_data_acquisition
-pip install .[dev]
+pip install -r requirements-lock.txt
 pre-commit install
 ```
+
+**EN.** Installing from the lock file guarantees that local development and
+continuous integration use the exact same dependency set. Regenerate the lock
+after modifying `pyproject.toml` by creating a fresh virtual environment,
+running `pip install .[dev]` and freezing the result with
+`pip freeze > requirements-lock.txt`. /
+**RU.** Установка по lock-файлу гарантирует идентичные зависимости в локальной
+разработке и CI. После изменений в `pyproject.toml` пересоберите lock: создайте
+новое виртуальное окружение, выполните `pip install .[dev]`, а затем
+`pip freeze > requirements-lock.txt`.
 
 Sensitive configuration such as API tokens belongs in a local ``.env`` file – see [`Конфигурация через .env`](#конфигурация-через-env) for usage guidelines.
 
@@ -374,14 +384,15 @@ To keep the environment current, periodically refresh the pinned
 libraries and verify that the project remains compatible:
 
 ```bash
-pip install -U .[dev]
+pip install -r requirements-lock.txt --upgrade
 pre-commit run --all-files
 ```
 
-The first command upgrades runtime and development dependencies to the
-newest minor releases permitted by the version ranges. The second command
-formats code, lints, runs static type checks and executes the test suite
-to confirm nothing broke during the upgrade.
+The upgrade reinstalls every pinned dependency at the versions recorded in the
+lock file and surfaces conflicts immediately. When intentionally moving to
+newer releases, update `pyproject.toml`, recreate the lock as described in the
+installation section and commit the refreshed `requirements-lock.txt` together
+with the source changes.
 
 ## Конфигурация через `.env`
 
