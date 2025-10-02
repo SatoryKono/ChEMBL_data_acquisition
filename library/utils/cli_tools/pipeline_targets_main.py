@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable, Iterator, Sequence
-from itertools import chain, islice
+from itertools import islice
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -91,7 +91,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
     root, _shared, log_cfg = build_root_parser()
     parser = argparse.ArgumentParser(
-        description="Run the target acquisition pipeline", parents=[root]
+        description="Run the target acquisition pipeline",
+        parents=[root],
+        conflict_handler="resolve",
     )
     parser.add_argument(
         "--column",
@@ -172,6 +174,15 @@ def _chembl_frame_stream(chunks: Iterator[Iterable[str]]) -> Iterator[pd.DataFra
         yield frame
 
 
+def _frame_iterator(data: pd.DataFrame | Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+    """Return an iterator over ``data`` irrespective of its concrete type."""
+
+    if isinstance(data, pd.DataFrame):
+        yield data
+        return
+    yield from data
+
+
 _PIPELINE_METADATA_COLUMNS = tuple(pipeline_metadata().keys())
 _PLACEHOLDER = "-"
 
@@ -208,8 +219,64 @@ def _raw_dump(
             encoding=encoding,
             mode="a",
             header=False,
-        )
+    )
     return path
+
+
+class _RawStreamWriter:
+    """Incrementally persist raw output chunks to disk."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str | None = None,
+        encoding: str | None = None,
+    ) -> None:
+        self.path = path
+        self.sep = sep or cfg.io.csv_sep
+        self.encoding = encoding or cfg.io.csv_encoding
+        self._columns: list[str] | None = None
+        self._written = False
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def write(self, chunk: pd.DataFrame) -> None:
+        if self._columns is None:
+            self._columns = list(chunk.columns)
+            chunk.to_csv(
+                self.path,
+                index=False,
+                sep=self.sep,
+                encoding=self.encoding,
+            )
+            self._written = True
+            return
+        if self._columns:
+            chunk = chunk.reindex(columns=self._columns)
+        else:
+            self._columns = list(chunk.columns)
+        chunk.to_csv(
+            self.path,
+            index=False,
+            sep=self.sep,
+            encoding=self.encoding,
+            mode="a",
+            header=False,
+        )
+        self._written = True
+
+    def close(self) -> Path:
+        if not self._written:
+            empty = pd.DataFrame(columns=self._columns or None)
+            empty.to_csv(
+                self.path,
+                index=False,
+                sep=self.sep,
+                encoding=self.encoding,
+            )
+            self._written = True
+        return self.path
 
 
 def _replace_id_placeholders(
@@ -245,7 +312,7 @@ def _prepare_final_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _validate_and_write(
-    df: pd.DataFrame,
+    frames: pd.DataFrame | Iterable[pd.DataFrame],
     path: Path,
     *,
     cfg: Config,
@@ -254,11 +321,25 @@ def _validate_and_write(
 ) -> Path:
     """Validate ``df`` against :data:`TargetsSchema` and serialise to CSV."""
 
-    prepared = _prepare_final_frame(df)
-    validated = TargetsSchema.validate(prepared, lazy=True)
+    def _validated_stream() -> Iterator[pd.DataFrame]:
+        if not isinstance(frames, pd.DataFrame):
+            iterator = iter(frames)
+            yielded = False
+            for chunk in iterator:
+                yielded = True
+                prepared = _prepare_final_frame(chunk)
+                yield TargetsSchema.validate(prepared, lazy=True)
+            if not yielded:
+                prepared = _prepare_final_frame(pd.DataFrame())
+                yield TargetsSchema.validate(prepared, lazy=True)
+            return
+
+        prepared = _prepare_final_frame(frames)
+        yield TargetsSchema.validate(prepared, lazy=True)
+
     path.parent.mkdir(parents=True, exist_ok=True)
     write_csv(
-        validated,
+        _validated_stream(),
         path,
         cfg=cfg,
         sep=sep,
@@ -295,27 +376,29 @@ def _cached_chembl_fetch(
     *,
     chunk_size: int = 100,
     batch_size: int | None = None,
-) -> pd.DataFrame:
-    """Return a deterministic frame for the provided ``chunks``.
+) -> Iterator[pd.DataFrame]:
+    """Yield deterministic ChEMBL frames for the provided ``chunks``.
 
     The wrapper mimics the behaviour of the production fetcher which caches
-    results on disk.  In this trimmed-down CLI variant we lazily convert the
-    incoming chunk iterator into dataframes and concatenate them on demand
-    while keeping the API compatible with
-    :func:`library.pipeline_targets.run_pipeline`.
+    results on disk.  In this trimmed-down CLI variant we now expose a
+    streaming interface so callers can process chunks incrementally without
+    materialising the entire dataset at once.
     """
 
-    frames = _chembl_frame_stream(chunks)
-    try:
-        first = next(frames)
-    except StopIteration:
-        return pd.DataFrame(
-            {
-                "target_chembl_id": pd.Series(dtype="string"),
-                "source": pd.Series(dtype="string"),
-            }
-        )
-    return pd.concat(chain([first], frames), ignore_index=True)
+    def _stream() -> Iterator[pd.DataFrame]:
+        yielded = False
+        for frame in _chembl_frame_stream(chunks):
+            yielded = True
+            yield frame
+        if not yielded:
+            yield pd.DataFrame(
+                {
+                    "target_chembl_id": pd.Series(dtype="string"),
+                    "source": pd.Series(dtype="string"),
+                }
+            )
+
+    return _stream()
 
 
 def run(cfg: Config, options: PipelineConfig) -> int:
@@ -332,20 +415,31 @@ def run(cfg: Config, options: PipelineConfig) -> int:
     if final_path is None:
         final_path = default_output_path(options.input_csv, cfg.io)
 
-    final_df = result.chembl
-    raw_df = final_df.drop(columns=_PIPELINE_METADATA_COLUMNS, errors="ignore")
-
+    frame_iter = _frame_iterator(result.chembl)
+    raw_writer: _RawStreamWriter | None = None
     if options.raw_out is not None:
-        _raw_dump(
-            [raw_df],
+        raw_writer = _RawStreamWriter(
             options.raw_out,
             cfg=cfg,
             sep=options.sep,
             encoding=options.encoding,
         )
 
+    def _final_stream() -> Iterator[pd.DataFrame]:
+        try:
+            for chunk in frame_iter:
+                if raw_writer is not None:
+                    raw_chunk = chunk.drop(
+                        columns=_PIPELINE_METADATA_COLUMNS, errors="ignore"
+                    )
+                    raw_writer.write(raw_chunk)
+                yield chunk
+        finally:
+            if raw_writer is not None:
+                raw_writer.close()
+
     _validate_and_write(
-        final_df,
+        _final_stream(),
         final_path,
         cfg=cfg,
         sep=options.sep,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -316,9 +316,7 @@ def test_cli_does_not_print_config_when_flag_missing(
     assert captured.out == ""
 
 
-def test_cached_chembl_fetch_uses_chunk_concatenation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cached_chembl_fetch_streams_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     chunks = iter(
         [
             ["CHEMBL1", "CHEMBL2"],
@@ -326,23 +324,16 @@ def test_cached_chembl_fetch_uses_chunk_concatenation(
         ]
     )
 
-    recorded: dict[str, Any] = {}
-    original_concat = pd.concat
+    stream = cli._cached_chembl_fetch(chunks, Config())
+    assert hasattr(stream, "__iter__")
 
-    def spy_concat(objs: Iterable[pd.DataFrame], **kwargs: Any) -> pd.DataFrame:
-        recorded["type"] = type(objs)
-        frames = list(objs)
-        recorded["sizes"] = [len(frame) for frame in frames]
-        return original_concat(frames, **kwargs)
-
-    monkeypatch.setattr(pd, "concat", spy_concat)
-
-    df = cli._cached_chembl_fetch(chunks, Config())
-
-    assert list(df["target_chembl_id"]) == ["CHEMBL1", "CHEMBL2", "CHEMBL3"]
-    assert list(df["source"]) == ["chembl", "chembl", "chembl"]
-    assert recorded["type"].__name__ == "chain"
-    assert recorded["sizes"] == [2, 1]
+    frames = list(stream)
+    assert len(frames) == 2
+    assert [list(frame["target_chembl_id"]) for frame in frames] == [
+        ["CHEMBL1", "CHEMBL2"],
+        ["CHEMBL3"],
+    ]
+    assert all((frame["source"] == "chembl").all() for frame in frames)
 
 
 # ---------------------------------------------------------------------------
@@ -416,8 +407,12 @@ def test_backward_compatibility_out_alias(
 
     recorded: dict[str, Path] = {}
 
-    def fake_validate(df: pd.DataFrame, path: Path, **_: Any) -> Path:
+    def fake_validate(
+        df: pd.DataFrame | Iterable[pd.DataFrame], path: Path, **_: Any
+    ) -> Path:
         recorded["path"] = path
+        if not isinstance(df, pd.DataFrame):
+            list(df)
         return path
 
     monkeypatch.setattr(cli, "run_pipeline", fake_run_pipeline)
@@ -475,3 +470,67 @@ def test_end_to_end_cli_raw_and_final_outputs(
     TargetsSchema.validate(final_df)
     assert final_df.loc[0, "uniprot_id_primary"] == ""
 
+
+def test_streaming_pipeline_keeps_chunk_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    total = 1_000
+    chunk_size = 25
+    input_csv = tmp_path / "targets.csv"
+    raw_out = tmp_path / "raw.csv"
+    final_out = tmp_path / "final.csv"
+
+    with input_csv.open("w", encoding="utf8") as handle:
+        handle.write("target_chembl_id\n")
+        for index in range(total):
+            handle.write(f"CHEMBL{index}\n")
+
+    recorded_final_sizes: list[int] = []
+    recorded_raw_sizes: list[int] = []
+
+    import library.io.writers as io_writers
+
+    original_chunks = io_writers.write_csv_chunks_deterministic
+
+    def tracking_write_chunks(
+        chunks: Iterable[pd.DataFrame], path: Path, *args: Any, **kwargs: Any
+    ) -> Path:
+        def _tracking() -> Iterator[pd.DataFrame]:
+            for chunk in chunks:
+                recorded_final_sizes.append(len(chunk))
+                yield chunk
+
+        return original_chunks(_tracking(), path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        io_writers,
+        "write_csv_chunks_deterministic",
+        tracking_write_chunks,
+    )
+
+    original_raw_write = cli._RawStreamWriter.write
+
+    def tracking_raw_write(self: cli._RawStreamWriter, chunk: pd.DataFrame) -> None:
+        recorded_raw_sizes.append(len(chunk))
+        original_raw_write(self, chunk)
+
+    monkeypatch.setattr(cli._RawStreamWriter, "write", tracking_raw_write)
+
+    options = cli.PipelineConfig(
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=raw_out,
+        chunk_size=chunk_size,
+        batch_size=chunk_size,
+        column="target_chembl_id",
+        encoding="utf8",
+        sep=",",
+    )
+
+    exit_code = cli.run(cfg, options)
+    assert exit_code == 0
+
+    assert recorded_final_sizes
+    assert max(recorded_final_sizes) <= chunk_size
+    assert recorded_raw_sizes
+    assert max(recorded_raw_sizes) <= chunk_size
