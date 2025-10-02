@@ -40,20 +40,39 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 SchemaT = TypeVar("SchemaT")
 
 
+
 def resolve_invocation(
     prog: str | None,
     argv: Sequence[object] | None,
 ) -> tuple[str, ...]:
-    """Return a normalised tuple describing the CLI invocation."""
+
+    """Return a normalised tuple describing the CLI invocation.
+
+    The helper captures the effective command line as a tuple of strings.
+    ``prog`` is optional to accommodate ``argparse`` defaults, while
+    ``argv`` may be ``None`` to mirror ``argparse`` behaviour where the
+    process arguments are used implicitly.
+    """
+
+    parts: list[str] = []
+    if prog:
+        parts.append(str(prog))
+
 
     if argv is None:
-        return tuple(str(arg) for arg in sys.argv)
+        argv_iterable: Sequence[object] = sys.argv[1:]
+    else:
+        argv_iterable = argv
+
+    parts.extend(str(arg) for arg in argv_iterable)
+    return tuple(parts)
 
     resolved: list[str] = []
     if prog:
         resolved.append(str(prog))
     resolved.extend(str(arg) for arg in argv)
     return tuple(resolved)
+
 
 
 class ValidationResult(Protocol):
@@ -88,6 +107,37 @@ def _callable_name(func: Callable[..., object]) -> str:
 
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
+
+
+
+def resolve_invocation(
+    program: str | None, argv: Sequence[object] | None
+) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation.
+
+    Parameters
+    ----------
+    program:
+        Optional executable name. When provided it is prefixed to the
+        resulting tuple.
+    argv:
+        Sequence of arguments. ``None`` falls back to ``sys.argv[1:]`` to
+        mirror standard ``argparse`` semantics.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Normalised invocation containing the program followed by positional
+        arguments represented as strings.
+    """
+
+    parts: list[str] = []
+    if program:
+        parts.append(str(program))
+    if argv is None:
+        argv = sys.argv[1:]
+    parts.extend(str(arg) for arg in argv)
+    return tuple(parts)
 
 
 def run_cli_command(
@@ -146,16 +196,6 @@ def run_cli_command(
     return exit_code
 
 
-def resolve_invocation(
-    program: str, argv: Sequence[str] | None
-) -> tuple[str, ...]:
-    """Return the effective command invocation as a tuple of strings."""
-
-    if argv is None:
-        argv = sys.argv[1:]
-    return (program, *map(str, argv))
-
-
 @overload
 def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]: ...
 
@@ -190,7 +230,6 @@ def run_pipeline(
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
-    invocation: Sequence[str] | None = None,
     cfg: Config | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
@@ -456,7 +495,11 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
+ 
     resolved_invocation = invocation_tuple
+ 
+ 
+ 
 
     meta_path = write_meta_yaml(
         csv_path=csv_path,
