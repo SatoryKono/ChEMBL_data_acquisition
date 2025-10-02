@@ -66,22 +66,19 @@ def test_get_activity_data_cli_workers_order(
 
     captured = {"chunks": [], "workers": None, "calls": []}
 
-    frames = [
-        pd.DataFrame({"activity_id": ["chunk0_A1", "chunk0_A2"]}),
-        pd.DataFrame({"activity_id": ["chunk1_A3", "chunk1_A4"]}),
-    ]
-    delays = [0.05, 0.0]
+    frames = {
+        ("A1", "A2"): pd.DataFrame({"activity_id": ["chunk0_A1", "chunk0_A2"]}),
+        ("A3", "A4"): pd.DataFrame({"activity_id": ["chunk1_A3", "chunk1_A4"]}),
+    }
+    delays = {("A1", "A2"): 0.05, ("A3", "A4"): 0.0}
 
     def fake_get_activities(ids, *, cfg, client, chunk_size, timeout, **kwargs):
-        captured["calls"].append((tuple(ids), chunk_size, timeout))
-
-        def _iter():
-            for delay, frame in zip(delays, frames):
-                if delay:
-                    time.sleep(delay)
-                yield frame
-
-        return _iter()
+        key = tuple(ids)
+        captured["calls"].append((key, chunk_size, timeout))
+        delay = delays.get(key, 0.0)
+        if delay:
+            time.sleep(delay)
+        return frames[key]
 
     class DummyClient:
         def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - trivial
@@ -139,4 +136,7 @@ def test_get_activity_data_cli_workers_order(
         ["chunk0_A1", "chunk0_A2"],
         ["chunk1_A3", "chunk1_A4"],
     ]
-    assert captured["calls"] == [(("A1", "A2"), 2, 30.0)]
+    assert captured["calls"] == [
+        (("A1", "A2"), 2, 30.0),
+        (("A3", "A4"), 2, 30.0),
+    ]
