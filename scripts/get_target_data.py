@@ -211,7 +211,11 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
                 if token not in seen:
                     seen.add(token)
                     unique_records.append(
-                        {"uniprot_id": candidate.value, "original_id": candidate.original_id}
+                        {
+                            "uniprot_id": candidate.value,
+                            "original_id": candidate.original_id,
+                            "source_column": candidate.source,
+                        }
                     )
         row_candidates.append(candidates)
 
@@ -1571,7 +1575,9 @@ def fetch_uniprot(
     if plan.unique_records:
         id_df = pd.DataFrame(plan.unique_records, dtype=object)
     else:
-        id_df = pd.DataFrame(columns=["uniprot_id", "original_id"], dtype=object)
+        id_df = pd.DataFrame(
+            columns=["uniprot_id", "original_id", "source_column"], dtype=object
+        )
 
     id_df = id_df.copy()
     id_df["__query_order"] = range(len(id_df))
@@ -1620,6 +1626,31 @@ def fetch_uniprot(
         df["original_id"] = _prefer_primary(left_original, right_original)
     elif "original_id" not in df.columns:
         df["original_id"] = pd.Series(dtype=object)
+
+    source_column = pd.Series(dtype=object)
+    if "source_column_x" in df.columns or "source_column_y" in df.columns:
+        left_source = df.pop("source_column_x") if "source_column_x" in df.columns else None
+        right_source = df.pop("source_column_y") if "source_column_y" in df.columns else None
+        source_column = _prefer_primary(left_source, right_source)
+    elif "source_column" in df.columns:
+        source_column = df["source_column"].astype(object)
+    else:
+        source_column = pd.Series([UNIPROT_MISSING_VALUE] * len(df), index=df.index, dtype=object)
+
+    if "source_column" not in df.columns:
+        df["source_column"] = source_column.reindex(df.index, fill_value=UNIPROT_MISSING_VALUE)
+
+    if "mapping_uniprot_id" not in df.columns:
+        df["mapping_uniprot_id"] = pd.Series(
+            UNIPROT_MISSING_VALUE, index=df.index, dtype=object
+        )
+
+    mapping_mask = df["source_column"].astype(str).eq("mapping_uniprot_id")
+    if mapping_mask.any():
+        df.loc[mapping_mask, "mapping_uniprot_id"] = (
+            df.loc[mapping_mask, "original_id"].fillna(UNIPROT_MISSING_VALUE).astype(str)
+        )
+    df["mapping_uniprot_id"] = df["mapping_uniprot_id"].fillna("").astype(str)
     logger.info("fetch_uniprot_done", rows=len(df))
     return df
 
@@ -1687,13 +1718,40 @@ def fetch_iuphar(
         )
         chembl_for_merge = chembl_for_merge.assign(**{merge_column: placeholder})
 
-    chembl_for_merge[lookup_column] = lookup_series
+    mapping_series = chembl_for_merge.get("mapping_uniprot_id")
+    if mapping_series is not None:
+        mapping_series = mapping_series.fillna("").astype(str).map(str.strip)
+    else:
+        mapping_series = pd.Series(
+            UNIPROT_MISSING_VALUE, index=chembl_for_merge.index, dtype=object
+        )
+
+    resolved_series = lookup_series.reindex(
+        chembl_for_merge.index, fill_value=UNIPROT_MISSING_VALUE
+    )
+    resolved_series = _prefer_primary(resolved_series, mapping_series)
+    chembl_for_merge[lookup_column] = resolved_series
+
+    mapping_join_column = "__uniprot_mapping_lookup_id"
+    chembl_for_merge[mapping_join_column] = mapping_series.reindex(
+        chembl_for_merge.index, fill_value=UNIPROT_MISSING_VALUE
+    )
+
+    uniprot_df = uniprot_df.copy()
+    if "mapping_uniprot_id" in uniprot_df.columns:
+        uniprot_df["mapping_uniprot_id"] = (
+            uniprot_df["mapping_uniprot_id"].fillna("").astype(str).map(str.strip)
+        )
+    else:
+        uniprot_df["mapping_uniprot_id"] = pd.Series(
+            UNIPROT_MISSING_VALUE, index=uniprot_df.index, dtype=object
+        )
 
     combined_df = pd.merge(
         chembl_for_merge,
         uniprot_df,
-        left_on=lookup_column,
-        right_on="uniprot_id",
+        left_on=[lookup_column, mapping_join_column],
+        right_on=["uniprot_id", "mapping_uniprot_id"],
         how="left",
         suffixes=("_chembl", "_uniprot"),
     )
@@ -1762,7 +1820,9 @@ def fetch_iuphar(
         }
         combined_df = combined_df.rename(columns=rename_map)
 
-    combined_df = combined_df.drop(columns=[lookup_column], errors="ignore")
+    combined_df = combined_df.drop(
+        columns=[lookup_column, mapping_join_column], errors="ignore"
+    )
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
 
@@ -1783,6 +1843,8 @@ def fetch_iuphar(
             if uniprot_col in combined_df.columns
             else None
         )
+        if chembl_series is None and uniprot_series is None:
+            continue
         if column == "reaction_ec_numbers":
             chembl_values = (
                 chembl_series.reindex(combined_df.index)
@@ -1873,25 +1935,32 @@ def fetch_iuphar(
             combined_df["mapping_uniprot_id"].fillna("").astype(str)
         )
 
-    resolved_ids = lookup_series.reindex(
-        chembl_df.index, fill_value=UNIPROT_MISSING_VALUE
+    resolved_for_combined = resolved_series.reindex(
+        combined_df.index, fill_value=UNIPROT_MISSING_VALUE
     )
+    resolved_for_combined = resolved_for_combined.astype(object)
+
     if merge_column in combined_df.columns:
-        combined_df[merge_column] = combined_df[merge_column].fillna(
-            UNIPROT_MISSING_VALUE
+        existing_merge = combined_df[merge_column].astype(object)
+    else:
+        existing_merge = pd.Series(
+            UNIPROT_MISSING_VALUE, index=combined_df.index, dtype=object
         )
+        combined_df[merge_column] = existing_merge
+
     if merge_column == "uniprot_id":
-        combined_df[merge_column] = resolved_ids.reindex(
-            combined_df.index, fill_value=UNIPROT_MISSING_VALUE
-        )
         if "mapping_uniprot_id" in combined_df.columns:
-            empty_mask = (
-                combined_df[merge_column].astype(str).str.strip()
-                == UNIPROT_MISSING_VALUE
+            mapping_merge = combined_df["mapping_uniprot_id"].astype(object)
+        else:
+            mapping_merge = pd.Series(
+                UNIPROT_MISSING_VALUE, index=combined_df.index, dtype=object
             )
-            combined_df.loc[empty_mask, merge_column] = combined_df.loc[
-                empty_mask, "mapping_uniprot_id"
-            ]
+        preferred_ids = _prefer_primary(resolved_for_combined, mapping_merge)
+        preferred_ids = _prefer_primary(preferred_ids, existing_merge)
+        combined_df[merge_column] = preferred_ids.fillna(UNIPROT_MISSING_VALUE)
+    else:
+        preferred_ids = _prefer_primary(existing_merge, resolved_for_combined)
+        combined_df[merge_column] = preferred_ids.fillna(UNIPROT_MISSING_VALUE)
 
     chembl_reactions = chembl_df.get(
         "reaction_ec_numbers", pd.Series(dtype=object)
@@ -1902,7 +1971,7 @@ def fetch_iuphar(
         else pd.DataFrame()
     )
     if "reaction_ec_numbers" in uniprot_reaction_map.columns:
-        uniprot_reactions = resolved_ids.reindex(
+        uniprot_reactions = resolved_for_combined.reindex(
             combined_df.index, fill_value=UNIPROT_MISSING_VALUE
         ).map(uniprot_reaction_map["reaction_ec_numbers"])
         uniprot_reactions = uniprot_reactions.fillna(UNIPROT_MISSING_VALUE)
