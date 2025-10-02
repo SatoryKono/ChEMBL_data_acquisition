@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import pytest
 import yaml
 
 from library.config import Config, _mask_secrets, _serialize_paths
-from library.cli_utils import build_parser, run_pipeline
+from library.cli_utils import build_parser, resolve_invocation, run_pipeline
 from library.logging_setup import LoggerConfig, configure_logger as setup_logger
 from schemas import AssaysSchema
 
@@ -59,6 +60,20 @@ def test_cli_utils_flags_and_help() -> None:
     assert parser.description is not None
     assert parser.description.startswith(
         "CLI wrapper for :func:`write_csv_deterministic`"
+    )
+
+
+def test_resolve_invocation_defaults_to_sys_argv(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["script.py", "--foo", "bar"], raising=False)
+
+    assert resolve_invocation("ignored", None) == ("script.py", "--foo", "bar")
+
+
+def test_resolve_invocation_with_custom_argv() -> None:
+    assert resolve_invocation("cli", ["--flag", "value"]) == (
+        "cli",
+        "--flag",
+        "value",
     )
 
 
