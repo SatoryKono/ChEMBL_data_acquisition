@@ -43,15 +43,15 @@
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `cache_path` | `data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами; переопределяется через `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
-| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; используйте `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` или каноничную форму `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`. |
+| `cache_path` | `../data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами; переопределяется через `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `../data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; используйте `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` или каноничную форму `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`. |
 | `endpoint` | `molecule` | Ресурс REST API ChEMBL, из которого подкачиваются данные при обновлении кэша. |
 | `child_field` | `molecule_chembl_id` | Поле ответа API с идентификатором дочерней молекулы. |
 | `parent_field` | `parent_molecule_chembl_id` | Поле ответа API с идентификатором родительской молекулы. |
 | `force_refresh_existing` | `false` | При `true` пересобирает связи родитель→потомок даже для записей с уже заполненным родителем, заставляя использовать данные из кэша/ChEMBL. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | Список полей, которые запрашиваются у ChEMBL при построении или обновлении каталога; расширяйте его для дополнительных атрибутов. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Набор фильтров, добавляемых ко всем запросам; по умолчанию выбирает только записи с заполненным родителем в ChEMBL. |
-| `hierarchy_lookup_path` | `dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
+| `hierarchy_lookup_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Кодировка, применяемая при чтении CSV иерархии; меняйте, если файл сохранён в другом наборе символов (например, Latin-1 из старых выгрузок). |
 | `hierarchy_lookup_delimiter` | `,` | Разделитель столбцов, ожидаемый загрузчиком иерархии; укажите `;` или табуляцию для файлов, подготовленных региональными командами. |
 | `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
@@ -179,8 +179,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
-| `sources.molecule_catalog_path` | `dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
-| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
+| `sources.molecule_hierarchy_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
 | `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
 | `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
 | `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |
@@ -213,18 +213,18 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Колонка с UniProt ID. |
-|  | `data_dir` | `dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
+|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
 | `chembl` | `column` | `target_chembl_id` | Колонка с таргетами ChEMBL. |
 |  | `chunk_size` | `5` | Размер батча запросов. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
-|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `iuphar` | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
+|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `all` | `data_dir` | `dictionary/_target/_uniprot` | Каталог с данными UniProt. |
-|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
-|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
+| `all` | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с данными UniProt. |
+|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
+|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 
@@ -273,7 +273,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Очерёдность стратегий при поиске PubChem CID. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
 | `cache_ttl` | `3600` | Время жизни in-memory кэша HTTP (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_ttl_hours` | `null` | TTL (часы) для постоянного CID-кэша; `null` отключает истечение. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
-| `cid_cache_path` | `"data/cache/pubchem_cid_cache.json"` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `cid_cache_path` | `"../data/cache/pubchem_cid_cache.json"` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
 | `batch_size` | `50` | Размер батча для обработчика PubChem; параллелизм ограничен `min(batch_size, rps)`. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Пропускать запросы, если локальные SMILES/InChIKey уже заполнены. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Сохранять существующие колонки `pubchem_*`, если ответ пуст. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
@@ -291,10 +291,10 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Корневая папка словарей. |
-| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
-| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
-| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
+| `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
+| `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
+| `targets_type_csv` | `../dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
 
 
 Каталог `dictionary/_target` отражает текущую структуру репозитория; в нём по умолчанию лежат справочники IUPHAR и выгрузки UniProt.
@@ -306,7 +306,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `output_dir` | `data/output` | Каталог для результирующих наборов данных. |
+| `output_dir` | `../data/output` | Каталог для результирующих наборов данных. |
 | `cache_dir` | `.cache` | Каталог HTTP-кэша. |
 | `csv_sep` | `,` | Разделитель CSV по умолчанию. |
 | `csv_fallback_separators` | `["\t", ";"]` | Дополнительные разделители, которые пробуются, если основной не раскрывает требуемый столбец. |
@@ -320,9 +320,9 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `same_doc` | `data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Источник пар «тот же документ». |
-| `all_doc` | `data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Источник пар «разные документы». |
-| `output_dir` | `data/output/ChEMBL/processed` | Каталог для подготовленных файлов. |
+| `same_doc` | `../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Источник пар «тот же документ». |
+| `all_doc` | `../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Источник пар «разные документы». |
+| `output_dir` | `../data/output/ChEMBL/processed` | Каталог для подготовленных файлов. |
 
 ## Системные настройки (`system`)
 
