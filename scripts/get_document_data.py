@@ -36,6 +36,7 @@ import weakref
 import heapq
 from threading import Lock, local
 
+from numbers import Integral, Real
 from typing import Any, cast, TypeVar
 
 
@@ -1071,6 +1072,50 @@ def _iter_export_chunks(
         yield _prepare_export_frame(chunk)
 
 
+def _coerce_chunk_size_value(value: object) -> int | None:
+    """Return ``value`` as an ``int`` when possible, otherwise ``None``."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        logger.warning("invalid_stream_chunk_size_bool", value=value)
+        return None
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            logger.warning("invalid_stream_chunk_size_string", value=value)
+            return None
+    if isinstance(value, Real):
+        if pd.isna(value):
+            return None
+        coerced = int(value)
+        if value != coerced:
+            logger.warning("invalid_stream_chunk_size_float", value=float(value))
+            return None
+        return coerced
+    if isinstance(value, pd.Series):
+        if value.empty:
+            return None
+        if len(value) == 1:
+            return _coerce_chunk_size_value(value.iloc[0])
+        logger.warning(
+            "invalid_stream_chunk_size_series",
+            length=int(len(value)),
+        )
+        return None
+    logger.warning(
+        "invalid_stream_chunk_size_type",
+        value_type=f"{type(value).__module__}.{type(value).__qualname__}",
+    )
+    return None
+
+
 def _resolve_chunk_size(value: int | None) -> int | None:
     """Return ``value`` when positive, otherwise ``None``."""
 
@@ -1080,6 +1125,16 @@ def _resolve_chunk_size(value: int | None) -> int | None:
         logger.warning("invalid_csv_chunksize", value=value)
         return None
     return value
+
+
+def _resolve_stream_chunk_size(value: object) -> int:
+    """Return a safe streaming chunk size derived from ``value``."""
+
+    coerced = _coerce_chunk_size_value(value)
+    resolved = _resolve_chunk_size(coerced)
+    if resolved is None:
+        return _EXPORT_STREAM_CHUNK_SIZE
+    return resolved
 
 
 def _write_export_chunks(
@@ -1174,7 +1229,7 @@ def _finalise_export(
     missing_required: set[str] = set(required_cols)
     missing_optional: set[str] = set(optional_cols)
 
-    stream_chunk = max(1, int(chunk_size or _EXPORT_STREAM_CHUNK_SIZE))
+    stream_chunk = _resolve_stream_chunk_size(chunk_size)
     failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
     errors = SidecarErrors()
     rows_total = 0

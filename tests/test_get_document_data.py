@@ -2097,6 +2097,127 @@ def test_finalise_export_falls_back_to_default_key(
     assert document_export_postprocess_stub
 
 
+def test_finalise_export_accepts_series_chunk_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document_export_postprocess_stub,
+) -> None:
+    """Chunk size provided as a scalar ``Series`` should be coerced to ``int``."""
+
+    cfg = Config()
+    df = pd.DataFrame({"document_chembl_id": ["CHEMBL1"], "PubMed.PMID": ["123"]})
+    output = tmp_path / "documents.csv"
+
+    captured: dict[str, Any] = {}
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Any,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        chunksize: int,
+        merge_chunksize: int,
+        sort_chunksize: int,
+        sep: str,
+        encoding: str,
+        **_: Any,
+    ) -> Path:
+        list(chunks)
+        path.write_text("data")
+        captured["chunksize"] = chunksize
+        captured["merge_chunksize"] = merge_chunksize
+        captured["sort_chunksize"] = sort_chunksize
+        captured["key_cols"] = list(key_cols or [])
+        captured["col_order"] = list(col_order or [])
+        captured["sep"] = sep
+        captured["encoding"] = encoding
+        return path
+
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda profiler, table_name: None)
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
+
+    exit_code = gdd._finalise_export(
+        df,
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=None,
+        chunk_size=pd.Series([7]),
+    )
+
+    assert exit_code == 0
+    assert captured["chunksize"] == 7
+    assert captured["merge_chunksize"] == 7
+    assert captured["sort_chunksize"] == 7
+    assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
+    assert document_export_postprocess_stub
+
+
+def test_finalise_export_series_chunk_size_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document_export_postprocess_stub,
+) -> None:
+    """Non-scalar ``Series`` chunk sizes should fall back to the default."""
+
+    cfg = Config()
+    df = pd.DataFrame({"document_chembl_id": ["CHEMBL1"], "PubMed.PMID": ["123"]})
+    output = tmp_path / "documents.csv"
+
+    captured: dict[str, Any] = {}
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Any,
+        key_cols: list[str] | None = None,
+        col_order: list[str] | None = None,
+        chunksize: int,
+        merge_chunksize: int,
+        sort_chunksize: int,
+        sep: str,
+        encoding: str,
+        **_: Any,
+    ) -> Path:
+        list(chunks)
+        path.write_text("data")
+        captured["chunksize"] = chunksize
+        captured["merge_chunksize"] = merge_chunksize
+        captured["sort_chunksize"] = sort_chunksize
+        return path
+
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda profiler, table_name: None)
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda frame, lazy=True: frame)
+
+    exit_code = gdd._finalise_export(
+        df,
+        output,
+        cfg,
+        input_csv=tmp_path / "input.csv",
+        key_columns=None,
+        chunk_size=pd.Series([5, 6]),
+    )
+
+    assert exit_code == 0
+    assert captured["chunksize"] == gdd._EXPORT_STREAM_CHUNK_SIZE
+    assert captured["merge_chunksize"] == gdd._EXPORT_STREAM_CHUNK_SIZE
+    assert captured["sort_chunksize"] == gdd._EXPORT_STREAM_CHUNK_SIZE
+    assert document_export_postprocess_stub
+
+
 def test_finalise_export_accepts_generator(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
