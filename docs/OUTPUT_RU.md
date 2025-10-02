@@ -5,19 +5,20 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Структура каталогов
 
-Экспорты сохраняются в `local.io.output_dir` (по умолчанию `../data/output`). По
+Экспорты сохраняются в `local.io.output_dir` (по умолчанию
+`~/.local/share/chembl-da/output`). По
 умолчанию CLI формирует имя как `output.<stem>_<date>.csv`, где `<stem>` — имя
 входного файла без расширения, а `<date>` — текущая дата в формате `YYYYMMDD`.
 Запись автоматически создаёт родительские каталоги, если `local.io.exist_ok`
 равно `true`.
 
 ```
-../data/output/
-├── output.activity_20240105.csv
-├── output.activity_20240105.csv.meta.yaml
-├── output.activity_20240105_failure_cases.csv
-├── output.activity_20240105_quality_report_table.csv
-└── output.activity_20240105_data_correlation_report_table.csv
+~/.local/share/chembl-da/output/
+├── output.activities_20240105.csv
+├── output.activities_20240105.csv.meta.yaml
+├── output.activities_20240105_failure_cases.csv
+├── output.activities_20240105_quality_report_table.csv
+└── output.activities_20240105_data_correlation_report_table.csv
 ```
 
 Документные пайплайны (например, `scripts/get_document_data.py`) дополняют
@@ -27,13 +28,13 @@ Acquisition, а также вспомогательные модули, отве
 Промежуточные файлы таргет-пайплайна в режиме `all`
 (`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) используют тот же шаблон.
 Параметр `--output` по-прежнему позволяет задать альтернативную структуру,
-например `../data/output/ChEMBL/processed/activity.csv`.
+например `~/.local/share/chembl-da/output/ChEMBL/processed/activities.csv`.
 
 ## Sidecar с метаданными (`*.csv.meta.yaml`)
 
 Каждый CSV сопровождается `<base>.csv.meta.yaml`, который создаёт
 `library.metadata.write_meta_yaml`, где `<base>` совпадает с именем файла без
-расширения (например, `output.activity_20240105`). Файл содержит:
+расширения (например, `output.activities_20240105`). Файл содержит:
 
 * `generated_at` — отметку времени в формате ISO 8601 (UTC).
 * `git_sha` — хэш коммита на момент запуска.
@@ -41,8 +42,13 @@ Acquisition, а также вспомогательные модули, отве
 * `command` — точную команду CLI.
 * `config` — применённые настройки (секреты автоматически маскируются).
 * `inputs` — описание входных файлов и аргументов.
-* `stats` — `rows_total`, `rows_kept`, `rows_dropped` и контрольную сумму
-  `output_sha256`.
+* `stats` — `rows_total`, `rows_kept`, `rows_dropped`, контрольную сумму
+  `output_sha256`, показатели по родительскому каталогу
+  (`parent_lookup_source`, `parent_lookup_missing`,
+  `parent_lookup_failed_ids`, `parent_lookup_failed_count`) и при наличии
+  массив `missing_molecule_ids` с пропущенными идентификаторами. Повторно
+  обработать не найденные родительские идентификаторы можно, передав их в
+  основной конвейер через стандартный CSV.
 * `schema` — имя схемы валидации.
 
 Если sidecar уже существует, содержимое аккуратно объединяется, чтобы сохранить
@@ -99,7 +105,7 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Границы активности (`lower_value`, `upper_value`)
 
-Выгрузка активностей (`output.activity_<date>.csv` по умолчанию) включает
+Выгрузка активностей (`output.activities_<date>.csv` по умолчанию) включает
 диапазоны значений, рассчитанные из канонических полей ChEMBL `standard_*`.
 Приоритет действий:
 
@@ -132,7 +138,7 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Экспорт тест-объектов
 
-`scripts/get_testitem_data.py` формирует `output_testitem_<date>.csv` с
+`scripts/get_testitem_data.py` формирует `output.testitems_<date>.csv` с
 метаданными и отчётами качества. Каждая строка объединяет данные ChEMBL,
 обогащение PubChem и служебные
 колонки, обеспечивая опорное измерение соединений. Для работы требуется каталог

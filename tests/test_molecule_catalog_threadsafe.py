@@ -112,3 +112,55 @@ def test_helper_skips_catalog_refresh_when_lock_held(monkeypatch) -> None:
 
     assert result == {}
     assert load_calls == []
+
+
+def test_fetch_parent_catalog_for_preserves_order(monkeypatch) -> None:
+    """Fallback single lookups should keep deterministic ordering."""
+
+    api_cfg = ApiCfg(user_agent="chembl-da-tests (mailto:test@example.org)")
+    cfg = MoleculeCatalogCfg(filters={})
+
+    monkeypatch.setattr(
+        molecule_catalog,
+        "_fetch_parent_catalog_chunk",
+        lambda *args, **kwargs: {},
+    )
+    monkeypatch.setattr(molecule_catalog, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(molecule_catalog, "load_parent_catalog", lambda **_: {})
+
+    completion_order: list[str] = []
+    release_first = threading.Event()
+
+    def fake_fetch_parent_for_id(chembl_id: str, **_: object) -> tuple[str, str]:
+        if chembl_id == "CHEMBL1":
+            if not release_first.wait(timeout=1):
+                raise RuntimeError("second lookup did not complete in time")
+            parent = "CHEMBL10"
+        else:
+            release_first.set()
+            parent = "CHEMBL20"
+        completion_order.append(chembl_id)
+        return chembl_id, parent
+
+    monkeypatch.setattr(
+        molecule_catalog, "fetch_parent_for_id", fake_fetch_parent_for_id
+    )
+
+    class NoRequestClient:
+        def request_json(self, *args, **kwargs):  # pragma: no cover - defensive
+            raise AssertionError("unexpected network call")
+
+    client = NoRequestClient()
+
+    result = molecule_catalog.fetch_parent_catalog_for(
+        ["CHEMBL1", "CHEMBL2"],
+        client=client,
+        api_cfg=api_cfg,
+        catalog_cfg=cfg,
+    )
+
+    assert completion_order == ["CHEMBL2", "CHEMBL1"]
+    assert list(result.items()) == [
+        ("CHEMBL1", "CHEMBL10"),
+        ("CHEMBL2", "CHEMBL20"),
+    ]

@@ -142,7 +142,7 @@ def test_cli_uses_custom_column(
             "document_chembl_id",
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(tmp_path / "out.csv"),
         ]
     )
@@ -256,7 +256,7 @@ def test_cli_runs_document_postprocessing(
             "chembl",
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_path),
         ]
     )
@@ -711,7 +711,7 @@ def test_pubmed_cli_rejects_non_positive_batch_size(tmp_path: Path) -> None:
                 "pubmed",
                 "--input",
                 str(input_csv),
-                "--output",
+                "--final-out",
                 str(tmp_path / "out.csv"),
                 "--batch-size",
                 "0",
@@ -732,7 +732,7 @@ def test_chembl_cli_rejects_non_positive_chunk_size(tmp_path: Path) -> None:
                 "chembl",
                 "--input",
                 str(input_csv),
-                "--output",
+                "--final-out",
                 str(tmp_path / "out.csv"),
                 "--chunk-size",
                 "0",

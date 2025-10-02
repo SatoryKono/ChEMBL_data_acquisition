@@ -24,7 +24,7 @@ def test_zero_limit_skips_pipeline(
 
     output_path = tmp_path / "assays.csv"
 
-    exit_code = gas.main(["--limit", "0", "--output", str(output_path)])
+    exit_code = gas.main(["--limit", "0", "--final-out", str(output_path)])
 
     assert exit_code == 0
     assert recorded == [("pipeline_skip_limit", {"limit": 0})]

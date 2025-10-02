@@ -16,6 +16,12 @@
 
 Sensitive values (API tokens, personal e-mails) should be injected via environment variables rather than committed to the repository.
 
+Path settings may reference the ``$CHEMBL_DA_BASE_PATH`` placeholder. During
+runtime it resolves to the CLI ``--base-path`` argument, the
+``CHEMBL_DA_BASE_PATH`` environment variable or, by default,
+``~/.local/share/chembl-da``. User-home shortcuts (``~``) are expanded before
+relative paths are resolved against the configuration file.
+
 ## `sources.chembl`
 
 ### API client (`sources.chembl.api`)
@@ -27,6 +33,7 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `timeout_read` | `30` | Read timeout in seconds. |
 | `retries` | `3` | Maximum number of attempts performed by higher-level clients; the shared HTTP adapter does not retry automatically. |
 | `backoff_factor` | `0.5` | Multiplier for exponential backoff between retries. |
+| `backoff_cap` | `null` | Maximum delay in seconds applied to exponential backoff. |
 | `rps` | `20` | Allowed requests per second for the rate limiter. |
 | `burst` | `20` | Bucket size used by the token bucket limiter. |
 | `user_agent` | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | User-Agent header. Replace the contact with your own address before production use; the validator still rejects the placeholder `contact@example.org`. Set via `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
@@ -44,8 +51,8 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `cache_path` | `../data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
-| `sqlite_path` | `../data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
+| `cache_path` | `"$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json"` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `"$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite"` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
 | `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
 | `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
 | `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
@@ -177,6 +184,9 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | `request_limit` | `1000` | Hard cap on the number of paginated requests performed in a single execution. |
 | `retries` | `5` | Maximum number of retry attempts applied to failed API calls. |
 | `backoff_factor` | `0.5` | Multiplier controlling exponential backoff between retry attempts. |
+| `batch_retry.enable` | `false` | Reduce the request batch size and retry once before surfacing a failure. |
+| `batch_retry.shrink_factor` | `0.5` | Multiplier applied to the current batch size when `batch_retry.enable` is `true`. |
+| `batch_retry.min_size` | `1` | Smallest batch size used during retries to avoid empty requests. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id', 'pref_name', 'max_phase', 'molecule_type', 'first_approval', 'oral', 'parenteral', 'topical', 'black_box_warning', 'structure_type', 'molecule_structures.canonical_smiles', 'molecule_structures.standard_inchi', 'molecule_structures.standard_inchi_key', 'pubchem_cid', 'pubchem_iupac_name', 'pubchem_molecular_formula', 'pubchem_isomeric_smiles', 'pubchem_canonical_smiles', 'pubchem_inchi', 'pubchem_inchikey']` | List of ChEMBL and PubChem fields requested for each test item batch. |
 
 
@@ -287,7 +297,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | `cache_ttl` | `3600` | Lifespan (seconds) of the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_maxsize` | `1024` | Maximum number of entries retained by the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_MAXSIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_MAXSIZE` |
 | `cache_ttl_hours` | `null` | Optional expiry (hours) for the persisted CID cache; `null` keeps entries indefinitely. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
-| `cid_cache_path` | `"../data/cache/pubchem_cid_cache.json"` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `cid_cache_path` | `"$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json"` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
 | `batch_size` | `50` | Number of rows processed per PubChem batch request; concurrency never exceeds `min(batch_size, rps)`. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Skip remote lookups when local SMILES/InChIKey columns are already populated. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Preserve existing `pubchem_*` columns when lookups return empty payloads. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
@@ -304,7 +314,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
+| `dictionary_dir` | `../dictionary` | Root directory with lookup tables. |
 | `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
 | `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
 | `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
@@ -319,8 +329,8 @@ IUPHAR and UniProt lookups are stored there by default.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `output_dir` | `../data/output` | Base directory for generated datasets. |
-| `cache_dir` | `.cache` | Location of the HTTP cache. |
+| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output"` | Base directory for generated datasets. |
+| `cache_dir` | `"~/.cache/chembl-da"` | Location of the HTTP cache. |
 | `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
 | `csv_fallback_separators` | `["\t", ";"]` | Additional delimiters tried when the primary separator does not expose the requested column. |
 | `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
@@ -333,9 +343,9 @@ IUPHAR and UniProt lookups are stored there by default.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `same_doc` | `../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Workbook with same-document pairs for initialisation. |
-| `all_doc` | `../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Workbook with cross-document pairs for initialisation. |
-| `output_dir` | `../data/output/ChEMBL/processed` | Destination for pre-processed initialisation files. |
+| `same_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"` | Workbook with same-document pairs for initialisation. |
+| `all_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"` | Workbook with cross-document pairs for initialisation. |
+| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"` | Destination for pre-processed initialisation files. |
 
 Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke tests. Replace them with the workbooks prepared by your organisation (or copy the manually supplied files into the desired location) before starting the initialisation routines. Refer to [docs/USAGE_EN.md](./USAGE_EN.md) for guidance on preparing the input templates.
 
@@ -350,11 +360,13 @@ Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke
 |  | `limiter_cache_ttl` | `600` | TTL for cached limiters in seconds. |
 | `retry` | `max_attempts` | `3` | Number of retry attempts for recoverable errors. |
 |  | `backoff_factor` | `0.5` | Base multiplier for exponential backoff. |
+|  | `backoff_cap` | `null` | Maximum delay in seconds applied between retry attempts. |
 |  | `status_forcelist` | `[429, 500, 502, 503, 504]` | HTTP status codes that trigger retries. |
 | `doc_quality` | `enable` | `true` | Toggle generation of table quality reports. |
 |  | `sample_rows` | `null` | Limit analysis to the first `N` rows; `null` processes the full dataset. |
 |  | `include_columns` | `null` | Optional allow list of column names to profile. |
 |  | `exclude_columns` | `null` | Optional deny list of column names to skip. |
+|  | `fatal_on_error` | `false` | Treat profiling errors as fatal pipeline failures. |
 | `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Weighting applied to document sources. |
 |  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Minimum counts for document type classification. |
 |  | `limit` | `null` | Optional limit on classified records. |
@@ -392,6 +404,7 @@ Common short aliases:
 | `CHEMBL_DA_LOG_LEVEL` | `system.log.level` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `system.retry.max_attempts` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `system.retry.backoff_factor` |
+| `CHEMBL_DA_RETRY_BACKOFF_CAP` | `system.retry.backoff_cap` |
 | `CHEMBL_DA_DICT_DIR` | `local.resources.dictionary_dir` |
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |

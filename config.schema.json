@@ -444,12 +444,12 @@
       "additionalProperties": false,
       "properties": {
         "cache_path": {
-          "default": "../data/cache/molecule_parent_catalog.json",
+          "default": "$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json",
           "title": "Cache Path",
           "type": "string"
         },
         "sqlite_path": {
-          "default": "../data/cache/molecule_parent_catalog.sqlite",
+          "default": "$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite",
           "title": "Sqlite Path",
           "type": "string"
         },
@@ -711,6 +711,11 @@
           ],
           "default": null,
           "title": "Exclude Columns"
+        },
+        "fatal_on_error": {
+          "default": false,
+          "title": "Fatal On Error",
+          "type": "boolean"
         }
       },
       "title": "DocQualityCfg",
@@ -941,19 +946,19 @@
       "additionalProperties": false,
       "properties": {
         "same_doc": {
-          "default": "../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx",
+          "default": "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx",
           "format": "path",
           "title": "Same Doc",
           "type": "string"
         },
         "all_doc": {
-          "default": "../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx",
+          "default": "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx",
           "format": "path",
           "title": "All Doc",
           "type": "string"
         },
         "output_dir": {
-          "default": "../data/output/ChEMBL/processed",
+          "default": "$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed",
           "format": "path",
           "title": "Output Dir",
           "type": "string"
@@ -965,14 +970,40 @@
     "IoCfg": {
       "additionalProperties": false,
       "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Path"
+        },
+        "input_dir": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Dir"
+        },
         "output_dir": {
-          "default": "../data/output",
+          "default": "$CHEMBL_DA_BASE_PATH/output",
           "format": "path",
           "title": "Output Dir",
           "type": "string"
         },
         "cache_dir": {
-          "default": ".cache",
+          "default": "~/.cache/chembl-da",
           "format": "path",
           "title": "Cache Dir",
           "type": "string"
@@ -1264,7 +1295,7 @@
           ]
         },
         "cid_cache_path": {
-          "default": "../data/cache/pubchem_cid_cache.json",
+          "default": "$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json",
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
           "title": "Cid Cache Path",
           "type": [
@@ -1410,7 +1441,7 @@
       "additionalProperties": false,
       "properties": {
         "dictionary_dir": {
-          "default": "dictionary",
+          "default": "../dictionary",
           "format": "path",
           "title": "Dictionary Dir",
           "type": "string"
@@ -1457,6 +1488,15 @@
           "minimum": 0,
           "title": "Backoff Factor",
           "type": "number"
+        },
+        "backoff_cap": {
+          "default": null,
+          "minimum": 0,
+          "title": "Backoff Cap",
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "status_forcelist": {
           "items": {
@@ -1792,6 +1832,31 @@
       "title": "TargetUniprotCfg",
       "type": "object"
     },
+    "TestitemBatchRetryCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": false,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "shrink_factor": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "title": "Shrink Factor",
+          "type": "number"
+        },
+        "min_size": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Min Size",
+          "type": "integer"
+        }
+      },
+      "title": "TestitemBatchRetryCfg",
+      "type": "object"
+    },
     "TestitemCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1887,6 +1952,9 @@
           ],
           "default": null,
           "title": "Backoff Factor"
+        },
+        "batch_retry": {
+          "$ref": "#/$defs/TestitemBatchRetryCfg"
         }
       },
       "title": "TestitemCfg",

@@ -15,6 +15,7 @@ from library import chembl_library as cl
 from library import pubchem_library as pl
 from library.clients import pubchem as pc
 from library.logging_setup import LoggerConfig, configure_logger
+from library.table_quality import TableQualityProfiler
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import (
     get_activity_data,
@@ -60,6 +61,16 @@ def _expected_output(output_dir: Path, stem: str, *, date: str = DEFAULT_DATE) -
     return output_dir / f"output.{stem}_{date}.csv"
 
 
+def _extract_output_path(namespace: argparse.Namespace) -> Path:
+    """Return the parsed destination path supporting legacy aliases."""
+
+    candidate = getattr(namespace, "final_out", None) or getattr(
+        namespace, "output", None
+    )
+    assert candidate is not None, "missing output flag"
+    return Path(candidate)
+
+
 def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure ``scripts.get_data`` orchestrates all pipelines with mocked steps."""
 
@@ -86,11 +97,12 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
             parser = argparse.ArgumentParser(add_help=False)
             parser.add_argument("--config")
             parser.add_argument("--input")
+            parser.add_argument("--final-out")
             parser.add_argument("--output")
             parser.add_argument("--log-level")
             ns = parser.parse_args(args)
             input_path = Path(ns.input)
-            output_path = Path(ns.output)
+            output_path = _extract_output_path(ns)
             assert input_path.exists(), f"missing input for {name}"
             output_path.write_text(f"{name} output\n")
             invocations.append(name)
@@ -187,11 +199,12 @@ def test_get_data_limit_zero_skips_steps(
                 assert args[0] == subcommand
                 args = args[1:]
             parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("--final-out")
             parser.add_argument("--output")
             parser.add_argument("--limit")
             ns, _ = parser.parse_known_args(args)
             assert ns.limit == "0"
-            temp_output = Path(ns.output)
+            temp_output = _extract_output_path(ns)
             assert temp_output.name.startswith(".")
             assert not temp_output.exists()
             invocations.append(name)
@@ -289,13 +302,15 @@ def test_get_data_forwards_skip_existing_flag(
             parser = argparse.ArgumentParser(add_help=False)
             parser.add_argument("--config")
             parser.add_argument("--input")
+            parser.add_argument("--final-out")
             parser.add_argument("--output")
             parser.add_argument("--log-level")
             parser.add_argument("--limit")
             parser.add_argument("--force", action="store_true")
             parser.add_argument("--skip-existing", action="store_true")
             ns = parser.parse_args(args)
-            Path(ns.output).write_text(f"{name} output\n")
+            output_path = _extract_output_path(ns)
+            output_path.write_text(f"{name} output\n")
             return 0
 
         return _main
@@ -387,10 +402,11 @@ def test_get_data_pipeline_events_include_run_id(
             parser = argparse.ArgumentParser(add_help=False)
             parser.add_argument("--config")
             parser.add_argument("--input")
+            parser.add_argument("--final-out")
             parser.add_argument("--output")
             parser.add_argument("--log-level")
             ns = parser.parse_args(args)
-            Path(ns.output).write_text(f"{name} output\n")
+            _extract_output_path(ns).write_text(f"{name} output\n")
             return 0
 
         return _main
@@ -551,8 +567,11 @@ def test_get_activity_data_smoke(
 
     assert quality_calls, "quality profiler should be invoked"
     quality_args, quality_kwargs = quality_calls[-1]
-    assert quality_args[0] == output_csv
-    assert quality_kwargs.get("destination_dir") == smoke_output_dir
+    assert Path(quality_args[0]).resolve() == output_csv.resolve()
+    assert (
+        Path(quality_kwargs.get("destination_dir")).resolve()
+        == smoke_output_dir.resolve()
+    )
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -623,8 +642,11 @@ def test_get_assay_data_smoke(
 
     assert assay_quality_calls, "quality profiler should be invoked"
     assay_args, assay_kwargs = assay_quality_calls[-1]
-    assert assay_args[0] == output_csv
-    assert assay_kwargs.get("destination_dir") == smoke_output_dir
+    assert Path(assay_args[0]).resolve() == output_csv.resolve()
+    assert (
+        Path(assay_kwargs.get("destination_dir")).resolve()
+        == smoke_output_dir.resolve()
+    )
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -705,8 +727,11 @@ def test_get_document_data_smoke(
 
     assert document_quality_calls, "quality profiler should be invoked"
     document_args, document_kwargs = document_quality_calls[-1]
-    assert document_args[0] == output_csv
-    assert document_kwargs.get("destination_dir") == smoke_output_dir
+    assert isinstance(document_args[0], TableQualityProfiler)
+    assert (
+        Path(document_kwargs.get("destination_dir")).resolve()
+        == smoke_output_dir.resolve()
+    )
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -768,6 +793,33 @@ def test_get_target_data_smoke(
 
     monkeypatch.setattr(get_target_data, "analyze_table_quality", _capture_target_quality)
 
+    def fake_run_all(cfg: object, args: object) -> int:
+        final_path = Path(getattr(args, "final_out"))
+        base = fake_get_targets(
+            ["CHEMBL-T1", "CHEMBL-T2"],
+            cfg=None,
+            client=None,
+            mapping_cfg=None,
+            chunk_size=0,
+            timeout=0,
+        )
+        base["pipeline_version"] = "test"
+        base["timestamp_utc"] = "2024-01-01T00:00:00Z"
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        base.to_csv(final_path, index=False)
+        doc_quality = getattr(cfg, "system").doc_quality
+        _capture_target_quality(
+            final_path,
+            table_name=str(final_path.with_suffix("")),
+            destination_dir=final_path.parent,
+            sample_rows=doc_quality.sample_rows,
+            include_columns=doc_quality.include_columns,
+            exclude_columns=doc_quality.exclude_columns,
+        )
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_chembl", fake_run_all)
+
     try:
         exit_code = get_target_data.main(["chembl", *_cli_args()])
     finally:
@@ -781,8 +833,11 @@ def test_get_target_data_smoke(
 
     assert target_quality_calls, "quality profiler should be invoked"
     target_args, target_kwargs = target_quality_calls[-1]
-    assert target_args[0] == output_csv
-    assert target_kwargs.get("destination_dir") == smoke_output_dir
+    assert Path(target_args[0]).resolve() == output_csv.resolve()
+    assert (
+        Path(target_kwargs.get("destination_dir")).resolve()
+        == smoke_output_dir.resolve()
+    )
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -895,7 +950,14 @@ def test_get_testitem_data_smoke(
         testitem_quality_calls.append((args, kwargs))
 
     monkeypatch.setattr(
-        get_testitem_data, "analyze_table_quality", _capture_testitem_quality
+        get_testitem_data,
+        "analyze_table_quality",
+        _capture_testitem_quality,
+    )
+    monkeypatch.setattr(
+        get_testitem_data.pipeline.cli,
+        "analyze_table_quality",
+        _capture_testitem_quality,
     )
 
     original_apply = get_testitem_data.cli.apply_config_overrides
@@ -922,8 +984,11 @@ def test_get_testitem_data_smoke(
     assert output_csv.parent == smoke_output_dir
     assert testitem_quality_calls, "quality profiler should be invoked"
     testitem_args, testitem_kwargs = testitem_quality_calls[-1]
-    assert testitem_args[0] == output_csv
-    assert testitem_kwargs.get("destination_dir") == smoke_output_dir
+    assert Path(testitem_args[0]).resolve() == output_csv.resolve()
+    assert (
+        Path(testitem_kwargs.get("destination_dir")).resolve()
+        == smoke_output_dir.resolve()
+    )
     assert polymer_smiles not in smiles_calls
     assert mixture_smiles not in smiles_calls
     assert any(event == "pubchem_skip_polymers" for event, _ in warning_events)
@@ -962,6 +1027,27 @@ def test_get_testitem_data_smoke(
     assert polymer_row["pubchem_cid"] == "POLY-CID"
     mixture_row = df.loc[df["molecule_type"] == "Mixture"].iloc[0]
     assert mixture_row["pubchem_cid"] == "MIX-CID"
+
+
+def test_get_testitem_data_missing_config(tmp_path: Path) -> None:
+    """Verify the CLI exits with an error when configuration is unavailable."""
+
+    missing_config = tmp_path / "missing.yaml"
+    exit_code = get_testitem_data.main(
+        [
+            "--base-path",
+            str(tmp_path),
+            "--input-dir",
+            str(tmp_path),
+            "--output-dir",
+            str(tmp_path),
+            "--log-level",
+            "ERROR",
+            "--config",
+            str(missing_config),
+        ]
+    )
+    assert exit_code == 1
 
 
 def test_get_activity_data_skip_existing(
@@ -1027,8 +1113,11 @@ def test_get_activity_data_force_overrides_skip(
 
     assert force_quality_calls, "quality profiler should be invoked"
     quality_args, quality_kwargs = force_quality_calls[-1]
-    assert quality_args[0] == output_csv
-    assert quality_kwargs.get("destination_dir") == smoke_output_dir
+    assert Path(quality_args[0]).resolve() == output_csv.resolve()
+    assert (
+        Path(quality_kwargs.get("destination_dir")).resolve()
+        == smoke_output_dir.resolve()
+    )
 
 
 def test_run_pipeline_failure_removes_outputs(
@@ -1066,16 +1155,16 @@ def test_run_pipeline_failure_removes_outputs(
 
     def failing_main(argv: list[str] | None) -> int:
         parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--final-out")
         parser.add_argument("--output")
         parser.add_argument("--input")
         parser.add_argument("--config")
         parser.add_argument("--log-level")
         ns = parser.parse_args(argv)
-        Path(ns.output).write_text("temporary output\n")
+        output_path = _extract_output_path(ns)
+        output_path.write_text("temporary output\n")
         final_output.write_text("unexpected final output\n")
-        failure_tmp = Path(ns.output).with_name(
-            f"{Path(ns.output).stem}_failure_cases.csv"
-        )
+        failure_tmp = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
         failure_tmp.write_text("errors\n", encoding="utf-8")
         return 2
 
@@ -1152,13 +1241,14 @@ def test_run_pipeline_system_exit_cleans_up(
 
     def aborting_main(argv: list[str] | None) -> int:
         parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--final-out")
         parser.add_argument("--output")
         parser.add_argument("--input")
         parser.add_argument("--config")
         parser.add_argument("--log-level")
         ns = parser.parse_args(argv)
-        Path(ns.output).write_text("temporary output\n")
-        out_path = Path(ns.output)
+        out_path = _extract_output_path(ns)
+        out_path.write_text("temporary output\n")
         reports_dir = out_path.parent / "reports" / out_path.with_suffix("").name
         reports_dir.mkdir(parents=True, exist_ok=True)
         profile_path = reports_dir / f"{out_path.with_suffix('').name}_profile.json"
@@ -1235,12 +1325,13 @@ def test_run_pipeline_success_promotes_sidecars(
 
     def successful_main(argv: list[str] | None) -> int:
         parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--final-out")
         parser.add_argument("--output")
         parser.add_argument("--input")
         parser.add_argument("--config")
         parser.add_argument("--log-level")
         ns = parser.parse_args(argv)
-        out_path = Path(ns.output)
+        out_path = _extract_output_path(ns)
         out_path.write_text("activity_id\n1\n")
         meta_path = out_path.with_name(out_path.name + ".meta.yaml")
         meta_path.write_text("meta: 1\n", encoding="utf-8")

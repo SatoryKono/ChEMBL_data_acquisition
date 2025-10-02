@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,9 @@ class DummyLogger:
         self.config: dict[str, object | None] = {}
 
     def info(self, event: str, **payload: object) -> None:
+        self.events.append((event, payload))
+
+    def error(self, event: str, **payload: object) -> None:
         self.events.append((event, payload))
 
 
@@ -135,3 +139,72 @@ def test_main_prints_config_when_requested(
         event == "pipeline_end" and payload.get("exit_code") == 0
         for event, payload in configured_loggers[-1].events
     )
+
+
+@pytest.mark.parametrize(
+    "keep_markers, expected",
+    [
+        (False, ["CHEMBL1", "CHEMBL3"]),
+        (True, ["CHEMBL1", "CUSTOM_NA", "CHEMBL3"]),
+    ],
+)
+def test_run_respects_na_marker_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    keep_markers: bool,
+    expected: list[str],
+) -> None:
+    cfg.io.na_markers = ("CUSTOM_NA",)
+    cfg.io.keep_na_markers = keep_markers
+
+    input_path = tmp_path / "ids.csv"
+    input_path.write_text("chembl_id\nCHEMBL1\nCUSTOM_NA\nCHEMBL3\n", encoding="utf-8")
+    output_path = tmp_path / "out.csv"
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_map(
+        ids: list[str],
+        cfg_mapping: object,
+        *,
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
+        captured["ids"] = list(ids)
+        return {chembl_id: None for chembl_id in ids}
+
+    monkeypatch.setattr(cli, "map_chembl_ids_to_uniprot", fake_map)
+
+    written: dict[str, object] = {}
+
+    def fake_write_csv(
+        df_out,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str,
+        encoding: str,
+    ) -> Path:
+        written["df"] = df_out.copy()
+        written["path"] = path
+        return path
+
+    monkeypatch.setattr(cli.io, "write_csv", fake_write_csv)
+
+    args = argparse.Namespace(
+        input_csv=input_path,
+        output_csv=output_path,
+        column="chembl_id",
+        sep=",",
+        encoding="utf8",
+        chunk_size=2,
+        rps=5.0,
+        workers=2,
+    )
+
+    exit_code = cli.run(cfg, args)
+    assert exit_code == 0
+    assert captured["ids"] == expected
+    assert written["path"] == output_path

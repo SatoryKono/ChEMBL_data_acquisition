@@ -125,7 +125,7 @@ def test_get_activity_data_cli_workers_order(
             str(config_path),
             "--input",
             str(input_path),
-            "--output",
+            "--final-out",
             str(output_path),
         ]
     )

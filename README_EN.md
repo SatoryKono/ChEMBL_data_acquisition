@@ -4,13 +4,13 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 
 ## Features
 
-
 * Unified CLI flags such as `--input`, `--final-out` (primary destination flag; the legacy `--output`/`--out`
   aliases remain for compatibility but now emit deprecation warnings), `--log-level`, `--sep`, `--encoding`,
   `--column`, plus `--config` and `--print-config` to manage configuration files. Batch size is controlled via
-  `--chunk-size` or `--batch-size` depending on the pipeline. The `--raw-out`, `--raw-format`, and `--id-cols`
-  switches are currently available through the target pipeline; other commands will expose them once the shared
-  CLI is extended.
+  `--chunk-size` or `--batch-size` depending on the pipeline. The `--raw-out`, `--raw-format`, `--id-cols`,
+  `--no-reindex-raw`, and `--normalize-at-export` / `--no-normalize-at-export` switches are currently available
+  through the target pipeline; other commands will expose them once the shared CLI is extended.
+
 
 * Streaming CSV handling with deterministic output for large datasets.
 * Schema validators in [`schemas/`](schemas/) and dictionaries in [`dictionary/`](dictionary/) that enforce types,
@@ -108,37 +108,47 @@ for usage guidelines.
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-      --final-out out/activities.csv \
+      --output out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --final-out out/documents.csv \
+      --output out/documents.csv \
       --limit 5 --log-level INFO
 
   ```
 
-  The target pipeline is the only one that currently honours `--raw-out` and `--raw-format`; other pipelines ignore the flags
-  until raw snapshot support lands in their adapters.
+
+  The target pipeline is the only one that currently honours `--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and
+  the `--normalize-at-export` / `--no-normalize-at-export` pair; other pipelines ignore the flags until staged snapshot support
+  lands in their adapters.
+
 
    The console scripts accept the same options as their module counterparts, so existing `python -m …` workflows remain valid:
 
   ```bash
   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --final-out out/quality --table-name chembl_targets --log-level INFO
+      --output out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  In the reporting example above `--final-out` must point to the directory where the report files will be created. The legacy
-  `--output`/`--out` aliases remain available for compatibility but now raise deprecation warnings when invoked.
+  In the reporting example above `--output` sets the destination. `--final-out` is currently exclusive to
+  `scripts.get_target_data` and `library.utils.cli_tools.pipeline_targets_main`. The legacy `--out` alias remains
+  available for compatibility but now raises a deprecation warning when invoked.
 
 4. **Run the tests** – see [Tests](#tests).
 
 ## Tests
 
 The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags
-when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in
-[docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md).
+when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in the QA
+process documents listed below.
+
+
+| Language | Checklist |
+|----------|-----------|
+| English  | [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md) |
+| Русский  | [docs/QA_PROCESS_RU.md](docs/QA_PROCESS_RU.md) |
 
 ```bash
 pre-commit run --all-files
@@ -147,7 +157,7 @@ pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --final-out out/mapped.csv --log-level INFO
+    --output out/mapped.csv --log-level INFO
 ```
 
 Before running the smoke command, create a `chembl_ids.csv` file with a `chembl_id` header and the required identifiers.
@@ -170,7 +180,7 @@ The command exits with status code `1` when mismatches occur and stores the diff
 
 ## Data generation
 
-Five production pipelines live in [`scripts/`](scripts/) and write CSV outputs to `data/output/`:
+Five production pipelines live in [`scripts/`](scripts/) and write CSV outputs to `~/.local/share/chembl-da/output` by default:
 
 * `get_activity_data.py` — retrieves activity data from ChEMBL and enriches it with derived value ranges.
 * `get_assay_data.py` — exports assay descriptions.
@@ -187,7 +197,7 @@ Example full pipeline execution:
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --final-out data/output/activities.csv --limit 10 --log-level INFO
+    --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 The command reads data from the ChEMBL API, writes the CSV table and the accompanying `*.meta.yaml`. Development utilities are in
@@ -201,20 +211,26 @@ as a CI artifact.
 ## Usage
 
 
+
 The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--final-out`, and
 `--limit`. The compatibility aliases `--output`/`--out` are still recognised but now emit deprecation warnings. Using `--limit 0`
 short-circuits processing before any network or filesystem access, which is useful for smoke-testing configuration overrides.
-The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols`; the remaining commands will pick
-up the staged switches as the shared parser is extended.
+The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the
+`--normalize-at-export` / `--no-normalize-at-export` pair; the remaining commands will pick up the staged switches as the shared
+parser is extended.
+
 After installing the project with `pip install .`, the same pipelines can be started via the console scripts listed in the
 [Quick Start](#quick-start) table—for example, `get-activity-data --help` is equivalent to `python -m scripts.get_activity_data --help`.
 Both forms accept identical arguments, so feel free to swap between them depending on your environment.
 
 Within the target pipeline the staged export surfaces separate destinations for raw payloads and cleaned tables. Use
 `--raw-out` to persist the unprocessed API response, optionally changing the `--raw-format` between `csv` (default) and
-`parquet`, and `--final-out` to override the normalised export while keeping the metadata sidecars. The legacy
-`--output`/`--out` aliases act as compatibility shims for now but emit a warning on each invocation. Multi-identifier payloads
-accept multiple columns via `--id-cols`, allowing you to keep composite keys in the raw snapshot before the cleanup step runs.
+`parquet`, `--no-reindex-raw` when you need to keep the API column order, and `--final-out` to override the normalised export
+while keeping the metadata sidecars. Normalisation is enabled by default (`--normalize-at-export`); pass
+`--no-normalize-at-export` if the final artefact must mirror the raw payload, in which case the pipeline writes the snapshot to
+`--raw-out` and copies it to `--final-out`. The legacy `--output`/`--out` aliases act as compatibility shims for now but emit a
+warning on each invocation. Multi-identifier payloads accept multiple columns via `--id-cols`, allowing you to keep composite
+keys in the raw snapshot before the cleanup step runs.
 
 
 ### `scripts/get_document_data.py`
@@ -224,7 +240,7 @@ Retrieve document metadata for a list of PubMed IDs using the bundled sample fil
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --final-out out/documents.csv \
+    --output out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -236,7 +252,7 @@ You can also run the PubMed pipeline directly via the library module:
 ```bash
 python -m library.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --final-out out/documents.csv \
+    --output out/documents.csv \
     --log-level INFO
 ```
 
@@ -257,8 +273,11 @@ python -m scripts.get_target_data chembl \
 ```
 
 Replace `path/to/targets.csv` with a CSV containing a `target_chembl_id` column. The `--raw-out` switch keeps the
-pre-normalised snapshot for debugging, while `--final-out` produces the cleaned export aligned with the validation schemas.
-The compatibility aliases `--output`/`--out` remain for migration support and issue warnings when used.
+pre-normalised snapshot for debugging; combine it with `--no-reindex-raw` to retain the API column order when comparing against
+upstream payloads. Normalisation is enabled by default, so `--final-out` produces the cleaned export aligned with the validation
+schemas. Pass `--no-normalize-at-export` to skip the final cleanup, in which case the raw snapshot is copied to `--final-out` so
+downstream consumers inspect the same payload. The compatibility aliases `--output`/`--out` remain for migration support and
+issue warnings when used.
 
 ### `library.utils.cli_tools.pipeline_targets_main`
 
@@ -299,16 +318,18 @@ flowchart LR
 
 * **Fetch** – read identifiers (single or composite via `--id-cols`) and call the upstream services.
 * **Raw CSV / Parquet** – when the CLI exposes staging switches, persist the untouched payload to `--raw-out` using the
-  selected `--raw-format`.
+  selected `--raw-format`. Add `--no-reindex-raw` to retain the API column order when diffing payloads.
 * **Cleanup IDs** – trim, deduplicate and patch placeholder identifiers before downstream work.
-* **Normalize** – harmonise text, relations and datatypes so validation is deterministic.
+* **Normalize** – harmonise text, relations and datatypes so validation is deterministic. Controlled via
+  `--normalize-at-export` / `--no-normalize-at-export` in the target pipeline.
 * **Validate** – run `pandera` schemas, routing failures to the sidecar files recorded in the metadata YAML.
-* **Final export** – write the cleaned table to `--final-out` alongside metadata and quality reports. Deprecated
-  aliases `--output`/`--out` continue to function but emit warnings during the migration period.
+* **Final export** – write the cleaned table to `--final-out` (target pipeline) or `--output` for commands that
+  have not yet adopted the staged switches. The deprecated `--out` alias continues to function but emits warnings
+  during the migration period.
 
-> **Note.** At the moment `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are available through
-> `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt the same
-> switches once the shared CLI is extended.
+> **Note.** At the moment `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the
+> `--normalize-at-export` / `--no-normalize-at-export` pair are available through `get-target-data` and
+> `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt the same switches once the shared CLI is extended.
 
 When `--raw-out` is omitted the raw snapshot is skipped, keeping backwards compatibility with legacy runs. Sidecars continue
 to store CLI arguments, configuration diffs and run hashes regardless of the format choices.
@@ -356,7 +377,7 @@ Run a script with automatic configuration loading:
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \
-    --final-out out/assays.csv
+    --output out/assays.csv
 ```
 
 The `assay_ids.csv` file must contain an `assay_chembl_id` column with the required identifiers, for example:
@@ -448,7 +469,7 @@ Set the log level via the `--log-level` flag or the `CHEMBL_DA_LOG_LEVEL` enviro
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --final-out out/assays.final.csv
+    --output out/assays.final.csv
 ```
 
 Sample log entry:
@@ -503,10 +524,11 @@ All CLI scripts share a common set of flags:
 python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 ```
 
-`--final-out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. The legacy
-`--output`/`--out` aliases continue to map to the same path but now emit deprecation warnings. Target pipeline invocations can
-override the raw snapshot via `--raw-out` (with optional `--raw-format parquet`) and the cleaned export via `--final-out`. For
-additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
+`--output` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. The deprecated
+`--out` alias continues to map to the same path but now emits deprecation warnings. Target pipeline invocations additionally
+accept `--final-out`, which reuses the same default while enabling distinct destinations once raw snapshots are enabled. Combine
+it with `--raw-out` (and optional `--raw-format parquet`) to persist the unprocessed payload. For additional examples see
+[`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
 
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
@@ -630,15 +652,18 @@ python -m library.utils.cli_tools.table_quality_main \
 
 `--final-out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory specified by `local.io.output_dir`. Legacy
 aliases `--output`/`--out` continue to resolve to the same path but issue a deprecation warning. Target pipeline invocations can
-use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. For additional
-examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
+use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. Raw dumps reindex
+columns alphabetically for deterministic layouts unless `--no-reindex-raw` keeps the API order. The final CSV is normalised by
+default; toggle the boolean pair `--normalize-at-export` / `--no-normalize-at-export` when the export should either undergo the
+clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md)
+(Russian version:
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
 
 ## Output and metadata
 
 Pipelines persist deterministic CSV tables via `library.io.write_csv` and store accompanying `*.meta.yaml` sidecars in
-`data/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
+`~/.local/share/chembl-da/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
 [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) for layout details.
 
 ## Dtype Inspector

@@ -128,6 +128,66 @@ def _absolutise_config_paths(data: Mapping[str, Any], base_dir: Path) -> None:
             current[final_key] = _absolutise_path_value(value, base_dir)
 
 
+def _normalize_base_path(value: Path | str) -> Path:
+    """Return *value* coerced into an absolute :class:`~pathlib.Path`."""
+
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (Path.cwd() / candidate).resolve()
+
+
+def _default_base_path() -> Path:
+    """Return the default data directory used for placeholder expansion."""
+
+    env_override = os.environ.get("CHEMBL_DA_BASE_PATH")
+    if env_override:
+        return _normalize_base_path(env_override)
+    return (Path.home() / ".local" / "share" / "chembl-da").resolve()
+
+
+def _default_cache_home() -> Path:
+    """Return the default cache directory for local artefacts."""
+
+    return (Path.home() / ".cache" / "chembl-da").resolve()
+
+
+def _expand_config_placeholders(data: Any, *, base_path: Path) -> Any:
+    """Expand configuration placeholders in ``data`` using *base_path*."""
+
+    replacements = {"$CHEMBL_DA_BASE_PATH": str(base_path)}
+
+    def _expand(value: Any) -> Any:
+        if isinstance(value, dict):
+            for key, current in value.items():
+                value[key] = _expand(current)
+            return value
+        if isinstance(value, list):
+            for idx, current in enumerate(value):
+                value[idx] = _expand(current)
+            return value
+        if isinstance(value, tuple):
+            return tuple(_expand(item) for item in value)
+        if isinstance(value, str):
+            replaced = value
+            for marker, target in replacements.items():
+                replaced = replaced.replace(marker, target)
+            replaced = os.path.expandvars(replaced)
+            replaced = os.path.expanduser(replaced)
+            return replaced
+        return value
+
+    return _expand(data)
+
+
+def _resolve_placeholder_base_path(base_path: Path | str | None) -> Path:
+    """Return the base path used for ``$CHEMBL_DA_BASE_PATH`` placeholders."""
+
+    if base_path is not None:
+        return _normalize_base_path(base_path)
+    return _default_base_path()
+
+
 _RESOURCE_STACK = ExitStack()
 atexit.register(_RESOURCE_STACK.close)
 
@@ -302,8 +362,16 @@ class ChemblCacheCfg(_BaseModel):
 
 
 class MoleculeCatalogCfg(_BaseModel):
-    cache_path: Path = Path("data/cache/molecule_parent_catalog.json")
-    sqlite_path: Path = Path("data/cache/molecule_parent_catalog.sqlite")
+    cache_path: Path = Field(
+        default_factory=lambda: _default_base_path()
+        / "cache"
+        / "molecule_parent_catalog.json"
+    )
+    sqlite_path: Path = Field(
+        default_factory=lambda: _default_base_path()
+        / "cache"
+        / "molecule_parent_catalog.sqlite"
+    )
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
@@ -488,7 +556,9 @@ class PubChemCfg(_BaseModel):
         description="Optional TTL for the persisted CID cache in hours",
     )
     cid_cache_path: Path | None = Field(
-        default=Path("data/cache/pubchem_cid_cache.json"),
+        default_factory=lambda: _default_base_path()
+        / "cache"
+        / "pubchem_cid_cache.json",
         description="Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
     )
     batch_size: int = Field(
@@ -581,6 +651,7 @@ class DocQualityCfg(_BaseModel):
     sample_rows: int | None = Field(default=None, ge=1)
     include_columns: tuple[str, ...] | None = None
     exclude_columns: tuple[str, ...] | None = None
+    fatal_on_error: bool = False
 
 
 class ResourcesCfg(_BaseModel):
@@ -618,8 +689,12 @@ class ResourcesCfg(_BaseModel):
 
 
 class IoCfg(_BoolModel):
-    output_dir: Path = Path("data/output")
-    cache_dir: Path = Path(".cache")
+    output_dir: Path = Field(
+        default_factory=lambda: _default_base_path() / "output"
+    )
+    cache_dir: Path = Field(
+        default_factory=lambda: _default_cache_home()
+    )
     csv_sep: str = ","
     csv_encoding: str = "utf-8-sig"
     csv_fallback_encodings: Sequence[str] | None = Field(
@@ -657,9 +732,24 @@ class LogCfg(_BaseModel):
 
 
 class InitCfg(_BaseModel):
-    same_doc: Path = Path("data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx")
-    all_doc: Path = Path("data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx")
-    output_dir: Path = Path("data/output/ChEMBL/processed")
+    same_doc: Path = Field(
+        default_factory=lambda: _default_base_path()
+        / "input"
+        / "ChEMBL"
+        / "ChEMBL_same_document_20_05.xlsx"
+    )
+    all_doc: Path = Field(
+        default_factory=lambda: _default_base_path()
+        / "input"
+        / "ChEMBL"
+        / "ChEMBL_all_10_05_step5.xlsx"
+    )
+    output_dir: Path = Field(
+        default_factory=lambda: _default_base_path()
+        / "output"
+        / "ChEMBL"
+        / "processed"
+    )
 
 
 class RateCfg(_BaseModel):
@@ -688,6 +778,7 @@ class RateCfg(_BaseModel):
 class RetryCfg(_BaseModel):
     max_attempts: int = Field(3, ge=1)
     backoff_factor: float = Field(0.5, ge=0)
+    backoff_cap: float | None = Field(default=None, ge=0)
     status_forcelist: list[StrictInt] = Field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
@@ -891,6 +982,17 @@ class AssayCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class TestitemBatchRetryCfg(_BoolModel):
+    enable: bool = False
+    shrink_factor: float = Field(0.5, gt=0, lt=1)
+    min_size: int = Field(1, ge=1)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
     batch_size: int = Field(1000, ge=1, le=1000)
@@ -901,6 +1003,9 @@ class TestitemCfg(_BaseModel):
     request_limit: int = Field(1000, ge=1, le=1000)
     retries: int | None = Field(default=None, ge=0)
     backoff_factor: float | None = Field(default=None, ge=0)
+    batch_retry: TestitemBatchRetryCfg = Field(
+        default_factory=lambda: TestitemBatchRetryCfg()
+    )
 
     @field_validator("fields", mode="before")
     @classmethod
@@ -1471,9 +1576,17 @@ def load_config(
     path: str | Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
     *,
+    base_path: Path | str | None = None,
     strict: bool = True,
 ) -> Config:
-    """Load configuration from *path* applying overrides."""
+    """Load configuration from *path* applying overrides.
+
+    Parameters
+    ----------
+    base_path:
+        Optional root directory used to resolve ``$CHEMBL_DA_BASE_PATH``
+        placeholders.
+    """
 
     try:
         data, resolved_path = load_yaml_config(path)
@@ -1507,6 +1620,9 @@ def load_config(
     if cli_overrides:
         for key, val in cli_overrides.items():
             _set_by_path(data, key.split("."), val)
+
+    placeholder_base = _resolve_placeholder_base_path(base_path)
+    data = _expand_config_placeholders(data, base_path=placeholder_base)
 
     base_dir = resolved_path.parent.resolve()
     _absolutise_config_paths(data, base_dir)
@@ -1777,6 +1893,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
     "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["system", "retry", "max_attempts"],
     "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["system", "retry", "backoff_factor"],
+    "CHEMBL_DA_RETRY_BACKOFF_CAP": ["system", "retry", "backoff_cap"],
 }
 
 _ALIAS_MAP: dict[str, list[str]] = {
@@ -1805,6 +1922,7 @@ __all__ = [
     "ActivityPropertiesCfg",
     "AssayCfg",
     "TestitemCfg",
+    "TestitemBatchRetryCfg",
     "TestitemMoleculeEnrichmentCfg",
     "TestitemMoleculeEnrichmentFlagsCfg",
     "TestitemMoleculeEnrichmentLoggingCfg",

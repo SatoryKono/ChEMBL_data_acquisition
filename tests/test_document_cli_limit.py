@@ -25,7 +25,7 @@ def test_zero_limit_skips_pipeline(
     output_path = tmp_path / "documents.csv"
 
     exit_code = gdd.main(
-        ["chembl", "--limit", "0", "--output", str(output_path)]
+        ["chembl", "--limit", "0", "--final-out", str(output_path)]
     )
 
     assert exit_code == 0

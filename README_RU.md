@@ -4,11 +4,14 @@
 
 ## Особенности
 
+
 * Унифицированные CLI-флаги `--input`, `--final-out` (основной флаг назначения; устаревшие алиасы `--output`/`--out`
   сохранены для совместимости и теперь сопровождаются предупреждением), `--log-level`, `--sep`, `--encoding`,
   `--column`, а также `--config` и `--print-config` для управления конфигурацией. Размер партий задаётся параметрами
-  `--chunk-size` или `--batch-size` в зависимости от пайплайна. Переключатели `--raw-out`, `--raw-format` и `--id-cols`
-  уже доступны в пайплайне таргетов; остальные команды получат их после расширения общего CLI.
+  `--chunk-size` или `--batch-size` в зависимости от пайплайна. Переключатели `--raw-out`, `--raw-format`, `--id-cols`,
+  `--no-reindex-raw` и пара `--normalize-at-export` / `--no-normalize-at-export` уже доступны в пайплайне таргетов;
+  остальные команды получат их после расширения общего CLI.
+
 
 * Потоковая обработка крупных CSV-файлов с детерминированным выводом.
 * Валидаторы схем в [`schemas/`](schemas/) и словари в [`dictionary/`](dictionary/) для проверки типов, диапазонов и справочных данных.
@@ -102,34 +105,40 @@ pre-commit install
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-      --final-out out/activities.csv \
+      --output out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --final-out out/documents.csv \
+      --output out/documents.csv \
       --limit 5 --log-level INFO
   ```
 
-  Выделенный «сырой» снимок сейчас поддерживает только таргет-пайплайн; остальные команды принимают `--raw-out`/`--raw-format`
-  для совместимости, но игнорируют их до появления соответствующей реализации.
+  Таргет-пайплайн остаётся единственным, кто понимает `--raw-out`, `--raw-format` и `--final-out`. Остальные команды
+  используют `--output` (или устаревший алиас `--out`) до расширения общего парсера.
 
    Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
 
   ```bash
   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --final-out out/quality --table-name chembl_targets --log-level INFO
+      --output out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  В примере с отчётностью `--final-out` задаёт каталог, где будут сохранены результаты. Устаревшие алиасы
-  `--output`/`--out` остаются для совместимости, но теперь сопровождаются предупреждением об удалении.
+  В примере с отчётностью путь задаёт `--output`. Флаг `--final-out` сейчас реализован только в
+  `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`. Алиас `--out`
+  сохранён для совместимости, но сопровождается предупреждением об удалении.
 
 4. **Запустите тесты** — см. раздел [Тесты](#тесты).
 
 ## Тесты
 
-`pre-commit` выполняет форматирование, линтинг и статические проверки. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Дополнительные smoke- и детерминизм-проверки доступны через отдельные CLI. Актуальный список проверок живёт в [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md).
+`pre-commit` выполняет форматирование, линтинг и статические проверки. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Дополнительные smoke- и детерминизм-проверки доступны через отдельные CLI. Актуальный список проверок приведён в документах по процессу обеспечения качества ниже.
+
+| Язык    | Чек-лист |
+|---------|----------|
+| English | [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md) |
+| Русский | [docs/QA_PROCESS_RU.md](docs/QA_PROCESS_RU.md) |
 
 ```bash
 pre-commit run --all-files
@@ -138,14 +147,14 @@ pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --final-out out/mapped.csv --log-level INFO
+    --output out/mapped.csv --log-level INFO
 ```
 
 Перед запуском smoke-команды создайте `chembl_ids.csv` с заголовком `chembl_id` и нужными идентификаторами.
 
 ## Генерация данных
 
-Пять рабочих пайплайнов находятся в каталоге [`scripts/`](scripts/) и сохраняют CSV в `data/output/`:
+Пять рабочих пайплайнов находятся в каталоге [`scripts/`](scripts/) и по умолчанию сохраняют CSV в `~/.local/share/chembl-da/output`:
 
 * `get_activity_data.py` — выгружает активности из ChEMBL и обогащает расчётными границами значений.
 * `get_assay_data.py` — загружает описания ассайев.
@@ -162,7 +171,7 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --final-out data/output/activities.csv --limit 10 --log-level INFO
+    --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 Команда обращается к API ChEMBL, сохраняет таблицу и сопровождающий `*.meta.yaml`. Утилиты разработки находятся в `library/utils/cli_tools/`; например, модуль `get_activities` предназначен лишь для демонстрационного логирования и не выполняет файловых операций. См. [`docs/CLI_TOOLS.md`](docs/CLI_TOOLS.md) для кратких описаний и типовых команд. Каталог результатов игнорируется Git и публикуется как артефакт CI.
@@ -171,7 +180,9 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 ## Использование
 
-Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--final-out`, `--limit`). Устаревшие алиасы `--output`/`--out` остаются доступными, но при использовании выводят предупреждения. Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации. Пайплайн таргетов уже поддерживает `--raw-out`, `--final-out`, `--raw-format` и `--id-cols`; остальные команды получат эти переключатели после расширения общего парсера.
+
+Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--final-out`, `--limit`). Устаревшие алиасы `--output`/`--out` остаются доступными, но при использовании выводят предупреждения. Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации. Пайплайн таргетов уже поддерживает `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw` и пару `--normalize-at-export` / `--no-normalize-at-export`; остальные команды получат эти переключатели после расширения общего парсера.
+
 После установки пакета через `pip install .` те же пайплайны доступны в виде консольных скриптов из таблицы в разделе
 [Быстрый старт](#быстрый-старт) — например, `get-activity-data --help` полностью эквивалентен
 `python -m scripts.get_activity_data --help`. Оба варианта принимают одинаковые аргументы, поэтому выбирайте форму, удобную
@@ -179,9 +190,12 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 Обновлённая конвейерная обработка в пайплайне таргетов разделяет необработанные и нормализованные артефакты. Параметр
 `--raw-out` сохраняет ответы API до любых преобразований, формат задаётся через `--raw-format` (`csv` по умолчанию, либо
-`parquet`). Опция `--final-out` переопределяет путь нормализованного экспорта, сохраняя побочные файлы метаданных. Алиасы
-`--output`/`--out` по-прежнему работают, но сопровождаются предупреждениями. Пайплайны с составными ключами принимают список
-столбцов через `--id-cols`, чтобы фиксировать исходные идентификаторы в «сыром» снимке до очистки.
+`parquet`); добавьте `--no-reindex-raw`, чтобы сохранить порядок колонок от API. Опция `--final-out` переопределяет путь
+нормализованного экспорта, сохраняя побочные файлы метаданных. По умолчанию выполняется нормализация (`--normalize-at-export`);
+укажите `--no-normalize-at-export`, если финальный артефакт должен совпадать с «сырым» снимком — в этом режиме файл из
+`--raw-out` копируется в `--final-out`, чтобы downstream-потребители работали с теми же данными. Алиасы `--output`/`--out`
+по-прежнему работают, но сопровождаются предупреждениями. Пайплайны с составными ключами принимают список столбцов через
+`--id-cols`, чтобы фиксировать исходные идентификаторы в «сыром» снимке до очистки.
 
 
 ### `scripts/get_document_data.py`
@@ -191,8 +205,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --final-out out/documents.csv \
-
+    --output out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -204,7 +217,7 @@ python -m scripts.get_document_data pubmed \
 ```bash
 python -m library.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --final-out out/documents.csv \
+    --output out/documents.csv \
     --log-level INFO
 ```
 
@@ -225,7 +238,9 @@ python -m scripts.get_target_data chembl \
 ```
 
 Замените `path/to/targets.csv` на CSV со столбцом `target_chembl_id`. `--raw-out` фиксирует снимок до нормализации для
-диагностики, а `--final-out` формирует чистый экспорт, согласованный со схемами валидации. Устаревшие алиасы
+диагностики; совместно с `--no-reindex-raw` сохраняется порядок колонок из API. По умолчанию активна нормализация, поэтому
+`--final-out` формирует чистый экспорт, согласованный со схемами валидации. Укажите `--no-normalize-at-export`, чтобы пропустить
+финальный этап: «сырой» снимок будет скопирован в `--final-out`, и downstream-системы увидят тот же payload. Устаревшие алиасы
 `--output`/`--out` сохраняются для совместимости и выводят предупреждения.
 
 ### `library.utils.cli_tools.pipeline_targets_main`
@@ -264,15 +279,17 @@ flowchart LR
 
 * **Fetch** — чтение идентификаторов (одиночных либо составных через `--id-cols`) и обращение к внешним сервисам.
 * **Raw CSV / Parquet** — при наличии соответствующих флагов сохранение необработанного ответа в `--raw-out` с заданным
-  `--raw-format`.
+  `--raw-format`. Добавляйте `--no-reindex-raw`, чтобы сравнивать payload в исходном порядке колонок.
 * **Очистка идентификаторов** — обрезка пробелов, дедупликация и пометка заглушек до дальнейшей обработки.
-* **Normalize** — выравнивание текста, операторов и типов для детерминированной валидации.
+* **Normalize** — выравнивание текста, операторов и типов для детерминированной валидации. Управляется парой
+  `--normalize-at-export` / `--no-normalize-at-export` в таргет-пайплайне.
 * **Validate** — применение схем `pandera`, перенос ошибочных строк в sidecar-файлы, описанные в YAML метаданных.
 * **Финальный экспорт** — запись очищенной таблицы в `--final-out` вместе с метаданными и отчётами о качестве. Устаревшие алиасы
   `--output`/`--out` временно сохраняются и сопровождаются предупреждениями.
 
-> **Примечание.** Сейчас флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` доступны в `get-target-data`
-> и `library.utils.cli_tools.pipeline_targets_main`. Остальные точки входа получат их после расширения общего CLI.
+> **Примечание.** Сейчас флаги `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw` и пара
+> `--normalize-at-export` / `--no-normalize-at-export` доступны в `get-target-data` и
+> `library.utils.cli_tools.pipeline_targets_main`. Остальные точки входа получат их после расширения общего CLI.
 
 Если `--raw-out` не указан, снимок «сырых» данных пропускается для обратной совместимости. Sidecar-файлы по-прежнему
 содержат параметры запуска, конфигурационные диффы и хеши независимо от выбранных форматов.
@@ -316,7 +333,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \
-    --final-out out/assays.csv
+    --output out/assays.csv
 ```
 
 Файл `assay_ids.csv` должен содержать столбец `assay_chembl_id` с нужными идентификаторами, например:
@@ -405,7 +422,7 @@ CLI-хелперы настраивают структурированное JSO
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --final-out out/assays.final.csv
+    --output out/assays.final.csv
 ```
 
 Пример строки лога:
@@ -457,9 +474,13 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
     --table-name activity
 ```
 
-По умолчанию `--final-out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
-Устаревшие алиасы `--output`/`--out` продолжают работать, но сопровождаются предупреждениями. Пайплайн таргетов может
-разделять «сырой» и чистый вывод флагами `--raw-out` (с `--raw-format`) и `--final-out`. Дополнительные примеры приведены в
+По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
+Устаревший алиас `--out` продолжает работать, но сопровождается предупреждениями. Таргет-пайплайн также принимает
+`--final-out`, чтобы разделять директории при наличии «сырого» снимка. Флаг `--raw-out` (с `--raw-format`) управляет
+сохранением необработанных данных, при этом столбцы переупорядочиваются по алфавиту для детерминированности —
+`--no-reindex-raw` сохраняет исходный порядок из API. Финальный CSV нормализуется по умолчанию; переключайте пару
+`--normalize-at-export` / `--no-normalize-at-export`, чтобы либо провести очистку перед записью, либо оставить экспорт
+идентичным «сырому» файлу. Дополнительные примеры приведены в
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 
@@ -568,14 +589,15 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-По умолчанию `--final-out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Устаревшие алиасы
-`--output`/`--out` продолжают работать и предупреждают о грядущем удалении. Пайплайн таргетов может использовать `--raw-out` и
-`--final-out`, чтобы явно развести «сырые» и чистые артефакты (при желании указав `--raw-format`). Дополнительные примеры см. в
+По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Устаревший алиас
+`--out` сохраняется для совместимости и предупреждает о грядущем удалении. Таргет-пайплайн дополнительно принимает `--final-out`,
+который использует тот же шаблон пути и позволяет разделять директории после добавления «сырого» снимка. Комбинируйте его с
+`--raw-out` (и опциональным `--raw-format parquet`), чтобы сохранять необработанный ответ. Дополнительные примеры см. в
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Вывод и метаданные
 
-Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `data/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
+Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `~/.local/share/chembl-da/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
 
 ## Dtype Inspector
 

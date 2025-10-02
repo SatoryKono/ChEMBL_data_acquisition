@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from library.utils.cli_tools import csv_utils_main as cli
+from library.utils.config import DEFAULT_CONFIG_PATH
 
 
 def _fd_count() -> int:
@@ -99,6 +100,8 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
             "3",
             "--log-level",
             "INFO",
+            "--config",
+            str(DEFAULT_CONFIG_PATH),
         ]
     )
     assert rc == 0
@@ -133,6 +136,8 @@ def test_cli_writes_with_custom_separator_and_encoding(tmp_path: Path) -> None:
             "id",
             "--log-level",
             "INFO",
+            "--config",
+            str(DEFAULT_CONFIG_PATH),
         ]
     )
 
@@ -207,7 +212,18 @@ def test_cli_generates_output_path(
 
     monkeypatch.setattr(cli.logger, "info", fake_info)
 
-    rc = cli.main(["--input", str(input_csv), "--key-cols", "a"])
+    rc = cli.main(
+        [
+            "--input",
+            str(input_csv),
+            "--key-cols",
+            "a",
+            "--date",
+            "20240102",
+            "--config",
+            str(DEFAULT_CONFIG_PATH),
+        ]
+    )
     assert rc == 0
     expected = input_csv.with_name("output.input_20240102.csv")
     assert called["output"] == expected
@@ -220,7 +236,9 @@ def test_cli_uses_configured_delimiter(
     input_csv = tmp_path / "in.csv"
     input_csv.write_text("a,b\n1,2\n", encoding="utf8")
     config_path = tmp_path / "cfg.yaml"
-    config_data = yaml.safe_load(Path("config/config.yaml").read_text(encoding="utf8"))
+    config_data = yaml.safe_load(
+        DEFAULT_CONFIG_PATH.read_text(encoding="utf8")
+    )
     config_data["local"]["io"]["csv_sep"] = ";"
     config_data["local"]["io"]["csv_encoding"] = "latin1"
     config_data["local"]["io"]["csv_chunksize"] = 256
@@ -338,6 +356,8 @@ def test_cli_resolves_paths_with_base_path(
             "20240203",
             "--key-cols",
             "a",
+            "--config",
+            str(DEFAULT_CONFIG_PATH),
         ]
     )
 
@@ -359,6 +379,8 @@ def test_cli_does_not_leak_file_descriptors(tmp_path: Path) -> None:
         "id",
         "--chunk-size",
         "1",
+        "--config",
+        str(DEFAULT_CONFIG_PATH),
     ]
 
     for run in range(3):

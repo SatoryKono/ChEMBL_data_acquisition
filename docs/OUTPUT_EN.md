@@ -6,7 +6,8 @@ creation.
 
 ## Directory layout
 
-Exports are written to `local.io.output_dir` (default `../data/output`). By
+Exports are written to `local.io.output_dir` (default
+`~/.local/share/chembl-da/output`). By
 default each CLI command derives the destination file as
 `output.<stem>_<date>.csv`, where `<stem>` is the input filename without
 extension and `<date>` is the host-local calendar date in `YYYYMMDD` format.
@@ -16,12 +17,12 @@ custom `--output` value or set `local.io.output_dir` explicitly so you can
 inject an alternate timestamp.
 
 ```
-../data/output/
-├── output.activity_20240105.csv
-├── output.activity_20240105.csv.meta.yaml
-├── output.activity_20240105_failure_cases.csv
-├── output.activity_20240105_quality_report_table.csv
-└── output.activity_20240105_data_correlation_report_table.csv
+~/.local/share/chembl-da/output/
+├── output.activities_20240105.csv
+├── output.activities_20240105.csv.meta.yaml
+├── output.activities_20240105_failure_cases.csv
+├── output.activities_20240105_quality_report_table.csv
+└── output.activities_20240105_data_correlation_report_table.csv
 ```
 
 Document-oriented pipelines (for example `scripts/get_document_data.py`) append
@@ -31,13 +32,13 @@ errors. Activity, assay and target jobs do not generate this report.
 Intermediate artefacts produced by the target `all` pipeline (`*_chembl.csv`,
 `*_uniprot.csv`, `*_iuphar.csv`) follow the same pattern. Custom `--output`
 arguments remain supported when a different layout (for example,
-`../data/output/ChEMBL/processed/activity.csv`) is required.
+`~/.local/share/chembl-da/output/ChEMBL/processed/activities.csv`) is required.
 
 ## Metadata sidecars (`*.csv.meta.yaml`)
 
 Each CSV export is accompanied by `<base>.csv.meta.yaml` created via
 `library.metadata.write_meta_yaml`, where `<base>` matches the CSV filename
-without the extension (for example `output.activity_20240105`). The metadata
+without the extension (for example `output.activities_20240105`). The metadata
 captures the following keys:
 
 * `generated_at` – ISO 8601 timestamp (UTC) when the file was produced.
@@ -46,8 +47,13 @@ captures the following keys:
 * `command` – the exact CLI invocation.
 * `config` – effective configuration values with secrets masked.
 * `inputs` – descriptions of source files and parameters.
-* `stats` – `rows_total`, `rows_kept`, `rows_dropped` and the `output_sha256`
-  digest.
+* `stats` – `rows_total`, `rows_kept`, `rows_dropped`, the `output_sha256`
+  digest, parent lookup diagnostics (`parent_lookup_source`,
+  `parent_lookup_missing`, `parent_lookup_failed_ids`,
+  `parent_lookup_failed_count`) and, when present,
+  `missing_molecule_ids` for raw identifier gaps. Operators can re-run failed
+  parent lookups by feeding the recorded identifiers back into the pipeline via
+  the regular CSV input flow.
 * `schema` – name of the validation schema applied to the dataset.
 
 When a sidecar already exists its contents are merged so that manual additions
@@ -108,7 +114,7 @@ when the signal is inconclusive.
 
 ## Activity bounds (`lower_value`, `upper_value`)
 
-The activity export (`output.activity_<date>.csv` by default) exposes canonical
+The activity export (`output.activities_<date>.csv` by default) exposes canonical
 value ranges derived from ChEMBL `standard_*`
 columns in `scripts/get_activity_data.py`. Bounds are resolved in the following
 priority order:
@@ -143,7 +149,7 @@ contains:
 
 ## Test item enrichment
 
-`scripts/get_testitem_data.py` produces `output_testitem_<date>.csv` plus the standard
+`scripts/get_testitem_data.py` produces `output.testitems_<date>.csv` plus the standard
 sidecars and quality reports. Each row merges ChEMBL molecule metadata, PubChem
 properties and pipeline bookkeeping, forming the canonical compound dimension.
 The enrichment stage relies on the molecule catalogue configured at

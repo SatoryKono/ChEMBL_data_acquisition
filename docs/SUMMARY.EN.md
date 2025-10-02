@@ -88,7 +88,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Create and activate a Python ≥3.11 virtual environment.
 2. Install dependencies from the lock file: `pip install -r requirements-lock.txt`.
 3. Enable the quality gate: `pre-commit install`.
-4. Recommended ad-hoc checks (see [Quality Assurance Process](QA_PROCESS_EN.md) for the living checklist):
+4. Recommended ad-hoc checks (see Quality Assurance Process — [English](QA_PROCESS_EN.md) / [Русский](QA_PROCESS_RU.md) — for the living checklist):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -113,7 +113,7 @@ Detailed command walkthroughs live in `docs/USAGE_EN.md` and
 
 ## Outputs
 
-* Primary CSV exports live under `local.io.output_dir` (default `../data/output`).
+* Primary CSV exports live under `local.io.output_dir` (default `~/.local/share/chembl-da/output`).
 * Every run writes a `<name>.csv.meta.yaml` sidecar with configuration, command
   line, row counts and SHA-256 digests. Validation errors go into
   `<name>_failure_cases.csv`, and table-quality reports are produced for each

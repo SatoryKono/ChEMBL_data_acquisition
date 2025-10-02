@@ -29,7 +29,7 @@ import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
-from itertools import chain, islice, tee
+from itertools import chain, islice
 import tempfile
 from pathlib import Path
 import weakref
@@ -109,6 +109,7 @@ from schemas import DocumentsSchema, normalize_documents
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
 DOCUMENT_PROGRESS_INFO_INTERVAL = 100
+DOCUMENT_FRAME_CONCAT_STRIDE = 16
 
 
 T = TypeVar("T")
@@ -195,6 +196,46 @@ def _build_fallback_doi_map(
             continue
         mapping[pmid] = doi
     return mapping
+
+
+def _concat_frames_incrementally(
+    frames: Iterator[pd.DataFrame],
+    *,
+    batch_size: int,
+) -> pd.DataFrame:
+    """Concatenate ``frames`` in bounded batches to reduce peak memory usage."""
+
+    combined: pd.DataFrame | None = None
+    buffer: list[pd.DataFrame] = []
+
+    def _flush(buffer_frames: list[pd.DataFrame], current: pd.DataFrame | None) -> pd.DataFrame:
+        """Concatenate ``buffer_frames`` into ``current`` and return the result."""
+
+        if not buffer_frames:
+            return current if current is not None else build_dataframe(
+                [], columns=DOCUMENT_SCHEMA_COLUMNS
+            )
+
+        if len(buffer_frames) == 1:
+            batch = buffer_frames[0]
+        else:
+            batch = pd.concat(buffer_frames, ignore_index=True)
+
+        if current is None:
+            return batch
+
+        return pd.concat([current, batch], ignore_index=True)
+
+    for frame in frames:
+        buffer.append(frame)
+        if len(buffer) >= batch_size:
+            combined = _flush(buffer, combined)
+            buffer = []
+
+    if combined is None and not buffer:
+        return build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
+
+    return _flush(buffer, combined)
 
 
 def fetch_pubmed_records(
@@ -783,7 +824,7 @@ def fetch_pubmed_records(
     iterator = (p for p in pmids if p)
 
     tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
-    record_heap: list[tuple[int, list[dict[str, str]]]] = []
+    frame_heap: list[tuple[int, pd.DataFrame]] = []
     next_to_emit = 0
     processed = 0
     completed_batches = 0
@@ -812,13 +853,14 @@ def fetch_pubmed_records(
 
     def _drain_future(
         done_future: Future[list[dict[str, str]]],
-    ) -> Iterator[list[dict[str, str]]]:
+    ) -> Iterator[pd.DataFrame]:
         nonlocal processed, next_to_emit, completed_batches
 
         pending.remove(done_future)
         batch_id, batch_pmids = tasks.pop(done_future)
         records = done_future.result()
-        heapq.heappush(record_heap, (batch_id, records))
+        frame = build_dataframe(records, columns=DOCUMENT_SCHEMA_COLUMNS)
+        heapq.heappush(frame_heap, (batch_id, frame))
         processed += len(batch_pmids)
         completed_batches += 1
         log_kwargs = {"count": processed, "batches": completed_batches}
@@ -827,21 +869,21 @@ def fetch_pubmed_records(
         else:
             logger.debug("documents_processed", **log_kwargs)
 
-        yield from _emit_ready_batches()
+        yield from _emit_ready_frames()
 
-    def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
+    def _emit_ready_frames() -> Iterator[pd.DataFrame]:
         nonlocal next_to_emit
 
-        while record_heap and record_heap[0][0] == next_to_emit:
-            _, records = heapq.heappop(record_heap)
-            yield records
-            next_to_emit += len(records)
+        while frame_heap and frame_heap[0][0] == next_to_emit:
+            _, frame = heapq.heappop(frame_heap)
+            yield frame
+            next_to_emit += len(frame)
 
-    def _iter_records() -> Iterator[list[dict[str, str]]]:
+    def _iter_frame_batches() -> Iterator[pd.DataFrame]:
         nonlocal offset
 
         for batch in _chunked(iterator, batch_size):
-            while record_heap and len(record_heap) >= max_in_flight and pending:
+            while frame_heap and len(frame_heap) >= max_in_flight and pending:
                 done_future = next(as_completed(list(pending)))
                 yield from _drain_future(done_future)
             if not batch:
@@ -855,22 +897,18 @@ def fetch_pubmed_records(
                 done_future = next(_iter_pending(pending))
                 yield from _drain_future(done_future)
 
-            yield from _emit_ready_batches()
+            yield from _emit_ready_frames()
 
         for done_future in _iter_pending(pending):
             yield from _drain_future(done_future)
 
         pending.clear()
 
-        yield from _emit_ready_batches()
+        yield from _emit_ready_frames()
 
     def _iter_frames() -> Iterator[pd.DataFrame]:
         try:
-            for records_batch in _iter_records():
-                if not records_batch:
-                    yield build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
-                    continue
-                yield build_dataframe(records_batch, columns=DOCUMENT_SCHEMA_COLUMNS)
+            yield from _iter_frame_batches()
         finally:
             stack.close()
             finalizer = getattr(thread_local_state, "resources_finalizer", None)
@@ -886,12 +924,10 @@ def fetch_pubmed_records(
     if return_generator:
         return frame_iter
 
-    frame_iter, concat_iter = tee(frame_iter)
-    try:
-        first_frame = next(concat_iter)
-    except StopIteration:
-        return build_dataframe([], columns=DOCUMENT_SCHEMA_COLUMNS)
-    return pd.concat(chain([first_frame], concat_iter), ignore_index=True)
+    return _concat_frames_incrementally(
+        frame_iter,
+        batch_size=DOCUMENT_FRAME_CONCAT_STRIDE,
+    )
 
 
 _NUMERIC_EXPORT_COLUMNS = {

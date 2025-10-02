@@ -151,13 +151,14 @@ def add_common_arguments(
 
     Notes
     -----
-    When ``--output`` is omitted, a file named
+    When ``--final-out`` is omitted, a file named
     ``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the input file.
     """
 
     log_level = "INFO" if defaults else argparse.SUPPRESS
     input_default: Path | object = Path("input.csv") if defaults else argparse.SUPPRESS
     output_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    final_default: Path | None | object = None if defaults else argparse.SUPPRESS
     sep_default: str | object = "," if defaults else argparse.SUPPRESS
     enc_default: str | object = "utf8" if defaults else argparse.SUPPRESS
     base_default: Path | None | object = None if defaults else argparse.SUPPRESS
@@ -174,6 +175,13 @@ def add_common_arguments(
         type=path_argument,
         default=input_default,
         help="Input CSV file",
+    )
+    parser.add_argument(
+        "--final-out",
+        dest="final_out",
+        type=path_argument,
+        default=final_default,
+        help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
     )
     parser.add_argument(
         "--output",
@@ -438,6 +446,10 @@ def _normalize_path(path: str) -> str:
 _DEFAULT_OVERRIDES: dict[str, str] = {
     key: _normalize_path(value)
     for key, value in {
+        "base_path": "io.base_path",
+        "input_dir": "io.input_dir",
+        "output_dir": "io.output_dir",
+        "cache_dir": "io.cache_dir",
         "sep": "io.csv_sep",
         "encoding": "io.csv_encoding",
         "log_level": "log.level",
@@ -525,9 +537,18 @@ def apply_config_overrides(
             cli_overrides[key] = value
 
     try:
+        base_path_arg = getattr(args, "base_path", None)
+        if isinstance(base_path_arg, Path):
+            config_base_path = base_path_arg
+        elif base_path_arg in (None, argparse.SUPPRESS):
+            config_base_path = None
+        else:
+            config_base_path = Path(base_path_arg)
+
         cfg = load_config(
             config_path,
             cli_overrides=cli_overrides,
+            base_path=config_base_path,
             strict=True,
         )
     except ConfigError as exc:
@@ -536,7 +557,7 @@ def apply_config_overrides(
             error=str(exc),
             config=str(config_path),
         )
-        parser.error(str(exc))
+        raise
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 
@@ -628,6 +649,9 @@ def prepare_io_paths(
 
     output_dir = _resolve_directory(getattr(args, "output_dir", None), base=base_path)
     setattr(args, "output_dir", output_dir)
+
+    cache_dir = _resolve_directory(getattr(args, "cache_dir", None), base=base_path)
+    setattr(args, "cache_dir", cache_dir)
 
     deprecated_out = getattr(args, "_deprecated_out", argparse.SUPPRESS)
     if deprecated_out is not argparse.SUPPRESS:

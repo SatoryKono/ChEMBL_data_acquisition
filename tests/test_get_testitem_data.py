@@ -144,11 +144,83 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
         sample_ids=("CHEMBL1",),
         fields=cfg.testitem.fields,
         page_limit=cfg.testitem.request_limit,
+        retry_cfg=cfg.testitem.batch_retry,
     )
 
     assert status == 1
     assert chunks is None
     assert requested_ids == ()
+
+
+def test_fetch_testitems_retries_reduced_batch(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    attempts: list[int] = []
+
+    def flaky_fetch(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+        fields: Sequence[str] | None = None,
+        page_limit: int = 0,
+    ) -> pd.DataFrame:
+        _ = cfg, client, timeout, fields, page_limit
+        attempts.append(chunk_size)
+        if chunk_size >= 4:
+            raise requests.RequestException("boom")
+        values = list(ids)
+        return pd.DataFrame({"molecule_chembl_id": values})
+
+    monkeypatch.setattr(cl, "get_testitem", flaky_fetch)
+
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    def capture_warning(event: str, *args: object, **kwargs: object) -> None:
+        warnings.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(gtd.logger, "warning", capture_warning)
+
+    original_retry = cfg.testitem.batch_retry
+    cfg.testitem.batch_retry = cfg.testitem.batch_retry.model_copy(
+        update={"enable": True, "min_size": 1, "shrink_factor": 0.5}
+    )
+
+    status, chunks, requested_ids = gtd.fetch_testitems(
+        iter(["CHEMBL1", "CHEMBL2", "CHEMBL3", "CHEMBL4"]),
+        api_cfg=cfg.api,
+        batch_size=4,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        sample_ids=("CHEMBL1",),
+        fields=cfg.testitem.fields,
+        page_limit=cfg.testitem.request_limit,
+        retry_cfg=cfg.testitem.batch_retry,
+    )
+
+    cfg.testitem.batch_retry = original_retry
+
+    assert status == 0
+    assert chunks is not None
+    frames = list(chunks)
+    assert len(frames) == 1
+    assert frames[0]["molecule_chembl_id"].tolist() == [
+        "CHEMBL1",
+        "CHEMBL2",
+        "CHEMBL3",
+        "CHEMBL4",
+    ]
+    assert attempts == [4, 2]
+    assert requested_ids == (
+        "CHEMBL1",
+        "CHEMBL2",
+        "CHEMBL3",
+        "CHEMBL4",
+    )
+    retry_events = [event for event, _ in warnings if event == "testitem_fetch_retry_reduced_batch"]
+    assert retry_events
 
 
 def test_ensure_no_parant_column_raises() -> None:
@@ -195,6 +267,7 @@ def test_fetch_testitems_passes_fields_and_limit(
         sample_ids=("CHEMBL1",),
         fields=("a", "b"),
         page_limit=500,
+        retry_cfg=cfg.testitem.batch_retry,
     )
 
     assert status == 0
@@ -241,6 +314,7 @@ def test_fetch_testitems_logs_missing_summary(
         sample_ids=("CHEMBL1",),
         fields=cfg.testitem.fields,
         page_limit=500,
+        retry_cfg=cfg.testitem.batch_retry,
     )
 
     assert status == 0
@@ -593,13 +667,22 @@ def test_finalize_output_success(
         unique=1,
         attached=1,
         uncovered=0,
+        failed_ids=("CHEMBL9",),
     )
 
     def fake_validate(frame: pd.DataFrame, *, return_result: bool) -> SimpleNamespace:
         return SimpleNamespace(data=frame, failure_cases=pd.DataFrame())
 
     monkeypatch.setattr(pipeline, "validate_testitems", fake_validate, raising=False)
-    monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
+    captured_stats: dict[str, object] = {}
+
+    def capture_meta(**kwargs: object) -> None:
+        stats = kwargs.get("stats")
+        if isinstance(stats, dict):
+            captured_stats.update(stats)
+
+    monkeypatch.setattr(pipeline, "write_meta_yaml", capture_meta)
+    monkeypatch.setattr(pipeline_cli, "write_meta_yaml", capture_meta)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(
         pipeline, "analyze_table_quality", lambda *_args, **_kwargs: None
@@ -620,6 +703,8 @@ def test_finalize_output_success(
     )
 
     assert exit_code == 0
+    assert captured_stats.get("parent_lookup_failed_ids") == ["CHEMBL9"]
+    assert captured_stats.get("parent_lookup_failed_count") == 1
 
 
 def test_finalize_output_missing_required_columns(

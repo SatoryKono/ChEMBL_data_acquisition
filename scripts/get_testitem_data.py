@@ -447,6 +447,7 @@ class ParentLookupStats:
     unique: int
     attached: int
     uncovered: int
+    failed_ids: tuple[str, ...] = ()
 
 
 def _cache_state(path: Path) -> tuple[bool, float | None]:
@@ -749,6 +750,7 @@ def attach_parent_molecule_ids(
         unique=int(len(unique_children)),
         attached=int(attached),
         uncovered=int(uncovered_children),
+        failed_ids=tuple(missing_ids),
     )
 
     logger.info(
