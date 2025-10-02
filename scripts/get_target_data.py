@@ -38,7 +38,7 @@ from library import iuphar_library as ii
 from library import protein_classification as pc
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.clients import ChemblClient, _chunked
+from library.clients import ChemblClient
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
@@ -82,6 +82,8 @@ UNIPROT_MISSING_VALUE = ""
 
 DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
+RAW_SUFFIX = "_raw"
+NORMALIZED_SUFFIX = "_normalized"
 
 
 @dataclass(frozen=True)
@@ -217,6 +219,49 @@ def _resolve_uniprot_matches(
         resolved.append(match)
 
     return pd.Series(resolved, index=plan.row_index, dtype=object)
+
+
+def _normalized_output_path(base: Path) -> Path:
+    """Return deterministic path for the normalized export derived from ``base``."""
+
+    suffix = base.suffix or ".csv"
+    return base.with_name(f"{base.stem}{NORMALIZED_SUFFIX}{suffix}")
+
+
+def _raw_output_path(base: Path) -> Path:
+    """Return default path for the raw payload dump derived from ``base``."""
+
+    suffix = base.suffix or ".csv"
+    return base.with_name(f"{base.stem}{RAW_SUFFIX}{suffix}")
+
+
+def _write_raw_dump(
+    df: pd.DataFrame,
+    destination: Path,
+    *,
+    cfg: Config,
+    reindex_columns: bool,
+) -> Path:
+    """Persist ``df`` to ``destination`` honouring CSV or Parquet formats."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if reindex_columns and not df.empty:
+        df = df.reindex(columns=sorted(df.columns))
+    suffix = destination.suffix.lower()
+    if suffix in {".parquet", ".pq"}:
+        try:
+            df.to_parquet(destination, index=False)
+        except (ImportError, ValueError) as exc:
+            raise OSError(f"failed to write parquet: {exc}") from exc
+    else:
+        df.to_csv(
+            destination,
+            index=False,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+    logger.info("raw_dump_written", rows=len(df), path=str(destination))
+    return destination
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -494,6 +539,25 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         dest="id_cols",
         default=None,
         help="Columns used to identify and sort rows in the output",
+     
+        ),
+    )
+    chembl.add_argument(
+        "--normalize-at-export",
+        dest="normalize_at_export",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Apply normalization and schema validation before writing the final export. "
+            "Use --no-normalize-at-export to emit raw payload output."
+        ),
+    )
+    chembl.add_argument(
+        "--no-reindex-raw",
+        dest="reindex_raw",
+        action="store_false",
+        default=True,
+        help="Preserve raw payload column order when writing dumps.",
     )
     chembl.set_defaults(func=run_chembl)
 
@@ -818,23 +882,106 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if offset:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
-    processed_ids = 0
+    limited_ids = list(islice(ids_iter, limit)) if limit is not None else list(ids_iter)
+    processed_ids = len(limited_ids)
 
-    def _iter_ids() -> Iterator[str]:
-        nonlocal processed_ids
-        for identifier in ids_iter:
-            processed_ids += 1
-            yield identifier
+    base_output = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    raw_destination = (
+        Path(args.raw_output)
+        if getattr(args, "raw_output", None) is not None
+        else _raw_output_path(base_output)
+    )
+    normalized_output = _normalized_output_path(base_output)
+    normalize_at_export = getattr(args, "normalize_at_export", True)
+    reindex_raw = getattr(args, "reindex_raw", True)
 
-    limited_ids: Iterator[str]
-    if limit is not None:
-        limited_ids = islice(_iter_ids(), limit)
+    raw_chunks: list[pd.DataFrame] = []
+    parsed_chunks: list[pd.DataFrame] = []
+
+    if limited_ids:
+        try:
+            with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                    limited_ids,
+                    cfg=cfg.api,
+                    client=client,
+                    mapping_cfg=cfg.uniprot_mapping,
+                    chunk_size=cfg.target.chembl.chunk_size,
+                    timeout=cfg.target.chembl.timeout,
+                ):
+                    if not raw_chunk.empty:
+                        raw_chunks.append(raw_chunk)
+                    if not parsed_chunk.empty:
+                        parsed_chunks.append(parsed_chunk)
+        except (requests.RequestException, ValueError) as exc:
+            logger.error(
+                "chembl_fetch_failed",
+                error=str(exc),
+                chunk_size=cfg.target.chembl.chunk_size,
+                timeout=cfg.target.chembl.timeout,
+            )
+            return 1
+
+    raw_df = (
+        pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
+    )
+
+    if normalize_at_export:
+        try:
+            _write_raw_dump(
+                raw_df, raw_destination, cfg=cfg, reindex_columns=reindex_raw
+            )
+        except (OSError, ValueError) as exc:
+            logger.error("raw_dump_failed", error=str(exc), path=str(raw_destination))
+            return 1
     else:
-        limited_ids = _iter_ids()
+        def _raw_fetcher() -> Iterator[pd.DataFrame]:
+            yield raw_df
 
-    output_path = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    output = Path(output_path)
-    failure_path = output.with_name(f"{output.stem}_failure_cases.csv")
+        def _raw_writer(
+            chunks: Iterator[pd.DataFrame],
+            destination: Path,
+            col_order: Sequence[str] | None,
+            key_cols: Sequence[str],
+        ) -> Path:
+            frames = list(chunks)
+            if frames:
+                merged = pd.concat(frames, ignore_index=True)
+            else:
+                merged = pd.DataFrame()
+            _write_raw_dump(merged, destination, cfg=cfg, reindex_columns=reindex_raw)
+            return destination
+
+        failure_path = raw_destination.with_name(
+            f"{raw_destination.stem}_failure_cases.csv"
+        )
+        exit_code = run_pipeline(
+            fetcher=_raw_fetcher,
+            schema=None,
+            schema_name="raw_target_payload",
+            validators=[],
+            metadata_hooks=[],
+            writer=_raw_writer,
+            output_path=raw_destination,
+            failure_path=failure_path,
+            command=" ".join(sys.argv),
+            config_snapshot=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            key_columns=[],
+            table_quality=lambda _: None,
+            cfg=cfg,
+            logger=logger,
+        )
+        if limit is not None:
+            logger.info("process_limit", limit=processed_ids)
+        logger.info(
+            "chembl_normalization_skipped",
+            output=str(raw_destination),
+            rows=len(raw_df),
+        )
+        return exit_code
 
     id_columns_input = getattr(args, "id_cols", None)
     if id_columns_input:
@@ -876,7 +1023,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
 
+    fetch_source: list[pd.DataFrame]
+    if parsed_chunks:
+        fetch_source = parsed_chunks
+    else:
+        fetch_source = [pd.DataFrame(columns=TARGET_FIELDS)]
+
     def fetcher() -> Iterator[pd.DataFrame]:
+
         nonlocal fetched_rows_total
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
             for chunk_ids in _chunked(limited_ids, cfg.target.chembl.chunk_size):
@@ -902,10 +1056,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 fetched_rows_total += len(chunk_df)
                 yield chunk_df
 
+
     def writer(
         chunks: Iterator[pd.DataFrame],
         destination: Path,
-        col_order: Sequence[str],
+        col_order: Sequence[str] | None,
         key_cols: Sequence[str],
     ) -> Path:
         key_columns = list(key_cols)
@@ -920,9 +1075,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             chunksize=cfg.io.csv_chunksize,
         )
 
+    failure_path = normalized_output.with_name(
+        f"{normalized_output.stem}_failure_cases.csv"
+    )
     table_quality = partial(
         analyze_table_quality,
-        table_name=str(output.with_suffix("")),
+        table_name=str(normalized_output.with_suffix("")),
     )
 
     metadata_hooks = [
@@ -938,12 +1096,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         validators=[_validate_chunk],
         metadata_hooks=metadata_hooks,
         writer=writer,
-        output_path=output,
+        output_path=normalized_output,
         failure_path=failure_path,
         command=" ".join(sys.argv),
         config_snapshot=_serialize_paths(cfg.to_dict()),
         inputs={"input_csv": str(args.input_csv)},
         key_columns=id_columns,
+
         table_quality=table_quality,
         cfg=cfg,
         logger=logger,
@@ -1125,8 +1284,12 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
+    normalized_output = _normalized_output_path(output_csv)
     df = pd.read_csv(
-        output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+        normalized_output,
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+        dtype=str,
     )
     logger.info("fetch_chembl_done", rows=len(df))
     return df
@@ -1585,7 +1748,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         after=normalized_rows,
     )
     normalized = add_pipeline_metadata(normalized)
-    final_df, missing_required, missing_optional = _prepare_targets_for_schema(
+    prepared, missing_required, missing_optional = _prepare_targets_for_schema(
         normalized
     )
     logger.info("prepare_targets_rows", rows=len(final_df))
@@ -1661,10 +1824,12 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
                 failures=0,
             )
     else:
+
         logger.warning(
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
+
 
     total_dropped = sum(len(ids) for ids in drop_reasons.values())
     logger.info(
@@ -1684,7 +1849,7 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
     io.write_csv(
         final_df,
-        output,
+        normalized_output,
         cfg=cfg,
         sep=cfg.io.csv_sep,
         encoding=cfg.io.csv_encoding,
@@ -1694,16 +1859,18 @@ def validate_and_write(df: pd.DataFrame, output: Path, cfg: Config) -> int:
         logger.info(
             "quality_report_skipped",
             reason="empty_dataframe",
-            table=str(output.with_suffix("")),
+            table=str(normalized_output.with_suffix("")),
         )
     else:
         try:
-            analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
+            analyze_table_quality(
+                final_df, table_name=str(normalized_output.with_suffix(""))
+            )
         except ValueError as exc:
             logger.error(
                 "quality_report_failed",
                 error=str(exc),
-                path=str(output),
+                path=str(normalized_output),
             )
             return 1
     logger.info("validate_write_done", rows=len(final_df))

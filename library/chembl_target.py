@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any
 
 import pandas as pd
@@ -282,6 +282,57 @@ def _parse_target_record(
     return res
 
 
+def _normalise_target_payloads(payloads: Sequence[dict[str, Any]]) -> pd.DataFrame:
+    """Return a DataFrame created from raw ``payloads`` using :func:`json_normalize`."""
+
+    if not payloads:
+        return pd.DataFrame()
+    frame = pd.json_normalize(payloads, sep=".")
+    return frame
+
+
+def iter_target_batches(
+    ids: Sequence[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+) -> Iterator[tuple[list[dict[str, Any]], pd.DataFrame, pd.DataFrame]]:
+    """Yield payloads, raw and parsed target data frames for ``ids``."""
+
+    if not ids:
+        return
+
+    base = (
+        f"{cfg.chembl_base.rstrip('/')}/target.json?format=json"
+        f"&include={TARGET_INCLUDE_PARAMS}"
+    )
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+
+    for chunk in _chunked(ids, chunk_size):
+        url = f"{base}&target_chembl_id__in={','.join(chunk)}"
+        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
+        items = data.get("targets") or data.get("target") or []
+        payloads = [
+            _extract_target_payload(item)
+            for item in items
+            if isinstance(item, (dict, list))
+        ]
+        payloads = [payload for payload in payloads if payload]
+        if not payloads:
+            continue
+        raw_frame = _normalise_target_payloads(payloads)
+        records = [_parse_target_record(payload, mapping_cfg) for payload in payloads]
+        parsed_frame = pd.DataFrame(records)
+        if parsed_frame.empty:
+            parsed_frame = pd.DataFrame(columns=TARGET_FIELDS)
+        else:
+            parsed_frame = parsed_frame.reindex(columns=TARGET_FIELDS)
+        yield payloads, raw_frame, parsed_frame
+
+
 def get_target(
     chembl_target_id: str,
     *,
@@ -317,6 +368,24 @@ def get_target(
     return _parse_target_record(payload, mapping_cfg)
 
 
+def get_target_payload(
+    chembl_target_id: str,
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Return the raw payload for ``chembl_target_id`` without post-processing."""
+
+    if chembl_target_id in {"", "#N/A"}:
+        return {}
+    base = cfg.chembl_base.rstrip("/")
+    url = f"{base}/target/{chembl_target_id}.json?include={TARGET_INCLUDE_PARAMS}"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
+    return _extract_target_payload(data)
+
+
 def get_targets(
     ids: Iterable[str],
     *,
@@ -347,21 +416,82 @@ def get_targets(
     if not valid:
         return pd.DataFrame(columns=TARGET_FIELDS)
 
-    records: list[dict[str, Any]] = []
-    base = (
-        f"{cfg.chembl_base.rstrip('/')}/target.json?format=json"
-        f"&include={TARGET_INCLUDE_PARAMS}"
-    )
-    effective_timeout = timeout if timeout is not None else cfg.timeout_read
-    for chunk in _chunked(valid, chunk_size):
-        url = f"{base}&target_chembl_id__in={','.join(chunk)}"
-        data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
-        items = data.get("targets") or data.get("target") or []
-        records.extend(_parse_target_record(item, mapping_cfg) for item in items)
-    if not records:
+    parsed_frames: list[pd.DataFrame] = []
+    for _, _, parsed in iter_target_batches(
+        valid,
+        cfg=cfg,
+        client=client,
+        mapping_cfg=mapping_cfg,
+        chunk_size=chunk_size,
+        timeout=timeout,
+    ):
+        if parsed.empty:
+            continue
+        parsed_frames.append(parsed)
+    if not parsed_frames:
         return pd.DataFrame(columns=TARGET_FIELDS)
-    df = pd.DataFrame(records)
+    df = pd.concat(parsed_frames, ignore_index=True)
     return df.reindex(columns=TARGET_FIELDS)
+
+
+def get_targets_payloads(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+) -> list[dict[str, Any]]:
+    """Return a list of raw payloads for ``ids`` without flattening."""
+
+    valid = [i for i in ids if i not in {"", "#N/A"}]
+    if not valid:
+        return []
+
+    payloads: list[dict[str, Any]] = []
+    for batch_payloads, _, _ in iter_target_batches(
+        valid,
+        cfg=cfg,
+        client=client,
+        mapping_cfg=mapping_cfg,
+        chunk_size=chunk_size,
+        timeout=timeout,
+    ):
+        payloads.extend(batch_payloads)
+    return payloads
+
+
+def get_targets_raw_frame(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    mapping_cfg: UniprotMappingCfg,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+) -> pd.DataFrame:
+    """Return a DataFrame created from the raw payloads for ``ids``."""
+
+    valid = [i for i in ids if i not in {"", "#N/A"}]
+    if not valid:
+        return pd.DataFrame()
+
+    frames: list[pd.DataFrame] = []
+    for _, raw_frame, _ in iter_target_batches(
+        valid,
+        cfg=cfg,
+        client=client,
+        mapping_cfg=mapping_cfg,
+        chunk_size=chunk_size,
+        timeout=timeout,
+    ):
+        if raw_frame.empty:
+            continue
+        frames.append(raw_frame)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
 
 
 def extend_target(
@@ -400,7 +530,11 @@ def extend_target(
 
 __all__ = [
     "get_target",
+    "get_target_payload",
     "get_targets",
+    "get_targets_payloads",
+    "get_targets_raw_frame",
+    "iter_target_batches",
     "extend_target",
     "TARGET_FIELDS",
 ]
