@@ -68,6 +68,78 @@ class _ValidationResult:
         self.failure_cases = failure_cases
 
 
+def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    chunk_one = pd.DataFrame(
+        {
+            "assay_chembl_id": ["A1", "A2"],
+            "document_chembl_id": ["D1", "D2"],
+        }
+    )
+    chunk_two = pd.DataFrame(
+        {
+            "assay_chembl_id": ["A3"],
+            "new_field": ["N"],
+        }
+    )
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [chunk_one, chunk_two]
+
+    def validator(df: pd.DataFrame) -> _ValidationResult:
+        return _ValidationResult(df, pd.DataFrame())
+
+    received_chunks: list[pd.DataFrame] = []
+    received_order: list[str] | None = None
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        nonlocal received_order
+        received_order = col_order
+        for chunk in chunks:
+            received_chunks.append(chunk)
+        combined = pd.concat(received_chunks, ignore_index=True)
+        combined.to_csv(destination, index=False)
+        return destination
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[validator],
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _path: None,
+        cfg=cfg,
+    )
+
+    assert exit_code == 0
+    assert received_order is not None
+    assert len(received_chunks) == 2
+    assert all(list(chunk.columns) == received_order for chunk in received_chunks)
+
+    written = pd.read_csv(output)
+    assert sorted(written["assay_chembl_id"]) == ["A1", "A2", "A3"]
+
+    meta_path = output.with_name(output.name + ".meta.yaml")
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["stats"]["rows_total"] == 3
+    assert metadata["stats"]["rows_kept"] == 3
+    assert metadata["stats"]["rows_dropped"] == 0
+
+
 def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
