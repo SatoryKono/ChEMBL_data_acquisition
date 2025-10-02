@@ -1,20 +1,2 @@
-library/rate_limiter.py:16: error: Library stubs not installed for "cachetools"  [import-untyped]
-library/rate_limiter.py:16: note: Hint: "python3 -m pip install types-cachetools"
-library/rate_limiter.py:91: error: Unused "type: ignore" comment  [unused-ignore]
-library/validation.py:7: error: Library stubs not installed for "pandas"  [import-untyped]
-library/validation.py:8: error: Library stubs not installed for "pandas.api.types"  [import-untyped]
-library/validation.py:8: error: Library stubs not installed for "pandas.api"  [import-untyped]
-library/config.py:23: error: Library stubs not installed for "yaml"  [import-untyped]
-library/config.py:23: note: Hint: "python3 -m pip install types-PyYAML"
-library/config.py:25: error: Library stubs not installed for "requests"  [import-untyped]
-library/config.py:26: error: Library stubs not installed for "requests.adapters"  [import-untyped]
-library/config.py:26: note: Hint: "python3 -m pip install types-requests"
-library/config.py:26: note: (or run "mypy --install-types" to install all missing stub packages)
-library/config.py:26: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
-library/csv_utils.py:20: error: Library stubs not installed for "pandas"  [import-untyped]
-library/csv_utils.py:21: error: Library stubs not installed for "yaml"  [import-untyped]
-library/csv_utils.py:22: error: Library stubs not installed for "pandas.api"  [import-untyped]
-library/io.py:32: error: Library stubs not installed for "pandas"  [import-untyped]
-library/io.py:32: note: Hint: "python3 -m pip install pandas-stubs"
-library/io.py:33: error: Library stubs not installed for "yaml"  [import-untyped]
-Found 13 errors in 5 files (checked 1 source file)
+mypy --strict library
+Success: no issues found in 109 source files
