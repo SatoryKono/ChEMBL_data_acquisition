@@ -485,8 +485,12 @@ class TableQualityProfiler:
         for column in missing_columns:
             self._accumulators[column].pad(len(frame))
 
-        for column in frame.columns:
-            self._accumulators[column].process(frame[column])
+        processed: set[str] = set()
+        for column, series in frame.items():
+            if column in processed:
+                continue
+            processed.add(column)
+            self._accumulators[column].process(series)
 
         self._rows_processed += len(frame)
 

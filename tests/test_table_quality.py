@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from library.config import Config
-from library.table_quality import analyze_table_quality
+from library.table_quality import TableQualityProfiler, analyze_table_quality
 from library.utils.cli_tools.table_quality_main import run
 
 
@@ -191,6 +191,18 @@ def test_table_quality_run_handles_mixed_types(tmp_path: Path) -> None:
 
     assert actual_mixed["numeric_cov"] == pytest.approx(expected_mixed["numeric_cov"])
     assert actual_mixed["numeric_mean"] == pytest.approx(expected_mixed["numeric_mean"])
+
+
+def test_table_quality_handles_duplicate_columns(tmp_path: Path) -> None:
+    profiler = TableQualityProfiler()
+    df = pd.DataFrame([[1, 10], [None, 20]], columns=["dup", "dup"])
+
+    profiler.consume(df)
+    quality, _ = profiler.build(table_name="duplicates", destination_dir=tmp_path)
+
+    dup_row = quality.loc[quality["column"] == "dup"].iloc[0]
+    assert int(dup_row["non_null"]) == 1
+    assert pytest.approx(float(dup_row["empty_pct"])) == 0.5
 
 
 def test_table_quality_run_rejects_output_with_suffix(tmp_path: Path) -> None:
