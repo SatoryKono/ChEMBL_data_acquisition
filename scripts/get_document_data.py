@@ -1073,6 +1073,31 @@ def _collapse_duplicate_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(collapsed_columns, index=frame.index)
 
 
+def _merge_preferred_series(target_series: pd.Series, source_series: pd.Series) -> pd.Series:
+    """Return ``target_series`` with missing entries populated from ``source_series``."""
+
+    if target_series.empty and source_series.empty:
+        return target_series.copy()
+
+    if not target_series.index.equals(source_series.index):
+        source_series = source_series.reindex(target_series.index)
+
+    combined = target_series.copy()
+
+    missing_mask = target_series.isna()
+    if missing_mask.any():
+        combined.loc[missing_mask] = source_series.loc[missing_mask]
+
+    if pd.api.types.is_object_dtype(target_series.dtype) or pd.api.types.is_string_dtype(
+        target_series.dtype
+    ):
+        empty_mask = target_series.fillna("").eq("")
+        if empty_mask.any():
+            combined.loc[empty_mask] = source_series.loc[empty_mask]
+
+    return combined
+
+
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
@@ -1089,15 +1114,7 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
         if target in frame.columns:
             target_series = _resolve_duplicate_column(frame, target)
             source_series = _resolve_duplicate_column(frame, source)
-            combined = target_series.combine_first(source_series)
-            if pd.api.types.is_object_dtype(target_series.dtype) or pd.api.types.is_string_dtype(
-                target_series.dtype
-            ):
-                mask = target_series.fillna("").eq("")
-                if mask.any():
-                    combined.loc[mask] = source_series.loc[mask]
-
-            frame[target] = combined
+            frame[target] = _merge_preferred_series(target_series, source_series)
             frame = frame.drop(columns=[source])
             continue
         rename_map[source] = target
