@@ -137,8 +137,8 @@ pre-commit install
 
 | Язык    | Чек-лист |
 |---------|----------|
-| English | [docs/QA_PROCESS_EN.md](./QA_PROCESS_EN.md) |
-| Русский | [docs/QA_PROCESS_RU.md](./QA_PROCESS_RU.md) |
+| English | [docs/en/QA_PROCESS.md](../en/QA_PROCESS.md) |
+| Русский | [docs/ru/QA_PROCESS.md](./QA_PROCESS.md) |
 
 ```bash
 pre-commit run --all-files
@@ -481,7 +481,7 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
 `--no-reindex-raw` сохраняет исходный порядок из API. Финальный CSV нормализуется по умолчанию; переключайте пару
 `--normalize-at-export` / `--no-normalize-at-export`, чтобы либо провести очистку перед записью, либо оставить экспорт
 идентичным «сырому» файлу. Дополнительные примеры приведены в
-[`docs/USAGE_RU.md`](./USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](./USAGE_EN.md)).
+[`docs/ru/USAGE.md`](./USAGE.md) (английская версия — [`docs/en/USAGE.md`](../en/USAGE.md)).
 
 
 ## Структура проекта
@@ -503,14 +503,26 @@ ChEMBL_data_acquisition/
 ├── tests/
 │   └── data/
 └── docs/
-    ├── CONFIG_EN.md / CONFIG_RU.md
-    ├── OUTPUT_EN.md / OUTPUT_RU.md
-    └── USAGE_EN.md / USAGE_RU.md
+    ├── CHANGELOG.md
+    ├── CONTRIBUTING.md
+    ├── RELEASE_NOTES.md
+    ├── en/
+    │   ├── CONFIG.md
+    │   ├── OUTPUT.md
+    │   ├── README.md
+    │   ├── SUMMARY.md
+    │   └── USAGE.md
+    └── ru/
+        ├── CONFIG.md
+        ├── OUTPUT.md
+        ├── README.md
+        ├── SUMMARY.md
+        └── USAGE.md
 ```
 
 ## Конфигурация
 
-Параметры читаются из `config/config.yaml`, переменных окружения (`CHEMBL_DA__...`) и CLI-флагов. Подробности смотрите в [`docs/CONFIG_RU.md`](./CONFIG_RU.md) (английская версия — [`docs/CONFIG_EN.md`](./CONFIG_EN.md)).
+Параметры читаются из `config/config.yaml`, переменных окружения (`CHEMBL_DA__...`) и CLI-флагов. Подробности смотрите в [`docs/ru/CONFIG.md`](./CONFIG.md) (английская версия — [`docs/en/CONFIG.md`](../en/CONFIG.md)).
 
 ### Переменные окружения
 
@@ -565,7 +577,7 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-Полное описание параметров приведено в [`docs/CONFIG_RU.md`](./CONFIG_RU.md) (английская версия — [`docs/CONFIG_EN.md`](./CONFIG_EN.md)).
+Полное описание параметров приведено в [`docs/ru/CONFIG.md`](./CONFIG.md) (английская версия — [`docs/en/CONFIG.md`](../en/CONFIG.md)).
 
 ### Проверка схемы
 
@@ -593,11 +605,11 @@ python -m library.utils.cli_tools.table_quality_main \
 `--out` сохраняется для совместимости и предупреждает о грядущем удалении. Таргет-пайплайн дополнительно принимает `--final-out`,
 который использует тот же шаблон пути и позволяет разделять директории после добавления «сырого» снимка. Комбинируйте его с
 `--raw-out` (и опциональным `--raw-format parquet`), чтобы сохранять необработанный ответ. Дополнительные примеры см. в
-[`docs/USAGE_RU.md`](./USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](./USAGE_EN.md)).
+[`docs/ru/USAGE.md`](./USAGE.md) (английская версия — [`docs/en/USAGE.md`](../en/USAGE.md)).
 
 ## Вывод и метаданные
 
-Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `~/.local/share/chembl-da/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](./OUTPUT_EN.md)).
+Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `~/.local/share/chembl-da/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/ru/OUTPUT.md`](./OUTPUT.md) (английская версия — [`docs/en/OUTPUT.md`](../en/OUTPUT.md)).
 
 ## Dtype Inspector
 
