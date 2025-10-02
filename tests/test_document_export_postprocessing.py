@@ -101,6 +101,7 @@ def test_preprocess_document_export_accepts_namespaced_columns() -> None:
     _assert_projection(result)
 
 
+
 def test_postprocess_export_file_writes_csv(tmp_path: Path) -> None:
     """``postprocess_export_file`` writes the derived projection to disk."""
 

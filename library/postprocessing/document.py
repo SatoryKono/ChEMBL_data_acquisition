@@ -400,11 +400,52 @@ def _coverage_status(score: int, has_error: bool) -> str:
 
 
 # ===== Modules ==============================================================
+def _ensure_document_identifier(frame: pd.DataFrame) -> pd.DataFrame:
+    """Ensure ``frame`` exposes a ``document_chembl_id`` column."""
+
+    if "document_chembl_id" in frame.columns:
+        return frame
+
+    # Normalise alternative representations (case differences, stray spacing)
+    for column in frame.columns:
+        if column.strip().lower() == "document_chembl_id":
+            if column == "document_chembl_id":
+                return frame
+            renamed = frame.copy()
+            renamed = renamed.rename(columns={column: "document_chembl_id"})
+            logger.warning(
+                "document_id_column_renamed",
+                original=column,
+                normalised="document_chembl_id",
+            )
+            return renamed
+
+    if "ChEMBL.document_chembl_id" in frame.columns:
+        duplicated = frame.copy()
+        duplicated["document_chembl_id"] = duplicated["ChEMBL.document_chembl_id"]
+        logger.warning(
+            "document_id_column_duplicated",
+            source="ChEMBL.document_chembl_id",
+            target="document_chembl_id",
+        )
+        return duplicated
+
+    fallback = frame.copy()
+    fallback["document_chembl_id"] = ""
+    logger.error(
+        "document_id_column_missing",
+        columns=list(frame.columns),
+    )
+    return fallback
+
+
 def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     """Return analytics-oriented projection of ``df``."""
 
 
+
     frame = _apply_export_aliases(df)
+
 
     validate_columns(frame, REQUIRED_INPUT_COLUMNS)
     if frame.empty:
