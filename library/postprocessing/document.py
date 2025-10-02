@@ -18,10 +18,10 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
+from .. import document_postprocessing as stage_document_postprocessing
 from ..config import IoCfg
 from ..csv_utils import write_csv_deterministic
 from ..log import logger
-from ..validation import validate_columns
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
@@ -198,7 +198,7 @@ PREPROCESSED_COLUMN_ORDER: tuple[str, ...] = (
     "date_code",
     "Index",
 )
-DEFAULT_KEY_COLUMNS: tuple[str, ...] = ("document_chembl_id",)
+DEFAULT_KEY_COLUMNS: tuple[str, ...] = ("completed", "document_chembl_id")
 
 
 # ===== Helpers ==============================================================
@@ -439,99 +439,39 @@ def _ensure_document_identifier(frame: pd.DataFrame) -> pd.DataFrame:
     return fallback
 
 
-def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
-    """Return analytics-oriented projection of ``df``."""
+def preprocess_document_export(
+    df: pd.DataFrame,
+    *,
+    ref_document: pd.DataFrame | None = None,
+    ref_document_path: Path | str | None = None,
+) -> pd.DataFrame:
+    """Return the Stage-aligned projection of ``df``.
 
+    This is a thin wrapper around :func:`library.document_postprocessing.postprocess_documents`
+    that preserves the legacy entry point used by :mod:`scripts.get_document_data`.
+    The resulting frame strictly follows :data:`FINAL_COLUMN_ORDER` defined in the
+    Stage port and omits analytics-only helper columns (``preferred_*``,
+    ``coverage_*`` and similar aggregates).
+    """
 
+    processed = stage_document_postprocessing.postprocess_documents(
+        df,
+        ref_document=ref_document,
+        ref_document_path=ref_document_path,
+    )
 
-    frame = _apply_export_aliases(df)
-
-
-    validate_columns(frame, REQUIRED_INPUT_COLUMNS)
-    if frame.empty:
-        result = pd.DataFrame(columns=list(PREPROCESSED_COLUMN_ORDER))
-        return result
-
-    result = pd.DataFrame(index=frame.index)
-    result["document_chembl_id"] = _string_series(frame["document_chembl_id"])
-
-    for target, columns in COALESCE_PRIORITIES.items():
-        result[target] = _coalesce_columns(frame, columns)
-
-    if "publication_class" in frame.columns:
-        result["publication_class"] = _string_series(frame["publication_class"])
-    else:
-        result["publication_class"] = pd.Series(
-            [""] * len(frame), index=frame.index, dtype="string"
-        )
-
-    review_series = pd.Series([False] * len(frame), index=frame.index)
-    if "publication_class" in result.columns:
-        review_series = review_series | (
-            result["publication_class"].str.lower() == "review"
-        )
-    for column in REVIEW_COLUMNS:
-        if column in frame.columns:
-            review_series = review_series | _series_to_bool(frame[column])
-    result["is_review"] = review_series
-
-    metadata_series, metadata_flags = _build_metadata_flags(frame)
-    result["metadata_sources"] = metadata_series
-    result["metadata_source_count"] = metadata_flags.pop("metadata_source_count")
-    for column, mask in metadata_flags.items():
-        result[column] = mask
-
-    error_sources, has_error = _build_error_sources(frame)
-    result["error_sources"] = error_sources
-    result["has_error"] = has_error
-
-    result["coverage_score"] = result["metadata_source_count"].astype("Int64")
-    status_values = [
-        _coverage_status(int(score) if pd.notna(score) else 0, bool(error))
-        for score, error in zip(
-            result["coverage_score"].fillna(0), result["has_error"].fillna(False)
-        )
+    missing_columns = [
+        column
+        for column in stage_document_postprocessing.FINAL_COLUMN_ORDER
+        if column not in processed.columns
     ]
-    result["coverage_status"] = pd.Series(status_values, index=df.index, dtype="string")
-
-    mesh_columns = [column for column in MESH_TERM_COLUMNS if column in frame.columns]
-    result["mesh_terms"] = _aggregate_terms(frame, mesh_columns)
-
-    if "publication_year" in result.columns:
-        publication_year = result["publication_year"].replace("", pd.NA)
-        result["publication_year"] = pd.to_numeric(
-            publication_year, errors="coerce"
-        ).astype("Int64")
-    else:
-        result["publication_year"] = pd.Series(
-            [pd.NA] * len(frame), index=frame.index, dtype="Int64"
+    if missing_columns:
+        raise ValueError(
+            "Stage post-processing did not return the expected column set",
+            missing_columns,
         )
 
-    for column in PASS_THROUGH_COLUMNS:
-        if column not in frame.columns:
-            if column == "Index":
-                result[column] = pd.Series(
-                    [""] * len(frame), index=frame.index, dtype="string"
-                )
-            else:
-                result[column] = pd.Series(
-                    [""] * len(frame), index=frame.index, dtype="string"
-                )
-            continue
-        if column == "Index":
-            index_series = frame[column]
-            if pd.api.types.is_numeric_dtype(index_series):
-                padded = index_series.fillna(0).astype(int).astype(str)
-            else:
-                padded = _string_series(index_series)
-            result[column] = padded.str.zfill(INDEX_PAD_WIDTH)
-        else:
-            result[column] = _string_series(frame[column])
-
-    existing_columns = [
-        column for column in PREPROCESSED_COLUMN_ORDER if column in result.columns
-    ]
-    return result.loc[:, existing_columns]
+    return processed.loc[:, stage_document_postprocessing.FINAL_COLUMN_ORDER]
 
 
 def postprocess_export_file(
@@ -541,8 +481,10 @@ def postprocess_export_file(
     output_path: Path | None = None,
     sep: str | None = None,
     encoding: str | None = None,
+    ref_document: pd.DataFrame | None = None,
+    ref_document_path: Path | str | None = None,
 ) -> Path:
-    """Read ``input_path``, project the analytics table and write to disk."""
+    """Read ``input_path`` and materialise the Stage-aligned projection."""
 
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding or UTF8_ENCODING
@@ -553,12 +495,20 @@ def postprocess_export_file(
         dtype=str,
         keep_default_na=False,
     )
-    processed = preprocess_document_export(frame)
+    processed = preprocess_document_export(
+        frame,
+        ref_document=ref_document,
+        ref_document_path=ref_document_path,
+    )
     destination = Path(output_path) if output_path else Path(input_path).with_name(
         f"{DEFAULT_OUTPUT_PREFIX}{Path(input_path).name}"
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    col_order = [col for col in PREPROCESSED_COLUMN_ORDER if col in processed.columns]
+    col_order = [
+        column
+        for column in stage_document_postprocessing.FINAL_COLUMN_ORDER
+        if column in processed.columns
+    ]
     write_csv_deterministic(
         processed,
         destination,
@@ -569,6 +519,7 @@ def postprocess_export_file(
         cfg=None,
     )
     return destination
+
 
 
 # ---------------------------------------------------------------------------
