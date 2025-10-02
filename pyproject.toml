@@ -7,7 +7,7 @@ name = "chembl-data-acquisition"
 version = "0.1.1"
 description = "Utilities for downloading and processing biological data from public APIs."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 license = {text = "MIT"}
 authors = [
   {name = "ChEMBL Team"}
@@ -18,38 +18,40 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-  "numpy>=1.26,<3.0",
-  "pandas>=2.0,<3.0",
-  "requests>=2.31,<3.0",
-  "PyYAML>=6.0,<7.0",
-  "openpyxl>=3.1,<4.0",
-  "pyarrow>=12.0,<19.0",
-  "jsonschema>=4.17,<5.0",
-  "pandera>=0.17,<0.27",
-  "cachetools>=5.3,<6.0",
-  "pydantic>=2.6,<3.0",
+  "numpy==2.3.3",
+  "pandas==2.3.3",
+  "requests==2.32.5",
+  "PyYAML==6.0.3",
+  "openpyxl==3.1.5",
+  "pyarrow==17.0.0",
+  "jsonschema==4.25.1",
+  "pandera==0.26.1",
+  "cachetools==5.3.3",
+  "pydantic==2.11.9",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "black>=24.4,<24.5",
-  "hypothesis>=6.112,<7",
-  "mypy>=1.17,<1.19",
-  "pandas-stubs>=2.3.0.250703,<2.4",
-  "pre-commit>=3.7,<4.1",
-  "psutil>=5.9,<7",
-  "pytest>=8.3,<8.4",
-  "pytest-cov>=6.1,<6.4",
-  "responses>=0.25,<0.26",
-  "ruff>=0.13,<0.14",
-  "types-cachetools>=5.3.0,<5.6",
-  "types-jsonschema>=4.23.0,<4.24",
-  "types-openpyxl>=3.1.5.20240806,<3.2",
-  "types-PyYAML>=6.0.12.20240808,<6.1",
-  "types-python-dateutil>=2.9.0.20241003,<2.10",
-  "types-requests>=2.32.0.20240905,<2.33",
-  "types-tabulate>=0.9.0,<0.10",
-  "types-urllib3>=1.26.25,<1.27",
+  "black==25.1.0",
+  "build==1.2.2.post1",
+  "hypothesis==6.138.15",
+  "mypy==1.17.1",
+  "pandas-stubs==2.2.3.241126",
+  "pre-commit==3.7.1",
+  "psutil==7.0.0",
+  "pytest==8.4.2",
+  "pytest-cov==6.0.0",
+  "responses==0.25.8",
+  "ruff==0.13.0",
+  "twine==5.1.1",
+  "types-cachetools==5.5.0.20240820",
+  "types-jsonschema==4.23.0.20240813",
+  "types-openpyxl==3.1.5.20240822",
+  "types-PyYAML==6.0.12.20240808",
+  "types-python-dateutil==2.9.0.20241003",
+  "types-requests==2.32.0.20241016",
+  "types-tabulate==0.9.0.20241207",
+  "types-urllib3==1.26.25.14",
 ]
 
 [project.scripts]

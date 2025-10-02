@@ -1,0 +1,16 @@
+# Example configuration overrides for local development.
+# Copy this file to config/config.local.yaml and adjust values as needed.
+runtime:
+  base_path: "./data"
+
+sources:
+  chembl:
+    api:
+      user_agent: "chembl-da/1.0 (mailto:you@example.com)"
+    cache:
+      cache_ttl: 900
+      cache_maxsize: 128
+  openalex:
+    mailto: "you@example.com"
+  crossref:
+    mailto: "you@example.com"
