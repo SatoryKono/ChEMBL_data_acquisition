@@ -44,15 +44,15 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `cache_path` | `data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
-| `sqlite_path` | `data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
+| `cache_path` | `../data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `../data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
 | `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
 | `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
 | `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
 | `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
-| `hierarchy_lookup_path` | `dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
+| `hierarchy_lookup_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Text encoding applied when reading the hierarchy lookup CSV; change when the snapshot is saved with a different charset (for example Latin-1 from legacy exports). |
 | `hierarchy_lookup_delimiter` | `,` | Delimiter expected by the hierarchy lookup loader; override for semicolon- or tab-separated snapshots produced by regional data teams. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
@@ -188,8 +188,8 @@ applies exponential backoff between attempts before surfacing the error.
 | Key | Default | Description |
 | --- | --- | --- |
 | `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
-| `sources.molecule_catalog_path` | `dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
-| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
+| `sources.molecule_hierarchy_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
 | `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
 | `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
 | `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
@@ -222,18 +222,18 @@ applies exponential backoff between attempts before surfacing the error.
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Column with UniProt identifiers. |
-|  | `data_dir` | `dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
+|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 | `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+| `iuphar` | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `all` | `data_dir` | `dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
-|  | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
-|  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+| `all` | `data_dir` | `../dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
+|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 
@@ -286,7 +286,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | `cache_ttl` | `3600` | Lifespan (seconds) of the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_maxsize` | `1024` | Maximum number of entries retained by the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_MAXSIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_MAXSIZE` |
 | `cache_ttl_hours` | `null` | Optional expiry (hours) for the persisted CID cache; `null` keeps entries indefinitely. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
-| `cid_cache_path` | `"data/cache/pubchem_cid_cache.json"` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `cid_cache_path` | `"../data/cache/pubchem_cid_cache.json"` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
 | `batch_size` | `50` | Number of rows processed per PubChem batch request; concurrency never exceeds `min(batch_size, rps)`. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Skip remote lookups when local SMILES/InChIKey columns are already populated. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Preserve existing `pubchem_*` columns when lookups return empty payloads. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
@@ -304,10 +304,10 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | Key | Default | Description |
 | --- | --- | --- |
 | `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
-| `uniprot_data_dir` | `dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
-| `targets_type_csv` | `dictionary/_target/targets_type.csv` | Target type classification table. |
+| `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
+| `targets_type_csv` | `../dictionary/_target/targets_type.csv` | Target type classification table. |
 
 
 The `dictionary/_target` folder mirrors the current repository layout; all
@@ -318,7 +318,7 @@ IUPHAR and UniProt lookups are stored there by default.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `output_dir` | `data/output` | Base directory for generated datasets. |
+| `output_dir` | `../data/output` | Base directory for generated datasets. |
 | `cache_dir` | `.cache` | Location of the HTTP cache. |
 | `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
 | `csv_fallback_separators` | `["\t", ";"]` | Additional delimiters tried when the primary separator does not expose the requested column. |
@@ -332,9 +332,9 @@ IUPHAR and UniProt lookups are stored there by default.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `same_doc` | `data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Workbook with same-document pairs for initialisation. |
-| `all_doc` | `data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Workbook with cross-document pairs for initialisation. |
-| `output_dir` | `data/output/ChEMBL/processed` | Destination for pre-processed initialisation files. |
+| `same_doc` | `../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Workbook with same-document pairs for initialisation. |
+| `all_doc` | `../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Workbook with cross-document pairs for initialisation. |
+| `output_dir` | `../data/output/ChEMBL/processed` | Destination for pre-processed initialisation files. |
 
 ## System settings (`system`)
 
