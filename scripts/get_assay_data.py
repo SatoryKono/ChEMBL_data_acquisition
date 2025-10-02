@@ -128,6 +128,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     table_quality = partial(
         analyze_table_quality,
         table_name=str(Path(output).with_suffix("")),
+        destination_dir=Path(output).parent,
     )
 
     global_limiter = get_global_limiter(

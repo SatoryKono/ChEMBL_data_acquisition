@@ -529,9 +529,12 @@ def test_get_activity_data_smoke(
         return pd.DataFrame(rows)
 
     monkeypatch.setattr(cl, "get_activities", fake_get_activities)
-    monkeypatch.setattr(
-        get_activity_data, "analyze_table_quality", lambda *_, **__: None
-    )
+    quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_quality(*args: object, **kwargs: object) -> None:
+        quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_activity_data, "analyze_table_quality", _capture_quality)
     monkeypatch.setattr(get_activity_data, "configure_logger", _capture_configure_logger)
     monkeypatch.setattr(
         get_activity_data.cli,
@@ -545,6 +548,11 @@ def test_get_activity_data_smoke(
     assert output_csv.exists()
     assert output_csv.name == f"output.activities_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
+
+    assert quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = quality_calls[-1]
+    assert quality_args[0] == output_csv
+    assert quality_kwargs.get("destination_dir") == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -599,13 +607,24 @@ def test_get_assay_data_smoke(
 
     monkeypatch.setattr(cl, "get_assays", fake_get_assays)
     monkeypatch.setattr(get_assay_data.ap, "postprocess_assays", lambda df: df)
-    monkeypatch.setattr(get_assay_data, "analyze_table_quality", lambda *_, **__: None)
+
+    assay_quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_assay_quality(*args: object, **kwargs: object) -> None:
+        assay_quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_assay_data, "analyze_table_quality", _capture_assay_quality)
 
     exit_code = get_assay_data.main(_cli_args())
     assert exit_code == 0
     assert output_csv.exists()
     assert output_csv.name == f"output.assays_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
+
+    assert assay_quality_calls, "quality profiler should be invoked"
+    assay_args, assay_kwargs = assay_quality_calls[-1]
+    assert assay_args[0] == output_csv
+    assert assay_kwargs.get("destination_dir") == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -666,9 +685,12 @@ def test_get_document_data_smoke(
         return pd.DataFrame(rows)
 
     monkeypatch.setattr(cl, "get_documents", fake_get_documents)
-    monkeypatch.setattr(
-        get_document_data, "analyze_table_quality", lambda *_, **__: None
-    )
+    document_quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_document_quality(*args: object, **kwargs: object) -> None:
+        document_quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_document_data, "analyze_table_quality", _capture_document_quality)
 
     try:
         exit_code = get_document_data.main(["chembl", *_cli_args()])
@@ -680,6 +702,11 @@ def test_get_document_data_smoke(
     assert output_csv.exists()
     assert output_csv.name == f"output.documents_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
+
+    assert document_quality_calls, "quality profiler should be invoked"
+    document_args, document_kwargs = document_quality_calls[-1]
+    assert document_args[0] == output_csv
+    assert document_kwargs.get("destination_dir") == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -734,7 +761,12 @@ def test_get_target_data_smoke(
         return pd.DataFrame(rows)
 
     monkeypatch.setattr(cl, "get_targets", fake_get_targets)
-    monkeypatch.setattr(get_target_data, "analyze_table_quality", lambda *_, **__: None)
+    target_quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_target_quality(*args: object, **kwargs: object) -> None:
+        target_quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_target_data, "analyze_table_quality", _capture_target_quality)
 
     try:
         exit_code = get_target_data.main(["chembl", *_cli_args()])
@@ -746,6 +778,11 @@ def test_get_target_data_smoke(
     assert output_csv.exists()
     assert output_csv.name == f"output.targets_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
+
+    assert target_quality_calls, "quality profiler should be invoked"
+    target_args, target_kwargs = target_quality_calls[-1]
+    assert target_args[0] == output_csv
+    assert target_kwargs.get("destination_dir") == smoke_output_dir
 
     df = pd.read_csv(output_csv)
     assert not df.empty
@@ -851,8 +888,14 @@ def test_get_testitem_data_smoke(
         "load_parent_catalog",
         lambda **__: {"CHEMBL1": "CHEMBL1_PARENT"},
     )
+
+    testitem_quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_testitem_quality(*args: object, **kwargs: object) -> None:
+        testitem_quality_calls.append((args, kwargs))
+
     monkeypatch.setattr(
-        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
+        get_testitem_data, "analyze_table_quality", _capture_testitem_quality
     )
 
     original_apply = get_testitem_data.cli.apply_config_overrides
@@ -877,6 +920,10 @@ def test_get_testitem_data_smoke(
     assert output_csv.exists()
     assert output_csv.name == f"output.testitems_{DEFAULT_DATE}.csv"
     assert output_csv.parent == smoke_output_dir
+    assert testitem_quality_calls, "quality profiler should be invoked"
+    testitem_args, testitem_kwargs = testitem_quality_calls[-1]
+    assert testitem_args[0] == output_csv
+    assert testitem_kwargs.get("destination_dir") == smoke_output_dir
     assert polymer_smiles not in smiles_calls
     assert mixture_smiles not in smiles_calls
     assert any(event == "pubchem_skip_polymers" for event, _ in warning_events)
@@ -966,14 +1013,22 @@ def test_get_activity_data_force_overrides_skip(
         return pd.DataFrame(rows)
 
     monkeypatch.setattr(cl, "get_activities", fake_get_activities)
-    monkeypatch.setattr(
-        get_activity_data, "analyze_table_quality", lambda *_, **__: None
-    )
+    force_quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_force_quality(*args: object, **kwargs: object) -> None:
+        force_quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_activity_data, "analyze_table_quality", _capture_force_quality)
 
     exit_code = get_activity_data.main(_cli_args("--skip-existing", "--force"))
     assert exit_code == 0
     assert output_csv.exists()
     assert output_csv.read_text() != "sentinel"
+
+    assert force_quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = force_quality_calls[-1]
+    assert quality_args[0] == output_csv
+    assert quality_kwargs.get("destination_dir") == smoke_output_dir
 
 
 def test_run_pipeline_failure_removes_outputs(

@@ -1141,7 +1141,11 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
     try:
-        analyze_table_quality(out_df, table_name=str(output.with_suffix("")))
+        analyze_table_quality(
+            out_df,
+            table_name=str(output.with_suffix("")),
+            destination_dir=output.parent,
+        )
     except Exception as exc:
         logger.exception(
             "quality_report_failed",
@@ -1546,8 +1550,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     )
     table_quality = partial(
         analyze_table_quality,
-
         table_name=str(final_output.with_suffix("")),
+        destination_dir=final_output.parent,
     )
 
     metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
@@ -1690,7 +1694,11 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
     try:
-        analyze_table_quality(output, table_name=str(output.with_suffix("")))
+        analyze_table_quality(
+            output,
+            table_name=str(output.with_suffix("")),
+            destination_dir=output.parent,
+        )
     except Exception as exc:
         logger.exception(
             "quality_report_failed",
@@ -2557,7 +2565,9 @@ def validate_and_write(
     else:
         try:
             analyze_table_quality(
-                final_df, table_name=str(normalized_output.with_suffix(""))
+                final_df,
+                table_name=str(normalized_output.with_suffix("")),
+                destination_dir=normalized_output.parent,
             )
         except Exception as exc:
             logger.exception(
