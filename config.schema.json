@@ -1374,15 +1374,21 @@
       "properties": {
         "global_rps": {
           "default": 8,
-          "minimum": 1,
+          "minimum": 0,
           "title": "Global Rps",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "global_burst": {
           "default": 8,
-          "minimum": 1,
+          "minimum": 0,
           "title": "Global Burst",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "limiter_cache_maxsize": {
           "default": 128,

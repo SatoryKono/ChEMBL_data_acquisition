@@ -70,7 +70,10 @@ def inspect_dtypes(
     # ``ChemblClient`` manages HTTP connections and retries.  The context
     # manager ensures the underlying ``requests.Session`` is properly closed
     # even if one of the retrieval functions fails.
-    global_limiter = get_global_limiter(cfg.rate.global_rps, cfg.rate.global_burst)
+    rate_cfg = cfg.rate
+    global_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     with ChemblClient(
         cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter

@@ -235,10 +235,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         def table_quality(_: Path) -> None:
             return None
 
-    global_limiter = get_global_limiter(
-        cfg.rate.global_rps,
-        cfg.rate.global_burst,
-    )
+    rate_cfg = cfg.rate
+    global_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     with ChemblClient(
         cfg.api,

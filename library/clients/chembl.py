@@ -133,12 +133,17 @@ class ChemblClient:
 
     def _get_session(self) -> Session:
         session_attr = getattr(self._session_local, "session", None)
-        session = session_attr if isinstance(session_attr, Session) else None
+        session = (
+            session_attr
+            if isinstance(session_attr, Session)
+            or (hasattr(session_attr, "get") and hasattr(session_attr, "close"))
+            else None
+        )
         if session is None:
             session = self._session_factory()
             self._register_session(session)
             setattr(self._session_local, "session", session)
-        return session
+        return cast(Session, session)
 
     @property
     def session(self) -> Session:

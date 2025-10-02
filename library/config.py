@@ -663,10 +663,26 @@ class InitCfg(_BaseModel):
 
 
 class RateCfg(_BaseModel):
-    global_rps: int = Field(8, ge=1)
-    global_burst: int = Field(8, ge=1)
+    global_rps: int | None = Field(8, ge=0)
+    global_burst: int | None = Field(8, ge=0)
     limiter_cache_maxsize: int = Field(128, ge=1)
     limiter_cache_ttl: int = Field(600, ge=1)
+
+    @field_validator("global_rps", "global_burst", mode="before")
+    @classmethod
+    def _allow_zero_or_none(cls, value: Any) -> Any:
+        """Normalise disabled limiter values."""
+
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            lowered = stripped.lower()
+            if lowered in {"none", "null"}:
+                return None
+        return value
 
 
 class RetryCfg(_BaseModel):

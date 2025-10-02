@@ -42,3 +42,16 @@ def test_rate_limiter_combined_throttling(monkeypatch) -> None:
         request.acquire()
 
     assert fake_time.sleeps == [0.1, 0.25, 0.5, 0.5]
+
+
+def test_get_global_limiter_disabled_returns_none() -> None:
+    """Zero rates should avoid creating a cached global limiter."""
+
+    with rl._limiters_lock:
+        rl._limiters.clear()
+
+    limiter = rl.get_global_limiter(0, 0)
+
+    assert limiter is None
+    with rl._limiters_lock:
+        assert rl.GLOBAL_LIMITER_NAME not in rl._limiters
