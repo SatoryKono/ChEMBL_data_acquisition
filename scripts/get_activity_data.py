@@ -116,8 +116,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         limited_ids = _iter_ids()
 
-    id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
-
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
     action_cfg = enrichment_cfg.action_type
@@ -130,7 +128,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
-
+        chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
         global_limiter = get_global_limiter(
             cfg.rate.global_rps, cfg.rate.global_burst
         )
@@ -139,10 +137,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
 
+
             def _fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
                 try:
                     return cl.get_activities(
-                        chunk_ids,
+                        ids,
                         cfg=cfg.api,
                         client=client,
                         chunk_size=cfg.activity.batch_size,
@@ -162,11 +161,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     raise PipelineError(str(exc)) from exc
 
+
             workers = max(1, cfg.activity.workers)
             if workers == 1:
+
                 for chunk_ids in id_chunks:
                     yield _fetch_chunk(list(chunk_ids))
                 return
+
 
             pending: dict[Future[pd.DataFrame], int] = {}
             completed: dict[int, pd.DataFrame] = {}
@@ -177,6 +179,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     future.cancel()
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
+
                 try:
                     for index, chunk_ids in enumerate(id_chunks):
                         chunk_list = list(chunk_ids)
@@ -207,6 +210,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             next_index += 1
                 finally:
                     pending.clear()
+
 
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)
@@ -378,6 +382,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "column": "activity.column",
             "batch_size": "activity.batch_size",
             "limit": "activity.limit",
+            "offset": "activity.offset",
             "dry_run": "activity.dry_run",
         },
         run=run,
