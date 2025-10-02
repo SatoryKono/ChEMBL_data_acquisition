@@ -652,6 +652,8 @@ def prepare_io_paths(
 
     if resolved_output is None and output_stem is not None:
         target_dir = output_dir or base_path
+        if target_dir is None and resolved_input is not None:
+            target_dir = resolved_input.parent
         if target_dir is not None:
             effective_date = date_str or datetime.now(timezone.utc).strftime("%Y%m%d")
             filename = f"output.{output_stem}_{effective_date}{suffix}"
@@ -666,6 +668,10 @@ def prepare_io_paths(
         )
         setattr(args, "output_csv", resolved_output)
         setattr(args, "final_out", resolved_output)
+    elif final_value not in (None, argparse.SUPPRESS):
+        candidate_path = Path(final_value)
+        setattr(args, "output_csv", candidate_path)
+        setattr(args, "final_out", candidate_path)
 
     raw_value = getattr(args, "raw_out", None)
     if raw_value in (None, argparse.SUPPRESS):
