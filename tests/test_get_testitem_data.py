@@ -27,6 +27,7 @@ from library import chembl_library as cl
 from library import io
 from library import molecule_catalog, pubchem_library as pl
 import library.testitem_pipeline as pipeline
+import library.testitem_pipeline.cli as pipeline_cli
 
 from library.config import ApiCfg, Config, IoCfg
 
@@ -597,7 +598,7 @@ def test_finalize_output_success(
     def fake_validate(frame: pd.DataFrame, *, return_result: bool) -> SimpleNamespace:
         return SimpleNamespace(data=frame, failure_cases=pd.DataFrame())
 
-    monkeypatch.setattr(pipeline, "validate_testitems", fake_validate)
+    monkeypatch.setattr(pipeline, "validate_testitems", fake_validate, raising=False)
     monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(
@@ -607,6 +608,7 @@ def test_finalize_output_success(
         pipeline,
         "write_csv_chunks_deterministic",
         lambda chunks, path, **kwargs: path,
+        raising=False,
     )
 
     exit_code = pipeline.finalize_output(
@@ -638,6 +640,7 @@ def test_finalize_output_missing_required_columns(
         lambda *args, **kwargs: pytest.fail(
             "should not write output when required columns are missing"
         ),
+        raising=False,
     )
     monkeypatch.setattr(
         pipeline,
@@ -657,6 +660,61 @@ def test_finalize_output_missing_required_columns(
 
     assert exit_code == 1
     assert not (tmp_path / "out.csv").exists()
+
+
+def test_finalize_output_validation_failure_skips_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    parent_stats = pipeline.ParentLookupStats(
+        source=pipeline.PARENT_LOOKUP_SOURCE_CACHE,
+        missing=0,
+        unique=1,
+        attached=1,
+        uncovered=0,
+    )
+
+    def fake_validate(frame: pd.DataFrame, *, return_result: bool) -> SimpleNamespace:
+        failures = pd.DataFrame([{"column": "value", "failure": "bad"}])
+        return SimpleNamespace(data=frame, failure_cases=failures)
+
+    monkeypatch.setattr(pipeline_cli, "validate_testitems", fake_validate)
+    monkeypatch.setattr(
+        pipeline_cli,
+        "write_csv_chunks_deterministic",
+        lambda *args, **kwargs: pytest.fail("should not write output when validation fails"),
+    )
+    monkeypatch.setattr(
+        pipeline_cli,
+        "write_meta_yaml",
+        lambda *args, **kwargs: pytest.fail("should not write metadata when validation fails"),
+    )
+    monkeypatch.setattr(
+        pipeline_cli,
+        "file_sha256",
+        lambda *args, **kwargs: pytest.fail("should not hash output when validation fails"),
+    )
+    monkeypatch.setattr(
+        pipeline_cli,
+        "analyze_table_quality",
+        lambda *args, **kwargs: pytest.fail("should not analyze quality when validation fails"),
+    )
+
+    output_path = tmp_path / "out.csv"
+    exit_code = pipeline.finalize_output(
+        [df],
+        cfg=cfg,
+        output=output_path,
+        parent_stats_supplier=lambda: parent_stats,
+        input_csv=tmp_path / "in.csv",
+    )
+
+    assert exit_code == 1
+    assert not output_path.exists()
+    assert not (output_path.with_name(output_path.name + ".meta.yaml")).exists()
+    failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
+    assert failure_path.exists()
+    assert (failure_path.with_name(failure_path.name + ".meta.yaml")).exists()
 
 
 def test_finalize_output_streams_sorted_chunks(

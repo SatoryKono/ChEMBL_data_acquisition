@@ -342,6 +342,18 @@ def run_pipeline(
             available_columns = set(all_columns)
         resolved_keys = [column for column in key_columns if column in available_columns]
 
+        if optional_cols and (missing_optional := optional_cols - present_columns):
+            use_logger.warning(
+                "optional_columns_missing",
+                columns=sorted(missing_optional),
+            )
+
+        if total_failures:
+            errors.save(failure_path, cfg=cfg)
+
+        if exit_code != 0:
+            return exit_code
+
         def _iter_validated() -> Iterator[pd.DataFrame]:
             for path in chunk_paths:
                 df = pd.read_pickle(path)
@@ -358,15 +370,6 @@ def run_pipeline(
                 path=str(output_path),
             )
             return 1
-
-    if optional_cols and (optional_cols - present_columns):
-        use_logger.warning(
-            "optional_columns_missing",
-            columns=sorted(optional_cols - present_columns),
-        )
-
-    if total_failures:
-        errors.save(failure_path, cfg=cfg)
 
     stats: Stats = {
         "rows_total": rows_total,
