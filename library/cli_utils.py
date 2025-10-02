@@ -33,7 +33,7 @@ from .cli import (
 )
 from .config import Config, ensure_dirs, print_config
 from .log import logger as default_logger
-from .metadata import Stats, file_sha256, write_meta_yaml
+from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
 from .sidecar import SidecarErrors
 from .utils.config import DEFAULT_CONFIG_PATH
 
@@ -583,21 +583,30 @@ def run_pipeline(
         extra_metadata=extra_metadata or None,
     )
 
+    doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
+    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
+
     try:
         table_quality(csv_path)
     except Exception as exc:
-        use_logger.error(
-            "quality_report_failed",
+        tb = traceback.format_exc()
+        record_quality_failure(
+            meta_path,
             error=str(exc),
             error_type=exc.__class__.__name__,
-            path=str(csv_path),
-            traceback=traceback.format_exc(),
-
+            traceback=tb,
+            fatal=fatal_quality_error,
         )
-        if schema is not None:
-            Path(csv_path).unlink(missing_ok=True)
-        meta_path.unlink(missing_ok=True)
-        return 1
+        log_kwargs = {
+            "error": str(exc),
+            "error_type": exc.__class__.__name__,
+            "path": str(csv_path),
+            "traceback": tb,
+        }
+        if fatal_quality_error:
+            log_kwargs["fatal"] = True
+            exit_code = 1
+        use_logger.warning("quality_report_failed", **log_kwargs)
 
     if exit_code == 0:
         use_logger.info("write_done", rows=rows_kept, path=str(csv_path))

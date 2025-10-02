@@ -711,6 +711,11 @@
           ],
           "default": null,
           "title": "Exclude Columns"
+        },
+        "fatal_on_error": {
+          "default": false,
+          "title": "Fatal On Error",
+          "type": "boolean"
         }
       },
       "title": "DocQualityCfg",
