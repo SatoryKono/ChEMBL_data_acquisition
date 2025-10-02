@@ -139,6 +139,16 @@ def run_cli_command(
     return exit_code
 
 
+def resolve_invocation(
+    program: str, argv: Sequence[str] | None
+) -> tuple[str, ...]:
+    """Return the effective command invocation as a tuple of strings."""
+
+    if argv is None:
+        argv = sys.argv[1:]
+    return (program, *map(str, argv))
+
+
 @overload
 def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]: ...
 
@@ -168,11 +178,12 @@ def run_pipeline(
     writer: Writer,
     output_path: Path,
     failure_path: Path,
-    command: str,
+    command: str | None = None,
     config_snapshot: Mapping[str, object],
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
+    invocation: Sequence[str] | None = None,
     cfg: Config | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
@@ -204,7 +215,8 @@ def run_pipeline(
     failure_path:
         Path for persisting validation failure cases.
     command:
-        Command used to launch the pipeline.  Stored in metadata output.
+        Command used to launch the pipeline.  Stored in metadata output. When
+        omitted the value is derived from ``invocation`` or ``sys.argv``.
     config_snapshot:
         Mapping of configuration values persisted to metadata.
     inputs:
@@ -214,6 +226,10 @@ def run_pipeline(
         columns present in the final dataset are forwarded to ``writer``.
     table_quality:
         Callable invoked after writing the CSV to compute quality metrics.
+    invocation:
+        Optional command invocation captured as a sequence of arguments. When
+        provided it is persisted to metadata alongside the joined ``command``
+        string.
     cfg:
         Optional application configuration forwarded to sidecar metadata.
     logger:
@@ -423,13 +439,21 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
+    resolved_invocation = tuple(map(str, invocation)) if invocation else ()
+    resolved_command = (
+        command
+        if command is not None
+        else (" ".join(resolved_invocation) if resolved_invocation else " ".join(sys.argv))
+    )
+
     meta_path = write_meta_yaml(
         csv_path=csv_path,
-        command=command,
+        command=resolved_command,
         config_subset=config_snapshot,
         inputs=inputs,
         stats=stats,
         schema=schema_name,
+        invocation=resolved_invocation or None,
     )
 
     try:
