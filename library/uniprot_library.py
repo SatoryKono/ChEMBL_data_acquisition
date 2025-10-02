@@ -129,6 +129,7 @@ UNIPROT_OUTPUT_COLUMNS: list[str] = [
     "pipeline_version",
     "timestamp_utc",
     "uniProtkbId",
+    "uniProtkbIdFallback",
     "secondaryAccessions",
     "recommendedName",
     "geneName",
@@ -281,17 +282,9 @@ def extract_organism(data: Any) -> dict[str, str]:
     return result
 
 
-def extract_uniprotkb_id(data: Any) -> str | None:
-    """Return the ``uniProtkbId`` for the first entry in ``data``.
+def _first_entry(data: Any) -> dict[str, Any] | None:
+    """Return the first UniProt entry from *data* when available."""
 
-    Args:
-        data: A UniProt JSON structure, list of entries, or search results
-            containing UniProt entries.
-
-    Returns:
-        The ``uniProtkbId`` string when present, otherwise ``None``.
-
-    """
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -300,11 +293,43 @@ def extract_uniprotkb_id(data: Any) -> str | None:
         entries = [data]
     for entry in entries:
         if isinstance(entry, dict):
-            value = entry.get("uniProtkbId")
-            if isinstance(value, str):
-                return value
-            break
+            return entry
     return None
+
+
+def extract_uniprotkb_id(
+    data: Any, *, allow_primary: bool = False, default: str | None = None
+) -> str | None:
+    """Return the ``uniProtkbId`` (optionally with fallbacks) for ``data``.
+
+    Args:
+        data: A UniProt JSON structure, list of entries, or search results
+            containing UniProt entries.
+        allow_primary: When ``True`` and ``uniProtkbId`` is missing, fall back to
+            ``primaryAccession``.
+        default: Value returned when neither ``uniProtkbId`` nor
+            ``primaryAccession`` (when ``allow_primary`` is enabled) is present.
+
+    Returns:
+        The ``uniProtkbId`` string when present. If ``allow_primary`` is set,
+        the ``primaryAccession`` value is returned when ``uniProtkbId`` is
+        absent. ``default`` is used as a final fallback.
+
+    """
+
+    entry = _first_entry(data)
+    if not entry:
+        return default
+    value = entry.get("uniProtkbId")
+    if isinstance(value, str) and value:
+        return value
+    if allow_primary:
+        primary = entry.get("primaryAccession")
+        if isinstance(primary, str) and primary:
+            return primary
+    return default
+
+
 
 
 def extract_secondary_accessions(data: Any) -> list[str]:
@@ -1059,6 +1084,7 @@ def collect_info(
         "uniprot_version": "",
         "pipeline_version": "",
         "timestamp_utc": "",
+        "uniProtkbIdFallback": "",
     }
     try:
         with open(json_path, encoding="utf-8") as handle:
@@ -1135,7 +1161,12 @@ def collect_info(
     result.update(cross)
     _update_gtop_metadata(result, cfg=gtop_cfg)
     result.update(activity)
-    result["uniProtkbId"] = extract_uniprotkb_id(data)
+    uni_protkb_id = extract_uniprotkb_id(data)
+    fallback_uniprotkb_id = (
+        uni_protkb_id or extract_uniprotkb_id(data, allow_primary=True)
+    )
+    result["uniProtkbId"] = uni_protkb_id
+    result["uniProtkbIdFallback"] = fallback_uniprotkb_id or uid
     result["secondaryAccessions"] = extract_secondary_accessions(data)
     result["recommendedName"] = extract_recommended_name(data)
     result["geneName"] = extract_gene_name(data)
