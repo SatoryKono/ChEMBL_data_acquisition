@@ -1478,6 +1478,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Configure session for ChEMBL requests
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps, cfg.rate.global_burst
+    )
+
     with ChemblClient(
         cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
     ) as client:
@@ -1565,6 +1569,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Prepare shared session before performing any API calls
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps, cfg.rate.global_burst
+    )
+
     try:
         ids_iter = io.read_ids(
             args.input_csv,
