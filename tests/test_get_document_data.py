@@ -150,6 +150,122 @@ def test_cli_uses_custom_column(
     assert captured["column"] == "document_chembl_id"
 
 
+def test_cli_runs_document_postprocessing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "data" / "output" / "document"
+    output_dir.mkdir(parents=True)
+    input_csv = tmp_path / "docs.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+    output_path = output_dir / "output.document_20240101.csv"
+
+    class DummyClient:
+        def __enter__(self) -> DummyClient:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    monkeypatch.setattr(gdd, "ChemblClient", lambda *_, **__: DummyClient())
+
+    def fake_read_ids(*_: object, **__: object) -> Iterable[str]:
+        return ["CHEMBL1"]
+
+    monkeypatch.setattr(gdd.io, "read_ids", fake_read_ids)
+
+    def fake_get_documents(
+        ids: Iterable[str],
+        *,
+        cfg: Any,
+        client: Any,
+        chunk_size: int,
+        timeout: float,
+    ) -> pd.DataFrame:
+        identifiers = list(ids)
+        return pd.DataFrame(
+            {
+                "document_chembl_id": identifiers,
+                "doi": ["10.1000/example"] * len(identifiers),
+                "publication_class": ["review"] * len(identifiers),
+            }
+        )
+
+    monkeypatch.setattr(cl, "get_documents", fake_get_documents)
+    monkeypatch.setattr(gdd, "normalize_documents", lambda df: df)
+
+    class DummyQualityAccumulator:
+        def __init__(self) -> None:
+            self.rows_total = 0
+
+        def consume(self, frame: pd.DataFrame) -> None:
+            self.rows_total += len(frame)
+
+    class DummyQualityProfiler:
+        def consume(self, frame: pd.DataFrame) -> None:
+            return None
+
+    monkeypatch.setattr(gdd, "DocumentQualityAccumulator", DummyQualityAccumulator)
+    monkeypatch.setattr(gdd, "TableQualityProfiler", DummyQualityProfiler)
+    monkeypatch.setattr(gdd, "add_pipeline_metadata", lambda df: df)
+    monkeypatch.setattr(gdd, "build_dataframe", lambda df, **__: df)
+    monkeypatch.setattr(
+        type(gdd.DocumentsSchema),
+        "validate",
+        lambda self, check_obj, lazy=True: check_obj,
+    )
+    monkeypatch.setattr(gdd, "dataframe_to_strings", lambda df, **__: df)
+    monkeypatch.setattr(gdd, "_prepare_export_frame", lambda df: df)
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: Any,
+        key_cols: Sequence[str],
+        **__: Any,
+    ) -> Path:
+        frames = [chunk for chunk in chunks]
+        combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        combined.to_csv(path, index=False)
+        return path
+
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(
+        gdd.document_export_postprocessing,
+        "postprocess_export_file",
+        lambda csv_path, cfg: csv_path,
+    )
+    monkeypatch.setattr(gdd, "file_sha256", lambda _: "deadbeef")
+    monkeypatch.setattr(gdd, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_: {})
+    monkeypatch.setattr(gdd, "save_quality_report", lambda *_: None)
+    monkeypatch.setattr(gdd, "analyze_table_quality", lambda *_args, **_kwargs: None)
+
+    created: list[Path] = []
+
+    def fake_maybe_postprocess(csv_path: Path) -> None:
+        target = csv_path.with_name(f"preprocessed_{csv_path.name}")
+        target.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+        created.append(target)
+
+    monkeypatch.setattr(gdd, "_maybe_run_document_postprocessing", fake_maybe_postprocess)
+
+    exit_code = gdd.main(
+        [
+            "chembl",
+            "--input",
+            str(input_csv),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert output_path.exists()
+    assert created == [output_dir / "preprocessed_output.document_20240101.csv"]
+    assert created[0].exists()
+
 def test_run_all_logs_failing_ids(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
