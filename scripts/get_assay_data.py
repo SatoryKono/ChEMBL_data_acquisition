@@ -46,6 +46,11 @@ from library.pipeline_metadata import add_pipeline_metadata
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
 from schemas import AssaysSchema, normalize_assays
+from library.pipeline_helpers import (
+    ChunkedFetchConfig,
+    CsvWriterConfig,
+    prepare_chunked_pipeline,
+)
 
 __all__ = ["ap", "main", "run", "run_chembl"]
 
@@ -112,35 +117,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
-    def fetcher() -> Iterable[pd.DataFrame]:
-        global_limiter = get_global_limiter(
-            cfg.rate.global_rps, cfg.rate.global_burst
-        )
-
-        with ChemblClient(
-            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
-        ) as client:
-            chunk_iter = cl._chunked(ids_source, cfg.assay.batch_size)
-            for chunk_ids in chunk_iter:
-                try:
-                    df = cl.get_assays(
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        chunk_size=cfg.assay.batch_size,
-                        timeout=cfg.assay.timeout,
-                    )
-                except (requests.RequestException, ValueError) as exc:
-                    logger.error(
-                        "assay_fetch_failed",
-                        extra={"msg": str(exc)},
-                        error=str(exc),
-                        batch_size=cfg.assay.batch_size,
-                        timeout=cfg.assay.timeout,
-                    )
-                    raise PipelineError(str(exc)) from exc
-                yield df
-
     metadata_hooks = [
         ap.postprocess_assays,
         normalize_assays,
@@ -149,47 +125,82 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     validators = [partial(validate_assays, return_result=True)]
 
-    def writer(
-        chunks: Iterable[pd.DataFrame],
-        destination: Path,
-        col_order: Sequence[str],
-        key_cols: Sequence[str],
-    ) -> Path:
-        sort_columns = list(key_cols) or sorted(col_order)
-        return write_csv_chunks_deterministic(
-            chunks,
-            destination,
-            key_cols=sort_columns,
-            col_order=col_order,
-            chunksize=cfg.io.csv_chunksize,
-            sort_chunksize=cfg.io.csv_chunksize,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-            cfg=cfg,
-        )
-
     table_quality = partial(
         analyze_table_quality,
         table_name=str(Path(output).with_suffix("")),
     )
 
-    exit_code = run_pipeline(
-        fetcher=fetcher,
-        schema=AssaysSchema,
-        schema_name="AssaysSchema",
-        validators=validators,
-        metadata_hooks=metadata_hooks,
-        writer=writer,
-        output_path=output,
-        failure_path=failure_path,
-        command=" ".join(sys.argv),
-        config_snapshot=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
-        key_columns=["assay_chembl_id"],
-        table_quality=table_quality,
-        cfg=cfg,
-        logger=logger,
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps,
+        cfg.rate.global_burst,
     )
+
+    with ChemblClient(
+        cfg.api,
+        cfg.retry,
+        cfg.chembl,
+        global_limiter=global_limiter,
+    ) as client:
+
+        def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+            try:
+                return cl.get_assays(
+                    chunk_ids,
+                    cfg=cfg.api,
+                    client=client,
+                    chunk_size=cfg.assay.batch_size,
+                    timeout=cfg.assay.timeout,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.error(
+                    "assay_fetch_failed",
+                    extra={"msg": str(exc)},
+                    error=str(exc),
+                    batch_size=cfg.assay.batch_size,
+                    timeout=cfg.assay.timeout,
+                )
+                raise PipelineError(str(exc)) from exc
+
+        fetch_config = ChunkedFetchConfig(
+            ids=ids_source,
+            chunk_size=cfg.assay.batch_size,
+            workers=1,
+        )
+
+        writer_config = CsvWriterConfig(
+            writer=write_csv_chunks_deterministic,
+            kwargs={
+                "chunksize": cfg.io.csv_chunksize,
+                "sort_chunksize": cfg.io.csv_chunksize,
+                "sep": cfg.io.csv_sep,
+                "encoding": cfg.io.csv_encoding,
+                "cfg": cfg,
+            },
+        )
+
+        fetcher, writer = prepare_chunked_pipeline(
+            fetch_config=fetch_config,
+            fetch_chunk=fetch_chunk,
+            csv_writer=writer_config,
+        )
+
+        exit_code = run_pipeline(
+            fetcher=fetcher,
+            schema=AssaysSchema,
+            schema_name="AssaysSchema",
+            validators=validators,
+            metadata_hooks=metadata_hooks,
+            writer=writer,
+            output_path=output,
+            failure_path=failure_path,
+            command=" ".join(sys.argv),
+            config_snapshot=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            key_columns=["assay_chembl_id"],
+            table_quality=table_quality,
+            cfg=cfg,
+            logger=logger,
+        )
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
