@@ -65,7 +65,8 @@ def _close_sessions(sessions: Iterable[Session]) -> None:
 
 
 def _get_or_create_session_locked() -> Session:
-    session = cast(Session | None, getattr(_session_local, "session", None))
+    session_attr = getattr(_session_local, "session", None)
+    session = session_attr if isinstance(session_attr, Session) else None
     if session is None:
         session = _session_factory()
         _sessions.add(session)

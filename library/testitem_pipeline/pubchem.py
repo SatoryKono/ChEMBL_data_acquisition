@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Collection
+from collections.abc import Collection, Hashable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence, TypeAlias, cast
 
 import pandas as pd
 import requests
@@ -30,6 +30,9 @@ _CID_CACHE_MISSING = object()
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 
 _PUBCHEM_SESSION_SIGNATURE: str | None = None
+
+
+ResolutionCache: TypeAlias = MutableMapping[Hashable, pl.PubChemResolution]
 _PUBCHEM_SESSION_LOCK = threading.Lock()
 
 
@@ -232,9 +235,7 @@ def resolve_pubchem_cid(
     cfg: PubChemCfg,
     *,
     parent_loader: Callable[[str], pd.Series | None] | None = None,
-    resolution_cache: (
-        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
-    ) = None,
+    resolution_cache: ResolutionCache | None = None,
     visited: set[str] | None = None,
 ) -> str | None:
     """Resolve PubChem CID for a ChEMBL record."""
@@ -347,13 +348,11 @@ def _prepare_pubchem_caches(
     cache_path: Path | str | None,
     cache_ttl_hours: float | None,
     cid_cache: MutableMapping[str, str | None] | None,
-    resolution_cache: (
-        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
-    ),
+    resolution_cache: ResolutionCache | None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None,
 ) -> tuple[
     MutableMapping[str, str | None],
-    MutableMapping[tuple[str | None, ...], pl.PubChemResolution],
+    ResolutionCache,
     MutableMapping[str, pd.Series | None],
     list[str],
     Callable[[str], pd.Series | None],
@@ -475,7 +474,7 @@ def _resolve_pubchem_cids(
     cfg: PubChemCfg,
     *,
     cid_cache: MutableMapping[str, str | None],
-    resolution_cache: MutableMapping[tuple[str | None, ...], pl.PubChemResolution],
+    resolution_cache: ResolutionCache,
     load_parent_record: Callable[[str], pd.Series | None] | None,
     skip_mask: pd.Series,
     prefer_local_mask: pd.Series,
@@ -644,9 +643,7 @@ def add_pubchem_data(
     api_cfg: ApiCfg | None = None,
     timeout: float | None = None,
     cid_cache: MutableMapping[str, str | None] | None = None,
-    resolution_cache: (
-        MutableMapping[tuple[str | None, ...], pl.PubChemResolution] | None
-    ) = None,
+    resolution_cache: ResolutionCache | None = None,
     parent_record_cache: MutableMapping[str, pd.Series | None] | None = None,
     testitem_fields: Sequence[str] | None = None,
     request_limit: int = 0,
@@ -799,9 +796,7 @@ def augment_pubchem(
     """Augment ``df`` with PubChem information if enabled."""
 
     pubchem_cid_cache: dict[str, str | None] | None = None
-    pubchem_resolution_cache: (
-        dict[tuple[str | None, ...], pl.PubChemResolution] | None
-    ) = None
+    pubchem_resolution_cache: ResolutionCache | None = None
     pubchem_parent_record_cache: dict[str, pd.Series | None] | None = None
     if getattr(pubchem_cfg, "enable", True):
         global _PUBCHEM_SESSION_SIGNATURE
@@ -814,7 +809,7 @@ def augment_pubchem(
             getattr(pubchem_cfg, "cid_cache_path", None),
             ttl_hours=getattr(pubchem_cfg, "cache_ttl_hours", None),
         )
-        pubchem_resolution_cache = {}
+        pubchem_resolution_cache = cast(ResolutionCache, {})
         pubchem_parent_record_cache = {}
 
     logger.info("pubchem_augment_start")

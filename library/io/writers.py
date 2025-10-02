@@ -87,18 +87,24 @@ def write_csv(
         col_order_list = list(col_order)
 
     chunk_iter: Iterator[pd.DataFrame] = chain([first], iterator)
-    write_kwargs: dict[str, object] = {
-        "col_order": col_order_list,
-        "key_cols": key_cols_list,
-        "sep": sep,
-        "encoding": encoding,
-        "cfg": cfg,
-    }
-    if chunksize is not None:
-        write_kwargs["chunksize"] = chunksize
+    if chunksize is None:
+        return write_csv_chunks_deterministic(
+            chunk_iter,
+            path,
+            col_order=col_order_list,
+            key_cols=key_cols_list,
+            sep=sep,
+            encoding=encoding,
+            cfg=cfg,
+        )
 
     return write_csv_chunks_deterministic(
         chunk_iter,
         path,
-        **write_kwargs,
+        col_order=col_order_list,
+        key_cols=key_cols_list,
+        chunksize=chunksize,
+        sep=sep,
+        encoding=encoding,
+        cfg=cfg,
     )

@@ -69,6 +69,8 @@ def _collect_path_field_paths(
     paths: set[tuple[str, ...]] = set()
     for name, field in model.model_fields.items():
         annotation = field.annotation
+        if annotation is None:
+            continue
         origin = get_origin(annotation)
         if origin in {UnionType, Union}:
             args = [arg for arg in get_args(annotation) if arg is not type(None)]
@@ -1381,7 +1383,13 @@ def _format_env_error_message(error: Mapping[str, Any]) -> str:
     if error_type in {"enum", "literal_error"} and "expected" in ctx:
         expected = ", ".join(map(str, ctx["expected"]))
         return f"must be one of {expected}"
-    message = error.get("msg", "is invalid")
+    raw_message = error.get("msg")
+    if isinstance(raw_message, str):
+        message = raw_message
+    elif raw_message is None:
+        message = "is invalid"
+    else:
+        message = str(raw_message)
     if message.startswith("Input should be "):
         return "must be " + message[len("Input should be ") :]
     return message

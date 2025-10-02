@@ -350,16 +350,18 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
                         if status == 429
                         else "request_server_error"
                     )
+                    warning_context: dict[str, Any] = {
+                        "url": url,
+                        "status": status,
+                        "attempt": attempt,
+                        "total_attempts": total_attempts,
+                        "rps": cfg.rps,
+                    }
+                    if retry_after is not None:
+                        warning_context["retry_after"] = retry_after
                     logger.warning(
                         event_name,
-                        url=url,
-                        status=status,
-                        attempt=attempt,
-                        total_attempts=total_attempts,
-                        rps=cfg.rps,
-                        **({"retry_after": retry_after}
-                          if retry_after is not None
-                          else {}),
+                        **warning_context,
                     )
                     if attempt >= total_attempts:
                         logger.debug(

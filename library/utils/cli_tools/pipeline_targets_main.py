@@ -358,9 +358,9 @@ def _resolve_optional_output(
 ) -> Path | None:
     """Return an absolute path for optional outputs respecting CLI roots."""
 
-    if path in (None, argparse.SUPPRESS):
+    if path is None or path is argparse.SUPPRESS:
         return None
-    candidate = Path(path)
+    candidate = path if isinstance(path, Path) else Path(str(path))
     if candidate.is_absolute():
         return candidate
     if output_dir is not None:
@@ -403,12 +403,13 @@ def _cached_chembl_fetch(
 
 def run(cfg: Config, options: PipelineConfig) -> int:
     chunk_factory = lambda: _chunk_iterator(cfg, options)
+    batch_size = options.batch_size if options.batch_size is not None else 100
     result = run_pipeline(
         chunk_factory,
         cfg,
         chembl_fetcher=_cached_chembl_fetch,
         chembl_kwargs={"chunk_size": options.chunk_size},
-        batch_size=options.batch_size,
+        batch_size=batch_size,
     )
 
     final_path = options.final_out or options.output_csv

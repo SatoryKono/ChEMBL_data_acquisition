@@ -14,6 +14,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import time
 from collections.abc import Sequence
+from typing import Any
 from datetime import date
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         ensure_dirs(cfg)
     except OSError as exc:
-        payload = {"error": str(exc)}
+        payload: dict[str, Any] = {"error": str(exc)}
         path = getattr(exc, "filename", None)
         if path:
             payload["path"] = str(path)

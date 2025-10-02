@@ -5,16 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from inspect import Parameter, Signature, signature
-from typing import Any
+from typing import Any, TypeAlias, cast
 
 import pandas as pd
 
 from .log import logger
 from .pipeline_metadata import add_pipeline_metadata
 
-FrameLike = pd.DataFrame | Iterable[pd.DataFrame]
+FrameLike: TypeAlias = pd.DataFrame | Iterable[pd.DataFrame]
 
-OptionalFetcher = Callable[..., FrameLike]
+OptionalFetcher: TypeAlias = Callable[..., FrameLike]
 
 _OPTIONAL_KEYWORDS = frozenset({"batch_size", "chunk_size"})
 
@@ -56,7 +56,7 @@ def _call_fetcher(
     /,
     *args: Any,
     **kwargs: Any,
-) -> pd.DataFrame:
+) -> FrameLike:
     """Invoke ``fetcher`` handling optional keywords gracefully."""
 
     filtered_kwargs, dropped = _filter_optional_kwargs(fetcher, kwargs)
@@ -213,7 +213,9 @@ def run_pipeline(
     if isinstance(chembl_output, pd.DataFrame):
         materialised_chembl = chembl_output
     elif requires_materialised:
-        materialised_chembl = _materialize_frames(chembl_output)
+        materialised_chembl = _materialize_frames(
+            cast(Iterable[pd.DataFrame], chembl_output)
+        )
         materialised_chembl = add_pipeline_metadata(materialised_chembl)
         chembl_output = materialised_chembl
     else:

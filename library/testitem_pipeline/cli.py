@@ -7,12 +7,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass
 from itertools import chain, islice
 from pathlib import Path
-from typing import (
-    Any,
-    Iterable,
-    Iterator,
-    Sequence,
-)
+from typing import Any, Callable, Iterable, Iterator, Sequence
 
 import pandas as pd
 import requests
@@ -26,6 +21,7 @@ from library.config import (
     Config,
     IoCfg,
     RetryCfg,
+    TestitemMoleculeEnrichmentCfg,
     _serialize_paths,
 )
 from library.csv_utils import write_csv_chunks_deterministic
@@ -384,7 +380,7 @@ def fetch_testitems(
 def apply_testitem_enrichment(
     df: pd.DataFrame,
     *,
-    enrichment_cfg,
+    enrichment_cfg: TestitemMoleculeEnrichmentCfg,
     io_cfg: IoCfg,
 ) -> tuple[int, pd.DataFrame | None]:
     """Apply optional test item enrichment if enabled."""
