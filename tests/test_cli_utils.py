@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -65,6 +66,7 @@ def test_cli_utils_flags_and_help() -> None:
 def test_resolve_invocation_normalises_arguments() -> None:
     invocation = resolve_invocation("tool", ["--flag", "value with space"])
     assert invocation == ("tool", "--flag", "value with space")
+
 
 
 class _ValidationResult:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import traceback
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
@@ -22,11 +23,11 @@ import shlex
 import pandas as pd
 from pandera.errors import SchemaErrors
 
+from . import cli
 from .cli import (
     LoggerConfig,
     add_common_arguments,
     apply_config_overrides,
-    configure_logger,
     path_argument,
     positive_int,
 )
@@ -37,6 +38,17 @@ from .sidecar import SidecarErrors
 from .utils.config import DEFAULT_CONFIG_RELATIVE
 
 SchemaT = TypeVar("SchemaT")
+
+
+def resolve_invocation(prog: str, argv: Sequence[str] | None) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation."""
+
+    if argv is None:
+        return tuple(str(arg) for arg in sys.argv)
+
+    resolved = [prog]
+    resolved.extend(str(arg) for arg in argv)
+    return tuple(resolved)
 
 
 class ValidationResult(Protocol):
@@ -74,6 +86,7 @@ class PipelineError(RuntimeError):
 
 
 def resolve_invocation(
+
     prog: str | None, argv: Sequence[object] | None
 ) -> tuple[str, ...]:
     """Return a normalised tuple describing the CLI invocation."""
@@ -84,6 +97,7 @@ def resolve_invocation(
     if argv:
         parts.extend(str(arg) for arg in argv)
     return tuple(parts)
+
 
 
 def run_cli_command(
@@ -99,7 +113,7 @@ def run_cli_command(
     """Execute CLI boilerplate shared by data acquisition commands."""
 
     log_cfg.level = getattr(args, "log_level", log_cfg.level)
-    configured_logger = configure_logger(log_cfg)
+    configured_logger = cli.configure_logger(log_cfg)
     use_logger = logger or configured_logger
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
@@ -113,11 +127,11 @@ def run_cli_command(
         )
         if getattr(args, "print_config", False):
             print_config(cfg)
-            configure_logger(log_cfg)
+            cli.configure_logger(log_cfg)
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        use_logger = configure_logger(log_cfg)
+        use_logger = cli.configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         use_logger.error(
             "config_error",
@@ -140,6 +154,16 @@ def run_cli_command(
     else:
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
     return exit_code
+
+
+def resolve_invocation(
+    program: str, argv: Sequence[str] | None
+) -> tuple[str, ...]:
+    """Return the effective command invocation as a tuple of strings."""
+
+    if argv is None:
+        argv = sys.argv[1:]
+    return (program, *map(str, argv))
 
 
 @overload
@@ -173,10 +197,12 @@ def run_pipeline(
     failure_path: Path,
     command: str | None = None,
     invocation: Sequence[str] | None = None,
+
     config_snapshot: Mapping[str, object],
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
+    invocation: Sequence[str] | None = None,
     cfg: Config | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
@@ -211,6 +237,7 @@ def run_pipeline(
         Command used to launch the pipeline.  Stored in metadata output.
     invocation:
         Normalised command invocation used when ``command`` is not provided.
+
     config_snapshot:
         Mapping of configuration values persisted to metadata.
     inputs:
@@ -220,6 +247,10 @@ def run_pipeline(
         columns present in the final dataset are forwarded to ``writer``.
     table_quality:
         Callable invoked after writing the CSV to compute quality metrics.
+    invocation:
+        Optional command invocation captured as a sequence of arguments. When
+        provided it is persisted to metadata alongside the joined ``command``
+        string.
     cfg:
         Optional application configuration forwarded to sidecar metadata.
     logger:
@@ -437,6 +468,13 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
+    resolved_invocation = tuple(map(str, invocation)) if invocation else ()
+    resolved_command = (
+        command
+        if command is not None
+        else (" ".join(resolved_invocation) if resolved_invocation else " ".join(sys.argv))
+    )
+
     meta_path = write_meta_yaml(
         csv_path=csv_path,
         command=command_str,
@@ -444,6 +482,7 @@ def run_pipeline(
         inputs=inputs,
         stats=stats,
         schema=schema_name,
+        invocation=resolved_invocation or None,
     )
 
     try:
