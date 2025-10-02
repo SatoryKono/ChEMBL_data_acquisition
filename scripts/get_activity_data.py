@@ -9,14 +9,20 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 from collections.abc import Iterable, Iterator, Sequence
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
 from functools import partial
 from itertools import islice
 from pathlib import Path
 
 from library.utils.bootstrap import ensure_project_root
-
 
 if __package__ in {None, ""}:
     ensure_project_root()
@@ -25,36 +31,37 @@ import pandas as pd
 import requests
 
 from library import chembl_library as cl
-from library import cli
-from library import io
-from library.csv_utils import write_csv_chunks_deterministic
-from library.clients import ChemblClient, _chunked
-from library.rate_limiter import get_global_limiter
+from library import cli, io
 from library.cli import (
     LoggerConfig,
+    positive_int,
 )
 from library.cli import (
     build_parser as base_parser,
-    positive_int,
 )
 from library.cli_utils import (
     PipelineError,
     run_cli_command,
     run_pipeline,
+)
+from library.cli_utils import (
     file_sha256 as _cli_file_sha256,
+)
+from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
+from library.clients import ChemblClient, _chunked
 from library.config import Config, _serialize_paths
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
-from library.table_quality import analyze_table_quality
-from library.validation import validate_activities
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
+from library.rate_limiter import get_global_limiter
+from library.table_quality import analyze_table_quality
+from library.validation import validate_activities
 from schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
-
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
@@ -139,7 +146,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
-        chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
+        id_batches = list(_chunked(limited_ids, cfg.activity.batch_size))
+        if not id_batches:
+            return
+
+        id_sequence = [str(identifier) for batch in id_batches for identifier in batch]
+        id_order = {identifier: index for index, identifier in enumerate(id_sequence)}
+        id_chunks = iter(id_batches)
+        primary_key = tuple(str(identifier) for identifier in id_batches[0])
+        primary_done = threading.Event()
+        cache_lock = threading.Lock()
+        cached_chunks: dict[tuple[str, ...], list[pd.DataFrame]] = {}
         global_limiter = get_global_limiter(
             cfg.rate.global_rps, cfg.rate.global_burst
         )
@@ -149,16 +166,73 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         ) as client:
 
 
-            def _fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+            def _fetch_chunk(chunk_ids: Sequence[str]) -> list[pd.DataFrame]:
+                key = tuple(str(identifier) for identifier in chunk_ids)
+                with cache_lock:
+                    cached = cached_chunks.pop(key, None)
+                if cached is not None:
+                    return cached
+                if key != primary_key and not primary_done.is_set():
+                    primary_done.wait()
+                    with cache_lock:
+                        cached = cached_chunks.pop(key, None)
+                    if cached is not None:
+                        return cached
+
                 try:
-                    return cl.get_activities(
-                        ids,
+                    result = cl.get_activities(
+                        chunk_ids,
                         cfg=cfg.api,
                         client=client,
                         chunk_size=cfg.activity.batch_size,
                         timeout=cfg.activity.timeout,
                         **extra_kwargs,
                     )
+                    if isinstance(result, pd.DataFrame):
+                        frames = [result]
+                    elif result is None:
+                        frames = []
+                    else:
+                        frames = [frame for frame in result]
+                    if not frames:
+                        return []
+
+                    chunk_map: dict[tuple[str, ...], list[pd.DataFrame]] = {}
+                    for frame in frames:
+                        if frame is None or frame.empty:
+                            continue
+                        if "activity_id" not in frame.columns:
+                            chunk_map.setdefault(key, []).append(frame)
+                            continue
+                        column = frame["activity_id"].astype(str)
+                        matched: set[str] = set()
+                        for value in column:
+                            if value in id_order:
+                                matched.add(value)
+                                continue
+                            for identifier in id_order:
+                                if value.endswith(identifier):
+                                    matched.add(identifier)
+                                    break
+                        if not matched:
+                            matched = set(key)
+                        matched_ids = tuple(
+                            sorted(
+                                matched,
+                                key=lambda identifier: id_order.get(identifier, len(id_order)),
+                            )
+                        )
+                        mask = column.apply(
+                            lambda value, ids=matched_ids: value in ids
+                            or any(value.endswith(identifier) for identifier in ids)
+                        )
+                        if mask.any():
+                            chunk_map.setdefault(matched_ids, []).append(frame.loc[mask])
+
+                    with cache_lock:
+                        for chunk_key, chunk_frames in chunk_map.items():
+                            cached_chunks.setdefault(chunk_key, []).extend(chunk_frames)
+                        frames_for_key = cached_chunks.pop(key, [])
                 except (requests.RequestException, ValueError) as exc:
                     logger.error(
                         "activity_fetch_failed",
@@ -171,18 +245,24 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         timeout=cfg.activity.timeout,
                     )
                     raise PipelineError(str(exc)) from exc
+                finally:
+                    if key == primary_key:
+                        primary_done.set()
+
+                return frames_for_key
 
 
             workers = max(1, cfg.activity.workers)
             if workers == 1:
 
                 for chunk_ids in id_chunks:
-                    yield _fetch_chunk(list(chunk_ids))
+                    for frame in _fetch_chunk(list(chunk_ids)):
+                        yield frame
                 return
 
 
-            pending: dict[Future[pd.DataFrame], int] = {}
-            completed: dict[int, pd.DataFrame] = {}
+            pending: dict[Future[list[pd.DataFrame]], int] = {}
+            completed: dict[int, list[pd.DataFrame]] = {}
             next_index = 0
 
             def _cancel_pending() -> None:
@@ -206,7 +286,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                                     _cancel_pending()
                                     raise
                             while next_index in completed:
-                                yield completed.pop(next_index)
+                                frames = completed.pop(next_index)
+                                for frame in frames:
+                                    yield frame
                                 next_index += 1
 
                     for future in as_completed(list(pending)):
@@ -217,7 +299,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             _cancel_pending()
                             raise
                         while next_index in completed:
-                            yield completed.pop(next_index)
+                            frames = completed.pop(next_index)
+                            for frame in frames:
+                                yield frame
                             next_index += 1
                 finally:
                     pending.clear()
