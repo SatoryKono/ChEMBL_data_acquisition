@@ -31,10 +31,10 @@ directly.
 | `--input-dir` | Directory containing input artefacts; resolved against `--base-path` when relative. |
 | `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
-| `--output` / `--out` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `--output-dir` or `--base-path`. |
+| `--final-out` | Primary destination for the cleaned export. When omitted, defaults to `output.<input-stem>_<YYYYMMDD>.csv` under `--output-dir` or `--base-path`. Equivalent to the legacy `--output`/`--out`, which remain available but raise deprecation warnings. |
+| `--output` / `--out` | Deprecated aliases for `--final-out`. They keep the previous behaviour and default paths but emit warnings on each invocation and will be removed after the migration. |
 | `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`; other commands will surface it once the shared parser is extended. Skipped when omitted. |
 | `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. Available in the same entry points as `--raw-out`. |
-| `--final-out` | Path for the final cleaned export. When omitted, falls back to `--output` / `--out`. Currently exposed by the target pipeline helpers. |
 | `--date` | Override the auto-generated `YYYYMMDD` suffix when building default output filenames. |
 | `--force` | Overwrite outputs even when they already exist. |
 | `--skip-existing` | Skip processing if the destination file is already present. |
@@ -66,7 +66,7 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
 ```
 
-In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and validation. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines continue to rely on `--output` until the shared parser is extended.
+In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out` writes the cleaned table after normalisation and validation. The legacy `--output`/`--out` switches remain wired in for compatibility but emit deprecation warnings. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines will add the staged switches once the shared parser is extended.
 
 > **Note.** `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
 
@@ -161,7 +161,7 @@ Console form:
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -171,7 +171,7 @@ Module form:
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -198,7 +198,7 @@ Console form:
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -212,7 +212,7 @@ Module form:
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -231,7 +231,7 @@ Console form:
 get-target-data chembl --input path/to/targets.csv \
   --column target_chembl_id \
   --raw-out out/targets.raw.csv \
-  --out out/targets.final.csv
+  --final-out out/targets.final.csv
 ```
 
 Module form:
@@ -241,7 +241,7 @@ python -m scripts.get_target_data chembl \
   --input path/to/targets.csv \
   --column target_chembl_id \
   --raw-out out/targets.raw.csv \
-  --out out/targets.final.csv
+  --final-out out/targets.final.csv
 ```
 
 Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository. Swap `chembl` in the example for `uniprot`, `iuphar` or `all` to choose a different source mix.
@@ -253,7 +253,7 @@ Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelin
 ```bash
 python -m library.utils.cli_tools.pipeline_targets_main \
   --input tests/data/chembl_targets_min.csv \
-  --out out/targets_cached.csv \
+  --final-out out/targets_cached.csv \
   --chunk-size 50 \
   --batch-size 50 \
   --limit 200
