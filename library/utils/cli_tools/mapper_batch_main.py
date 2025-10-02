@@ -15,7 +15,7 @@ from library.cli import (
     configure_logger,
 )
 from library.cli import build_parser as base_parser
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.log import logger
 from library.mapper_batch_library import map_chembl_ids_to_uniprot
 
@@ -122,8 +122,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_cfg.level = args.log_level
     logger = configure_logger(log_cfg)
     logger.info("pipeline_start", run_id=log_cfg.run_id)
-    cfg = cli.apply_config_overrides(args, parser, args.config)
-    ensure_dirs(cfg)
+    try:
+        cfg = cli.apply_config_overrides(args, parser, args.config)
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger.info("pipeline_end", exit_code=1)
+        return 1
+
+    try:
+        ensure_dirs(cfg)
+    except (ValueError, TypeError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger.info("pipeline_end", exit_code=1)
+        return 1
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        logger.error("directory_setup_failed", error=str(exc))
+        logger.info("pipeline_end", exit_code=1)
+        return 1
+
     logger = configure_logger(log_cfg)
     if args.print_config:
         print_config(cfg)

@@ -544,7 +544,7 @@ def apply_config_overrides(
             error=str(exc),
             config=str(config_path),
         )
-        parser.error(str(exc))
+        raise
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 

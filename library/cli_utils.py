@@ -31,7 +31,7 @@ from .cli import (
     path_argument,
     positive_int,
 )
-from .config import Config, ensure_dirs, print_config
+from .config import Config, ConfigError, ensure_dirs, print_config
 from .log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml
 from .sidecar import SidecarErrors
@@ -124,14 +124,23 @@ def run_cli_command(
     try:
         config_arg = getattr(args, "config", None)
         if isinstance(config_arg, (str, Path)):
-            config_path = config_arg
+            config_path: Path | str = config_arg
         else:
             default_config = parser.get_default("config")
             if not isinstance(default_config, (str, Path)):
                 msg = "configuration path must be provided"
                 raise ValueError(msg)
             config_path = default_config
+    except ValueError as exc:
+        use_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(getattr(args, "config", "")),
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
 
+    try:
         cfg: Config = apply_config_overrides(
             args,
             parser,
@@ -139,6 +148,16 @@ def run_cli_command(
             mapping=dict(mapping),
             base_parser=base_parser,
         )
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        use_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(config_path),
+        )
+        use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    try:
         if getattr(args, "print_config", False):
             print_config(cfg)
             cli.configure_logger(log_cfg)
@@ -150,7 +169,7 @@ def run_cli_command(
         use_logger.error(
             "config_error",
             error=str(exc),
-            config=str(getattr(args, "config", "")),
+            config=str(config_path),
         )
         use_logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1

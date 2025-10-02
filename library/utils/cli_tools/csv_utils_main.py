@@ -24,7 +24,7 @@ from library import cli
 from library.cli import LoggerConfig, configure_logger, create_logger_config
 from library.cli_utils import build_parser
 from library.csv_utils import write_csv_chunks_deterministic
-from library.config import ensure_dirs, print_config
+from library.config import ConfigError, ensure_dirs, print_config
 from library.log import logger
 from library.parser_schema import CSVExportArgs
 
@@ -47,22 +47,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     ns = parser.parse_args(argv)
     input_path = getattr(ns, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
+    provided_output = getattr(ns, "output_csv", None)
+    provided_final = getattr(ns, "final_out", None)
+    provided_date = getattr(ns, "date", None)
     cli.prepare_io_paths(ns, output_stem=output_stem)
-    if ns.output_csv is None and output_stem is not None:
+    if (
+        output_stem is not None
+        and provided_output is None
+        and provided_final is None
+    ):
         target_dir = ns.output_dir or ns.base_path or Path(ns.input_csv).parent
         date_value = getattr(ns, "date", None)
-        if date_value is None:
+        if provided_date is None:
             date_value = f"{date.today():%Y%m%d}"
             setattr(ns, "date", date_value)
-        ns.output_csv = (
+        default_output = (
             target_dir / f"output.{output_stem}_{date_value}.csv"
         ).resolve()
-    cfg = cli.apply_config_overrides(
-        ns,
-        parser,
-        ns.config,
-        mapping={"chunk_size": "io.csv_chunksize"},
-    )
+        ns.output_csv = default_output
+        setattr(ns, "final_out", default_output)
+    try:
+        cfg = cli.apply_config_overrides(
+            ns,
+            parser,
+            ns.config,
+            mapping={"chunk_size": "io.csv_chunksize"},
+        )
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(ns.config),
+        )
+        return 1
     log_cfg: LoggerConfig = create_logger_config(ns.log_level)
     if getattr(ns, "print_config", False):
         print_config(cfg)
@@ -83,6 +100,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         ensure_dirs(cfg)
+    except (ValueError, TypeError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(ns.config),
+        )
+        return 1
     except OSError as exc:
         payload: dict[str, Any] = {"error": str(exc)}
         path = getattr(exc, "filename", None)

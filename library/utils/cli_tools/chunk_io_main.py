@@ -15,7 +15,7 @@ from library.cli import (
     create_logger_config,
     path_argument,
 )
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from library.io.paths import default_output_path
 from library.log import logger
@@ -129,7 +129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logger(log_cfg)
     try:
         cfg = cli.apply_config_overrides(args, parser, args.config)
-    except (TypeError, ValueError) as exc:
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
         logger.error(
             "config_error",
             error=str(exc),
