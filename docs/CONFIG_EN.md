@@ -69,6 +69,7 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | `column` | `activity_chembl_id` | Input column containing activity identifiers. |
 | `batch_size` | `50` | Batch size for API requests. |
 | `timeout` | `30.0` | Request timeout in seconds. |
+| `workers` | `1` | Number of parallel worker processes handling API batches. |
 | `limit` | `null` | Optional cap on identifiers processed. |
 | `dry_run` | `false` | Skip network calls and file generation when `true`. |
 
