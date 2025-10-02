@@ -562,6 +562,19 @@ def _resolve_file(
     return candidate
 
 
+def _raw_suffix(raw_format: str, fallback: str) -> str:
+    value = raw_format.strip().lower()
+    if not value:
+        return fallback
+    if value == "csv":
+        return fallback
+    if value == "parquet":
+        return ".parquet"
+    if value.startswith("."):
+        return value
+    return f".{value}"
+
+
 def prepare_io_paths(
     args: argparse.Namespace,
     *,
@@ -587,9 +600,43 @@ def prepare_io_paths(
     if resolved_input is not None:
         setattr(args, "input_csv", resolved_input)
 
-    current_output = getattr(args, "output_csv", None)
+    alias_value = getattr(args, "final_out_alias", None)
+    final_candidate = getattr(args, "final_out", None)
+    output_candidate = getattr(args, "output_csv", None)
+
+    if alias_value not in (None, argparse.SUPPRESS):
+        if final_candidate in (None, argparse.SUPPRESS):
+            final_candidate = alias_value
+            setattr(args, "final_out", final_candidate)
+        log.logger.warning(
+            "cli_option_deprecated",
+            option="--out",
+            replacement="--final-out",
+        )
+
+    if output_candidate not in (None, argparse.SUPPRESS):
+        if final_candidate in (None, argparse.SUPPRESS):
+            final_candidate = output_candidate
+            setattr(args, "final_out", final_candidate)
+        log.logger.warning(
+            "cli_option_deprecated",
+            option="--output",
+            replacement="--final-out",
+        )
+
+    raw_format_value = getattr(args, "raw_format", None)
+    if raw_format_value in (None, argparse.SUPPRESS):
+        raw_format_str = "csv"
+    else:
+        raw_format_str = str(raw_format_value).lower()
+    setattr(args, "raw_format", raw_format_str)
+
+    final_value = getattr(args, "final_out", None)
+    if final_value in (None, argparse.SUPPRESS):
+        final_value = None
+
     resolved_output = _resolve_file(
-        current_output,
+        final_value,
         directory=output_dir,
         base=base_path,
     )
@@ -615,6 +662,28 @@ def prepare_io_paths(
             base=base_path,
         )
         setattr(args, "output_csv", resolved_output)
+        setattr(args, "final_out", resolved_output)
+
+    raw_value = getattr(args, "raw_out", None)
+    if raw_value in (None, argparse.SUPPRESS):
+        if resolved_output is not None:
+            if raw_format_str == "csv":
+                resolved_raw = resolved_output
+            else:
+                suffix_value = _raw_suffix(raw_format_str, suffix)
+                resolved_raw = resolved_output.with_suffix(suffix_value)
+        else:
+            resolved_raw = None
+    else:
+        resolved_raw = _resolve_file(raw_value, directory=output_dir, base=base_path)
+
+    if resolved_raw is not None:
+        resolved_raw = _resolve_file(
+            resolved_raw,
+            directory=output_dir,
+            base=base_path,
+        )
+    setattr(args, "raw_out", resolved_raw)
 
     if date_str is not None:
         setattr(args, "date", date_str)
