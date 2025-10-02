@@ -52,9 +52,8 @@ def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         normalized = gtd._normalized_output_path(Path(args.output_csv))
         pd.DataFrame({"target_chembl_id": ["C1"], "uniprot_id": ["P1"]}).to_csv(
-ч
-            args.final_out, index=False
-
+            args.final_out,
+            index=False,
         )
         return 0
 

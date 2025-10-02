@@ -20,7 +20,8 @@ from itertools import islice
 import pandas as pd
 import pytest
 import requests
-import responses
+
+responses = pytest.importorskip("responses")
 
 from library import chembl_library as cl
 from library import io as lib_io
