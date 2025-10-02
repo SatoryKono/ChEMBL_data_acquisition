@@ -154,16 +154,15 @@ Before running the smoke command, create a `chembl_ids.csv` file with a `chembl_
 
 ### Document post-processing QA
 
-The document pipeline now emits QA artefacts next to `preprocessed_output.document_YYYYMMDD.csv` when a legacy
-Power Query export (`input/full/ref_document.csv`) is available under the data root. The helper writes a JSON report,
+The document pipeline now emits QA artefacts next to `output.document_YYYYMMDD.csv` when a legacy
+Power Query export (`input/full/document.csv`) is available under the data root. The helper writes a JSON report,
 Markdown summary and, on divergence, a CSV diff capped at 100 rows. You can also run the checker manually:
 
 ```bash
 python -m qa.check_document_postprocessing \
     --base-path data \
-    --ref input\\full\\ref_document.csv \
-    --actual output\\document\\preprocessed_output.document_20230101.csv \
-    --out qa_reports
+    --out output\\document\\output.document_20230101.csv \
+    --reports-dir qa_reports
 ```
 
 The command exits with status code `1` when mismatches occur and stores the diff in

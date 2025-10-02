@@ -23,11 +23,14 @@ def _prepare_environment(tmp_path: Path) -> tuple[Path, Path, Path]:
     reference_dir.mkdir(parents=True)
     output_dir.mkdir(parents=True)
 
-    reference_path = reference_dir / "ref_document.csv"
-    candidate_path = output_dir / "preprocessed_output.document_20230101.csv"
+    reference_path = reference_dir / "document.csv"
+    candidate_path = output_dir / "output.document_20230101.csv"
 
     shutil.copy(FIXTURE_DIR / "ref_document.csv", reference_path)
-    shutil.copy(FIXTURE_DIR / "ref_document.csv", candidate_path)
+    shutil.copy(
+        FIXTURE_DIR / "preprocessed_output.document_20230101.csv",
+        candidate_path,
+    )
 
     return base_dir, reference_path, candidate_path
 
@@ -90,10 +93,8 @@ def test_cli_exit_codes(tmp_path: Path, mutate: bool) -> None:
         [
             "--base-path",
             str(base_dir),
-            "--ref",
-            "input\\full\\ref_document.csv",
-            "--actual",
-            "output\\preprocessed_output.document_20230101.csv",
+            "--out",
+            "output\\output.document_20230101.csv",
         ]
     )
 

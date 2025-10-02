@@ -366,20 +366,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--base-path",
         default=".",
-        help="Root directory for resolving relative paths",
-    )
-    parser.add_argument(
-        "--ref",
-        required=True,
-        help="Relative or absolute path to the reference (Power Query) CSV",
-    )
-    parser.add_argument(
-        "--actual",
-        required=True,
-        help="Relative or absolute path to the Python-generated CSV",
+        help="Root directory containing the Power Query reference and Python outputs",
     )
     parser.add_argument(
         "--out",
+        required=True,
+        help="Relative or absolute path to the Python-generated document CSV (output.document_*.csv)",
+    )
+    parser.add_argument(
+        "--reports-dir",
         dest="output_dir",
         help="Optional directory for QA reports (defaults to the candidate directory)",
     )
@@ -415,10 +410,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    base_dir = Path(args.base_path).resolve()
+    reference_path = _resolve_relative(base_dir, Path("input") / "full" / "document.csv")
+    candidate_path = _resolve_relative(base_dir, args.out)
+
     result = run_document_postprocessing_check(
-        base_path=args.base_path,
-        reference_path=args.ref,
-        candidate_path=args.actual,
+        base_path=base_dir,
+        reference_path=reference_path,
+        candidate_path=candidate_path,
         output_dir=args.output_dir,
         date_code=args.date_code,
         delimiter=args.delimiter,
