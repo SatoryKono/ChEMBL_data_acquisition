@@ -20,11 +20,11 @@ from typing import Protocol, TypeVar, overload
 import pandas as pd
 from pandera.errors import SchemaErrors
 
+from . import cli
 from .cli import (
     LoggerConfig,
     add_common_arguments,
     apply_config_overrides,
-    configure_logger,
     path_argument,
     positive_int,
 )
@@ -71,6 +71,16 @@ class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
 
 
+def resolve_invocation(
+    program: str, argv: Sequence[str] | None
+) -> tuple[str, ...]:
+    """Return a normalized CLI invocation tuple for metadata logging."""
+
+    if argv is None:
+        return (program,)
+    return (program, *[str(argument) for argument in argv])
+
+
 def run_cli_command(
     *,
     args: argparse.Namespace,
@@ -84,7 +94,7 @@ def run_cli_command(
     """Execute CLI boilerplate shared by data acquisition commands."""
 
     log_cfg.level = getattr(args, "log_level", log_cfg.level)
-    configured_logger = configure_logger(log_cfg)
+    configured_logger = cli.configure_logger(log_cfg)
     use_logger = logger or configured_logger
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
@@ -98,11 +108,11 @@ def run_cli_command(
         )
         if getattr(args, "print_config", False):
             print_config(cfg)
-            configure_logger(log_cfg)
+            cli.configure_logger(log_cfg)
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        use_logger = configure_logger(log_cfg)
+        use_logger = cli.configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         use_logger.error(
             "config_error",
