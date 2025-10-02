@@ -52,6 +52,7 @@ from .pubchem import (
     _PUBCHEM_CACHE_SCHEMA_VERSION,
     _PUBCHEM_SESSION_LOCK,
     _PUBCHEM_SESSION_SIGNATURE,
+    _merge_pubchem_properties,
     _load_pubchem_cid_cache,
     _prepare_pubchem_caches,
     _prefetch_parents,

@@ -12,6 +12,7 @@ from typing import (
     Iterable,
     Iterator,
     Sequence,
+    TypeVar,
 )
 
 import pandas as pd
@@ -51,6 +52,18 @@ from .catalog import (
     run_parent_enrichment,
 )
 from .pubchem import PUBCHEM_COLUMNS, add_pubchem_data, augment_pubchem
+
+_T = TypeVar("_T")
+
+
+def _resolve_override(name: str, default: _T) -> _T:
+    """Return patched attribute ``name`` from the package when available."""
+
+    module = sys.modules.get(__package__)
+    if module is None:
+        return default
+    override = getattr(module, name, None)
+    return override if override is not None else default
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
@@ -426,6 +439,19 @@ def run_testitem_pipeline(
     pubchem_api_cfg = _prepare_pubchem_api_cfg(cfg, api_cfg)
     pc.init_session(pubchem_api_cfg, cfg.retry)
 
+    read_ids_fn = _resolve_override("read_input_ids", read_input_ids)
+    fetch_fn = _resolve_override("fetch_testitems", fetch_testitems)
+    prepare_fn = _resolve_override(
+        "prepare_parent_enrichment", prepare_parent_enrichment
+    )
+    parent_run_fn = _resolve_override("run_parent_enrichment", run_parent_enrichment)
+    augment_fn = _resolve_override("augment_pubchem", augment_pubchem)
+    enrichment_fn = _resolve_override(
+        "apply_testitem_enrichment", apply_testitem_enrichment
+    )
+    finalize_fn = _resolve_override("finalize_output", finalize_output)
+    client_factory = _resolve_override("ChemblClient", ChemblClient)
+
     requested_ids: tuple[str, ...] = ()
     missing_ids: list[str] = []
     parent_stats = ParentLookupStats(
@@ -440,8 +466,8 @@ def run_testitem_pipeline(
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
     offset = options.offset if options.offset is not None else cfg.testitem.offset
 
-    with ChemblClient(api_cfg, cfg.retry, cfg.chembl) as client:
-        read_status, read_result = read_input_ids(
+    with client_factory(api_cfg, cfg.retry, cfg.chembl) as client:
+        read_status, read_result = read_ids_fn(
             input_csv,
             column=cfg.testitem.column,
             io_cfg=cfg.io,
@@ -451,7 +477,7 @@ def run_testitem_pipeline(
         if read_status != 0 or read_result is None:
             return read_status
 
-        fetch_status, chunk_iter, requested_ids = fetch_testitems(
+        fetch_status, chunk_iter, requested_ids = fetch_fn(
             read_result.ids_iter,
             api_cfg=api_cfg,
             batch_size=cfg.testitem.batch_size,
@@ -502,7 +528,7 @@ def run_testitem_pipeline(
             try:
                 for chunk in chunk_iter:
                     rows_counter += len(chunk)
-                    prep_status, prep = prepare_parent_enrichment(
+                    prep_status, prep = prepare_fn(
                         chunk,
                         catalog_cfg=cfg.molecule_catalog,
                         io_cfg=cfg.io,
@@ -514,7 +540,7 @@ def run_testitem_pipeline(
                     if prep_status != 0 or prep is None:
                         raise TestitemPipelineStageError(prep_status)
 
-                    parent_status, parent_result = run_parent_enrichment(
+                    parent_status, parent_result = parent_run_fn(
                         prep,
                         client=client,
                         api_cfg=api_cfg,
@@ -529,7 +555,7 @@ def run_testitem_pipeline(
                         parent_stats_holder["value"], parent_result.parent_stats
                     )
 
-                    current = augment_pubchem(
+                    current = augment_fn(
                         current,
                         pubchem_cfg=cfg.pubchem,
                         api_cfg=pubchem_api_cfg,
@@ -540,7 +566,7 @@ def run_testitem_pipeline(
                         request_limit=cfg.testitem.request_limit,
                     )
 
-                    enrichment_status, enriched_df = apply_testitem_enrichment(
+                    enrichment_status, enriched_df = enrichment_fn(
                         current,
                         enrichment_cfg=cfg.testitem_molecule_enrichment,
                         io_cfg=cfg.io,
@@ -584,7 +610,7 @@ def run_testitem_pipeline(
         )
 
         try:
-            exit_code = finalize_output(
+            exit_code = finalize_fn(
                 _processed_chunks(),
                 cfg=cfg,
                 output=output_path,
