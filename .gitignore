@@ -19,3 +19,8 @@ uniprot/
 # Local development files
 python
 exists.csv
+.venv/
+config/config.local.yaml
+config/*.local.yaml
+config/*.secrets.yaml
+config/*.override.yaml
