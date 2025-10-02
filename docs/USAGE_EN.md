@@ -58,7 +58,8 @@ The repository includes a few compact fixtures under `tests/data/` for smoke-lev
 
 ### Staged pipeline flow
 
-All entity pipelines share a unified staging flow:
+All entity pipelines share a unified staging flow, although the dedicated raw snapshot currently exists only for the target
+pipeline:
 
 ```mermaid
 flowchart LR
@@ -68,6 +69,7 @@ flowchart LR
 In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and validation. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines continue to rely on `--output` until the shared parser is extended.
 
 > **Note.** `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
+
 
 During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preserved in the raw snapshot and counted in the metadata under `error_placeholder_counts` while being removed from the final export.
 
@@ -186,6 +188,9 @@ Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sou
 Consult `get-document-data --help` for a summary and
 `get-document-data <sub-command> --help` for the
 allowed switches (for example, `--batch-size` for PubMed batching).
+
+Raw snapshot support for the document pipeline is tracked on the roadmap and will reuse the reserved `--raw-out`/`--raw-format`
+switches once implemented.
 
 Console form:
 

@@ -8,6 +8,7 @@
   `--config` и `--print-config` для управления конфигурацией. Размер партий задаётся параметрами `--chunk-size`
   или `--batch-size` в зависимости от пайплайна. Новые переключатели `--raw-out`, `--final-out`, `--raw-format` и
   `--id-cols` уже доступны в пайплайне таргетов; остальные команды получат их после расширения общего CLI.
+
 * Потоковая обработка крупных CSV-файлов с детерминированным выводом.
 * Валидаторы схем в [`schemas/`](schemas/) и словари в [`dictionary/`](dictionary/) для проверки типов, диапазонов и справочных данных.
 * Конфигурация через `config/config.yaml`, переменные окружения и CLI-переопределения.
@@ -105,6 +106,9 @@ pre-commit install
       --limit 5 --log-level INFO
   ```
 
+  Выделенный «сырой» снимок сейчас поддерживает только таргет-пайплайн; остальные команды принимают `--raw-out`/`--raw-format`
+  для совместимости, но игнорируют их до появления соответствующей реализации.
+
    Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
 
    ```bash
@@ -175,6 +179,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 одиночного переключателя подойдёт короткий алиас `--out`, полностью эквивалентный `--output`. Пайплайны с составными
 ключами принимают список столбцов через `--id-cols`, чтобы фиксировать исходные идентификаторы в «сыром» снимке до очистки.
 
+
 ### `scripts/get_document_data.py`
 
 Получите метаданные публикаций по списку PubMed ID с использованием тестового файла:
@@ -183,6 +188,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
     --output out/documents.csv \
+
     --limit 5 \
     --log-level INFO
 ```
@@ -197,6 +203,9 @@ python -m library.pubmed_library \
     --output out/documents.csv \
     --log-level INFO
 ```
+
+Добавление отдельного «сырого» снимка для документ-пайплайна находится в дорожной карте и будет reuse-ровано существующими
+флагами `--raw-out`/`--raw-format` после реализации.
 
 ### `scripts/get_target_data.py`
 
@@ -241,7 +250,7 @@ python -m library.utils.cli_tools.get_activities --limit 500 --dry-run
 
 ## Конвейер с поэтапным выводом
 
-Каждый пайплайн теперь следует единой схеме этапов:
+Каждый пайплайн следует единой схеме этапов, хотя выделенный «сырой» снимок пока реализован только для таргетов:
 
 ```mermaid
 flowchart LR
@@ -445,6 +454,7 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
 По умолчанию `--output`/`--out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
 Пайплайн таргетов может разделять «сырой» и чистый вывод флагами `--raw-out` (с `--raw-format`) и `--final-out`. Дополнительные
 примеры приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+
 
 ## Структура проекта
 

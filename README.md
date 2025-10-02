@@ -9,13 +9,17 @@ The README is available in multiple languages:
 
  
 * Командные скрипты с унифицированными флагами `--input`, `--output`/`--out`,
+
   `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
   `--print-config` для управления загрузкой настроек. Размер пакетной
   выборки задаётся параметрами `--chunk-size` или `--batch-size` в зависимости
   от конкретного пайплайна. Новые переключатели `--raw-out`, `--final-out`,
   `--raw-format` и `--id-cols` уже доступны в пайплайне таргетов; остальные
   команды получат их после расширения общего CLI.
+
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
+* Отдельный «сырой» снимок (`--raw-out`) доступен для пайплайна таргетов;
+  поддержка остальных конвейеров запланирована и будет объявлена отдельно.
 * Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
 * Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
@@ -166,6 +170,7 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs / Очистка ID"] --> Normalize --> Validate --> Final["Final export / Финальный экспорт"]
 ```
 
+
 **EN.** The target pipeline already follows the staged contract with dedicated destinations for raw and cleaned artefacts. Use
 `--raw-out` (optionally with `--raw-format parquet`) to capture the raw payload, list composite keys via `--id-cols`, and direct
 the cleaned export to `--final-out` or the shorter alias `--out`. Placeholder identifiers remain in the raw snapshot and are
@@ -182,6 +187,7 @@ using `--output` until the shared CLI is extended.
 > `library.utils.cli_tools.pipeline_targets_main`. Other commands will adopt these switches once the shared parser lands.
 > **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` уже доступны в `get-target-data` и
 > `library.utils.cli_tools.pipeline_targets_main`. Остальные команды получат их после доработки общего парсера.
+
 
 
 ## Tests / Тесты

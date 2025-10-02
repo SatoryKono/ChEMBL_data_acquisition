@@ -4,11 +4,13 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 
 ## Features
 
+
 * Unified CLI flags such as `--input`, `--output`/`--out`, `--log-level`, `--sep`, `--encoding`, `--column`, plus
   `--config` and `--print-config` to manage configuration files. Batch size is controlled via `--chunk-size` or
   `--batch-size` depending on the pipeline. The new `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols`
   switches are currently available through the target pipeline; other commands will expose them once the shared
   CLI is extended.
+
 * Streaming CSV handling with deterministic output for large datasets.
 * Schema validators in [`schemas/`](schemas/) and dictionaries in [`dictionary/`](dictionary/) that enforce types,
   ranges and reference data.
@@ -102,12 +104,17 @@ for usage guidelines.
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
+
       --output out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
       --output out/documents.csv \
       --limit 5 --log-level INFO
+
   ```
+
+  The target pipeline is the only one that currently honours `--raw-out` and `--raw-format`; other pipelines ignore the flags
+  until raw snapshot support lands in their adapters.
 
    The console scripts accept the same options as their module counterparts, so existing `python -m …` workflows remain valid:
 
@@ -173,6 +180,7 @@ as a CI artifact.
 
 ## Usage
 
+
 The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--out`/`--output`, and
 `--limit`. Using `--limit 0` now short-circuits processing before any network or filesystem access, which is useful for
 smoke-testing configuration overrides. The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, and
@@ -186,6 +194,7 @@ Within the target pipeline the staged export surfaces separate destinations for 
 `parquet`, and `--final-out` to override the normalised export while keeping the metadata sidecars. When you only need a
 single output switch, `--out` acts as a short alias for `--output`. Multi-identifier payloads accept multiple columns via
 `--id-cols`, allowing you to keep composite keys in the raw snapshot before the cleanup step runs.
+
 
 ### `scripts/get_document_data.py`
 
@@ -209,6 +218,9 @@ python -m library.pubmed_library \
     --output out/documents.csv \
     --log-level INFO
 ```
+
+Raw snapshots for document exports are part of the roadmap and will reuse the reserved `--raw-out`/`--raw-format` switches once
+implemented.
 
 ### `scripts/get_target_data.py`
 
@@ -256,7 +268,8 @@ The command logs that it would generate 500 activity rows and exits without crea
 
 ## Staged export pipeline
 
-Every entity pipeline now follows the same staged contract:
+Every entity pipeline now follows the same staged contract, although the dedicated raw snapshot is currently implemented only
+for targets:
 
 ```mermaid
 flowchart LR
@@ -471,6 +484,7 @@ python -m library.utils.cli_tools.table_quality_main --input data.csv --table-na
 `--output`/`--out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. Target
 pipeline invocations can override the raw snapshot via `--raw-out` (with optional `--raw-format parquet`) and the cleaned
 export via `--final-out`. For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
+
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
 
 ## Project structure
@@ -595,6 +609,7 @@ python -m library.utils.cli_tools.table_quality_main \
 Target pipeline invocations can use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be
 separated explicitly. For additional examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
 [`docs/USAGE_RU.md`](docs/USAGE_RU.md)).
+
 
 ## Output and metadata
 
