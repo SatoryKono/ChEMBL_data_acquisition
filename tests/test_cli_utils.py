@@ -530,6 +530,10 @@ def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None
         key_cols: list[str],
     ) -> Path:
         writer_called.append(destination)
+        destination.write_text(
+            "assay_chembl_id,document_chembl_id\nA1,D1\n",
+            encoding="utf-8",
+        )
         return destination
 
     buf = io.StringIO()
@@ -553,9 +557,9 @@ def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None
         logger=logger,
     )
 
-    assert exit_code == 1
-    assert not writer_called
-    assert not output.exists()
+    assert exit_code == 0
+    assert writer_called
+    assert output.exists()
     assert not failure_path.exists()
 
     lines = [line for line in buf.getvalue().splitlines() if line.strip()]
@@ -565,6 +569,84 @@ def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None
     hook_errors = [record for record in records if record.get("event") == "metadata_hook_failed"]
     assert hook_errors
     assert hook_errors[-1]["error"] == "hook boom"
+    assert hook_errors[-1]["context"] == "chunk"
+    assert hook_errors[-1]["strict_mode"] is False
+
+    meta_path = output.with_name(output.name + ".meta.yaml")
+    assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    failures = metadata.get("metadata_hook_failures")
+    assert failures
+    assert any(str(name).endswith(".hook") for name in failures)
+
+
+def test_run_pipeline_metadata_hook_failure_strict(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [
+            pd.DataFrame(
+                {
+                    "assay_chembl_id": ["A1"],
+                    "document_chembl_id": ["D1"],
+                }
+            )
+        ]
+
+    def hook(_: pd.DataFrame) -> pd.DataFrame:
+        raise RuntimeError("hook boom")
+
+    writer_called: list[Path] = []
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        writer_called.append(destination)
+        destination.write_text(
+            "assay_chembl_id,document_chembl_id\nA1,D1\n",
+            encoding="utf-8",
+        )
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=[hook],
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda path: None,
+        cfg=cfg,
+        strict_mode=True,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert not writer_called
+    assert not output.exists()
+    assert not failure_path.exists()
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert lines
+    records = [json.loads(line) for line in lines]
+    hook_errors = [record for record in records if record.get("event") == "metadata_hook_failed"]
+    assert hook_errors
+    assert hook_errors[-1]["strict_mode"] is True
 
 
 def test_run_pipeline_writer_failure(tmp_path: Path, cfg: Config) -> None:

@@ -73,6 +73,7 @@ def write_meta_yaml(
     schema: str,
     *,
     invocation: Sequence[str] | None = None,
+    extra_metadata: Mapping[str, Any] | None = None,
 ) -> Path:
     """Write metadata for ``csv_path`` to ``<csv_path>.meta.yaml``.
 
@@ -94,6 +95,9 @@ def write_meta_yaml(
     invocation:
         Optional tuple describing the exact CLI invocation. Persisted when
         provided to aid reproducibility.
+    extra_metadata:
+        Optional mapping merged into the generated metadata prior to
+        serialisation.
 
     Returns
     -------
@@ -130,6 +134,8 @@ def write_meta_yaml(
     )
     if invocation:
         metadata["invocation"] = list(invocation)
+    if extra_metadata:
+        metadata.update(dict(extra_metadata))
 
     with open_atomic(meta_path, encoding="utf-8") as fh:
         yaml.safe_dump(metadata, fh, sort_keys=False)
