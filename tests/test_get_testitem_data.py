@@ -756,7 +756,9 @@ def test_finalize_output_streams_sorted_chunks(
     monkeypatch.setattr(pd.DataFrame, "to_csv", spy_to_csv)
     monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
-    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        pipeline, "analyze_table_quality", lambda df, table_name, **_: None
+    )
 
     exit_code = pipeline.finalize_output(
         [df],
@@ -1682,7 +1684,9 @@ def test_run_chembl_column_order(
     monkeypatch.setattr(
         pipeline, "attach_parent_molecule_ids", fake_attach_parent_molecule_ids
     )
-    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        pipeline, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(pipeline, "file_sha256", lambda p: "deadbeef")
 
@@ -1864,7 +1868,9 @@ def test_run_chembl_initialises_pubchem_session(
         "write_csv",
         lambda df, path, *, cfg, key_cols=None, col_order=None, **__: path,
     )
-    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        pipeline, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 
@@ -2044,7 +2050,9 @@ def test_run_chembl_calls_pubchem_once(
         "write_csv",
         lambda frame, path, *, cfg, key_cols=None, col_order=None, **__: path,
     )
-    monkeypatch.setattr(pipeline, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        pipeline, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(pipeline, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "deadbeef")
 

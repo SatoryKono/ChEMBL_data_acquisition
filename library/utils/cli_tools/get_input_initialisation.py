@@ -104,12 +104,18 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("generate_quality_reports")
         report_dir = out_dir / "data_validity_report"
         report_dir.mkdir(parents=True, exist_ok=True)
+        doc_quality_cfg = cfg.system.doc_quality
         for entity, path in paths.items():
             logger.info("profiling", entity=entity)
+            if not doc_quality_cfg.enable:
+                continue
             analyze_table_quality(
                 path,
                 table_name=path.stem,
                 destination_dir=report_dir,
+                sample_rows=doc_quality_cfg.sample_rows,
+                include_columns=doc_quality_cfg.include_columns,
+                exclude_columns=doc_quality_cfg.exclude_columns,
             )
 
         logger.info("save_done", tables=len(paths), path=str(out_dir))

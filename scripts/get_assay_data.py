@@ -125,11 +125,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     validators = [partial(validate_assays, return_result=True)]
 
-    table_quality = partial(
-        analyze_table_quality,
-        table_name=str(Path(output).with_suffix("")),
-        destination_dir=Path(output).parent,
-    )
+    doc_quality_cfg = cfg.system.doc_quality
+    if doc_quality_cfg.enable:
+        table_quality = partial(
+            analyze_table_quality,
+            table_name=str(Path(output).with_suffix("")),
+            destination_dir=Path(output).parent,
+            sample_rows=doc_quality_cfg.sample_rows,
+            include_columns=doc_quality_cfg.include_columns,
+            exclude_columns=doc_quality_cfg.exclude_columns,
+        )
+    else:
+        def table_quality(_: Path) -> None:
+            return None
 
     global_limiter = get_global_limiter(
         cfg.rate.global_rps,

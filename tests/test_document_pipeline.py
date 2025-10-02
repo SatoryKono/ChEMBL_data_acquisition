@@ -638,7 +638,9 @@ def test_finalise_export_streams_single_pass(
     monkeypatch.setattr(gdd, "write_meta_yaml", lambda **_: None)
     monkeypatch.setattr(gdd, "build_quality_report", lambda *_, **__: {})
     monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path)
-    monkeypatch.setattr(gdd, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gdd, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     exit_code = gdd._finalise_export(
         df,
 

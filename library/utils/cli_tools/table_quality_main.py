@@ -77,28 +77,6 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         if exclude_columns is None:
             exclude_columns = doc_cfg.exclude_columns
 
-        if sample_rows is not None:
-            df = df.head(sample_rows)
-
-        include_columns = tuple(include_columns) if include_columns else None
-        exclude_columns = tuple(exclude_columns) if exclude_columns else None
-
-        if include_columns is not None:
-            missing = sorted(set(include_columns) - set(df.columns))
-            if missing:
-                logger.warning("include_columns_missing", columns=missing)
-            df = df.loc[:, [col for col in df.columns if col in include_columns]]
-
-        if exclude_columns is not None:
-            missing = sorted(set(exclude_columns) - set(df.columns))
-            if missing:
-                logger.warning("exclude_columns_missing", columns=missing)
-            excluded = set(exclude_columns)
-            df = df.loc[:, [col for col in df.columns if col not in excluded]]
-
-        if df.shape[1] == 0:
-            logger.warning("no_columns_after_filter", table_name=args.table_name)
-
         output_dir = args.output_csv
 
         if output_dir.suffix:
@@ -132,6 +110,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             df,
             table_name=args.table_name,
             destination_dir=destination_dir,
+            sample_rows=sample_rows,
+            include_columns=include_columns,
+            exclude_columns=exclude_columns,
         )
         return 0
     except Exception as exc:  # pragma: no cover - defensive
