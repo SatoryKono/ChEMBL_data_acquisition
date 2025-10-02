@@ -259,3 +259,40 @@ def test_map_uniprot_file_uses_mapping_uniprot(tmp_path: Path) -> None:
     assert result.loc[0, "IUPHAR_class"] == "Enzyme"
     assert result.loc[0, "IUPHAR_subclass"] == "Transferase"
     assert result.loc[0, "mapping_uniprot_id"] == "P12345|Q99999"
+
+
+def test_map_uniprot_file_resolves_secondary_mapping_value(tmp_path: Path) -> None:
+    target_df = pd.DataFrame(
+        {
+            "target_id": ["T2"],
+            "uniprot_id": ["Q11111"],
+            "family_id": ["F2"],
+            "type": ["Enzyme.Transferase"],
+            "target_name": ["Another target"],
+        }
+    )
+    family_df = pd.DataFrame(
+        {
+            "family_id": ["F2"],
+            "parent_family_id": [pd.NA],
+            "family_name": ["Second family"],
+            "type": ["Enzyme.Transferase"],
+        }
+    )
+    data = ii.IUPHARData(target_df=target_df, family_df=family_df)
+
+    input_df = pd.DataFrame(
+        {
+            "uniprot_id": [""],
+            "mapping_uniprot_id": ["P22222|Q11111"],
+        }
+    )
+    input_csv = tmp_path / "input_secondary.csv"
+    output_csv = tmp_path / "output_secondary.csv"
+    input_df.to_csv(input_csv, index=False)
+
+    result = data.map_uniprot_file(input_csv, output_csv)
+
+    assert result.loc[0, "target_id"] == "T2"
+    assert result.loc[0, "IUPHAR_class"] == "Enzyme"
+    assert result.loc[0, "IUPHAR_subclass"] == "Transferase"

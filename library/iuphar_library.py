@@ -123,6 +123,19 @@ class IUPHARData:
             if value and value.strip()
         ]
 
+    @classmethod
+    def _merge_uniprot_sources(
+        cls, values: Iterable[str | float | None]
+    ) -> str:
+        """Return a pipe-joined list of unique accessions from *values*."""
+
+        merged: list[str] = []
+        for raw in values:
+            for candidate in cls._normalise_uniprot_values(raw):
+                if candidate not in merged:
+                    merged.append(candidate)
+        return "|".join(merged)
+
     def target_id_by_uniprot(self, uniprot_id: str) -> str:
         """Return the first target ID mapped to any of the supplied accessions."""
 
@@ -283,16 +296,24 @@ class IUPHARData:
         # order mirrors the Power Query logic: UniProt accession, mapped
         # UniProt identifiers supplied by the ChEMBL fallback, HGNC name, HGNC
         # ID, gene symbol and finally any supplied synonyms.
-        mask = df["target_id"].eq("")
-        df.loc[mask, "target_id"] = df.loc[mask, "uniprot_id"].apply(
-            self.target_id_by_uniprot
+        uniprot_series = df.get(
+            "uniprot_id", pd.Series("", index=df.index, dtype=object)
+        ).fillna("")
+        mapping_series = df.get(
+            "mapping_uniprot_id", pd.Series("", index=df.index, dtype=object)
+        ).fillna("")
+        combined_lookup = pd.Series(
+            [
+                self.target_id_by_uniprot(
+                    self._merge_uniprot_sources((primary, secondary))
+                )
+                for primary, secondary in zip(uniprot_series, mapping_series)
+            ],
+            index=df.index,
+            dtype=object,
         )
-
-        if "mapping_uniprot_id" in df.columns:
-            mask = df["target_id"].eq("")
-            df.loc[mask, "target_id"] = df.loc[mask, "mapping_uniprot_id"].apply(
-                self.target_id_by_uniprot
-            )
+        mask = df["target_id"].eq("")
+        df.loc[mask, "target_id"] = combined_lookup.loc[mask]
 
         if "hgnc_name" in df.columns:
             mask = df["target_id"].eq("")

@@ -1263,6 +1263,10 @@ def fetch_iuphar(
         combined_df["mapping_uniprot_id"] = (
             combined_df["mapping_uniprot_id"].fillna("").astype(str)
         )
+    else:
+        combined_df["mapping_uniprot_id"] = pd.Series(
+            "", index=combined_df.index, dtype=object
+        )
 
     from tempfile import NamedTemporaryFile
 
