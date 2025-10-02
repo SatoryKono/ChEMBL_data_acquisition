@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pandas as pd
@@ -21,8 +22,27 @@ from schemas import (
     DocumentsSchema,
     TargetsSchema,
     TestitemsSchema,
+    configure_activity_schema,
 )
 from schemas.targets import TARGETS_COLUMN_ORDER
+
+
+DEFAULT_ACTION_TYPE_METRICS = {
+    "ic50": "inhibition",
+    "ec50": "activation",
+    "ac50": "activation",
+    "ki": "binding",
+    "kd": "binding",
+}
+
+
+@pytest.fixture(autouse=True)
+def configure_default_activity_schema() -> Iterator[None]:
+    """Ensure ``ActivitiesSchema`` enforces the default metric allowlist."""
+
+    configure_activity_schema(DEFAULT_ACTION_TYPE_METRICS)
+    yield
+    configure_activity_schema(DEFAULT_ACTION_TYPE_METRICS)
 
 
 def test_activities_schema_validation() -> None:
@@ -57,6 +77,24 @@ def test_activities_schema_accepts_configured_standard_types() -> None:
             "assay_chembl_id": ["CHEMBL0", "CHEMBL0", "CHEMBL1"],
             "standard_value": [1.0, 2.0, 3.0],
             "standard_type": ["IC50", "EC50", "KD"],
+        }
+    )
+
+    ActivitiesSchema.validate(df)
+
+
+def test_configure_activity_schema_accepts_custom_metrics() -> None:
+    """Schema accepts standard types derived from custom metrics."""
+
+    configure_activity_schema({"FooIC50": "activation"})
+
+    df = pd.DataFrame(
+        {
+            "activity_id": ["1", "2"],
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            "assay_chembl_id": ["CHEMBL0", "CHEMBL0"],
+            "standard_value": [5.0, 10.0],
+            "standard_type": ["FooIC50", "fooic50"],
         }
     )
 
