@@ -618,6 +618,8 @@ class ResourcesCfg(_BaseModel):
 
 
 class IoCfg(_BoolModel):
+    base_path: Path | None = None
+    input_dir: Path | None = None
     output_dir: Path = Path("data/output")
     cache_dir: Path = Path(".cache")
     csv_sep: str = ","

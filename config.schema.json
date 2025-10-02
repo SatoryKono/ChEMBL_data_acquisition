@@ -965,6 +965,32 @@
     "IoCfg": {
       "additionalProperties": false,
       "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Path"
+        },
+        "input_dir": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Dir"
+        },
         "output_dir": {
           "default": "../data/output",
           "format": "path",
