@@ -12,6 +12,7 @@ from library.chembl_assay import (
     MAX_TESTITEM_URL_LENGTH,
     TESTITEM_QUERY_FIELDS,
     _split_chunk_for_url,
+    get_activities,
     get_assays,
     get_testitem,
 )
@@ -25,6 +26,15 @@ def _response_page(
 
     page_meta: dict[str, object] = {"next": next_path}
     return {"assays": items, "page_meta": page_meta}
+
+
+def _activity_response_page(
+    items: list[dict[str, str]], next_path: str | None
+) -> dict[str, object]:
+    """Return a fake paginated response payload for activities."""
+
+    page_meta: dict[str, object] = {"next": next_path}
+    return {"activities": items, "page_meta": page_meta}
 
 
 class DummyClient:
@@ -126,6 +136,42 @@ def test_get_assays_fetches_all_pages() -> None:
     assert "offset=2" in client.calls[1]
     assert isinstance(df, pd.DataFrame)
     assert list(df["assay_chembl_id"]) == ids
+
+
+def test_get_activities_fetches_all_pages() -> None:
+    """Pagination should be followed when activity responses are truncated."""
+
+    cfg = ApiCfg()
+    ids = ["AC1", "AC2", "AC3"]
+    next_path = (
+        "/chembl/api/data/activity.json?format=json&activity_id__in=AC1,AC2,AC3&limit=3&offset=2"
+    )
+    responses = iter(
+        [
+            _activity_response_page(
+                [
+                    {"activity_id": "AC1", "assay_chembl_id": "A1"},
+                    {"activity_id": "AC2", "assay_chembl_id": "A2"},
+                ],
+                next_path,
+            ),
+            _activity_response_page(
+                [
+                    {"activity_id": "AC3", "assay_chembl_id": "A3"},
+                ],
+                None,
+            ),
+        ]
+    )
+    client = DummyClient(responses)
+
+    df = get_activities(ids, cfg=cfg, client=client, chunk_size=3)
+
+    assert len(client.calls) == 2
+    assert "limit=3" in client.calls[0]
+    assert "offset=2" in client.calls[1]
+    assert isinstance(df, pd.DataFrame)
+    assert list(df["activity_id"]) == ids
 
 
 def test_get_testitem_splits_requests_when_url_would_exceed_limit() -> None:
