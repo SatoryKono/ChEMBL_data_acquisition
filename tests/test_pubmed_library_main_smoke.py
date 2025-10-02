@@ -230,3 +230,52 @@ def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
     sleep_logs = [r for r in fake_logger.records if r[1] == "retry_sleep"]
     assert sleep_logs and sleep_logs[0][2]["delay"] == expected_delay
+
+    responses_no_header = iter(
+        [
+            (429, "Too Many Requests", None, "", {}),
+            (200, "<xml/>", "<xml/>", "", {}),
+        ]
+    )
+
+    def fake_make_request_no_retry_after(
+        *_args: Any, **_kwargs: Any
+    ) -> tuple[int, str, Any, str, dict[str, str]]:
+        try:
+            return next(responses_no_header)
+        except StopIteration:  # pragma: no cover - defensive
+            raise AssertionError("Unexpected request count for fallback scenario")
+
+    monkeypatch.setattr(pubmed_client, "_make_request", fake_make_request_no_retry_after)
+    monkeypatch.setattr(pubmed_client.random, "uniform", lambda _a, _b: 0.3)
+
+    sleep_calls.clear()
+    fallback_logger = RecordingLogger()
+    monkeypatch.setattr(pubmed_client, "logger", fallback_logger)
+
+    data_retry, error_retry = pubmed_client._do_request(
+        session=object(),
+        url="http://example",
+        delay=0.3,
+        expect_json=False,
+        retries=1,
+        timeout=(1, 5),
+        retry_cfg=None,
+    )
+
+    assert data_retry == "<xml/>"
+    assert error_retry == ""
+
+    fallback_retry_records = [
+        r for r in fallback_logger.records if r[1] == "request_retry"
+    ]
+    assert fallback_retry_records and "delay" in fallback_retry_records[0][2]
+    fallback_delay = fallback_retry_records[0][2]["delay"]
+    assert fallback_delay > 0
+
+    fallback_sleep_logs = [
+        r for r in fallback_logger.records if r[1] == "retry_sleep"
+    ]
+    assert fallback_sleep_logs and fallback_sleep_logs[0][2]["delay"] == fallback_delay
+    assert sleep_calls == [pytest.approx(fallback_delay)]
+    assert sleep_calls[0] > 0
