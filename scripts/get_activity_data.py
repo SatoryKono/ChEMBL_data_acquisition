@@ -162,6 +162,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         extra_columns.append(action_cfg.column)
     extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
 
+    invocation = _args_invocation(args)
+
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
@@ -301,7 +303,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             writer=writer,
             output_path=output,
             failure_path=failure_path,
-            invocation=_args_invocation(args),
+            command=" ".join(invocation),
+            invocation=invocation,
             config_snapshot=_serialize_paths(cfg.to_dict()),
             inputs={"input_csv": str(args.input_csv)},
             key_columns=["activity_id"],
