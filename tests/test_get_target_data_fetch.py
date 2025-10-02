@@ -112,7 +112,7 @@ def test_run_chembl_streams_chunks(
         offset=0,
         id_cols=None,
         no_reindex_raw=False,
-        normalize_at_export=False,
+        normalize_at_export=True,
     )
 
     chunk_calls: list[list[str]] = []
@@ -153,8 +153,8 @@ def test_run_chembl_streams_chunks(
         ) -> bool:
             return False
 
-    frames_to_write: list[pd.DataFrame] = []
-    raw_dumps: list[pd.DataFrame] = []
+    raw_writer_chunks: list[pd.DataFrame] = []
+    written_frames: list[pd.DataFrame] = []
 
     def fake_write_csv(
         df: pd.DataFrame | list[pd.DataFrame],
@@ -167,28 +167,38 @@ def test_run_chembl_streams_chunks(
         col_order: list[str] | None = None,
         chunksize: int | None = None,
     ) -> Path:
-        assert not isinstance(df, pd.DataFrame)
-        chunks = list(df)
-        frames_to_write.extend(chunks)
+        if isinstance(df, pd.DataFrame):
+            written_frames.append(df.copy())
+        else:
+            for chunk in df:
+                written_frames.append(chunk.copy())
         destination = Path(path)
         destination.write_text("dummy", encoding=encoding or cfg.io.csv_encoding)
         return destination
 
-    def fake_write_raw_dump(
-        df: pd.DataFrame,
-        destination: Path,
-        *,
-        cfg: Config,
-        reindex_columns: bool,
-    ) -> Path:
-        raw_dumps.append(df.copy())
-        df.to_csv(destination, index=False)
-        return destination
+    class RecordingRawWriter:
+        def __init__(
+            self,
+            destination: Path,
+            *,
+            cfg: Config,
+            reindex_columns: bool,
+        ) -> None:
+            self.destination = Path(destination)
+            self.cfg = cfg
+
+        def write(self, frame: pd.DataFrame) -> None:
+            raw_writer_chunks.append(frame.copy())
+
+        def finalize(self) -> Path:
+            self.destination.parent.mkdir(parents=True, exist_ok=True)
+            self.destination.write_text("raw", encoding=self.cfg.io.csv_encoding)
+            return self.destination
 
     monkeypatch.setattr(gtd.cl, "iter_target_batches", fake_iter_target_batches)
     monkeypatch.setattr(gtd, "ChemblClient", DummyClient)
     monkeypatch.setattr(gtd.io, "write_csv", fake_write_csv)
-    monkeypatch.setattr(gtd, "_write_raw_dump", fake_write_raw_dump)
+    monkeypatch.setattr(gtd, "_RawDumpStreamWriter", RecordingRawWriter)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(
         TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df)
@@ -202,8 +212,9 @@ def test_run_chembl_streams_chunks(
         ["CHEMBL3", "CHEMBL4"],
         ["CHEMBL5"],
     ]
-    assert [df["target_chembl_id"].tolist() for df in frames_to_write] == chunk_calls
-    assert raw_dumps and raw_dumps[0]["target_chembl_id"].tolist() == [
+    assert [df["target_chembl_id"].tolist() for df in raw_writer_chunks] == chunk_calls
+    assert written_frames
+    assert written_frames[-1]["target_chembl_id"].tolist() == [
         "CHEMBL1",
         "CHEMBL2",
         "CHEMBL3",
