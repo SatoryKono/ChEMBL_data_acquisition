@@ -2353,10 +2353,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"get_target_data_{date_value}.log"
     exit_code = 0
-    try:
-        with log_path.open("a", encoding="utf-8") as log_stream:
-            log_cfg.stream = log_stream
-            configure_logger(log_cfg)
+
+    original_stream = log_cfg.stream
+    with log_path.open("a", encoding="utf-8") as log_stream:
+        log_cfg.stream = log_stream
+        configure_logger(log_cfg)
+        try:
 
             limit_value = getattr(args, "limit", None)
             if limit_value == 0:
@@ -2433,13 +2435,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     run=run,
                     logger=logger,
                 )
-    finally:
-        fallback_cfg = LoggerConfig(
-            level=log_cfg.level,
-            run_id=log_cfg.run_id,
-            redact_secrets=log_cfg.redact_secrets,
-        )
-        configure_logger(fallback_cfg)
+
+        finally:
+            log_cfg.stream = original_stream
+            configure_logger(log_cfg)
+
 
     return exit_code
 
