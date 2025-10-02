@@ -343,7 +343,7 @@ def fetch_pubmed_records(
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
 
-    global_limiter = get_global_limiter(
+    system_limiter = get_global_limiter(
         rate_cfg.global_rps, rate_cfg.global_burst
     )
 
@@ -388,10 +388,13 @@ def fetch_pubmed_records(
     )
 
     def _acquire_documents(
-        limiter: RateLimiter | None, *, use_global: bool = True
+        limiter: RateLimiter | None,
+        *,
+        use_global: bool = True,
+        global_rate_limiter: RateLimiter | None = system_limiter,
     ) -> None:
-        if use_global and global_limiter is not None:
-            global_limiter.acquire()
+        if use_global and global_rate_limiter is not None:
+            global_rate_limiter.acquire()
         if limiter is not None:
             limiter.acquire()
 
@@ -1478,6 +1481,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Configure session for ChEMBL requests
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps, cfg.rate.global_burst
+    )
+
     with ChemblClient(
         cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
     ) as client:
@@ -1565,6 +1572,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Prepare shared session before performing any API calls
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps, cfg.rate.global_burst
+    )
+
     try:
         ids_iter = io.read_ids(
             args.input_csv,

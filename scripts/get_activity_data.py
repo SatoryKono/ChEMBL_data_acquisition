@@ -14,7 +14,15 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 
-from library.utils.bootstrap import ensure_project_root
+try:
+    from library.utils.bootstrap import ensure_project_root
+except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
+    def ensure_project_root() -> None:
+        """Add the repository root to ``sys.path`` when executed as a script."""
+
+        project_root = str(Path(__file__).resolve().parent.parent)
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
 
 
 if __package__ in {None, ""}:
@@ -142,6 +150,92 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
+
+    def fetcher() -> Iterator[pd.DataFrame]:
+        id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
+        global_limiter = get_global_limiter(
+            cfg.rate.global_rps, cfg.rate.global_burst
+        )
+
+        with ChemblClient(
+            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
+        ) as client:
+
+
+            def _fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+                try:
+                    return cl.get_activities(
+                        chunk_ids,
+                        cfg=cfg.api,
+                        client=client,
+                        chunk_size=cfg.activity.batch_size,
+                        timeout=cfg.activity.timeout,
+                        **extra_kwargs,
+                    )
+                except (requests.RequestException, ValueError) as exc:
+                    logger.error(
+                        "activity_fetch_failed",
+                        extra={
+                            "msg": str(exc),
+                            "chunk_ids": list(chunk_ids),
+                        },
+                        error=str(exc),
+                        batch_size=cfg.activity.batch_size,
+                        timeout=cfg.activity.timeout,
+                    )
+                    raise PipelineError(str(exc)) from exc
+
+
+            workers = max(1, cfg.activity.workers)
+            if workers == 1:
+
+                for chunk_ids in id_chunks:
+                    yield _fetch_chunk(list(chunk_ids))
+                return
+
+
+            pending: dict[Future[pd.DataFrame], int] = {}
+            completed: dict[int, pd.DataFrame] = {}
+            next_index = 0
+
+            def _cancel_pending() -> None:
+                for future in list(pending):
+                    future.cancel()
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+
+                try:
+                    for index, chunk_ids in enumerate(id_chunks):
+                        chunk_list = list(chunk_ids)
+                        future = executor.submit(_fetch_chunk, chunk_list)
+                        pending[future] = index
+                        if len(pending) >= workers:
+                            done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+                            for finished in done:
+                                chunk_index = pending.pop(finished)
+                                try:
+                                    completed[chunk_index] = finished.result()
+                                except PipelineError:
+                                    _cancel_pending()
+                                    raise
+                            while next_index in completed:
+                                yield completed.pop(next_index)
+                                next_index += 1
+
+                    for future in as_completed(list(pending)):
+                        chunk_index = pending.pop(future)
+                        try:
+                            completed[chunk_index] = future.result()
+                        except PipelineError:
+                            _cancel_pending()
+                            raise
+                        while next_index in completed:
+                            yield completed.pop(next_index)
+                            next_index += 1
+                finally:
+                    pending.clear()
+
+
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)
 
@@ -160,6 +254,30 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     ]
 
     validators = [partial(validate_activities, return_result=True)]
+
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: Sequence[str],
+        key_cols: Sequence[str],
+    ) -> Path:
+        sort_columns = list(key_cols) or sorted(col_order)
+        output_path = io.write_csv(
+            chunks,
+            destination,
+            cfg=cfg,
+            key_cols=sort_columns,
+            col_order=col_order,
+            chunksize=cfg.io.csv_chunksize,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+        path_obj = Path(output_path)
+        if not path_obj.exists():
+            raise PipelineError(f"writer failed to create output: {path_obj}")
+        return path_obj
+
 
     table_quality = partial(
         analyze_table_quality,
