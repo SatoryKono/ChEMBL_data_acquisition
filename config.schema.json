@@ -1600,7 +1600,7 @@
           "type": "number"
         },
         "uniprot_column": {
-          "default": "uniprot_id",
+          "default": "mapping_uniprot_id",
           "title": "Uniprot Column",
           "type": "string"
         },
@@ -1753,7 +1753,7 @@
       "additionalProperties": false,
       "properties": {
         "column": {
-          "default": "uniprot_id",
+          "default": "mapping_uniprot_id",
           "title": "Column",
           "type": "string"
         },
