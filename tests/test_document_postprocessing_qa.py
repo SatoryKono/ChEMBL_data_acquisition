@@ -15,6 +15,7 @@ from library.config import IoCfg
 
 import qa.check_document_postprocessing as qa_module
 
+import qa.check_document_postprocessing as qa_module
 from qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
 
 from qa.check_document_postprocessing import main as qa_main
@@ -44,10 +45,12 @@ def _prepare_environment(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     legacy_reference_path = reference_dir / "ref_document.csv"
     candidate_path = output_dir / "output.document_20230101.csv"
+    default_candidate_path = output_dir / "output.document.csv"
 
     shutil.copy(FIXTURE_DIR / "document.csv", reference_path)
     shutil.copy(FIXTURE_DIR / "document.csv", legacy_reference_path)
     shutil.copy(FIXTURE_DIR / "output.document_20230101.csv", candidate_path)
+    shutil.copy(FIXTURE_DIR / "output.document_20230101.csv", default_candidate_path)
 
 
     return base_dir, reference_path, candidate_path
@@ -198,50 +201,39 @@ def test_diff_extract_limited_by_keys(
 
     rows: list[dict[str, str]] = []
     for idx in range(150):
-        row = {column: "" for column in dp.FINAL_COLUMN_ORDER}
-        row["PMID"] = f"{100000 + idx}"
-        row["document_chembl_id"] = f"DOC{idx:05d}"
-        row["completed"] = "2020-01-01"
-        row["doi"] = f"10.1000/{idx:03d}"
-        row["reference"] = "Journal, 1(1), p.1-2"
-        row["sortorder.document"] = f"ISSN:{idx:08d}"
-        row["review"] = "false"
-        row["experimental"] = "true"
-        row["document_contains_external_links"] = "false"
-        row["invalid"] = "false"
-        row["invalid.doi"] = "false"
-        row["invalid.PMID"] = "false"
-        row["invalid.reference"] = "false"
-        row["year"] = "2020"
-        row["month"] = "01"
-        row["day"] = "01"
-        rows.append(row)
+        pmid = f"{100000 + idx}"
+        chembl_id = f"DOC{idx:05d}"
+        doi_value = f"10.1000/{idx:03d}"
+        rows.append(
+            {
+                "PMID": pmid,
+                "document_chembl_id": chembl_id,
+                "completed": "2020-01-01",
+                "doi": doi_value,
+            }
+        )
 
-    expected_df = pd.DataFrame(rows)
-    actual_df = expected_df.copy()
-    actual_df["doi"] = actual_df["doi"] + ".mismatch"
+    reference_df = pd.DataFrame(rows)
+    reference_df.to_csv(reference_path, index=False)
 
-    expected_df.to_csv(candidate_path, index=False)
+    candidate_df = reference_df.copy()
+    candidate_df["doi"] = candidate_df["doi"] + ".mismatch"
+    candidate_df.to_csv(candidate_path, index=False)
 
-    monkeypatch.setattr(
-        qa_module,
-        "_power_query_expected",
-        lambda ref_document, out_document: expected_df.copy(),
-    )
 
-    def fake_postprocess_file(
-        source: Path,
-        target_dir: Path,
-        *,
-        cfg: IoCfg,
-        ref_document_path: Path,
-    ) -> Path:
-        processed_path = source.with_name(f"preprocessed_{source.name}")
-        actual_df.to_csv(processed_path, index=False)
-        return processed_path
+    expected = reference_df.copy()
+    actual = candidate_df.copy()
 
-    monkeypatch.setattr(dp, "postprocess_file", fake_postprocess_file)
+    def fake_power_query(ref_doc: pd.DataFrame, out_doc: pd.DataFrame) -> pd.DataFrame:
+        return expected
 
+    def fake_postprocess(candidate: Path, destination_dir: Path, **_: object) -> Path:
+        output_path = Path(destination_dir) / f"preprocessed_{Path(candidate).name}"
+        actual.to_csv(output_path, index=False)
+        return output_path
+
+    monkeypatch.setattr(qa_module, "_power_query_expected", fake_power_query)
+    monkeypatch.setattr(dp, "postprocess_file", fake_postprocess)
 
     result = run_document_postprocessing_check(
         base_path=base_dir,
@@ -257,12 +249,10 @@ def test_diff_extract_limited_by_keys(
     assert set(diff_df["column"]) == {"doi"}
 
 
-@pytest.mark.parametrize(
-    "mutate",
-    [False, True],
-)
+@pytest.mark.parametrize("mutate", [False, True])
+@pytest.mark.parametrize("use_defaults", [False, True])
 def test_cli_exit_codes(
-    tmp_path: Path, mutate: bool, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, mutate: bool, use_defaults: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
     if mutate:
@@ -286,15 +276,19 @@ def test_cli_exit_codes(
 
         monkeypatch.setattr(dp, "postprocess_documents", mutate_fn)
 
-    exit_code = qa_main(
-        [
-            "--base-path",
-            str(base_dir),
-            "--out",
-            str(candidate_path.relative_to(base_dir)),
+    args = ["--base-path", str(base_dir)]
+    if not use_defaults:
+        args.extend(
+            [
+                "--ref",
+                "input\\full\\document.csv",
+                "--actual",
+                "output\\document\\output.document_20230101.csv",
+            ]
+        )
 
-        ]
-    )
+
+    exit_code = qa_main(args)
 
     if mutate:
         assert exit_code == 1

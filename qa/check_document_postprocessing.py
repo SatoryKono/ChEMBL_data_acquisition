@@ -49,6 +49,8 @@ INVARIANT_LABELS: Mapping[str, str] = {
     "completed_format": "completed date format",
     "completed_order": "completed order monotonicity",
 }
+DEFAULT_REFERENCE_RELATIVE = Path("input") / "full" / "document.csv"
+DEFAULT_ACTUAL_RELATIVE = Path("output") / "document" / "output.document.csv"
 
 
 # ===== Data classes ==========================================================
@@ -704,11 +706,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Root directory containing the Power Query reference and Python outputs",
     )
     parser.add_argument(
+        "--ref",
+        default=str(DEFAULT_REFERENCE_RELATIVE),
+        help="Relative or absolute path to the Power Query reference CSV",
+    )
+    parser.add_argument(
+        "--actual",
         "--out",
-        required=True,
-
-        help="Relative or absolute path to the unprocessed out_document CSV",
-
+        dest="actual",
+        default=str(DEFAULT_ACTUAL_RELATIVE),
+        help="Relative or absolute path to the Python-generated CSV",
     )
     parser.add_argument(
         "--reports-dir",
@@ -748,8 +755,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     base_dir = Path(args.base_path).resolve()
-    reference_path = _resolve_relative(base_dir, Path("input") / "full" / "document.csv")
-    candidate_path = _resolve_relative(base_dir, args.out)
+    reference_path = _resolve_relative(base_dir, args.ref)
+    candidate_path = _resolve_relative(base_dir, args.actual)
 
     result = run_document_postprocessing_check(
         base_path=base_dir,
