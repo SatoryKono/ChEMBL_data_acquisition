@@ -71,6 +71,8 @@ from library.config import (
     PubMedCfg,
     SemanticScholarCfg,
     _serialize_paths,
+    crossref_session,
+    openalex_session,
     session_with_retry,
 )
 from library.document_pipeline import (
@@ -383,16 +385,19 @@ def fetch_pubmed_records(
         if limiter is not None:
             limiter.acquire()
 
-    def _failure_records(batch: Sequence[str], message: str) -> list[dict[str, str]]:
+    def _failure_records(
+        batch: Sequence[str], message: str, *, source: str = "pubmed"
+    ) -> list[dict[str, str]]:
         """Return placeholder rows describing a failure for ``batch`` PMIDs."""
 
         records: list[dict[str, str]] = []
         for pmid in batch:
+            metadata = {"fetch_status": "error", "error_source": source}
             pubmed = {"PubMed.PMID": pmid, "PubMed.Error": message}
             scholar = {"scholar.PMID": pmid, "scholar.Error": message}
             openalex = {"OpenAlex.Error": message}
             crossref = {"crossref.Error": message}
-            records.append(merge_metadata(pubmed, scholar, openalex, crossref))
+            records.append(merge_metadata(metadata, pubmed, scholar, openalex, crossref))
         return records
 
     def _coerce_batch_argument(*candidates: object) -> list[str]:
@@ -707,14 +712,14 @@ def fetch_pubmed_records(
                 **batch_summary,
                 error=str(exc),
             )
-            return _failure_records(batch_list, str(exc))
+            return _failure_records(batch_list, str(exc), source="pubmed")
         except Exception as exc:  # pragma: no cover - defensive safety net
             logger.warning(
                 "pubmed_batch_unexpected_error",
                 **batch_summary,
                 error=str(exc),
             )
-            return _failure_records(batch_list, str(exc))
+            return _failure_records(batch_list, str(exc), source="pubmed")
 
     openalex_capacity = _executor_capacity(openalex_limiter, openalex_cfg.burst)
     crossref_capacity = _executor_capacity(crossref_limiter, crossref_cfg.burst)

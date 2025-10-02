@@ -128,6 +128,7 @@ data/output/
 | `doi_coverage` | Число | Доля документов с DOI (0.0–1.0). |
 | `publication_class_counts` | Объект | Количество строк по меткам `review`, `experimental`, `unknown`; отсутствующие категории представляются нулём. |
 | `error_counts` | Объект | Число ошибок по источникам (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
+| `error_placeholder_counts` | Объект | Количество строк-заглушек после критических сбоев, агрегированных по `error_source` (`pubmed`, `semantic_scholar`, `openalex`, `crossref`, `unknown`). |
 
 ## Экспорт тест-объектов
 
