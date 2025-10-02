@@ -250,127 +250,212 @@ def run_pipeline(
         use_logger.error("fetch_failed", error=str(exc))
         return 1
 
-    processed_chunks: list[pd.DataFrame] = []
+    class _AbortPipeline(RuntimeError):
+        """Internal exception raised to abort processing early."""
 
-    try:
-        for chunk in iterable:
-            if chunk is None:
-                continue
-            chunk_rows_total = len(chunk)
-            rows_total += chunk_rows_total
+        def __init__(self, code: int = 1) -> None:
+            super().__init__("pipeline aborted")
+            self.code = code
 
-            for hook in metadata_hooks:
-                try:
-                    chunk = hook(chunk)
-                except Exception as exc:
-                    use_logger.error(
-                        "metadata_hook_failed",
-                        hook=_callable_name(hook),
-                        error=str(exc),
-                    )
-                    return 1
-
-            chunk_columns = set(chunk.columns)
-            present_columns.update(chunk_columns)
-            all_columns.update(chunk_columns)
-
-            missing_chunk_required = required_cols - chunk_columns
-            if missing_chunk_required:
-                missing_required_columns.update(missing_chunk_required)
-                validation_enabled = False
-                exit_code = 1
-                break
-
-            validated_chunk = chunk
-            if validation_enabled and validators and not chunk.empty:
-                for validator in validators:
-                    try:
-                        result = validator(validated_chunk)
-                    except SchemaErrors as exc:
-                        failure_cases = exc.failure_cases
-                        if not failure_cases.empty:
-                            for row in failure_cases.to_dict("records"):
-                                errors.add_error(row)
-                            total_failures += len(failure_cases)
-                            exit_code = 1
-                            use_logger.error(
-                                "validation_failed",
-                                failures=len(failure_cases),
-                                path=str(failure_path),
-                            )
-                        validated_chunk = getattr(
-                            exc, "validated_data", validated_chunk
-                        )
-                    else:
-                        validated_chunk = result.data
-                        failure_cases = result.failure_cases
-                        if not failure_cases.empty:
-                            for row in failure_cases.to_dict("records"):
-                                errors.add_error(row)
-                            total_failures += len(failure_cases)
-                            exit_code = 1
-                            use_logger.error(
-                                "validation_failed",
-                                failures=len(failure_cases),
-                                path=str(failure_path),
-                            )
-
-            rows_kept += len(validated_chunk)
-            rows_dropped += chunk_rows_total - len(validated_chunk)
-            present_columns.update(validated_chunk.columns)
-            all_columns.update(validated_chunk.columns)
-
-            processed_chunks.append(validated_chunk)
-    except PipelineError:
-        return 1
-    except Exception as exc:
-        use_logger.error(
-            "chunk_processing_failed",
-            error=str(exc),
-        )
-        return 1
-
-    if missing_required_columns:
-        use_logger.warning(
-            "validation_skipped",
-            missing_columns=sorted(missing_required_columns),
-        )
-        return exit_code or 1
-
-    if not processed_chunks:
-        empty = pd.DataFrame()
-        for hook in metadata_hooks:
-            try:
-                empty = hook(empty)
-            except Exception as exc:
-                use_logger.error(
-                    "metadata_hook_failed",
-                    hook=_callable_name(hook),
-                    error=str(exc),
-                )
-                return 1
-        present_columns.update(empty.columns)
-        all_columns.update(empty.columns)
-        processed_chunks.append(empty)
-
+    schema_columns: list[str] | None
     if schema is not None:
         schema_columns = list(getattr(schema, "columns", {}))
-        head = [column for column in schema_columns if column in all_columns]
-        tail = sorted(
-            column for column in all_columns if column not in schema_columns
-        )
-        col_order: Sequence[str] | None = head + tail
-        available_columns = set(col_order)
     else:
-        col_order = None
-        available_columns = set(all_columns)
-    resolved_keys = [column for column in key_columns if column in available_columns]
+        schema_columns = None
 
-    if optional_cols and (missing_optional := optional_cols - present_columns):
-        use_logger.warning(
-            "optional_columns_missing",
-            columns=sorted(missing_optional),
+    col_order: list[str] = list(schema_columns or [])
+    resolved_keys: list[str] = []
+
+    def _refresh_column_tracking(frame: pd.DataFrame) -> None:
+        chunk_columns = set(frame.columns)
+        present_columns.update(chunk_columns)
+        all_columns.update(chunk_columns)
+
+        if schema_columns is not None:
+            head = [column for column in schema_columns if column in all_columns]
+            tail = sorted(
+                column for column in all_columns if column not in schema_columns
+            )
+            col_order[:] = head + tail
+        else:
+            col_order[:] = sorted(all_columns)
+
+        resolved_keys[:] = [column for column in key_columns if column in all_columns]
+
+    def _validated_chunks() -> Iterator[pd.DataFrame]:
+        nonlocal rows_total, rows_kept, rows_dropped, total_failures, exit_code
+        nonlocal validation_enabled
+
+        chunks_emitted = False
+        aborted = False
+
+        try:
+            for chunk in iterable:
+                if chunk is None:
+                    continue
+
+                chunk_rows_total = len(chunk)
+                rows_total += chunk_rows_total
+
+                for hook in metadata_hooks:
+                    try:
+                        chunk = hook(chunk)
+                    except Exception as exc:
+                        use_logger.error(
+                            "metadata_hook_failed",
+                            hook=_callable_name(hook),
+                            error=str(exc),
+                        )
+                        aborted = True
+                        raise _AbortPipeline(1) from exc
+
+                _refresh_column_tracking(chunk)
+
+                missing_chunk_required = required_cols - set(chunk.columns)
+                if missing_chunk_required:
+                    missing_required_columns.update(missing_chunk_required)
+                    validation_enabled = False
+                    exit_code = 1
+                    aborted = True
+                    raise _AbortPipeline(exit_code)
+
+                validated_chunk = chunk
+                if validation_enabled and validators and not chunk.empty:
+                    for validator in validators:
+                        try:
+                            result = validator(validated_chunk)
+                        except SchemaErrors as exc:
+                            failure_cases = exc.failure_cases
+                            if not failure_cases.empty:
+                                for row in failure_cases.to_dict("records"):
+                                    errors.add_error(row)
+                                total_failures += len(failure_cases)
+                                exit_code = 1
+                                use_logger.error(
+                                    "validation_failed",
+                                    failures=len(failure_cases),
+                                    path=str(failure_path),
+                                )
+                            validated_chunk = getattr(
+                                exc, "validated_data", validated_chunk
+                            )
+                        else:
+                            validated_chunk = result.data
+                            failure_cases = result.failure_cases
+                            if not failure_cases.empty:
+                                for row in failure_cases.to_dict("records"):
+                                    errors.add_error(row)
+                                total_failures += len(failure_cases)
+                                exit_code = 1
+                                use_logger.error(
+                                    "validation_failed",
+                                    failures=len(failure_cases),
+                                    path=str(failure_path),
+                                )
+
+                rows_kept += len(validated_chunk)
+                rows_dropped += chunk_rows_total - len(validated_chunk)
+                _refresh_column_tracking(validated_chunk)
+
+                if exit_code != 0:
+                    aborted = True
+                    raise _AbortPipeline(exit_code)
+
+                chunks_emitted = True
+                if col_order:
+                    yield validated_chunk.reindex(columns=col_order)
+                else:
+                    yield validated_chunk
+        except _AbortPipeline:
+            aborted = True
+            raise
+        except PipelineError:
+            raise
+        except Exception as exc:  # pragma: no cover - exercised in integration tests
+            use_logger.error(
+                "chunk_processing_failed",
+                error=str(exc),
+            )
+            aborted = True
+            raise _AbortPipeline(1) from exc
+        finally:
+            if not aborted and not chunks_emitted and not missing_required_columns:
+                empty = pd.DataFrame()
+                for hook in metadata_hooks:
+                    try:
+                        empty = hook(empty)
+                    except Exception as exc:  # pragma: no cover - rare failure path
+                        use_logger.error(
+                            "metadata_hook_failed",
+                            hook=_callable_name(hook),
+                            error=str(exc),
+                        )
+                        raise _AbortPipeline(1) from exc
+                _refresh_column_tracking(empty)
+                yield empty.reindex(columns=col_order) if col_order else empty
+
+    chunk_iterator = _validated_chunks()
+
+    try:
+        first_chunk = next(chunk_iterator)
+    except StopIteration:
+        first_chunk = None
+    except _AbortPipeline as abort_exc:
+        if missing_required_columns:
+            use_logger.warning(
+                "validation_skipped",
+                missing_columns=sorted(missing_required_columns),
+            )
+        if total_failures:
+            errors.save(failure_path, cfg=cfg)
+        else:
+            failure_path.unlink(missing_ok=True)
+            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+        return abort_exc.code
+    except PipelineError:
+        if total_failures:
+            errors.save(failure_path, cfg=cfg)
+        else:
+            failure_path.unlink(missing_ok=True)
+            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+        return 1
+
+    def _iter_chunks() -> Iterator[pd.DataFrame]:
+        if first_chunk is not None:
+            yield first_chunk
+        yield from chunk_iterator
+
+    csv_path: Path | None = None
+    try:
+        csv_path = writer(
+            _iter_chunks(),
+            output_path,
+            col_order or None,
+            resolved_keys,
         )
+    except _AbortPipeline as abort_exc:
+        if total_failures:
+            errors.save(failure_path, cfg=cfg)
+        else:
+            failure_path.unlink(missing_ok=True)
+            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
+        return abort_exc.code
+    except Exception as exc:
+        if total_failures:
+            errors.save(failure_path, cfg=cfg)
+        else:
+            failure_path.unlink(missing_ok=True)
+            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        Path(str(output_path) + ".meta.yaml").unlink(missing_ok=True)
+        use_logger.error(
+            "write_fail",
+            error=str(exc),
+            path=str(output_path),
+        )
+        return 1
 
     if total_failures:
         errors.save(failure_path, cfg=cfg)
@@ -378,28 +463,11 @@ def run_pipeline(
         failure_path.unlink(missing_ok=True)
         Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
 
-    if exit_code != 0:
-        return exit_code
-
-    def _iter_validated() -> Iterator[pd.DataFrame]:
-        for chunk in processed_chunks:
-            if col_order:
-                yield chunk.reindex(columns=col_order)
-            else:
-                yield chunk
-
-    csv_path: Path | None = None
-    try:
-        csv_path = writer(
-            _iter_validated(), output_path, col_order, resolved_keys
+    if optional_cols and (missing_optional := optional_cols - present_columns):
+        use_logger.warning(
+            "optional_columns_missing",
+            columns=sorted(missing_optional),
         )
-    except Exception as exc:
-        use_logger.error(
-            "write_fail",
-            error=str(exc),
-            path=str(output_path),
-        )
-        return 1
 
     if csv_path is None:
         use_logger.error("write_fail", error="writer returned None", path=str(output_path))
