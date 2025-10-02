@@ -33,8 +33,9 @@ from itertools import chain, islice, tee
 import tempfile
 from pathlib import Path
 import weakref
+import heapq
+from threading import Lock, local
 
-from threading import local
 from typing import Any, cast, TypeVar
 
 
@@ -750,7 +751,7 @@ def fetch_pubmed_records(
     iterator = (p for p in pmids if p)
 
     tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
-    completed: dict[int, list[dict[str, str]]] = {}
+    record_heap: list[tuple[int, list[dict[str, str]]]] = []
     next_to_emit = 0
     processed = 0
     completed_batches = 0
@@ -777,7 +778,8 @@ def fetch_pubmed_records(
 
         pending.remove(done_future)
         batch_id, batch_pmids = tasks.pop(done_future)
-        completed[batch_id] = done_future.result()
+        records = done_future.result()
+        heapq.heappush(record_heap, (batch_id, records))
         processed += len(batch_pmids)
         completed_batches += 1
         log_kwargs = {"count": processed, "batches": completed_batches}
@@ -786,16 +788,13 @@ def fetch_pubmed_records(
         else:
             logger.debug("documents_processed", **log_kwargs)
 
-        while next_to_emit in completed:
-            records = completed.pop(next_to_emit)
-            yield records
-            next_to_emit += len(records)
+        yield from _emit_ready_batches()
 
     def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
         nonlocal next_to_emit
 
-        while next_to_emit in completed:
-            records = completed.pop(next_to_emit)
+        while record_heap and record_heap[0][0] == next_to_emit:
+            _, records = heapq.heappop(record_heap)
             yield records
             next_to_emit += len(records)
 
@@ -803,6 +802,9 @@ def fetch_pubmed_records(
         nonlocal offset
 
         for batch in _chunked(iterator, batch_size):
+            while record_heap and len(record_heap) >= max_in_flight and pending:
+                done_future = next(as_completed(list(pending)))
+                yield from _drain_future(done_future)
             if not batch:
                 continue
             future = batch_executor.submit(_fetch_batch, batch)

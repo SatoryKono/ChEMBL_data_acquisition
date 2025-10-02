@@ -1228,6 +1228,146 @@ def test_fetch_pubmed_records_drains_pending_batches(
     assert combined["PubMed.PMID"].tolist() == pmids
 
 
+def test_fetch_pubmed_records_limits_heap_with_delayed_first_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Completed results stay bounded when the first batch is slow."""
+
+    pmids = [str(i) for i in range(40)]
+    max_workers = 2
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_, **__: DummySession())
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    first_batch_started = threading.Event()
+    other_batch_ready = threading.Event()
+    release_first_batch = threading.Event()
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        retry_cfg: Any | None = None,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        if batch and batch[0] == "0":
+            first_batch_started.set()
+            release_first_batch.wait()
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch
+        ]
+
+    def fake_semantic_batch(
+        session: Any,
+        ids: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1000/{pmid}"} for pmid in ids
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_, **__: {"scholar.DOI": "10.1000/fallback"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda session, pmid, cfg, limiter: {"OpenAlex.Id": f"OA{pmid}"},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda session, doi, cfg, limiter: {"crossref.DOI": doi},
+    )
+
+    heap_lock = threading.Lock()
+    max_heap_size = 0
+    heap_sizes_after_release: list[int] = []
+
+    original_heappush = gdd.heapq.heappush
+    original_heappop = gdd.heapq.heappop
+
+    def tracking_heappush(
+        heap: list[tuple[int, list[dict[str, str]]]],
+        item: tuple[int, list[dict[str, str]]],
+    ) -> None:
+        nonlocal max_heap_size
+        original_heappush(heap, item)
+        with heap_lock:
+            size = len(heap)
+            if item[0] != 0 and not release_first_batch.is_set():
+                other_batch_ready.set()
+            if size > max_heap_size:
+                max_heap_size = size
+            if release_first_batch.is_set():
+                heap_sizes_after_release.append(size)
+
+    def tracking_heappop(
+        heap: list[tuple[int, list[dict[str, str]]]],
+    ) -> tuple[int, list[dict[str, str]]]:
+        item = original_heappop(heap)
+        with heap_lock:
+            if release_first_batch.is_set():
+                heap_sizes_after_release.append(len(heap))
+        return item
+
+    monkeypatch.setattr(gdd.heapq, "heappush", tracking_heappush)
+    monkeypatch.setattr(gdd.heapq, "heappop", tracking_heappop)
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=max_workers,
+        batch_size=1,
+        return_generator=True,
+    )
+
+    frames: list[pd.DataFrame] = []
+
+    def consume() -> None:
+        for frame in generator:
+            frames.append(frame)
+
+    consumer = threading.Thread(target=consume)
+    consumer.start()
+
+    try:
+        assert first_batch_started.wait(timeout=5)
+        assert other_batch_ready.wait(timeout=5)
+        time.sleep(0.2)
+        release_first_batch.set()
+        consumer.join(timeout=5)
+    finally:
+        release_first_batch.set()
+        consumer.join(timeout=5)
+
+    assert not consumer.is_alive()
+    assert frames
+    combined = pd.concat(frames, ignore_index=True)
+    assert combined["PubMed.PMID"].tolist() == pmids
+
+    assert max_heap_size > max_workers
+    assert max_heap_size <= max_workers * 4
+    assert heap_sizes_after_release and heap_sizes_after_release[-1] == 0
+
+
 def test_fetch_pubmed_records_streams_large_batches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
