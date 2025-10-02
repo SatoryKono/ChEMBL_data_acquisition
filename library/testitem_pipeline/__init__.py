@@ -68,9 +68,11 @@ from library import pubchem_library as pl
 from library import testitem_enrichment
 from library.chembl_client import ChemblClient
 from library.clients import pubchem as pc
+from library.csv_utils import write_csv_chunks_deterministic as write_csv_deterministic
 from library.log import logger
 from library.metadata import file_sha256, write_meta_yaml
 from library.table_quality import analyze_table_quality
+from library.validation import validate_testitems
 
 __all__ = [
     "ChemblClient",
@@ -134,6 +136,8 @@ __all__ = [
     "run_testitem_pipeline",
     "testitem_enrichment",
     "update_parent_catalog_cache",
+    "validate_testitems",
     "write_meta_yaml",
+    "write_csv_deterministic",
     "write_parent_catalog_cache",
 ]

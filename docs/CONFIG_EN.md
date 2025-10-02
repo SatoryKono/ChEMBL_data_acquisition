@@ -178,6 +178,9 @@ The CLI only exposes high-level switches such as `--batch-size` or `--dry-run`; 
 | `request_limit` | `1000` | Hard cap on the number of paginated requests performed in a single execution. |
 | `retries` | `5` | Maximum number of retry attempts applied to failed API calls. |
 | `backoff_factor` | `0.5` | Multiplier controlling exponential backoff between retry attempts. |
+| `batch_retry.enable` | `false` | Reduce the request batch size and retry once before surfacing a failure. |
+| `batch_retry.shrink_factor` | `0.5` | Multiplier applied to the current batch size when `batch_retry.enable` is `true`. |
+| `batch_retry.min_size` | `1` | Smallest batch size used during retries to avoid empty requests. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id', 'pref_name', 'max_phase', 'molecule_type', 'first_approval', 'oral', 'parenteral', 'topical', 'black_box_warning', 'structure_type', 'molecule_structures.canonical_smiles', 'molecule_structures.standard_inchi', 'molecule_structures.standard_inchi_key', 'pubchem_cid', 'pubchem_iupac_name', 'pubchem_molecular_formula', 'pubchem_isomeric_smiles', 'pubchem_canonical_smiles', 'pubchem_inchi', 'pubchem_inchikey']` | List of ChEMBL and PubChem fields requested for each test item batch. |
 
 

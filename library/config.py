@@ -895,6 +895,17 @@ class AssayCfg(_BaseModel):
     limit: int | None = Field(default=None, ge=0)
 
 
+class TestitemBatchRetryCfg(_BoolModel):
+    enable: bool = False
+    shrink_factor: float = Field(0.5, gt=0, lt=1)
+    min_size: int = Field(1, ge=1)
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _bools(cls, v: Any) -> bool:
+        return cls._parse_bool(v)
+
+
 class TestitemCfg(_BaseModel):
     column: str = "molecule_chembl_id"
     batch_size: int = Field(1000, ge=1, le=1000)
@@ -905,6 +916,9 @@ class TestitemCfg(_BaseModel):
     request_limit: int = Field(1000, ge=1, le=1000)
     retries: int | None = Field(default=None, ge=0)
     backoff_factor: float | None = Field(default=None, ge=0)
+    batch_retry: TestitemBatchRetryCfg = Field(
+        default_factory=lambda: TestitemBatchRetryCfg()
+    )
 
     @field_validator("fields", mode="before")
     @classmethod
@@ -1810,6 +1824,7 @@ __all__ = [
     "ActivityPropertiesCfg",
     "AssayCfg",
     "TestitemCfg",
+    "TestitemBatchRetryCfg",
     "TestitemMoleculeEnrichmentCfg",
     "TestitemMoleculeEnrichmentFlagsCfg",
     "TestitemMoleculeEnrichmentLoggingCfg",
