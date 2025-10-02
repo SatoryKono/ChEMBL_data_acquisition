@@ -23,6 +23,7 @@ import pandas as pd
 from .chembl_document import DOCUMENT_COLUMNS as _CHEMBL_COLUMNS
 from .document_type_classifier import compute_scores, decide_label
 from .document_type_terms import parse_terms
+from .pandas_utils import merge_series_prefer_left
 
 # ---------------------------------------------------------------------------
 # Column declarations
@@ -303,7 +304,7 @@ def merge_with_chembl(
                 )
             if column not in metadata_columns and column not in left_columns:
                 metadata_columns.append(column)
-            result[column] = result[column].combine_first(right[column])
+            result[column] = merge_series_prefer_left(result[column], right[column])
 
     result = result.sort_values("__merge_order").drop(columns=["__merge_order"])
     result = result.reset_index(drop=True)
