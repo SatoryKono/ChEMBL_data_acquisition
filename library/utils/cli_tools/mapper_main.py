@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
 from urllib.error import URLError
@@ -66,19 +67,25 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             text = str(value).strip()
             return text or None
 
-        ids_to_map: list[str] = []
+        row_ids: list[str | None] = []
+        unique_ids: OrderedDict[str, None] = OrderedDict()
         for value in df[args.column]:
             normalized = _normalize(value)
+            row_ids.append(normalized)
             if normalized is not None:
-                ids_to_map.append(normalized)
+                unique_ids.setdefault(normalized, None)
+
+        ids_to_map = list(unique_ids.keys())
+        normalized_ids = [chembl_id for chembl_id in row_ids if chembl_id is not None]
 
         log_each = bool(getattr(args, "log_each", False))
-        total_ids = len(ids_to_map)
+        total_ids = len(normalized_ids)
         mapped_count = 0
         missing_count = 0
         missing_sample: list[str] = []
 
 
+        mapping_failed = False
         try:
             mappings = map_chembl_ids_to_uniprot(
                 ids_to_map,
@@ -91,9 +98,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             logger.warning("map_failed", error=str(exc))
             df["mapping_uniprot_id"] = [None for _ in df[args.column]]
             missing_count = total_ids
-            missing_sample = ids_to_map[:SUMMARY_SAMPLE_LIMIT]
+            missing_sample = normalized_ids[:SUMMARY_SAMPLE_LIMIT]
+            mapping_failed = True
         else:
-            for chembl_id in ids_to_map:
+            for chembl_id in row_ids:
+                if chembl_id is None:
+                    continue
                 uniprot_id = mappings.get(chembl_id)
                 if uniprot_id:
                     mapped_count += 1
@@ -117,12 +127,10 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                         logger.warning("uniprot_id_missing", chembl_id=chembl_id)
                     else:
                         logger.debug("uniprot_id_missing", chembl_id=chembl_id)
-            mapped_values: list[str | None] = []
-            for value in df[args.column]:
-                normalized = _normalize(value)
-                mapped_values.append(
-                    mappings.get(normalized) if normalized is not None else None
-                )
+            mapped_values: list[str | None] = [
+                mappings.get(chembl_id) if chembl_id is not None else None
+                for chembl_id in row_ids
+            ]
             df["mapping_uniprot_id"] = mapped_values
 
         summary_payload = {

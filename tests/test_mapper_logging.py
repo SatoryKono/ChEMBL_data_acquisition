@@ -197,6 +197,91 @@ def test_mapper_main_concurrent_preserves_order(
     assert payload["sample_missing"] == ["CHEMBL3"]
 
 
+def test_mapper_main_deduplicates_ids_before_mapping(
+    tmp_path: Path, monkeypatch: Any, cfg: Config
+) -> None:
+    df = pd.DataFrame({"chembl_id": ["CHEMBL1", "CHEMBL1", "CHEMBL2"]})
+    input_path = tmp_path / "in.csv"
+    df.to_csv(input_path, index=False)
+    output_path = tmp_path / "out.csv"
+
+    calls: dict[str, Any] = {"count": 0, "ids": None}
+
+    def fake_map(
+        ids: list[str],
+        cfg_mapping: object,
+        *,
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
+        calls["count"] += 1
+        calls["ids"] = list(ids)
+        return {"CHEMBL1": "P111", "CHEMBL2": "P222"}
+
+    monkeypatch.setattr(mapper_main, "map_chembl_ids_to_uniprot", fake_map)
+
+    written: dict[str, Any] = {}
+
+    def fake_write_csv(
+        df_out: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str,
+        encoding: str,
+        key_cols: Any,
+    ) -> Path:
+        written["df"] = df_out.copy()
+        written["path"] = path
+        written["key_cols"] = key_cols
+        return path
+
+    monkeypatch.setattr(mapper_main.io, "write_csv", fake_write_csv)
+
+    args = argparse.Namespace(
+        input_csv=input_path,
+        output_csv=output_path,
+        column="chembl_id",
+        sep=",",
+        encoding="utf8",
+        key_cols=None,
+        chunk_size=2,
+        rps=5.0,
+        workers=3,
+    )
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(stream=buffer, level="DEBUG"))
+
+    cfg_ns = SimpleNamespace(
+        io=cfg.io,
+        uniprot_mapping=cfg.uniprot_mapping,
+        to_dict=lambda: {},
+    )
+
+    exit_code = mapper_main.run(cfg_ns, args)
+    assert exit_code == 0
+
+    assert calls["count"] == 1
+    assert calls["ids"] == ["CHEMBL1", "CHEMBL2"]
+
+    output_df = written["df"]
+    assert output_df["chembl_id"].tolist() == ["CHEMBL1", "CHEMBL1", "CHEMBL2"]
+    assert output_df["mapping_uniprot_id"].tolist() == ["P111", "P111", "P222"]
+    assert written["path"] == output_path
+    assert written["key_cols"] is None
+
+    records = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+    summary = [r for r in records if r["event"] == "mapper_summary"]
+    assert summary
+    payload = summary[0]
+    assert payload["total"] == 3
+    assert payload["mapped"] == 3
+    assert payload["missing"] == 0
+    assert "sample_missing" not in payload
+
+
 def test_mapper_main_log_each_emits_per_id_logs(
     tmp_path: Path, monkeypatch: Any, cfg: Config
 ) -> None:
