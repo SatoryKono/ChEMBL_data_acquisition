@@ -95,6 +95,8 @@ def test_run_document_postprocessing_check_pass(tmp_path: Path) -> None:
 
     markdown = result.report_markdown.read_text(encoding="utf-8")
     assert "- Status: **passed**" in markdown
+    assert "- Column sets identical: ✅ yes" in markdown
+    assert "- Column order identical: ✅ yes" in markdown
     assert "- Diff excerpt: not generated" in markdown
 
 
@@ -140,8 +142,9 @@ def test_run_document_postprocessing_check_failure(
 
     markdown = result.report_markdown.read_text(encoding="utf-8")
     assert "- Status: **failed**" in markdown
+    assert "- Column sets identical:" in markdown
+    assert "- Column order identical:" in markdown
     assert result.diff_csv.name in markdown
-
 
 def test_structure_metrics_detects_missing_candidate_columns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -187,7 +190,6 @@ def test_structure_metrics_detects_missing_candidate_columns(
         issue.startswith("Candidate missing columns") and "doi" in issue
         for issue in payload["issues"]
     )
-
 
 def test_diff_extract_limited_by_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -240,6 +242,7 @@ def test_diff_extract_limited_by_keys(
 
     monkeypatch.setattr(dp, "postprocess_file", fake_postprocess_file)
 
+
     result = run_document_postprocessing_check(
         base_path=base_dir,
         reference_path=reference_path,
@@ -289,6 +292,7 @@ def test_cli_exit_codes(
             str(base_dir),
             "--out",
             str(candidate_path.relative_to(base_dir)),
+
         ]
     )
 
