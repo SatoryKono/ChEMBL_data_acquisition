@@ -63,7 +63,7 @@ checklist.
 
 The document export now includes an automated regression check against the legacy Power Query workbook.
 
-1. Populate `data/input/full/ref_document.csv` with the authoritative export.
+1. Populate `data/input/full/document.csv` with the authoritative export.
 2. Run the document pipeline (`python -m scripts.get_document_data ...`) and confirm it produces:
    * `preprocessed_output.document_YYYYMMDD.csv`
    * `qa_document_postprocessing_report_YYYYMMDD.json`
@@ -73,7 +73,7 @@ The document export now includes an automated regression check against the legac
    ```bash
    python -m qa.check_document_postprocessing \
        --base-path data \
-       --ref input\\full\\ref_document.csv \
+       --ref input\\full\\document.csv \
        --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv
    ```
 4. Treat a non-zero exit code as a blocking failure; consult the Markdown summary and diff extract for remediation.
