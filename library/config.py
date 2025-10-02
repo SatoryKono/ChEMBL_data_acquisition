@@ -581,6 +581,7 @@ class DocQualityCfg(_BaseModel):
     sample_rows: int | None = Field(default=None, ge=1)
     include_columns: tuple[str, ...] | None = None
     exclude_columns: tuple[str, ...] | None = None
+    fatal_on_error: bool = False
 
 
 class ResourcesCfg(_BaseModel):
@@ -618,6 +619,8 @@ class ResourcesCfg(_BaseModel):
 
 
 class IoCfg(_BoolModel):
+    base_path: Path | None = None
+    input_dir: Path | None = None
     output_dir: Path = Path("data/output")
     cache_dir: Path = Path(".cache")
     csv_sep: str = ","
@@ -688,6 +691,7 @@ class RateCfg(_BaseModel):
 class RetryCfg(_BaseModel):
     max_attempts: int = Field(3, ge=1)
     backoff_factor: float = Field(0.5, ge=0)
+    backoff_cap: float | None = Field(default=None, ge=0)
     status_forcelist: list[StrictInt] = Field(
         default_factory=lambda: [429, 500, 502, 503, 504]
     )
@@ -1777,6 +1781,7 @@ _ALIAS_OVERRIDES: dict[str, list[str]] = {
     "CHEMBL_DA_LOG_LEVEL": ["system", "log", "level"],
     "CHEMBL_DA_RETRY_MAX_ATTEMPTS": ["system", "retry", "max_attempts"],
     "CHEMBL_DA_RETRY_BACKOFF_FACTOR": ["system", "retry", "backoff_factor"],
+    "CHEMBL_DA_RETRY_BACKOFF_CAP": ["system", "retry", "backoff_cap"],
 }
 
 _ALIAS_MAP: dict[str, list[str]] = {

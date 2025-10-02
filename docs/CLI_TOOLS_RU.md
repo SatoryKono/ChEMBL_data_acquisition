@@ -18,4 +18,6 @@
 | `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Запускает закешированную обвязку таргет-пайплайна и позволяет проверить стадийные флаги (`--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, `--normalize-at-export` / `--no-normalize-at-export`). |
 | `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Формирует отчёты о качестве по столбцам для произвольных CSV-наборов. |
 
+Обе утилиты маппинга учитывают список [`io.na_markers`](CONFIG_RU.md#io) при фильтрации placeholder-значений и опцию [`io.keep_na_markers`](CONFIG_RU.md#io), которая определяет, сохранять ли такие идентификаторы во входных данных.
+
 Все модули по-прежнему экспортируют функцию `main`, поэтому их можно подключать к точкам входа в `pyproject.toml`. При программном вызове импортируйте модуль из `library.utils.cli_tools` и передавайте `main(argv)`, чтобы переиспользовать интерфейс командной строки в тестах.

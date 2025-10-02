@@ -88,7 +88,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Create and activate a Python ≥3.11 virtual environment.
 2. Install dependencies from the lock file: `pip install -r requirements-lock.txt`.
 3. Enable the quality gate: `pre-commit install`.
-4. Recommended ad-hoc checks (see [Quality Assurance Process](QA_PROCESS_EN.md) for the living checklist):
+4. Recommended ad-hoc checks (see Quality Assurance Process — [English](QA_PROCESS_EN.md) / [Русский](QA_PROCESS_RU.md) — for the living checklist):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`

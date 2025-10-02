@@ -446,6 +446,10 @@ def _normalize_path(path: str) -> str:
 _DEFAULT_OVERRIDES: dict[str, str] = {
     key: _normalize_path(value)
     for key, value in {
+        "base_path": "io.base_path",
+        "input_dir": "io.input_dir",
+        "output_dir": "io.output_dir",
+        "cache_dir": "io.cache_dir",
         "sep": "io.csv_sep",
         "encoding": "io.csv_encoding",
         "log_level": "log.level",
@@ -544,7 +548,7 @@ def apply_config_overrides(
             error=str(exc),
             config=str(config_path),
         )
-        parser.error(str(exc))
+        raise
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
 
@@ -636,6 +640,9 @@ def prepare_io_paths(
 
     output_dir = _resolve_directory(getattr(args, "output_dir", None), base=base_path)
     setattr(args, "output_dir", output_dir)
+
+    cache_dir = _resolve_directory(getattr(args, "cache_dir", None), base=base_path)
+    setattr(args, "cache_dir", cache_dir)
 
     deprecated_out = getattr(args, "_deprecated_out", argparse.SUPPRESS)
     if deprecated_out is not argparse.SUPPRESS:

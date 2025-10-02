@@ -711,6 +711,11 @@
           ],
           "default": null,
           "title": "Exclude Columns"
+        },
+        "fatal_on_error": {
+          "default": false,
+          "title": "Fatal On Error",
+          "type": "boolean"
         }
       },
       "title": "DocQualityCfg",
@@ -965,6 +970,32 @@
     "IoCfg": {
       "additionalProperties": false,
       "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Path"
+        },
+        "input_dir": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Dir"
+        },
         "output_dir": {
           "default": "../data/output",
           "format": "path",
@@ -1457,6 +1488,15 @@
           "minimum": 0,
           "title": "Backoff Factor",
           "type": "number"
+        },
+        "backoff_cap": {
+          "default": null,
+          "minimum": 0,
+          "title": "Backoff Cap",
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "status_forcelist": {
           "items": {

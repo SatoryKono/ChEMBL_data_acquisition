@@ -1029,6 +1029,27 @@ def test_get_testitem_data_smoke(
     assert mixture_row["pubchem_cid"] == "MIX-CID"
 
 
+def test_get_testitem_data_missing_config(tmp_path: Path) -> None:
+    """Verify the CLI exits with an error when configuration is unavailable."""
+
+    missing_config = tmp_path / "missing.yaml"
+    exit_code = get_testitem_data.main(
+        [
+            "--base-path",
+            str(tmp_path),
+            "--input-dir",
+            str(tmp_path),
+            "--output-dir",
+            str(tmp_path),
+            "--log-level",
+            "ERROR",
+            "--config",
+            str(missing_config),
+        ]
+    )
+    assert exit_code == 1
+
+
 def test_get_activity_data_skip_existing(
     smoke_output_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
