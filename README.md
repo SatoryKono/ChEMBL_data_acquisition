@@ -303,8 +303,10 @@ Before running the smoke command, create a `chembl_ids.csv` file with a header `
 ## Генерация данных
 
 **EN.** Five production pipelines live in `scripts/` and write CSV outputs to
-`data/output/`. / **RU.** Пять рабочих пайплайнов расположены в каталоге
-`scripts/` и сохраняют CSV-файлы в `data/output/`:
+`~/.local/share/chembl-da/output` by default (honouring `--base-path`). /
+**RU.** Пять рабочих пайплайнов расположены в каталоге `scripts/` и по
+умолчанию сохраняют CSV-файлы в `~/.local/share/chembl-da/output`
+(учитывается `--base-path`):
 
 * **EN.** `get_activity_data.py` extracts activity records from ChEMBL and
   adds calculated bounds. / **RU.** `get_activity_data.py` извлекает данные
@@ -821,7 +823,7 @@ configuration looks like::
           rps: 5
     local:
       io:
-        output_dir: data/output
+        output_dir: "$CHEMBL_DA_BASE_PATH/output"
 
 ### Переменные окружения
 
@@ -963,9 +965,9 @@ ChEMBL_data_acquisition/
 
 ## Output and metadata / Вывод и метаданные
 
-**EN.** Pipelines persist deterministic CSV tables via ``library.io.write_csv`` and place accompanying ``*.meta.yaml`` sidecars in ``data/output``.
+**EN.** Pipelines persist deterministic CSV tables via ``library.io.write_csv`` and place accompanying ``*.meta.yaml`` sidecars in ``~/.local/share/chembl-da/output``.
 
-**RU.** Пайплайны сохраняют детерминированные CSV с помощью ``library.io.write_csv`` и добавляют рядом файлы ``*.meta.yaml`` в каталоге ``data/output``.
+**RU.** Пайплайны сохраняют детерминированные CSV с помощью ``library.io.write_csv`` и добавляют рядом файлы ``*.meta.yaml`` в каталоге ``~/.local/share/chembl-da/output``.
 
 Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) for layout details.
 

@@ -23,8 +23,8 @@ sources:
       cache_ttl: 3600  # Seconds to cache ChEMBL API responses (env: CHEMBL_DA_CACHE_TTL)
       cache_maxsize: 1024  # Max cached ChEMBL responses (env: CHEMBL_DA_CACHE_MAXSIZE)
     molecule_catalog:
-      cache_path: "../data/cache/molecule_parent_catalog.json"  # Local cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_CACHE)
-      sqlite_path: "../data/cache/molecule_parent_catalog.sqlite"  # SQLite cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_SQLITE)
+      cache_path: "$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json"  # Local cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_CACHE)
+      sqlite_path: "$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite"  # SQLite cache for molecule parents (env: CHEMBL_DA_MOLECULE_CATALOG_SQLITE)
       endpoint: "molecule"  # API resource providing parent relationships
       child_field: "molecule_chembl_id"  # Column containing molecule identifiers
       parent_field: "parent_molecule_chembl_id"  # Column containing parent molecule identifiers
@@ -181,7 +181,7 @@ sources:
     cache_ttl: 3600  # Request cache time-to-live in seconds
     cache_maxsize: 1024  # Maximum cached PubChem responses
     cache_ttl_hours: null  # Persisted CID cache TTL in hours; null disables expiry
-    cid_cache_path: "../data/cache/pubchem_cid_cache.json"
+    cid_cache_path: "$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json"
     batch_size: 50
     prefer_local_smiles: false
     prefer_local_values: true
@@ -206,14 +206,14 @@ sources:
 
 local:
   resources:
-    dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
+    dictionary_dir: "../dictionary"  # Directory with supplementary lookup tables
     iuphar_target_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
     iuphar_family_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
     uniprot_data_dir: "../dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
     targets_type_csv: "../dictionary/_target/targets_type.csv"  # Target type mapping table
   io:
-    output_dir: "../data/output"  # Directory for generated datasets
-    cache_dir: ".cache"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
+    output_dir: "$CHEMBL_DA_BASE_PATH/output"  # Directory for generated datasets
+    cache_dir: "~/.cache/chembl-da"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
     csv_sep: ","  # CSV field separator
     csv_encoding: "utf-8-sig"  # Encoding for CSV files
     csv_fallback_separators:
@@ -225,9 +225,9 @@ local:
     keep_na_markers: false  # Preserve identifiers matching NA markers instead of dropping them
     exist_ok: true  # Create directories with ensure_dirs if missing
   init:
-    same_doc: "../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook
-    all_doc: "../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
-    output_dir: "../data/output/ChEMBL/processed"  # Output directory for processed files
+    same_doc: "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"  # Source workbook
+    all_doc: "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"
+    output_dir: "$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"  # Output directory for processed files
 
 activity_enrichment:
   action_type:

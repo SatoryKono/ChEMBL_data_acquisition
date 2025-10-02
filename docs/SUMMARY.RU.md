@@ -112,7 +112,7 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Результаты выгрузки
 
-* Основные CSV сохраняются в `local.io.output_dir` (по умолчанию `../data/output`).
+* Основные CSV сохраняются в `local.io.output_dir` (по умолчанию `~/.local/share/chembl-da/output`).
 * Каждый запуск формирует `<name>.csv.meta.yaml` с конфигурацией, командой,
   статистикой строк и SHA-256 хэшем; ошибки валидации попадают в
   `<name>_failure_cases.csv`, а отчёты качества строятся автоматически.

@@ -537,9 +537,18 @@ def apply_config_overrides(
             cli_overrides[key] = value
 
     try:
+        base_path_arg = getattr(args, "base_path", None)
+        if isinstance(base_path_arg, Path):
+            config_base_path = base_path_arg
+        elif base_path_arg in (None, argparse.SUPPRESS):
+            config_base_path = None
+        else:
+            config_base_path = Path(base_path_arg)
+
         cfg = load_config(
             config_path,
             cli_overrides=cli_overrides,
+            base_path=config_base_path,
             strict=True,
         )
     except ConfigError as exc:
