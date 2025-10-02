@@ -75,6 +75,27 @@ def test_preprocess_document_export_derives_fields() -> None:
     assert result["is_review"].tolist() == [False, True]
 
 
+def test_preprocess_document_export_restores_identifier_from_prefixed_column() -> None:
+    """The export projection rehydrates ``document_chembl_id`` when prefixed."""
+
+    df = _sample_dataframe().drop(columns=["document_chembl_id"])
+    df["ChEMBL.document_chembl_id"] = ["DOC1", "DOC2"]
+
+    result = document_export_postprocessing.preprocess_document_export(df)
+
+    assert result["document_chembl_id"].tolist() == ["DOC1", "DOC2"]
+
+
+def test_preprocess_document_export_injects_empty_identifier_when_missing() -> None:
+    """An empty identifier column is created when no source column exists."""
+
+    df = _sample_dataframe().drop(columns=["document_chembl_id"])
+
+    result = document_export_postprocessing.preprocess_document_export(df)
+
+    assert result["document_chembl_id"].tolist() == ["", ""]
+
+
 def test_postprocess_export_file_writes_csv(tmp_path: Path) -> None:
     """``postprocess_export_file`` writes the derived projection to disk."""
 
