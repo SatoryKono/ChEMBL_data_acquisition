@@ -40,6 +40,7 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 SchemaT = TypeVar("SchemaT")
 
 
+
 def resolve_invocation(
     prog: str | None,
     argv: Sequence[object] | None,
@@ -63,6 +64,7 @@ def resolve_invocation(
 
     parts.extend(str(arg) for arg in argv_iterable)
     return tuple(parts)
+
 
 
 class ValidationResult(Protocol):
@@ -97,6 +99,37 @@ def _callable_name(func: Callable[..., object]) -> str:
 
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
+
+
+
+def resolve_invocation(
+    program: str | None, argv: Sequence[object] | None
+) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation.
+
+    Parameters
+    ----------
+    program:
+        Optional executable name. When provided it is prefixed to the
+        resulting tuple.
+    argv:
+        Sequence of arguments. ``None`` falls back to ``sys.argv[1:]`` to
+        mirror standard ``argparse`` semantics.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Normalised invocation containing the program followed by positional
+        arguments represented as strings.
+    """
+
+    parts: list[str] = []
+    if program:
+        parts.append(str(program))
+    if argv is None:
+        argv = sys.argv[1:]
+    parts.extend(str(arg) for arg in argv)
+    return tuple(parts)
 
 
 
@@ -186,8 +219,6 @@ def run_pipeline(
     output_path: Path,
     failure_path: Path,
     command: str | None = None,
-    invocation: Sequence[str] | None = None,
-
     config_snapshot: Mapping[str, object],
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
@@ -454,11 +485,8 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
-    resolved_invocation = tuple(map(str, invocation)) if invocation else ()
-    resolved_command = (
-        command
-        if command is not None
-        else (" ".join(resolved_invocation) if resolved_invocation else " ".join(sys.argv))
+    resolved_invocation = (
+        resolve_invocation(None, invocation) if invocation is not None else ()
     )
 
     meta_path = write_meta_yaml(
