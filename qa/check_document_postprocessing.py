@@ -49,6 +49,8 @@ INVARIANT_LABELS: Mapping[str, str] = {
     "completed_format": "completed date format",
     "completed_order": "completed order monotonicity",
 }
+DEFAULT_REFERENCE_RELATIVE = Path("input") / "full" / "document.csv"
+DEFAULT_ACTUAL_RELATIVE = Path("output") / "document" / "output.document.csv"
 
 
 # ===== Data classes ==========================================================
@@ -550,19 +552,19 @@ def run_document_postprocessing_check(
     missing_in_expected = sorted(set(all_columns) - set(expected_df.columns))
 
     structure_metrics = {
-        "columns_equal": set(reference_df.columns) == set(candidate_df.columns),
-        "column_order_equal": list(reference_df.columns) == list(candidate_df.columns),
+        "columns_equal": set(expected_df.columns) == set(actual_df.columns),
+        "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
     }
 
     reference_summary = _summarise_dataset(
-        frame=reference_df,
+        frame=expected_df,
         canonical=reference_canonical,
         key_columns=key_columns,
         path=str(reference_resolved),
         duplicate_count=reference_duplicates,
     )
     candidate_summary = _summarise_dataset(
-        frame=candidate_df,
+        frame=actual_df,
         canonical=candidate_canonical,
         key_columns=key_columns,
         path=str(candidate_resolved),
@@ -614,19 +616,10 @@ def run_document_postprocessing_check(
     metrics: dict[str, Any] = {
         "status": status,
         "date_code": resolved_date_code,
+        "structure": structure_metrics,
 
-        "reference": {
-            "path": str(reference_resolved),
-            "rows": int(len(expected_df)),
-            "columns": list(expected_df.columns),
-            "duplicates": reference_duplicates,
-        },
-        "candidate": {
-            "path": str(processed_path),
-            "rows": int(len(actual_df)),
-            "columns": list(actual_df.columns),
-            "duplicates": candidate_duplicates,
-        },
+        "reference": reference_summary,
+        "candidate": candidate_summary,
 
         "differences": {
             "cells_total": total_cells,
@@ -697,11 +690,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Root directory containing the Power Query reference and Python outputs",
     )
     parser.add_argument(
+        "--ref",
+        default=str(DEFAULT_REFERENCE_RELATIVE),
+        help="Relative or absolute path to the Power Query reference CSV",
+    )
+    parser.add_argument(
+        "--actual",
         "--out",
-        required=True,
-
-        help="Relative or absolute path to the unprocessed out_document CSV",
-
+        dest="actual",
+        default=str(DEFAULT_ACTUAL_RELATIVE),
+        help="Relative or absolute path to the Python-generated CSV",
     )
     parser.add_argument(
         "--reports-dir",
@@ -741,8 +739,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     base_dir = Path(args.base_path).resolve()
-    reference_path = _resolve_relative(base_dir, Path("input") / "full" / "document.csv")
-    candidate_path = _resolve_relative(base_dir, args.out)
+    reference_path = _resolve_relative(base_dir, args.ref)
+    candidate_path = _resolve_relative(base_dir, args.actual)
 
     result = run_document_postprocessing_check(
         base_path=base_dir,
