@@ -10,6 +10,7 @@ import pandas as pd
 
 from ...config import ActivityBoundsCfg
 from ...log import logger
+from ...pandas_utils import merge_series_prefer_left
 
 __all__ = ["compute_activity_bounds"]
 
@@ -245,8 +246,8 @@ def compute_activity_bounds(
     std_upper = _to_numeric(result, "standard_upper_value")
     std_values = _to_numeric(result, "standard_value")
 
-    lower = std_lower.combine_first(lower)
-    upper = std_upper.combine_first(upper)
+    lower = merge_series_prefer_left(lower, std_lower)
+    upper = merge_series_prefer_left(upper, std_upper)
 
     range_mask = std_values.notna() & std_upper.notna()
     if range_mask.any():
@@ -329,4 +330,8 @@ def compute_activity_bounds(
 
     result["lower_value"] = lower
     result["upper_value"] = upper
+    if "activity_id" in result.columns and pd.api.types.is_string_dtype(
+        result["activity_id"].dtype
+    ):
+        result["activity_id"] = result["activity_id"].astype("object")
     return result
