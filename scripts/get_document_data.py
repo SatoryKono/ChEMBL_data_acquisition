@@ -344,9 +344,9 @@ def fetch_pubmed_records(
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
 
-    system_limiter = get_global_limiter(
-        rate_cfg.global_rps, rate_cfg.global_burst
-    )
+    system_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        system_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     def _service_limiter(
         name: str,
@@ -356,12 +356,18 @@ def fetch_pubmed_records(
     ) -> RateLimiter | None:
         effective_rps = rps if rps is not None else rate_cfg.global_rps
         effective_burst = burst if burst is not None else rate_cfg.global_burst
+        if effective_rps is None or effective_rps <= 0:
+            return None
+        if effective_burst is not None and effective_burst <= 0:
+            effective_burst = None
         if (
-            rps is None
-            and burst is None
-            or (
-                effective_rps == rate_cfg.global_rps
-                and effective_burst == rate_cfg.global_burst
+            system_limiter is not None
+            and (
+                (rps is None and burst is None)
+                or (
+                    effective_rps == rate_cfg.global_rps
+                    and effective_burst == rate_cfg.global_burst
+                )
             )
         ):
             return None
@@ -1635,9 +1641,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Configure session for ChEMBL requests
-    global_limiter = get_global_limiter(
-        cfg.rate.global_rps, cfg.rate.global_burst
-    )
+    rate_cfg = cfg.rate
+    global_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     with ChemblClient(
         cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
@@ -1726,9 +1733,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     # Prepare shared session before performing any API calls
-    global_limiter = get_global_limiter(
-        cfg.rate.global_rps, cfg.rate.global_burst
-    )
+    rate_cfg = cfg.rate
+    global_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     try:
         ids_iter = io.read_ids(

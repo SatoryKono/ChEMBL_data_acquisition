@@ -1258,7 +1258,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
 
 
-    global_limiter = get_global_limiter(cfg.rate.global_rps, cfg.rate.global_burst)
+    rate_cfg = cfg.rate
+    global_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     fetched_rows_total = 0
     raw_dump_rows_total = 0

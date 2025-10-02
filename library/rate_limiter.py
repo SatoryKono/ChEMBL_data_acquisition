@@ -110,18 +110,25 @@ def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
         return limiter
 
 
-def get_global_limiter(rps: float, burst: int) -> RateLimiter:
-    """Return the shared system-wide :class:`RateLimiter`.
+def get_global_limiter(
+    rps: float | None, burst: int | None = None
+) -> RateLimiter | None:
+    """Return the shared system-wide :class:`RateLimiter` if enabled.
 
     Parameters
     ----------
     rps:
-        Allowed requests per second for the entire pipeline.
+        Allowed requests per second for the entire pipeline.  A value ``<= 0``
+        disables the limiter.
     burst:
-        Maximum burst size for the global limiter.
+        Maximum burst size for the global limiter.  Non-positive values are
+        treated as ``None``.
     """
 
-    return get_limiter(GLOBAL_LIMITER_NAME, rps, burst)
+    if rps is None or rps <= 0:
+        return None
+    burst_value = burst if burst is not None and burst > 0 else None
+    return get_limiter(GLOBAL_LIMITER_NAME, rps, burst_value)
 
 
 def sleep(delay: float) -> None:

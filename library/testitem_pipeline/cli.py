@@ -440,9 +440,10 @@ def run_testitem_pipeline(
     output_csv = Path(options.output_csv) if options.output_csv is not None else None
     offset = options.offset if options.offset is not None else cfg.testitem.offset
 
-    global_limiter = get_global_limiter(
-        cfg.rate.global_rps, cfg.rate.global_burst
-    )
+    rate_cfg = cfg.rate
+    global_limiter = None
+    if (rate_cfg.global_rps or 0) > 0:
+        global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
     with ChemblClient(
         api_cfg, cfg.retry, cfg.chembl, global_limiter=global_limiter

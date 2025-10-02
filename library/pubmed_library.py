@@ -265,8 +265,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info("pipeline_fail", run_id=log_cfg.run_id)
         return 1
 
-    pubmed_rps = cfg.pubmed.rps or cfg.rate.global_rps
-    pubmed_burst = cfg.pubmed.burst or cfg.rate.global_burst
+    global_rps = cfg.rate.global_rps
+    if global_rps is None:
+        global_rps = 0
+    pubmed_rps = cfg.pubmed.rps if cfg.pubmed.rps is not None else global_rps
+    if pubmed_rps is None:
+        pubmed_rps = 0
+    pubmed_burst = cfg.pubmed.burst if cfg.pubmed.burst is not None else cfg.rate.global_burst
+    if pubmed_burst is not None and pubmed_burst <= 0:
+        pubmed_burst = None
     limiter = get_limiter("pubmed", pubmed_rps, pubmed_burst)
     delay = 1.0 / pubmed_rps if pubmed_rps > 0 else 0.0
 
