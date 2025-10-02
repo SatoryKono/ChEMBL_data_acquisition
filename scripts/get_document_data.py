@@ -52,6 +52,7 @@ if __package__ in {None, ""}:
 from library import chembl_library as cl
 from library import cli
 from library import document_postprocessing as dp
+from library.postprocessing import document as document_export_postprocessing
 from library import io
 from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
@@ -1262,7 +1263,24 @@ def _finalise_export(
         logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
 
-    _maybe_run_document_postprocessing(csv_path)
+    try:
+        postprocessed_path = document_export_postprocessing.postprocess_export_file(
+            csv_path,
+            cfg=cfg.io,
+        )
+    except (OSError, ValueError, pd.errors.ParserError) as exc:
+        logger.error(
+            "document_export_postprocess_failed",
+            error=str(exc),
+            path=str(csv_path),
+        )
+        exit_code = 1
+    else:
+        logger.info(
+            "document_export_postprocess_written",
+            path=str(postprocessed_path),
+        )
+
 
 
     if missing_required:
