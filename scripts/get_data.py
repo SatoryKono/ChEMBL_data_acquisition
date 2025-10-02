@@ -25,8 +25,10 @@ import argparse
 import sys
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -334,7 +336,13 @@ class SidecarArtefact:
     working_path: Path | None = None
 
 
-def _discover_sidecars(final_output: Path, working_output: Path) -> dict[Path, SidecarArtefact]:
+def _discover_sidecars(
+    final_output: Path,
+    working_output: Path,
+    *,
+    max_depth: int | None = None,
+    include_patterns: Sequence[str] | None = None,
+) -> dict[Path, SidecarArtefact]:
     """Return all auxiliary files derived from ``final_output`` and ``working_output``."""
 
     final_dir = final_output.parent
@@ -346,11 +354,25 @@ def _discover_sidecars(final_output: Path, working_output: Path) -> dict[Path, S
         working_output.name,
         working_output.with_suffix("").name,
     }
+    prefix_candidates: set[str] = set()
+    for candidate in (final_output, working_output):
+        current = candidate
+        while True:
+            prefix_candidates.add(current.name)
+            if not current.suffix:
+                break
+            current = current.with_suffix("")
     replacements = (
         (working_output.name, final_output.name),
         (working_output.with_suffix("").name, final_output.with_suffix("").name),
     )
     main_outputs = {final_output.resolve(), working_output.resolve()}
+
+    def _matches_explicit_patterns(rel_path: Path, name: str) -> bool:
+        if include_patterns is None:
+            return False
+        rel_value = rel_path.as_posix()
+        return any(fnmatch(rel_value, pattern) or fnmatch(name, pattern) for pattern in include_patterns)
 
     def _normalise_relative(path: Path) -> Path:
         parts: list[str] = []
@@ -367,22 +389,39 @@ def _discover_sidecars(final_output: Path, working_output: Path) -> dict[Path, S
         collected: dict[Path, Path] = {}
         if not base_dir.exists():
             return collected
-        for candidate in base_dir.rglob("*"):
-            if not candidate.is_file():
-                continue
+        queue: deque[tuple[Path, int, bool]] = deque([(base_dir, 0, False)])
+        while queue:
+            current, depth, within_branch = queue.popleft()
             try:
-                resolved = candidate.resolve()
+                entries = list(current.iterdir())
             except OSError:  # pragma: no cover - filesystem race protection
                 continue
-            if resolved in main_outputs:
-                continue
-            name = candidate.name
-            if name == sentinel_name:
-                continue
-            if not any(name.startswith(pattern) for pattern in patterns):
-                continue
-            rel_path = candidate.relative_to(base_dir)
-            collected[rel_path] = candidate
+            for entry in entries:
+                rel_path = entry.relative_to(base_dir)
+                name = entry.name
+                if entry.is_dir():
+                    next_depth = depth + 1
+                    if max_depth is not None and next_depth > max_depth:
+                        continue
+                    matches_prefix = any(name.startswith(prefix) for prefix in prefix_candidates)
+                    matches_pattern = _matches_explicit_patterns(rel_path, name)
+                    next_within = within_branch or matches_prefix or matches_pattern
+                    if next_within:
+                        queue.append((entry, next_depth, next_within))
+                    continue
+                matches_default = any(name.startswith(pattern) for pattern in patterns)
+                matches_explicit = _matches_explicit_patterns(rel_path, name)
+                if not matches_default and not matches_explicit:
+                    continue
+                if name == sentinel_name:
+                    continue
+                try:
+                    resolved = entry.resolve()
+                except OSError:  # pragma: no cover - filesystem race protection
+                    continue
+                if resolved in main_outputs:
+                    continue
+                collected[rel_path] = entry
         return collected
 
     sidecars: dict[Path, SidecarArtefact] = {}
