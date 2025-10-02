@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from typing import Any, cast
+from typing import IO, Any, cast
 
 from datetime import datetime, timezone
 
@@ -118,6 +118,116 @@ DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
 RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
+
+
+COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
+
+_RUSSIAN_KEYBOARD_MAP: dict[str, str] = {
+    "q": "й",
+    "w": "ц",
+    "e": "у",
+    "r": "к",
+    "t": "е",
+    "y": "н",
+    "u": "г",
+    "i": "ш",
+    "o": "щ",
+    "p": "з",
+    "[": "х",
+    "]": "ъ",
+    "a": "ф",
+    "s": "ы",
+    "d": "в",
+    "f": "а",
+    "g": "п",
+    "h": "р",
+    "j": "о",
+    "k": "л",
+    "l": "д",
+    ";": "ж",
+    "'": "э",
+    "z": "я",
+    "x": "ч",
+    "c": "с",
+    "v": "м",
+    "b": "и",
+    "n": "т",
+    "m": "ь",
+    ",": "б",
+    ".": "ю",
+    "`": "ё",
+}
+
+
+def _translate_keyboard_layout(value: str) -> str:
+    """Return ``value`` as if typed with the Russian keyboard layout."""
+
+    translated: list[str] = []
+    for char in value:
+        lower = char.lower()
+        mapped = _RUSSIAN_KEYBOARD_MAP.get(lower)
+        if mapped is None:
+            translated.append(char)
+            continue
+        translated.append(mapped.upper() if char.isupper() else mapped)
+    return "".join(translated)
+
+
+def _keyboard_aliases(command: str) -> tuple[str, ...]:
+    """Return alternative spellings caused by the Russian keyboard layout."""
+
+    base = _translate_keyboard_layout(command)
+    variants: list[str] = []
+    for candidate in (base, base.capitalize(), base.upper()):
+        if candidate != command and candidate not in variants:
+            variants.append(candidate)
+    return tuple(variants)
+
+
+COMMAND_KEYBOARD_ALIASES: dict[str, tuple[str, ...]] = {}
+for _command_choice in COMMAND_CHOICES:
+    _aliases = _keyboard_aliases(_command_choice)
+    if _aliases:
+        COMMAND_KEYBOARD_ALIASES[_command_choice] = _aliases
+
+COMMAND_ALIAS_TO_CANONICAL: dict[str, str] = {
+    alias: command
+    for command, aliases in COMMAND_KEYBOARD_ALIASES.items()
+    for alias in aliases
+}
+
+
+class _TeeStream:
+    """Mirror writes to multiple text streams without closing them."""
+
+    def __init__(self, *streams: IO[str] | None) -> None:
+        unique_streams: list[IO[str]] = []
+        for stream in streams:
+            if stream is None:
+                continue
+            if any(stream is existing for existing in unique_streams):
+                continue
+            unique_streams.append(stream)
+        self._streams: tuple[IO[str], ...] = tuple(unique_streams)
+
+    def write(self, data: str) -> int:  # pragma: no cover - direct delegation
+        for stream in self._streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:  # pragma: no cover - direct delegation
+        for stream in self._streams:
+            flush = getattr(stream, "flush", None)
+            if callable(flush):
+                flush()
+
+    def writable(self) -> bool:  # pragma: no cover - interface helper
+        if not self._streams:
+            return False
+        return all(getattr(stream, "writable", lambda: True)() for stream in self._streams)
+
+    def isatty(self) -> bool:  # pragma: no cover - interface helper
+        return any(getattr(stream, "isatty", lambda: False)() for stream in self._streams)
 
 
 @dataclass(frozen=True)
@@ -601,6 +711,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "uniprot",
         parents=[shared],
         help="Extract information for UniProt accessions",
+        aliases=list(COMMAND_KEYBOARD_ALIASES.get("uniprot", ())),
     )
     uniprot.add_argument(
         "--column",
@@ -639,6 +750,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         parents=[shared],
         help="Retrieve target information from ChEMBL",
         conflict_handler="resolve",
+        aliases=list(COMMAND_KEYBOARD_ALIASES.get("chembl", ())),
     )
     # ``--id-cols`` and other export options are inherited from ``shared``.
     chembl.set_defaults(normalize_at_export=True)
@@ -683,6 +795,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "iuphar",
         parents=[shared],
         help="Map UniProt accessions to IUPHAR classifications",
+        aliases=list(COMMAND_KEYBOARD_ALIASES.get("iuphar", ())),
     )
     iuphar.add_argument(
         "--target-csv",
@@ -723,6 +836,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "all",
         parents=[shared],
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
+        aliases=list(COMMAND_KEYBOARD_ALIASES.get("all", ())),
     )
     all_cmd.add_argument(
         "--chembl-out",
@@ -2452,6 +2566,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the selected target pipeline applying CLI policies."""
 
+    alias_token = getattr(args, "_command_keyboard_alias", None)
+    if isinstance(alias_token, str):
+        logger.info(
+            "command_alias_resolved",
+            alias=alias_token,
+            command=args.command,
+        )
+
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
         final_output = Path(io.default_output_path(args.input_csv, cfg.io))
@@ -2499,6 +2621,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    command_alias = COMMAND_ALIAS_TO_CANONICAL.get(getattr(args, "command", ""))
+    if command_alias is not None:
+        setattr(args, "_command_keyboard_alias", args.command)
+        args.command = command_alias
     prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
@@ -2515,8 +2641,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     original_stream = log_cfg.stream
     with log_path.open("a", encoding="utf-8") as log_stream:
-        log_cfg.stream = log_stream
+        tee_stream = _TeeStream(log_stream, original_stream)
+        log_cfg.stream = tee_stream
         configure_logger(log_cfg)
+        console_stream = original_stream or sys.stdout
+        if console_stream is None:  # pragma: no cover - defensive fallback
+            console_stream = sys.stdout
+        print(
+            f"[INFO] Structured logs are mirrored to '{log_path}'.",
+            file=console_stream,
+            flush=True,
+        )
         try:
 
             limit_value = getattr(args, "limit", None)
