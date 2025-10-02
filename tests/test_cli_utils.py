@@ -100,6 +100,12 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
 
     received_chunks: list[pd.DataFrame] = []
     received_order: list[str] | None = None
+    events: list[tuple[str, tuple[str, ...]]] = []
+    observed_orders: list[list[str]] = []
+
+    def tracking_hook(df: pd.DataFrame) -> pd.DataFrame:
+        events.append(("process", tuple(df.get("assay_chembl_id", []))))
+        return df
 
     def writer(
         chunks: Iterable[pd.DataFrame],
@@ -108,9 +114,17 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
         key_cols: list[str],
     ) -> Path:
         nonlocal received_order
-        received_order = col_order
         for chunk in chunks:
+            events.append(("write", tuple(chunk.get("assay_chembl_id", []))))
+            if col_order:
+                chunk = chunk.reindex(columns=col_order)
+            observed_orders.append(list(chunk.columns))
             received_chunks.append(chunk)
+        received_order = list(col_order) if col_order is not None else None
+        if received_order is not None:
+            for idx, chunk in enumerate(received_chunks):
+                received_chunks[idx] = chunk.reindex(columns=received_order)
+                observed_orders[idx] = list(received_chunks[idx].columns)
         combined = pd.concat(received_chunks, ignore_index=True)
         combined.to_csv(destination, index=False)
         return destination
@@ -120,7 +134,7 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
         schema=AssaysSchema,
         schema_name="AssaysSchema",
         validators=[validator],
-        metadata_hooks=None,
+        metadata_hooks=[tracking_hook],
         writer=writer,
         output_path=output,
         failure_path=failure_path,
@@ -135,7 +149,13 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
     assert exit_code == 0
     assert received_order is not None
     assert len(received_chunks) == 2
-    assert all(list(chunk.columns) == received_order for chunk in received_chunks)
+    assert all(order == received_order for order in observed_orders)
+    assert events == [
+        ("process", ("A1", "A2")),
+        ("write", ("A1", "A2")),
+        ("process", ("A3",)),
+        ("write", ("A3",)),
+    ]
 
     written = pd.read_csv(output)
     assert sorted(written["assay_chembl_id"]) == ["A1", "A2", "A3"]
