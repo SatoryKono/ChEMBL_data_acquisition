@@ -1,7 +1,9 @@
 # Project Summary
 
 This document provides an at-a-glance description of the ChEMBL data acquisition
-utilities, their structure, shared services and supporting workflows.
+utilities, their structure, shared services and supporting workflows. Refer to the
+[project README](../README.md#chembl-data-acquisition-utilities) for the current
+release version badge.
 
 ## Repository layout
 

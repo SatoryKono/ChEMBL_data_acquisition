@@ -1,5 +1,7 @@
 # ChEMBL Data Acquisition Utilities
 
+[![Version: 0.1.1](https://img.shields.io/badge/version-0.1.1-blue.svg)](../pyproject.toml)
+
 The primary documentation and reference material live in this directory.
 
 ## Features
