@@ -9,10 +9,10 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from library import input_initialisation_library as lib
+from library.integration import input_initialisation_library as lib
 from library.cli import LoggerConfig, configure_logger
 from library.config import Config
-from library.input_initialisation_library import (
+from library.integration.input_initialisation_library import (
     TableDict,
     _ensure_openpyxl,
     _safe_to_bool,

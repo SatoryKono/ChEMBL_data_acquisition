@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.uniprot_library`."""
+"""Tests for :mod:`library.integration.uniprot_library`."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 requests = pytest.importorskip("requests")
 responses = pytest.importorskip("responses")
 
-from library import uniprot_library as ul  # noqa: E402
+from library.integration import uniprot_library as ul  # noqa: E402
 from library.clients import uniprot as uniprot_client  # noqa: E402
 from library.config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg  # noqa: E402
 

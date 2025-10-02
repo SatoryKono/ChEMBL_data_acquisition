@@ -51,8 +51,8 @@ if __package__ in {None, ""}:
 
 from library import cli  # noqa: F401 - re-exported for monkeypatching in tests
 from library import io
-from library import molecule_catalog
-from library import pubchem_library as pl
+from library.integration import molecule_catalog
+from library.integration import pubchem_library as pl
 from library.cli import LoggerConfig
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command
@@ -63,10 +63,10 @@ from library.config import (
     MoleculeCatalogCfg,
     PubChemCfg,
 )
-from library.log import logger
+from library.common.log import logger
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
 import library.testitem_pipeline as pipeline
-from library.chembl_client import ChemblClient
+from library.integration.chembl_client import ChemblClient
 from library.testitem_pipeline import (
     PUBCHEM_CID_CACHE_ENCODING,
     PUBCHEM_COLUMNS,
@@ -780,7 +780,7 @@ def add_pubchem_data(
 
     Delegates to :func:`library.testitem_pipeline.add_pubchem_data` while
     relaxing the ``resolution_cache`` type to align with
-    :func:`library.pubchem_library.resolve_pubchem_record`.
+    :func:`library.integration.pubchem_library.resolve_pubchem_record`.
     """
 
     return pipeline.add_pubchem_data(

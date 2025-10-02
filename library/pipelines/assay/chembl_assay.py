@@ -1,0 +1,521 @@
+"""Assay and activity helpers for the ChEMBL API."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator, Sequence
+from urllib.parse import urlencode, urljoin
+
+import pandas as pd
+import requests
+
+from library.clients import ChemblClient, _chunked
+from ...config import ApiCfg, TESTITEM_FIELD_DEFAULTS
+from ...common.log import logger
+from ...common.pandas_utils import json_normalize_pyarrow
+
+ASSAY_VARIANT_COLUMN_ALIASES = {
+    "variant_sequence.isoform": "isoform",
+    "variant_sequence.mutation": "mutation",
+    "variant_sequence.sequence": "sequence",
+}
+
+
+ASSAY_COLUMNS = [
+    "aidx",
+    "assay_category",
+    "assay_cell_type",
+    "assay_chembl_id",
+    "assay_classifications",
+    "assay_group",
+    "assay_organism",
+    "assay_parameters",
+    "assay_strain",
+    "assay_subcellular_fraction",
+    "assay_tax_id",
+    "assay_test_type",
+    "assay_tissue",
+    "assay_type",
+    "assay_type_description",
+    "bao_format",
+    "bao_label",
+    "cell_chembl_id",
+    "confidence_score",
+    "description",
+    "document_chembl_id",
+    "src_assay_id",
+    "src_id",
+    "relationship_type",
+    "target_chembl_id",
+    "tissue_chembl_id",
+    "isoform",
+    "mutation",
+    "sequence",
+]
+
+
+def _apply_assay_column_aliases(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename nested variant sequence columns to flattened aliases."""
+    if df.empty:
+        return df
+    return df.rename(columns=ASSAY_VARIANT_COLUMN_ALIASES)
+
+
+ACTIVITY_COLUMNS = [
+    "activity_id",
+    "assay_chembl_id",
+    "document_chembl_id",
+    "molecule_chembl_id",
+    "record_id",
+    "assay_description",
+    "bao_label",
+    "bao_format",
+    "standard_type",
+    "standard_lower_value",
+    "standard_value",
+    "standard_upper_value",
+    "standard_units",
+    "standard_relation",
+    "type",
+    "value",
+    "upper_value",
+    "units",
+    "relation",
+    "qudt_units",
+    "pchembl_value",
+    "activity_comment",
+    "data_validity_comment",
+    "data_validity_description",
+    "potential_duplicate",
+    "src_id",
+    "src_assay_id",
+    "assay_variant_accession",
+    "assay_variant_mutation",
+]
+
+TESTITEM_PUBCHEM_COLUMNS: tuple[str, ...] = (
+    "pubchem_cid",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+    "pubchem_isomeric_smiles",
+    "pubchem_canonical_smiles",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+)
+
+
+TESTITEM_STRUCTURE_COLUMNS = {
+    "molecule_structures.canonical_smiles": "canonical_smiles",
+    "molecule_structures.standard_inchi": "standard_inchi",
+    "molecule_structures.standard_inchi_key": "standard_inchi_key",
+    "pubchem.cid": "pubchem_cid",
+    "pubchem.canonical_smiles": "pubchem_canonical_smiles",
+    "pubchem.isomeric_smiles": "pubchem_isomeric_smiles",
+    "pubchem.inchi": "pubchem_inchi",
+    "pubchem.inchikey": "pubchem_inchikey",
+    "pubchem.inchi_key": "pubchem_inchikey",
+    "pubchem.iupac_name": "pubchem_iupac_name",
+    "pubchem.molecular_formula": "pubchem_molecular_formula",
+}
+
+TESTITEM_COLUMNS = [
+    "molecule_chembl_id",
+    "parent_molecule_chembl_id",
+    "pref_name",
+    "max_phase",
+    "molecule_type",
+    "first_approval",
+    "oral",
+    "parenteral",
+    "topical",
+    "black_box_warning",
+    "structure_type",
+    "canonical_smiles",
+    "standard_inchi",
+    "standard_inchi_key",
+    *TESTITEM_PUBCHEM_COLUMNS,
+]
+
+
+TESTITEM_QUERY_FIELDS = TESTITEM_FIELD_DEFAULTS
+
+
+# ChEMBL API rejects URLs above ~4096 characters, keep a conservative margin.
+MAX_TESTITEM_URL_LENGTH = 4000
+
+
+def _split_chunk_for_url(
+    chunk: Sequence[str],
+    base_url: str,
+    *,
+    max_length: int = MAX_TESTITEM_URL_LENGTH,
+) -> Iterator[list[str]]:
+    """Yield sub-chunks that keep the request URL within ``max_length``."""
+
+    prefix = f"{base_url}&molecule_chembl_id__in="
+    prefix_length = len(prefix)
+    if prefix_length >= max_length:
+        raise ValueError("base URL exceeds maximum request length")
+
+    buffer: list[str] = []
+    buffer_length = 0
+    for identifier in chunk:
+        separator = 1 if buffer else 0
+        candidate_length = buffer_length + separator + len(identifier)
+        if prefix_length + candidate_length > max_length and buffer:
+            yield buffer
+            buffer = [identifier]
+            buffer_length = len(identifier)
+        elif prefix_length + candidate_length > max_length:
+            yield [identifier]
+            buffer = []
+            buffer_length = 0
+        else:
+            buffer.append(identifier)
+            buffer_length = candidate_length
+
+    if buffer:
+        yield buffer
+
+
+def _fetch_testitem_chunk(
+    identifiers: Sequence[str],
+    *,
+    base: str,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    timeout: float,
+) -> list[pd.DataFrame]:
+    """Fetch data for ``identifiers`` with adaptive splitting on HTTP 400."""
+
+    pending: list[list[str]] = [list(identifiers)]
+    frames: list[pd.DataFrame] = []
+    while pending:
+        current = pending.pop()
+        if not current:
+            continue
+        chunk_key = ",".join(current)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&molecule_chembl_id__in={chunk_key}"
+        next_url: str | None = url
+        seen_urls: set[str] = set()
+        chunk_frames: list[pd.DataFrame] = []
+        try:
+            while next_url:
+                absolute_url = urljoin(cfg.chembl_base, next_url)
+                if absolute_url in seen_urls:
+                    logger.warning(
+                        "pagination_loop_detected",
+                        extra={"stage": "chunk_loop", "chunk_key": chunk_key},
+                    )
+                    break
+                seen_urls.add(absolute_url)
+                data = client.request_json(absolute_url, cfg=cfg, timeout=timeout)
+                items = data.get("molecules") or data.get("molecule") or []
+                if items:
+                    chunk_frames.append(json_normalize_pyarrow(items))
+                page_meta = data.get("page_meta") or {}
+                next_token = page_meta.get("next")
+                next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        except requests.RequestException as exc:
+            response = getattr(exc, "response", None)
+            status_code = response.status_code if response is not None else None
+            if status_code == 400 and len(current) > 1:
+                midpoint = max(1, len(current) // 2)
+                first = current[:midpoint]
+                second = current[midpoint:]
+                logger.warning(
+                    "chunk_http_400_split",
+                    extra={
+                        "stage": "chunk_split",
+                        "chunk_key": chunk_key,
+                        "size": len(current),
+                        "status": status_code,
+                    },
+                )
+                if second:
+                    pending.append(second)
+                if first:
+                    pending.append(first)
+                continue
+            raise
+        if chunk_frames:
+            frames.append(pd.concat(chunk_frames, ignore_index=True))
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
+    return frames
+
+
+def get_assay(
+    chembl_assay_id: str,
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    timeout: float | None = None,
+) -> pd.DataFrame:
+    """Retrieve assay information as a DataFrame.
+
+    Parameters
+    ----------
+    chembl_assay_id:
+        Identifier of the assay to fetch.
+    cfg:
+        API configuration providing base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
+    timeout:
+        Optional override for the read timeout in seconds.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Normalised assay information or an empty frame when ``chembl_assay_id``
+        is empty or the record is missing.
+    """
+    if chembl_assay_id in {"", "#N/A"}:
+        return pd.DataFrame(columns=ASSAY_COLUMNS)
+    base = cfg.chembl_base.rstrip("/")
+    url = f"{base}/assay/{chembl_assay_id}?format=json"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
+    items = data.get("assays") or data.get("assay") or []
+    if not items:
+        return pd.DataFrame(columns=ASSAY_COLUMNS)
+    df = json_normalize_pyarrow(items).dropna(axis="columns", how="all")
+    df = _apply_assay_column_aliases(df)
+    return df.reindex(columns=ASSAY_COLUMNS)
+
+
+def get_assays(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+    require_variant_sequence: bool = False,
+) -> pd.DataFrame:
+    """Fetch assay records for *ids*.
+
+    Parameters
+    ----------
+    ids:
+        Assay identifiers to retrieve.
+    cfg:
+        API configuration providing base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
+    chunk_size:
+        Maximum number of IDs per HTTP request.
+    timeout:
+        Optional override for the read timeout in seconds.
+    require_variant_sequence:
+        If ``True``, only assays with a non-null ``variant_sequence`` are returned.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Combined assay records.
+
+    """
+    valid = [i for i in ids if i not in {"", "#N/A"}]
+    if not valid:
+        return pd.DataFrame(columns=ASSAY_COLUMNS)
+
+    records: list[pd.DataFrame] = []
+    base = f"{cfg.chembl_base.rstrip('/')}/assay.json?format=json"
+    if require_variant_sequence:
+        base += "&variant_sequence__isnull=false"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    for chunk in _chunked(valid, chunk_size):
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&assay_chembl_id__in={chunk_key}&limit={len(chunk)}"
+        chunk_frames: list[pd.DataFrame] = []
+        next_url: str | None = url
+        while next_url:
+            data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
+            items = data.get("assays") or data.get("assay") or []
+            if items:
+                df_chunk = json_normalize_pyarrow(items).dropna(
+                    axis="columns", how="all"
+                )
+                if not df_chunk.empty:
+                    chunk_frames.append(_apply_assay_column_aliases(df_chunk))
+            page_meta = data.get("page_meta") or {}
+            next_token = page_meta.get("next")
+            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        if chunk_frames:
+            records.append(pd.concat(chunk_frames, ignore_index=True))
+            logger.info(
+                "chunk_done",
+                extra={"stage": "chunk_done", "chunk_key": chunk_key},
+            )
+            continue
+        logger.info("chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key})
+    if not records:
+        return pd.DataFrame(columns=ASSAY_COLUMNS)
+    df = pd.concat(records, ignore_index=True)
+    df = _apply_assay_column_aliases(df)
+    return df.reindex(columns=ASSAY_COLUMNS)
+
+
+def get_activities(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+    extra_columns: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Fetch activity records for *ids*.
+
+    Parameters
+    ----------
+    ids:
+        Activity identifiers to retrieve.
+    cfg:
+        API configuration providing base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
+    chunk_size:
+        Maximum number of IDs per HTTP request.
+    timeout:
+        Optional override for the read timeout in seconds.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Combined activity records.
+    """
+    valid = [i for i in ids if i not in {"", "#N/A"}]
+    if not valid:
+        return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+
+    records: list[pd.DataFrame] = []
+    base = f"{cfg.chembl_base.rstrip('/')}/activity.json?format=json"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    for chunk in _chunked(valid, chunk_size):
+        chunk_key = ",".join(chunk)
+        logger.info(
+            "chunk_start", extra={"stage": "chunk_start", "chunk_key": chunk_key}
+        )
+        url = f"{base}&activity_id__in={chunk_key}&limit={len(chunk)}"
+        chunk_frames: list[pd.DataFrame] = []
+        next_url: str | None = url
+        while next_url:
+            data = client.request_json(next_url, cfg=cfg, timeout=effective_timeout)
+            items = data.get("activities") or data.get("activity") or []
+            if items:
+                df_chunk = json_normalize_pyarrow(items)
+                if not df_chunk.empty:
+                    chunk_frames.append(df_chunk)
+            page_meta = data.get("page_meta") or {}
+            next_token = page_meta.get("next")
+            next_url = urljoin(cfg.chembl_base, next_token) if next_token else None
+        if chunk_frames:
+            records.append(pd.concat(chunk_frames, ignore_index=True))
+            logger.info(
+                "chunk_done", extra={"stage": "chunk_done", "chunk_key": chunk_key}
+            )
+        else:
+            logger.info(
+                "chunk_skip", extra={"stage": "chunk_skip", "chunk_key": chunk_key}
+            )
+    if not records:
+        columns = list(ACTIVITY_COLUMNS)
+        if extra_columns:
+            for column in extra_columns:
+                if column not in columns:
+                    columns.append(column)
+        return pd.DataFrame(columns=columns)
+    df = pd.concat(records, ignore_index=True)
+    columns = list(ACTIVITY_COLUMNS)
+    if extra_columns:
+        for column in extra_columns:
+            if column not in columns:
+                columns.append(column)
+    return df.reindex(columns=columns)
+
+
+def get_testitem(
+    ids: Iterable[str],
+    *,
+    cfg: ApiCfg,
+    client: ChemblClient,
+    chunk_size: int = 5,
+    timeout: float | None = None,
+    fields: Sequence[str] | None = None,
+    page_limit: int = 1000,
+) -> pd.DataFrame:
+    """Fetch compound records for *ids*.
+
+    Parameters
+    ----------
+    ids:
+        Molecule identifiers to retrieve.
+    cfg:
+        API configuration providing base URL and timeouts.
+    client:
+        ChemblClient used for HTTP requests and caching.
+    chunk_size:
+        Maximum number of IDs per HTTP request.
+    timeout:
+        Optional override for the read timeout in seconds.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Combined compound records.
+    """
+    valid = [i for i in ids if i not in {"", "#N/A"}]
+    if not valid:
+        return pd.DataFrame(columns=TESTITEM_COLUMNS)
+
+    records: list[pd.DataFrame] = []
+    effective_fields = tuple(fields) if fields else TESTITEM_QUERY_FIELDS
+    max_limit = max(1, min(page_limit, 1000))
+    effective_chunk = max(1, min(chunk_size, max_limit))
+    base_params: list[tuple[str, str]] = [("format", "json"), ("limit", str(max_limit))]
+    if effective_fields:
+        base_params.append(("fields", ",".join(effective_fields)))
+    query_string = urlencode(base_params)
+    base = f"{cfg.chembl_base.rstrip('/')}/molecule.json?{query_string}"
+    effective_timeout = timeout if timeout is not None else cfg.timeout_read
+    for chunk in _chunked(valid, effective_chunk):
+        for url_chunk in _split_chunk_for_url(chunk, base):
+            records.extend(
+                _fetch_testitem_chunk(
+                    url_chunk,
+                    base=base,
+                    cfg=cfg,
+                    client=client,
+                    timeout=effective_timeout,
+                )
+            )
+    if not records:
+        return pd.DataFrame(columns=TESTITEM_COLUMNS)
+    df = pd.concat(records, ignore_index=True)
+    df = df.rename(columns=TESTITEM_STRUCTURE_COLUMNS)
+    return df.reindex(columns=TESTITEM_COLUMNS)
+
+
+__all__ = [
+    "get_assay",
+    "get_assays",
+    "get_activities",
+    "get_testitem",
+    "ASSAY_COLUMNS",
+    "ACTIVITY_COLUMNS",
+    "TESTITEM_COLUMNS",
+    "TESTITEM_PUBCHEM_COLUMNS",
+]

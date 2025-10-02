@@ -3,9 +3,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
 from library.clients import ChemblClient
-from library.dtype_inspector import inspect_dtypes, logger
+from library.common.dtype_inspector import inspect_dtypes, logger
 
 
 def _make_df(name: str) -> pd.DataFrame:

@@ -17,8 +17,8 @@ from cachetools import TTLCache
 from requests import Session
 
 from ..config import ApiCfg, ChemblCacheCfg, RetryCfg, session_with_retry
-from ..log import logger
-from ..rate_limiter import RateLimiter, get_limiter, sleep
+from ..common.log import logger
+from ..common.rate_limiter import RateLimiter, get_limiter, sleep
 
 
 @dataclass

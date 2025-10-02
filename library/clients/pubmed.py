@@ -14,8 +14,8 @@ from typing import Any
 import requests
 
 from ..config import PubMedCfg, RetryCfg
-from ..log import logger
-from ..rate_limiter import sleep
+from ..common.log import logger
+from ..common.rate_limiter import sleep
 
 __all__ = [
     "PubMedClient",

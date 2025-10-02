@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from library import document_postprocessing as dp
+from library.pipelines.document import postprocessing as dp
 from library.config import IoCfg
 from library.postprocessing import document as document_export_postprocessing
 

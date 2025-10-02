@@ -20,7 +20,7 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.log import logger
+from library.common.log import logger
 from library.table_quality import analyze_table_quality
 
 

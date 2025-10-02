@@ -13,10 +13,10 @@ import pytest
 
 from email.utils import format_datetime
 
-from library import rate_limiter as rl
+from library.common import rate_limiter as rl
 from library.clients import ChemblClient
 from library.config import ApiCfg, RetryCfg
-from library.logging_setup import LoggerConfig, configure_logger
+from library.common.logging_setup import LoggerConfig, configure_logger
 
 cachetools = pytest.importorskip("cachetools")
 from cachetools import TTLCache  # type: ignore[import-untyped]  # noqa: E402

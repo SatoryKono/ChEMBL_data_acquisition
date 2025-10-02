@@ -1,8 +1,8 @@
-"""Tests for limiter cache size in :mod:`library.rate_limiter`."""
+"""Tests for limiter cache size in :mod:`library.common.rate_limiter`."""
 
 from __future__ import annotations
 
-from library import rate_limiter as rl
+from library.common import rate_limiter as rl
 
 
 def test_limiter_cache_respects_maxsize() -> None:

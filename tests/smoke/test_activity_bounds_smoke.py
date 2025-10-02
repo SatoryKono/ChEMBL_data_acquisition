@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from library.config import ActivityBoundsCfg
-from library.log import logger as activity_logger
+from library.common.log import logger as activity_logger
 from library.processing.activity import compute_activity_bounds
 from library.schemas import normalize_activities
 

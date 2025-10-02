@@ -17,7 +17,7 @@ import argparse
 from collections.abc import Sequence
 
 from library.cli import configure_logger, create_logger_config
-from library.dtype_inspector import inspect_dtypes
+from library.common.dtype_inspector import inspect_dtypes
 
 
 def build_parser() -> argparse.ArgumentParser:

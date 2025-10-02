@@ -250,7 +250,7 @@ The `tests/data/pmids.csv` file contains a small set of PMIDs for experimentatio
 You can also run the PubMed pipeline directly via the library module:
 
 ```bash
-python -m library.pubmed_library \
+python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
     --output out/documents.csv \
     --log-level INFO
@@ -293,7 +293,7 @@ python -m library.utils.cli_tools.pipeline_targets_main \
 ```
 
 The command reads target identifiers from the CSV, chunks them according to `--chunk-size` and `--limit`, forwards the batch size to
-`library.pipeline_targets.run_pipeline` and writes the cached ChemBL table with pipeline metadata via `write_csv`. Use it to verify
+`library.pipelines.target.pipeline.run_pipeline` and writes the cached ChemBL table with pipeline metadata via `write_csv`. Use it to verify
 CLI overrides, logging and deterministic output before launching the network-backed `get_target_data` pipeline.
 
 ### `library/utils/cli_tools/get_activities.py`
@@ -461,7 +461,7 @@ as a reference artifact with the minimum `1` specified for `api.rps`.
 
 ## Logging
 
-CLI helpers configure structured JSON logging via `library.logging_setup.configure_logger`. Use environment variables or CLI flags to
+CLI helpers configure structured JSON logging via `library.common.logging_setup.configure_logger`. Use environment variables or CLI flags to
 adjust verbosity. The JSON structure is fixed and cannot be customised and now stamps each record with the staging phase:
 `fetch`, `raw`, `cleanup`, `normalize`, `validate`, or `final_export`.
 
@@ -517,7 +517,7 @@ smoke harness `tests/smoke/test_get_data_scripts.py`.
 ## Reproducibility
 
 Deterministic CSV writers in `library.io` keep outputs and metadata stable across runs. The function
-`library.csv_utils.write_csv_deterministic` normalises column ordering and metadata so repeated executions yield identical files.
+`library.common.csv_utils.write_csv_deterministic` normalises column ordering and metadata so repeated executions yield identical files.
 All CLI scripts share a common set of flags:
 
 ```bash

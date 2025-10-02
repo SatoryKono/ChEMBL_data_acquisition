@@ -11,7 +11,7 @@ import pytest
 
 from library.cli import prepare_io_paths
 from library.cli import parser as cli_parser
-from library.logging_setup import Logger, LoggerConfig
+from library.common.logging_setup import Logger, LoggerConfig
 
 
 def _build_namespace() -> argparse.Namespace:

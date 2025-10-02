@@ -53,7 +53,7 @@ from scripts import (
     get_testitem_data,
 )
 
-from library.logging_setup import Logger, LoggerConfig, configure_logger
+from library.common.logging_setup import Logger, LoggerConfig, configure_logger
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 

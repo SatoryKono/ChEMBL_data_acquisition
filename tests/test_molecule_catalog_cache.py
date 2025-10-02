@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from library.config import MoleculeCatalogCfg
-from library import molecule_catalog as mc
+from library.integration import molecule_catalog as mc
 from library.utils import atomic as atomic_utils
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from library.logging_setup import LoggerConfig, configure_logger
+from library.common.logging_setup import LoggerConfig, configure_logger
 from library.utils.cli_tools import csv_utils_main
 
 

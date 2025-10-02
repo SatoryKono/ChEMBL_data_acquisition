@@ -1,4 +1,4 @@
-"""Behavioural checks for :func:`library.uniprot_library.process`."""
+"""Behavioural checks for :func:`library.integration.uniprot_library.process`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from pytest import MonkeyPatch
 
-from library import uniprot_library as ul
+from library.integration import uniprot_library as ul
 from library.config import UniprotCfg
 
 

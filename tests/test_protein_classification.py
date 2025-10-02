@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from library import protein_classification as pc
-from library.iuphar_library import ClassificationRecord
+from library.integration.iuphar_library import ClassificationRecord
 
 
 class DummyClassifier:

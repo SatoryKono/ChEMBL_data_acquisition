@@ -78,7 +78,7 @@ flowchart LR
 
 ### Мониторинг структурированных логов
 
-Все утилиты используют `library.logging_setup.Logger` и пишут JSON-строки с уникальным `run_id`, именем стадии (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`) и дополнительными полями (`status`, `rps` и др.). Основные события:
+Все утилиты используют `library.common.logging_setup.Logger` и пишут JSON-строки с уникальным `run_id`, именем стадии (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`) и дополнительными полями (`status`, `rps` и др.). Основные события:
 
 | Событие | Когда появляется |
 | --- | --- |
@@ -263,7 +263,7 @@ python -m library.utils.cli_tools.pipeline_targets_main \
 ```
 
 Облегчённая CLI-команда повторяет интерфейс `get_target_data.py`, но запускает
-`library.pipeline_targets.run_pipeline` на подготовленных чанках без сетевых
+`library.pipelines.target.pipeline.run_pipeline` на подготовленных чанках без сетевых
 запросов. Идентификаторы читаются через `read_ids` с учётом `--chunk-size`,
 `--limit`, разделителя и кодировки, размер батча прокидывается в пайплайн, а
 результат записывается после `add_pipeline_metadata` и `write_csv`, что
@@ -335,7 +335,7 @@ python -m scripts.get_testitem_data \
 PubChem-дополнение добавляет детерминированные свойства (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
 `pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`). Чтобы
 отслеживать изменения между выгрузками, выгрузите только эти колонки во временный файл и посчитайте SHA-256 с помощью
-`library.metadata.file_sha256` или `library.csv_utils.sha256_file`. Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
+`library.metadata.file_sha256` или `library.common.csv_utils.sha256_file`. Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
 
 ### Требования к каталогу родительских молекул
 
@@ -349,7 +349,7 @@ PubChem-дополнение добавляет детерминированны
 
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
-`library.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
+`library.integration.molecule_catalog.load_parent_catalog` — функция считывает готовый кэш и, при его отсутствии,
 подкачивает свежие связи ребёнок→родитель из API ChEMBL.
 
 ### Обогащение солей и флагов каталога
@@ -417,7 +417,7 @@ get-activity-data
 
 ## Мониторинг структурированных логов
 
-Все CLI пишут JSON-логи через `library.logging_setup`. Запись включает отметку времени (`ts`), уровень (`level`), событие
+Все CLI пишут JSON-логи через `library.common.logging_setup`. Запись включает отметку времени (`ts`), уровень (`level`), событие
 (`event`) и `run_id`, унаследованный от параметров CLI; дополнительные поля добавляются после автоматической маскировки
 секретов. Применяйте `jq` или подобные инструменты, чтобы фильтровать события по `event`, `stage` или кодам предупреждений
 (`activity_bounds_*`, `parent_lookup_*` и т.д.). Меняйте уровень детализации флагом `--log-level` или переменными окружения без

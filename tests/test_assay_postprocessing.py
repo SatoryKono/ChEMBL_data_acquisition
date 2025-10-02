@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.assay_postprocessing`."""
+"""Tests for :mod:`library.pipelines.assay.postprocessing`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pandas as pd
 import pandera.errors as pa_errors
 import pytest
 
-from library import assay_postprocessing as ap
+from library.pipelines.assay import postprocessing as ap
 from library.config import IoCfg
 from library.schemas import AssayPostprocessSchema
 
