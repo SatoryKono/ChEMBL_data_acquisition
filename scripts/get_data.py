@@ -107,6 +107,7 @@ class PipelineStep:
     name: str
     main: Callable[[Sequence[str] | None], int]
     subcommand: str | None
+    output_flag: str = "--output"
 
     def build_arguments(
         self, cfg: PipelineRunConfig, output_path: Path | None = None
@@ -118,7 +119,7 @@ class PipelineStep:
             output_path if output_path is not None else cfg.output_path(self.name)
         )
         args = ["--config", str(cfg.config_path), "--input", str(input_csv)]
-        args.extend(["--output", str(output_csv)])
+        args.extend([self.output_flag, str(output_csv)])
         args.extend(["--log-level", cfg.log_level])
         if cfg.limit is not None:
             args.extend(["--limit", str(cfg.limit)])
@@ -143,7 +144,12 @@ class PipelineStep:
 
 _PIPELINE_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep("document", get_document_data.main, "all"),
-    PipelineStep("target", get_target_data.main, "all"),
+    PipelineStep(
+        "target",
+        get_target_data.main,
+        "all",
+        output_flag="--final-out",
+    ),
     PipelineStep("assay", get_assay_data.main, None),
     PipelineStep("testitem", get_testitem_data.main, None),
     PipelineStep("activity", get_activity_data.main, None),
