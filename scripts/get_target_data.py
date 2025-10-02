@@ -146,6 +146,7 @@ class _UniprotQueryPlan:
     unique_records: list[dict[str, str]]
     row_candidates: list[list[_UniprotCandidate]]
     row_index: list[Any]
+    candidate_columns: list[str]
 
 
 def _split_uniprot_tokens(value: str) -> Iterator[str]:
@@ -190,7 +191,9 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
     row_index = list(df.index)
 
     if not candidate_columns:
-        return _UniprotQueryPlan(unique_records, [[] for _ in row_index], row_index)
+        return _UniprotQueryPlan(
+            unique_records, [[] for _ in row_index], row_index, candidate_columns
+        )
 
     positions = [df.columns.get_loc(column) for column in candidate_columns]
     for row in df.itertuples(index=False, name=None):
@@ -219,7 +222,7 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
                     )
         row_candidates.append(candidates)
 
-    return _UniprotQueryPlan(unique_records, row_candidates, row_index)
+    return _UniprotQueryPlan(unique_records, row_candidates, row_index, candidate_columns)
 
 
 def _resolve_uniprot_matches(
@@ -1592,6 +1595,12 @@ def fetch_uniprot(
 
     logger.info("fetch_uniprot_start", output=str(output_csv))
     plan = _build_uniprot_query_plan(chembl_df, cfg)
+    logger.info(
+        "fetch_uniprot_plan",
+        rows=len(plan.row_index),
+        unique=len(plan.unique_records),
+        candidate_columns=plan.candidate_columns,
+    )
     if plan.unique_records:
         id_df = pd.DataFrame(plan.unique_records, dtype=object)
     else:
@@ -1630,6 +1639,34 @@ def fetch_uniprot(
     fetched_df = pd.read_csv(
         output_csv, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
     )
+    requested_ids = {
+        str(record.get("uniprot_id", "")).strip()
+        for record in plan.unique_records
+        if str(record.get("uniprot_id", "")).strip()
+    }
+    if "uniprot_id" in fetched_df.columns:
+        retrieved_ids = {
+            str(value).strip()
+            for value in fetched_df["uniprot_id"].dropna()
+            if str(value).strip()
+        }
+    else:
+        retrieved_ids = set()
+    missing_ids = requested_ids - retrieved_ids
+    logger.info(
+        "fetch_uniprot_coverage",
+        requested=len(requested_ids),
+        retrieved=len(retrieved_ids),
+        missing=len(missing_ids),
+    )
+    if missing_ids:
+        sample = sorted(missing_ids)[:10]
+        logger.debug(
+            "fetch_uniprot_missing_ids",
+            sample=sample,
+            sample_size=len(sample),
+            total_missing=len(missing_ids),
+        )
     if "uniprot_id" in fetched_df.columns:
         df = id_df.merge(fetched_df, on="uniprot_id", how="left", sort=False)
     else:
@@ -2087,6 +2124,26 @@ def merge_results(
     """
 
     logger.info("merge_results_start")
+    chembl_keys: set[str] = set()
+    if "uniprot_id" in combined_df.columns:
+        chembl_keys = {
+            str(value).strip()
+            for value in combined_df["uniprot_id"].dropna()
+            if str(value).strip()
+        }
+    iuphar_keys: set[str] = set()
+    if "uniprot_id" in iuphar_df.columns:
+        iuphar_keys = {
+            str(value).strip()
+            for value in iuphar_df["uniprot_id"].dropna()
+            if str(value).strip()
+        }
+    logger.info(
+        "merge_results_key_coverage",
+        chembl=len(chembl_keys),
+        iuphar=len(iuphar_keys),
+        matched=len(chembl_keys & iuphar_keys),
+    )
     merged = combined_df.merge(iuphar_df, on="uniprot_id", how="left")
     if classifier is None:
         classifier = pc.classifier_from_config(cfg)

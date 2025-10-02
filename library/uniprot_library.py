@@ -80,6 +80,21 @@ __all__ = [
 ]
 
 
+def _canonical_accession(accession: str) -> str | None:
+    """Return canonical accession for ``accession`` when it targets an isoform."""
+
+    if not isinstance(accession, str):
+        return None
+    head, sep, tail = accession.partition("-")
+    if not sep:
+        return None
+    head = head.strip()
+    tail = tail.strip()
+    if not head or not tail:
+        return None
+    return head
+
+
 UNIPROT_OUTPUT_COLUMNS: list[str] = [
     "uniprot_id",
     "names",
@@ -747,21 +762,24 @@ def extract_crossrefs(data: Any) -> dict[str, str]:
     Returns:
         A dictionary mapping database names to pipe-separated identifier
         strings. The returned keys include ``GuidetoPHARMACOLOGY``, ``family``,
-        ``SUPFAM``, ``PROSITE``, ``InterPro``, ``Pfam``, ``PRINTS``, and
-        ``TCDB``.
+        ``SUPFAM``, ``PROSITE``, ``InterPro``, ``Pfam``, ``PRINTS``, ``TCDB``,
+        ``xref_pdb``, ``xref_alphafold``, and ``xref_ensembl``.
 
     """
-    dbs = [
-        "GuidetoPHARMACOLOGY",
-        "family",
-        "SUPFAM",
-        "PROSITE",
-        "InterPro",
-        "Pfam",
-        "PRINTS",
-        "TCDB",
-    ]
-    result: dict[str, list[str]] = {db: [] for db in dbs}
+    db_map: dict[str, tuple[str, ...]] = {
+        "GuidetoPHARMACOLOGY": ("GuidetoPHARMACOLOGY",),
+        "family": ("family",),
+        "SUPFAM": ("SUPFAM",),
+        "PROSITE": ("PROSITE",),
+        "InterPro": ("InterPro",),
+        "Pfam": ("Pfam",),
+        "PRINTS": ("PRINTS",),
+        "TCDB": ("TCDB",),
+        "xref_pdb": ("PDB",),
+        "xref_alphafold": ("AlphaFoldDB",),
+        "xref_ensembl": ("Ensembl",),
+    }
+    result: dict[str, list[str]] = {column: [] for column in db_map}
     if isinstance(data, dict) and "results" in data:
         entries = data["results"]
     elif isinstance(data, list):
@@ -783,11 +801,16 @@ def extract_crossrefs(data: Any) -> dict[str, str]:
             if not isinstance(ref, dict):
                 continue
             db = ref.get("database")
-            if db in result:
-                ref_id = ref.get("id")
-                if isinstance(ref_id, str):
-                    result[db].append(ref_id)
-    return {db: "|".join(ids) for db, ids in result.items()}
+            if not isinstance(db, str):
+                continue
+            ref_id = ref.get("id")
+            if not isinstance(ref_id, str):
+                continue
+            for column, names in db_map.items():
+                if db in names:
+                    result[column].append(ref_id)
+                    break
+    return {column: "|".join(ids) for column, ids in result.items()}
 
 
 def extract_activity(data: Any) -> dict[str, str]:
@@ -999,6 +1022,74 @@ def _extract_audit_last_update(audit: dict[str, Any]) -> str | None:
     return None
 
 
+def _load_uniprot_entry(
+    uid: str, data_dir: Path, cfg: UniprotCfg
+) -> tuple[Any | None, str | None]:
+    """Return UniProt JSON data for ``uid`` with isoform-aware fallback."""
+
+    fallback_id = _canonical_accession(uid)
+    candidates: list[str] = [uid]
+    if fallback_id and fallback_id not in candidates:
+        candidates.append(fallback_id)
+
+    for candidate in candidates:
+        json_path = data_dir / f"{candidate}.json"
+        try:
+            with open(json_path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except FileNotFoundError:
+            continue
+        except json.JSONDecodeError:
+            logger.warning("uniprot_json_malformed", uid=candidate)
+            continue
+        else:
+            if candidate != uid:
+                logger.info(
+                    "uniprot_isoform_fallback_cache",
+                    isoform=uid,
+                    canonical=candidate,
+                )
+            return data, candidate
+
+    logger.info("uniprot_json_download", uid=uid)
+    for index, candidate in enumerate(candidates):
+        try:
+            data = fetch_uniprot(candidate, cfg=cfg)
+        except UniProtFetchError as exc:
+            if candidate == uid and fallback_id and index == 0:
+                logger.info(
+                    "uniprot_isoform_fetch_retry",
+                    isoform=uid,
+                    canonical=fallback_id,
+                    error=str(exc),
+                )
+                continue
+            logger.warning("uniprot_json_fetch_failed", uid=candidate, error=str(exc))
+            return None, None
+
+        data_dir.mkdir(parents=True, exist_ok=True)
+        persist_ids = [candidate]
+        if candidate != uid:
+            persist_ids.append(uid)
+            logger.info(
+                "uniprot_isoform_fallback_fetch",
+                isoform=uid,
+                canonical=candidate,
+            )
+        for persist_id in persist_ids:
+            json_path = data_dir / f"{persist_id}.json"
+            try:
+                with open(json_path, "w", encoding="utf-8") as handle:
+                    json.dump(data, handle)
+            except OSError as exc:  # pragma: no cover - disk I/O failure
+                logger.warning(
+                    "uniprot_json_write_failed", uid=persist_id, error=str(exc)
+                )
+        return data, candidate
+
+    return None, None
+
+
 def collect_info(
     uid: str,
     data_dir: Path | str | None = None,
@@ -1034,7 +1125,6 @@ def collect_info(
         data_dir = _DEFAULT_UNIPROT_DATA_DIR
     data_dir = Path(data_dir)
 
-    json_path = data_dir / f"{uid}.json"
     result = {
         "uniprot_id": uid,
         "names": "",
@@ -1086,25 +1176,8 @@ def collect_info(
         "timestamp_utc": "",
         "uniProtkbIdFallback": "",
     }
-    try:
-        with open(json_path, encoding="utf-8") as handle:
-            data = json.load(handle)
-    except FileNotFoundError:
-        logger.info("uniprot_json_download", uid=uid)
-        try:
-            data = fetch_uniprot(uid, cfg=cfg)
-        except UniProtFetchError as exc:
-            logger.warning("uniprot_json_fetch_failed", uid=uid, error=str(exc))
-            return result
-        data_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            with open(json_path, "w", encoding="utf-8") as handle:
-                json.dump(data, handle)
-        except OSError as exc:  # pragma: no cover - disk I/O failure
-            logger.warning("uniprot_json_write_failed", uid=uid, error=str(exc))
-            return result
-    except json.JSONDecodeError:
-        logger.warning("uniprot_json_malformed", uid=uid)
+    data, _source_id = _load_uniprot_entry(uid, data_dir, cfg)
+    if data is None:
         return result
 
     names = extract_names(data)
