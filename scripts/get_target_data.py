@@ -1002,6 +1002,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
     )
 
+    def _run_pipeline_with_meta(**kwargs: object) -> int:
+        original_cli_write_meta = cli_utils_module.write_meta_yaml
+        cli_utils_module.write_meta_yaml = write_meta_yaml
+        try:
+            return run_pipeline(**kwargs)
+        finally:
+            cli_utils_module.write_meta_yaml = original_cli_write_meta
+
     if normalize_at_export:
         try:
             _write_raw_dump(
@@ -1119,14 +1127,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     fetched_rows_total = 0
     raw_dump_rows_total = 0
     post_cleanup_rows_total = 0
-
-    def _run_pipeline_with_meta(**kwargs: object) -> int:
-        original_cli_write_meta = cli_utils_module.write_meta_yaml
-        cli_utils_module.write_meta_yaml = write_meta_yaml
-        try:
-            return run_pipeline(**kwargs)
-        finally:
-            cli_utils_module.write_meta_yaml = original_cli_write_meta
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
         nonlocal placeholder_replacements, post_cleanup_rows_total
