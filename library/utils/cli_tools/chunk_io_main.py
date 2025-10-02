@@ -16,7 +16,7 @@ from library.cli import (
     path_argument,
 )
 from library.config import Config, ensure_dirs, print_config
-from library.utils.config import DEFAULT_CONFIG_RELATIVE
+from library.utils.config import DEFAULT_CONFIG_PATH
 from library.io.paths import default_output_path
 from library.log import logger
 
@@ -49,8 +49,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--config",
         dest="config",
         type=path_argument,
-        default=DEFAULT_CONFIG_RELATIVE,
-        help="YAML configuration file",
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--print-config",
