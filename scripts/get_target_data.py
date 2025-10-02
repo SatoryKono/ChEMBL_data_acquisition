@@ -32,6 +32,7 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
+import library.cli_utils as cli_utils_module
 from library import chembl_library as cl
 from library import cli
 from library import io
@@ -514,6 +515,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
                 "Use --no-normalize-at-export to keep the raw payload."
             ),
         )
+        has_out_alias = any(
+            "--out" in action.option_strings for action in parser_obj._actions
+        )
+        if not has_out_alias:
+            parser_obj.add_argument(
+                "--out",
+                dest="final_out_alias",
+                type=path_argument,
+                default=argparse.SUPPRESS,
+                help=argparse.SUPPRESS,
+            )
+
     _add_output_arguments(root, defaults=True)
     _add_output_arguments(shared, defaults=False)
 
@@ -567,7 +580,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "chembl",
         parents=[shared],
         help="Retrieve target information from ChEMBL",
+        conflict_handler="resolve",
     )
+    # ``--id-cols`` and other export options are inherited from ``shared``.
+    chembl.set_defaults(normalize_at_export=True)
     chembl.add_argument(
         "--column",
         default="target_chembl_id",
@@ -933,8 +949,17 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         else _raw_output_path(base_output)
     )
     normalized_output = _normalized_output_path(base_output)
-    normalize_at_export = getattr(args, "normalize_at_export", True)
-    reindex_raw = getattr(args, "reindex_raw", True)
+    normalize_value = getattr(args, "normalize_at_export", None)
+    if normalize_value in (None, argparse.SUPPRESS):
+        normalize_at_export = True
+    else:
+        normalize_at_export = bool(normalize_value)
+
+    reindex_value = getattr(args, "reindex_raw", None)
+    if reindex_value in (None, argparse.SUPPRESS):
+        reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
+    else:
+        reindex_raw = bool(reindex_value)
 
     raw_chunks: list[pd.DataFrame] = []
     parsed_chunks: list[pd.DataFrame] = []
@@ -996,7 +1021,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         failure_path = raw_destination.with_name(
             f"{raw_destination.stem}_failure_cases.csv"
         )
-        exit_code = run_pipeline(
+        exit_code = _run_pipeline_with_meta(
             fetcher=_raw_fetcher,
             schema=None,
             schema_name="raw_target_payload",
@@ -1025,7 +1050,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
-        final_output = Path(io.default_output_path(args.input_csv, cfg.io))
+        output_candidate = getattr(args, "output_csv", None)
+        if output_candidate not in (None, argparse.SUPPRESS):
+            final_output = Path(output_candidate)
+        else:
+            final_output = Path(io.default_output_path(args.input_csv, cfg.io))
     else:
         final_output = Path(final_candidate)
 
@@ -1041,8 +1070,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "unsupported_raw_format", format=raw_format, fallback="csv"
         )
         raw_format = "csv"
-    reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
-    normalize_at_export = bool(getattr(args, "normalize_at_export", False))
     id_cols_value = getattr(args, "id_cols", None)
     if id_cols_value in (None, argparse.SUPPRESS):
         key_columns = ["target_chembl_id"]
@@ -1058,6 +1085,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     fetched_rows_total = 0
     raw_dump_rows_total = 0
     post_cleanup_rows_total = 0
+
+    def _run_pipeline_with_meta(**kwargs: object) -> int:
+        original_cli_write_meta = cli_utils_module.write_meta_yaml
+        cli_utils_module.write_meta_yaml = write_meta_yaml
+        try:
+            return run_pipeline(**kwargs)
+        finally:
+            cli_utils_module.write_meta_yaml = original_cli_write_meta
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
         nonlocal placeholder_replacements, post_cleanup_rows_total
@@ -1086,38 +1121,41 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
 
-    fetch_source: list[pd.DataFrame]
-    if parsed_chunks:
-        fetch_source = parsed_chunks
-    else:
-        fetch_source = [pd.DataFrame(columns=TARGET_FIELDS)]
-
     def fetcher() -> Iterator[pd.DataFrame]:
 
         nonlocal fetched_rows_total
-        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            for chunk_ids in _chunked(limited_ids, cfg.target.chembl.chunk_size):
-                if not chunk_ids:
-                    continue
-                try:
-                    chunk_df = cl.get_targets(
-                        chunk_ids,
-                        cfg=cfg.api,
-                        client=client,
-                        mapping_cfg=cfg.uniprot_mapping,
-                        chunk_size=cfg.target.chembl.chunk_size,
-                        timeout=cfg.target.chembl.timeout,
-                    )
-                except (requests.RequestException, ValueError) as exc:
-                    logger.error(
-                        "chembl_fetch_failed",
-                        error=str(exc),
-                        chunk_size=cfg.target.chembl.chunk_size,
-                        timeout=cfg.target.chembl.timeout,
-                    )
-                    raise PipelineError(str(exc)) from exc
+        if parsed_chunks:
+            for chunk_df in parsed_chunks:
                 fetched_rows_total += len(chunk_df)
                 yield chunk_df
+            return
+
+        if not limited_ids:
+            yield pd.DataFrame(columns=TARGETS_COLUMN_ORDER)
+            return
+
+        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+            try:
+                for _, _, parsed_chunk in cl.iter_target_batches(
+                    limited_ids,
+                    cfg=cfg.api,
+                    client=client,
+                    mapping_cfg=cfg.uniprot_mapping,
+                    chunk_size=cfg.target.chembl.chunk_size,
+                    timeout=cfg.target.chembl.timeout,
+                ):
+                    if parsed_chunk.empty:
+                        continue
+                    fetched_rows_total += len(parsed_chunk)
+                    yield parsed_chunk
+            except (requests.RequestException, ValueError) as exc:
+                logger.error(
+                    "chembl_fetch_failed",
+                    error=str(exc),
+                    chunk_size=cfg.target.chembl.chunk_size,
+                    timeout=cfg.target.chembl.timeout,
+                )
+                raise PipelineError(str(exc)) from exc
 
 
     def writer(
@@ -1215,7 +1253,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         metadata_hooks.insert(0, normalize_targets)
 
 
-    exit_code = run_pipeline(
+    exit_code = _run_pipeline_with_meta(
         fetcher=fetcher,
         schema=TargetsSchema,
         schema_name="TargetsSchema",
