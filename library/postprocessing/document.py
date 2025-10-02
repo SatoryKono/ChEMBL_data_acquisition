@@ -131,6 +131,23 @@ METADATA_SOURCE_COLUMNS: Mapping[str, Sequence[str]] = {
         "crossref.Error",
     ),
 }
+
+CHEMBL_EXPORT_ALIASES: Mapping[str, str] = {
+    "ChEMBL.document_chembl_id": "document_chembl_id",
+    "ChEMBL.title": "title",
+    "ChEMBL.abstract": "abstract",
+    "ChEMBL.doi": "doi",
+    "ChEMBL.year": "year",
+    "ChEMBL.journal": "journal",
+    "ChEMBL.journal_abbrev": "journal_abbrev",
+    "ChEMBL.volume": "volume",
+    "ChEMBL.issue": "issue",
+    "ChEMBL.first_page": "first_page",
+    "ChEMBL.last_page": "last_page",
+    "ChEMBL.pubmed_id": "pubmed_id",
+    "ChEMBL.authors": "authors",
+    "ChEMBL.source": "source",
+}
 ERROR_COLUMN_MAP: Mapping[str, str] = {
     "pubmed": "PubMed.Error",
     "semantic_scholar": "scholar.Error",
@@ -208,6 +225,22 @@ def _string_series(series: pd.Series) -> pd.Series:
         return pd.Series(dtype="string")
     result = series.astype("string").fillna("").str.strip()
     return result
+
+
+def _apply_export_aliases(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of ``df`` with ChEMBL export aliases populated."""
+
+    frame = df.copy()
+    for source, target in CHEMBL_EXPORT_ALIASES.items():
+        if source not in frame.columns:
+            continue
+        if target in frame.columns:
+            mask = _string_series(frame[target]) == ""
+            if mask.any():
+                frame.loc[mask, target] = frame.loc[mask, source]
+        else:
+            frame[target] = frame[source]
+    return frame
 
 
 def _truthy_mask(series: pd.Series) -> pd.Series:
@@ -370,39 +403,42 @@ def _coverage_status(score: int, has_error: bool) -> str:
 def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     """Return analytics-oriented projection of ``df``."""
 
-    validate_columns(df, REQUIRED_INPUT_COLUMNS)
-    if df.empty:
+    frame = _apply_export_aliases(df)
+    validate_columns(frame, REQUIRED_INPUT_COLUMNS)
+    if frame.empty:
         result = pd.DataFrame(columns=list(PREPROCESSED_COLUMN_ORDER))
         return result
 
-    result = pd.DataFrame(index=df.index)
-    result["document_chembl_id"] = _string_series(df["document_chembl_id"])
+    result = pd.DataFrame(index=frame.index)
+    result["document_chembl_id"] = _string_series(frame["document_chembl_id"])
 
     for target, columns in COALESCE_PRIORITIES.items():
-        result[target] = _coalesce_columns(df, columns)
+        result[target] = _coalesce_columns(frame, columns)
 
-    if "publication_class" in df.columns:
-        result["publication_class"] = _string_series(df["publication_class"])
+    if "publication_class" in frame.columns:
+        result["publication_class"] = _string_series(frame["publication_class"])
     else:
-        result["publication_class"] = pd.Series([""] * len(df), index=df.index, dtype="string")
+        result["publication_class"] = pd.Series(
+            [""] * len(frame), index=frame.index, dtype="string"
+        )
 
-    review_series = pd.Series([False] * len(df), index=df.index)
+    review_series = pd.Series([False] * len(frame), index=frame.index)
     if "publication_class" in result.columns:
         review_series = review_series | (
             result["publication_class"].str.lower() == "review"
         )
     for column in REVIEW_COLUMNS:
-        if column in df.columns:
-            review_series = review_series | _series_to_bool(df[column])
+        if column in frame.columns:
+            review_series = review_series | _series_to_bool(frame[column])
     result["is_review"] = review_series
 
-    metadata_series, metadata_flags = _build_metadata_flags(df)
+    metadata_series, metadata_flags = _build_metadata_flags(frame)
     result["metadata_sources"] = metadata_series
     result["metadata_source_count"] = metadata_flags.pop("metadata_source_count")
     for column, mask in metadata_flags.items():
         result[column] = mask
 
-    error_sources, has_error = _build_error_sources(df)
+    error_sources, has_error = _build_error_sources(frame)
     result["error_sources"] = error_sources
     result["has_error"] = has_error
 
@@ -415,8 +451,8 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     ]
     result["coverage_status"] = pd.Series(status_values, index=df.index, dtype="string")
 
-    mesh_columns = [column for column in MESH_TERM_COLUMNS if column in df.columns]
-    result["mesh_terms"] = _aggregate_terms(df, mesh_columns)
+    mesh_columns = [column for column in MESH_TERM_COLUMNS if column in frame.columns]
+    result["mesh_terms"] = _aggregate_terms(frame, mesh_columns)
 
     if "publication_year" in result.columns:
         publication_year = result["publication_year"].replace("", pd.NA)
@@ -424,24 +460,30 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
             publication_year, errors="coerce"
         ).astype("Int64")
     else:
-        result["publication_year"] = pd.Series([pd.NA] * len(df), index=df.index, dtype="Int64")
+        result["publication_year"] = pd.Series(
+            [pd.NA] * len(frame), index=frame.index, dtype="Int64"
+        )
 
     for column in PASS_THROUGH_COLUMNS:
-        if column not in df.columns:
+        if column not in frame.columns:
             if column == "Index":
-                result[column] = pd.Series([""] * len(df), index=df.index, dtype="string")
+                result[column] = pd.Series(
+                    [""] * len(frame), index=frame.index, dtype="string"
+                )
             else:
-                result[column] = pd.Series([""] * len(df), index=df.index, dtype="string")
+                result[column] = pd.Series(
+                    [""] * len(frame), index=frame.index, dtype="string"
+                )
             continue
         if column == "Index":
-            index_series = df[column]
+            index_series = frame[column]
             if pd.api.types.is_numeric_dtype(index_series):
                 padded = index_series.fillna(0).astype(int).astype(str)
             else:
                 padded = _string_series(index_series)
             result[column] = padded.str.zfill(INDEX_PAD_WIDTH)
         else:
-            result[column] = _string_series(df[column])
+            result[column] = _string_series(frame[column])
 
     existing_columns = [
         column for column in PREPROCESSED_COLUMN_ORDER if column in result.columns
