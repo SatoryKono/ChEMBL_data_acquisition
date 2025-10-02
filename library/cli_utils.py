@@ -40,17 +40,6 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 SchemaT = TypeVar("SchemaT")
 
 
-def resolve_invocation(prog: str, argv: Sequence[str] | None) -> tuple[str, ...]:
-    """Return a normalised tuple describing the CLI invocation."""
-
-    if argv is None:
-        return tuple(str(arg) for arg in sys.argv)
-
-    resolved = [prog]
-    resolved.extend(str(arg) for arg in argv)
-    return tuple(resolved)
-
-
 class ValidationResult(Protocol):
     """Protocol describing the return type of validator callables."""
 
@@ -86,18 +75,33 @@ class PipelineError(RuntimeError):
 
 
 def resolve_invocation(
-
-    prog: str | None, argv: Sequence[object] | None
+    program: str | None, argv: Sequence[object] | None
 ) -> tuple[str, ...]:
-    """Return a normalised tuple describing the CLI invocation."""
+    """Return a normalised tuple describing the CLI invocation.
+
+    Parameters
+    ----------
+    program:
+        Optional executable name. When provided it is prefixed to the
+        resulting tuple.
+    argv:
+        Sequence of arguments. ``None`` falls back to ``sys.argv[1:]`` to
+        mirror standard ``argparse`` semantics.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Normalised invocation containing the program followed by positional
+        arguments represented as strings.
+    """
 
     parts: list[str] = []
-    if prog:
-        parts.append(str(prog))
-    if argv:
-        parts.extend(str(arg) for arg in argv)
+    if program:
+        parts.append(str(program))
+    if argv is None:
+        argv = sys.argv[1:]
+    parts.extend(str(arg) for arg in argv)
     return tuple(parts)
-
 
 
 def run_cli_command(
@@ -156,16 +160,6 @@ def run_cli_command(
     return exit_code
 
 
-def resolve_invocation(
-    program: str, argv: Sequence[str] | None
-) -> tuple[str, ...]:
-    """Return the effective command invocation as a tuple of strings."""
-
-    if argv is None:
-        argv = sys.argv[1:]
-    return (program, *map(str, argv))
-
-
 @overload
 def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]: ...
 
@@ -196,8 +190,6 @@ def run_pipeline(
     output_path: Path,
     failure_path: Path,
     command: str | None = None,
-    invocation: Sequence[str] | None = None,
-
     config_snapshot: Mapping[str, object],
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
@@ -468,11 +460,8 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
-    resolved_invocation = tuple(map(str, invocation)) if invocation else ()
-    resolved_command = (
-        command
-        if command is not None
-        else (" ".join(resolved_invocation) if resolved_invocation else " ".join(sys.argv))
+    resolved_invocation = (
+        resolve_invocation(None, invocation) if invocation is not None else ()
     )
 
     meta_path = write_meta_yaml(
