@@ -128,7 +128,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
-
+        chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
         global_limiter = get_global_limiter(
             cfg.rate.global_rps, cfg.rate.global_burst
         )
@@ -159,8 +159,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     raise PipelineError(str(exc)) from exc
 
-            def _run_sequential(chunks: Iterator[list[str]]) -> Iterator[pd.DataFrame]:
-                for chunk_ids in chunks:
+
+            workers = max(1, cfg.activity.workers)
+            if workers == 1:
+                for chunk_ids in chunk_iter:
+
                     yield _fetch_chunk(chunk_ids)
 
 
@@ -169,7 +172,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             next_index = 0
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
-                for index, chunk_ids in enumerate(id_chunks):
+
+                for index, chunk_ids in enumerate(chunk_iter):
+
                     future = executor.submit(_fetch_chunk, chunk_ids)
                     pending[future] = index
                     if len(pending) >= workers:
@@ -360,6 +365,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "column": "activity.column",
             "batch_size": "activity.batch_size",
             "limit": "activity.limit",
+            "offset": "activity.offset",
             "dry_run": "activity.dry_run",
         },
         run=run,
