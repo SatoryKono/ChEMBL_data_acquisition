@@ -200,7 +200,9 @@ def run_pipeline(
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
     cfg: Config | None = None,
-    strict_mode: bool = False,
+    stats_extra: (
+        Mapping[str, object] | Callable[[], Mapping[str, object]] | None
+    ) = None,
     logger: Logger | None = None,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
@@ -247,9 +249,10 @@ def run_pipeline(
         Callable invoked after writing the CSV to compute quality metrics.
     cfg:
         Optional application configuration forwarded to sidecar metadata.
-    strict_mode:
-        When ``True`` metadata hook failures abort the pipeline mimicking the
-        legacy behaviour used in CI environments.
+    stats_extra:
+        Optional mapping or callable returning a mapping of additional
+        statistics merged into the metadata output. Intended for
+        pipeline-specific diagnostics such as fetch failures.
     logger:
         Optional logger.  Defaults to :data:`library.log.logger` when omitted.
 
@@ -565,6 +568,9 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
+    extra_stats = stats_extra() if callable(stats_extra) else stats_extra
+    for key, value in (extra_stats or {}).items():
+        stats[key] = value
  
     resolved_invocation = invocation_tuple
 
