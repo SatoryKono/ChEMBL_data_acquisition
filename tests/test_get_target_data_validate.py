@@ -18,5 +18,6 @@ def test_validate_and_write(
     out = tmp_path / "out.csv"
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *a, **k: None)
     exit_code = gtd.validate_and_write(df, out, cfg)
+    normalized = gtd._normalized_output_path(out)
     assert exit_code == 0
-    assert out.exists()
+    assert normalized.exists()
