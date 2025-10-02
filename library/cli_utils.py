@@ -40,15 +40,29 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 SchemaT = TypeVar("SchemaT")
 
 
-def resolve_invocation(prog: str, argv: Sequence[str] | None) -> tuple[str, ...]:
-    """Return a normalised tuple describing the CLI invocation."""
+def resolve_invocation(
+    prog: str | None,
+    argv: Sequence[object] | None,
+) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation.
+
+    The helper captures the effective command line as a tuple of strings.
+    ``prog`` is optional to accommodate ``argparse`` defaults, while
+    ``argv`` may be ``None`` to mirror ``argparse`` behaviour where the
+    process arguments are used implicitly.
+    """
+
+    parts: list[str] = []
+    if prog:
+        parts.append(str(prog))
 
     if argv is None:
-        return tuple(str(arg) for arg in sys.argv)
+        argv_iterable: Sequence[object] = sys.argv[1:]
+    else:
+        argv_iterable = argv
 
-    resolved = [prog]
-    resolved.extend(str(arg) for arg in argv)
-    return tuple(resolved)
+    parts.extend(str(arg) for arg in argv_iterable)
+    return tuple(parts)
 
 
 class ValidationResult(Protocol):
@@ -83,20 +97,6 @@ def _callable_name(func: Callable[..., object]) -> str:
 
 class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
-
-
-def resolve_invocation(
-
-    prog: str | None, argv: Sequence[object] | None
-) -> tuple[str, ...]:
-    """Return a normalised tuple describing the CLI invocation."""
-
-    parts: list[str] = []
-    if prog:
-        parts.append(str(prog))
-    if argv:
-        parts.extend(str(arg) for arg in argv)
-    return tuple(parts)
 
 
 
@@ -156,16 +156,6 @@ def run_cli_command(
     return exit_code
 
 
-def resolve_invocation(
-    program: str, argv: Sequence[str] | None
-) -> tuple[str, ...]:
-    """Return the effective command invocation as a tuple of strings."""
-
-    if argv is None:
-        argv = sys.argv[1:]
-    return (program, *map(str, argv))
-
-
 @overload
 def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]: ...
 
@@ -202,7 +192,6 @@ def run_pipeline(
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
-    invocation: Sequence[str] | None = None,
     cfg: Config | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
@@ -235,9 +224,6 @@ def run_pipeline(
         Path for persisting validation failure cases.
     command:
         Command used to launch the pipeline.  Stored in metadata output.
-    invocation:
-        Normalised command invocation used when ``command`` is not provided.
-
     config_snapshot:
         Mapping of configuration values persisted to metadata.
     inputs:
