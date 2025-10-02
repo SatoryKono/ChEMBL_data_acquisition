@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from library.clients import ChemblClient, _chunked
+from library.clients import ChemblClient
 from .config import ApiCfg
 
 DOCUMENT_COLUMNS = [
@@ -26,6 +26,8 @@ DOCUMENT_COLUMNS = [
     "authors",
     "source",
 ]
+
+INVALID_DOCUMENT_IDS = {"", "#N/A"}
 
 
 def get_documents(
@@ -57,19 +59,14 @@ def get_documents(
         Data frame containing the retrieved document metadata. Missing
         identifiers result in an empty frame.
     """
-    # Filter out empty placeholders and deduplicate to avoid redundant HTTP
-    # requests for the same identifier.
-    valid = [i for i in ids if i not in {"", "#N/A"}]
-    unique_ids = list(dict.fromkeys(valid))
-    if not unique_ids:
-        return pd.DataFrame(columns=DOCUMENT_COLUMNS)
-
     base = f"{cfg.chembl_base.rstrip('/')}/document.json?format=json"
     effective_timeout = timeout if timeout is not None else cfg.timeout_read
     records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    chunk: list[str] = []
 
-    for chunk in _chunked(unique_ids, chunk_size):
-        url = f"{base}&document_chembl_id__in={','.join(chunk)}"
+    def fetch_chunk(chunk_ids: list[str]) -> None:
+        url = f"{base}&document_chembl_id__in={','.join(chunk_ids)}"
         data = client.request_json(url, cfg=cfg, timeout=effective_timeout)
         items = data.get("documents") or data.get("document") or []
         for item in items:
@@ -91,7 +88,21 @@ def get_documents(
             }
             records.append(record)
 
-    if not records:
+    for identifier in ids:
+        if identifier in INVALID_DOCUMENT_IDS:
+            continue
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        chunk.append(identifier)
+        if len(chunk) >= chunk_size:
+            fetch_chunk(chunk)
+            chunk = []
+
+    if chunk:
+        fetch_chunk(chunk)
+
+    if not seen or not records:
         return pd.DataFrame(columns=DOCUMENT_COLUMNS)
 
     df = pd.DataFrame(records)

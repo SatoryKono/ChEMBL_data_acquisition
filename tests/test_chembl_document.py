@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from library.chembl_document import get_documents
 from library.config import ApiCfg
 
@@ -11,12 +13,14 @@ class FakeClient:
 
     def __init__(self) -> None:
         self.called: list[tuple[str, float | None]] = []
+        self.chunks: list[list[str]] = []
 
     def request_json(
         self, url: str, *, cfg: ApiCfg, timeout: float | None = None
     ) -> dict[str, object]:
         self.called.append((url, timeout))
         ids = url.split("document_chembl_id__in=")[-1].split("&")[0].split(",")
+        self.chunks.append(ids)
         docs = [
             {
                 "document_chembl_id": i,
@@ -82,3 +86,21 @@ def test_get_documents_deduplicates_ids(
 
     assert df["document_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
     assert len(client.called) == len({"CHEMBL1", "CHEMBL2"})
+
+
+def test_get_documents_handles_large_iterable() -> None:
+    cfg = ApiCfg(
+        chembl_base="https://example.com",
+        user_agent="test/0.1 (mailto:test@example.com)",
+    )
+    client = FakeClient()
+
+    def id_source() -> Iterable[str]:
+        for index in range(20):
+            yield f"CHEMBL{index // 2}"
+
+    df = get_documents(id_source(), cfg=cfg, client=client, chunk_size=3)
+
+    assert df["document_chembl_id"].tolist() == [f"CHEMBL{i}" for i in range(10)]
+    assert all(len(chunk) <= 3 for chunk in client.chunks)
+    assert sum(len(chunk) for chunk in client.chunks) == 10
