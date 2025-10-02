@@ -1,5 +1,8 @@
 # Usage Guide
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 ## Shared CLI options
 
 All `scripts/get_*_data.py` commands share a common interface. After

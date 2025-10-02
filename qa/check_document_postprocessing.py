@@ -33,6 +33,7 @@ DEFAULT_REPORT_DIR = Path("output") / "document"
 CROSSWALK_PATH = Path("qa") / "document_schema_crosswalk.yaml"
 DATE_PATTERN = re.compile(r"(20\d{6})")
 DEFAULT_DIFF_LIMIT = 100
+MAX_DIFF_KEY_EXPORT = DEFAULT_DIFF_LIMIT
 BOOLEAN_TRUE_VALUES = {"true", "1", "yes", "y", "t"}
 BOOLEAN_FALSE_VALUES = {"false", "0", "no", "n", "f", ""}
 MESH_SPLIT_PATTERN = re.compile(r"[;,|]")

@@ -1,5 +1,8 @@
 # Output Artefacts
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 This guide describes the files emitted by the ChEMBL data acquisition
 pipelines, how they are structured and which helpers are responsible for their
 creation.

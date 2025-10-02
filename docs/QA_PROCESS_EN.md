@@ -1,5 +1,8 @@
 # Quality Assurance Process (Living Document)
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 This document is the canonical checklist for validating the ChEMBL data acquisition stack. Keep it up to date when adding new
 services, pipelines or policies so other guides can simply link here instead of duplicating instructions.
 

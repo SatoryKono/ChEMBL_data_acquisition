@@ -1,5 +1,7 @@
 # Utility CLI modules
 
+> **Project version:** 0.2.0 (2025-10-02)
+>
 > **Languages:** [English](CLI_TOOLS.md) · [Русский](CLI_TOOLS_RU.md)
 
 The lightweight helper commands previously exposed as loose modules under

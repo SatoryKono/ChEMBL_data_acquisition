@@ -1,5 +1,8 @@
 # Data Schema
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 ## Input Tables
 
 ### activity.csv

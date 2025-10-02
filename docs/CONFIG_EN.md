@@ -1,5 +1,8 @@
 # Configuration Reference
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 ## Overview
 
 * All command-line tools load their defaults from [`config/config.yaml`](../config/config.yaml) in the project root.

@@ -1,5 +1,8 @@
 # ETL data flow for `get_*_data.py`
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 This document summarises the inputs, external data sources, processing steps and outputs for each
 `get_*_data.py` command-line utility. Use it as a map for onboarding to the ChEMBL data acquisition
 pipelines.

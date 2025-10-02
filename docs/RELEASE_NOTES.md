@@ -1,13 +1,32 @@
-# Release Notes
+# Release Notes / Список релизов
 
-## Unreleased
+> **Project version / Версия проекта:** 0.2.0 (2025-10-02)
+>
+> Detailed history lives in [`CHANGELOG.md`](../CHANGELOG.md). The sections
+> below highlight the key points for each tagged release.
 
-- Clarified the minimum supported Python version as 3.11 across documentation and runtime checks.
-- Documented the requirement to configure `api.user_agent` with a real contact, including validation behaviour and the
-  `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` environment override.
-- Downgraded ChEMBL and PubChem cache hit/miss logging to DEBUG to reduce noise in default INFO logs.
-- Added UniProt isoform fallbacks, richer cross-reference extraction (AlphaFold, PDB, Ensembl), and additional logging to
-  trace identifier coverage through the target merge pipeline.
-- Normalised CLI path overrides so `--base-path`, `--input-dir`, `--output-dir`, and `--cache-dir` propagate into
-  `local.io` configuration fields.
+## 0.2.0 — 2025-10-02
 
+### Highlights / Основные изменения
+- Синхронизированы английская и русская версии руководств, добавлены версии в
+  заголовки и обновлены примеры запуска CLI.
+- README переработан в двуязычный портал с картой документации и блоком по
+  управлению релизами.
+- Уточнено, что набор ключей `--raw-out` доступен в полной мере только для
+  пайплайна таргетов; остальные команды игнорируют их до расширения функционала.
+- Проект повышен до версии `0.2.0`, changelog переведён в формат Keep a Changelog
+  с двумя языками.
+
+### Testing focus / Тестовый контур
+- `pre-commit run --all-files`
+- `pytest`
+- `python -m library.utils.cli_tools.check_determinism --limit 10`
+
+## 0.1.0 — (date not recorded / дата не зафиксирована)
+
+### Highlights / Основные изменения
+- Initial public release with activity, assay, document, target and test item
+  pipelines, configuration framework and QA harness.
+
+### Testing focus / Тестовый контур
+- Baseline pytest suite and deterministic IO smoke tests.

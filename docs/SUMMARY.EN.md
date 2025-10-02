@@ -1,5 +1,8 @@
 # Project Summary
 
+> **Project version:** 0.2.0 (2025-10-02)
+
+
 This document provides an at-a-glance description of the ChEMBL data acquisition
 utilities, their structure, shared services and supporting workflows.
 
