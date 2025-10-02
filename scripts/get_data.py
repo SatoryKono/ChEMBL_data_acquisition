@@ -91,6 +91,7 @@ class PipelineRunConfig:
     limit: int | None
     force: bool
     skip_existing: bool
+    dry_run: bool
 
     def input_path(self, name: str) -> Path:
         """Return the fully resolved path for ``name`` in the input directory."""
@@ -114,6 +115,7 @@ class PipelineStep:
     main: Callable[[Sequence[str] | None], int]
     subcommand: str | None
     output_flag: str = "--output"
+    supports_dry_run: bool = False
 
     def build_arguments(
         self, cfg: PipelineRunConfig, output_path: Path | None = None
@@ -133,6 +135,8 @@ class PipelineStep:
             args.append("--force")
         if cfg.skip_existing:
             args.append("--skip-existing")
+        if cfg.dry_run and self.supports_dry_run:
+            args.append("--dry-run")
         if self.subcommand is not None:
             return [self.subcommand, *args]
         return args
@@ -158,7 +162,7 @@ _PIPELINE_STEPS: tuple[PipelineStep, ...] = (
     ),
     PipelineStep("assay", get_assay_data.main, None),
     PipelineStep("testitem", get_testitem_data.main, None),
-    PipelineStep("activity", get_activity_data.main, None),
+    PipelineStep("activity", get_activity_data.main, None, supports_dry_run=True),
 )
 
 
@@ -247,6 +251,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Skip pipeline execution when the output file is present",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run pipelines without writing outputs or performing side effects",
+    )
     return parser.parse_args(argv)
 
 
@@ -277,6 +286,7 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         limit=args.limit,
         force=args.force,
         skip_existing=args.skip_existing,
+        dry_run=args.dry_run,
     )
 
 
