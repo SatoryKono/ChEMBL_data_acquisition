@@ -87,6 +87,20 @@ def _valid_url(url: str) -> bool:
     return bool(parsed.scheme and parsed.netloc)
 
 
+def _coerce_integral_numbers(value: Any) -> Any:
+    """Return *value* with floats that represent integers converted to ``int``."""
+
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else value
+    if isinstance(value, list):
+        return [_coerce_integral_numbers(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_coerce_integral_numbers(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _coerce_integral_numbers(val) for key, val in value.items()}
+    return value
+
+
 class ConfigError(RuntimeError):
     """Raised when configuration loading fails."""
 
@@ -1200,7 +1214,7 @@ def _parse_env_value(env_key: str, raw_value: str) -> Any:
     if raw_value and raw_value.strip() == "":
         return raw_value
     try:
-        return yaml.safe_load(raw_value)
+        value = yaml.safe_load(raw_value)
     except yaml.YAMLError as exc:
         logger.debug(
             "treating %s as plain string due to YAML parse error: %s",
@@ -1208,6 +1222,7 @@ def _parse_env_value(env_key: str, raw_value: str) -> Any:
             exc,
         )
         return raw_value
+    return _coerce_integral_numbers(value)
 
 
 def _normalize_env_errors(
@@ -1349,6 +1364,8 @@ def load_config(
         data, resolved_path = load_yaml_config(path)
     except ConfigLoaderError as exc:
         raise ConfigError(str(exc)) from exc
+
+    data = _coerce_integral_numbers(data)
 
     # Guard against accidentally passing the JSON schema instead of a runtime
     # configuration file. The schema contains the ``$defs`` key at the top
