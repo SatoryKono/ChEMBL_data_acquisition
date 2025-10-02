@@ -35,8 +35,15 @@ from library.cli import (
 )
 from library.cli import (
     build_parser as base_parser,
+    positive_int,
 )
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.cli_utils import (
+    PipelineError,
+    run_cli_command,
+    run_pipeline,
+    file_sha256 as _cli_file_sha256,
+    write_meta_yaml as _cli_write_meta_yaml,
+)
 from library.config import Config, _serialize_paths
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
@@ -51,6 +58,10 @@ from schemas import ActivitiesSchema, configure_activity_schema, normalize_activ
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
+
+
+file_sha256 = _cli_file_sha256
+write_meta_yaml = _cli_write_meta_yaml
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -238,17 +249,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         key_cols: Sequence[str],
     ) -> Path:
         sort_columns = list(key_cols) or sorted(col_order)
-        return write_csv_chunks_deterministic(
+        output_path = io.write_csv(
             chunks,
             destination,
+            cfg=cfg,
             key_cols=sort_columns,
             col_order=col_order,
             chunksize=cfg.io.csv_chunksize,
-            sort_chunksize=cfg.io.csv_chunksize,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
-            cfg=cfg,
         )
+        path_obj = Path(output_path)
+        if not path_obj.exists():
+            path_obj.parent.mkdir(parents=True, exist_ok=True)
+            path_obj.touch()
+        return path_obj
 
     table_quality = partial(
         analyze_table_quality,
@@ -334,6 +349,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         action="store_true",
         help="Read input and exit without contacting the API or writing files",
     )
+    parser.add_argument(
+        "--workers",
+        type=positive_int,
+        default=1,
+        help="Number of worker threads fetching activities in parallel",
+    )
     parser.set_defaults(func=run_chembl)
     return parser, log_cfg
 
@@ -384,6 +405,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "limit": "activity.limit",
             "offset": "activity.offset",
             "dry_run": "activity.dry_run",
+            "workers": "activity.workers",
         },
         run=run,
         logger=logger,
