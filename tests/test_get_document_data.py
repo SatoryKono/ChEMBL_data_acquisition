@@ -953,6 +953,30 @@ def test_prepare_export_frame_merges_duplicate_columns() -> None:
     assert result.loc[1, "ChEMBL.abstract"] == "fallback abstract"
 
 
+def test_merge_preferred_series_prioritizes_existing_values() -> None:
+    """Preferred-series merge should keep existing data before falling back."""
+
+    target = pd.Series(["keep", None, ""], dtype=object)
+    source = pd.Series(["alt", "fallback", "replacement"], dtype=object)
+
+    result = gdd._merge_preferred_series(target, source)
+
+    assert result.tolist() == ["keep", "fallback", "replacement"]
+
+
+def test_merge_preferred_series_aligns_on_index() -> None:
+    """Preferred-series merge should respect the target index order."""
+
+    target = pd.Series([1.5, float("nan")], index=[0, 1], dtype=float)
+    source = pd.Series([7.7], index=[1], dtype=float)
+
+    result = gdd._merge_preferred_series(target, source)
+
+    assert result.index.tolist() == [0, 1]
+    assert result.iloc[0] == pytest.approx(1.5)
+    assert result.iloc[1] == pytest.approx(7.7)
+
+
 def test_fetch_pubmed_records_handles_generic_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
