@@ -13,6 +13,8 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable
 
+from contextlib import contextmanager
+
 from itertools import islice
 
 import pandas as pd
@@ -2829,3 +2831,116 @@ def test_fetch_pubmed_records_generator_batches(
         ["300"],
         ["400"],
     ]
+
+
+def test_fetch_pubmed_records_reuses_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = Config()
+    cfg.openalex.mailto = "openalex@test"
+    cfg.crossref.mailto = "crossref@test"
+
+    class DummySession:
+        creation_lock = threading.Lock()
+        creation_count = 0
+        closed_count = 0
+
+        def __init__(self) -> None:
+            with DummySession.creation_lock:
+                DummySession.creation_count += 1
+            self.headers: dict[str, str] = {}
+            self._closed = False
+
+        def close(self) -> None:
+            if self._closed:
+                return
+            self._closed = True
+            with DummySession.creation_lock:
+                DummySession.closed_count += 1
+
+    @contextmanager
+    def dummy_session_with_retry(*_: Any, **__: Any) -> Iterator[DummySession]:
+        session = DummySession()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    monkeypatch.setattr(gdd, "session_with_retry", dummy_session_with_retry)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    pmids = ["1", "2"]
+
+    def fake_pubmed_batch(
+        session: requests.Session,
+        batch: Sequence[str],
+        sleep: float | None,
+        *,
+        cfg: PubMedCfg,
+        retry_cfg: Any,
+    ) -> list[dict[str, str]]:
+        assert isinstance(session, DummySession)
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1234/{pmid}"}
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        session: requests.Session,
+        identifiers: Sequence[str],
+        sleep: float | None,
+        *,
+        cfg: SemanticScholarCfg,
+    ) -> list[dict[str, str]]:
+        assert isinstance(session, DummySession)
+        return [
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1234/{pmid}"}
+            for pmid in identifiers
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", lambda *_, **__: {})
+
+    openalex_sessions: set[int] = set()
+    crossref_sessions: set[int] = set()
+
+    def fake_openalex(
+        session: requests.Session,
+        identifier: str,
+        cfg_obj: OpenAlexCfg,
+        limiter: Any,
+    ) -> dict[str, str]:
+        assert isinstance(session, DummySession)
+        openalex_sessions.add(id(session))
+        return {"OpenAlex.PMID": identifier}
+
+    def fake_crossref(
+        session: requests.Session,
+        identifier: str,
+        cfg_obj: CrossRefCfg,
+        limiter: Any,
+    ) -> dict[str, str]:
+        assert isinstance(session, DummySession)
+        crossref_sessions.add(id(session))
+        return {"crossref.DOI": identifier}
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+
+    gdd.fetch_pubmed_records(
+        pmids,
+        cfg,
+        sleep=0.0,
+        pubmed_cfg=cfg.pubmed,
+        semantic_scholar_cfg=cfg.semantic_scholar,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert DummySession.creation_count == 3
+    assert openalex_sessions and len(openalex_sessions) == 1
+    assert crossref_sessions and len(crossref_sessions) == 1
+    assert DummySession.closed_count == DummySession.creation_count
+

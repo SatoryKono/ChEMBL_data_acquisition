@@ -422,20 +422,6 @@ def fetch_pubmed_records(
             limit = min(limit, limiter_burst)
         return max(1, limit)
 
-    class _SessionPool:
-        def __init__(
-            self,
-            stack: ExitStack,
-            factory: Callable[[], AbstractContextManager[requests.Session]],
-        ) -> None:
-            self._stack = stack
-            self._factory = factory
-
-        @contextmanager
-        def session(self) -> Iterator[requests.Session]:
-            with self._factory() as nested_session:
-                yield nested_session
-
     class _ThreadResources:
         def __init__(
             self,
@@ -446,6 +432,39 @@ def fetch_pubmed_records(
             self.stack = stack
             self.base_session = base_session
             self.session_pools = session_pools
+            self.sessions: dict[str, requests.Session] = {}
+            self.session_finalizers: dict[str, Callable[[], None]] = {}
+
+    class _SessionPool:
+        def __init__(
+            self,
+            stack: ExitStack,
+            factory: Callable[[], AbstractContextManager[requests.Session]],
+            resources: _ThreadResources,
+            service: str,
+        ) -> None:
+            self._stack = stack
+            self._factory = factory
+            self._resources = resources
+            self._service = service
+
+        @contextmanager
+        def session(self) -> Iterator[requests.Session]:
+            cached = self._resources.sessions.get(self._service)
+            if cached is None:
+                context = self._factory()
+                session = cast(requests.Session, context.__enter__())
+
+                def _finalizer(
+                    _context: AbstractContextManager[requests.Session] = context,
+                ) -> None:
+                    _context.__exit__(None, None, None)
+
+                self._resources.sessions[self._service] = session
+                self._resources.session_finalizers[self._service] = _finalizer
+                self._stack.callback(_finalizer)
+                cached = session
+            yield cached
 
     thread_local_state = local()
 
@@ -487,12 +506,11 @@ def fetch_pubmed_records(
             "crossref": _service_factory(crossref_cfg.mailto),
         }
 
-        pools = {
-            service: _SessionPool(session_stack, factory)
+        resources = _ThreadResources(session_stack, base_session, {})
+        resources.session_pools = {
+            service: _SessionPool(session_stack, factory, resources, service)
             for service, factory in session_factories.items()
         }
-
-        resources = _ThreadResources(session_stack, base_session, pools)
         setattr(thread_local_state, "resources", resources)
 
         finalizer = weakref.finalize(
