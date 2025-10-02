@@ -3243,3 +3243,24 @@ def test_fetch_pubmed_records_uses_pending_helper_minimally(
     assert call_count == 2
     assert df["PubMed.PMID"].tolist() == pmids
 
+
+def test_prepare_export_frame_merges_prefixed_columns() -> None:
+    """Existing prefixed columns should absorb their unprefixed counterparts."""
+
+    frame = pd.DataFrame(
+        {
+            "ChEMBL.title": ["kept", ""],
+            "title": ["ignored", "fallback"],
+            "ChEMBL.abstract": ["", "pref"],
+            "abstract": ["primary", ""],
+        }
+    )
+
+    result = gdd._prepare_export_frame(frame)
+
+    assert not result.columns.duplicated().any()
+    assert result.loc[0, "ChEMBL.title"] == "kept"
+    assert result.loc[1, "ChEMBL.title"] == "fallback"
+    assert result.loc[0, "ChEMBL.abstract"] == "primary"
+    assert result.loc[1, "ChEMBL.abstract"] == "pref"
+

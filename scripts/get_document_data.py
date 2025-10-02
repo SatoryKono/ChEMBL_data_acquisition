@@ -1037,7 +1037,15 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
     frame = df.copy()
-    rename_map = {k: v for k, v in _EXPORT_COLUMN_RENAMES.items() if k in frame.columns}
+    rename_map: dict[str, str] = {}
+    for source, target in _EXPORT_COLUMN_RENAMES.items():
+        if source not in frame.columns:
+            continue
+        if target in frame.columns and target != source:
+            frame[target] = _coalesce_columns(frame, [target, source])
+            frame = frame.drop(columns=[source])
+            continue
+        rename_map[source] = target
     if rename_map:
         frame = frame.rename(columns=rename_map)
 
