@@ -1056,16 +1056,50 @@ def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
     return consolidated
 
 
+def _collapse_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` with duplicate-named columns collapsed into single series."""
+
+    if df.empty or not isinstance(df.columns, pd.Index):
+        return df
+
+    if not df.columns.duplicated().any():
+        return df
+
+    collapsed: dict[str, pd.Series] = {}
+    for column in df.columns:
+        if column in collapsed:
+            continue
+
+        matches = df.loc[:, df.columns == column]
+
+        if isinstance(matches, pd.Series):
+            collapsed[column] = matches
+            continue
+
+        if matches.shape[1] == 1:
+            collapsed[column] = matches.iloc[:, 0]
+            continue
+
+        sanitised = matches.copy()
+        for name in sanitised.columns:
+            series = sanitised[name]
+            if pd.api.types.is_object_dtype(series.dtype) or pd.api.types.is_string_dtype(
+                series.dtype
+            ):
+                sanitised[name] = series.replace("", pd.NA)
+
+        consolidated = sanitised.bfill(axis=1).ffill(axis=1).iloc[:, 0]
+        if pd.api.types.is_object_dtype(consolidated.dtype) or pd.api.types.is_string_dtype(
+            consolidated.dtype
+        ):
+            consolidated = consolidated.fillna("")
+        collapsed[column] = consolidated
+
+    return pd.DataFrame(collapsed, index=df.index)
+
+
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
-
-
-
-    return pd.DataFrame(collapsed_columns, index=df.index)
-
-    # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
-    # keeping existing data intact.
-
 
     frame = _collapse_duplicate_columns(df.copy())
 
@@ -1093,9 +1127,6 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     if rename_map:
         frame = frame.rename(columns=rename_map)
 
-
-    if frame.columns.duplicated().any():
-        frame = frame.loc[:, ~frame.columns.duplicated()]
 
     if frame.columns.duplicated().any():
         frame = frame.loc[:, ~frame.columns.duplicated()]
