@@ -138,11 +138,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
-            for chunk_ids in id_chunks:
 
+            def _fetch_chunk(ids: Sequence[str]) -> pd.DataFrame:
                 try:
                     return cl.get_activities(
-                        chunk_ids,
+                        ids,
                         cfg=cfg.api,
                         client=client,
                         chunk_size=cfg.activity.batch_size,
@@ -171,7 +171,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 for index, chunk_ids in enumerate(id_chunks):
-                    future = executor.submit(_fetch_chunk, list(chunk_ids))
+                    future = executor.submit(_fetch_chunk, chunk_ids)
                     pending[future] = index
                     if len(pending) >= workers:
                         done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
