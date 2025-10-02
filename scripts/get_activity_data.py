@@ -89,6 +89,13 @@ def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
 
 file_sha256 = _cli_file_sha256
 write_meta_yaml = _cli_write_meta_yaml
+configure_logger = cli.configure_logger
+
+__all__ = (
+    "file_sha256",
+    "write_meta_yaml",
+    "configure_logger",
+)
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -303,8 +310,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             writer=writer,
             output_path=output,
             failure_path=failure_path,
-            command=" ".join(invocation),
-            invocation=invocation,
+            command=" ".join(_args_invocation(args)),
+
             config_snapshot=_serialize_paths(cfg.to_dict()),
             inputs={"input_csv": str(args.input_csv)},
             key_columns=["activity_id"],

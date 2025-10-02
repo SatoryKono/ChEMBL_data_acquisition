@@ -156,6 +156,15 @@ def test_negative_limit_in_config_exits(
     assert "sources.chembl.pipelines.activity.limit" in buf.getvalue()
 
 
+def test_activity_negative_limit_in_config_exits(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Backward compatibility wrapper for CLI negative limit validation."""
+
+    test_negative_limit_in_config_exits(tmp_path, monkeypatch)
+
+
 def test_doc_type_negative_limit_in_config_exits(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
