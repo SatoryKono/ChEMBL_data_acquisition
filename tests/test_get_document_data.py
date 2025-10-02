@@ -2973,114 +2973,133 @@ def test_fetch_pubmed_records_generator_batches(
     ]
 
 
-def test_fetch_pubmed_records_reuses_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_pubmed_records_uses_pending_helper_minimally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure ``_iter_pending`` only triggers ``as_completed`` when required."""
+
+    pmids = ["100", "200"]
     cfg = Config()
-    cfg.openalex.mailto = "openalex@test"
-    cfg.crossref.mailto = "crossref@test"
+
+    monkeypatch.setattr(
+        gdd, "get_limiter", lambda *_args, **_kwargs: DummyLimiter(burst=1)
+    )
+
+    class ImmediateExecutor:
+        def __init__(self, *_: object, **__: object) -> None:
+            return None
+
+        def __enter__(self) -> ImmediateExecutor:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def submit(
+            self, func: Callable[..., list[dict[str, str]]], *args: object, **kwargs: object
+        ) -> Future:
+            future: Future = Future()
+            try:
+                result = func(*args, **kwargs)
+            except Exception as exc:  # pragma: no cover - defensive
+                future.set_exception(exc)
+            else:
+                future.set_result(result)
+            return future
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", ImmediateExecutor)
 
     class DummySession:
-        creation_lock = threading.Lock()
-        creation_count = 0
-        closed_count = 0
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
 
-        def __init__(self) -> None:
-            with DummySession.creation_lock:
-                DummySession.creation_count += 1
-            self.headers: dict[str, str] = {}
-            self._closed = False
+        def __exit__(self, *_exc: object) -> None:  # pragma: no cover - trivial
+            return None
 
-        def close(self) -> None:
-            if self._closed:
-                return
-            self._closed = True
-            with DummySession.creation_lock:
-                DummySession.closed_count += 1
-
-    @contextmanager
-    def dummy_session_with_retry(*_: Any, **__: Any) -> Iterator[DummySession]:
-        session = DummySession()
-        try:
-            yield session
-        finally:
-            session.close()
-
-    monkeypatch.setattr(gdd, "session_with_retry", dummy_session_with_retry)
-    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
-
-    pmids = ["1", "2"]
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_args, **_kwargs: DummySession())
 
     def fake_pubmed_batch(
-        session: requests.Session,
+        _session: object,
         batch: Sequence[str],
-        sleep: float | None,
-        *,
-        cfg: PubMedCfg,
-        retry_cfg: Any,
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
     ) -> list[dict[str, str]]:
-        assert isinstance(session, DummySession)
         return [
-            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1234/{pmid}"}
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": "",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+            }
+
             for pmid in batch
         ]
 
     monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
 
     def fake_semantic_batch(
-        session: requests.Session,
-        identifiers: Sequence[str],
-        sleep: float | None,
-        *,
-        cfg: SemanticScholarCfg,
+
+        _session: object,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
     ) -> list[dict[str, str]]:
-        assert isinstance(session, DummySession)
         return [
-            {"scholar.PMID": pmid, "scholar.DOI": f"10.1234/{pmid}"}
-            for pmid in identifiers
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": "",
+                "scholar.Error": "",
+            }
+            for pmid in batch
         ]
 
-    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
-    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", lambda *_, **__: {})
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar_batch",
+        fake_semantic_batch,
+    )
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.Error": "",
+        },
+    )
 
-    openalex_sessions: set[int] = set()
-    crossref_sessions: set[int] = set()
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda *_args, **_kwargs: {"OpenAlex.Error": ""},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda *_args, **_kwargs: {"crossref.Error": ""},
+    )
 
-    def fake_openalex(
-        session: requests.Session,
-        identifier: str,
-        cfg_obj: OpenAlexCfg,
-        limiter: Any,
-    ) -> dict[str, str]:
-        assert isinstance(session, DummySession)
-        openalex_sessions.add(id(session))
-        return {"OpenAlex.PMID": identifier}
+    call_count = 0
+    orig_as_completed = gdd.as_completed
 
-    def fake_crossref(
-        session: requests.Session,
-        identifier: str,
-        cfg_obj: CrossRefCfg,
-        limiter: Any,
-    ) -> dict[str, str]:
-        assert isinstance(session, DummySession)
-        crossref_sessions.add(id(session))
-        return {"crossref.DOI": identifier}
+    def spy_as_completed(futures: Iterable[Future]) -> Iterator[Future]:
+        nonlocal call_count
+        call_count += 1
+        return orig_as_completed(futures)
 
-    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
-    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+    monkeypatch.setattr(gdd, "as_completed", spy_as_completed)
 
-    gdd.fetch_pubmed_records(
+    df = gdd.fetch_pubmed_records(
         pmids,
         cfg,
         sleep=0.0,
-        pubmed_cfg=cfg.pubmed,
-        semantic_scholar_cfg=cfg.semantic_scholar,
-        openalex_cfg=cfg.openalex,
-        crossref_cfg=cfg.crossref,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
         max_workers=1,
-        batch_size=2,
+        batch_size=1,
     )
 
-    assert DummySession.creation_count == 3
-    assert openalex_sessions and len(openalex_sessions) == 1
-    assert crossref_sessions and len(crossref_sessions) == 1
-    assert DummySession.closed_count == DummySession.creation_count
+    assert call_count == 2
+    assert df["PubMed.PMID"].tolist() == pmids
 

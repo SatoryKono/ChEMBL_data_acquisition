@@ -771,6 +771,13 @@ def fetch_pubmed_records(
     offset = 0
     pending: set[Future[list[dict[str, str]]]] = set()
 
+    def _iter_pending(
+        futures: Iterable[Future[list[dict[str, str]]]]
+    ) -> Iterator[Future[list[dict[str, str]]]]:
+        """Yield completed futures without copying the ``futures`` collection."""
+
+        yield from as_completed(futures)
+
     def _drain_future(
         done_future: Future[list[dict[str, str]]],
     ) -> Iterator[list[dict[str, str]]]:
@@ -813,12 +820,12 @@ def fetch_pubmed_records(
             offset += len(batch)
             if len(pending) >= max_in_flight:
 
-                done_future = next(as_completed(list(pending)))
+                done_future = next(_iter_pending(pending))
                 yield from _drain_future(done_future)
 
             yield from _emit_ready_batches()
 
-        for done_future in as_completed(list(pending)):
+        for done_future in _iter_pending(pending):
             yield from _drain_future(done_future)
 
         pending.clear()
