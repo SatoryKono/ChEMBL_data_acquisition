@@ -39,42 +39,6 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 
 SchemaT = TypeVar("SchemaT")
 
-
-
-def resolve_invocation(
-    prog: str | None,
-    argv: Sequence[object] | None,
-) -> tuple[str, ...]:
-
-    """Return a normalised tuple describing the CLI invocation.
-
-    The helper captures the effective command line as a tuple of strings.
-    ``prog`` is optional to accommodate ``argparse`` defaults, while
-    ``argv`` may be ``None`` to mirror ``argparse`` behaviour where the
-    process arguments are used implicitly.
-    """
-
-    parts: list[str] = []
-    if prog:
-        parts.append(str(prog))
-
-
-    if argv is None:
-        argv_iterable: Sequence[object] = sys.argv[1:]
-    else:
-        argv_iterable = argv
-
-    parts.extend(str(arg) for arg in argv_iterable)
-    return tuple(parts)
-
-    resolved: list[str] = []
-    if prog:
-        resolved.append(str(prog))
-    resolved.extend(str(arg) for arg in argv)
-    return tuple(resolved)
-
-
-
 class ValidationResult(Protocol):
     """Protocol describing the return type of validator callables."""
 
