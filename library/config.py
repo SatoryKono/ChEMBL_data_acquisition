@@ -179,8 +179,8 @@ class ApiCfg(_BaseModel):
     """Settings for ChEMBL API access."""
 
     chembl_base: str = "https://www.ebi.ac.uk/chembl/api/data"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(30, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(30.0, ge=1)
     retries: int = Field(3, ge=0)
     backoff_factor: float = Field(0.5, ge=0)
     rps: int = Field(5, ge=1)
@@ -239,8 +239,8 @@ class MoleculeCatalogCfg(_BaseModel):
 
 class OpenAlexCfg(_BaseModel):
     base: str = "https://api.openalex.org"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(30, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(30.0, ge=1)
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
@@ -261,8 +261,8 @@ class OpenAlexCfg(_BaseModel):
 
 class CrossRefCfg(_BaseModel):
     base: str = "https://api.crossref.org"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(30, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(30.0, ge=1)
     retries: int = Field(3, ge=0)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
@@ -283,8 +283,8 @@ class CrossRefCfg(_BaseModel):
 
 class UniprotCfg(_BaseModel):
     base: str = "https://rest.uniprot.org"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(30, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(30.0, ge=1)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
     delay: float = Field(0.25, ge=0)
@@ -330,8 +330,8 @@ class UniprotMappingCfg(_BaseModel):
 
 class IupharCfg(_BaseModel):
     base: str = "https://www.guidetopharmacology.org/services"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(30, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(30.0, ge=1)
     rps: int = Field(4, ge=1)
     burst: int = Field(5, ge=1)
 
@@ -355,8 +355,8 @@ class PubChemCfg(_BaseModel):
         "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)",
         description="Custom User-Agent for PubChem requests including contact details",
     )
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(60, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(60.0, ge=1)
     timeout_seconds: float = Field(
         30.0,
         ge=0,
@@ -449,8 +449,8 @@ class PubChemCfg(_BaseModel):
 
 class PubMedCfg(_BaseModel):
     base: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(10, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(10.0, ge=1)
     retries: int = Field(2, ge=0)
     rps: int | None = Field(default=None, ge=1)
     burst: int | None = Field(default=None, ge=1)
@@ -465,8 +465,8 @@ class PubMedCfg(_BaseModel):
 
 class SemanticScholarCfg(_BaseModel):
     base: str = "https://api.semanticscholar.org/graph/v1"
-    timeout_connect: int = Field(5, ge=1)
-    timeout_read: int = Field(10, ge=1)
+    timeout_connect: float = Field(5.0, ge=1)
+    timeout_read: float = Field(10.0, ge=1)
     retries: int = Field(2, ge=0)
     rps: int | None = Field(default=None, ge=1)
     burst: int | None = Field(default=None, ge=1)

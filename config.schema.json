@@ -334,16 +334,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 30,
+          "default": 30.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "retries": {
           "default": 3,
@@ -583,16 +583,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 30,
+          "default": 30.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "retries": {
           "default": 3,
@@ -1045,16 +1045,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 30,
+          "default": 30.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "rps": {
           "default": 4,
@@ -1109,16 +1109,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 30,
+          "default": 30.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "retries": {
           "default": 3,
@@ -1168,16 +1168,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 60,
+          "default": 60.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_seconds": {
           "default": 30.0,
@@ -1316,16 +1316,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 10,
+          "default": 10.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "retries": {
           "default": 2,
@@ -1466,16 +1466,16 @@
           "type": "string"
         },
         "timeout_connect": {
-          "default": 5,
+          "default": 5.0,
           "minimum": 1,
           "title": "Timeout Connect",
-          "type": "integer"
+          "type": "number"
         },
         "timeout_read": {
-          "default": 10,
+          "default": 10.0,
           "minimum": 1,
           "title": "Timeout Read",
-          "type": "integer"
+          "type": "number"
         },
         "retries": {
           "default": 2,
