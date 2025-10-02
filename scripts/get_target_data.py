@@ -2353,11 +2353,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"get_target_data_{date_value}.log"
     exit_code = 0
+
     original_stream = log_cfg.stream
     with log_path.open("a", encoding="utf-8") as log_stream:
         log_cfg.stream = log_stream
         configure_logger(log_cfg)
         try:
+
             limit_value = getattr(args, "limit", None)
             if limit_value == 0:
                 logger.info("pipeline_skip_limit", limit=limit_value)
@@ -2433,9 +2435,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     run=run,
                     logger=logger,
                 )
+
         finally:
             log_cfg.stream = original_stream
             configure_logger(log_cfg)
+
 
     return exit_code
 
