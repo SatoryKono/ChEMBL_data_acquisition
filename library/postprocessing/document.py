@@ -9,20 +9,24 @@ Changelog
 
 from __future__ import annotations
 
+import math
+import os
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
+import numpy as np
 import pandas as pd
 
 from ..config import IoCfg
 from ..csv_utils import write_csv_deterministic
+from ..log import logger
 from ..validation import validate_columns
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
 DEFAULT_OUTPUT_PREFIX = "preprocessed_"
-LIST_SEPARATOR = "; "
+METADATA_LIST_SEPARATOR = "; "
 TOKEN_DELIMITERS: tuple[str, ...] = (";", "|", ",")
 INDEX_PAD_WIDTH = 4
 COVERAGE_COMPLETE_THRESHOLD = 4
@@ -271,7 +275,7 @@ def _aggregate_terms(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
                     continue
                 seen.add(lowered)
                 terms.append(token)
-        collected.append(LIST_SEPARATOR.join(terms))
+        collected.append(METADATA_LIST_SEPARATOR.join(terms))
     return pd.Series(collected, index=df.index, dtype="string")
 
 
@@ -317,7 +321,7 @@ def _build_error_sources(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
                 tokens.append(source.lower())
         ordered = _sort_tokens(tokens, ERROR_PRIORITY)
         has_error.append(bool(ordered))
-        error_tokens.append(LIST_SEPARATOR.join(ordered))
+        error_tokens.append(METADATA_LIST_SEPARATOR.join(ordered))
     return (
         pd.Series(error_tokens, index=df.index, dtype="string"),
         pd.Series(has_error, index=df.index, dtype="boolean"),
@@ -341,7 +345,7 @@ def _build_metadata_flags(df: pd.DataFrame) -> tuple[pd.Series, dict[str, pd.Ser
     for row in zip(*(flags[f"has_{src}"] for src in METADATA_SOURCE_ORDER)):
         sources = [name for name, present in zip(METADATA_SOURCE_ORDER, row) if present]
         token_lists.append(sources)
-    metadata_strings = [LIST_SEPARATOR.join(tokens) for tokens in token_lists]
+    metadata_strings = [METADATA_LIST_SEPARATOR.join(tokens) for tokens in token_lists]
     metadata_counts = [len(tokens) for tokens in token_lists]
     metadata_series = pd.Series(metadata_strings, index=df.index, dtype="string")
     count_series = pd.Series(metadata_counts, index=df.index, dtype="Int64")
@@ -482,28 +486,11 @@ def postprocess_export_file(
     return destination
 
 
-# ===== Exports ==============================================================
-__all__ = [
-    "preprocess_document_export",
-    "postprocess_export_file",
-=======
-import math
-import os
-from pathlib import Path
-from typing import Any, Iterable
-
-import numpy as np
-import pandas as pd
-
-from library.log import logger
-
-
 # ---------------------------------------------------------------------------
 # Parameters (paths, encodings, delimiters)
 # ---------------------------------------------------------------------------
 
 CP1252 = "cp1252"
-UTF8 = "utf-8"
 CSV_DELIMITER = ","
 
 DEFAULT_BASE_PATH = "e:\\github\\ChEMBL_data_acquisition\\data\\"
@@ -632,7 +619,7 @@ FINAL_COLUMN_ORDER = (
     "day",
 )
 
-LIST_SEPARATOR = "\\"
+WINDOWS_PATH_SEPARATOR = "\\"
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +756,7 @@ def _resolve_relative(base_path: Path, relative: str) -> Path:
 
 
 def _format_windows_path(path: Path) -> str:
-    return LIST_SEPARATOR.join(path.parts)
+    return WINDOWS_PATH_SEPARATOR.join(path.parts)
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +886,7 @@ def _load_output_document(path: Path) -> pd.DataFrame:
     return pd.read_csv(
         path,
         dtype=OUTPUT_DTYPE,
-        encoding=UTF8,
+        encoding=UTF8_ENCODING,
         sep=CSV_DELIMITER,
         keep_default_na=True,
     )
@@ -1152,7 +1139,12 @@ def preprocess_documents_csv(
         target_name = f"preprocessed_{result_name}"
 
     target_path = out_path.with_name(target_name)
-    harmonised.to_csv(target_path, index=False, encoding=UTF8, sep=CSV_DELIMITER)
+    harmonised.to_csv(
+        target_path,
+        index=False,
+        encoding=UTF8_ENCODING,
+        sep=CSV_DELIMITER,
+    )
 
     total_rows = len(harmonised)
     logger.info(
@@ -1180,11 +1172,14 @@ def preprocess_documents_csv(
 
 __all__ = [
     "DEFAULT_BASE_PATH",
+    "DEFAULT_OUTPUT_PREFIX",
     "DEFAULT_OUTPUT_RELATIVE",
     "DEFAULT_REF_RELATIVE",
     "FINAL_COLUMN_ORDER",
     "LOWERCASE_LIST_COLUMNS",
     "STAGE_REMOVED1_COLUMNS",
+    "preprocess_document_export",
+    "postprocess_export_file",
     "normalize_journal",
     "pad2",
     "pad4",
