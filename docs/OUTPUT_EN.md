@@ -6,7 +6,7 @@ creation.
 
 ## Directory layout
 
-Exports are written to `local.io.output_dir` (default `data/output`). By
+Exports are written to `local.io.output_dir` (default `../data/output`). By
 default each CLI command derives the destination file as
 `output.<stem>_<date>.csv`, where `<stem>` is the input filename without
 extension and `<date>` is the host-local calendar date in `YYYYMMDD` format.
@@ -16,7 +16,7 @@ custom `--output` value or set `local.io.output_dir` explicitly so you can
 inject an alternate timestamp.
 
 ```
-data/output/
+../data/output/
 ├── output.activity_20240105.csv
 ├── output.activity_20240105.csv.meta.yaml
 ├── output.activity_20240105_failure_cases.csv
@@ -31,7 +31,7 @@ errors. Activity, assay and target jobs do not generate this report.
 Intermediate artefacts produced by the target `all` pipeline (`*_chembl.csv`,
 `*_uniprot.csv`, `*_iuphar.csv`) follow the same pattern. Custom `--output`
 arguments remain supported when a different layout (for example,
-`data/output/ChEMBL/processed/activity.csv`) is required.
+`../data/output/ChEMBL/processed/activity.csv`) is required.
 
 ## Metadata sidecars (`*.csv.meta.yaml`)
 
