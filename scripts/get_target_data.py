@@ -575,6 +575,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "chembl",
         parents=[shared],
         help="Retrieve target information from ChEMBL",
+        conflict_handler="resolve",
     )
     chembl.add_argument(
         "--column",
