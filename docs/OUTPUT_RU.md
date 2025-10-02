@@ -13,11 +13,11 @@ Acquisition, а также вспомогательные модули, отве
 
 ```
 ../data/output/
-├── output.activity_20240105.csv
-├── output.activity_20240105.csv.meta.yaml
-├── output.activity_20240105_failure_cases.csv
-├── output.activity_20240105_quality_report_table.csv
-└── output.activity_20240105_data_correlation_report_table.csv
+├── output.activities_20240105.csv
+├── output.activities_20240105.csv.meta.yaml
+├── output.activities_20240105_failure_cases.csv
+├── output.activities_20240105_quality_report_table.csv
+└── output.activities_20240105_data_correlation_report_table.csv
 ```
 
 Документные пайплайны (например, `scripts/get_document_data.py`) дополняют
@@ -27,13 +27,13 @@ Acquisition, а также вспомогательные модули, отве
 Промежуточные файлы таргет-пайплайна в режиме `all`
 (`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) используют тот же шаблон.
 Параметр `--output` по-прежнему позволяет задать альтернативную структуру,
-например `../data/output/ChEMBL/processed/activity.csv`.
+например `../data/output/ChEMBL/processed/activities.csv`.
 
 ## Sidecar с метаданными (`*.csv.meta.yaml`)
 
 Каждый CSV сопровождается `<base>.csv.meta.yaml`, который создаёт
 `library.metadata.write_meta_yaml`, где `<base>` совпадает с именем файла без
-расширения (например, `output.activity_20240105`). Файл содержит:
+расширения (например, `output.activities_20240105`). Файл содержит:
 
 * `generated_at` — отметку времени в формате ISO 8601 (UTC).
 * `git_sha` — хэш коммита на момент запуска.
@@ -99,7 +99,7 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Границы активности (`lower_value`, `upper_value`)
 
-Выгрузка активностей (`output.activity_<date>.csv` по умолчанию) включает
+Выгрузка активностей (`output.activities_<date>.csv` по умолчанию) включает
 диапазоны значений, рассчитанные из канонических полей ChEMBL `standard_*`.
 Приоритет действий:
 
@@ -132,7 +132,7 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Экспорт тест-объектов
 
-`scripts/get_testitem_data.py` формирует `output_testitem_<date>.csv` с
+`scripts/get_testitem_data.py` формирует `output.testitems_<date>.csv` с
 метаданными и отчётами качества. Каждая строка объединяет данные ChEMBL,
 обогащение PubChem и служебные
 колонки, обеспечивая опорное измерение соединений. Для работы требуется каталог
