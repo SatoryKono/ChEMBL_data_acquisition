@@ -2662,20 +2662,29 @@ def test_fetch_pubmed_records_reuses_service_executors(
         },
     )
 
+    openalex_cfg = OpenAlexCfg()
+    crossref_cfg = CrossRefCfg()
+    max_workers = 1
+
     df = gdd.fetch_pubmed_records(
         pmids,
         sleep=0.0,
         pubmed_cfg=PubMedCfg(),
         semantic_scholar_cfg=SemanticScholarCfg(),
-        openalex_cfg=OpenAlexCfg(),
-        crossref_cfg=CrossRefCfg(),
-        max_workers=1,
+        openalex_cfg=openalex_cfg,
+        crossref_cfg=crossref_cfg,
+        max_workers=max_workers,
         batch_size=2,
     )
 
     assert df["PubMed.PMID"].tolist() == pmids
     assert len(creations) == 3
-    assert creations.count(1) == 1
+
+    expected_downstream_capacity = max(
+        1,
+        min(max_workers, openalex_cfg.burst, crossref_cfg.burst),
+    )
+    assert creations[0] == expected_downstream_capacity
 
 
 def test_fetch_pubmed_records_generator_batches(
