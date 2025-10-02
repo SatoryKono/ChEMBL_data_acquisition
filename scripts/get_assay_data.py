@@ -18,6 +18,10 @@ from itertools import islice
 import pandas as pd
 import requests
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from library.utils.bootstrap import ensure_project_root
 
 
