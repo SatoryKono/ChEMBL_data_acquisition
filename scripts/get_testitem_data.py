@@ -403,9 +403,10 @@ def resolve_pubchem_cid(
             cache[chembl_id] = None
         return None
 
-    parent_id = _normalise_identifier(
-        row.get("parent_molecule_chembl_id"), uppercase=True
-    )
+    parent_raw = None
+    if isinstance(row, pd.Series) and "parent_molecule_chembl_id" in row.index:
+        parent_raw = row.get("parent_molecule_chembl_id")
+    parent_id = _normalise_identifier(parent_raw, uppercase=True)
     if not parent_id:
         if chembl_id and chembl_id not in cache:
             cache[chembl_id] = None

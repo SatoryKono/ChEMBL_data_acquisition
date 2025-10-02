@@ -1438,6 +1438,25 @@ def test_resolve_pubchem_cid_uses_parent_when_enabled(
     assert calls == ["CHEMBL2", "CHEMBL1"]
 
 
+def test_resolve_pubchem_cid_handles_missing_parent_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = pd.Series({"molecule_chembl_id": "CHEMBL2"})
+    cache: dict[str, str | None] = {}
+    cfg = pl.PubChemCfg(delay=0, use_parent_for_salts=True)
+
+    monkeypatch.setattr(
+        pl,
+        "resolve_pubchem_record",
+        lambda *args, **kwargs: pl.PubChemResolution(cid=None, source=None),
+    )
+
+    cid = pipeline.resolve_pubchem_cid(row, cache, cfg, resolution_cache={})
+
+    assert cid is None
+    assert cache["CHEMBL2"] is None
+
+
 def test_resolve_pubchem_cid_logs_when_parent_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
