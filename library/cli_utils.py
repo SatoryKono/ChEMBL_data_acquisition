@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import traceback
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
@@ -35,6 +36,17 @@ from .sidecar import SidecarErrors
 from .utils.config import DEFAULT_CONFIG_RELATIVE
 
 SchemaT = TypeVar("SchemaT")
+
+
+def resolve_invocation(prog: str, argv: Sequence[str] | None) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation."""
+
+    if argv is None:
+        return tuple(str(arg) for arg in sys.argv)
+
+    resolved = [prog]
+    resolved.extend(str(arg) for arg in argv)
+    return tuple(resolved)
 
 
 class ValidationResult(Protocol):
