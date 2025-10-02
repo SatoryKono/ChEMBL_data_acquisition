@@ -54,6 +54,7 @@ from scripts import (
 )
 
 from library.logging_setup import Logger, LoggerConfig, configure_logger
+from library.utils.config import DEFAULT_CONFIG_PATH
 
 
 _LOGGER: Logger = Logger(LoggerConfig())
@@ -220,7 +221,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("config/config.yaml"),
+        default=DEFAULT_CONFIG_PATH,
         help="YAML configuration shared by all pipelines",
     )
     parser.add_argument(
@@ -267,7 +268,8 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
     base_path = args.base_path.expanduser().resolve()
     input_dir = _resolve_path(base_path, args.input_dir)
     output_dir = _resolve_path(base_path, args.output_dir)
-    config_path = args.config.expanduser().resolve()
+    config_candidate = args.config or DEFAULT_CONFIG_PATH
+    config_path = Path(config_candidate).expanduser().resolve()
 
     if args.limit is not None and args.limit < 0:
         raise ValueError("--limit must be zero or a positive integer")
@@ -288,7 +290,7 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         limit=args.limit,
         force=args.force,
         skip_existing=args.skip_existing,
-        dry_run=args.dry_run,
+        dry_run=bool(getattr(args, "dry_run", False)),
     )
 
 

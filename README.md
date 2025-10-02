@@ -155,6 +155,14 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
    ознакомления с опциями можно запускать полный экспорт, указав реальные
    каталоги.
 
+   EN: Without ``--config`` the orchestrator now falls back to the packaged
+   ``config/config.yaml`` via ``library.utils.config.DEFAULT_CONFIG_PATH``. Pass
+   an explicit path whenever you maintain a local override.
+
+   RU: При запуске без ``--config`` оркестратор использует встроенный
+   ``config/config.yaml`` через ``library.utils.config.DEFAULT_CONFIG_PATH``.
+   Собственный YAML укажите явным путём.
+
    For lightweight smoke checks you can still call individual helpers, for
    example:
 
