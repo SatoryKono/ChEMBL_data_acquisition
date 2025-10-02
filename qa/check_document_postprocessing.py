@@ -550,22 +550,22 @@ def run_document_postprocessing_check(
     missing_in_expected = sorted(set(all_columns) - set(expected_df.columns))
 
     structure_metrics = {
-        "columns_equal": set(reference_df.columns) == set(candidate_df.columns),
-        "column_order_equal": list(reference_df.columns) == list(candidate_df.columns),
+        "columns_equal": set(expected_df.columns) == set(actual_df.columns),
+        "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
     }
 
     reference_summary = _summarise_dataset(
-        frame=reference_df,
+        frame=expected_df,
         canonical=reference_canonical,
         key_columns=key_columns,
         path=str(reference_resolved),
         duplicate_count=reference_duplicates,
     )
     candidate_summary = _summarise_dataset(
-        frame=candidate_df,
+        frame=actual_df,
         canonical=candidate_canonical,
         key_columns=key_columns,
-        path=str(candidate_resolved),
+        path=str(processed_path),
         duplicate_count=candidate_duplicates,
     )
 
@@ -614,19 +614,10 @@ def run_document_postprocessing_check(
     metrics: dict[str, Any] = {
         "status": status,
         "date_code": resolved_date_code,
+        "structure": structure_metrics,
 
-        "reference": {
-            "path": str(reference_resolved),
-            "rows": int(len(expected_df)),
-            "columns": list(expected_df.columns),
-            "duplicates": reference_duplicates,
-        },
-        "candidate": {
-            "path": str(processed_path),
-            "rows": int(len(actual_df)),
-            "columns": list(actual_df.columns),
-            "duplicates": candidate_duplicates,
-        },
+        "reference": reference_summary,
+        "candidate": candidate_summary,
 
         "differences": {
             "cells_total": total_cells,

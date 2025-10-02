@@ -11,6 +11,9 @@ import pytest
 
 
 from library import document_postprocessing as dp
+from library.config import IoCfg
+
+import qa.check_document_postprocessing as qa_module
 
 from qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
 
@@ -140,24 +143,102 @@ def test_run_document_postprocessing_check_failure(
     assert result.diff_csv.name in markdown
 
 
-def test_diff_extract_limited_by_keys(tmp_path: Path) -> None:
+def test_structure_metrics_detects_missing_candidate_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
 
-    template = pd.read_csv(reference_path, dtype=str)
-    rows: list[pd.Series] = []
-    for idx in range(150):
-        record = template.iloc[0].copy()
-        record["PMID"] = f"{100000 + idx}"
-        record["document_chembl_id"] = f"DOC{idx:05d}"
-        record["completed"] = "2020-01-01"
-        record["doi"] = f"10.1000/{idx:03d}"
-        rows.append(record)
-    reference_df = pd.DataFrame(rows)
-    reference_df.to_csv(reference_path, index=False)
+    original_postprocess = dp.postprocess_file
 
-    candidate_df = reference_df.copy()
-    candidate_df["doi"] = candidate_df["doi"] + ".mismatch"
-    candidate_df.to_csv(candidate_path, index=False)
+    def drop_column_postprocess(
+        source: Path,
+        target_dir: Path,
+        *,
+        cfg: IoCfg,
+        ref_document_path: Path,
+    ) -> Path:
+        processed_path = original_postprocess(
+            source,
+            target_dir,
+            cfg=cfg,
+            ref_document_path=ref_document_path,
+        )
+        processed_df = pd.read_csv(processed_path, dtype=str)
+        if "doi" in processed_df.columns:
+            processed_df = processed_df.drop(columns=["doi"])
+        processed_df.to_csv(processed_path, index=False)
+        return processed_path
+
+    monkeypatch.setattr(dp, "postprocess_file", drop_column_postprocess)
+
+    result = run_document_postprocessing_check(
+        base_path=base_dir,
+        reference_path=reference_path,
+        candidate_path=candidate_path,
+    )
+
+    assert result.passed is False
+
+    with result.report_json.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    assert payload["structure"]["columns_equal"] is False
+    assert any(
+        issue.startswith("Candidate missing columns") and "doi" in issue
+        for issue in payload["issues"]
+    )
+
+
+def test_diff_extract_limited_by_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
+
+    rows: list[dict[str, str]] = []
+    for idx in range(150):
+        row = {column: "" for column in dp.FINAL_COLUMN_ORDER}
+        row["PMID"] = f"{100000 + idx}"
+        row["document_chembl_id"] = f"DOC{idx:05d}"
+        row["completed"] = "2020-01-01"
+        row["doi"] = f"10.1000/{idx:03d}"
+        row["reference"] = "Journal, 1(1), p.1-2"
+        row["sortorder.document"] = f"ISSN:{idx:08d}"
+        row["review"] = "false"
+        row["experimental"] = "true"
+        row["document_contains_external_links"] = "false"
+        row["invalid"] = "false"
+        row["invalid.doi"] = "false"
+        row["invalid.PMID"] = "false"
+        row["invalid.reference"] = "false"
+        row["year"] = "2020"
+        row["month"] = "01"
+        row["day"] = "01"
+        rows.append(row)
+
+    expected_df = pd.DataFrame(rows)
+    actual_df = expected_df.copy()
+    actual_df["doi"] = actual_df["doi"] + ".mismatch"
+
+    expected_df.to_csv(candidate_path, index=False)
+
+    monkeypatch.setattr(
+        qa_module,
+        "_power_query_expected",
+        lambda ref_document, out_document: expected_df.copy(),
+    )
+
+    def fake_postprocess_file(
+        source: Path,
+        target_dir: Path,
+        *,
+        cfg: IoCfg,
+        ref_document_path: Path,
+    ) -> Path:
+        processed_path = source.with_name(f"preprocessed_{source.name}")
+        actual_df.to_csv(processed_path, index=False)
+        return processed_path
+
+    monkeypatch.setattr(dp, "postprocess_file", fake_postprocess_file)
 
     result = run_document_postprocessing_check(
         base_path=base_dir,
@@ -206,12 +287,8 @@ def test_cli_exit_codes(
         [
             "--base-path",
             str(base_dir),
-
-            "--ref",
-            "input\\full\\document.csv",
-            "--actual",
-            "output\\document\\output.document_20230101.csv",
-
+            "--out",
+            str(candidate_path.relative_to(base_dir)),
         ]
     )
 
