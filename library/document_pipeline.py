@@ -94,11 +94,14 @@ DERIVED_COLUMNS: list[str] = [
     "publication_class",
 ]
 
+PIPELINE_STATUS_COLUMNS: list[str] = ["fetch_status", "error_source"]
+
 # The combined list intentionally mirrors the downstream document pipeline so
 # CSV exports preserve a deterministic order.
 DOCUMENT_SCHEMA_COLUMNS: list[str] = (
     CH_EMBL_COLUMNS
     + DERIVED_COLUMNS
+    + PIPELINE_STATUS_COLUMNS
     + PUBMED_COLUMNS
     + SEMANTIC_SCHOLAR_COLUMNS
     + OPENALEX_COLUMNS
@@ -346,6 +349,7 @@ class DocumentQualityAccumulator:
         self._doi_total = 0
         self._class_counts: Counter[str] = Counter()
         self._error_counts: Counter[str] = Counter()
+        self._placeholder_counts: Counter[str] = Counter()
 
     def consume(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
@@ -389,9 +393,33 @@ class DocumentQualityAccumulator:
                 series.astype(str)
                 .str.strip()
                 .astype(bool)
-                .sum()
             )
-            self._error_counts[key] += int(truthy)
+            self._error_counts[key] += int(truthy.sum())
+
+        status = frame.get("fetch_status")
+        if status is not None:
+            status_strings = status.astype("string").fillna("")
+            is_error = status_strings.str.strip().str.lower() == "error"
+            if bool(is_error.any()):
+                sources = frame.get("error_source")
+                if sources is None:
+                    source_strings = pd.Series(
+                        ["unknown"] * len(frame),
+                        index=status_strings.index,
+                        dtype="string",
+                    )
+                else:
+                    source_strings = (
+                        sources.astype("string")
+                        .fillna("unknown")
+                        .str.strip()
+                        .str.lower()
+                    )
+                    source_strings = source_strings.replace("", "unknown")
+                counts = source_strings[is_error].value_counts()
+                self._placeholder_counts.update(
+                    {str(source): int(count) for source, count in counts.items()}
+                )
 
     def build(self) -> dict[str, Any]:
         doi_coverage = (
@@ -409,7 +437,24 @@ class DocumentQualityAccumulator:
                 "openalex": int(self._error_counts.get("openalex", 0)),
                 "crossref": int(self._error_counts.get("crossref", 0)),
             },
+            "error_placeholder_counts": self._build_placeholder_counts(),
         }
+
+    def _build_placeholder_counts(self) -> dict[str, int]:
+        """Return normalised placeholder counters keyed by error source."""
+
+        baseline = {
+            "pubmed": 0,
+            "semantic_scholar": 0,
+            "openalex": 0,
+            "crossref": 0,
+            "unknown": 0,
+        }
+        counts = {key: int(self._placeholder_counts.get(key, 0)) for key in baseline}
+        for key, value in self._placeholder_counts.items():
+            if key not in counts:
+                counts[key] = int(value)
+        return counts
 
 
 def build_quality_report(

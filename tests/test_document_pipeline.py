@@ -150,6 +150,8 @@ def test_build_quality_report_counts() -> None:
             "scholar.Error": ["", ""],
             "OpenAlex.Error": ["", ""],
             "crossref.Error": ["oops", ""],
+            "fetch_status": ["ok", "error"],
+            "error_source": ["", "pubmed"],
         }
     )
 
@@ -159,6 +161,24 @@ def test_build_quality_report_counts() -> None:
     assert report["publication_class_counts"]["review"] == 1
     assert report["error_counts"]["pubmed"] == 1
     assert report["error_counts"]["crossref"] == 1
+    assert report["error_placeholder_counts"]["pubmed"] == 1
+    assert report["error_placeholder_counts"]["unknown"] == 0
+
+
+def test_build_quality_report_counts_unknown_placeholders() -> None:
+    """Placeholder rows without a source default to ``unknown``."""
+
+    df = pd.DataFrame(
+        {
+            "doi": [""],
+            "publication_class": [""],
+            "fetch_status": ["error"],
+            "PubMed.Error": ["error"],
+        }
+    )
+
+    report = build_quality_report(df)
+    assert report["error_placeholder_counts"]["unknown"] == 1
 
 
 def test_fetch_pubmed_records_uses_fresh_sessions_per_job(

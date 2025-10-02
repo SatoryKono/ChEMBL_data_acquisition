@@ -139,6 +139,7 @@ contains:
 | `doi_coverage` | Float | Fraction of documents with a DOI (0.0–1.0). |
 | `publication_class_counts` | Object | Counts of `review`, `experimental`, `unknown`; missing categories are reported as zero. |
 | `error_counts` | Object | Failure counters per upstream service (`pubmed`, `semantic_scholar`, `openalex`, `crossref`). |
+| `error_placeholder_counts` | Object | Number of placeholder rows emitted after unrecoverable errors, keyed by `error_source` (`pubmed`, `semantic_scholar`, `openalex`, `crossref`, `unknown`). |
 
 ## Test item enrichment
 

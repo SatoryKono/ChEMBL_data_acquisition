@@ -40,6 +40,8 @@ _COLUMN_DEFINITIONS: dict[str, pa.Column] = {
         int, required=False, nullable=True, coerce=True
     ),
     "publication_class": pa.Column(str, required=False, nullable=True),
+    "fetch_status": pa.Column(str, required=False, nullable=True),
+    "error_source": pa.Column(str, required=False, nullable=True),
     # PubMed fields
     "PubMed.PMID": pa.Column(object, required=False, nullable=True, coerce=True),
     "PubMed.DOI": pa.Column(object, required=False, nullable=True, coerce=True),
