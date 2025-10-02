@@ -422,12 +422,12 @@ get-activity-data
 
 ## Запуск тестов
 
-Создайте виртуальное окружение и установите dev-зависимости:
+Создайте виртуальное окружение и установите закреплённые зависимости:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install .[dev]
+pip install -r requirements-lock.txt
 ```
 
 После этого запустите unit- и smoke-наборы:

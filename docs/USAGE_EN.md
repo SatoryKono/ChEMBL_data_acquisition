@@ -427,12 +427,12 @@ Environment variables follow the `CHEMBL_DA__SECTION__...__KEY` pattern. For fre
 
 ## Running tests
 
-Create a virtual environment and install the development extras first:
+Create a virtual environment and install the pinned dependencies first:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install .[dev]
+pip install -r requirements-lock.txt
 ```
 
 Then execute the unit and smoke suites with `pytest`:

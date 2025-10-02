@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import yaml
 
 from library.config import Config, _mask_secrets, _serialize_paths
 from library.cli_utils import build_parser, run_pipeline
+from library.logging_setup import LoggerConfig, configure_logger as setup_logger
 from schemas import AssaysSchema
 
 
@@ -21,6 +24,7 @@ def test_cli_utils_flags_and_help() -> None:
         "--log-level",
         "--input",
         "--output",
+        "--out",
         "--config",
         "--sep",
         "--encoding",
@@ -238,3 +242,123 @@ def test_run_pipeline_missing_required_columns(tmp_path: Path, cfg: Config) -> N
     assert exit_code == 1
     assert not output.exists()
     assert not failure_path.exists()
+
+
+def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+    frames = [
+        pd.DataFrame(
+            {
+                "assay_chembl_id": ["A1"],
+                "document_chembl_id": ["D1"],
+            }
+        )
+    ]
+
+    def fetcher() -> list[pd.DataFrame]:
+        return frames
+
+    def hook(_: pd.DataFrame) -> pd.DataFrame:
+        raise RuntimeError("hook boom")
+
+    writer_called: list[Path] = []
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        writer_called.append(destination)
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=[hook],
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda path: None,
+        cfg=cfg,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert not writer_called
+    assert not output.exists()
+    assert not failure_path.exists()
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert lines
+    assert all("Traceback" not in line for line in lines)
+    records = [json.loads(line) for line in lines]
+    hook_errors = [record for record in records if record.get("event") == "metadata_hook_failed"]
+    assert hook_errors
+    assert hook_errors[-1]["error"] == "hook boom"
+
+
+def test_run_pipeline_writer_failure(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [
+            pd.DataFrame(
+                {
+                    "assay_chembl_id": ["A1"],
+                    "document_chembl_id": ["D1"],
+                }
+            )
+        ]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        raise RuntimeError("writer boom")
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=[lambda df: df],
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda path: None,
+        cfg=cfg,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert not output.exists()
+    assert not failure_path.exists()
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert lines
+    assert all("Traceback" not in line for line in lines)
+    records = [json.loads(line) for line in lines]
+    write_errors = [record for record in records if record.get("event") == "write_fail"]
+    assert write_errors
+    assert write_errors[-1]["error"] == "writer boom"

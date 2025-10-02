@@ -4,7 +4,7 @@ This module provides a typed wrapper around ``config/config.yaml``. Configuratio
 values are loaded from a YAML file and can be overridden by environment
 variables or command line options. The order of precedence is::
 
-    YAML < environment variables < CLI overrides
+    YAML < config.local.yaml < environment variables < CLI overrides
 
 Environment variables follow the ``CHEMBL_DA__SECTION__KEY`` naming pattern
 where sections and keys are joined by double underscores. A number of short
@@ -769,6 +769,7 @@ class ActivityEnrichmentCfg(_BaseModel):
 class ActivityCfg(_BoolModel):
     column: str = "activity_id"
     batch_size: int = Field(5, ge=1)
+    workers: int = Field(1, ge=1)
     timeout: float = Field(30.0, ge=0)
     limit: int | None = Field(default=None, ge=0)
     dry_run: bool = False
@@ -1364,6 +1365,16 @@ def load_config(
         data, resolved_path = load_yaml_config(path)
     except ConfigLoaderError as exc:
         raise ConfigError(str(exc)) from exc
+
+    local_path = resolved_path.with_name(
+        f"{resolved_path.stem}.local{resolved_path.suffix}"
+    )
+    if local_path != resolved_path and local_path.exists():
+        try:
+            local_data, _ = load_yaml_config(local_path)
+        except ConfigLoaderError as exc:
+            raise ConfigError(str(exc)) from exc
+        _merge_mapping(data, local_data)
 
     data = _coerce_integral_numbers(data)
 

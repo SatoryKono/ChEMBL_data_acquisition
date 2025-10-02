@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable, Iterator, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -45,7 +46,7 @@ from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from schemas import ActivitiesSchema, normalize_activities
+from schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 
 
 DEFAULT_INPUT_NAME = "activity.csv"
@@ -120,6 +121,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
     action_cfg = enrichment_cfg.action_type
+    configure_activity_schema(action_cfg.metrics)
     if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
         extra_columns.append(action_cfg.column)
     extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}
@@ -128,6 +130,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
+
         global_limiter = get_global_limiter(
             cfg.rate.global_rps, cfg.rate.global_burst
         )
@@ -136,8 +139,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
             for chunk_ids in id_chunks:
+
                 try:
-                    chunk_df = cl.get_activities(
+                    return cl.get_activities(
                         chunk_ids,
                         cfg=cfg.api,
                         client=client,
@@ -154,7 +158,36 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         timeout=cfg.activity.timeout,
                     )
                     raise PipelineError(str(exc)) from exc
-                yield chunk_df
+
+            workers = max(1, cfg.activity.workers)
+            if workers == 1:
+                for chunk_ids in id_chunks:
+                    yield _fetch_chunk(chunk_ids)
+                return
+
+            pending: dict[Future[pd.DataFrame], int] = {}
+            completed: dict[int, pd.DataFrame] = {}
+            next_index = 0
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                for index, chunk_ids in enumerate(id_chunks):
+                    future = executor.submit(_fetch_chunk, list(chunk_ids))
+                    pending[future] = index
+                    if len(pending) >= workers:
+                        done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+                        for finished in done:
+                            chunk_index = pending.pop(finished)
+                            completed[chunk_index] = finished.result()
+                        while next_index in completed:
+                            yield completed.pop(next_index)
+                            next_index += 1
+
+                for future in as_completed(list(pending)):
+                    chunk_index = pending.pop(future)
+                    completed[chunk_index] = future.result()
+                    while next_index in completed:
+                        yield completed.pop(next_index)
+                        next_index += 1
 
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)
