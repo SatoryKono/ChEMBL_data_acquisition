@@ -386,33 +386,128 @@ def _raw_output_path(base: Path) -> Path:
     return base.with_name(f"{base.stem}{RAW_SUFFIX}{suffix}")
 
 
+class _RawDumpStreamWriter:
+    """Stream ChEMBL raw payloads to disk without accumulating chunks."""
+
+    def __init__(
+        self,
+        destination: Path,
+        *,
+        cfg: Config,
+        reindex_columns: bool,
+    ) -> None:
+        self.destination = destination
+        self.cfg = cfg
+        self.reindex_columns = reindex_columns
+        self._suffix = destination.suffix.lower()
+        self._rows_written = 0
+        self._columns: list[str] | None = None
+        self._frames: list[pd.DataFrame] | None = [] if self._is_parquet else None
+        self.destination.parent.mkdir(parents=True, exist_ok=True)
+        self._destination_opened = False
+
+    @property
+    def _is_parquet(self) -> bool:
+        return self._suffix in {".parquet", ".pq"}
+
+    def _resolve_columns(self, frame: pd.DataFrame) -> None:
+        if self._columns is None:
+            columns = list(frame.columns)
+            if self.reindex_columns:
+                columns = sorted(columns)
+            self._columns = columns
+            return
+
+        new_columns = [column for column in frame.columns if column not in self._columns]
+        if not new_columns:
+            return
+
+        if self._is_parquet or self._rows_written == 0:
+            merged = list(self._columns)
+            merged.extend(column for column in new_columns if column not in merged)
+            if self.reindex_columns:
+                merged = sorted(merged)
+            self._columns = merged
+            return
+
+        raise OSError(
+            "raw_dump_inconsistent_columns"
+        )
+
+    def write(self, frame: pd.DataFrame) -> None:
+        if frame.empty and self._rows_written == 0 and self._columns is None:
+            if self.reindex_columns:
+                self._columns = []
+            else:
+                self._columns = list(frame.columns)
+            return
+
+        self._resolve_columns(frame)
+        working = frame
+        if self._columns is not None and not working.empty:
+            working = working.reindex(columns=self._columns)
+
+        if self._is_parquet:
+            if self._frames is None:
+                self._frames = []
+            self._frames.append(working.copy())
+        else:
+            mode = "w" if self._rows_written == 0 else "a"
+            header = self._rows_written == 0
+            working.to_csv(
+                self.destination,
+                mode=mode,
+                header=header,
+                index=False,
+                sep=self.cfg.io.csv_sep,
+                encoding=self.cfg.io.csv_encoding,
+            )
+            self._destination_opened = True
+
+        self._rows_written += len(working)
+
+    def finalize(self) -> Path:
+        if self._is_parquet:
+            frames = self._frames or []
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
+            else:
+                combined = pd.DataFrame(columns=self._columns or [])
+            try:
+                combined.to_parquet(self.destination, index=False)
+            except (ImportError, ValueError) as exc:
+                raise OSError(f"failed to write parquet: {exc}") from exc
+        else:
+            if not self._destination_opened:
+                empty = pd.DataFrame(columns=self._columns or [])
+                empty.to_csv(
+                    self.destination,
+                    index=False,
+                    sep=self.cfg.io.csv_sep,
+                    encoding=self.cfg.io.csv_encoding,
+                )
+        logger.info(
+            "raw_dump_written", rows=self._rows_written, path=str(self.destination)
+        )
+        return self.destination
+
+
 def _write_raw_dump(
-    df: pd.DataFrame,
+    df: pd.DataFrame | Iterator[pd.DataFrame],
     destination: Path,
     *,
     cfg: Config,
     reindex_columns: bool,
 ) -> Path:
-    """Persist ``df`` to ``destination`` honouring CSV or Parquet formats."""
+    """Persist raw payloads to ``destination`` using streaming writes."""
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if reindex_columns and not df.empty:
-        df = df.reindex(columns=sorted(df.columns))
-    suffix = destination.suffix.lower()
-    if suffix in {".parquet", ".pq"}:
-        try:
-            df.to_parquet(destination, index=False)
-        except (ImportError, ValueError) as exc:
-            raise OSError(f"failed to write parquet: {exc}") from exc
+    writer = _RawDumpStreamWriter(destination, cfg=cfg, reindex_columns=reindex_columns)
+    if isinstance(df, pd.DataFrame):
+        writer.write(df)
     else:
-        df.to_csv(
-            destination,
-            index=False,
-            sep=cfg.io.csv_sep,
-            encoding=cfg.io.csv_encoding,
-        )
-    logger.info("raw_dump_written", rows=len(df), path=str(destination))
-    return destination
+        for chunk in df:
+            writer.write(chunk)
+    return writer.finalize()
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -1110,11 +1205,22 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     offset = getattr(args, "offset", 0)
+    base_ids_iter: Iterator[str] = ids_iter
     if offset:
-        ids_iter = islice(ids_iter, offset, None)
+        base_ids_iter = islice(base_ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
-    limited_ids = list(islice(ids_iter, limit)) if limit is not None else list(ids_iter)
-    processed_ids = len(limited_ids)
+    if limit is not None:
+        base_ids_iter = islice(base_ids_iter, limit)
+
+    processed_ids = 0
+
+    def _counted_ids() -> Iterator[str]:
+        nonlocal processed_ids
+        for target_id in base_ids_iter:
+            processed_ids += 1
+            yield target_id
+
+    counted_ids_iter = _counted_ids()
 
     output_candidate = getattr(args, "output_csv", None)
     base_output = Path(
@@ -1143,55 +1249,43 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
 
 
-    raw_chunks: list[pd.DataFrame] = []
-    parsed_chunks: list[pd.DataFrame] = []
-
     global_limiter = get_global_limiter(cfg.rate.global_rps, cfg.rate.global_burst)
 
-    if limited_ids:
-        try:
-            with ChemblClient(
-                cfg.api,
-                cfg.retry,
-                cfg.chembl,
-                global_limiter=global_limiter,
-            ) as client:
-                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
-                    limited_ids,
-                    cfg=cfg.api,
-                    client=client,
-                    mapping_cfg=cfg.uniprot_mapping,
+    fetched_rows_total = 0
+    raw_dump_rows_total = 0
+
+    if not normalize_at_export:
+
+        def _raw_fetcher() -> Iterator[pd.DataFrame]:
+            nonlocal fetched_rows_total, raw_dump_rows_total
+            try:
+                with ChemblClient(
+                    cfg.api,
+                    cfg.retry,
+                    cfg.chembl,
+                    global_limiter=global_limiter,
+                ) as client:
+                    for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                        counted_ids_iter,
+                        cfg=cfg.api,
+                        client=client,
+                        mapping_cfg=cfg.uniprot_mapping,
+                        chunk_size=cfg.target.chembl.chunk_size,
+                        timeout=cfg.target.chembl.timeout,
+                    ):
+                        raw_dump_rows_total += len(raw_chunk)
+                        fetched_rows_total += len(parsed_chunk)
+                        if raw_chunk.empty:
+                            continue
+                        yield raw_chunk
+            except (requests.RequestException, ValueError) as exc:
+                logger.error(
+                    "chembl_fetch_failed",
+                    error=str(exc),
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
-                ):
-                    if not raw_chunk.empty:
-                        raw_chunks.append(raw_chunk)
-                    if not parsed_chunk.empty:
-                        parsed_chunks.append(parsed_chunk)
-        except (requests.RequestException, ValueError) as exc:
-            logger.error(
-                "chembl_fetch_failed",
-                error=str(exc),
-                chunk_size=cfg.target.chembl.chunk_size,
-                timeout=cfg.target.chembl.timeout,
-            )
-            return 1
-
-    raw_df = (
-        pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
-    )
-
-    if normalize_at_export:
-        try:
-            _write_raw_dump(
-                raw_df, raw_destination, cfg=cfg, reindex_columns=reindex_raw
-            )
-        except (OSError, ValueError) as exc:
-            logger.error("raw_dump_failed", error=str(exc), path=str(raw_destination))
-            return 1
-    else:
-        def _raw_fetcher() -> Iterator[pd.DataFrame]:
-            yield raw_df
+                )
+                raise PipelineError(str(exc)) from exc
 
         def _raw_writer(
             chunks: Iterator[pd.DataFrame],
@@ -1199,13 +1293,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             col_order: Sequence[str] | None,
             key_cols: Sequence[str],
         ) -> Path:
-            frames = list(chunks)
-            if frames:
-                merged = pd.concat(frames, ignore_index=True)
-            else:
-                merged = pd.DataFrame()
-            _write_raw_dump(merged, destination, cfg=cfg, reindex_columns=reindex_raw)
-            return destination
+            writer = _RawDumpStreamWriter(
+                destination, cfg=cfg, reindex_columns=reindex_raw
+            )
+            for chunk in chunks:
+                writer.write(chunk)
+            return writer.finalize()
 
         failure_path = raw_destination.with_name(
             f"{raw_destination.stem}_failure_cases.csv"
@@ -1230,10 +1323,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         if exit_code != 0:
             return exit_code
 
-        if not raw_destination.exists():
-            logger.error("raw_dump_missing", path=str(raw_destination))
-            return 1
-
         destination = base_output
         if raw_destination != destination:
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1253,7 +1342,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info(
             "chembl_normalization_skipped",
             output=str(destination),
-            rows=len(raw_df),
+            rows=raw_dump_rows_total,
         )
         return 0
 
@@ -1295,8 +1384,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     missing_optional_columns: set[str] = set()
     placeholder_replacements = 0
-    fetched_rows_total = 0
-    raw_dump_rows_total = 0
     post_cleanup_rows_total = 0
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1326,46 +1413,51 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
 
+    raw_dump_writer = _RawDumpStreamWriter(
+        raw_destination, cfg=cfg, reindex_columns=reindex_raw
+    )
+
     def fetcher() -> Iterator[pd.DataFrame]:
 
-        nonlocal fetched_rows_total
-        if parsed_chunks:
-            for chunk_df in parsed_chunks:
-                fetched_rows_total += len(chunk_df)
-                yield chunk_df
-            return
+        nonlocal fetched_rows_total, raw_dump_rows_total
 
-        if not limited_ids:
-            yield pd.DataFrame(columns=TARGETS_COLUMN_ORDER)
-            return
-
-        with ChemblClient(
-            cfg.api,
-            cfg.retry,
-            cfg.chembl,
-            global_limiter=global_limiter,
-        ) as client:
-            try:
-                for _, _, parsed_chunk in cl.iter_target_batches(
-                    limited_ids,
+        try:
+            with ChemblClient(
+                cfg.api,
+                cfg.retry,
+                cfg.chembl,
+                global_limiter=global_limiter,
+            ) as client:
+                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                    counted_ids_iter,
                     cfg=cfg.api,
                     client=client,
                     mapping_cfg=cfg.uniprot_mapping,
                     chunk_size=cfg.target.chembl.chunk_size,
                     timeout=cfg.target.chembl.timeout,
                 ):
+                    raw_dump_rows_total += len(raw_chunk)
+                    try:
+                        raw_dump_writer.write(raw_chunk)
+                    except OSError as exc:
+                        logger.error(
+                            "raw_dump_failed",
+                            error=str(exc),
+                            path=str(raw_destination),
+                        )
+                        raise PipelineError(str(exc)) from exc
                     if parsed_chunk.empty:
                         continue
                     fetched_rows_total += len(parsed_chunk)
                     yield parsed_chunk
-            except (requests.RequestException, ValueError) as exc:
-                logger.error(
-                    "chembl_fetch_failed",
-                    error=str(exc),
-                    chunk_size=cfg.target.chembl.chunk_size,
-                    timeout=cfg.target.chembl.timeout,
-                )
-                raise PipelineError(str(exc)) from exc
+        except (requests.RequestException, ValueError) as exc:
+            logger.error(
+                "chembl_fetch_failed",
+                error=str(exc),
+                chunk_size=cfg.target.chembl.chunk_size,
+                timeout=cfg.target.chembl.timeout,
+            )
+            raise PipelineError(str(exc)) from exc
 
 
     def writer(
@@ -1480,6 +1572,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         cfg=cfg,
         logger=logger,
     )
+
+    try:
+        raw_dump_writer.finalize()
+    except OSError as exc:
+        logger.error("raw_dump_failed", error=str(exc), path=str(raw_destination))
+        return 1
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
