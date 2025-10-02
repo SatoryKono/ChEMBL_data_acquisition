@@ -1,8 +1,9 @@
-"""Quality assurance for document post-processing outputs.
+"""Crosswalk-based QA for document post-processing outputs.
 
 Changelog
 ~~~~~~~~
-- 2025-02-??: Initial implementation mirroring legacy Power Query QA.
+- 2025-02-14: Replaced legacy CSV diff with crosswalk-driven comparison of the
+  Python projection against the canonical Power Query logic.
 """
 
 from __future__ import annotations
@@ -11,168 +12,229 @@ import argparse
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
-import numpy as np
 import pandas as pd
+import yaml
 
-from library import document_postprocessing as dp
-from library.config import IoCfg
 from library.csv_utils import write_csv_deterministic
-from library.postprocessing.document import to_text
+from library.document_postprocessing import to_text
 
 
 # ===== Parameters ============================================================
 CP1252_ENCODING = "cp1252"
 UTF8_ENCODING = "utf-8"
 CSV_DELIMITER = ","
-DEFAULT_MAX_DIFF_ROWS = 100
-MAX_DIFF_KEY_EXPORT = 100
-KEY_COLUMNS: tuple[str, str, str] = ("PMID", "document_chembl_id", "completed")
+DEFAULT_BASE_PATH = Path("data")
+DEFAULT_REPORT_DIR = Path("output") / "document"
+CROSSWALK_PATH = Path("qa") / "document_schema_crosswalk.yaml"
+DATE_PATTERN = re.compile(r"(20\d{6})")
+DEFAULT_DIFF_LIMIT = 100
+BOOLEAN_TRUE_VALUES = {"true", "1", "yes", "y", "t"}
+BOOLEAN_FALSE_VALUES = {"false", "0", "no", "n", "f", ""}
+MESH_SPLIT_PATTERN = re.compile(r"[;,|]")
+PROVIDER_COLUMNS_M: Mapping[str, tuple[str, ...]] = {
+    "chembl": (
+        "ChEMBL.title",
+        "ChEMBL.abstract",
+        "ChEMBL.doi",
+        "ChEMBL.year",
+        "ChEMBL.journal",
+        "ChEMBL.journal_abbrev",
+        "ChEMBL.volume",
+        "ChEMBL.issue",
+        "ChEMBL.first_page",
+        "ChEMBL.last_page",
+        "ChEMBL.pubmed_id",
+        "ChEMBL.authors",
+        "ChEMBL.source",
+        "title",
+        "abstract",
+        "doi",
+    ),
+    "pubmed": (
+        "PMID",
+        "PubMed.PMID",
+        "PubMed.ArticleTitle",
+        "PubMed.Abstract",
+        "PubMed.mesh.descriptors",
+        "PubMed.mesh.qualifiers",
+        "PubMed.chemical.list",
+        "PubMed.Volume",
+        "PubMed.Issue",
+        "PubMed.StartPage",
+        "PubMed.EndPage",
+        "PubMed.ISSN",
+        "PubMed.PublicationType",
+        "PubMed.YearCompleted",
+        "PubMed.MonthCompleted",
+        "PubMed.DayCompleted",
+        "PubMed.YearRevised",
+        "PubMed.MonthRevised",
+        "PubMed.DayRevised",
+        "PubMed.Error",
+    ),
+    "semantic_scholar": (
+        "scholar.PMID",
+        "scholar.DOI",
+        "scholar.PublicationTypes",
+        "scholar.Venue",
+        "scholar.SemanticScholarId",
+        "scholar.ExternalIds",
+        "scholar.Error",
+    ),
+    "openalex": (
+        "OpenAlex.PMID",
+        "OpenAlex.DOI",
+        "OpenAlex.TypeCrossref",
+        "OpenAlex.Id",
+        "OpenAlex.mesh.descriptors",
+        "OpenAlex.mesh.qualifiers",
+        "OpenAlex.Error",
+    ),
+    "crossref": (
+        "crossref.DOI",
+        "crossref.Type",
+        "crossref.Title",
+        "crossref.Error",
+    ),
+}
+INVALID_ERROR_TOKEN_MAP = {
+    "invalid.doi": {"chembl", "pubmed", "semantic_scholar", "openalex", "crossref", "unknown", "doi"},
+    "invalid.PMID": {"pubmed", "semantic_scholar", "openalex", "unknown", "pmid"},
+}
+MATCH_THRESHOLDS = {
+    "ids": 0.995,
+    "preferred": 0.995,
+    "publication_year": 0.995,
+    "is_review": 1.0,
+    "mesh_terms": 0.995,
+    "has_flags": 0.995,
+    "coverage": 0.995,
+}
 REPORT_PREFIX = "qa_document_postprocessing_report_"
-DIFF_PREFIX = "qa_document_postprocessing_diff_"
 REPORT_JSON_SUFFIX = ".json"
 REPORT_MD_SUFFIX = ".md"
+DIFF_PREFIX = "qa_document_postprocessing_diff_"
 DIFF_SUFFIX = ".csv"
-DATE_PATTERN = re.compile(r"(20\d{6})")
-SUCCESS_STATUS = "passed"
-FAILURE_STATUS = "failed"
-BOOLEAN_TRUE_VALUES = frozenset({"true", "1", "yes"})
-BOOLEAN_FALSE_VALUES = frozenset({"false", "0", "no", ""})
-COMPLETED_FORMAT_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-INVARIANT_SAMPLE_LIMIT = 5
-INVARIANT_LABELS: Mapping[str, str] = {
-    "invalid_formula": "invalid flag formula",
-    "completed_format": "completed date format",
-    "completed_order": "completed order monotonicity",
-}
-DEFAULT_REFERENCE_RELATIVE = Path("input") / "full" / "document.csv"
-DEFAULT_ACTUAL_RELATIVE = Path("output") / "document" / "output.document.csv"
 
 
-# ===== Data classes ==========================================================
-@dataclass
-class QaResult:
-    """Structured result emitted by :func:`run_document_postprocessing_check`."""
+# ===== Crosswalk structures ==================================================
+@dataclass(frozen=True)
+class BuilderConfig:
+    """Configuration for deriving a comparable series."""
 
-    passed: bool
-    date_code: str
-    metrics: Mapping[str, Any]
-    report_json: Path
-    report_markdown: Path
-    diff_csv: Path | None
+    builder: str
+    columns: tuple[str, ...] = field(default_factory=tuple)
+    params: Mapping[str, Any] = field(default_factory=dict)
+
+    @staticmethod
+    def from_mapping(data: Mapping[str, Any]) -> "BuilderConfig":
+        builder = data.get("builder")
+        if not builder:
+            raise ValueError("builder key is required in crosswalk field")
+        columns = tuple(data.get("columns", ()))
+        params = data.get("params", {})
+        return BuilderConfig(builder=builder, columns=columns, params=params)
+
+
+@dataclass(frozen=True)
+class CrosswalkField:
+    """Crosswalk definition for a single comparable field."""
+
+    name: str
+    description: str
+    metric_group: str
+    python: BuilderConfig
+    m: BuilderConfig
+
+    @staticmethod
+    def from_mapping(data: Mapping[str, Any]) -> "CrosswalkField":
+        name = data.get("name")
+        if not name:
+            raise ValueError("Field name missing in crosswalk")
+        description = data.get("description", "")
+        metric_group = data.get("metric_group", "misc")
+        python_cfg = BuilderConfig.from_mapping(data.get("python", {}))
+        m_cfg = BuilderConfig.from_mapping(data.get("m", {}))
+        return CrosswalkField(
+            name=name,
+            description=description,
+            metric_group=metric_group,
+            python=python_cfg,
+            m=m_cfg,
+        )
+
+
+@dataclass(frozen=True)
+class Crosswalk:
+    """Container for the full crosswalk specification."""
+
+    version: str
+    description: str
+    fields: tuple[CrosswalkField, ...]
+
+    @staticmethod
+    def load(path: Path) -> "Crosswalk":
+        with path.open("r", encoding=UTF8_ENCODING) as stream:
+            payload = yaml.safe_load(stream)
+        version = payload.get("version", "unknown")
+        description = payload.get("description", "")
+        fields = tuple(CrosswalkField.from_mapping(item) for item in payload.get("fields", []))
+        if not fields:
+            raise ValueError("Crosswalk must define at least one field")
+        return Crosswalk(version=version, description=description, fields=fields)
+
+    def metric_groups(self) -> Mapping[str, list[str]]:
+        groups: dict[str, list[str]] = {}
+        for field in self.fields:
+            groups.setdefault(field.metric_group, []).append(field.name)
+        return groups
 
 
 # ===== Helpers ===============================================================
-def _resolve_relative(base_path: Path, relative: str | os.PathLike[str]) -> Path:
-    """Return ``relative`` resolved from ``base_path`` honouring Windows paths."""
-
-    relative_text = str(relative)
-    candidate = Path(relative_text.replace("\\", os.sep))
-    if candidate.is_absolute():
-        return candidate
-    return (base_path / candidate).resolve()
+def _resolve_path(base: Path, candidate: str | os.PathLike[str]) -> Path:
+    text = str(candidate)
+    candidate_path = Path(text.replace("\\", os.sep))
+    if candidate_path.is_absolute():
+        return candidate_path
+    return (base / candidate_path).resolve()
 
 
-def _ensure_columns(frame: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
-    """Return ``frame`` with ``columns`` ensured (missing ones filled with empty)."""
-
-    result = frame.copy()
-    for column in columns:
-        if column not in result.columns:
-            result[column] = ""
-    return result
-
-
-def _canonicalise(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return ``frame`` with textual normalisation mirroring Power Query."""
-
-    canonical = pd.DataFrame(index=frame.index)
-    for column in frame.columns:
-        canonical[column] = frame[column].map(to_text)
-    return canonical
+def _read_csv(path: Path, *, encoding: str) -> pd.DataFrame:
+    return pd.read_csv(
+        path,
+        sep=CSV_DELIMITER,
+        encoding=encoding,
+        dtype=str,
+        keep_default_na=False,
+    )
 
 
-def _build_index(frame: pd.DataFrame, key_columns: Sequence[str]) -> pd.MultiIndex:
-    """Return a MultiIndex composed from ``key_columns`` after canonicalisation."""
-
-    keys = [frame[column].map(to_text) for column in key_columns]
-    tuples = list(zip(*keys, strict=False))
-    if not tuples:
-        return pd.MultiIndex.from_tuples([], names=list(key_columns))
-    return pd.MultiIndex.from_tuples(tuples, names=list(key_columns))
+def _string_series(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype="string")
+    return series.fillna("").astype("string").str.strip()
 
 
-def _extract_date_code(path: Path, explicit: str | None = None) -> str:
-    """Return the date code associated with ``path`` or ``explicit`` fallback."""
-
-    if explicit:
-        return explicit
-    match = DATE_PATTERN.search(path.name)
-    if match:
-        return match.group(1)
-    return datetime.utcnow().strftime("%Y%m%d")
-
-
-def _summarise_missing(index_a: pd.Index, index_b: pd.Index) -> dict[str, Any]:
-    """Return counts of elements present in ``index_a`` but not ``index_b``."""
-
-    missing = index_a.difference(index_b)
-    sample = [tuple(item) if isinstance(item, tuple) else item for item in missing[:5]]
-    return {"count": int(len(missing)), "sample": sample}
+def _normalize_numeric_identifier(value: Any) -> str:
+    text = to_text(value).strip()
+    if not text:
+        return ""
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if not digits:
+        return ""
+    return str(int(digits))
 
 
-def _differences_to_frame(
-    mask: pd.DataFrame,
-    expected: pd.DataFrame,
-    actual: pd.DataFrame,
-    *,
-    key_columns: Sequence[str],
-    limit: int,
-) -> pd.DataFrame:
-    """Return a tidy DataFrame describing mismatched cells limited by ``limit``."""
-
-    records: list[dict[str, Any]] = []
-    columns = list(mask.columns)
-    key_count = 0
-    for row_idx, row_mask in enumerate(mask.to_numpy()):
-        if not row_mask.any():
-            continue
-        key_count += 1
-        if key_count > limit:
-            break
-        index_value = mask.index[row_idx]
-        if isinstance(index_value, tuple):
-            key_map = dict(zip(key_columns, index_value, strict=False))
-        else:
-            key_map = {key_columns[0]: index_value}
-            for extra in key_columns[1:]:
-                key_map.setdefault(extra, "")
-        for column_idx, has_difference in enumerate(row_mask):
-            if not has_difference:
-                continue
-            record = {
-                **key_map,
-                "column": columns[column_idx],
-                "expected": to_text(expected.iloc[row_idx, column_idx]),
-                "actual": to_text(actual.iloc[row_idx, column_idx]),
-            }
-            records.append(record)
-    return pd.DataFrame.from_records(records, columns=[*key_columns, "column", "expected", "actual"])
+def _normalize_numeric_series(series: pd.Series) -> pd.Series:
+    return series.map(_normalize_numeric_identifier)
 
 
-def _differences_by_column(mask: pd.DataFrame) -> dict[str, int]:
-    """Return a dictionary counting mismatches per column."""
-
-    return {column: int(mask[column].sum()) for column in mask.columns}
-
-
-def _normalise_boolish(value: Any) -> bool | None:
-    """Return a tri-state boolean for ``value`` supporting textual truthy forms."""
-
+def _normalize_boolean_value(value: Any) -> bool | None:
     text = to_text(value).strip().lower()
     if text in BOOLEAN_TRUE_VALUES:
         return True
@@ -181,958 +243,688 @@ def _normalise_boolish(value: Any) -> bool | None:
     return None
 
 
-def _value_counts(series: pd.Series) -> Mapping[str, int]:
-    """Return deterministic value counts for ``series`` as a mapping."""
-
-    counts = series.fillna("").map(to_text).value_counts(sort=False)
-    sorted_items = sorted(counts.items(), key=lambda item: item[0])
-    return {str(key): int(value) for key, value in sorted_items}
+def _boolean_series(series: pd.Series) -> pd.Series:
+    normalized = series.map(_normalize_boolean_value)
+    return normalized.astype("boolean")
 
 
-def _summarise_invalid_flags(frame: pd.DataFrame) -> Mapping[str, Mapping[str, int]]:
-    """Return per-column distributions for invalid flags within ``frame``."""
-
-    columns = [column for column in frame.columns if column == "invalid" or column.startswith("invalid.")]
-    summary: dict[str, Mapping[str, int]] = {}
-    for column in sorted(columns):
-        summary[column] = _value_counts(frame[column])
-    return summary
-
-
-def _boolean_share(series: pd.Series | None) -> Mapping[str, Any]:
-    """Return counts and share of truthy values within ``series``."""
-
-    if series is None:
-        return {"available": False, "true": 0, "false": 0, "other": 0, "share_true": 0.0}
-
-    values = series.fillna("").map(to_text)
-    true_count = int(sum(1 for item in values if _normalise_boolish(item) is True))
-    false_count = int(sum(1 for item in values if _normalise_boolish(item) is False))
-    other_count = int(len(values) - true_count - false_count)
-    total_rows = int(len(values))
-    share_true = true_count / total_rows if total_rows else 0.0
-    return {
-        "available": True,
-        "true": true_count,
-        "false": false_count,
-        "other": other_count,
-        "share_true": share_true,
-    }
+def _mesh_tokens(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for value in values:
+        for token in MESH_SPLIT_PATTERN.split(value):
+            cleaned = token.strip().lower()
+            if not cleaned:
+                continue
+            if cleaned in seen:
+                continue
+            seen.add(cleaned)
+            tokens.append(cleaned)
+    tokens.sort()
+    return tokens
 
 
-def _collect_key_sample(index: pd.Index, key_columns: Sequence[str], limit: int = INVARIANT_SAMPLE_LIMIT) -> list[Mapping[str, Any]]:
-    """Return a deterministic sample of key combinations from ``index``."""
+def _mesh_series(columns: Sequence[pd.Series]) -> pd.Series:
+    if not columns:
+        return pd.Series(dtype="string")
+    length = len(columns[0])
+    result = []
+    for row_idx in range(length):
+        values = [to_text(column.iloc[row_idx]) for column in columns]
+        tokens = _mesh_tokens(values)
+        result.append("; ".join(tokens))
+    return pd.Series(result, dtype="string")
 
-    sample: list[Mapping[str, Any]] = []
-    for value in index[:limit]:
-        if isinstance(value, tuple):
-            sample.append({column: element for column, element in zip(key_columns, value, strict=False)})
+
+def _year_from_date(value: str) -> str:
+    text = to_text(value).strip()
+    if not text:
+        return ""
+    match = re.match(r"(\d{4})", text)
+    return match.group(1) if match else ""
+
+
+def _coalesce_columns(frame: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
+    if not columns:
+        return pd.Series([""] * len(frame), index=frame.index, dtype="string")
+    result = pd.Series([""] * len(frame), index=frame.index, dtype="string")
+    for column in columns:
+        if column not in frame.columns:
+            continue
+        candidate = _string_series(frame[column])
+        mask = result.eq("") & candidate.ne("")
+        result.loc[mask] = candidate.loc[mask]
+        if result.ne("").all():
+            break
+    return result
+
+
+def _tokenise_sources(value: str) -> set[str]:
+    tokens = MESH_SPLIT_PATTERN.split(to_text(value).lower())
+    return {token.strip() for token in tokens if token.strip()}
+
+
+def _extract_date_code(path: Path) -> str:
+    match = DATE_PATTERN.search(path.name)
+    if match:
+        return match.group(1)
+    return datetime.utcnow().strftime("%Y%m%d")
+
+
+def _collect_key_sample(index: pd.Index, limit: int = 5) -> list[Mapping[str, str]]:
+    sample: list[Mapping[str, str]] = []
+    for key in index[:limit]:
+        if isinstance(key, tuple):
+            sample.append({"document_chembl_id": to_text(key[0]), "primary_pubmed_id": to_text(key[1])})
         else:
-            row = {key_columns[0]: value}
-            for extra in key_columns[1:]:
-                row.setdefault(extra, "")
-            sample.append(row)
+            sample.append({"document_chembl_id": to_text(key), "primary_pubmed_id": ""})
     return sample
 
 
-def _check_invalid_formula(frame: pd.DataFrame, key_columns: Sequence[str]) -> Mapping[str, Any]:
-    """Return invariant status ensuring ``invalid`` equals the OR of component flags."""
+# ===== Dataset contexts ======================================================
+class DatasetContext:
+    """Base class exposing helper utilities for builder functions."""
 
-    if "invalid" not in frame.columns:
-        return {"available": False, "passed": True, "violations": 0, "failing_keys": []}
+    def __init__(self, frame: pd.DataFrame):
+        self.frame = frame
 
-    detail_columns = [column for column in frame.columns if column.startswith("invalid.")]
-    invalid_true = frame["invalid"].map(_normalise_boolish).eq(True)
-    if detail_columns:
-        detail_true = frame[detail_columns].map(_normalise_boolish).eq(True)
-        expected_true = detail_true.any(axis=1)
+    @property
+    def length(self) -> int:
+        return len(self.frame)
+
+
+class PythonDatasetContext(DatasetContext):
+    """Context for the Python post-processed dataset."""
+
+    def get_column(self, column: str) -> pd.Series:
+        if column not in self.frame.columns:
+            return pd.Series(["" for _ in range(self.length)], dtype="string")
+        return _string_series(self.frame[column])
+
+    def provider_flag(self, provider: str) -> pd.Series:
+        column_name = f"has_{provider}"
+        series = self.frame.get(column_name)
+        if series is None:
+            return pd.Series([False] * self.length, dtype="boolean")
+        values = _boolean_series(_string_series(series))
+        return values.fillna(False)
+
+    def metadata_count(self) -> pd.Series:
+        series = self.frame.get("metadata_source_count")
+        if series is None:
+            return pd.Series([0] * self.length, dtype="Int64")
+        numeric = pd.to_numeric(_string_series(series).replace("", pd.NA), errors="coerce")
+        return numeric.astype("Int64").fillna(0)
+
+
+class MPowerQueryContext(DatasetContext):
+    """Context for the legacy Power Query shaped dataset."""
+
+    def __init__(self, frame: pd.DataFrame):
+        super().__init__(frame)
+        self._provider_cache: dict[str, pd.Series] = {}
+
+    def get_column(self, column: str) -> pd.Series:
+        if column not in self.frame.columns:
+            return pd.Series(["" for _ in range(self.length)], dtype="string")
+        return _string_series(self.frame[column])
+
+    def provider_flag(self, provider: str) -> pd.Series:
+        if provider in self._provider_cache:
+            return self._provider_cache[provider]
+        columns = PROVIDER_COLUMNS_M.get(provider, ())
+        flag = pd.Series([False] * self.length, dtype="boolean")
+        for column in columns:
+            if column not in self.frame.columns:
+                continue
+            candidate = _string_series(self.frame[column]).ne("")
+            flag = flag | candidate
+        self._provider_cache[provider] = flag.fillna(False)
+        return self._provider_cache[provider]
+
+    def metadata_count(self) -> pd.Series:
+        flags = [self.provider_flag(provider) for provider in PROVIDER_COLUMNS_M]
+        if not flags:
+            return pd.Series([0] * self.length, dtype="Int64")
+        total = pd.DataFrame(flags).T.sum(axis=1)
+        return total.astype("Int64")
+
+
+# ===== Builder registries ====================================================
+def _build_python_series(context: PythonDatasetContext, config: BuilderConfig) -> pd.Series:
+    if config.builder == "column":
+        return context.get_column(config.columns[0]) if config.columns else context.get_column("")
+    if config.builder == "numeric_identifier":
+        if not config.columns:
+            return pd.Series(["" for _ in range(context.length)], dtype="string")
+        series = context.get_column(config.columns[0])
+        return _normalize_numeric_series(series)
+    if config.builder == "boolean":
+        if not config.columns:
+            return pd.Series([False] * context.length, dtype="boolean")
+        series = context.get_column(config.columns[0])
+        return _boolean_series(series).fillna(False)
+    if config.builder == "mesh_terms":
+        columns = [context.get_column(column) for column in config.columns]
+        return _mesh_series(columns)
+    if config.builder == "integer":
+        if not config.columns:
+            return pd.Series([0] * context.length, dtype="Int64")
+        series = context.get_column(config.columns[0]).replace("", pd.NA)
+        numeric = pd.to_numeric(series, errors="coerce")
+        return numeric.astype("Int64").fillna(0)
+    if config.builder == "year_column":
+        if not config.columns:
+            return pd.Series(["" for _ in range(context.length)], dtype="string")
+        series = context.get_column(config.columns[0]).replace("", pd.NA)
+        numeric = pd.to_numeric(series, errors="coerce")
+        return numeric.astype("Int64")
+    raise ValueError(f"Unsupported python builder: {config.builder}")
+
+
+def _build_m_series(context: MPowerQueryContext, config: BuilderConfig) -> pd.Series:
+    if config.builder == "column":
+        return context.get_column(config.columns[0]) if config.columns else context.get_column("")
+    if config.builder == "numeric_identifier":
+        result = pd.Series(["" for _ in range(context.length)], dtype="string")
+        for column in config.columns:
+            candidate = _normalize_numeric_series(context.get_column(column))
+            mask = result.eq("") & candidate.ne("")
+            result.loc[mask] = candidate.loc[mask]
+            if result.ne("").all():
+                break
+        return result
+    if config.builder == "coalesce":
+        return _coalesce_columns(context.frame, config.columns)
+    if config.builder == "mesh_terms":
+        columns = [context.get_column(column) for column in config.columns]
+        return _mesh_series(columns)
+    if config.builder == "review_flag":
+        values = pd.Series([False] * context.length, dtype="boolean")
+        for column in config.columns:
+            if column not in context.frame.columns:
+                continue
+            series = _boolean_series(context.frame[column])
+            values = values | series.fillna(False)
+        return values.fillna(False)
+    if config.builder == "publication_year":
+        result = pd.Series([pd.NA] * context.length, dtype="Int64")
+        for column in config.columns:
+            if column not in context.frame.columns:
+                continue
+            series = context.frame[column]
+            if column == "completed":
+                candidate = pd.Series([_year_from_date(value) for value in series], dtype="string")
+                candidate = candidate.replace("", pd.NA)
+                numeric = pd.to_numeric(candidate, errors="coerce")
+            else:
+                candidate = _string_series(series).replace("", pd.NA)
+                numeric = pd.to_numeric(candidate, errors="coerce")
+            numeric = numeric.astype("Int64")
+            mask = result.isna() & numeric.notna()
+            result.loc[mask] = numeric.loc[mask]
+            if result.notna().all():
+                break
+        return result
+    if config.builder == "provider_flag":
+        provider = config.columns[0] if config.columns else ""
+        return context.provider_flag(provider)
+    if config.builder == "provider_count":
+        providers = config.columns or tuple(PROVIDER_COLUMNS_M.keys())
+        flags = [context.provider_flag(provider) for provider in providers]
+        if not flags:
+            return pd.Series([0] * context.length, dtype="Int64")
+        total = pd.DataFrame(flags).T.sum(axis=1)
+        return total.astype("Int64")
+    raise ValueError(f"Unsupported Power Query builder: {config.builder}")
+
+
+# ===== Projection builders ===================================================
+def _build_projection(frame: pd.DataFrame, crosswalk: Crosswalk, *, side: str) -> pd.DataFrame:
+    if side == "python":
+        context = PythonDatasetContext(frame)
+        builder = _build_python_series
+    elif side == "m":
+        context = MPowerQueryContext(frame)
+        builder = _build_m_series
     else:
-        expected_true = pd.Series(False, index=frame.index)
-    violations_mask = invalid_true != expected_true
-    violations = int(violations_mask.sum())
-    failing_keys = _collect_key_sample(frame.index[violations_mask], key_columns)
-    return {
-        "available": True,
-        "passed": violations == 0,
-        "violations": violations,
-        "failing_keys": failing_keys,
-    }
+        raise ValueError(f"Unknown side {side}")
+
+    result = pd.DataFrame(index=frame.index)
+    for field in crosswalk.fields:
+        series = builder(context, getattr(field, side))
+        result[field.name] = series
+    return result
 
 
-def _check_completed_format(frame: pd.DataFrame, key_columns: Sequence[str]) -> Mapping[str, Any]:
-    """Return invariant status confirming ``completed`` follows the canonical pattern."""
-
-    if "completed" not in frame.columns:
-        return {"available": False, "passed": True, "violations": 0, "failing_keys": []}
-
-    completed_values = frame["completed"].map(to_text)
-    valid_mask = completed_values.str.fullmatch(COMPLETED_FORMAT_PATTERN) | completed_values.eq("")
-    violations_mask = ~valid_mask
-    violations = int(violations_mask.sum())
-    failing_keys = _collect_key_sample(frame.index[violations_mask], key_columns)
-    return {
-        "available": True,
-        "passed": violations == 0,
-        "violations": violations,
-        "failing_keys": failing_keys,
-    }
+def _canonicalise(df: pd.DataFrame) -> pd.DataFrame:
+    canonical = pd.DataFrame(index=df.index)
+    for column in df.columns:
+        canonical[column] = df[column].map(to_text)
+    return canonical
 
 
-def _parse_completed_tuple(value: str) -> tuple[int, int, int] | None:
-    """Return a sortable tuple extracted from ``value`` when formatted correctly."""
+def _build_index(df: pd.DataFrame) -> pd.MultiIndex:
+    doc_ids = df["document_chembl_id"].map(to_text)
+    pmids = df["primary_pubmed_id"].map(to_text)
+    tuples = list(zip(doc_ids, pmids, strict=False))
+    return pd.MultiIndex.from_tuples(
+        tuples,
+        names=("document_chembl_id", "primary_pubmed_id"),
+    )
 
-    if not COMPLETED_FORMAT_PATTERN.fullmatch(value):
-        return None
-    parts = value.split("-")
-    return tuple(int(part) for part in parts)
+
+# ===== Metrics ===============================================================
+def _group_match_rate(mask: pd.DataFrame, columns: Sequence[str]) -> float:
+    if not columns:
+        return 1.0
+    subset = mask[list(columns)]
+    if subset.empty:
+        return 1.0
+    rowwise = subset.all(axis=1)
+    if not len(rowwise):
+        return 1.0
+    return float(rowwise.sum()) / len(rowwise)
 
 
-def _check_completed_order(frame: pd.DataFrame, key_columns: Sequence[str]) -> Mapping[str, Any]:
-    """Return invariant status ensuring completed dates are non-decreasing by sort order."""
-
-    if "completed" not in frame.columns or "sortorder.document" not in frame.columns:
-        return {"available": False, "passed": True, "violations": 0, "failing_keys": []}
-
-    ordered = frame[["completed", "sortorder.document"]].copy()
-    ordered["completed"] = ordered["completed"].map(to_text)
-    ordered["sortorder.document"] = ordered["sortorder.document"].map(to_text)
-    ordered = ordered.sort_values("sortorder.document", kind="stable")
-
-    previous: tuple[int, int, int] | None = None
-    violating_labels: list[Any] = []
-    for label, value in ordered["completed"].items():
-        parsed = _parse_completed_tuple(value)
-        if parsed is None:
-            continue
-        if previous is None:
-            previous = parsed
-            continue
-        if parsed < previous:
-            violating_labels.append(label)
+def _per_field_match(mask: pd.DataFrame) -> Mapping[str, float]:
+    rates: dict[str, float] = {}
+    for column in mask.columns:
+        column_mask = mask[column]
+        if not len(column_mask):
+            rates[column] = 1.0
         else:
-            previous = parsed
-    violations = len(violating_labels)
-    failing_keys = _collect_key_sample(pd.Index(violating_labels), key_columns)
-    return {
-        "available": True,
-        "passed": violations == 0,
-        "violations": violations,
-        "failing_keys": failing_keys,
-    }
+            rates[column] = float(column_mask.sum()) / len(column_mask)
+    return rates
 
 
-def _summarise_dataset(
-    *,
-    frame: pd.DataFrame,
-    canonical: pd.DataFrame,
-    key_columns: Sequence[str],
-    path: str,
-    duplicate_count: int,
+# ===== Invariants ============================================================
+def _invariant_invalid_to_error(
+    m_frame: pd.DataFrame,
+    python_frame: pd.DataFrame,
 ) -> Mapping[str, Any]:
-    """Return derived metrics for ``frame`` and ``canonical`` representations."""
+    if m_frame.empty:
+        return {"passed": True, "violations": 0, "failing_keys": []}
 
-    review_summary = _boolean_share(canonical.get("review"))
-    experimental_summary = _boolean_share(canonical.get("experimental"))
-    invariants = {
-        "invalid_formula": _check_invalid_formula(canonical, key_columns),
-        "completed_format": _check_completed_format(canonical, key_columns),
-        "completed_order": _check_completed_order(canonical, key_columns),
-    }
-    return {
-        "path": path,
-        "rows": int(len(frame)),
-        "columns": list(frame.columns),
-        "column_count": int(len(frame.columns)),
-        "duplicates": duplicate_count,
-        "invalid_flags": _summarise_invalid_flags(canonical),
-        "review": review_summary,
-        "experimental": experimental_summary,
-        "invariants": invariants,
-    }
-
-
-def _render_markdown(metrics: Mapping[str, Any], diff_path: Path | None) -> str:
-    """Return a Markdown summary of the QA run."""
-
-    def _format_bool(flag: bool) -> str:
-        return "✅ yes" if flag else "❌ no"
-
-    def _format_invalid(summary: Mapping[str, Mapping[str, int]]) -> str:
-        if not summary:
-            return "n/a"
-        parts = []
-        for column, values in summary.items():
-            value_text = ", ".join(
-                f"{name or '""'}={count}" for name, count in values.items()
-            )
-            parts.append(f"{column} [{value_text}]")
-        return "; ".join(parts)
-
-    def _format_bool_optional(flag: Any | None) -> str:
-        if flag is None:
-            return "n/a"
-        if isinstance(flag, bool):
-            return _format_bool(flag)
-        return _format_bool(bool(flag))
-
-    def _format_share_block(summary: Mapping[str, Any], total_rows: int) -> str:
-        if not summary.get("available"):
-            return "n/a"
-        true_count = summary["true"]
-        percentage = summary["share_true"] * 100
-        return f"{percentage:.2f}% ({true_count}/{total_rows})"
-
-    ref_rows = metrics["reference"]["rows"]
-    cand_rows = metrics["candidate"]["rows"]
-    lines = ["# Document post-processing QA report", ""]
-    lines.append(f"- Status: **{metrics['status']}**")
-    lines.append(f"- Reference rows: {ref_rows}")
-    lines.append(f"- Candidate rows: {cand_rows}")
-    structure = metrics.get("structure", {})
-    lines.append(
-        "- Column sets identical: "
-        + _format_bool_optional(structure.get("columns_equal"))
-    )
-    lines.append(
-        "- Column order identical: "
-        + _format_bool_optional(structure.get("column_order_equal"))
-    )
-    lines.append(
-        "- Cells different: "
-        f"{metrics['differences']['cells_different']} / {metrics['differences']['cells_total']} "
-        f"(rows impacted: {metrics['differences']['rows_with_differences']} of {metrics['differences']['rows_compared']})"
-    )
-    lines.append(
-        "- Missing keys: "
-        f"reference-only {metrics['missing_rows']['reference_only']['count']}, "
-        f"candidate-only {metrics['missing_rows']['candidate_only']['count']}"
-    )
-    lines.append(
-        "- Invalid flags (reference): "
-        + _format_invalid(metrics["reference"]["invalid_flags"])
-    )
-    lines.append(
-        "- Invalid flags (candidate): "
-        + _format_invalid(metrics["candidate"]["invalid_flags"])
-    )
-    lines.append(
-        "- Review share: reference "
-        + _format_share_block(metrics["reference"]["review"], ref_rows)
-        + "; candidate "
-        + _format_share_block(metrics["candidate"]["review"], cand_rows)
-    )
-    lines.append(
-        "- Experimental share: reference "
-        + _format_share_block(metrics["reference"]["experimental"], ref_rows)
-        + "; candidate "
-        + _format_share_block(metrics["candidate"]["experimental"], cand_rows)
-    )
-    invariants = metrics["candidate"]["invariants"]
-    ref_invariants = metrics["reference"]["invariants"]
-    lines.append(
-        "- Invariants: "
-        f"invalid formula ref {_format_bool(ref_invariants['invalid_formula']['passed'])} / "
-        f"cand {_format_bool(invariants['invalid_formula']['passed'])}; "
-        f"completed format ref {_format_bool(ref_invariants['completed_format']['passed'])} / "
-        f"cand {_format_bool(invariants['completed_format']['passed'])}; "
-        f"order ref {_format_bool(ref_invariants['completed_order']['passed'])} / "
-        f"cand {_format_bool(invariants['completed_order']['passed'])}"
-    )
-    lines.append(f"- Issues detected: {len(metrics['issues'])}")
-    if diff_path is not None:
-        lines.append(
-            f"- Diff excerpt: [{diff_path.name}]({diff_path.name})"
-        )
+    if "invalid.doi" in m_frame.columns:
+        invalid_doi = _boolean_series(m_frame["invalid.doi"]).fillna(False)
     else:
-        lines.append("- Diff excerpt: not generated")
+        invalid_doi = pd.Series([False] * len(m_frame), index=m_frame.index, dtype="boolean")
 
-    if metrics["issues"]:
-        lines.append("")
-        lines.append("## Issues")
-        for issue in metrics["issues"]:
-            lines.append(f"- {issue}")
+    if "invalid.PMID" in m_frame.columns:
+        invalid_pmid = _boolean_series(m_frame["invalid.PMID"]).fillna(False)
+    else:
+        invalid_pmid = pd.Series([False] * len(m_frame), index=m_frame.index, dtype="boolean")
 
-    if metrics["differences"]["by_column"]:
-        lines.append("")
-        lines.append("## Differences by column")
-        lines.append("| Column | Differences |")
-        lines.append("| --- | ---: |")
-        for column, count in metrics["differences"]["by_column"].items():
-            lines.append(f"| {column} | {count} |")
+    if "has_error" in python_frame.columns:
+        has_error = _boolean_series(python_frame["has_error"]).fillna(False)
+    else:
+        has_error = pd.Series([False] * len(python_frame), index=python_frame.index, dtype="boolean")
 
+    if "error_sources" in python_frame.columns:
+        error_sources = _string_series(python_frame["error_sources"])
+    else:
+        error_sources = pd.Series([""] * len(python_frame), index=python_frame.index, dtype="string")
+
+    combined_flag = invalid_doi | invalid_pmid
+    violation_mask = combined_flag & ~has_error
+    failing_labels: list[Any] = list(m_frame.index[violation_mask])
+
+    for key in combined_flag.index:
+        if not bool(combined_flag.loc[key]):
+            continue
+        tokens = _tokenise_sources(error_sources.loc[key] if key in error_sources.index else "")
+        expected_tokens: set[str] = set()
+        if bool(invalid_doi.loc[key]):
+            expected_tokens |= INVALID_ERROR_TOKEN_MAP["invalid.doi"]
+        if bool(invalid_pmid.loc[key]):
+            expected_tokens |= INVALID_ERROR_TOKEN_MAP["invalid.PMID"]
+        if expected_tokens and tokens.isdisjoint(expected_tokens):
+            failing_labels.append(key)
+
+    unique_labels = list(dict.fromkeys(failing_labels))
+    sample_index = pd.Index(unique_labels) if unique_labels else pd.Index([])
+    sample = _collect_key_sample(sample_index)
+    return {
+        "passed": not unique_labels,
+        "violations": len(unique_labels),
+        "failing_keys": sample,
+    }
+
+
+def _invariant_review_merge(
+    m_frame: pd.DataFrame,
+    python_frame: pd.DataFrame,
+) -> Mapping[str, Any]:
+    if m_frame.empty:
+        return {"passed": True, "violations": 0, "failing_keys": []}
+
+    review = (
+        _boolean_series(m_frame["review"]).fillna(False)
+        if "review" in m_frame.columns
+        else pd.Series([False] * len(m_frame), index=m_frame.index, dtype="boolean")
+    )
+    doctype = (
+        _boolean_series(m_frame["doctype_review"]).fillna(False)
+        if "doctype_review" in m_frame.columns
+        else pd.Series([False] * len(m_frame), index=m_frame.index, dtype="boolean")
+    )
+    expected = review | doctype
+
+    if "is_review" in python_frame.columns:
+        actual = _boolean_series(python_frame["is_review"]).fillna(False)
+    else:
+        actual = pd.Series([False] * len(python_frame), index=python_frame.index, dtype="boolean")
+
+    violations = expected & ~actual
+    failing_index = pd.Index(m_frame.index[violations])
+    sample = _collect_key_sample(failing_index)
+    return {
+        "passed": int(violations.sum()) == 0,
+        "violations": int(violations.sum()),
+        "failing_keys": sample,
+    }
+
+
+def _invariant_provider_coverage(
+    m_projection: pd.DataFrame,
+    python_projection: pd.DataFrame,
+    python_raw: pd.DataFrame,
+    *,
+    provider_columns: Sequence[str],
+) -> Mapping[str, Any]:
+    if m_projection.empty:
+        return {"passed": True, "violations": 0, "failing_keys": []}
+
+    mismatch_flags = pd.Series([False] * len(m_projection), index=m_projection.index, dtype="boolean")
+
+    for provider in provider_columns:
+        column = f"has_{provider}"
+        if column not in m_projection.columns or column not in python_projection.columns:
+            continue
+        expected = _boolean_series(m_projection[column]).fillna(False)
+        actual = _boolean_series(python_projection[column]).fillna(False)
+        mismatch_flags = mismatch_flags | (expected != actual)
+
+    count_expected = pd.to_numeric(
+        _string_series(m_projection.get("metadata_source_count", pd.Series([0] * len(m_projection), index=m_projection.index, dtype="string"))).replace("", pd.NA),
+        errors="coerce",
+    ).fillna(0)
+    count_actual = pd.to_numeric(
+        _string_series(python_projection.get("metadata_source_count", pd.Series([0] * len(python_projection), index=python_projection.index, dtype="string"))).replace("", pd.NA),
+        errors="coerce",
+    ).fillna(0)
+    count_mismatch = count_expected != count_actual
+
+    coverage_status = _string_series(
+        python_raw.get("coverage_status", pd.Series(["" for _ in range(len(python_raw))], index=python_raw.index, dtype="string"))
+    ).str.lower()
+    has_error = _boolean_series(
+        python_raw.get("has_error", pd.Series([False] * len(python_raw), index=python_raw.index, dtype="boolean"))
+    ).fillna(False)
+
+    zero_mask = count_expected.eq(0)
+    status_violation = zero_mask & ~(coverage_status.isin(["unknown", "failed"]) | (has_error & coverage_status.eq("failed")))
+
+    failing_flags = mismatch_flags | count_mismatch | status_violation
+    failing_index = pd.Index(m_projection.index[failing_flags])
+    sample = _collect_key_sample(failing_index)
+    return {
+        "passed": int(failing_flags.sum()) == 0,
+        "violations": int(failing_flags.sum()),
+        "failing_keys": sample,
+    }
+
+
+# ===== Reporting =============================================================
+def _format_percentage(value: float) -> str:
+    return f"{value:.4%}"
+
+
+def _format_invariant(status: Mapping[str, Any]) -> str:
+    if not status:
+        return "n/a"
+    label = "PASS" if status.get("passed") else "FAIL"
+    count = status.get("violations", 0)
+    return f"{label} ({count} violations)"
+
+
+def _render_markdown(
+    *,
+    crosswalk: Crosswalk,
+    date_code: str,
+    metrics: Mapping[str, Any],
+    diff_path: Path | None,
+) -> str:
+    lines = [f"# QA Report — document postprocessing ({date_code})", ""]
+    lines.append(f"- Crosswalk loaded: {crosswalk.version}")
+    records = metrics.get("records", {})
+    lines.append(
+        "- Records: "
+        f"python={records.get('python', 0)}, m_like={records.get('m_like', 0)}"
+    )
+    lines.append("- Match rates:")
+    match_rates = metrics.get("match_rates", {})
+    for key in ["ids", "preferred", "publication_year", "is_review", "mesh_terms", "has_flags", "coverage"]:
+        if key in match_rates:
+            lines.append(f"  - {key.replace('_', ' ')}: {_format_percentage(match_rates[key])}")
+    invariants = metrics.get("invariants", {})
+    lines.append("- Invariants:")
+    lines.append(f"  - invalid→has_error: {_format_invariant(invariants.get('invalid_to_error'))}")
+    lines.append(f"  - review merge: {_format_invariant(invariants.get('review_merge'))}")
+    lines.append(f"  - provider coverage consistent: {_format_invariant(invariants.get('provider_coverage'))}")
+    lines.append("- Top 5 mismatch reasons:")
+    reasons = metrics.get("top_mismatch_reasons", [])
+    if not reasons:
+        reasons = ["n/a"]
+    for idx, reason in enumerate(reasons[:5], start=1):
+        lines.append(f"  {idx}) {reason}")
     lines.append("")
+    lines.append(f"Result: {metrics.get('status', 'UNKNOWN')}")
+    diff_label = diff_path.name if diff_path else "n/a"
+    lines.append(f"Diff: {diff_label}")
     return "\n".join(lines)
 
 
-# ===== Core functionality ====================================================
+# ===== Main QA driver ========================================================
 def run_document_postprocessing_check(
     *,
-    base_path: str | os.PathLike[str],
-    reference_path: str | os.PathLike[str],
-    candidate_path: str | os.PathLike[str],
-    output_dir: str | os.PathLike[str] | None = None,
-    date_code: str | None = None,
-    delimiter: str = CSV_DELIMITER,
-    reference_encoding: str = CP1252_ENCODING,
-    candidate_encoding: str = UTF8_ENCODING,
-    max_diff_rows: int = DEFAULT_MAX_DIFF_ROWS,
-    key_columns: Sequence[str] = KEY_COLUMNS,
-) -> QaResult:
-    """Compare the Power Query reproduction with the Python post-processing result."""
+    crosswalk: Crosswalk,
+    m_frame: pd.DataFrame,
+    python_frame: pd.DataFrame,
+    diff_limit: int,
+    date_code: str,
+    report_dir: Path,
+) -> Mapping[str, Any]:
+    python_projection = _build_projection(python_frame, crosswalk, side="python")
+    m_projection = _build_projection(m_frame, crosswalk, side="m")
 
-    if max_diff_rows <= 0:
-        msg = "max_diff_rows must be positive"
-        raise ValueError(msg)
+    python_canonical = _canonicalise(python_projection)
+    m_canonical = _canonicalise(m_projection)
 
-    base_dir = Path(base_path).resolve()
-    reference_resolved = _resolve_relative(base_dir, reference_path)
-    candidate_resolved = _resolve_relative(base_dir, candidate_path)
+    python_index = _build_index(python_canonical)
+    m_index = _build_index(m_canonical)
 
-    if output_dir is None:
-        output_directory = candidate_resolved.parent
-    else:
-        output_directory = _resolve_relative(base_dir, output_dir)
-    output_directory.mkdir(parents=True, exist_ok=True)
+    python_projection = python_projection.copy()
+    m_projection = m_projection.copy()
+    python_raw = python_frame.copy()
+    m_raw = m_frame.copy()
 
-    ref_source = _load_csv(
-        reference_resolved,
-        encoding=reference_encoding,
-        delimiter=delimiter,
-        keep_default_na=True,
-    )
-    out_source = _load_csv(
-        candidate_resolved,
-        encoding=candidate_encoding,
-        delimiter=delimiter,
-        keep_default_na=True,
-    )
+    python_projection.index = python_index
+    m_projection.index = m_index
+    python_canonical.index = python_index
+    m_canonical.index = m_index
+    python_raw.index = python_index
+    m_raw.index = m_index
 
-    expected_df = _power_query_expected(ref_source, out_source)
+    common_index = python_index.intersection(m_index)
+    python_common = python_canonical.reindex(common_index)
+    m_common = m_canonical.reindex(common_index)
+    python_projection_common = python_projection.reindex(common_index)
+    m_projection_common = m_projection.reindex(common_index)
+    python_raw_common = python_raw.reindex(common_index)
+    m_raw_common = m_raw.reindex(common_index)
 
-    cfg = IoCfg(csv_sep=delimiter, csv_encoding=candidate_encoding)
-    processed_path = dp.postprocess_file(
-        candidate_resolved,
-        candidate_resolved.parent,
-        cfg=cfg,
-        ref_document_path=reference_resolved,
-    )
+    comparison_mask = python_common.eq(m_common)
 
-    actual_df = _load_csv(
-        processed_path,
-        encoding=dp.UTF8_ENCODING,
-        delimiter=delimiter,
-        keep_default_na=False,
-    )
+    per_field = _per_field_match(comparison_mask)
+    group_rates: dict[str, float] = {}
+    for group, columns in crosswalk.metric_groups().items():
+        group_rates[group] = _group_match_rate(comparison_mask, columns)
 
-    expected_df = _ensure_columns(expected_df, key_columns)
-    actual_df = _ensure_columns(actual_df, key_columns)
+    python_only = python_index.difference(m_index)
+    m_only = m_index.difference(python_index)
 
-    reference_canonical = _canonicalise(expected_df)
-    candidate_canonical = _canonicalise(actual_df)
-
-    reference_index = _build_index(reference_canonical, key_columns)
-    candidate_index = _build_index(candidate_canonical, key_columns)
-
-    reference_canonical.index = reference_index
-    candidate_canonical.index = candidate_index
-
-    all_columns = sorted(set(reference_canonical.columns) | set(candidate_canonical.columns))
-    reference_canonical = reference_canonical.reindex(columns=all_columns).fillna("")
-    candidate_canonical = candidate_canonical.reindex(columns=all_columns).fillna("")
-
-    combined_index = reference_index.union(candidate_index)
-    reference_aligned = reference_canonical.reindex(combined_index, fill_value="")
-    candidate_aligned = candidate_canonical.reindex(combined_index, fill_value="")
-
-    mask = reference_aligned.ne(candidate_aligned)
-    cells_different = int(mask.to_numpy().sum())
-    total_cells = int(mask.size)
-    rows_with_differences = int(mask.any(axis=1).sum())
-    by_column = _differences_by_column(mask)
-
-    missing_in_candidate = _summarise_missing(reference_index, candidate_index)
-    missing_in_reference = _summarise_missing(candidate_index, reference_index)
-
-    reference_duplicates = int(reference_index.duplicated().sum())
-    candidate_duplicates = int(candidate_index.duplicated().sum())
-
-    missing_in_actual = sorted(set(all_columns) - set(actual_df.columns))
-    missing_in_expected = sorted(set(all_columns) - set(expected_df.columns))
-
-    structure_metrics = {
-        "columns_equal": set(expected_df.columns) == set(actual_df.columns),
-        "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
+    invariants = {
+        "invalid_to_error": _invariant_invalid_to_error(
+            m_raw_common, python_raw_common
+        ),
+        "review_merge": _invariant_review_merge(
+            m_raw_common, python_raw_common
+        ),
+        "provider_coverage": _invariant_provider_coverage(
+            m_projection_common,
+            python_projection_common,
+            python_raw_common,
+            provider_columns=["chembl", "pubmed", "semantic_scholar", "openalex", "crossref"],
+        ),
     }
 
-
-    reference_summary = _summarise_dataset(
-        frame=expected_df,
-        canonical=reference_canonical,
-        key_columns=key_columns,
-        path=str(reference_resolved),
-        duplicate_count=reference_duplicates,
-    )
-    candidate_summary = _summarise_dataset(
-        frame=actual_df,
-        canonical=candidate_canonical,
-        key_columns=key_columns,
-        path=str(processed_path),
-        duplicate_count=candidate_duplicates,
-    )
-
-    structure_metrics = {
-        "columns_equal": set(expected_df.columns) == set(actual_df.columns),
-        "column_order_equal": list(expected_df.columns) == list(actual_df.columns),
-    }
-
-    issues: list[str] = []
-    if cells_different:
-        issues.append(f"Detected {cells_different} mismatched cells")
-    if missing_in_candidate["count"]:
-        issues.append(
-            f"{missing_in_candidate['count']} keys missing in candidate output"
-        )
-    if missing_in_reference["count"]:
-        issues.append(
-            f"{missing_in_reference['count']} keys missing in reference output"
-        )
-    if reference_duplicates:
-        issues.append(f"Reference contains {reference_duplicates} duplicate key rows")
-    if candidate_duplicates:
-        issues.append(f"Candidate contains {candidate_duplicates} duplicate key rows")
-    if missing_in_expected:
-        issues.append(
-            "Reference missing columns present in candidate: "
-            + ", ".join(missing_in_expected)
-        )
-    if missing_in_actual:
-        issues.append(
-            "Candidate missing columns present in reference: "
-            + ", ".join(missing_in_actual)
-        )
-    if structure_metrics["columns_equal"] and not structure_metrics["column_order_equal"]:
-        issues.append("Column order differs between reference and candidate outputs")
-
-    for dataset_name, dataset_summary in (
-        ("reference", reference_summary),
-        ("candidate", candidate_summary),
-    ):
-        for invariant_key, invariant in dataset_summary["invariants"].items():
-            if invariant.get("available") and not invariant.get("passed"):
-                label = INVARIANT_LABELS.get(invariant_key, invariant_key.replace("_", " "))
-                issues.append(
-                    f"{dataset_name.title()} {label} violated for {invariant['violations']} rows"
-                )
-
-    status = SUCCESS_STATUS if not issues else FAILURE_STATUS
-    resolved_date_code = _extract_date_code(processed_path, date_code)
-
-    metrics: dict[str, Any] = {
-        "status": status,
-        "date_code": resolved_date_code,
-        "structure": structure_metrics,
-
-
-        "reference": reference_summary,
-        "candidate": candidate_summary,
-
-        "differences": {
-            "cells_total": total_cells,
-            "cells_different": cells_different,
-            "rows_compared": int(len(mask.index)),
-            "rows_with_differences": rows_with_differences,
-            "by_column": by_column,
-        },
-        "missing_rows": {
-            "reference_only": missing_in_candidate,
-            "candidate_only": missing_in_reference,
-        },
-        "issues": issues,
-        "key_columns": list(key_columns),
-    }
-
-    report_stem = f"{REPORT_PREFIX}{resolved_date_code}"
-    json_path = output_directory / f"{report_stem}{REPORT_JSON_SUFFIX}"
-    markdown_path = output_directory / f"{report_stem}{REPORT_MD_SUFFIX}"
-
-    with json_path.open("w", encoding=UTF8_ENCODING) as handle:
-        json.dump(metrics, handle, indent=2, sort_keys=True)
-        handle.write("\n")
+    mismatched_rows_mask = ~comparison_mask.all(axis=1)
+    diff_records: list[dict[str, Any]] = []
+    for key in comparison_mask.index[mismatched_rows_mask]:
+        row_mask = ~comparison_mask.loc[key]
+        differing_columns = row_mask[row_mask].index
+        for column in differing_columns:
+            diff_records.append(
+                {
+                    "document_chembl_id": to_text(key[0]),
+                    "primary_pubmed_id": to_text(key[1]),
+                    "field": column,
+                    "python_value": python_common.loc[key, column],
+                    "m_value": m_common.loc[key, column],
+                }
+            )
+            if len(diff_records) >= diff_limit:
+                break
+        if len(diff_records) >= diff_limit:
+            break
 
     diff_path: Path | None = None
-    if issues:
-        diff_limit = min(max_diff_rows, MAX_DIFF_KEY_EXPORT)
-        diff_df = _differences_to_frame(
-            mask,
-            reference_aligned,
-            candidate_aligned,
-            key_columns=key_columns,
-            limit=diff_limit,
-        )
-        if not diff_df.empty:
-            diff_name = f"{DIFF_PREFIX}{resolved_date_code}{DIFF_SUFFIX}"
-            diff_path = output_directory / diff_name
-            write_csv_deterministic(
-                diff_df,
-                diff_path,
-                encoding=UTF8_ENCODING,
-                sep=delimiter,
-                key_cols=list(key_columns),
-            )
-    markdown_path.write_text(
-        _render_markdown(metrics, diff_path),
-        encoding=UTF8_ENCODING,
-    )
+    if diff_records:
+        diff_df = pd.DataFrame(diff_records)
+        report_dir.mkdir(parents=True, exist_ok=True)
+        diff_path = report_dir / f"{DIFF_PREFIX}{date_code}{DIFF_SUFFIX}"
+        write_csv_deterministic(diff_df, diff_path)
 
-    return QaResult(
-        passed=status == SUCCESS_STATUS,
-        date_code=resolved_date_code,
+    issues: list[str] = []
+    for group, threshold in MATCH_THRESHOLDS.items():
+        rate = group_rates.get(group)
+        if rate is None:
+            continue
+        if rate < threshold:
+            issues.append(f"Match rate for {group} below threshold ({rate:.4%} < {threshold:.2%})")
+    for label, status in invariants.items():
+        if not status.get("passed", True):
+            issues.append(f"Invariant {label} failed with {status.get('violations', 0)} violations")
+    if len(python_only):
+        issues.append(f"{len(python_only)} python-only keys detected")
+    if len(m_only):
+        issues.append(f"{len(m_only)} M-output-only keys detected")
+
+    diff_counts = (~comparison_mask).sum().sort_values(ascending=False)
+    top_reasons = [f"{column}: {count}" for column, count in diff_counts.items() if count > 0][:5]
+
+    status_label = "PASS" if not issues else "FAIL"
+
+    metrics = {
+        "status": status_label,
+        "date_code": date_code,
+        "crosswalk_version": crosswalk.version,
+        "records": {"python": int(len(python_frame)), "m_like": int(len(m_frame))},
+        "missing_rows": {
+            "python_only": int(len(python_only)),
+            "m_only": int(len(m_only)),
+            "python_only_sample": _collect_key_sample(python_only),
+            "m_only_sample": _collect_key_sample(m_only),
+        },
+        "match_rates": group_rates,
+        "per_field_match": per_field,
+        "invariants": invariants,
+        "issues": issues,
+        "top_mismatch_reasons": top_reasons,
+        "diff_rows": len(diff_records),
+    }
+
+    report_dir.mkdir(parents=True, exist_ok=True)
+    json_path = report_dir / f"{REPORT_PREFIX}{date_code}{REPORT_JSON_SUFFIX}"
+    md_path = report_dir / f"{REPORT_PREFIX}{date_code}{REPORT_MD_SUFFIX}"
+    with json_path.open("w", encoding=UTF8_ENCODING) as handle:
+        json.dump(metrics, handle, indent=2, ensure_ascii=False)
+    markdown = _render_markdown(
+        crosswalk=crosswalk,
+        date_code=date_code,
         metrics=metrics,
-        report_json=json_path,
-        report_markdown=markdown_path,
-        diff_csv=diff_path,
+        diff_path=diff_path,
     )
+    with md_path.open("w", encoding=UTF8_ENCODING) as handle:
+        handle.write(markdown)
+
+    metrics["report_json"] = str(json_path)
+    metrics["report_markdown"] = str(md_path)
+    metrics["diff_path"] = str(diff_path) if diff_path else None
+    return metrics
 
 
-# ===== CLI ==================================================================
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Validate Python document post-processing against the reference output",
-    )
-    parser.add_argument(
-        "--base-path",
-        default=".",
-        help="Root directory containing the Power Query reference and Python outputs",
-    )
-    parser.add_argument(
-        "--ref",
-        default=str(DEFAULT_REFERENCE_RELATIVE),
-        help="Relative or absolute path to the Power Query reference CSV",
-    )
-    parser.add_argument(
-        "--actual",
-        "--out",
-        dest="actual",
-        default=str(DEFAULT_ACTUAL_RELATIVE),
-        help="Relative or absolute path to the Python-generated CSV",
-    )
-    parser.add_argument(
-        "--reports-dir",
-        dest="output_dir",
-        help="Optional directory for QA reports (defaults to the candidate directory)",
-    )
-    parser.add_argument(
-        "--date-code",
-        help="Override the date code extracted from the candidate filename",
-    )
-    parser.add_argument(
-        "--delimiter",
-        default=CSV_DELIMITER,
-        help="Field delimiter used in the CSV files",
-    )
-    parser.add_argument(
-        "--ref-encoding",
-        default=CP1252_ENCODING,
-        help="Encoding of the reference CSV",
-    )
-    parser.add_argument(
-        "--actual-encoding",
-        default=UTF8_ENCODING,
-        help="Encoding of the Python-generated CSV",
-    )
-    parser.add_argument(
-        "--max-diff-rows",
-        type=int,
-        default=DEFAULT_MAX_DIFF_ROWS,
-        help="Number of discrepancies to include in the diff extract",
-    )
+# ===== CLI ===================================================================
+def _build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="QA validation for document post-processing")
+    parser.add_argument("--base-path", dest="base_path", default=str(DEFAULT_BASE_PATH))
+    parser.add_argument("--out", "--m-output", dest="m_output", required=True)
+    parser.add_argument("--preprocessed", dest="python_output", default=None)
+    parser.add_argument("--crosswalk", dest="crosswalk_path", default=str(CROSSWALK_PATH))
+    parser.add_argument("--diff-limit", dest="diff_limit", type=int, default=DEFAULT_DIFF_LIMIT)
+    parser.add_argument("--report-dir", dest="report_dir", default=str(DEFAULT_REPORT_DIR))
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
+def main() -> None:
+    parser = _build_argument_parser()
+    args = parser.parse_args()
 
-    base_dir = Path(args.base_path).resolve()
-    reference_path = _resolve_relative(base_dir, args.ref)
-    candidate_path = _resolve_relative(base_dir, args.actual)
+    base_path = Path(str(args.base_path).replace("\\", os.sep)).resolve()
+    m_path = _resolve_path(base_path, args.m_output)
 
-    result = run_document_postprocessing_check(
-        base_path=base_dir,
-        reference_path=reference_path,
-        candidate_path=candidate_path,
-        output_dir=args.output_dir,
-        date_code=args.date_code,
-        delimiter=args.delimiter,
-        reference_encoding=args.ref_encoding,
-        candidate_encoding=args.actual_encoding,
-        max_diff_rows=args.max_diff_rows,
+    if args.python_output:
+        python_path = _resolve_path(base_path, args.python_output)
+    else:
+        python_path = m_path.with_name(f"preprocessed_{m_path.name}")
+
+    crosswalk_path = Path(str(args.crosswalk_path).replace("\\", os.sep))
+    if not crosswalk_path.is_absolute():
+        crosswalk_path = (Path.cwd() / crosswalk_path).resolve()
+
+    report_dir = Path(str(args.report_dir).replace("\\", os.sep))
+    if not report_dir.is_absolute():
+        report_dir = (base_path / report_dir).resolve()
+
+    crosswalk = Crosswalk.load(crosswalk_path)
+    m_frame = _read_csv(m_path, encoding=CP1252_ENCODING)
+    python_frame = _read_csv(python_path, encoding=UTF8_ENCODING)
+
+    date_code = _extract_date_code(python_path)
+
+    metrics = run_document_postprocessing_check(
+        crosswalk=crosswalk,
+        m_frame=m_frame,
+        python_frame=python_frame,
+        diff_limit=args.diff_limit,
+        date_code=date_code,
+        report_dir=report_dir,
     )
 
-    return 0 if result.passed else 1
+    print(json.dumps({"status": metrics.get("status"), "report": metrics.get("report_markdown")}, indent=2))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-# ===== Helpers ===============================================================
-def _load_csv(
-    path: Path,
-    *,
-    encoding: str,
-    delimiter: str,
-    keep_default_na: bool,
-) -> pd.DataFrame:
-    """Return a DataFrame loaded from ``path`` with consistent options."""
-
-    return pd.read_csv(
-        path,
-        dtype="string",
-        encoding=encoding,
-        sep=delimiter,
-        keep_default_na=keep_default_na,
-    )
-
-
-def _prepare_reference_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return ``frame`` shaped like the Power Query ``ref_document`` table."""
-
-    reference = frame.copy()
-
-    if "classification" in reference.columns:
-        classification = (
-            pd.to_numeric(reference["classification"], errors="coerce")
-            .fillna(0)
-            .astype(int)
-        )
-        reference["doctype_review"] = classification.astype(bool)
-    elif "doctype_review" not in reference.columns:
-        reference["doctype_review"] = False
-
-    drop_columns = [
-        "abstract",
-        "authors",
-        "DOI",
-        "first_page",
-        "issue",
-        "journal",
-        "last_page",
-        "month",
-        "postcodes",
-        "title",
-        "volume",
-        "year",
-        "classification",
-    ]
-    reference = reference.drop(columns=[c for c in drop_columns if c in reference.columns])
-
-    reference["document_chembl_id"] = reference["document_chembl_id"].map(to_text)
-
-    return reference
-
-
-def _series_from_column(
-    frame: pd.DataFrame,
-    column: str,
-    *,
-    transform: Callable[[Any], Any] | None = to_text,
-    default: str = "",
-) -> pd.Series:
-    """Return ``column`` mapped through ``transform`` with ``default`` fallback."""
-
-    if column in frame.columns:
-        series = frame[column]
-    else:
-        series = pd.Series([default] * len(frame), index=frame.index)
-    if transform is None:
-        return series
-    return series.map(transform)
-
-
-def _power_query_expected(
-    ref_document: pd.DataFrame,
-    out_document: pd.DataFrame,
-) -> pd.DataFrame:
-    """Return the expected Power Query output for ``out_document``."""
-
-    if out_document.empty:
-        return pd.DataFrame(columns=list(dp.FINAL_COLUMN_ORDER))
-
-    frame = out_document.copy()
-
-    for column in frame.columns:
-        frame[column] = frame[column].map(to_text)
-
-    for column in dp.PUBMED_NUMERIC_TEXT_COLUMNS:
-        frame[column] = _series_from_column(frame, column).replace("", "0")
-
-    for column in dp.CHEMBL_NUMERIC_TEXT_COLUMNS + dp.PUBMED_NUMERIC_TEXT_COLUMNS:
-        frame[column] = _series_from_column(frame, column)
-
-    frame["ChEMBL.journal"] = _series_from_column(
-        frame, "ChEMBL.journal", transform=dp.normalize_journal
-    )
-    frame["PubMed.JournalTitle"] = _series_from_column(
-        frame, "PubMed.JournalTitle", transform=dp.normalize_journal
-    )
-
-    ref_doi = _series_from_column(frame, "ChEMBL.doi")
-    doi_agree: list[pd.Series] = []
-    doi_conflict: list[pd.Series] = []
-    for column in dp.EXTERNAL_DOI_COLUMNS:
-        external = _series_from_column(frame, column)
-        valid = ~external.isin(("", "0"))
-        doi_agree.append(valid & (external == ref_doi))
-        doi_conflict.append(valid & (external != ref_doi))
-    agree_any = dp._series_any(doi_agree) if doi_agree else pd.Series(False, index=frame.index)
-    conflict_any = (
-        dp._series_any(doi_conflict)
-        if doi_conflict
-        else pd.Series(False, index=frame.index)
-    )
-    frame["invalid.doi"] = (~agree_any) & conflict_any
-
-    ref_pmid_numbers = _series_from_column(frame, "ChEMBL.pubmed_id").map(dp.try_parse_int)
-    ref_valid = ref_pmid_numbers.notna()
-    pmid_agree: list[pd.Series] = []
-    pmid_conflict: list[pd.Series] = []
-    for column in dp.EXTERNAL_PMID_COLUMNS:
-        external_text = _series_from_column(frame, column)
-        external_numbers = external_text.map(dp.try_parse_int)
-        external_valid = external_numbers.notna()
-        match = ref_valid & external_valid & (external_numbers == ref_pmid_numbers)
-        pmid_agree.append(match)
-
-        non_empty = external_text != ""
-        mismatch = (
-            non_empty & ref_valid & external_valid & (external_numbers != ref_pmid_numbers)
-        )
-        pmid_conflict.append(mismatch)
-    agree_pmid_any = (
-        dp._series_any(pmid_agree)
-        if pmid_agree
-        else pd.Series(False, index=frame.index)
-    )
-    conflict_pmid_any = (
-        dp._series_any(pmid_conflict)
-        if pmid_conflict
-        else pd.Series(False, index=frame.index)
-    )
-    frame["invalid.PMID"] = (~agree_pmid_any) & conflict_pmid_any
-
-    review_columns = (
-        "PubMed.PublicationType",
-        "scholar.PublicationTypes",
-        "OpenAlex.PublicationTypes",
-        "OpenAlex.TypeCrossref",
-        "crossref.Type",
-    )
-    review_series = [
-        _series_from_column(frame, column)
-        .astype("string")
-        .fillna("")
-        .str.lower()
-        .str.contains("review", na=False)
-        for column in review_columns
-    ]
-    frame["review"] = dp._series_any(review_series) if review_series else pd.Series(False, index=frame.index)
-
-    journal_match = (
-        frame["PubMed.JournalTitle"] == frame["ChEMBL.journal"]
-    ) & (frame["ChEMBL.journal"] != "")
-    volume_match = (
-        frame["PubMed.Volume"] == frame["ChEMBL.volume"]
-    ) & (frame["ChEMBL.volume"] != "")
-    issue_match = (
-        frame["PubMed.Issue"] == frame["ChEMBL.issue"]
-    ) & (frame["ChEMBL.issue"] != "")
-    start_match = (
-        frame["PubMed.StartPage"] == frame["ChEMBL.first_page"]
-    ) & (frame["ChEMBL.first_page"] != "")
-    end_match = (
-        frame["PubMed.EndPage"] == frame["ChEMBL.last_page"]
-    ) & (frame["ChEMBL.last_page"] != "")
-
-    journal_value = np.where(journal_match, frame["ChEMBL.journal"], "unknown")
-    volume_value = np.where(volume_match, frame["ChEMBL.volume"], "unknown")
-    issue_value = np.where(issue_match, frame["ChEMBL.issue"], "unknown")
-    start_value = np.where(start_match, frame["ChEMBL.first_page"], "unknown")
-    end_value = np.where(end_match, frame["ChEMBL.last_page"], "unknown")
-
-    frame["reference"] = (
-        pd.Series(journal_value, index=frame.index)
-        + ", "
-        + pd.Series(volume_value, index=frame.index)
-        + "("
-        + pd.Series(issue_value, index=frame.index)
-        + "), p."
-        + pd.Series(start_value, index=frame.index)
-        + "-"
-        + pd.Series(end_value, index=frame.index)
-    )
-
-    frame["invalid.reference"] = frame["reference"].str.contains("unknown", na=False)
-
-    year_completed = _series_from_column(frame, "PubMed.YearCompleted")
-    year_revised = _series_from_column(frame, "PubMed.YearRevised")
-    chembl_year = _series_from_column(frame, "ChEMBL.year")
-    frame["year"] = np.where(
-        ~year_completed.map(dp.null_or_empty),
-        year_completed.map(dp.pad4),
-        np.where(
-            ~year_revised.map(dp.null_or_empty),
-            year_revised.map(dp.pad4),
-            chembl_year.map(dp.pad4),
-        ),
-    )
-
-    month_completed = _series_from_column(frame, "PubMed.MonthCompleted")
-    month_revised = _series_from_column(frame, "PubMed.MonthRevised")
-    frame["month"] = np.where(
-        ~month_completed.map(dp.null_or_empty),
-        month_completed.map(dp.pad2),
-        np.where(
-            ~month_revised.map(dp.null_or_empty),
-            month_revised.map(dp.pad2),
-            "00",
-        ),
-    )
-
-    day_completed = _series_from_column(frame, "PubMed.DayCompleted")
-    day_revised = _series_from_column(frame, "PubMed.DayRevised")
-    frame["day"] = np.where(
-        ~day_completed.map(dp.null_or_empty),
-        day_completed.map(dp.pad2),
-        np.where(
-            ~day_revised.map(dp.null_or_empty),
-            day_revised.map(dp.pad2),
-            "00",
-        ),
-    )
-
-    frame["completed"] = (
-        pd.Series(frame["year"], index=frame.index)
-        + "-"
-        + pd.Series(frame["month"], index=frame.index)
-        + "-"
-        + pd.Series(frame["day"], index=frame.index)
-    )
-
-    frame["ChEMBL.pubmed_id"] = _series_from_column(frame, "ChEMBL.pubmed_id").map(
-        dp.pad_pmid8
-    )
-    frame["sortorder.document"] = (
-        _series_from_column(frame, "PubMed.ISSN")
-        + ":"
-        + frame["completed"]
-        + ":"
-        + frame["ChEMBL.pubmed_id"].map(to_text)
-    )
-
-    frame = frame.rename(columns={"PubMed.PMID": "PMID", "ChEMBL.doi": "doi"})
-    frame["PMID"] = frame["PMID"].map(to_text)
-    frame["doi"] = frame["doi"].map(to_text)
-
-    frame["invalid"] = (
-        frame["invalid.doi"] | frame["invalid.PMID"] | frame["invalid.reference"]
-    )
-
-    drop_candidates = [
-        column for column in dp.STAGE_REMOVED_COLUMNS if column in frame.columns
-    ]
-    frame = frame.drop(columns=drop_candidates)
-
-    rename_map = {
-        "ChEMBL.document_chembl_id": "document_chembl_id",
-        "PubMed.DOI": "doi",
-        "PubMed.ArticleTitle": "title",
-        "PubMed.Abstract": "abstract",
-        "PubMed.MeSH_Descriptors": "mesh.descriptors",
-        "PubMed.MeSH_Qualifiers": "mesh.qualifiers",
-        "PubMed.ChemicalList": "chemical_list",
-        "OpenAlex.MeshDescriptors": "OpenAlex.mesh.descriptors",
-    }
-    frame = frame.rename(columns=rename_map)
-    frame["doi"] = frame["doi"].map(to_text)
-
-    secondary_rename = {
-        "chemical_list": "PubMed.chemical.list",
-        "mesh.qualifiers": "PubMed.mesh.qualifiers",
-        "mesh.descriptors": "PubMed.mesh.descriptors",
-    }
-    frame = frame.rename(columns=secondary_rename)
-
-    for column in dp.LOWERCASE_LIST_COLUMNS:
-        if column in frame.columns:
-            frame[column] = frame[column].map(dp.safe_lower)
-
-    harmonised_reference = _prepare_reference_frame(ref_document)
-
-    frame = frame.merge(harmonised_reference, on="document_chembl_id", how="left")
-
-    if "document_contains_external_links" in frame.columns:
-        def _normalize_bool(value: Any) -> Any:
-            if pd.isna(value):
-                return pd.NA
-            text = to_text(value).strip().lower()
-            if text in {"", "nan"}:
-                return pd.NA
-            if text in {"true", "1", "yes"}:
-                return True
-            if text in {"false", "0", "no"}:
-                return False
-            return bool(value)
-
-        frame["document_contains_external_links"] = frame[
-            "document_contains_external_links"
-        ].map(_normalize_bool)
-
-    review_values: list[Any] = []
-    for current, doctype in zip(frame["review"], frame["doctype_review"]):
-        current_value = None if pd.isna(current) else bool(current)
-        doctype_value = None if pd.isna(doctype) else bool(doctype)
-        if current_value is True or doctype_value is True:
-            review_values.append(True)
-        elif current_value is False and doctype_value is False:
-            review_values.append(False)
-        else:
-            review_values.append(pd.NA)
-    frame["review"] = pd.Series(review_values, index=frame.index, dtype="boolean")
-
-    experimental_values: list[Any] = []
-    for value in frame["review"]:
-        if value is pd.NA or pd.isna(value):
-            experimental_values.append(pd.NA)
-        else:
-            experimental_values.append(not bool(value))
-    frame["experimental"] = pd.Series(
-        experimental_values, index=frame.index, dtype="boolean"
-    )
-
-    frame = frame.drop(columns=["is_experimental_doc"], errors="ignore")
-
-    boolean_columns = [
-        "review",
-        "experimental",
-        "invalid",
-        "invalid.doi",
-        "invalid.PMID",
-        "invalid.reference",
-        "document_contains_external_links",
-    ]
-    for column in boolean_columns:
-        if column in frame.columns:
-            frame[column] = frame[column].map(
-                lambda value: ""
-                if pd.isna(value)
-                else str(bool(value)).lower()
-            )
-
-    missing = [column for column in dp.FINAL_COLUMN_ORDER if column not in frame.columns]
-    if missing:
-        raise ValueError(f"Missing expected columns after harmonisation: {missing}")
-
-    frame = frame.loc[:, dp.FINAL_COLUMN_ORDER]
-    frame = frame.sort_values("completed", ascending=True, kind="mergesort")
-    frame.reset_index(drop=True, inplace=True)
-
-    return frame
+    main()

@@ -1,0 +1,179 @@
+version: "2025-02-14"
+description: |
+  Canonical crosswalk between the legacy Power Query Stage_FinalOrder output
+  and the Python post-processing projection for document metadata.  Each field
+  describes how to derive a comparable series from both datasets so the QA
+  harness can measure logical equivalence.
+fields:
+  - name: document_chembl_id
+    description: Primary ChEMBL document identifier.
+    metric_group: ids
+    python:
+      builder: column
+      columns: [document_chembl_id]
+    m:
+      builder: column
+      columns: [document_chembl_id]
+  - name: primary_pubmed_id
+    description: Primary PubMed identifier with numeric normalisation.
+    metric_group: ids
+    python:
+      builder: numeric_identifier
+      columns: [primary_pubmed_id]
+    m:
+      builder: numeric_identifier
+      columns:
+        - PMID
+        - PubMed.PMID
+        - ChEMBL.pubmed_id
+        - scholar.PMID
+        - OpenAlex.PMID
+  - name: preferred_title
+    description: Preferred title resolved by provider priority.
+    metric_group: preferred
+    python:
+      builder: column
+      columns: [preferred_title]
+    m:
+      builder: coalesce
+      columns:
+        - title
+        - PubMed.ArticleTitle
+        - ChEMBL.title
+        - crossref.Title
+        - OpenAlex.Title
+        - scholar.Venue
+  - name: preferred_abstract
+    description: Preferred abstract resolved by provider priority.
+    metric_group: preferred
+    python:
+      builder: column
+      columns: [preferred_abstract]
+    m:
+      builder: coalesce
+      columns:
+        - abstract
+        - PubMed.Abstract
+        - ChEMBL.abstract
+  - name: preferred_doi
+    description: Consensus DOI prioritising PubMed, ChEMBL, and CrossRef.
+    metric_group: preferred
+    python:
+      builder: column
+      columns: [preferred_doi]
+    m:
+      builder: coalesce
+      columns:
+        - doi
+        - PubMed.DOI
+        - ChEMBL.doi
+        - OpenAlex.DOI
+        - crossref.DOI
+        - scholar.DOI
+  - name: preferred_journal
+    description: Journal/venue name following PubMed → ChEMBL → external priority.
+    metric_group: preferred
+    python:
+      builder: column
+      columns: [preferred_journal]
+    m:
+      builder: coalesce
+      columns:
+        - journal
+        - ChEMBL.journal
+        - PubMed.Journal
+        - PubMed.JournalTitle
+        - crossref.Title
+        - OpenAlex.Venue
+        - scholar.Venue
+  - name: publication_year
+    description: Publication year using Completed → Revised → ChEMBL.year fallback.
+    metric_group: publication_year
+    python:
+      builder: year_column
+      columns: [publication_year]
+    m:
+      builder: publication_year
+      columns:
+        - completed
+        - PubMed.YearCompleted
+        - PubMed.YearRevised
+        - ChEMBL.year
+  - name: is_review
+    description: Unified review flag (publication_class OR provider flags).
+    metric_group: is_review
+    python:
+      builder: boolean
+      columns: [is_review]
+    m:
+      builder: review_flag
+      columns:
+        - review
+        - doctype_review
+  - name: mesh_terms
+    description: Combined MeSH descriptors and qualifiers.
+    metric_group: mesh_terms
+    python:
+      builder: mesh_terms
+      columns: [mesh_terms]
+    m:
+      builder: mesh_terms
+      columns:
+        - PubMed.mesh.descriptors
+        - PubMed.mesh.qualifiers
+        - OpenAlex.mesh.descriptors
+        - OpenAlex.mesh.qualifiers
+  - name: metadata_source_count
+    description: Number of metadata providers contributing information.
+    metric_group: coverage
+    python:
+      builder: integer
+      columns: [metadata_source_count]
+    m:
+      builder: provider_count
+      columns: [chembl, pubmed, semantic_scholar, openalex, crossref]
+  - name: has_chembl
+    description: Availability flag for ChEMBL metadata.
+    metric_group: has_flags
+    python:
+      builder: boolean
+      columns: [has_chembl]
+    m:
+      builder: provider_flag
+      columns: [chembl]
+  - name: has_pubmed
+    description: Availability flag for PubMed metadata.
+    metric_group: has_flags
+    python:
+      builder: boolean
+      columns: [has_pubmed]
+    m:
+      builder: provider_flag
+      columns: [pubmed]
+  - name: has_semantic_scholar
+    description: Availability flag for Semantic Scholar metadata.
+    metric_group: has_flags
+    python:
+      builder: boolean
+      columns: [has_semantic_scholar]
+    m:
+      builder: provider_flag
+      columns: [semantic_scholar]
+  - name: has_openalex
+    description: Availability flag for OpenAlex metadata.
+    metric_group: has_flags
+    python:
+      builder: boolean
+      columns: [has_openalex]
+    m:
+      builder: provider_flag
+      columns: [openalex]
+  - name: has_crossref
+    description: Availability flag for CrossRef metadata.
+    metric_group: has_flags
+    python:
+      builder: boolean
+      columns: [has_crossref]
+    m:
+      builder: provider_flag
+      columns: [crossref]
