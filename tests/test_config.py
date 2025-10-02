@@ -142,6 +142,33 @@ def test_alias_env_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert cfg.api.rps == 5
 
 
+def test_local_config_merges(tmp_path: Path) -> None:
+    base = tmp_path / "cfg.yaml"
+    base.write_text(
+        "sources:\n"
+        "  chembl:\n"
+        "    api:\n"
+        "      rps: 7\n"
+        "      timeout_read: 10\n"
+    )
+
+    local = base.with_name("cfg.local.yaml")
+    local.write_text(
+        "sources:\n"
+        "  chembl:\n"
+        "    api:\n"
+        "      timeout_read: 15\n"
+        "  openalex:\n"
+        "    rps: 9\n"
+    )
+
+    cfg = load_config(base)
+
+    assert cfg.api.rps == 7
+    assert cfg.api.timeout_read == 15
+    assert cfg.openalex.rps == 9
+
+
 def test_retry_and_log_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """New environment variable aliases should override retry and log defaults."""
 
