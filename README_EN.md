@@ -8,9 +8,9 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 * Unified CLI flags such as `--input`, `--final-out` (primary destination flag; the legacy `--output`/`--out`
   aliases remain for compatibility but now emit deprecation warnings), `--log-level`, `--sep`, `--encoding`,
   `--column`, plus `--config` and `--print-config` to manage configuration files. Batch size is controlled via
-  `--chunk-size` or `--batch-size` depending on the pipeline. The `--raw-out`, `--raw-format`, and `--id-cols`
-  switches are currently available through the target pipeline; other commands will expose them once the shared
-  CLI is extended.
+  `--chunk-size` or `--batch-size` depending on the pipeline. The `--raw-out`, `--raw-format`, `--id-cols`,
+  `--no-reindex-raw`, and `--normalize-at-export` / `--no-normalize-at-export` switches are currently available
+  through the target pipeline; other commands will expose them once the shared CLI is extended.
 
 * Streaming CSV handling with deterministic output for large datasets.
 * Schema validators in [`schemas/`](schemas/) and dictionaries in [`dictionary/`](dictionary/) that enforce types,
@@ -116,8 +116,9 @@ for usage guidelines.
 
   ```
 
-  The target pipeline is the only one that currently honours `--raw-out` and `--raw-format`; other pipelines ignore the flags
-  until raw snapshot support lands in their adapters.
+  The target pipeline is the only one that currently honours `--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and
+  the `--normalize-at-export` / `--no-normalize-at-export` pair; other pipelines ignore the flags until staged snapshot support
+  lands in their adapters.
 
    The console scripts accept the same options as their module counterparts, so existing `python -m …` workflows remain valid:
 
@@ -204,17 +205,21 @@ as a CI artifact.
 The examples below demonstrate how to run the main CLI tools with common options such as `--input`, `--final-out`, and
 `--limit`. The compatibility aliases `--output`/`--out` are still recognised but now emit deprecation warnings. Using `--limit 0`
 short-circuits processing before any network or filesystem access, which is useful for smoke-testing configuration overrides.
-The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols`; the remaining commands will pick
-up the staged switches as the shared parser is extended.
+The target pipeline already exposes `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the
+`--normalize-at-export` / `--no-normalize-at-export` pair; the remaining commands will pick up the staged switches as the shared
+parser is extended.
 After installing the project with `pip install .`, the same pipelines can be started via the console scripts listed in the
 [Quick Start](#quick-start) table—for example, `get-activity-data --help` is equivalent to `python -m scripts.get_activity_data --help`.
 Both forms accept identical arguments, so feel free to swap between them depending on your environment.
 
 Within the target pipeline the staged export surfaces separate destinations for raw payloads and cleaned tables. Use
 `--raw-out` to persist the unprocessed API response, optionally changing the `--raw-format` between `csv` (default) and
-`parquet`, and `--final-out` to override the normalised export while keeping the metadata sidecars. The legacy
-`--output`/`--out` aliases act as compatibility shims for now but emit a warning on each invocation. Multi-identifier payloads
-accept multiple columns via `--id-cols`, allowing you to keep composite keys in the raw snapshot before the cleanup step runs.
+`parquet`, `--no-reindex-raw` when you need to keep the API column order, and `--final-out` to override the normalised export
+while keeping the metadata sidecars. Normalisation is enabled by default (`--normalize-at-export`); pass
+`--no-normalize-at-export` if the final artefact must mirror the raw payload, in which case the pipeline writes the snapshot to
+`--raw-out` and copies it to `--final-out`. The legacy `--output`/`--out` aliases act as compatibility shims for now but emit a
+warning on each invocation. Multi-identifier payloads accept multiple columns via `--id-cols`, allowing you to keep composite
+keys in the raw snapshot before the cleanup step runs.
 
 
 ### `scripts/get_document_data.py`
@@ -257,8 +262,11 @@ python -m scripts.get_target_data chembl \
 ```
 
 Replace `path/to/targets.csv` with a CSV containing a `target_chembl_id` column. The `--raw-out` switch keeps the
-pre-normalised snapshot for debugging, while `--final-out` produces the cleaned export aligned with the validation schemas.
-The compatibility aliases `--output`/`--out` remain for migration support and issue warnings when used.
+pre-normalised snapshot for debugging; combine it with `--no-reindex-raw` to retain the API column order when comparing against
+upstream payloads. Normalisation is enabled by default, so `--final-out` produces the cleaned export aligned with the validation
+schemas. Pass `--no-normalize-at-export` to skip the final cleanup, in which case the raw snapshot is copied to `--final-out` so
+downstream consumers inspect the same payload. The compatibility aliases `--output`/`--out` remain for migration support and
+issue warnings when used.
 
 ### `library.utils.cli_tools.pipeline_targets_main`
 
@@ -299,16 +307,17 @@ flowchart LR
 
 * **Fetch** – read identifiers (single or composite via `--id-cols`) and call the upstream services.
 * **Raw CSV / Parquet** – when the CLI exposes staging switches, persist the untouched payload to `--raw-out` using the
-  selected `--raw-format`.
+  selected `--raw-format`. Add `--no-reindex-raw` to retain the API column order when diffing payloads.
 * **Cleanup IDs** – trim, deduplicate and patch placeholder identifiers before downstream work.
-* **Normalize** – harmonise text, relations and datatypes so validation is deterministic.
+* **Normalize** – harmonise text, relations and datatypes so validation is deterministic. Controlled via
+  `--normalize-at-export` / `--no-normalize-at-export` in the target pipeline.
 * **Validate** – run `pandera` schemas, routing failures to the sidecar files recorded in the metadata YAML.
 * **Final export** – write the cleaned table to `--final-out` alongside metadata and quality reports. Deprecated
   aliases `--output`/`--out` continue to function but emit warnings during the migration period.
 
-> **Note.** At the moment `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are available through
-> `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt the same
-> switches once the shared CLI is extended.
+> **Note.** At the moment `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the
+> `--normalize-at-export` / `--no-normalize-at-export` pair are available through `get-target-data` and
+> `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt the same switches once the shared CLI is extended.
 
 When `--raw-out` is omitted the raw snapshot is skipped, keeping backwards compatibility with legacy runs. Sidecars continue
 to store CLI arguments, configuration diffs and run hashes regardless of the format choices.
