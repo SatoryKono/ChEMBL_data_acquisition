@@ -1033,7 +1033,6 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     return result
 
 
-
 def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
     """Return a single series for ``column`` consolidating duplicate columns."""
 
@@ -1063,7 +1062,6 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 
     return pd.DataFrame(collapsed_columns, index=df.index)
-
 
     # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
     # keeping existing data intact.
@@ -1095,6 +1093,9 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     if rename_map:
         frame = frame.rename(columns=rename_map)
 
+
+    if frame.columns.duplicated().any():
+        frame = frame.loc[:, ~frame.columns.duplicated()]
 
     if frame.columns.duplicated().any():
         frame = frame.loc[:, ~frame.columns.duplicated()]
