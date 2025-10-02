@@ -147,8 +147,8 @@ process documents listed below.
 
 | Language | Checklist |
 |----------|-----------|
-| English  | [docs/QA_PROCESS_EN.md](QA_PROCESS_EN.md) |
-| Русский  | [docs/QA_PROCESS_RU.md](QA_PROCESS_RU.md) |
+| English  | [docs/QA_PROCESS_EN.md](./QA_PROCESS_EN.md) |
+| Русский  | [docs/QA_PROCESS_RU.md](./QA_PROCESS_RU.md) |
 
 ```bash
 pre-commit run --all-files
@@ -202,7 +202,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 The command reads data from the ChEMBL API, writes the CSV table and the accompanying `*.meta.yaml`. Development utilities are in
 `library/utils/cli_tools/`; for instance, the `get_activities` module focuses on demo logging and performs no file operations. See
-[`docs/CLI_TOOLS.md`](CLI_TOOLS.md) for descriptions and command patterns. The output directory is ignored by Git and exposed
+[`docs/CLI_TOOLS.md`](./CLI_TOOLS.md) for descriptions and command patterns. The output directory is ignored by Git and exposed
 as a CI artifact.
 
 > **Note.** The legacy `activity_extraction_main.py` entry point has been superseded by the modular
@@ -528,9 +528,9 @@ python -m library.utils.cli_tools.table_quality_main --input data.csv --table-na
 `--out` alias continues to map to the same path but now emits deprecation warnings. Target pipeline invocations additionally
 accept `--final-out`, which reuses the same default while enabling distinct destinations once raw snapshots are enabled. Combine
 it with `--raw-out` (and optional `--raw-format parquet`) to persist the unprocessed payload. For additional examples see
-[`docs/USAGE_EN.md`](USAGE_EN.md) (Russian version:
+[`docs/USAGE_EN.md`](./USAGE_EN.md) (Russian version:
 
-[`docs/USAGE_RU.md`](USAGE_RU.md)).
+[`docs/USAGE_RU.md`](./USAGE_RU.md)).
 
 ## Project structure
 
@@ -559,7 +559,7 @@ ChEMBL_data_acquisition/
 ## Configuration
 
 Parameters are read from `config/config.yaml`, environment variables (`CHEMBL_DA__...`) and CLI flags. Details are documented in
-[`docs/CONFIG_EN.md`](CONFIG_EN.md) (Russian version: [`docs/CONFIG_RU.md`](CONFIG_RU.md)).
+[`docs/CONFIG_EN.md`](./CONFIG_EN.md) (Russian version: [`docs/CONFIG_RU.md`](./CONFIG_RU.md)).
 
 ### Environment variables
 
@@ -617,8 +617,8 @@ source:
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-See [`docs/CONFIG_EN.md`](CONFIG_EN.md) for a complete overview of all configuration options (Russian version —
-[`docs/CONFIG_RU.md`](CONFIG_RU.md)).
+See [`docs/CONFIG_EN.md`](./CONFIG_EN.md) for a complete overview of all configuration options (Russian version —
+[`docs/CONFIG_RU.md`](./CONFIG_RU.md)).
 
 ### Schema validation
 
@@ -655,16 +655,16 @@ aliases `--output`/`--out` continue to resolve to the same path but issue a depr
 use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. Raw dumps reindex
 columns alphabetically for deterministic layouts unless `--no-reindex-raw` keeps the API order. The final CSV is normalised by
 default; toggle the boolean pair `--normalize-at-export` / `--no-normalize-at-export` when the export should either undergo the
-clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/USAGE_EN.md`](USAGE_EN.md)
+clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/USAGE_EN.md`](./USAGE_EN.md)
 (Russian version:
-[`docs/USAGE_RU.md`](USAGE_RU.md)).
+[`docs/USAGE_RU.md`](./USAGE_RU.md)).
 
 
 ## Output and metadata
 
 Pipelines persist deterministic CSV tables via `library.io.write_csv` and store accompanying `*.meta.yaml` sidecars in
 `~/.local/share/chembl-da/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
-[`docs/OUTPUT_EN.md`](OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](OUTPUT_RU.md) for layout details.
+[`docs/OUTPUT_EN.md`](./OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md) for layout details.
 
 ## Dtype Inspector
 

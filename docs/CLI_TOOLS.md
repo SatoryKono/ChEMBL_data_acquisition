@@ -1,6 +1,6 @@
 # Utility CLI modules
 
-> **Languages:** [English](CLI_TOOLS.md) · [Русский](CLI_TOOLS_RU.md)
+> **Languages:** [English](./CLI_TOOLS.md) · [Русский](./CLI_TOOLS_RU.md)
 
 The lightweight helper commands previously exposed as loose modules under
 `scripts/` now live in the `library.utils.cli_tools` package so that they can be
