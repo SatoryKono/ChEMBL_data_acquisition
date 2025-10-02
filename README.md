@@ -9,12 +9,14 @@ The README is available in multiple languages:
 
  
 * Командные скрипты с унифицированными флагами `--input`, `--output`/`--out`,
-  `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--log-level`,
+  `--final-out`, `--log-level`,
   `--sep`, `--encoding`, `--column`, а также `--config` и `--print-config`
   для управления загрузкой настроек. Размер пакетной выборки задаётся
   параметрами `--chunk-size` или `--batch-size` в зависимости от конкретного
   пайплайна.
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
+* Отдельный «сырой» снимок (`--raw-out`) доступен для пайплайна таргетов;
+  поддержка остальных конвейеров запланирована и будет объявлена отдельно.
 * Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
 * Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
@@ -165,15 +167,15 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs / Очистка ID"] --> Normalize --> Validate --> Final["Final export / Финальный экспорт"]
 ```
 
-**EN.** All pipelines follow the same staged contract. Use `--raw-out` (optionally with `--raw-format parquet`) to capture the
-raw payload, list composite keys via `--id-cols`, and direct the cleaned export to `--final-out` or the shorter alias `--out`.
-Placeholder identifiers remain in the raw snapshot and are counted in the metadata (`error_placeholder_counts`), while the final
-export includes only validated values.
+**EN.** The target pipeline currently exercises the full staged contract: `--raw-out` (optionally with `--raw-format parquet`)
+captures the raw payload, `--id-cols` keeps composite keys, and `--final-out`/`--out` receives the cleaned export. Activity,
+assay and document pipelines already run the same logical stages but omit the dedicated raw snapshot until their adapters are
+updated.
 
-**RU.** Все пайплайны используют единый набор стадий. Флаг `--raw-out` (с `--raw-format parquet` при необходимости) сохраняет
-исходный ответ, `--id-cols` перечисляет составные ключи, а чистый экспорт направляется в `--final-out` либо сокращённый алиас
-`--out`. Временные идентификаторы остаются в «сыром» снимке и учитываются в метаданных (`error_placeholder_counts`), тогда как
-финальная таблица содержит только прошедшие валидацию значения.
+**RU.** Полный набор стадий сейчас реализован в пайплайне таргетов: `--raw-out` (при необходимости с `--raw-format parquet`)
+сохраняет исходный ответ, `--id-cols` фиксирует составные ключи, а `--final-out`/`--out` получают нормализованный экспорт.
+Пайплайны активностей, ассайев и документов проходят те же логические шаги, но пока пропускают отдельный «сырой» снимок до
+обновления адаптеров.
 
 
 ## Tests / Тесты

@@ -32,8 +32,8 @@ directly.
 | `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
 | `--output` / `--out` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `--output-dir` or `--base-path`. |
-| `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Skipped when omitted. |
-| `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. |
+| `--raw-out` | Target pipeline only: path for the raw snapshot written before cleanup and normalisation. Ignored by other pipelines until raw support lands. |
+| `--raw-format` | Target pipeline only: format of the raw snapshot (`csv` by default, `parquet` when supplied). |
 | `--final-out` | Path for the final cleaned export. When omitted, falls back to `--output` / `--out`. |
 | `--date` | Override the auto-generated `YYYYMMDD` suffix when building default output filenames. |
 | `--force` | Overwrite outputs even when they already exist. |
@@ -58,14 +58,18 @@ The repository includes a few compact fixtures under `tests/data/` for smoke-lev
 
 ### Staged pipeline flow
 
-All entity pipelines share a unified staging flow:
+All entity pipelines share a unified staging flow, although the dedicated raw snapshot currently exists only for the target
+pipeline:
 
 ```mermaid
 flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
 ```
 
-`--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and validation. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility.
+When running the target pipeline, `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols`
+keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and
+validation. Pipelines without raw support currently skip the stage entirely; the existing flags remain reserved for future
+adapters.
 
 During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preserved in the raw snapshot and counted in the metadata under `error_placeholder_counts` while being removed from the final export.
 
@@ -91,8 +95,8 @@ diagnose problematic batches.
 Pipe the output through `jq` or similar tooling for real-time monitoring:
 
 ```bash
-get-document-data all --input docs.csv --column document_chembl_id \
-  --raw-out out/documents.raw.csv --final-out out/documents.final.csv \
+get-target-data chembl --input docs.csv --column target_chembl_id \
+  --raw-out out/targets.raw.csv --final-out out/targets.final.csv \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
@@ -156,8 +160,6 @@ Console form:
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --raw-out out/documents.raw.parquet \
-  --raw-format parquet \
   --final-out out/documents.final.csv \
   --batch-size 20
 ```
@@ -168,7 +170,6 @@ Module form:
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --raw-out out/documents.raw.csv \
   --final-out out/documents.final.csv \
   --batch-size 20
 ```
@@ -188,13 +189,14 @@ Consult `get-document-data --help` for a summary and
 `get-document-data <sub-command> --help` for the
 allowed switches (for example, `--batch-size` for PubMed batching).
 
+Raw snapshot support for the document pipeline is tracked on the roadmap and will reuse the reserved `--raw-out`/`--raw-format`
+switches once implemented.
+
 Console form:
 
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --raw-out out/documents.raw.parquet \
-  --raw-format parquet \
   --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
@@ -209,7 +211,6 @@ Module form:
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --raw-out out/documents.raw.csv \
   --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
