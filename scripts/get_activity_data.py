@@ -139,7 +139,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
-        chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
+        id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
         global_limiter = get_global_limiter(
             cfg.rate.global_rps, cfg.rate.global_burst
         )
@@ -152,7 +152,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             def _fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
                 try:
                     return cl.get_activities(
-                        ids,
+                        chunk_ids,
                         cfg=cfg.api,
                         client=client,
                         chunk_size=cfg.activity.batch_size,
