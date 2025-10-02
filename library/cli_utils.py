@@ -18,6 +18,8 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, TypeVar, overload
 
+import shlex
+
 import pandas as pd
 from pandera.errors import SchemaErrors
 
@@ -84,13 +86,18 @@ class PipelineError(RuntimeError):
 
 
 def resolve_invocation(
-    program: str, argv: Sequence[str] | None
-) -> tuple[str, ...]:
-    """Return a normalized CLI invocation tuple for metadata logging."""
 
-    if argv is None:
-        return (program,)
-    return (program, *[str(argument) for argument in argv])
+    prog: str | None, argv: Sequence[object] | None
+) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation."""
+
+    parts: list[str] = []
+    if prog:
+        parts.append(str(prog))
+    if argv:
+        parts.extend(str(arg) for arg in argv)
+    return tuple(parts)
+
 
 
 def run_cli_command(
@@ -189,6 +196,8 @@ def run_pipeline(
     output_path: Path,
     failure_path: Path,
     command: str | None = None,
+    invocation: Sequence[str] | None = None,
+
     config_snapshot: Mapping[str, object],
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
@@ -225,8 +234,10 @@ def run_pipeline(
     failure_path:
         Path for persisting validation failure cases.
     command:
-        Command used to launch the pipeline.  Stored in metadata output. When
-        omitted the value is derived from ``invocation`` or ``sys.argv``.
+        Command used to launch the pipeline.  Stored in metadata output.
+    invocation:
+        Normalised command invocation used when ``command`` is not provided.
+
     config_snapshot:
         Mapping of configuration values persisted to metadata.
     inputs:
@@ -254,6 +265,14 @@ def run_pipeline(
     """
 
     use_logger = logger or default_logger
+
+    if invocation is not None:
+        quoted = [shlex.quote(str(part)) for part in invocation]
+        command_str = " ".join(quoted)
+    else:
+        command_str = command
+    if command_str is None:
+        raise ValueError("run_pipeline requires either 'command' or 'invocation'")
 
     metadata_hooks = list(metadata_hooks or [])
     validators = list(validators or [])
@@ -458,7 +477,7 @@ def run_pipeline(
 
     meta_path = write_meta_yaml(
         csv_path=csv_path,
-        command=resolved_command,
+        command=command_str,
         config_subset=config_snapshot,
         inputs=inputs,
         stats=stats,
