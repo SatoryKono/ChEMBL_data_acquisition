@@ -42,6 +42,7 @@ LOWERCASE_COLUMNS: list[str] = [
 TEXT_COLUMNS: list[str] = [
     "target_chembl_id",
     "uniprotkb_Id",
+    "uniProtkbIdFallback",
     "uniprot_id",
     "secondary_uniprot_id",
     "gene_name",
@@ -370,8 +371,26 @@ def postprocess_targets(
         df = df.rename(columns={chembl_col: internal_id})
 
     # --- normalise identifiers -------------------------------------------------
+    raw_uniprot_ids = df.get("uniProtkbId")
+    if raw_uniprot_ids is not None:
+        raw_uniprot_ids = raw_uniprot_ids.astype("string")
+    else:
+        raw_uniprot_ids = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    fallback_uniprot_ids = df.get("uniProtkbIdFallback")
+    if fallback_uniprot_ids is not None:
+        fallback_uniprot_ids = fallback_uniprot_ids.astype("string")
+        resolved_uniprot_ids = raw_uniprot_ids.fillna(fallback_uniprot_ids)
+    else:
+        resolved_uniprot_ids = raw_uniprot_ids.copy()
+
+    if "uniprot_id" in df.columns:
+        resolved_uniprot_ids = resolved_uniprot_ids.fillna(
+            df["uniprot_id"].astype("string")
+        )
+
     df["uniprotkb_Id"] = (
-        df.get("uniProtkbId", pd.Series(dtype=str))
+        resolved_uniprot_ids.fillna("")
         .astype(str)
         .str.split("_")
         .str[0]
@@ -584,7 +603,25 @@ def finalise_targets(
     ]
     _validate_columns(df, required_columns)
 
-    mask_nan = df["uniprotkb_Id"].astype(str) == "nan"
+    uniprot_series = df["uniprotkb_Id"].astype("string")
+    fallback_series = df.get("uniProtkbIdFallback")
+    if fallback_series is not None:
+        fallback_series = fallback_series.astype("string")
+    else:
+        fallback_series = pd.Series(pd.NA, index=df.index, dtype="string")
+
+    missing_uniprot = (
+        uniprot_series.isna()
+        | (uniprot_series.str.strip() == "")
+        | (uniprot_series.str.lower() == "nan")
+    )
+    fallback_available = ~(
+        fallback_series.isna()
+        | (fallback_series.str.strip() == "")
+        | (fallback_series.str.lower() == "nan")
+    )
+
+    mask_nan = missing_uniprot & ~fallback_available
     if mask_nan.any():
         logger.debug("Dropping %d rows with missing UniProt IDs", mask_nan.sum())
     df = df[~mask_nan]

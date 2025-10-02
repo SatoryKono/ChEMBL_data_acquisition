@@ -52,6 +52,45 @@ def test_postprocess_targets_merges_and_normalises() -> None:
     assert row["synonyms"].startswith("g2|g3|g1|name2|name3")
 
 
+def test_finalise_targets_retains_rows_with_fallback_id() -> None:
+    """Rows using the UniProt fallback identifier are preserved."""
+
+    df = pd.DataFrame(
+        {
+            "chembl_id": ["CHEMBL1"],
+            "uniProtkbId": [None],
+            "uniProtkbIdFallback": ["P12345"],
+            "uniprot_id": ["Q12345"],
+            "secondaryAccessions": [None],
+            "pref_name": ["Protein kinase"],
+            "gene_name_x": [""],
+            "geneName": [""],
+            "gene": ["g1"],
+            "secondaryAccessionNames": [""],
+            "component_description": [""],
+            "chembl_alternative_name": [""],
+            "recommendedName": [""],
+            "names": [""],
+            "synonyms_x": [""],
+            "synonyms": [""],
+            "ec_number": [""],
+            "ec_code": [""],
+            "genus": ["Homo"],
+            "lineage_superkingdom": ["Eukaryota"],
+            "lineage_phylum": ["Chordata"],
+            "lineage_class": ["Mammalia"],
+        }
+    )
+
+    processed = tp.postprocess_targets(df, chembl_col="chembl_id")
+    assert processed.loc[0, "uniprotkb_Id"] == "P12345"
+
+    final = tp.finalise_targets(processed, chembl_col="chembl_id")
+
+    assert not final.empty
+    assert list(final["target_chembl_id"]) == ["CHEMBL1"]
+
+
 def test_postprocess_targets_orders_columns() -> None:
     """Columns from the schema appear first and others alphabetically."""
 
