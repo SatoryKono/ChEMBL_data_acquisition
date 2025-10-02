@@ -581,6 +581,7 @@ CSV_DELIMITER = ","
 DEFAULT_BASE_PATH = "e:\\github\\ChEMBL_data_acquisition\\data\\"
 DEFAULT_REF_RELATIVE = "input\\full\\document.csv"
 DEFAULT_OUTPUT_RELATIVE = "output\\document\\output.document_YYYYMMDD.csv"
+DEFAULT_QA_REFERENCE_RELATIVE = "input\\full\\ref_document.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -1193,6 +1194,7 @@ def preprocess_documents_csv(
     base_path: str,
     ref_document_rel: str = DEFAULT_REF_RELATIVE,
     out_document_rel: str = DEFAULT_OUTPUT_RELATIVE,
+    qa_reference_rel: str | None = DEFAULT_QA_REFERENCE_RELATIVE,
 ) -> str:
     base_dir = Path(base_path)
     ref_path = _resolve_relative(base_dir, ref_document_rel)
@@ -1252,6 +1254,45 @@ def preprocess_documents_csv(
                 invalid=invalid_counts["invalid"],
             )
 
+    if qa_reference_rel:
+        qa_reference_path = _resolve_relative(base_dir, qa_reference_rel)
+        if qa_reference_path.exists():
+            try:
+                from qa.check_document_postprocessing import (
+                    run_document_postprocessing_check,
+                )
+            except Exception:
+                logger.exception(
+                    "document_postprocess_qa_import_failed",
+                    reference=str(qa_reference_path),
+                )
+            else:
+                qa_result = run_document_postprocessing_check(
+                    base_path=base_dir,
+                    reference_path=qa_reference_path,
+                    candidate_path=target_path,
+                    output_dir=target_path.parent,
+                    delimiter=CSV_DELIMITER,
+                )
+                if qa_result.passed:
+                    logger.info(
+                        "document_postprocess_qa_passed",
+                        report=str(qa_result.report_json),
+                    )
+                else:
+                    logger.error(
+                        "document_postprocess_qa_failed",
+                        report=str(qa_result.report_json),
+                        diff=str(qa_result.diff_csv) if qa_result.diff_csv else None,
+                    )
+                    msg = "Document post-processing QA mismatches detected"
+                    raise RuntimeError(msg)
+        else:
+            logger.info(
+                "document_postprocess_qa_reference_missing",
+                reference=str(qa_reference_path),
+            )
+
     return str(target_path)
 
 
@@ -1260,6 +1301,7 @@ __all__ = [
     "DEFAULT_OUTPUT_PREFIX",
     "DEFAULT_OUTPUT_RELATIVE",
     "DEFAULT_REF_RELATIVE",
+    "DEFAULT_QA_REFERENCE_RELATIVE",
     "FINAL_COLUMN_ORDER",
     "LOWERCASE_LIST_COLUMNS",
     "STAGE_REMOVED1_COLUMNS",

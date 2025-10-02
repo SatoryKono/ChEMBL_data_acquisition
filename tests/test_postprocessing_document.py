@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -84,6 +85,10 @@ def test_preprocess_documents_csv_integration(tmp_path: Path) -> None:
         FIXTURE_DIR / "output.document_20230101.csv",
         base_dir / "output" / "document" / "output.document_20230101.csv",
     )
+    shutil.copy(
+        FIXTURE_DIR / "ref_document.csv",
+        base_dir / "input" / "full" / "ref_document.csv",
+    )
 
     result_path = doc.preprocess_documents_csv(
         base_path=str(base_dir),
@@ -103,3 +108,16 @@ def test_preprocess_documents_csv_integration(tmp_path: Path) -> None:
 
     completed = produced_df["completed"].tolist()
     assert completed == sorted(completed)
+
+    qa_json = result.parent / "qa_document_postprocessing_report_20230101.json"
+    qa_md = result.parent / "qa_document_postprocessing_report_20230101.md"
+    qa_diff = result.parent / "qa_document_postprocessing_diff_20230101.csv"
+
+    assert qa_json.exists()
+    assert qa_md.exists()
+    assert not qa_diff.exists()
+
+    with qa_json.open("r", encoding="utf-8") as handle:
+        metrics = json.load(handle)
+
+    assert metrics["status"] == "passed"
