@@ -14,6 +14,7 @@ import argparse
 import sys
 import shutil
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from itertools import islice
@@ -64,6 +65,25 @@ from library.table_quality import analyze_table_quality
 from library.validation import ValidationResult
 from schemas import TargetsSchema, normalize_targets
 from schemas.targets import TARGETS_COLUMN_ORDER
+
+
+@contextmanager
+def _override_cli_meta_writer() -> Iterator[None]:
+    """Temporarily patch CLI metadata writer used by ``run_pipeline``."""
+
+    original_cli_write_meta = cli_utils_module.write_meta_yaml
+    cli_utils_module.write_meta_yaml = write_meta_yaml
+    try:
+        yield
+    finally:
+        cli_utils_module.write_meta_yaml = original_cli_write_meta
+
+
+def _run_pipeline_with_meta(**kwargs: object) -> int:
+    """Invoke :func:`run_pipeline` with project-specific metadata writer."""
+
+    with _override_cli_meta_writer():
+        return run_pipeline(**kwargs)
 
 TARGETS_REQUIRED_COLUMNS: set[str] = {
     name for name, column in TargetsSchema.columns.items() if column.required
@@ -1001,14 +1021,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     raw_df = (
         pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
     )
-
-    def _run_pipeline_with_meta(**kwargs: object) -> int:
-        original_cli_write_meta = cli_utils_module.write_meta_yaml
-        cli_utils_module.write_meta_yaml = write_meta_yaml
-        try:
-            return run_pipeline(**kwargs)
-        finally:
-            cli_utils_module.write_meta_yaml = original_cli_write_meta
 
     if normalize_at_export:
         try:
