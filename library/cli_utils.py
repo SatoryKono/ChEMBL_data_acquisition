@@ -40,6 +40,33 @@ from .utils.config import DEFAULT_CONFIG_RELATIVE
 SchemaT = TypeVar("SchemaT")
 
 
+
+def resolve_invocation(
+    prog: str | None,
+    argv: Sequence[object] | None,
+) -> tuple[str, ...]:
+    """Return a normalised tuple describing the CLI invocation.
+
+    The helper captures the effective command line as a tuple of strings.
+    ``prog`` is optional to accommodate ``argparse`` defaults, while
+    ``argv`` may be ``None`` to mirror ``argparse`` behaviour where the
+    process arguments are used implicitly.
+    """
+
+    parts: list[str] = []
+    if prog:
+        parts.append(str(prog))
+
+    if argv is None:
+        argv_iterable: Sequence[object] = sys.argv[1:]
+    else:
+        argv_iterable = argv
+
+    parts.extend(str(arg) for arg in argv_iterable)
+    return tuple(parts)
+
+
+
 class ValidationResult(Protocol):
     """Protocol describing the return type of validator callables."""
 
@@ -74,6 +101,7 @@ class PipelineError(RuntimeError):
     """Raised when a pipeline step encounters a fatal error."""
 
 
+
 def resolve_invocation(
     program: str | None, argv: Sequence[object] | None
 ) -> tuple[str, ...]:
@@ -102,6 +130,7 @@ def resolve_invocation(
         argv = sys.argv[1:]
     parts.extend(str(arg) for arg in argv)
     return tuple(parts)
+
 
 
 def run_cli_command(
@@ -194,7 +223,6 @@ def run_pipeline(
     inputs: Mapping[str, object],
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
-    invocation: Sequence[str] | None = None,
     cfg: Config | None = None,
     logger: logging.Logger | None = None,
 ) -> int:
@@ -227,9 +255,6 @@ def run_pipeline(
         Path for persisting validation failure cases.
     command:
         Command used to launch the pipeline.  Stored in metadata output.
-    invocation:
-        Normalised command invocation used when ``command`` is not provided.
-
     config_snapshot:
         Mapping of configuration values persisted to metadata.
     inputs:
