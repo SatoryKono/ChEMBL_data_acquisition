@@ -61,11 +61,21 @@ class ChemblClient:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
         if session is not None:
-            self._session_factory = lambda session=session: session
+            def _session_from_argument(provided: Session = session) -> Session:
+                return provided
+
+            self._session_factory = _session_from_argument
         else:
-            self._session_factory = lambda api=api, retry=retry: session_with_retry(
-                api, retry
-            )
+            api_cfg_default: ApiCfg = api
+            retry_cfg_default: RetryCfg = retry
+
+            def _build_session(
+                api_cfg: ApiCfg = api_cfg_default,
+                retry_cfg: RetryCfg = retry_cfg_default,
+            ) -> Session:
+                return session_with_retry(api_cfg, retry_cfg)
+
+            self._session_factory = _build_session
         ttl = chembl.cache_ttl if chembl is not None else ChemblCacheCfg().cache_ttl
         maxsize = (
             chembl.cache_maxsize
@@ -122,7 +132,8 @@ class ChemblClient:
             self._sessions.add(session)
 
     def _get_session(self) -> Session:
-        session = cast(Session | None, getattr(self._session_local, "session", None))
+        session_attr = getattr(self._session_local, "session", None)
+        session = session_attr if isinstance(session_attr, Session) else None
         if session is None:
             session = self._session_factory()
             self._register_session(session)
@@ -323,14 +334,15 @@ def _retry_after_delay(response: requests.Response | None) -> float | None:
         return max(0.0, delay)
     except ValueError:
         try:
-            dt = parsedate_to_datetime(value)
+            parsed_dt = parsedate_to_datetime(value)
         except (TypeError, ValueError):
             return None
-        if dt is None:
+        if parsed_dt is None:
             return None
+        dt = parsed_dt
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        delta = (dt - _utcnow()).total_seconds()
+        delta = float((dt - _utcnow()).total_seconds())
         return max(0.0, delta)
 
 
@@ -346,7 +358,7 @@ def _backoff_delay(
     delay = base + jitter
     if header_delay is not None:
         delay = max(delay, header_delay)
-    return delay
+    return float(delay)
 
 
 def _log_retry_delay(

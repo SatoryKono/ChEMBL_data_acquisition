@@ -118,7 +118,7 @@ def _load_molecule_hierarchy_mapping(
     path: str,
     encoding: str,
     delimiter: str,
-) -> dict[str, str | None]:
+) -> dict[str, str]:
     """Return cached child → parent mapping with normalised identifiers."""
 
     csv_path = Path(path)
@@ -158,11 +158,11 @@ def _load_molecule_hierarchy_mapping(
         keep="first",
     )
 
-    lookup: dict[str, str | None] = {}
+    lookup: dict[str, str] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = parent_id or None
-        if parent is not None and parent == molecule_id:
-            parent = None
+        parent = parent_id or ""
+        if parent == molecule_id:
+            parent = ""
         lookup[molecule_id] = parent
 
     return lookup
@@ -174,7 +174,7 @@ def LoadMoleculeHierarchyLookup(
     encoding: str | None = None,
     delimiter: str | None = None,
     catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, dict[str, str | None]]:
+) -> dict[str, dict[str, str]]:
     """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
 
     cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
@@ -242,7 +242,7 @@ def load_molecule_hierarchy_lookup(
     if not lookup:
         return {}
 
-    attached_rows = sum(1 for value in lookup.values() if value is not None)
+    attached_rows = sum(1 for value in lookup.values() if value)
 
     logger.info(
         "molecule_hierarchy_lookup_loaded",

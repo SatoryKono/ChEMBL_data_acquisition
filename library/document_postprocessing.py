@@ -9,7 +9,7 @@ source implementation (``NullOrEmpty``, ``NormalizeJournal`` and friends).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 import numpy as np
 import pandas as pd
@@ -177,7 +177,7 @@ def to_text(value: Any) -> str:
         if float(value).is_integer():
             return str(int(value))
         return str(float(value))
-    if pd.isna(value):  # type: ignore[arg-type]
+    if pd.isna(cast(object, value)):
         return ""
     return str(value)
 
@@ -276,7 +276,7 @@ def _series_any(series_list: Iterable[pd.Series]) -> pd.Series:
 
 
 def _coerce_to_bool(value: Any) -> Any:
-    if pd.isna(value):  # type: ignore[arg-type]
+    if pd.isna(cast(object, value)):
         return pd.NA
     text = to_text(value).strip().lower()
     if text in {"true", "1", "yes"}:

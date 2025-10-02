@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterable, Iterator, Sequence
+from typing import cast
 from copy import deepcopy
-from functools import partial
 from datetime import date
 from pathlib import Path
 
@@ -23,14 +23,19 @@ from .clients.semantic_scholar import (
 from .cli import LoggerConfig, configure_logger, path_argument
 from .cli import build_parser as base_parser
 from .config import (
+    ApiCfg,
     Config,
+    CrossRefCfg,
+    OpenAlexCfg,
+    RetryCfg,
+    SemanticScholarCfg,
     ensure_dirs,
     print_config,
     session_with_retry,
     _serialize_paths,
 )
 from .csv_utils import write_csv_chunks_deterministic
-from .metadata import file_sha256, write_meta_yaml
+from .metadata import Stats, file_sha256, write_meta_yaml
 from .clients.pubmed import PubMedClient
 from .pubmed import (
     EMPTY_PUBMED,
@@ -48,7 +53,7 @@ from .pubmed import (
     text_or_none,
 )
 from .rate_limiter import RateLimiter, get_limiter
-from .cli_utils import run_pipeline
+from .cli_utils import MetadataHook, Validator, run_pipeline
 from .table_quality import analyze_table_quality
 from .pipeline_metadata import add_pipeline_metadata
 from .normalization import normalize_documents
@@ -151,20 +156,20 @@ def _stream_pubmed_batches(
     delay: float,
     pubmed_client: PubMedClient,
     limiter: RateLimiter,
-    semantic_scholar_cfg,
-    openalex_cfg,
-    crossref_cfg,
+    semantic_scholar_cfg: SemanticScholarCfg,
+    openalex_cfg: OpenAlexCfg,
+    crossref_cfg: CrossRefCfg,
     dump_level: str,
     openalex_limiter: RateLimiter,
     crossref_limiter: RateLimiter,
-    api_cfg,
-    retry_cfg,
+    api_cfg: ApiCfg,
+    retry_cfg: RetryCfg,
 ) -> Iterator[pd.DataFrame]:
     """Yield combined metadata for ``pmids`` one batch at a time."""
 
     with session_with_retry(api_cfg, retry_cfg) as session:
         for i in range(0, len(pmids), batch_size):
-            batch_pmids = pmids[i : i + batch_size]
+            batch_pmids = list(pmids[i : i + batch_size])
             limiter.acquire()
             pubmed_list = fetch_pubmed_batch(
                 session,
@@ -298,7 +303,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             retry_cfg=cfg.retry,
         )
 
-    metadata_hooks = [normalize_documents, add_pipeline_metadata]
+    metadata_hooks: list[MetadataHook] = [normalize_documents, add_pipeline_metadata]
 
     stats_tracker = {"rows_total": 0, "rows_kept": 0}
 
@@ -308,20 +313,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         stats_tracker["rows_kept"] += len(result.data)
         return result
 
-    validators = [_validator_with_stats]
+    validators: list[Validator] = [cast(Validator, _validator_with_stats)]
 
     def writer(
         chunks: Iterable[pd.DataFrame],
         destination: Path,
-        col_order: Sequence[str],
+        col_order: Sequence[str] | None,
         key_cols: Sequence[str],
     ) -> Path:
-        sort_columns = list(key_cols) or sorted(col_order)
+        sort_columns = list(key_cols)
+        if not sort_columns and col_order is not None:
+            sort_columns = list(col_order)
+        order = list(col_order) if col_order is not None else sorted(sort_columns)
         return write_csv_chunks_deterministic(
             chunks,
             destination,
             key_cols=sort_columns,
-            col_order=col_order,
+            col_order=order,
             chunksize=cfg.io.csv_chunksize,
             sort_chunksize=cfg.io.csv_chunksize,
             sep=cfg.io.csv_sep,
@@ -329,10 +337,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg=cfg,
         )
 
-    table_quality = partial(
-        analyze_table_quality,
-        table_name=str(output_path.with_suffix("")),
-    )
+    def table_quality(destination: Path) -> None:
+        analyze_table_quality(
+            destination,
+            table_name=str(output_path.with_suffix("")),
+        )
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
     config_snapshot = _serialize_paths(cfg.to_dict())
@@ -358,7 +367,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rows_total = stats_tracker["rows_total"]
         rows_kept = stats_tracker["rows_kept"]
         rows_dropped = max(rows_total - rows_kept, 0)
-        stats = {
+        stats: Stats = {
             "rows_total": rows_total,
             "rows_kept": rows_kept,
             "rows_dropped": rows_dropped,

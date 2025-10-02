@@ -6,21 +6,57 @@ import errno
 import os
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
-from typing import Iterator, TextIO
+from types import ModuleType, TracebackType
+from typing import IO, TYPE_CHECKING, Any, Iterator, Protocol, TextIO, cast
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    class _PortalockerModule(Protocol):
+        def Lock(
+            self,
+            path: str,
+            *,
+            mode: str = ...,
+            timeout: float = ...,
+        ) -> AbstractContextManager[Any]: ...
+else:  # pragma: no cover - runtime branch
+    _PortalockerModule = ModuleType
 
 try:  # pragma: no cover - optional dependency
-    import portalocker
+    import portalocker as _portalocker
 except ModuleNotFoundError:  # pragma: no cover - fallback path
-    portalocker = None
+    portalocker: _PortalockerModule | None = None
+else:
+    portalocker = cast("_PortalockerModule", _portalocker)
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    class _MSVCRTModule(Protocol):
+        LK_NBLCK: int
+        LK_UNLCK: int
+
+        def locking(self, fd: int, mode: int, size: int) -> None: ...
+
+    class _FcntlModule(Protocol):
+        LOCK_EX: int
+        LOCK_NB: int
+        LOCK_UN: int
+
+        def flock(self, fd: int, op: int) -> None: ...
+else:  # pragma: no cover - runtime branch
+    _MSVCRTModule = ModuleType
+    _FcntlModule = ModuleType
 
 if os.name == "nt":  # pragma: no cover - platform dependent
-    import msvcrt
-else:  # pragma: no cover - platform dependent
-    import errno
+    import msvcrt as _msvcrt
 
-    import fcntl
+    msvcrt: _MSVCRTModule | None = cast("_MSVCRTModule", _msvcrt)
+    fcntl: _FcntlModule | None = None
+else:  # pragma: no cover - platform dependent
+    msvcrt = None
+    import fcntl as _fcntl
+
+    fcntl = cast("_FcntlModule", _fcntl)
 
 _LOCK_TIMEOUT_SECONDS = 10.0
 _LOCK_POLL_INTERVAL_SECONDS = 0.1
@@ -56,7 +92,12 @@ class FileLock:
 
             time.sleep(self._poll_interval)
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._handle is None:
             return
 
@@ -70,8 +111,12 @@ def _try_lock(handle: TextIO) -> bool:
 
     try:
         if os.name == "nt":  # pragma: no cover - platform-specific behaviour
+            if msvcrt is None:  # pragma: no cover - defensive branch
+                raise RuntimeError("msvcrt is unavailable on this platform")
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         else:  # pragma: no cover - platform-specific behaviour
+            if fcntl is None:  # pragma: no cover - defensive branch
+                raise RuntimeError("fcntl is unavailable on this platform")
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError as exc:
         if _is_lock_contended(exc):
@@ -86,8 +131,12 @@ def _unlock(handle: TextIO) -> None:
     """Release a previously acquired lock on *handle*."""
 
     if os.name == "nt":  # pragma: no cover - platform-specific behaviour
+        if msvcrt is None:  # pragma: no cover - defensive branch
+            raise RuntimeError("msvcrt is unavailable on this platform")
         msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
     else:  # pragma: no cover - platform-specific behaviour
+        if fcntl is None:  # pragma: no cover - defensive branch
+            raise RuntimeError("fcntl is unavailable on this platform")
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
@@ -107,7 +156,7 @@ def open_atomic(
     encoding: str | None = None,
     newline: str | None = None,
     lock_timeout: float = _LOCK_TIMEOUT_SECONDS,
-) -> Iterator[TextIO]:
+) -> Iterator[IO[Any]]:
     """Open *path* for atomic writing.
 
     A temporary file is created in the same directory and moved into place with
@@ -125,7 +174,6 @@ def open_atomic(
     lock_path = path.with_name(f"{path.name}.lock")
 
     with _acquire_lock(lock_path, lock_timeout):
-
         fd, tmp_name = tempfile.mkstemp(
             dir=path.parent,
             prefix=f".{path.name}.",
@@ -133,7 +181,9 @@ def open_atomic(
             text="b" not in mode,
         )
         try:
-            with os.fdopen(fd, mode, encoding=encoding, newline=newline) as tmp_file:
+            tmp_file: IO[Any]
+            tmp_file = os.fdopen(fd, mode, encoding=encoding, newline=newline)
+            with tmp_file:
                 yield tmp_file
         except Exception:
             raise
@@ -178,17 +228,18 @@ def _wait_for_lock(lock_file: TextIO, timeout: float, start_time: float) -> None
         except BlockingIOError as exc:  # pragma: no cover - dependent on timing
             if timeout is not None and time.monotonic() - start_time > timeout:
                 raise TimeoutError("timed out acquiring file lock") from exc
-            time.sleep(0.1)
+            time.sleep(_LOCK_POLL_INTERVAL_SECONDS)
         except OSError as exc:  # pragma: no cover - platform dependent
             if os.name == "nt":
-                if exc.winerror not in {32, 33}:  # sharing violation / lock violation
+                win_err = getattr(exc, "winerror", None)
+                if win_err not in {32, 33}:  # sharing violation / lock violation
                     raise
             else:
                 if exc.errno not in {errno.EACCES, errno.EAGAIN}:
                     raise
             if timeout is not None and time.monotonic() - start_time > timeout:
                 raise TimeoutError("timed out acquiring file lock") from exc
-            time.sleep(0.1)
+            time.sleep(_LOCK_POLL_INTERVAL_SECONDS)
         else:
             break
 
@@ -197,8 +248,12 @@ def _lock_file(lock_file: TextIO) -> None:
     """Lock the file in a platform-specific manner."""
 
     if os.name == "nt":  # pragma: no branch - platform specific
+        if msvcrt is None:  # pragma: no cover - defensive branch
+            raise RuntimeError("msvcrt is unavailable on this platform")
         msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
     else:
+        if fcntl is None:  # pragma: no cover - defensive branch
+            raise RuntimeError("fcntl is unavailable on this platform")
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
@@ -206,8 +261,12 @@ def _release_lock(lock_file: TextIO) -> None:
     """Release the platform-specific file lock."""
 
     if os.name == "nt":  # pragma: no branch - platform specific
+        if msvcrt is None:  # pragma: no cover - defensive branch
+            raise RuntimeError("msvcrt is unavailable on this platform")
         msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
     else:
+        if fcntl is None:  # pragma: no cover - defensive branch
+            raise RuntimeError("fcntl is unavailable on this platform")
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 

@@ -11,7 +11,6 @@ metadata files.
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 import traceback
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -25,6 +24,7 @@ from pandera.errors import SchemaErrors
 
 from . import cli
 from .cli import (
+    Logger,
     LoggerConfig,
     add_common_arguments,
     apply_config_overrides,
@@ -112,7 +112,7 @@ def run_cli_command(
     log_cfg: LoggerConfig,
     mapping: Mapping[str, str],
     run: Callable[[Config, argparse.Namespace], int],
-    logger: logging.Logger | None = None,
+    logger: Logger | None = None,
 ) -> int:
     """Execute CLI boilerplate shared by data acquisition commands."""
 
@@ -122,11 +122,21 @@ def run_cli_command(
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
     try:
+        config_arg = getattr(args, "config", None)
+        if isinstance(config_arg, (str, Path)):
+            config_path = config_arg
+        else:
+            default_config = parser.get_default("config")
+            if not isinstance(default_config, (str, Path)):
+                msg = "configuration path must be provided"
+                raise ValueError(msg)
+            config_path = default_config
+
         cfg: Config = apply_config_overrides(
             args,
             parser,
-            getattr(args, "config", None),
-            mapping=mapping,
+            config_path,
+            mapping=dict(mapping),
             base_parser=base_parser,
         )
         if getattr(args, "print_config", False):
@@ -160,14 +170,6 @@ def run_cli_command(
     return exit_code
 
 
-@overload
-def _as_iterable(source: pd.DataFrame) -> Iterator[pd.DataFrame]: ...
-
-
-@overload
-def _as_iterable(source: Iterable[pd.DataFrame]) -> Iterator[pd.DataFrame]: ...
-
-
 def _as_iterable(
     source: pd.DataFrame | Iterable[pd.DataFrame],
 ) -> Iterator[pd.DataFrame]:
@@ -196,7 +198,7 @@ def run_pipeline(
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
     cfg: Config | None = None,
-    logger: logging.Logger | None = None,
+    logger: Logger | None = None,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
 

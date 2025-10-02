@@ -112,7 +112,7 @@ def prepare_chunked_pipeline(
     csv_writer: CsvWriterConfig,
 ) -> tuple[
     Callable[[], Iterator[Chunk]],
-    Callable[[Iterable[Chunk], Path, Sequence[str], Sequence[str]], Path],
+    Callable[[Iterable[Chunk], Path, Sequence[str] | None, Sequence[str]], Path],
 ]:
     """Construct fetcher and writer callables handling chunking and ordering."""
 
@@ -130,15 +130,18 @@ def prepare_chunked_pipeline(
     def writer(
         chunks: Iterable[Chunk],
         destination: Path,
-        col_order: Sequence[str],
+        col_order: Sequence[str] | None,
         key_cols: Sequence[str],
     ) -> Path:
-        sort_columns = list(key_cols) or sorted(col_order)
+        sort_columns = list(key_cols)
+        if not sort_columns and col_order is not None:
+            sort_columns = list(col_order)
+        order = list(col_order) if col_order is not None else sorted(sort_columns)
         path = csv_writer.writer(
             chunks,
             destination,
             key_cols=sort_columns,
-            col_order=col_order,
+            col_order=order,
             **csv_writer.kwargs,
         )
         path_obj = Path(path)

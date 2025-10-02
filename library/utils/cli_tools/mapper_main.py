@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections import OrderedDict
 from collections.abc import Sequence
+from typing import Any
 from pathlib import Path
 from urllib.error import URLError
 
@@ -134,7 +135,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             ]
             df["mapping_uniprot_id"] = mapped_values
 
-        summary_payload = {
+        summary_payload: dict[str, Any] = {
             "total": total_ids,
             "mapped": mapped_count,
             "missing": missing_count,
