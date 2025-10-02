@@ -247,16 +247,18 @@ def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
             raise AssertionError("Unexpected request count for fallback scenario")
 
     monkeypatch.setattr(pubmed_client, "_make_request", fake_make_request_no_retry_after)
-    monkeypatch.setattr(pubmed_client.random, "uniform", lambda _a, _b: 0.3)
+    jitter_value = 0.3
+    monkeypatch.setattr(pubmed_client.random, "uniform", lambda _a, _b: jitter_value)
 
     sleep_calls.clear()
     fallback_logger = RecordingLogger()
     monkeypatch.setattr(pubmed_client, "logger", fallback_logger)
 
+    base_delay = 0.0
     data_retry, error_retry = pubmed_client._do_request(
         session=object(),
         url="http://example",
-        delay=0.3,
+        delay=base_delay,
         expect_json=False,
         retries=1,
         timeout=(1, 5),
@@ -271,6 +273,14 @@ def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     assert fallback_retry_records and "delay" in fallback_retry_records[0][2]
     fallback_delay = fallback_retry_records[0][2]["delay"]
+    default_backoff = RetryCfg().backoff_factor * (2 ** (1 - 1))
+    timeout_cap = pubmed_client._max_timeout((1, 5))
+    assert timeout_cap is not None
+    expected_fallback_delay = min(
+        max(base_delay, default_backoff + jitter_value),
+        timeout_cap,
+    )
+    assert fallback_delay == pytest.approx(expected_fallback_delay)
     assert fallback_delay > 0
 
     fallback_sleep_logs = [
