@@ -501,6 +501,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         )
         parser_obj.add_argument(
             "--no-reindex-raw",
+            dest="no_reindex_raw",
             action="store_true",
             default=no_reindex_default,
             help="Skip column reindexing when exporting the raw dataset",
@@ -613,7 +614,9 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=0,
         help="Number of identifiers to skip before processing",
     )
+
     chembl.set_defaults(normalize_at_export=True)
+
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
@@ -810,7 +813,8 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
         )
 
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        output_candidate = getattr(args, "output_csv", None)
+        output = output_candidate or io.default_output_path(args.input_csv, cfg.io)
         data_dir = cfg.target.uniprot.data_dir
         uu.init_session(cfg.api, cfg.retry)
         try:
@@ -940,26 +944,32 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     limited_ids = list(islice(ids_iter, limit)) if limit is not None else list(ids_iter)
     processed_ids = len(limited_ids)
 
+    output_candidate = getattr(args, "output_csv", None)
     base_output = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        output_candidate or io.default_output_path(args.input_csv, cfg.io)
     )
-    raw_destination = (
-        Path(args.raw_output)
-        if getattr(args, "raw_output", None) is not None
-        else _raw_output_path(base_output)
+
+    raw_candidate = getattr(args, "raw_out", None)
+    if raw_candidate in (None, argparse.SUPPRESS):
+        legacy_raw_candidate = getattr(args, "raw_output", None)
+        if legacy_raw_candidate not in (None, argparse.SUPPRESS):
+            raw_candidate = legacy_raw_candidate
+    raw_path_override = (
+        Path(raw_candidate)
+        if raw_candidate not in (None, argparse.SUPPRESS)
+        else None
     )
+    raw_destination = raw_path_override or _raw_output_path(base_output)
     normalized_output = _normalized_output_path(base_output)
-    normalize_value = getattr(args, "normalize_at_export", None)
-    if normalize_value in (None, argparse.SUPPRESS):
+
+
+    normalize_flag = getattr(args, "normalize_at_export", None)
+    if normalize_flag in (None, argparse.SUPPRESS):
         normalize_at_export = True
     else:
-        normalize_at_export = bool(normalize_value)
+        normalize_at_export = bool(normalize_flag)
+    reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
 
-    reindex_value = getattr(args, "reindex_raw", None)
-    if reindex_value in (None, argparse.SUPPRESS):
-        reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
-    else:
-        reindex_raw = bool(reindex_value)
 
     raw_chunks: list[pd.DataFrame] = []
     parsed_chunks: list[pd.DataFrame] = []
@@ -1038,14 +1048,35 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
             logger=logger,
         )
+        if exit_code != 0:
+            return exit_code
+
+        if not raw_destination.exists():
+            logger.error("raw_dump_missing", path=str(raw_destination))
+            return 1
+
+        destination = base_output
+        if raw_destination != destination:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(raw_destination, destination)
+            except OSError as exc:
+                logger.error(
+                    "raw_to_final_copy_failed",
+                    error=str(exc),
+                    source=str(raw_destination),
+                    destination=str(destination),
+                )
+                return 1
+
         if limit is not None:
             logger.info("process_limit", limit=processed_ids)
         logger.info(
             "chembl_normalization_skipped",
-            output=str(raw_destination),
+            output=str(destination),
             rows=len(raw_df),
         )
-        return exit_code
+        return 0
 
 
     final_candidate = getattr(args, "final_out", None)
@@ -1058,11 +1089,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         final_output = Path(final_candidate)
 
-    raw_candidate = getattr(args, "raw_out", None)
-    if raw_candidate in (None, argparse.SUPPRESS):
+    if raw_path_override is None:
         raw_output = final_output
     else:
-        raw_output = Path(raw_candidate)
+        raw_output = raw_path_override
 
     raw_format = str(getattr(args, "raw_format", "csv") or "csv").lower()
     if raw_format not in {"csv", "parquet"}:
@@ -1070,6 +1100,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "unsupported_raw_format", format=raw_format, fallback="csv"
         )
         raw_format = "csv"
+
+    reindex_raw = not bool(getattr(args, "no_reindex_raw", False))
+    # ``normalize_at_export`` already coerced above to avoid divergent values.
+
     id_cols_value = getattr(args, "id_cols", None)
     if id_cols_value in (None, argparse.SUPPRESS):
         key_columns = ["target_chembl_id"]
@@ -1361,7 +1395,8 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
             family_path=cfg.target.iuphar.family_csv,
             encoding=cfg.io.csv_encoding,
         )
-        output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+        output_candidate = getattr(args, "output_csv", None)
+        output = output_candidate or io.default_output_path(args.input_csv, cfg.io)
         data.map_uniprot_file(
             input_path=source_csv,
             output_path=output,
@@ -1970,6 +2005,8 @@ def validate_and_write(
     logger.info("validate_write_start", output=str(output))
 
     key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
+    normalized_output = _normalized_output_path(output)
+    input_rows = len(df)
 
     if raw_out is not None:
         raw_format_value = (raw_format or "csv").lower()
@@ -2009,6 +2046,7 @@ def validate_and_write(
     prepared, missing_required, missing_optional = _prepare_targets_for_schema(
         normalized
     )
+    final_df = prepared
     logger.info("prepare_targets_rows", rows=len(final_df))
 
     drop_reasons: dict[str, set[Any]] = {
