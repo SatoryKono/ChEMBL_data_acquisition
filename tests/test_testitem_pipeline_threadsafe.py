@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from library.config import ApiCfg, PubChemCfg, RetryCfg
 import library.testitem_pipeline as pipeline
+import library.testitem_pipeline.cli as pipeline_cli
 
 
 def test_augment_pubchem_single_initialisation(monkeypatch) -> None:
@@ -88,7 +89,10 @@ def test_run_pipeline_streams_chunks(monkeypatch, tmp_path, cfg) -> None:
         )
 
     def fake_fetch(*_args, **_kwargs):
-        return 0, iter([chunk_a, chunk_b]), ("CHEMBL1", "CHEMBL2", "CHEMBL3")
+        summary = pipeline_cli.RequestedIdsSummary()
+        for value in ("CHEMBL1", "CHEMBL2", "CHEMBL3"):
+            summary.record(value)
+        return 0, iter([chunk_a, chunk_b]), summary
 
     def fake_prepare(df: pd.DataFrame, **_kwargs):
         captured_prepare.append(df.copy())
@@ -145,12 +149,19 @@ def test_run_pipeline_streams_chunks(monkeypatch, tmp_path, cfg) -> None:
             return False
 
     monkeypatch.setattr(pipeline, "read_input_ids", fake_read_ids)
+    monkeypatch.setattr(pipeline_cli, "read_input_ids", fake_read_ids)
     monkeypatch.setattr(pipeline, "fetch_testitems", fake_fetch)
+    monkeypatch.setattr(pipeline_cli, "fetch_testitems", fake_fetch)
     monkeypatch.setattr(pipeline, "prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr(pipeline_cli, "prepare_parent_enrichment", fake_prepare)
     monkeypatch.setattr(pipeline, "run_parent_enrichment", fake_run)
+    monkeypatch.setattr(pipeline_cli, "run_parent_enrichment", fake_run)
     monkeypatch.setattr(pipeline, "augment_pubchem", fake_augment)
+    monkeypatch.setattr(pipeline_cli, "augment_pubchem", fake_augment)
     monkeypatch.setattr(pipeline, "apply_testitem_enrichment", fake_enrich)
+    monkeypatch.setattr(pipeline_cli, "apply_testitem_enrichment", fake_enrich)
     monkeypatch.setattr(pipeline, "finalize_output", fake_finalize)
+    monkeypatch.setattr(pipeline_cli, "finalize_output", fake_finalize)
     monkeypatch.setattr(pipeline, "ChemblClient", DummyClient)
     monkeypatch.setattr(pipeline.pc, "init_session", lambda *_args, **_kwargs: None)
 
@@ -189,7 +200,10 @@ def test_run_pipeline_streams_missing(monkeypatch, tmp_path, cfg) -> None:
         )
 
     def fake_fetch(*_args, **_kwargs):
-        return 0, iter([chunk]), ("CHEMBL1", "CHEMBL2")
+        summary = pipeline_cli.RequestedIdsSummary()
+        for value in ("CHEMBL1", "CHEMBL2"):
+            summary.record(value)
+        return 0, iter([chunk]), summary
 
     def fake_prepare(df: pd.DataFrame, **_kwargs):
         lookup = pipeline.ParentLookupPreparedData(
@@ -238,12 +252,19 @@ def test_run_pipeline_streams_missing(monkeypatch, tmp_path, cfg) -> None:
             return False
 
     monkeypatch.setattr(pipeline, "read_input_ids", fake_read_ids)
+    monkeypatch.setattr(pipeline_cli, "read_input_ids", fake_read_ids)
     monkeypatch.setattr(pipeline, "fetch_testitems", fake_fetch)
+    monkeypatch.setattr(pipeline_cli, "fetch_testitems", fake_fetch)
     monkeypatch.setattr(pipeline, "prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr(pipeline_cli, "prepare_parent_enrichment", fake_prepare)
     monkeypatch.setattr(pipeline, "run_parent_enrichment", fake_run)
+    monkeypatch.setattr(pipeline_cli, "run_parent_enrichment", fake_run)
     monkeypatch.setattr(pipeline, "augment_pubchem", lambda df, **_: df)
+    monkeypatch.setattr(pipeline_cli, "augment_pubchem", lambda df, **_: df)
     monkeypatch.setattr(pipeline, "apply_testitem_enrichment", lambda df, **_: (0, df))
+    monkeypatch.setattr(pipeline_cli, "apply_testitem_enrichment", lambda df, **_: (0, df))
     monkeypatch.setattr(pipeline, "finalize_output", fake_finalize)
+    monkeypatch.setattr(pipeline_cli, "finalize_output", fake_finalize)
     monkeypatch.setattr(pipeline, "ChemblClient", DummyClient)
     monkeypatch.setattr(pipeline.pc, "init_session", lambda *_args, **_kwargs: None)
 

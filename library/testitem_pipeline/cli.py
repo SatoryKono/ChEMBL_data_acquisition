@@ -6,11 +6,13 @@ import sys
 from collections import OrderedDict, deque
 from dataclasses import dataclass
 from itertools import chain, islice
+from types import MappingProxyType
 from pathlib import Path
 from typing import (
     Any,
     Iterable,
     Iterator,
+    Mapping,
     Sequence,
 )
 
@@ -219,6 +221,58 @@ def integrate_missing_identifiers(
     return ordered
 
 
+class RequestedIdsSummary:
+    """Track requested identifiers and input duplicates during streaming."""
+
+    __slots__ = ("_unique", "_duplicates", "_total")
+
+    def __init__(self) -> None:
+        self._unique: OrderedDict[str, str] = OrderedDict()
+        self._duplicates: set[str] = set()
+        self._total = 0
+
+    def record(self, identifier: object) -> tuple[str, bool]:
+        """Register *identifier* and return its text form and inclusion flag."""
+
+        self._total += 1
+        text_identifier = str(identifier)
+        normalized = text_identifier.strip()
+
+        if not normalized:
+            return text_identifier, True
+
+        upper_identifier = normalized.upper()
+        if upper_identifier in self._unique:
+            self._duplicates.add(upper_identifier)
+            return text_identifier, False
+
+        self._unique[upper_identifier] = text_identifier
+        return text_identifier, True
+
+    @property
+    def unique(self) -> Mapping[str, str]:
+        """Return a read-only, ordered view of the unique identifiers."""
+
+        return MappingProxyType(self._unique)
+
+    def iter_unique_keys(self) -> Iterator[str]:
+        """Yield normalised keys for all unique identifiers in input order."""
+
+        return iter(self._unique.keys())
+
+    def missing_originals(self, fetched_keys: set[str]) -> list[str]:
+        """Return identifiers absent from *fetched_keys* preserving order."""
+
+        return [
+            original for key, original in self._unique.items() if key not in fetched_keys
+        ]
+
+    def duplicate_keys(self) -> set[str]:
+        """Return the set of normalised duplicate identifiers from input."""
+
+        return set(self._duplicates)
+
+
 class TestitemFetchError(RuntimeError):
     """Raised when streaming retrieval of test item data fails."""
 
@@ -230,21 +284,6 @@ class TestitemPipelineStageError(RuntimeError):
         detail = message if message is not None else f"pipeline stage failed ({code})"
         super().__init__(detail)
         self.code = code
-
-
-def _batched(iterable: Iterable[str], size: int) -> Iterator[list[str]]:
-    """Yield lists of at most ``size`` elements from ``iterable``."""
-
-    chunk: list[str] = []
-    for item in iterable:
-        chunk.append(item)
-        if len(chunk) == size:
-            yield chunk
-            chunk = []
-    if chunk:
-        yield chunk
-
-
 def fetch_testitems(
     ids_iter: Iterable[str],
     *,
@@ -259,13 +298,26 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter`` in chunks."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
-    requested_ids_original: list[str] = []
+    requested_summary = RequestedIdsSummary()
 
-    for identifier in ids_iter:
-        text_identifier = str(identifier)
-        requested_ids_original.append(text_identifier)
+    def _iter_requested_batches() -> Iterator[list[str]]:
+        chunk: list[str] = []
+        chunk_limit = max(1, batch_size)
 
-    requested_iter = iter(requested_ids_original)
+        for identifier in ids_iter:
+            text_identifier, include = requested_summary.record(identifier)
+            if not include:
+                continue
+
+            chunk.append(text_identifier)
+            if len(chunk) == chunk_limit:
+                yield chunk
+                chunk = []
+
+        if chunk:
+            yield chunk
+
+    requested_iter = _iter_requested_batches()
 
     seen_ids: set[str] = set()
     duplicate_ids: set[str] = set()
@@ -332,27 +384,26 @@ def fetch_testitems(
 
         return cleaned.reset_index(drop=True)
 
-    batched_iter = _batched(requested_iter, max(1, batch_size))
-
     try:
-        first_batch = next(batched_iter)
+        first_batch = next(requested_iter)
     except StopIteration:
         logger.info("chembl_fetch_done", rows=0)
         logger.info("identifiers_retrieved", count=0)
+        duplicate_ids.update(requested_summary.duplicate_keys())
         if duplicate_ids:
             logger.warning(
                 "chembl_duplicate_identifiers",
                 duplicate_count=len(duplicate_ids),
                 duplicate_ids=sorted(duplicate_ids),
             )
-        return 0, iter(()), tuple(requested_ids_original)
+        return 0, iter(()), requested_summary
 
     prefetched: list[pd.DataFrame] = []
 
     try:
         prefetched.append(_load_chunk(first_batch))
     except TestitemFetchError:
-        return 1, None, tuple(requested_ids_original)
+        return 1, None, requested_summary
 
     rows_counter = 0
 
@@ -363,7 +414,7 @@ def fetch_testitems(
                 if not prefetched_chunk.empty:
                     rows_counter += len(prefetched_chunk)
                     yield prefetched_chunk
-            for batch in batched_iter:
+            for batch in requested_iter:
                 chunk_df = _load_chunk(batch)
                 if not chunk_df.empty:
                     rows_counter += len(chunk_df)
@@ -371,6 +422,7 @@ def fetch_testitems(
         finally:
             logger.info("chembl_fetch_done", rows=rows_counter)
             logger.info("identifiers_retrieved", count=rows_counter)
+            duplicate_ids.update(requested_summary.duplicate_keys())
             if duplicate_ids:
                 logger.warning(
                     "chembl_duplicate_identifiers",
@@ -378,7 +430,7 @@ def fetch_testitems(
                     duplicate_ids=sorted(duplicate_ids),
                 )
 
-    return 0, _chunk_stream(), tuple(requested_ids_original)
+    return 0, _chunk_stream(), requested_summary
 
 
 def apply_testitem_enrichment(
@@ -470,14 +522,6 @@ def run_testitem_pipeline(
         )
         if fetch_status != 0 or chunk_iter is None:
             return fetch_status
-
-        requested_unique: OrderedDict[str, str] = OrderedDict()
-        for identifier in requested_ids:
-            key = identifier.strip()
-            if not key:
-                continue
-            upper_key = key.upper()
-            requested_unique.setdefault(upper_key, identifier)
 
         fetched_ids: set[str] = set()
 
@@ -572,8 +616,7 @@ def run_testitem_pipeline(
             ) as exc:  # pragma: no cover - propagated network error
                 raise TestitemPipelineStageError(1, str(exc)) from exc
 
-            missing_keys = [key for key in requested_unique if key not in fetched_ids]
-            missing_ids.extend(requested_unique[key] for key in missing_keys)
+            missing_ids.extend(requested_ids.missing_originals(fetched_ids))
             if missing_ids:
                 logger.warning(
                     "chembl_missing_identifiers",

@@ -148,7 +148,7 @@ def test_fetch_testitems_failure(monkeypatch: pytest.MonkeyPatch, cfg: Config) -
 
     assert status == 1
     assert chunks is None
-    assert requested_ids == ()
+    assert list(requested_ids.unique.values()) == ["CHEMBL1"]
 
 
 def test_ensure_no_parant_column_raises() -> None:
@@ -204,7 +204,60 @@ def test_fetch_testitems_passes_fields_and_limit(
     assert frames[0]["molecule_chembl_id"].tolist() == ["CHEMBL1", "CHEMBL2"]
     assert captured["fields"] == ("a", "b")
     assert captured["page_limit"] == 500
-    assert requested_ids == ("CHEMBL1", "CHEMBL2")
+    assert list(requested_ids.unique.values()) == ["CHEMBL1", "CHEMBL2"]
+
+
+def test_fetch_testitems_deduplicates_input(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    captured_batches: list[list[str]] = []
+    captured_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured_events.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(gtd.logger, "warning", fake_warning)
+
+    def fake_get_testitem(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+        fields: Sequence[str] | None = None,
+        page_limit: int = 0,
+    ) -> pd.DataFrame:
+        batch = list(ids)
+        captured_batches.append(batch)
+        return pd.DataFrame(
+            [{"molecule_chembl_id": value.upper()} for value in batch],
+            columns=["molecule_chembl_id"],
+        )
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+
+    ids = iter(["chembl1", "CHEMBL1", "ChEmBl1", "CHEMBL2", "chembl3"])
+    status, chunks, requested_ids = gtd.fetch_testitems(
+        ids,
+        api_cfg=cfg.api,
+        batch_size=2,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        sample_ids=("chembl1",),
+        fields=cfg.testitem.fields,
+        page_limit=cfg.testitem.request_limit,
+    )
+
+    assert status == 0
+    assert chunks is not None
+    _ = list(chunks)
+    assert captured_batches == [["chembl1", "CHEMBL2"], ["chembl3"]]
+    assert list(requested_ids.unique.values()) == ["chembl1", "CHEMBL2", "chembl3"]
+    duplicate_events = [event for event in captured_events if event[0] == "chembl_duplicate_identifiers"]
+    assert duplicate_events
+    assert duplicate_events[0][1]["duplicate_count"] == 1
+    assert duplicate_events[0][1]["duplicate_ids"] == ["CHEMBL1"]
 
 
 def test_fetch_testitems_logs_missing_summary(
@@ -245,8 +298,12 @@ def test_fetch_testitems_logs_missing_summary(
 
     assert status == 0
     assert chunks is not None
-    assert requested_ids == ("CHEMBL1", "chembl2", "CHEMBL3")
     _ = list(chunks)
+    assert list(requested_ids.unique.values()) == [
+        "CHEMBL1",
+        "chembl2",
+        "CHEMBL3",
+    ]
     missing = [
         record for record in captured if record[0] == "chembl_missing_identifiers"
     ]
