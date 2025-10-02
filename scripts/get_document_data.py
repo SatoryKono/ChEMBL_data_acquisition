@@ -1033,6 +1033,7 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     return result
 
 
+
 def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
     """Return a single series for ``column`` consolidating duplicate columns."""
 
@@ -1059,14 +1060,22 @@ def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
-    frame = df.copy()
+
+
+    return pd.DataFrame(collapsed_columns, index=df.index)
+
 
     # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
     # keeping existing data intact.
 
+
+    frame = _collapse_duplicate_columns(df.copy())
+
+    rename_map: dict[str, str] = {}
     for source, target in _EXPORT_COLUMN_RENAMES.items():
         if source not in frame.columns:
             continue
+
         if target in frame.columns:
 
             target_series = _resolve_duplicate_column(frame, target)
@@ -1079,9 +1088,13 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
                 if mask.any():
                     frame.loc[mask, target] = source_series.loc[mask]
 
+
             frame = frame.drop(columns=[source])
-        else:
-            frame = frame.rename(columns={source: target})
+            continue
+        rename_map[source] = target
+    if rename_map:
+        frame = frame.rename(columns=rename_map)
+
 
     if frame.columns.duplicated().any():
         frame = frame.loc[:, ~frame.columns.duplicated()]
