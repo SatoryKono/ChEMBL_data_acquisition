@@ -192,8 +192,13 @@ def _do_request(
         extra = {"stage": event, "url": url, "attempt": attempt + 1}
 
         if attempt:
-
-            retry_delay = _retry_delay(attempt, delay, retry_cfg, timeout)
+            header_delay = retry_after_delay
+            retry_after_delay = None
+            retry_delay = (
+                header_delay
+                if header_delay is not None
+                else _retry_delay(attempt, delay, retry_cfg, timeout)
+            )
             extra["delay"] = retry_delay
             logger.info(event, extra=extra)
             if retry_delay > 0:
