@@ -61,6 +61,7 @@ from library.cli import (
 )
 from library.cli_utils import (
     PipelineError,
+    resolve_invocation,
     run_cli_command,
     run_pipeline,
 )
@@ -85,6 +86,14 @@ from schemas import ActivitiesSchema, configure_activity_schema, normalize_activ
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
+PROGRAM_NAME = Path(__file__).with_suffix("").name
+
+
+def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
+    invocation = getattr(args, "invocation", None)
+    if invocation is None:
+        return (PROGRAM_NAME,)
+    return tuple(str(arg) for arg in invocation)
 
 
 file_sha256 = _cli_file_sha256
@@ -359,15 +368,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         key_cols: Sequence[str],
     ) -> Path:
         sort_columns = list(key_cols) or sorted(col_order)
-        output_path = io.write_csv(
+        output_path = write_csv_chunks_deterministic(
             chunks,
             destination,
-            cfg=cfg,
             key_cols=sort_columns,
-            col_order=col_order,
+            col_order=list(col_order),
             chunksize=cfg.io.csv_chunksize,
+            sort_chunksize=cfg.io.csv_chunksize,
             sep=cfg.io.csv_sep,
             encoding=cfg.io.csv_encoding,
+            cfg=cfg,
         )
         path_obj = Path(output_path)
         if not path_obj.exists():
@@ -423,15 +433,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
 
         writer_config = CsvWriterConfig(
-            writer=write_csv_chunks_deterministic,
-            kwargs={
-                "cfg": cfg,
-                "chunksize": cfg.io.csv_chunksize,
-                "sort_chunksize": cfg.io.csv_chunksize,
-                "sep": cfg.io.csv_sep,
-                "encoding": cfg.io.csv_encoding,
-            },
-            ensure_destination=True,
+            writer=writer,
+            kwargs={},
+            ensure_destination=False,
         )
 
         fetcher, writer = prepare_chunked_pipeline(
@@ -449,7 +453,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             writer=writer,
             output_path=output,
             failure_path=failure_path,
-            command=" ".join(sys.argv),
+            invocation=_args_invocation(args),
             config_snapshot=_serialize_paths(cfg.to_dict()),
             inputs={"input_csv": str(args.input_csv)},
             key_columns=["activity_id"],
@@ -493,6 +497,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         size_option="--batch-size",
         size_dest="batch_size",
     )
+    parser.prog = PROGRAM_NAME
     parser.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser.add_argument(
         "--timeout",
@@ -551,6 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser, log_cfg = build_parser()
     args = parser.parse_args(argv)
+    args.invocation = resolve_invocation(parser.prog, argv)
     cli.prepare_io_paths(
         args,
         input_default=DEFAULT_INPUT_NAME,
