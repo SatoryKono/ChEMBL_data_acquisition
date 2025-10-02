@@ -607,8 +607,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         dest="id_cols",
         default=None,
         help="Columns used to identify and sort rows in the output",
-     
-        ),
     )
     chembl.add_argument(
         "--normalize-at-export",
@@ -1251,16 +1249,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         validators=[_validate_chunk],
         metadata_hooks=metadata_hooks,
         writer=writer,
-
         output_path=raw_output,
-
         failure_path=failure_path,
         command=" ".join(sys.argv),
         config_snapshot=_serialize_paths(cfg.to_dict()),
         inputs={"input_csv": str(args.input_csv)},
-ч
         key_columns=key_columns,
-
         table_quality=table_quality,
         cfg=cfg,
         logger=logger,
