@@ -28,8 +28,11 @@ The primary documentation and reference material live in the [docs/](docs/) dire
 | requests  | ≥2.31             | 2.32.5        |
 | PyYAML    | ≥6.0              | 6.0.3         |
 
-See `requirements-dev.txt` or `pyproject.toml` for the full list. Runtime dependencies follow compatible release ranges so patch
-updates within each minor version remain supported. Continuous integration validates both the minimum and latest rows above.
+`requirements-lock.txt` is the single source of truth for pinned dependency
+versions; `pyproject.toml` documents the supported version ranges. Runtime
+dependencies follow compatible release ranges so patch updates within each
+minor version remain supported. Continuous integration validates both the
+minimum and latest rows above.
 
 ### Runtime environment
 

@@ -109,11 +109,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterable[pd.DataFrame]:
-    global_limiter = get_global_limiter(cfg.rate.global_rps, cfg.rate.global_burst)
+        global_limiter = get_global_limiter(
+            cfg.rate.global_rps, cfg.rate.global_burst
+        )
 
-    with ChemblClient(
-        cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
-    ) as client:
+        with ChemblClient(
+            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
+        ) as client:
             chunk_iter = cl._chunked(ids_source, cfg.assay.batch_size)
             for chunk_ids in chunk_iter:
                 try:

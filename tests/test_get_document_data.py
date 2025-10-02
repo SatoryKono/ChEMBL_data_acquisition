@@ -2053,7 +2053,9 @@ def test_fetch_pubmed_records_falls_back_to_single_semantic_call(
 
 
 def test_finalise_export_falls_back_to_default_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document_export_postprocess_stub,
 ) -> None:
     """CSV export should default to known key columns when none are provided."""
 
@@ -2092,10 +2094,13 @@ def test_finalise_export_falls_back_to_default_key(
 
     assert exit_code == 0
     assert captured["key_cols"] == ["ChEMBL.document_chembl_id"]
+    assert document_export_postprocess_stub
 
 
 def test_finalise_export_accepts_generator(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document_export_postprocess_stub,
 ) -> None:
     """Generator inputs should be validated and written in order."""
 
@@ -2164,10 +2169,13 @@ def test_finalise_export_accepts_generator(
         ["101"],
         ["102"],
     ]
+    assert document_export_postprocess_stub
 
 
 def test_finalise_export_streaming_is_deterministic(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document_export_postprocess_stub,
 ) -> None:
     """Streaming export should preserve deterministic ordering and payload."""
 
@@ -2230,6 +2238,7 @@ def test_finalise_export_streaming_is_deterministic(
     analyzer_input = captured["quality_analyzer_input"]
     quality_report, _ = analyzer_input.build(captured["quality_table_name"])
     assert quality_report["PubMed.PMID"].astype(str).tolist() == ["101", "102"]
+    assert document_export_postprocess_stub
 
 
 @pytest.mark.parametrize("context_position", ["suffix", "prefix"])

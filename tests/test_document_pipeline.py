@@ -593,7 +593,9 @@ def test_fetch_pubmed_records_logs_compact_batch(
 
 
 def test_finalise_export_streams_single_pass(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    document_export_postprocess_stub,
 ) -> None:
     """The export finalisation stage streams frames without duplicating work."""
 
@@ -651,10 +653,13 @@ def test_finalise_export_streams_single_pass(
 
     assert all(event != "write_done" for event, _payload in info_events)
     assert captured_errors
+    assert document_export_postprocess_stub
 
 
 def test_finalise_export_streams_quality(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document_export_postprocess_stub,
 ) -> None:
     """Quality analysis consumes stream without re-reading the CSV."""
 
@@ -736,6 +741,7 @@ def test_finalise_export_streams_quality(
         quality_report["column"] == "ChEMBL.document_chembl_id"
     ].iloc[0]
     assert int(chembl_row["non_empty"]) == 4
+    assert document_export_postprocess_stub
 
 
 
