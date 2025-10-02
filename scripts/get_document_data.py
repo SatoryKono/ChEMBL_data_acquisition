@@ -745,6 +745,15 @@ def fetch_pubmed_records(
     openalex_capacity = _executor_capacity(openalex_limiter, openalex_cfg.burst)
     crossref_capacity = _executor_capacity(crossref_limiter, crossref_cfg.burst)
 
+    downstream_capacity = max(
+        1,
+        min(
+            max_workers,
+            openalex_capacity or max_workers,
+            crossref_capacity or max_workers,
+        ),
+    )
+
     openalex_executor: ThreadPoolExecutor | None = None
     crossref_executor: ThreadPoolExecutor | None = None
 
@@ -755,7 +764,7 @@ def fetch_pubmed_records(
     next_to_emit = 0
     processed = 0
     completed_batches = 0
-    max_in_flight = max(1, max_workers * 2)
+    max_in_flight = downstream_capacity * 2
 
     stack = ExitStack()
     batch_executor = stack.enter_context(ThreadPoolExecutor(max_workers=max_workers))
