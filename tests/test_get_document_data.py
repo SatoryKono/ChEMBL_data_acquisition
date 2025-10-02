@@ -2734,3 +2734,132 @@ def test_fetch_pubmed_records_generator_batches(
         ["300"],
         ["400"],
     ]
+
+
+def test_fetch_pubmed_records_uses_pending_helper_minimally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure ``_iter_pending`` only triggers ``as_completed`` when required."""
+
+    pmids = ["100", "200"]
+    cfg = Config()
+
+    monkeypatch.setattr(
+        gdd, "get_limiter", lambda *_args, **_kwargs: DummyLimiter(burst=1)
+    )
+
+    class ImmediateExecutor:
+        def __init__(self, *_: object, **__: object) -> None:
+            return None
+
+        def __enter__(self) -> ImmediateExecutor:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def submit(
+            self, func: Callable[..., list[dict[str, str]]], *args: object, **kwargs: object
+        ) -> Future:
+            future: Future = Future()
+            try:
+                result = func(*args, **kwargs)
+            except Exception as exc:  # pragma: no cover - defensive
+                future.set_exception(exc)
+            else:
+                future.set_result(result)
+            return future
+
+    monkeypatch.setattr(gdd, "ThreadPoolExecutor", ImmediateExecutor)
+
+    class DummySession:
+        def __enter__(self) -> DummySession:  # pragma: no cover - trivial
+            return self
+
+        def __exit__(self, *_exc: object) -> None:  # pragma: no cover - trivial
+            return None
+
+    monkeypatch.setattr(gdd, "session_with_retry", lambda *_args, **_kwargs: DummySession())
+
+    def fake_pubmed_batch(
+        _session: object,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: PubMedCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "PubMed.PMID": pmid,
+                "PubMed.DOI": "",
+                "PubMed.ArticleTitle": f"Article {pmid}",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        _session: object,
+        batch: Sequence[str],
+        _sleep: float,
+        cfg: SemanticScholarCfg | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "scholar.PMID": pmid,
+                "scholar.DOI": "",
+                "scholar.Error": "",
+            }
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar_batch",
+        fake_semantic_batch,
+    )
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_args, **_kwargs: {
+            "scholar.PMID": "",
+            "scholar.DOI": "",
+            "scholar.Error": "",
+        },
+    )
+
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda *_args, **_kwargs: {"OpenAlex.Error": ""},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda *_args, **_kwargs: {"crossref.Error": ""},
+    )
+
+    call_count = 0
+    orig_as_completed = gdd.as_completed
+
+    def spy_as_completed(futures: Iterable[Future]) -> Iterator[Future]:
+        nonlocal call_count
+        call_count += 1
+        return orig_as_completed(futures)
+
+    monkeypatch.setattr(gdd, "as_completed", spy_as_completed)
+
+    df = gdd.fetch_pubmed_records(
+        pmids,
+        cfg,
+        sleep=0.0,
+        pubmed_cfg=PubMedCfg(),
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+    )
+
+    assert call_count == 2
+    assert df["PubMed.PMID"].tolist() == pmids
