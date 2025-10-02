@@ -8,11 +8,12 @@ The README is available in multiple languages:
 | Русский  | [README_RU.md](README_RU.md) |
 
  
-* Командные скрипты с унифицированными флагами `--input`, `--output`,
-  `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
-  `--print-config` для управления загрузкой настроек. Размер пакетной
-  выборки задаётся параметрами `--chunk-size` или `--batch-size` в
-  зависимости от конкретного пайплайна.
+* Командные скрипты с унифицированными флагами `--input`, `--output`/`--out`,
+  `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--log-level`,
+  `--sep`, `--encoding`, `--column`, а также `--config` и `--print-config`
+  для управления загрузкой настроек. Размер пакетной выборки задаётся
+  параметрами `--chunk-size` или `--batch-size` в зависимости от конкретного
+  пайплайна.
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
 * Валидаторы схем (`schemas/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
@@ -136,15 +137,33 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
 
   ```bash
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --out out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --output out/quality --table-name chembl_targets --log-level INFO
+      --out out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  Во втором примере аргумент `--output` должен указывать на каталог, в котором
+  Во втором примере аргумент `--out`/`--output` должен указывать на каталог, в котором
   будут созданы файлы отчёта.
 
 4. **Run the tests / Запустите тесты** – refer to [Tests / Тесты](#tests--тесты).
+
+
+## Staged export pipeline / Поэтапный конвейер
+
+```mermaid
+flowchart LR
+  Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs / Очистка ID"] --> Normalize --> Validate --> Final["Final export / Финальный экспорт"]
+```
+
+**EN.** All pipelines follow the same staged contract. Use `--raw-out` (optionally with `--raw-format parquet`) to capture the
+raw payload, list composite keys via `--id-cols`, and direct the cleaned export to `--final-out` or the shorter alias `--out`.
+Placeholder identifiers remain in the raw snapshot and are counted in the metadata (`error_placeholder_counts`), while the final
+export includes only validated values.
+
+**RU.** Все пайплайны используют единый набор стадий. Флаг `--raw-out` (с `--raw-format parquet` при необходимости) сохраняет
+исходный ответ, `--id-cols` перечисляет составные ключи, а чистый экспорт направляется в `--final-out` либо сокращённый алиас
+`--out`. Временные идентификаторы остаются в «сыром» снимке и учитываются в метаданных (`error_placeholder_counts`), тогда как
+финальная таблица содержит только прошедшие валидацию значения.
 
 
 ## Tests / Тесты
@@ -160,10 +179,10 @@ pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m scripts.get_data --help
 tmp_dir=$(mktemp -d) && python -m library.utils.cli_tools.pipeline_targets_main \
     --input tests/data/chembl_targets_min.csv \
-    --output "${tmp_dir}/targets.csv" --log-level INFO --limit 2
+    --out "${tmp_dir}/targets.csv" --log-level INFO --limit 2
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --output out/mapped.csv --log-level INFO
+    --out out/mapped.csv --log-level INFO
 ```
 
 Before running the smoke command, create a `chembl_ids.csv` file with a header `chembl_id` and the required identifiers. / Перед запуском smoke-команды создайте `chembl_ids.csv` со столбцом `chembl_id` и нужными идентификаторами.
@@ -269,7 +288,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ## Usage
 
 The examples below illustrate how to run the main CLI tools with common
-options like ``--input``, ``--output`` and ``--limit``. Passing
+options like ``--input``, ``--out``/``--output``, ``--raw-out`` and ``--limit``. Passing
 ``--limit 0`` short-circuits processing before any network or filesystem
 access, which is handy for configuration smoke tests.
 
@@ -487,9 +506,9 @@ api:
 
 ## Logging / Логирование
 
-**EN.** CLI helpers configure structured JSON logging via ``library.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity. The JSON layout is fixed and not customisable.
+**EN.** CLI helpers configure structured JSON logging via ``library.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity. The JSON layout is fixed and now stamps the staging phase (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
 
-**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.logging_setup.configure_logger``. Управляйте уровнем логов переменными окружения или ключами CLI. Формат JSON фиксирован и не настраивается.
+**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.logging_setup.configure_logger``. Управляйте уровнем логов переменными окружения или ключами CLI. Формат JSON фиксирован и теперь дополнительно фиксирует стадию (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
 
 
 Уровень логов можно задать флагом `--log-level` или переменной
@@ -497,7 +516,7 @@ api:
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.csv
+    --out out/assays.final.csv
 ```
 
 Пример строки лога:
@@ -540,6 +559,8 @@ Typical log entries look like:
 {"ts":"2024-05-01T12:00:02Z","level":"INFO","event":"validate_done","run_id":"abc123","stage":"validate","rows":42}
 {"ts":"2024-05-01T12:00:03Z","level":"INFO","event":"pipeline_done","run_id":"abc123","stage":"pipeline","elapsed":3.2}
 ```
+
+Smoke fixtures for full orchestration live in ``tests/data/input-smoke/``. The expected JSON structure (including stage names and placeholder counters) is validated by ``tests/test_logging.py``, ``tests/test_logging_setup.py`` and the smoke harness ``tests/smoke/test_get_data_scripts.py``.
 
 ## Reproducibility / Воспроизводимость
 
@@ -629,9 +650,11 @@ Running the CLI saves ``data_quality_report_table.csv`` and
 
     python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 
-Use ``--output`` to redirect these artefacts to another directory. The value must be a
-directory path (do not include the final file name). When ``local.io.exist_ok`` is set to
-``false`` the directory has to exist beforehand; otherwise it is created automatically.
+Use ``--output``/``--out`` to redirect these artefacts to another directory or combine
+them with ``--raw-out`` / ``--final-out`` when raw and cleaned exports have different
+destinations. The value must be a directory path (do not include the final file name).
+When ``local.io.exist_ok`` is set to ``false`` the directory has to exist beforehand;
+otherwise it is created automatically.
 
 All scripts share a common set of flags:
 
@@ -776,8 +799,10 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-`--output` по умолчанию формируется как `output.<имя_входа>_YYYYMMDD.csv`
-в каталоге, заданном `local.io.output_dir`.
+`--output`/`--out` по умолчанию формируется как `output.<имя_входа>_YYYYMMDD.csv`
+в каталоге, заданном `local.io.output_dir`. При необходимости
+используйте `--raw-out` и `--final-out` (с `--raw-format`) для разведения
+«сырого» снимка и финального экспорта.
 Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md) и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
 
 ## Структура проекта
