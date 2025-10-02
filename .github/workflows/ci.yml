@@ -19,8 +19,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          # Install package along with development extras
-          pip install .[dev]
+          # Install the project using the canonical lock file
+          pip install -r requirements-lock.txt
       - name: Check installed packages
         run: pip check
       - name: Check formatting
