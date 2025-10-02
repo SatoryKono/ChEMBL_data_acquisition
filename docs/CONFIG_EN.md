@@ -4,7 +4,7 @@
 
 * All command-line tools load their defaults from [`config/config.yaml`](../config/config.yaml) in the project root.
 * Values are validated by `library.config.load_config`, which calls `Config.model_validate` from Pydantic. [`config.schema.json`](../config.schema.json) documents the same structure for tooling but is not executed during start-up.
-* Settings can be overridden via environment variables and CLI flags. Precedence is: `config/config.yaml` < environment variables < CLI arguments.
+* Settings can be overridden via a `config.local.yaml` placed next to the primary configuration (including custom paths supplied via `--config`), environment variables and CLI flags. Precedence is: `config/config.yaml` < `config.local.yaml` < environment variables < CLI arguments.
 
 ## Layout of `config/config.yaml`
 
