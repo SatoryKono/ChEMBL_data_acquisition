@@ -1,6 +1,6 @@
 # Утилиты ChEMBL Data Acquisition
 
-Основная справка и расширенная документация расположены в каталоге [docs/](docs/).
+Основная справка и расширенная документация находятся в этом каталоге — см. [указатель материалов](./).
 
 ## Особенности
 
@@ -14,7 +14,7 @@
 
 
 * Потоковая обработка крупных CSV-файлов с детерминированным выводом.
-* Валидаторы схем в [`schemas/`](schemas/) и словари в [`dictionary/`](dictionary/) для проверки типов, диапазонов и справочных данных.
+* Валидаторы схем в [`schemas/`](../schemas/) и словари в [`dictionary/`](../dictionary/) для проверки типов, диапазонов и справочных данных.
 * Конфигурация через `config/config.yaml`, переменные окружения и CLI-переопределения.
 * Логирование на базе стандартного модуля `logging` с настраиваемой детализацией.
 * Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование `black`, проверка типов `mypy` и тесты `pytest`.
@@ -137,8 +137,8 @@ pre-commit install
 
 | Язык    | Чек-лист |
 |---------|----------|
-| English | [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md) |
-| Русский | [docs/QA_PROCESS_RU.md](docs/QA_PROCESS_RU.md) |
+| English | [docs/QA_PROCESS_EN.md](./QA_PROCESS_EN.md) |
+| Русский | [docs/QA_PROCESS_RU.md](./QA_PROCESS_RU.md) |
 
 ```bash
 pre-commit run --all-files
@@ -154,7 +154,7 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 
 ## Генерация данных
 
-Пять рабочих пайплайнов находятся в каталоге [`scripts/`](scripts/) и по умолчанию сохраняют CSV в `~/.local/share/chembl-da/output`:
+Пять рабочих пайплайнов находятся в каталоге [`scripts/`](../scripts/) и по умолчанию сохраняют CSV в `~/.local/share/chembl-da/output`:
 
 * `get_activity_data.py` — выгружает активности из ChEMBL и обогащает расчётными границами значений.
 * `get_assay_data.py` — загружает описания ассайев.
@@ -163,7 +163,7 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 * `get_testitem_data.py` — дополняет соединения структурными атрибутами и данными PubChem.
 
 Кешируемая обвязка `library.utils.cli_tools.pipeline_targets_main`, размещённая в
-[`library/utils/cli_tools/`](library/utils/cli_tools/), использует те же CLI-параметры, что и
+[`library/utils/cli_tools/`](../library/utils/cli_tools/), использует те же CLI-параметры, что и
 боевой таргет-пайплайн, но работает только с локальными файлами и подготовленными чанками
 идентификаторов без сетевых вызовов.
 
@@ -174,7 +174,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
     --output data/output/activities.csv --limit 10 --log-level INFO
 ```
 
-Команда обращается к API ChEMBL, сохраняет таблицу и сопровождающий `*.meta.yaml`. Утилиты разработки находятся в `library/utils/cli_tools/`; например, модуль `get_activities` предназначен лишь для демонстрационного логирования и не выполняет файловых операций. См. [`docs/CLI_TOOLS.md`](docs/CLI_TOOLS.md) для кратких описаний и типовых команд. Каталог результатов игнорируется Git и публикуется как артефакт CI.
+Команда обращается к API ChEMBL, сохраняет таблицу и сопровождающий `*.meta.yaml`. Утилиты разработки находятся в `library/utils/cli_tools/`; например, модуль `get_activities` предназначен лишь для демонстрационного логирования и не выполняет файловых операций. См. [`docs/CLI_TOOLS.md`](./CLI_TOOLS.md) для кратких описаний и типовых команд. Каталог результатов игнорируется Git и публикуется как артефакт CI.
 
 > **Примечание.** Ранее использовался входной скрипт `activity_extraction_main.py`. Теперь применяйте модульный запуск `python -m scripts.get_activity_data`, что упрощает сопровождение и работу в виртуальных окружениях.
 
@@ -325,7 +325,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 Допустимо указывать как короткий алиас `CHEMBL_DA_BASE`, так и полное имя
 `CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; обе переменные настраивают одно
 и то же значение. Полный список доступных алиасов приведён в
-[`library/config.py`](library/config.py#L1531-L1634).
+[`library/config.py`](../library/config.py#L1531-L1634).
 
 Типовые переменные с контактными e-mail приведены в `.env.example`.
 
@@ -409,7 +409,7 @@ api:
   rps: 5  # любое >= 1
 ```
 
-Диапазоны допустимых значений описаны в [`config.schema.json`](./config.schema.json), экспортированном из Pydantic-моделей — там для `api.rps` указан минимум `1`.
+Диапазоны допустимых значений описаны в [`config.schema.json`](../config.schema.json), экспортированном из Pydantic-моделей — там для `api.rps` указан минимум `1`.
 
 ## Логирование
 
@@ -481,7 +481,7 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
 `--no-reindex-raw` сохраняет исходный порядок из API. Финальный CSV нормализуется по умолчанию; переключайте пару
 `--normalize-at-export` / `--no-normalize-at-export`, чтобы либо провести очистку перед записью, либо оставить экспорт
 идентичным «сырому» файлу. Дополнительные примеры приведены в
-[`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+[`docs/USAGE_RU.md`](./USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](./USAGE_EN.md)).
 
 
 ## Структура проекта
@@ -510,7 +510,7 @@ ChEMBL_data_acquisition/
 
 ## Конфигурация
 
-Параметры читаются из `config/config.yaml`, переменных окружения (`CHEMBL_DA__...`) и CLI-флагов. Подробности смотрите в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) (английская версия — [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md)).
+Параметры читаются из `config/config.yaml`, переменных окружения (`CHEMBL_DA__...`) и CLI-флагов. Подробности смотрите в [`docs/CONFIG_RU.md`](./CONFIG_RU.md) (английская версия — [`docs/CONFIG_EN.md`](./CONFIG_EN.md)).
 
 ### Переменные окружения
 
@@ -520,7 +520,7 @@ ChEMBL_data_acquisition/
 export CHEMBL_DA__LOG__LEVEL=DEBUG
 ```
 
-Большинство опций имеют короткие алиасы для обратной совместимости. Таблица перечисляет все поддерживаемые алиасы и их канонические ключи. См. [`_ALIAS_OVERRIDES`](library/config.py#L1569-L1634) и [`_ALIAS_MAP`](library/config.py#L1637-L1640) как первоисточник:
+Большинство опций имеют короткие алиасы для обратной совместимости. Таблица перечисляет все поддерживаемые алиасы и их канонические ключи. См. [`_ALIAS_OVERRIDES`](../library/config.py#L1569-L1634) и [`_ALIAS_MAP`](../library/config.py#L1637-L1640) как первоисточник:
 
 | Alias | Эквивалентный ключ |
 |-------|--------------------|
@@ -565,7 +565,7 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-Полное описание параметров приведено в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) (английская версия — [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md)).
+Полное описание параметров приведено в [`docs/CONFIG_RU.md`](./CONFIG_RU.md) (английская версия — [`docs/CONFIG_EN.md`](./CONFIG_EN.md)).
 
 ### Проверка схемы
 
@@ -593,11 +593,11 @@ python -m library.utils.cli_tools.table_quality_main \
 `--out` сохраняется для совместимости и предупреждает о грядущем удалении. Таргет-пайплайн дополнительно принимает `--final-out`,
 который использует тот же шаблон пути и позволяет разделять директории после добавления «сырого» снимка. Комбинируйте его с
 `--raw-out` (и опциональным `--raw-format parquet`), чтобы сохранять необработанный ответ. Дополнительные примеры см. в
-[`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+[`docs/USAGE_RU.md`](./USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](./USAGE_EN.md)).
 
 ## Вывод и метаданные
 
-Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `~/.local/share/chembl-da/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
+Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `~/.local/share/chembl-da/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](./OUTPUT_EN.md)).
 
 ## Dtype Inspector
 
