@@ -45,7 +45,7 @@ from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from schemas import ActivitiesSchema, normalize_activities
+from schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 
 
 DEFAULT_INPUT_NAME = "activity.csv"
@@ -120,6 +120,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
     action_cfg = enrichment_cfg.action_type
+    configure_activity_schema(action_cfg.metrics)
     if action_cfg.enabled or action_cfg.log_missing or action_cfg.log_distribution:
         extra_columns.append(action_cfg.column)
     extra_kwargs = {"extra_columns": extra_columns} if extra_columns else {}

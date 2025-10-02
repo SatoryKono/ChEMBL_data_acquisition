@@ -1,6 +1,6 @@
 """Convenient exports for schema definitions."""
 
-from .activities import ActivitiesSchema
+from .activities import ActivitiesSchema, configure_activity_schema
 from .assay_postprocessing import AssayPostprocessSchema
 from .assays import AssaysSchema
 from .documents import DocumentsSchema
@@ -28,4 +28,5 @@ __all__ = [
     "normalize_documents",
     "normalize_targets",
     "normalize_testitems",
+    "configure_activity_schema",
 ]

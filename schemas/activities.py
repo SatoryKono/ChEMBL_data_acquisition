@@ -6,11 +6,10 @@ expected structure of activity dataframes.
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Mapping
 from typing import cast
 
 import pandera.pandas as pa
-import yaml
 from pandera.dtypes import DataType
 
 PA_ANY = cast(DataType, None)
@@ -27,20 +26,10 @@ _ALLOWED_ACTION_TYPES = {
 }
 
 
-def _load_standard_type_values() -> tuple[str, ...]:
-    """Return configured standard type values if available."""
+def _derive_standard_type_values(metrics: Mapping[str, str] | None) -> tuple[str, ...]:
+    """Derive permissible ``standard_type`` values from *metrics* keys."""
 
-    config_path = Path(__file__).resolve().parents[1] / "config" / "config.yaml"
-    try:
-        with config_path.open("r", encoding="utf8") as handle:
-            config = yaml.safe_load(handle) or {}
-    except (FileNotFoundError, yaml.YAMLError, TypeError):
-        return ()
-
-    metrics = (
-        config.get("activity_enrichment", {}).get("action_type", {}).get("metrics", {})
-    )
-    if not isinstance(metrics, dict):
+    if not metrics:
         return ()
 
     values: set[str] = set()
@@ -60,10 +49,7 @@ def _load_standard_type_values() -> tuple[str, ...]:
     return tuple(sorted(values))
 
 
-_STANDARD_TYPE_VALUES = _load_standard_type_values()
 _STANDARD_TYPE_CHECKS: list[pa.Check] = []
-if _STANDARD_TYPE_VALUES:
-    _STANDARD_TYPE_CHECKS.append(pa.Check.isin(sorted(_STANDARD_TYPE_VALUES)))
 
 
 ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
@@ -118,3 +104,18 @@ ActivitiesSchema: pa.DataFrameSchema = pa.DataFrameSchema(
 )
 
 """pa.DataFrameSchema: Validation schema for activities."""
+
+
+def configure_activity_schema(metrics: Mapping[str, str] | None) -> pa.DataFrameSchema:
+    """Update :data:`ActivitiesSchema` based on *metrics* configuration."""
+
+    values = _derive_standard_type_values(metrics)
+
+    _STANDARD_TYPE_CHECKS.clear()
+    if values:
+        _STANDARD_TYPE_CHECKS.append(pa.Check.isin(sorted(values)))
+
+    # ``DataFrameSchema`` stores a shallow copy of the provided list, therefore
+    # we synchronise the column checks explicitly to reflect runtime changes.
+    ActivitiesSchema.columns["standard_type"].checks = list(_STANDARD_TYPE_CHECKS)
+    return ActivitiesSchema
