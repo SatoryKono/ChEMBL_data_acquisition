@@ -632,7 +632,6 @@ def run_document_postprocessing_check(
         "date_code": resolved_date_code,
         "structure": structure_metrics,
 
-        "structure": structure_metrics,
 
         "reference": reference_summary,
         "candidate": candidate_summary,

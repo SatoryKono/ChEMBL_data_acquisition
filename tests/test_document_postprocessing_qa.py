@@ -16,6 +16,7 @@ from library.config import IoCfg
 import qa.check_document_postprocessing as qa_module
 
 import qa.check_document_postprocessing as qa_module
+
 from qa.check_document_postprocessing import MAX_DIFF_KEY_EXPORT
 
 from qa.check_document_postprocessing import main as qa_main
@@ -219,8 +220,6 @@ def test_diff_extract_limited_by_keys(
     candidate_df = reference_df.copy()
     candidate_df["doi"] = candidate_df["doi"] + ".mismatch"
     candidate_df.to_csv(candidate_path, index=False)
-
-
     expected = reference_df.copy()
     actual = candidate_df.copy()
 
@@ -286,7 +285,6 @@ def test_cli_exit_codes(
                 "output\\document\\output.document_20230101.csv",
             ]
         )
-
 
     exit_code = qa_main(args)
 
