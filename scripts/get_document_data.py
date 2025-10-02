@@ -52,6 +52,7 @@ if __package__ in {None, ""}:
 from library import chembl_library as cl
 from library import cli
 from library import document_postprocessing as dp
+from library.postprocessing import document as document_export_postprocessing
 from library import io
 from library.csv_utils import write_csv_chunks_deterministic
 from library import openalex_crossref_library as ocl
@@ -90,6 +91,7 @@ from library.document_pipeline import (
 )
 from library.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.postprocessing.document import preprocess_documents_csv
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.sidecar import SidecarErrors
@@ -1105,6 +1107,38 @@ def _write_export_chunks(
     )
 
 
+def _maybe_run_document_postprocessing(csv_path: Path) -> None:
+    if not csv_path.name.startswith("output.document_"):
+        return
+
+    data_dir: Path | None = None
+    for parent in csv_path.parents:
+        if parent.name.lower() == "data":
+            data_dir = parent
+            break
+
+    if data_dir is None:
+        return
+
+    reference_rel = Path("input/full/document.csv")
+    reference_path = data_dir / reference_rel
+    if not reference_path.exists():
+        return
+
+    try:
+        output_relative = csv_path.relative_to(data_dir)
+    except ValueError:
+        return
+
+    ref_rel_windows = "\\".join(reference_rel.parts)
+    out_rel_windows = "\\".join(output_relative.parts)
+    preprocess_documents_csv(
+        base_path=str(data_dir),
+        ref_document_rel=ref_rel_windows,
+        out_document_rel=out_rel_windows,
+    )
+
+
 def _finalise_export(
     df: pd.DataFrame | Iterable[pd.DataFrame],
     output: Path,
@@ -1228,6 +1262,25 @@ def _finalise_export(
     except OSError as exc:
         logger.error("csv_write_failed", error=str(exc), path=str(output))
         return 1
+
+    try:
+        postprocessed_path = document_export_postprocessing.postprocess_export_file(
+            csv_path,
+            cfg=cfg.io,
+        )
+    except (OSError, ValueError, pd.errors.ParserError) as exc:
+        logger.error(
+            "document_export_postprocess_failed",
+            error=str(exc),
+            path=str(csv_path),
+        )
+        exit_code = 1
+    else:
+        logger.info(
+            "document_export_postprocess_written",
+            path=str(postprocessed_path),
+        )
+
 
 
     if missing_required:

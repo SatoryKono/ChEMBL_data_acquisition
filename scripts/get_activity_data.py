@@ -136,7 +136,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
+
             def _fetch_chunk(ids: Sequence[str]) -> pd.DataFrame:
+
                 try:
                     return cl.get_activities(
                         ids,
@@ -156,11 +158,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     raise PipelineError(str(exc)) from exc
 
+
             workers = max(1, cfg.activity.workers)
             if workers == 1:
                 for chunk_ids in chunk_iter:
+
                     yield _fetch_chunk(chunk_ids)
-                return
+
 
             pending: dict[Future[pd.DataFrame], int] = {}
             completed: dict[int, pd.DataFrame] = {}
@@ -175,16 +179,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         for finished in done:
                             chunk_index = pending.pop(finished)
                             completed[chunk_index] = finished.result()
+
                         while next_index in completed:
                             yield completed.pop(next_index)
                             next_index += 1
 
-                for future in as_completed(list(pending)):
-                    chunk_index = pending.pop(future)
-                    completed[chunk_index] = future.result()
-                    while next_index in completed:
-                        yield completed.pop(next_index)
-                        next_index += 1
+            chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
+            workers = max(1, cfg.activity.workers)
+            if workers == 1:
+                yield from _run_sequential(chunk_iter)
+                return
+
+            yield from _run_parallel(chunk_iter, workers)
 
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)

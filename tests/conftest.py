@@ -5,9 +5,12 @@ This module provides common pytest fixtures used across the test suite.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from library.config import Config
+import scripts.get_document_data as gdd
 
 
 @pytest.fixture(autouse=True)
@@ -59,3 +62,34 @@ def duplicate_document_ids() -> list[str]:
     """Return sample document IDs including duplicates for testing."""
 
     return ["CHEMBL1", "CHEMBL1", "CHEMBL2"]
+
+
+@pytest.fixture()
+def document_export_postprocess_stub(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[Path]:
+    """Stub ``postprocess_export_file`` to avoid filesystem I/O in tests."""
+
+    created: list[Path] = []
+
+    def fake_postprocess(
+        path: Path,
+        *,
+        cfg: object,
+        output_path: Path | None = None,
+        **_: object,
+    ) -> Path:
+        destination = Path(output_path) if output_path else Path(path).with_name(
+            f"preprocessed_{Path(path).name}"
+        )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("stub")
+        created.append(destination)
+        return destination
+
+    monkeypatch.setattr(
+        gdd.document_export_postprocessing,
+        "postprocess_export_file",
+        fake_postprocess,
+    )
+    return created

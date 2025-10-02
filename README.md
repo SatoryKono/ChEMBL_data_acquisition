@@ -64,7 +64,10 @@ console scripts for each pipeline. Use them interchangeably with the
 | requests      | ≥2.31              | 2.32.5                      |
 | PyYAML        | ≥6.0               | 6.0.3                       |
 
-Полный список приведён в `requirements-dev.txt` или `pyproject.toml`.
+**EN.** `requirements-lock.txt` is the single source of truth for pinned
+dependencies; `pyproject.toml` documents the declared dependency ranges.
+**RU.** Файл `requirements-lock.txt` — единый источник истины с фиксированными
+версиями, а `pyproject.toml` описывает поддерживаемые диапазоны зависимостей.
 
 ### Среда выполнения
 
