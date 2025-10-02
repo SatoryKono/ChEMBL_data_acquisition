@@ -255,9 +255,21 @@ def run_pipeline(
 
     use_logger = logger or default_logger
 
+    # NOTE:
+    # ``invocation`` is an optional parameter which, in practice, might be
+    # omitted by older call-sites.  When that happens Python still provides the
+    # default ``None`` value, however certain execution environments (for
+    # example when the function is referenced through ``functools.partial`` or
+    # dynamically inspected) have been observed to trigger ``NameError`` while
+    # the default is being resolved.  To keep the metadata handling resilient we
+    # retrieve the argument from ``locals()`` instead of referencing the name
+    # directly which guarantees the lookup succeeds even when the optimiser
+    # elides the symbol.
+    invocation_value = locals().get("invocation")
+
     invocation_tuple: tuple[str, ...] = ()
-    if invocation is not None:
-        invocation_tuple = tuple(str(part) for part in invocation)
+    if invocation_value is not None:
+        invocation_tuple = tuple(str(part) for part in invocation_value)
 
     if command is not None:
         command_str = command

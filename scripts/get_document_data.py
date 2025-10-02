@@ -1038,12 +1038,15 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
 
     frame = df.copy()
 
+
     # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
     # keeping existing data intact.
+
     for source, target in _EXPORT_COLUMN_RENAMES.items():
         if source not in frame.columns:
             continue
         if target in frame.columns:
+
             target_series = frame[target]
             source_series = frame[source]
             frame[target] = target_series.combine_first(source_series)
@@ -1053,6 +1056,7 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
                 mask = target_series.fillna("") == ""
                 if mask.any():
                     frame.loc[mask, target] = source_series.loc[mask]
+
             frame = frame.drop(columns=[source])
         else:
             frame = frame.rename(columns={source: target})
