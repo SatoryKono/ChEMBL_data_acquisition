@@ -81,6 +81,43 @@ def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert cfg.openalex.rps == 6
 
 
+def test_yaml_integral_float_coercion(tmp_path: Path) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        "sources:\n"
+        "  chembl:\n"
+        "    api:\n"
+        "      timeout_connect: 5.0\n"
+        "      timeout_read: 30.0\n"
+    )
+
+    cfg = load_config(path)
+
+    assert cfg.api.timeout_read == 30
+    assert isinstance(cfg.api.timeout_read, int)
+    assert cfg.api.timeout_connect == 5
+    assert isinstance(cfg.api.timeout_connect, int)
+
+
+def test_env_integral_float_coercion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "cfg.yaml"
+    path.write_text(
+        "sources:\n"
+        "  chembl:\n"
+        "    api:\n"
+        "      timeout_read: 10\n"
+    )
+
+    monkeypatch.setenv("CHEMBL_DA_TIMEOUT_READ", "30.0")
+
+    cfg = load_config(path)
+
+    assert cfg.api.timeout_read == 30
+    assert isinstance(cfg.api.timeout_read, int)
+
+
 def test_alias_env_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure shorthand environment variables map to the correct fields."""
 
