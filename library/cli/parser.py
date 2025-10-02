@@ -614,19 +614,8 @@ def prepare_io_paths(
     if resolved_input is not None:
         setattr(args, "input_csv", resolved_input)
 
-    alias_value = getattr(args, "final_out_alias", None)
     final_candidate = getattr(args, "final_out", None)
     output_candidate = getattr(args, "output_csv", None)
-
-    if alias_value not in (None, argparse.SUPPRESS):
-        if final_candidate in (None, argparse.SUPPRESS):
-            final_candidate = alias_value
-            setattr(args, "final_out", final_candidate)
-        log.logger.warning(
-            "cli_option_deprecated",
-            option="--out",
-            replacement="--final-out",
-        )
 
     if output_candidate not in (None, argparse.SUPPRESS):
         if final_candidate in (None, argparse.SUPPRESS):
