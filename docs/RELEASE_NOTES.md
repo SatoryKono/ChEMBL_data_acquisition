@@ -8,4 +8,6 @@
 - Downgraded ChEMBL and PubChem cache hit/miss logging to DEBUG to reduce noise in default INFO logs.
 - Added UniProt isoform fallbacks, richer cross-reference extraction (AlphaFold, PDB, Ensembl), and additional logging to
   trace identifier coverage through the target merge pipeline.
+- Normalised CLI path overrides so `--base-path`, `--input-dir`, `--output-dir`, and `--cache-dir` propagate into
+  `local.io` configuration fields.
 

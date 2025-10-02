@@ -132,6 +132,8 @@ def run_cli_command(
                 raise ValueError(msg)
             config_path = default_config
 
+        cli.prepare_io_paths(args)
+
         cfg: Config = apply_config_overrides(
             args,
             parser,
