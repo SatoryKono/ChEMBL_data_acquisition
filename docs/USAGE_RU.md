@@ -35,8 +35,8 @@ CLI без вложенных подкоманд.
 | `--output-dir` | Каталог для сохранения артефактов; относительный путь сочетается с `--base-path`. |
 | `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
 | `--output` / `--out` | Выходной CSV. Если не указан, создаётся `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. |
-| `--raw-out` | Путь для «сырого» снимка до очистки и нормализации. Если флаг опущен, этап пропускается. |
-| `--raw-format` | Формат снимка: `csv` (по умолчанию) или `parquet`. |
+| `--raw-out` | Только таргет-пайплайн: путь для «сырого» снимка до очистки и нормализации. Остальные конвейеры пока игнорируют флаг, сохраняя совместимость интерфейса. |
+| `--raw-format` | Только таргет-пайплайн: формат снимка (`csv` по умолчанию, `parquet` при явном указании). |
 | `--final-out` | Путь финального нормализованного экспорта. При отсутствии использует `--output` / `--out`. |
 | `--date` | Заменяет автогенерируемый суффикс `YYYYMMDD` при формировании имени файла по умолчанию. |
 | `--force` | Перезаписывать выходные файлы, даже если они уже существуют. |
@@ -61,14 +61,14 @@ CLI без вложенных подкоманд.
 
 ### Стадии пайплайна
 
-Все сущности проходят через единый набор этапов:
+Все сущности проходят через единый набор этапов, однако полноценный «сырой» снимок сейчас реализован только в таргет-пайплайне:
 
 ```mermaid
 flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Очистка идентификаторов"] --> Normalize --> Validate --> Final["Финальный экспорт"]
 ```
 
-`--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out`/`--out` записывает нормализованную таблицу после валидации. Если `--raw-out` не указан, этап выгрузки «сырых» данных пропускается для совместимости со старыми сценариями.
+При запуске таргет-пайплайна `--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out`/`--out` записывает нормализованную таблицу после валидации. Пайплайны без поддержки «сырого» слоя сейчас пропускают этап, но сохраняют те же флаги для будущих адаптеров.
 
 Во время очистки временные идентификаторы (например, `CHEMBL_PENDING`) остаются только в «сыром» снимке и учитываются в метаданных (`error_placeholder_counts`), тогда как финальный экспорт содержит уже проверенные значения.
 
@@ -93,8 +93,8 @@ flowchart LR
 Для онлайн-контроля направляйте вывод через `jq` или аналогичный инструмент:
 
 ```bash
-get-document-data all --input documents.csv --column document_chembl_id \
-  --raw-out out/documents.raw.csv --final-out out/documents.final.csv \
+get-target-data chembl --input targets.csv --column target_chembl_id \
+  --raw-out out/targets.raw.csv --final-out out/targets.final.csv \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
@@ -156,8 +156,6 @@ python -m scripts.get_assay_data \
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --raw-out out/documents.raw.parquet \
-  --raw-format parquet \
   --final-out out/documents.final.csv \
   --batch-size 20
 ```
@@ -168,7 +166,6 @@ get-document-data all --input path/to/documents.csv \
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --raw-out out/documents.raw.csv \
   --final-out out/documents.final.csv \
   --batch-size 20
 ```
@@ -190,13 +187,13 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 и `get-document-data <подкоманда> --help`
 (например, `--batch-size` управляет размером пакета для PubMed).
 
+Поддержка отдельного «сырого» снимка для документного пайплайна находится в дорожной карте и будет использовать зарезервированные флаги `--raw-out`/`--raw-format` после реализации.
+
 Вариант консольного скрипта:
 
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --raw-out out/documents.raw.parquet \
-  --raw-format parquet \
   --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
@@ -211,7 +208,6 @@ get-document-data pubmed --input path/to/documents.csv \
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --raw-out out/documents.raw.csv \
   --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
