@@ -23,6 +23,9 @@ from library.mapper_batch_library import map_chembl_ids_to_uniprot
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Run batch mapping of ChEMBL IDs to UniProt accessions."""
     try:
+        marker_values = list(cfg.io.na_markers or ())
+        keep_markers = bool(getattr(cfg.io, "keep_na_markers", False))
+        na_values = marker_values if marker_values and not keep_markers else None
         try:
             df = io.read_csv(
                 args.input_csv,
@@ -30,7 +33,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 sep=args.sep,
                 encoding=args.encoding,
                 dtype=str,
-                na_values=["#N/A", ""],
+                na_values=na_values,
             )
         except (FileNotFoundError, OSError) as exc:
             logger.error(
@@ -49,11 +52,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
 
-        ids = [
-            str(chembl_id)
-            for chembl_id in df[args.column]
-            if pd.notna(chembl_id) and str(chembl_id).strip()
-        ]
+        marker_set = set(marker_values)
+        ids = []
+        for chembl_id in df[args.column]:
+            if pd.isna(chembl_id):
+                continue
+            text = str(chembl_id).strip()
+            if not text:
+                continue
+            if not keep_markers and text in marker_set:
+                continue
+            ids.append(text)
         mappings = map_chembl_ids_to_uniprot(
             ids,
             cfg.uniprot_mapping,

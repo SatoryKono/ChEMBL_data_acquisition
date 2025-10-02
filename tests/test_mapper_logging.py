@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 import pandas as pd
 
 from library.cli import LoggerConfig, configure_logger
@@ -397,3 +399,80 @@ def test_mapper_main_timeout_logs_missing_summary(
         for record in records
         if record["event"] in {"mapped", "uniprot_id_missing"}
     ]
+
+
+@pytest.mark.parametrize(
+    "keep_markers, expected",
+    [
+        (False, ["CHEMBL1", "CHEMBL3"]),
+        (True, ["CHEMBL1", "CUSTOM_NA", "CHEMBL3"]),
+    ],
+)
+def test_mapper_main_respects_na_marker_configuration(
+    tmp_path: Path,
+    monkeypatch: Any,
+    cfg: Config,
+    keep_markers: bool,
+    expected: list[str],
+) -> None:
+    cfg.io.na_markers = ("CUSTOM_NA",)
+    cfg.io.keep_na_markers = keep_markers
+
+    df = pd.DataFrame({"chembl_id": ["CHEMBL1", "CUSTOM_NA", "CHEMBL3"]})
+    input_path = tmp_path / "in.csv"
+    df.to_csv(input_path, index=False)
+    output_path = tmp_path / "out.csv"
+
+    captured: dict[str, Any] = {}
+
+    def fake_map(
+        ids: list[str],
+        cfg_mapping: object,
+        *,
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
+        captured["ids"] = list(ids)
+        return {chembl_id: None for chembl_id in ids}
+
+    monkeypatch.setattr(mapper_main, "map_chembl_ids_to_uniprot", fake_map)
+
+    def fake_write_csv(
+        df_out: pd.DataFrame,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str,
+        encoding: str,
+        key_cols: Any,
+    ) -> Path:
+        return path
+
+    monkeypatch.setattr(mapper_main.io, "write_csv", fake_write_csv)
+
+    args = argparse.Namespace(
+        input_csv=input_path,
+        output_csv=output_path,
+        column="chembl_id",
+        sep=",",
+        encoding="utf8",
+        key_cols=None,
+        chunk_size=1,
+        rps=1.0,
+        workers=1,
+        log_each=False,
+    )
+
+    buffer = io.StringIO()
+    configure_logger(LoggerConfig(stream=buffer, level="INFO"))
+
+    cfg_ns = SimpleNamespace(
+        io=cfg.io,
+        uniprot_mapping=cfg.uniprot_mapping,
+        to_dict=lambda: {},
+    )
+
+    exit_code = mapper_main.run(cfg_ns, args)
+    assert exit_code == 0
+    assert captured["ids"] == expected
