@@ -332,6 +332,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     table_quality = partial(
         analyze_table_quality,
         table_name=str(output_path.with_suffix("")),
+        destination_dir=output_path.parent,
     )
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))

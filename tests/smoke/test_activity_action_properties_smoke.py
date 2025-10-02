@@ -44,8 +44,13 @@ def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "scripts.get_activity_data.cl.get_activities", lambda *_, **__: df
     )
+    quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_quality(*args: object, **kwargs: object) -> None:
+        quality_calls.append((args, kwargs))
+
     monkeypatch.setattr(
-        "scripts.get_activity_data.analyze_table_quality", lambda *_, **__: None
+        "scripts.get_activity_data.analyze_table_quality", _capture_quality
     )
     monkeypatch.setattr("scripts.get_activity_data.write_meta_yaml", lambda **__: None)
     monkeypatch.setattr("scripts.get_activity_data.file_sha256", lambda _: "deadbeef")
@@ -71,6 +76,11 @@ def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:
         ]
     )
     assert exit_code == 0
+
+    assert quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = quality_calls[-1]
+    assert Path(quality_args[0]) == output_csv
+    assert Path(quality_kwargs.get("destination_dir")).resolve() == output_csv.parent.resolve()
 
     result = pd.read_csv(output_csv)
     assert set(["action_type", "activity_properties", "properties_hash"]).issubset(
