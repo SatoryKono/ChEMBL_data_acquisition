@@ -11,7 +11,7 @@ modules in order while forwarding the computed arguments:
 4. :mod:`scripts.get_testitem_data`
 5. :mod:`scripts.get_activity_data`
 
-Each pipeline receives consistent ``--config``, ``--input`` and ``--output``
+Each pipeline receives consistent ``--config``, ``--input`` and ``--final-out``
 values alongside shared logging options. The command line interface exposes
 parameters for the base data directory, distinct input/output sub-directories,
 a date prefix for generated filenames and optional execution flags. The helper
@@ -114,7 +114,7 @@ class PipelineStep:
     name: str
     main: Callable[[Sequence[str] | None], int]
     subcommand: str | None
-    output_flag: str = "--output"
+    output_flag: str = "--final-out"
     supports_dry_run: bool = False
 
     def build_arguments(

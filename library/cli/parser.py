@@ -151,13 +151,14 @@ def add_common_arguments(
 
     Notes
     -----
-    When ``--output`` is omitted, a file named
+    When ``--final-out`` is omitted, a file named
     ``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the input file.
     """
 
     log_level = "INFO" if defaults else argparse.SUPPRESS
     input_default: Path | object = Path("input.csv") if defaults else argparse.SUPPRESS
     output_default: Path | None | object = None if defaults else argparse.SUPPRESS
+    final_default: Path | None | object = None if defaults else argparse.SUPPRESS
     sep_default: str | object = "," if defaults else argparse.SUPPRESS
     enc_default: str | object = "utf8" if defaults else argparse.SUPPRESS
     base_default: Path | None | object = None if defaults else argparse.SUPPRESS
@@ -174,6 +175,13 @@ def add_common_arguments(
         type=path_argument,
         default=input_default,
         help="Input CSV file",
+    )
+    parser.add_argument(
+        "--final-out",
+        dest="final_out",
+        type=path_argument,
+        default=final_default,
+        help="Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)",
     )
     parser.add_argument(
         "--output",

@@ -30,7 +30,7 @@ def test_zero_limit_skips_pipeline(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--limit",
             "0",
