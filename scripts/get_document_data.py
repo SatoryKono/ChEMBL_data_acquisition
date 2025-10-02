@@ -43,7 +43,13 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library.utils.bootstrap import ensure_project_root
+try:
+    from library.utils.bootstrap import ensure_project_root
+except ModuleNotFoundError:  # pragma: no cover - environment bootstrap
+    project_root = Path(__file__).resolve().parents[1]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    from library.utils.bootstrap import ensure_project_root
 
 
 if __package__ in {None, ""}:
