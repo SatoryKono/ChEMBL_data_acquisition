@@ -27,6 +27,7 @@
 | `timeout_read` | `30` | Таймаут ожидания ответа (сек.). |
 | `retries` | `3` | Максимум попыток, выполняемых клиентскими обёртками; общий HTTP-адаптер повторы не делает. |
 | `backoff_factor` | `0.5` | Множитель экспоненциального backoff между повторами. |
+| `backoff_cap` | `null` | Максимальная задержка экспоненциального backoff (сек.). |
 | `rps` | `20` | Лимит запросов в секунду для rate limiter. |
 | `burst` | `20` | Размер «ведра» токенов. |
 | `user_agent` | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | Заголовок User-Agent. Перед продакшеном замените контакт на собственный адрес; валидатор по-прежнему отвергает шаблон `contact@example.org`. Задайте через `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
@@ -338,6 +339,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 |  | `limiter_cache_ttl` | `600` | TTL записей кэша (сек.). |
 | `retry` | `max_attempts` | `3` | Количество повторов при ошибках. |
 |  | `backoff_factor` | `0.5` | Базовый множитель экспоненциальной задержки. |
+|  | `backoff_cap` | `null` | Максимальная задержка между повторами (сек.). |
 |  | `status_forcelist` | `[429, 500, 502, 503, 504]` | Коды HTTP, инициирующие повтор. |
 | `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Веса источников документации. |
 |  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Минимальные пороги классификации. |
@@ -376,6 +378,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 | `CHEMBL_DA_LOG_LEVEL` | `system.log.level` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `system.retry.max_attempts` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `system.retry.backoff_factor` |
+| `CHEMBL_DA_RETRY_BACKOFF_CAP` | `system.retry.backoff_cap` |
 | `CHEMBL_DA_DICT_DIR` | `local.resources.dictionary_dir` |
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |

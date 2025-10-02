@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import traceback
 from collections import OrderedDict, deque
 from dataclasses import dataclass
 from itertools import chain, islice
@@ -26,7 +27,12 @@ from library.config import (
 )
 from library.csv_utils import write_csv_chunks_deterministic
 from library.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.metadata import (
+    Stats,
+    file_sha256,
+    write_meta_yaml,
+    record_quality_failure,
+)
 from library.pipeline_metadata import add_pipeline_metadata
 from library.rate_limiter import get_global_limiter
 from library.sidecar import SidecarErrors
@@ -763,7 +769,7 @@ def finalize_output(
         stats["missing_molecule_ids"] = list(missing_ids_tuple)
         stats["missing_molecule_ids_count"] = len(missing_ids_tuple)
 
-    write_meta_yaml(
+    meta_path = write_meta_yaml(
         csv_path=csv_path,
         command=" ".join(sys.argv),
         config_subset=_serialize_paths(cfg.to_dict()),
@@ -773,6 +779,7 @@ def finalize_output(
     )
 
     doc_quality_cfg = cfg.system.doc_quality
+    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
     try:
         if doc_quality_cfg.enable:
             analyze_table_quality(
@@ -784,12 +791,24 @@ def finalize_output(
                 exclude_columns=doc_quality_cfg.exclude_columns,
             )
     except Exception as exc:
-        logger.exception(
-            "quality_report_failed",
+        tb = traceback.format_exc()
+        record_quality_failure(
+            meta_path,
             error=str(exc),
-            path=str(output),
-            exc=exc,
+            error_type=exc.__class__.__name__,
+            traceback=tb,
+            fatal=fatal_quality_error,
         )
-        return 1
+        log_kwargs = {
+            "error": str(exc),
+            "error_type": exc.__class__.__name__,
+            "path": str(output),
+            "traceback": tb,
+        }
+        if fatal_quality_error:
+            log_kwargs["fatal"] = True
+        logger.warning("quality_report_failed", **log_kwargs)
+        if fatal_quality_error:
+            return 1
 
     return exit_code

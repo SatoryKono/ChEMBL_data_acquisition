@@ -17,9 +17,10 @@ The README is available in multiple languages:
   `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
   `--print-config` для управления загрузкой настроек. Размер пакетной
   выборки задаётся параметрами `--chunk-size` или `--batch-size` в зависимости
-  от конкретного пайплайна. Новые переключатели `--raw-out`, `--raw-format` и
-  `--id-cols` уже доступны в пайплайне таргетов; остальные команды получат их
-  после расширения общего CLI.
+  от конкретного пайплайна. Новые переключатели `--raw-out`, `--raw-format`,
+  `--id-cols`, `--no-reindex-raw` и пара `--normalize-at-export` /
+  `--no-normalize-at-export` уже доступны в пайплайне таргетов; остальные
+  команды получат их после расширения общего CLI.
 
 * Потоковая обработка больших CSV через чанки, детерминированный вывод.
 * Отдельный «сырой» снимок (`--raw-out`) доступен для пайплайна таргетов;
@@ -120,6 +121,25 @@ running `pip install .[dev]` and freezing the result with
 новое виртуальное окружение, выполните `pip install .[dev]`, а затем
 `pip freeze > requirements-lock.txt`.
 
+> **EN.** Fresh wheel installs now rely on platform-specific user directories.
+> The packaged configuration is copied to the user config home, CSV exports go
+> to the user data directory and HTTP caches live in the user cache directory.
+> Adjust these paths via the `local.io.*` keys if required or keep the defaults
+> listed below. See also the [FAQ entry on wheel vs. source usage](#faq-wheel-vs-source).
+>
+> **RU.** Новые установки wheel используют каталоги пользователя, подобранные
+> `platformdirs`: конфигурация копируется в пользовательский каталог настроек,
+> выгрузки — в пользовательский каталог данных, кэши HTTP — в пользовательский
+> каталог кэша. При необходимости меняйте их через `local.io.*` или оставляйте
+> значения по умолчанию из таблицы. Дополнительные детали собраны в
+> [FAQ про wheel и исходники](#faq-wheel-vs-source).
+
+| Platform / Платформа | Config dir / Каталог конфигурации | Output dir / Каталог выгрузки | Cache dir / Каталог кэша |
+| --------------------- | --------------------------------- | ----------------------------- | ------------------------ |
+| Linux (XDG)           | `~/.config/chembl-data-acquisition/config.yaml` | `~/.local/share/chembl-data-acquisition/output` | `~/.cache/chembl-data-acquisition` |
+| macOS                 | `~/Library/Application Support/chembl-data-acquisition/config.yaml` | `~/Library/Application Support/chembl-data-acquisition/output` | `~/Library/Caches/chembl-data-acquisition` |
+| Windows               | `%APPDATA%\chembl-data-acquisition\config.yaml` | `%LOCALAPPDATA%\chembl-data-acquisition\output` | `%LOCALAPPDATA%\chembl-data-acquisition\Cache` |
+
 Sensitive configuration such as API tokens belongs in a local ``.env`` file – see [`Конфигурация через .env`](#конфигурация-через-env) for usage guidelines.
 
 ## Quick Start / Быстрый старт
@@ -154,6 +174,14 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
    ознакомления с опциями можно запускать полный экспорт, указав реальные
    каталоги.
 
+   EN: Without ``--config`` the orchestrator now falls back to the packaged
+   ``config/config.yaml`` via ``library.utils.config.DEFAULT_CONFIG_PATH``. Pass
+   an explicit path whenever you maintain a local override.
+
+   RU: При запуске без ``--config`` оркестратор использует встроенный
+   ``config/config.yaml`` через ``library.utils.config.DEFAULT_CONFIG_PATH``.
+   Собственный YAML укажите явным путём.
+
    For lightweight smoke checks you can still call individual helpers, for
    example:
 
@@ -163,6 +191,34 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
       --output out/quality --table-name chembl_targets --log-level INFO
   ```
+
+   EN: Maintain a custom configuration by copying the packaged YAML into the
+   user config directory and passing it via `--config`. The loader automatically
+   merges a sibling `config.local.yaml`, keeping your overrides separate from the
+   upstream defaults. Example:
+
+  ```bash
+  python - <<'PY'
+from importlib import resources
+from pathlib import Path
+
+target = Path.home() / ".config" / "chembl-data-acquisition"
+target.mkdir(parents=True, exist_ok=True)
+source = resources.files("chembl_data_acquisition.config") / "config.yaml"
+target_cfg = target / "config.yaml"
+target_cfg.write_bytes(source.read_bytes())
+PY
+
+  get-data --config ~/.config/chembl-data-acquisition/config.yaml \
+      --output-dir ~/.local/share/chembl-data-acquisition/output
+  ```
+
+   RU: Чтобы сопровождать собственную конфигурацию, скопируйте штатный YAML в
+   пользовательский каталог настроек и передайте путь через `--config`.
+   Файл `config.local.yaml`, лежащий рядом, автоматически объединяется с базой,
+   поэтому изменения остаются отделены от стандартов. Пример выше можно
+   использовать и в Linux/macOS; в PowerShell путь будет
+   `%APPDATA%\chembl-data-acquisition\config.yaml`.
 
   EN: In the reporting example above `--output` sets the destination. `--final-out`
   currently exists only in `scripts.get_target_data` and
@@ -186,32 +242,28 @@ flowchart LR
 
 
 **EN.** The target pipeline already follows the staged contract with dedicated destinations for raw and cleaned artefacts. Use
-`--raw-out` (optionally with `--raw-format parquet`) to capture the raw payload, list composite keys via `--id-cols`, and direct
-the cleaned export to `--final-out`. The legacy `--output`/`--out` aliases stay wired in for compatibility but now emit
-deprecation warnings when used. Placeholder identifiers remain in the raw snapshot and are counted in the metadata
-(`error_placeholder_counts`), while the final export includes only validated values. Other pipelines will surface
-`--final-out` once their shared CLI is extended; until then the deprecated aliases remain available with matching warnings.
+`--raw-out` (optionally with `--raw-format parquet`) to capture the raw payload, list composite keys via `--id-cols`, add `--no-reindex-raw` when you need to preserve the API column order, and direct the cleaned export to `--final-out`. Normalisation runs by default (`--normalize-at-export`); specify `--no-normalize-at-export` if the final artefact must mirror the untouched payload. When normalisation is deferred the pipeline writes the raw snapshot and copies it to `--final-out`, keeping metadata sidecars intact. The legacy `--output`/`--out` aliases stay wired in for compatibility but now emit deprecation warnings when used. Placeholder identifiers remain in the raw snapshot and are counted in the metadata (`error_placeholder_counts`), while the final export includes only validated values. Other pipelines will surface `--final-out` once their shared CLI is extended; until then the deprecated aliases remain available with matching warnings.
 
-**RU.** Пайплайн таргетов уже использует поэтапный контракт с разделением «сырого» и нормализованного вывода. Флаг `--raw-out`
-(при необходимости с `--raw-format parquet`) сохраняет исходный ответ, `--id-cols` перечисляет составные ключи, а чистый экспорт
-направляется в `--final-out`. Алиасы `--output`/`--out` сохранены для совместимости, однако при их использовании CLI выводит
-предупреждение об устаревании. Временные идентификаторы остаются в «сыром» снимке и учитываются в метаданных
-(`error_placeholder_counts`), тогда как финальная таблица содержит только прошедшие валидацию значения. Прочие пайплайны
-получат `--final-out` после расширения общего CLI; до тех пор устаревшие алиасы остаются доступными и сопровождаются теми же
-предупреждениями.
+**RU.** Пайплайн таргетов уже использует поэтапный контракт с разделением «сырого» и нормализованного вывода. Флаг `--raw-out` (при необходимости с `--raw-format parquet`) сохраняет исходный ответ, `--id-cols` перечисляет составные ключи, `--no-reindex-raw` удерживает исходный порядок колонок, а чистый экспорт направляется в `--final-out`. По умолчанию выполняется нормализация (`--normalize-at-export`); укажите `--no-normalize-at-export`, если финальный артефакт должен совпадать с необработанным снимком. При отложенной нормализации пайплайн записывает «сырой» файл и копирует его в `--final-out`, оставляя побочные метаданные без изменений. Алиасы `--output`/`--out` сохранены для совместимости, однако при их использовании CLI выводит предупреждение об устаревании. Временные идентификаторы остаются в «сыром» снимке и учитываются в метаданных (`error_placeholder_counts`), тогда как финальная таблица содержит только прошедшие валидацию значения. Прочие пайплайны получат `--final-out` после расширения общего CLI; до тех пор устаревшие алиасы остаются доступными и сопровождаются теми же предупреждениями.
 
-> **EN.** `--raw-out`, `--final-out`, `--raw-format`, and `--id-cols` are currently exposed via `get-target-data` and
+> **EN.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the `--normalize-at-export` / `--no-normalize-at-export` pair are currently exposed via `get-target-data` and
 > `library.utils.cli_tools.pipeline_targets_main`. Other commands will adopt these switches once the shared parser lands.
-> **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format` и `--id-cols` уже доступны в `get-target-data` и
+> **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw` и пара `--normalize-at-export` / `--no-normalize-at-export` уже доступны в `get-target-data` и
 > `library.utils.cli_tools.pipeline_targets_main`. Остальные команды получат их после доработки общего парсера.
 
 
 
 ## Tests / Тесты
 
-**EN.** The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md).
+**EN.** The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in the QA process documents listed below.
 
-**RU.** Команда `pre-commit` запускает форматирование, линтеры и проверку типов. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Детеминизм и smoke-проверки доступны в отдельных CLI. Актуальный список проверок хранится в [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md).
+**RU.** Команда `pre-commit` запускает форматирование, линтеры и проверку типов. Для юнит-тестов используйте `pytest`, при необходимости добавляйте параметры покрытия. Детеминизм и smoke-проверки доступны в отдельных CLI. Актуальный список проверок приведён в документах по процессу обеспечения качества ниже.
+
+| Language / Язык | Checklist / Чек-лист |
+|-----------------|----------------------|
+| English         | [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md) |
+| Русский         | [docs/QA_PROCESS_RU.md](docs/QA_PROCESS_RU.md) |
+
 
 ```bash
 pre-commit run --all-files
@@ -925,6 +977,19 @@ pytest
 ```
 
 Test datasets live in ``tests/data``; ``library.utils.cli_tools.check_determinism`` validates repeatable CSV output. / Тестовые наборы лежат в ``tests/data``; ``library.utils.cli_tools.check_determinism`` проверяет повторяемость CSV-вывода.
+
+## FAQ
+
+<a id="faq-wheel-vs-source"></a>
+### Wheel vs. source installation / Установка wheel против исходников
+
+**EN.** Install the published wheel (`pip install chembl-data-acquisition`) when you only need the pipelines: the package ships with the default configuration, dictionary resources and schema validators, and now places writable artefacts under platform-specific user directories (see the table above). Keep long-term tweaks in a sibling `config.local.yaml` or point CLI commands at a cloned copy via `--config`.
+
+**RU.** Используйте опубликованный wheel (`pip install chembl-data-acquisition`), если достаточно готовых пайплайнов: пакет включает конфигурацию по умолчанию, словари и схемы, а артефакты записывает в пользовательские каталоги (см. таблицу выше). Долгосрочные правки сохраняйте в `config.local.yaml` рядом с файлом или передавайте путь к собственной копии через `--config`.
+
+**EN.** Clone the repository when developing new features or debugging: editable installs keep tests, documentation sources and tooling such as `pre-commit` at hand, and you can pin dependencies via `requirements-lock.txt`.
+
+**RU.** Клонируйте репозиторий для разработки и отладки: так остаются доступны тесты, исходники документации и инструменты (`pre-commit` и др.), а зависимости фиксируются через `requirements-lock.txt`.
 
 ## Лицензия
 

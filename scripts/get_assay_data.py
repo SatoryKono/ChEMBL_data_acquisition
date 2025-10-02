@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from time import sleep
 
 import argparse
 from collections.abc import Iterable, Iterator, Sequence
@@ -33,13 +34,14 @@ from library import chembl_library as cl
 from library import cli
 from library import io
 from library.csv_utils import write_csv_chunks_deterministic
+from library.chembl_assay import ASSAY_COLUMNS
 from library.clients import ChemblClient
 from library.rate_limiter import get_global_limiter
 from library.cli import (
     LoggerConfig,
 )
 from library.cli import build_parser as base_parser
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.cli_utils import run_cli_command, run_pipeline
 from library.config import Config, _serialize_paths
 from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
@@ -51,6 +53,7 @@ from library.pipeline_helpers import (
     CsvWriterConfig,
     prepare_chunked_pipeline,
 )
+from library.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 __all__ = ["ap", "main", "run", "run_chembl"]
 
@@ -116,6 +119,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
+    fetch_failure_path = Path(output).with_name(
+        f"{Path(output).stem}_fetch_failures.csv"
+    )
 
     metadata_hooks = [
         ap.postprocess_assays,
@@ -151,24 +157,50 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         global_limiter=global_limiter,
     ) as client:
 
+        retry_cfg = cfg.retry
+        chunk_failures = ChunkFailureTracker()
+
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
-            try:
-                return cl.get_assays(
-                    chunk_ids,
-                    cfg=cfg.api,
-                    client=client,
-                    chunk_size=cfg.assay.batch_size,
-                    timeout=cfg.assay.timeout,
-                )
-            except (requests.RequestException, ValueError) as exc:
-                logger.error(
-                    "assay_fetch_failed",
-                    extra={"msg": str(exc)},
-                    error=str(exc),
-                    batch_size=cfg.assay.batch_size,
-                    timeout=cfg.assay.timeout,
-                )
-                raise PipelineError(str(exc)) from exc
+            attempts = max(1, retry_cfg.max_attempts)
+            for attempt in range(1, attempts + 1):
+                try:
+                    return cl.get_assays(
+                        chunk_ids,
+                        cfg=cfg.api,
+                        client=client,
+                        chunk_size=cfg.assay.batch_size,
+                        timeout=cfg.assay.timeout,
+                    )
+                except (requests.RequestException, ValueError) as exc:
+                    error_message = str(exc)
+                    context = {
+                        "chunk_ids": list(chunk_ids),
+                        "chunk_size": len(chunk_ids),
+                        "attempt": attempt,
+                        "max_attempts": attempts,
+                        "batch_size": cfg.assay.batch_size,
+                        "timeout": cfg.assay.timeout,
+                    }
+                    log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
+                    if attempt >= attempts:
+                        logger.error(
+                            "assay_fetch_failed",
+                            extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                            error=error_message,
+                            **log_context,
+                        )
+                        chunk_failures.add_failure(chunk_ids, error_message)
+                        return pd.DataFrame(columns=ASSAY_COLUMNS)
+                    delay = compute_backoff_delay(attempt, retry_cfg)
+                    logger.warning(
+                        "assay_fetch_retry",
+                        extra={"msg": error_message, "chunk_ids": context["chunk_ids"]},
+                        delay=delay,
+                        **log_context,
+                    )
+                    if delay > 0:
+                        sleep(delay)
+            return pd.DataFrame(columns=ASSAY_COLUMNS)
 
         fetch_config = ChunkedFetchConfig(
             ids=ids_source,
@@ -193,23 +225,27 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             csv_writer=writer_config,
         )
 
-        exit_code = run_pipeline(
-            fetcher=fetcher,
-            schema=AssaysSchema,
-            schema_name="AssaysSchema",
-            validators=validators,
-            metadata_hooks=metadata_hooks,
-            writer=writer,
-            output_path=output,
-            failure_path=failure_path,
-            command=" ".join(sys.argv),
-            config_snapshot=_serialize_paths(cfg.to_dict()),
-            inputs={"input_csv": str(args.input_csv)},
-            key_columns=["assay_chembl_id"],
-            table_quality=table_quality,
-            cfg=cfg,
-            logger=logger,
-        )
+        try:
+            exit_code = run_pipeline(
+                fetcher=fetcher,
+                schema=AssaysSchema,
+                schema_name="AssaysSchema",
+                validators=validators,
+                metadata_hooks=metadata_hooks,
+                writer=writer,
+                output_path=output,
+                failure_path=failure_path,
+                command=" ".join(sys.argv),
+                config_snapshot=_serialize_paths(cfg.to_dict()),
+                inputs={"input_csv": str(args.input_csv)},
+                key_columns=["assay_chembl_id"],
+                table_quality=table_quality,
+                cfg=cfg,
+                stats_extra=chunk_failures.stats,
+                logger=logger,
+            )
+        finally:
+            chunk_failures.save(fetch_failure_path, cfg=cfg)
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)

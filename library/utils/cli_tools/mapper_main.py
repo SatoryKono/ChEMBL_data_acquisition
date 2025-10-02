@@ -46,6 +46,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
     """
     try:
+        marker_values = list(cfg.io.na_markers or ())
+        keep_markers = bool(getattr(cfg.io, "keep_na_markers", False))
+        na_values = marker_values if marker_values and not keep_markers else None
         try:
             df = io.read_csv(
                 args.input_csv,
@@ -53,7 +56,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 sep=args.sep,
                 encoding=args.encoding,
                 dtype=str,
-                na_values=["#N/A", ""],
+                na_values=na_values,
             )
         except (FileNotFoundError, OSError) as exc:
             logger.error("read_fail", error=str(exc))
@@ -62,11 +65,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             logger.error("missing_column", column=args.column, path=str(args.input_csv))
             return 1
 
+        marker_set = set(marker_values)
+
         def _normalize(value: object) -> str | None:
             if pd.isna(value):
                 return None
             text = str(value).strip()
-            return text or None
+            if not text:
+                return None
+            if not keep_markers and text in marker_set:
+                return None
+            return text
 
         row_ids: list[str | None] = []
         unique_ids: OrderedDict[str, None] = OrderedDict()

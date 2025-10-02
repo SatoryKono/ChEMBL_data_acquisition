@@ -92,6 +92,31 @@ def test_write_meta_yaml_preserves_existing_columns(tmp_path: Path) -> None:
     assert data["stats"] == stats
 
 
+def test_write_meta_yaml_includes_extra_metadata(tmp_path: Path) -> None:
+    csv_path = tmp_path / "output.csv"
+    csv_path.write_text("id\n1\n", encoding="utf-8")
+
+    stats: Stats = {
+        "rows_total": 1,
+        "rows_kept": 1,
+        "rows_dropped": 0,
+        "output_sha256": "feedface",
+    }
+
+    meta_path = write_meta_yaml(
+        csv_path=csv_path,
+        command="unit-test",
+        config_subset={},
+        inputs={},
+        stats=stats,
+        schema="Schema",
+        extra_metadata={"metadata_hook_failures": ["hook"]},
+    )
+
+    data = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert data["metadata_hook_failures"] == ["hook"]
+
+
 def test_write_meta_yaml_failure_preserves_original(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -49,8 +49,8 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         "--config",
         dest="config",
         type=path_argument,
-        default=DEFAULT_CONFIG_RELATIVE,
-        help="YAML configuration file",
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--print-config",

@@ -168,6 +168,51 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
     assert metadata["stats"]["rows_dropped"] == 0
 
 
+def test_run_pipeline_includes_extra_stats(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frame = pd.DataFrame({"assay_chembl_id": ["A1"]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        combined = pd.concat(list(chunks), ignore_index=True)
+        combined.to_csv(destination, index=False)
+        return destination
+
+    extra = {"chunk_fetch_failure_chunks": 3, "chunk_fetch_failure_ids": ["C1"]}
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="none",
+        validators=None,
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _path: None,
+        cfg=cfg,
+        stats_extra=lambda: extra,
+    )
+
+    assert exit_code == 0
+    metadata = yaml.safe_load(output.with_name(output.name + ".meta.yaml").read_text())
+    assert metadata["stats"]["chunk_fetch_failure_chunks"] == 3
+    assert metadata["stats"]["chunk_fetch_failure_ids"] == ["C1"]
+
+
 def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
@@ -342,10 +387,12 @@ def test_run_pipeline_removes_outputs_on_table_quality_failure(
 
     meta_path = output.with_name(output.name + ".meta.yaml")
 
-    assert exit_code == 1
+    assert exit_code == 0
     assert quality_calls == [output]
-    assert not output.exists()
-    assert not meta_path.exists()
+    assert output.exists()
+    assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["quality_report"]["status"] == "failed"
 
 
 def test_run_pipeline_removes_stale_failure_outputs(tmp_path: Path, cfg: Config) -> None:
@@ -530,6 +577,10 @@ def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None
         key_cols: list[str],
     ) -> Path:
         writer_called.append(destination)
+        destination.write_text(
+            "assay_chembl_id,document_chembl_id\nA1,D1\n",
+            encoding="utf-8",
+        )
         return destination
 
     buf = io.StringIO()
@@ -553,9 +604,9 @@ def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None
         logger=logger,
     )
 
-    assert exit_code == 1
-    assert not writer_called
-    assert not output.exists()
+    assert exit_code == 0
+    assert writer_called
+    assert output.exists()
     assert not failure_path.exists()
 
     lines = [line for line in buf.getvalue().splitlines() if line.strip()]
@@ -565,6 +616,84 @@ def test_run_pipeline_metadata_hook_failure(tmp_path: Path, cfg: Config) -> None
     hook_errors = [record for record in records if record.get("event") == "metadata_hook_failed"]
     assert hook_errors
     assert hook_errors[-1]["error"] == "hook boom"
+    assert hook_errors[-1]["context"] == "chunk"
+    assert hook_errors[-1]["strict_mode"] is False
+
+    meta_path = output.with_name(output.name + ".meta.yaml")
+    assert meta_path.exists()
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    failures = metadata.get("metadata_hook_failures")
+    assert failures
+    assert any(str(name).endswith(".hook") for name in failures)
+
+
+def test_run_pipeline_metadata_hook_failure_strict(
+    tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [
+            pd.DataFrame(
+                {
+                    "assay_chembl_id": ["A1"],
+                    "document_chembl_id": ["D1"],
+                }
+            )
+        ]
+
+    def hook(_: pd.DataFrame) -> pd.DataFrame:
+        raise RuntimeError("hook boom")
+
+    writer_called: list[Path] = []
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        writer_called.append(destination)
+        destination.write_text(
+            "assay_chembl_id,document_chembl_id\nA1,D1\n",
+            encoding="utf-8",
+        )
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=[hook],
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda path: None,
+        cfg=cfg,
+        strict_mode=True,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert not writer_called
+    assert not output.exists()
+    assert not failure_path.exists()
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert lines
+    records = [json.loads(line) for line in lines]
+    hook_errors = [record for record in records if record.get("event") == "metadata_hook_failed"]
+    assert hook_errors
+    assert hook_errors[-1]["strict_mode"] is True
 
 
 def test_run_pipeline_writer_failure(tmp_path: Path, cfg: Config) -> None:
@@ -677,9 +806,21 @@ def test_run_pipeline_table_quality_failure(tmp_path: Path, cfg: Config) -> None
         logger=logger,
     )
 
-    assert exit_code == 1
+    assert exit_code == 0
     assert output.exists()
     assert not failure_path.exists()
+
+    meta_path = output.with_name(f"{output.name}.meta.yaml")
+    assert meta_path.exists()
+    with meta_path.open("r", encoding="utf-8") as fh:
+        metadata = yaml.safe_load(fh)
+    assert metadata
+    quality = metadata.get("quality_report")
+    assert quality
+    assert quality["status"] == "failed"
+    assert quality["error"] == "quality boom"
+    assert quality["error_type"] == "RuntimeError"
+    assert "captured_at" in quality
 
     lines = [line for line in buf.getvalue().splitlines() if line.strip()]
     assert lines
@@ -691,3 +832,71 @@ def test_run_pipeline_table_quality_failure(tmp_path: Path, cfg: Config) -> None
     last_record = quality_errors[-1]
     assert last_record["error"] == "quality boom"
     assert last_record.get("traceback")
+
+
+def test_run_pipeline_table_quality_failure_fatal(tmp_path: Path, cfg: Config) -> None:
+    cfg.system.doc_quality.fatal_on_error = True
+
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frames = [
+        pd.DataFrame(
+            {
+                "assay_chembl_id": ["A1"],
+                "document_chembl_id": ["D1"],
+            }
+        )
+    ]
+
+    def fetcher() -> list[pd.DataFrame]:
+        return frames
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        collected = list(chunks)
+        if collected:
+            df = pd.concat(collected, ignore_index=True)
+        else:
+            df = pd.DataFrame(columns=col_order or [])
+        df.to_csv(destination, index=False)
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    def failing_quality(_: Path) -> None:
+        raise RuntimeError("quality boom")
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="",
+        validators=[],
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=[],
+        table_quality=failing_quality,
+        cfg=cfg,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert output.exists()
+    meta_path = output.with_name(f"{output.name}.meta.yaml")
+    assert meta_path.exists()
+    with meta_path.open("r", encoding="utf-8") as fh:
+        metadata = yaml.safe_load(fh)
+    quality = metadata.get("quality_report")
+    assert quality
+    assert quality["status"] == "failed"
+    assert quality["fatal"] is True

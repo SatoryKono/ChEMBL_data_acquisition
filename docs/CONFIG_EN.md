@@ -27,6 +27,7 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 | `timeout_read` | `30` | Read timeout in seconds. |
 | `retries` | `3` | Maximum number of attempts performed by higher-level clients; the shared HTTP adapter does not retry automatically. |
 | `backoff_factor` | `0.5` | Multiplier for exponential backoff between retries. |
+| `backoff_cap` | `null` | Maximum delay in seconds applied to exponential backoff. |
 | `rps` | `20` | Allowed requests per second for the rate limiter. |
 | `burst` | `20` | Bucket size used by the token bucket limiter. |
 | `user_agent` | `chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)` | User-Agent header. Replace the contact with your own address before production use; the validator still rejects the placeholder `contact@example.org`. Set via `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. |
@@ -350,11 +351,13 @@ Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke
 |  | `limiter_cache_ttl` | `600` | TTL for cached limiters in seconds. |
 | `retry` | `max_attempts` | `3` | Number of retry attempts for recoverable errors. |
 |  | `backoff_factor` | `0.5` | Base multiplier for exponential backoff. |
+|  | `backoff_cap` | `null` | Maximum delay in seconds applied between retry attempts. |
 |  | `status_forcelist` | `[429, 500, 502, 503, 504]` | HTTP status codes that trigger retries. |
 | `doc_quality` | `enable` | `true` | Toggle generation of table quality reports. |
 |  | `sample_rows` | `null` | Limit analysis to the first `N` rows; `null` processes the full dataset. |
 |  | `include_columns` | `null` | Optional allow list of column names to profile. |
 |  | `exclude_columns` | `null` | Optional deny list of column names to skip. |
+|  | `fatal_on_error` | `false` | Treat profiling errors as fatal pipeline failures. |
 | `doc_type` | `weights` | `{pubmed: 4, openalex: 3, scholar: 2}` | Weighting applied to document sources. |
 |  | `thresholds` | `{review: 1, experimental: 1, unknown: 2}` | Minimum counts for document type classification. |
 |  | `limit` | `null` | Optional limit on classified records. |
@@ -392,6 +395,7 @@ Common short aliases:
 | `CHEMBL_DA_LOG_LEVEL` | `system.log.level` |
 | `CHEMBL_DA_RETRY_MAX_ATTEMPTS` | `system.retry.max_attempts` |
 | `CHEMBL_DA_RETRY_BACKOFF_FACTOR` | `system.retry.backoff_factor` |
+| `CHEMBL_DA_RETRY_BACKOFF_CAP` | `system.retry.backoff_cap` |
 | `CHEMBL_DA_DICT_DIR` | `local.resources.dictionary_dir` |
 | `CHEMBL_DA_UNIPROT_DATA_DIR` | `local.resources.uniprot_data_dir` |
 | `CHEMBL_DA_IUPHAR_TARGET_CSV` | `local.resources.iuphar_target_csv` |

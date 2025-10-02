@@ -33,9 +33,9 @@ from .cli import (
 )
 from .config import Config, ConfigError, ensure_dirs, print_config
 from .log import logger as default_logger
-from .metadata import Stats, file_sha256, write_meta_yaml
+from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
 from .sidecar import SidecarErrors
-from .utils.config import DEFAULT_CONFIG_RELATIVE
+from .utils.config import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
 
@@ -141,6 +141,8 @@ def run_cli_command(
         return 1
 
     try:
+        cli.prepare_io_paths(args)
+
         cfg: Config = apply_config_overrides(
             args,
             parser,
@@ -217,6 +219,9 @@ def run_pipeline(
     key_columns: Sequence[str],
     table_quality: TableQualityHook,
     cfg: Config | None = None,
+    stats_extra: (
+        Mapping[str, object] | Callable[[], Mapping[str, object]] | None
+    ) = None,
     logger: Logger | None = None,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
@@ -263,6 +268,10 @@ def run_pipeline(
         Callable invoked after writing the CSV to compute quality metrics.
     cfg:
         Optional application configuration forwarded to sidecar metadata.
+    stats_extra:
+        Optional mapping or callable returning a mapping of additional
+        statistics merged into the metadata output. Intended for
+        pipeline-specific diagnostics such as fetch failures.
     logger:
         Optional logger.  Defaults to :data:`library.log.logger` when omitted.
 
@@ -323,6 +332,7 @@ def run_pipeline(
     missing_required_columns: set[str] = set()
     all_columns: set[str] = set()
     validation_enabled = True
+    failed_metadata_hooks: set[str] = set()
 
     try:
         iterable = _as_iterable(fetcher())
@@ -370,26 +380,36 @@ def run_pipeline(
 
         chunks_emitted = False
         aborted = False
+        chunk_index = 0
 
         try:
             for chunk in iterable:
                 if chunk is None:
                     continue
 
+                chunk_index += 1
                 chunk_rows_total = len(chunk)
                 rows_total += chunk_rows_total
 
                 for hook in metadata_hooks:
+                    hook_name = _callable_name(hook)
                     try:
                         chunk = hook(chunk)
                     except Exception as exc:
                         use_logger.error(
                             "metadata_hook_failed",
-                            hook=_callable_name(hook),
+                            hook=hook_name,
                             error=str(exc),
+                            error_type=exc.__class__.__name__,
+                            context="chunk",
+                            chunk_index=chunk_index,
+                            rows=chunk_rows_total,
+                            strict_mode=strict_mode,
                         )
-                        aborted = True
-                        raise _AbortPipeline(1) from exc
+                        failed_metadata_hooks.add(hook_name)
+                        if strict_mode:
+                            aborted = True
+                            raise _AbortPipeline(1) from exc
 
                 _refresh_column_tracking(chunk)
 
@@ -464,15 +484,21 @@ def run_pipeline(
             if not aborted and not chunks_emitted and not missing_required_columns:
                 empty = pd.DataFrame()
                 for hook in metadata_hooks:
+                    hook_name = _callable_name(hook)
                     try:
                         empty = hook(empty)
                     except Exception as exc:  # pragma: no cover - rare failure path
                         use_logger.error(
                             "metadata_hook_failed",
-                            hook=_callable_name(hook),
+                            hook=hook_name,
                             error=str(exc),
+                            error_type=exc.__class__.__name__,
+                            context="empty_frame",
+                            strict_mode=strict_mode,
                         )
-                        raise _AbortPipeline(1) from exc
+                        failed_metadata_hooks.add(hook_name)
+                        if strict_mode:
+                            raise _AbortPipeline(1) from exc
                 _refresh_column_tracking(empty)
                 yield empty.reindex(columns=col_order) if col_order else empty
 
@@ -561,11 +587,15 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
+    extra_stats = stats_extra() if callable(stats_extra) else stats_extra
+    for key, value in (extra_stats or {}).items():
+        stats[key] = value
  
     resolved_invocation = invocation_tuple
- 
- 
- 
+
+    extra_metadata: dict[str, object] = {}
+    if failed_metadata_hooks:
+        extra_metadata["metadata_hook_failures"] = sorted(failed_metadata_hooks)
 
     meta_path = write_meta_yaml(
         csv_path=csv_path,
@@ -575,23 +605,33 @@ def run_pipeline(
         stats=stats,
         schema=schema_name,
         invocation=resolved_invocation or None,
+        extra_metadata=extra_metadata or None,
     )
+
+    doc_quality_cfg = getattr(getattr(cfg, "system", None), "doc_quality", None)
+    fatal_quality_error = bool(getattr(doc_quality_cfg, "fatal_on_error", False))
 
     try:
         table_quality(csv_path)
     except Exception as exc:
-        use_logger.error(
-            "quality_report_failed",
+        tb = traceback.format_exc()
+        record_quality_failure(
+            meta_path,
             error=str(exc),
             error_type=exc.__class__.__name__,
-            path=str(csv_path),
-            traceback=traceback.format_exc(),
-
+            traceback=tb,
+            fatal=fatal_quality_error,
         )
-        if schema is not None:
-            Path(csv_path).unlink(missing_ok=True)
-        meta_path.unlink(missing_ok=True)
-        return 1
+        log_kwargs = {
+            "error": str(exc),
+            "error_type": exc.__class__.__name__,
+            "path": str(csv_path),
+            "traceback": tb,
+        }
+        if fatal_quality_error:
+            log_kwargs["fatal"] = True
+            exit_code = 1
+        use_logger.warning("quality_report_failed", **log_kwargs)
 
     if exit_code == 0:
         use_logger.info("write_done", rows=rows_kept, path=str(csv_path))
@@ -633,8 +673,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         dest="config",
         type=path_argument,
-        default=DEFAULT_CONFIG_RELATIVE,
-        help="YAML configuration file",
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--print-config",
