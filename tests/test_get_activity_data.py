@@ -54,11 +54,25 @@ def test_run_chembl_respects_limit(
 
     monkeypatch.setattr(cl, "get_activities", fake_get)
 
-    monkeypatch.setattr(
-        gad,
-        "write_csv_chunks_deterministic",
-        lambda df, output, *, key_cols, col_order, chunksize, sort_chunksize, sep, encoding, cfg, **__: output,
-    )
+    def fake_write_chunks(
+        df,
+        output,
+        *,
+        key_cols,
+        col_order,
+        chunksize,
+        sort_chunksize,
+        sep,
+        encoding,
+        cfg,
+        **__,
+    ):
+        path = Path(output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("activity_id\n")
+        return path
+
+    monkeypatch.setattr(gad, "write_csv_chunks_deterministic", fake_write_chunks)
     monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
@@ -140,7 +154,10 @@ def test_run_chembl_column_order(
         **__,
     ) -> Path:
         captured["col_order"] = list(col_order or [])
-        return output
+        path = Path(output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("activity_id\n")
+        return path
 
     monkeypatch.setattr(gad, "write_csv_chunks_deterministic", fake_write_csv)
 
@@ -240,6 +257,8 @@ def test_run_chembl_streams_large_output(
                 "rows": rows,
             }
         )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("activity_id\n")
         return output
 
     monkeypatch.setattr(gad, "write_csv_chunks_deterministic", fake_write_csv)
@@ -252,6 +271,74 @@ def test_run_chembl_streams_large_output(
     assert captured["chunksize"] == chunk_size
     assert captured["sort_chunksize"] == chunk_size
     assert captured["chunk_count"] > 1
+
+
+def test_run_chembl_writer_missing_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    input_csv = tmp_path / "activity.csv"
+    input_csv.write_text("activity_id\n1\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=tmp_path / "out.csv")
+
+    monkeypatch.setattr(io, "read_ids", lambda *_, **__: iter(["1"]))
+
+    monkeypatch.setattr(
+        cl,
+        "get_activities",
+        lambda *_, **__: pd.DataFrame(
+            {
+                "activity_id": ["1"],
+                "assay_chembl_id": ["A1"],
+                "molecule_chembl_id": ["M1"],
+                "standard_value": [1.0],
+                "standard_type": ["IC50"],
+            }
+        ),
+    )
+
+    monkeypatch.setattr(gad, "normalize_activities", lambda df: df)
+    monkeypatch.setattr(gad, "add_pipeline_metadata", lambda df: df)
+    monkeypatch.setattr(gad, "compute_activity_bounds", lambda df, cfg: df)
+    monkeypatch.setattr(
+        gad,
+        "apply_activity_annotations",
+        lambda df, action_cfg, properties_cfg: df,
+    )
+
+    class _Result:
+        def __init__(self, data: pd.DataFrame) -> None:
+            self.data = data
+            self.failure_cases = pd.DataFrame()
+
+    monkeypatch.setattr(
+        gad,
+        "validate_activities",
+        lambda df, return_result: _Result(df),
+    )
+
+    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
+    monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
+
+    def fake_write_csv(
+        chunks,
+        destination,
+        *,
+        cfg,
+        key_cols,
+        col_order,
+        chunksize,
+        sep,
+        encoding,
+    ):
+        return destination
+
+    monkeypatch.setattr(gad.io, "write_csv", fake_write_csv)
+
+    rc = gad.run_chembl(cfg, args)
+
+    assert rc == 1
 
 
 def test_run_chembl_workers_preserve_order(

@@ -261,8 +261,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         path_obj = Path(output_path)
         if not path_obj.exists():
-            path_obj.parent.mkdir(parents=True, exist_ok=True)
-            path_obj.touch()
+            raise PipelineError(f"writer failed to create output: {path_obj}")
         return path_obj
 
     table_quality = partial(
