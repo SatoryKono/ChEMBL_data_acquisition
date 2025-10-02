@@ -50,6 +50,7 @@ def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     inp = tmp_path / "in.csv"
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        assert args.normalize_at_export is True
         normalized = gtd._normalized_output_path(Path(args.output_csv))
         pd.DataFrame({"target_chembl_id": ["C1"], "uniprot_id": ["P1"]}).to_csv(
             args.final_out,
@@ -72,6 +73,7 @@ def test_fetch_chembl_custom_chunk_size(
     original_chunk = cfg.target.chembl.chunk_size
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        assert args.normalize_at_export is True
         recorded["chunk_size"] = cfg.target.chembl.chunk_size
 
         pd.DataFrame({"target_chembl_id": ["C1"]}).to_csv(
@@ -584,7 +586,8 @@ def test_run_all_preserves_reaction_ec_numbers(
     exit_code = gtd.run_all(cfg, args)
     assert exit_code == 0
 
-    result = pd.read_csv(output_csv, dtype=str)
+    normalized_output = gtd._normalized_output_path(output_csv)
+    result = pd.read_csv(normalized_output, dtype=str)
     assert result.loc[0, "reaction_ec_numbers"] == "2.2.2.2|4.4.4.4"
     assert result.loc[0, "target_type"] == "Multicellular organism"
     assert result.loc[0, "protein_class_pred_L1"] == "ClassA"
