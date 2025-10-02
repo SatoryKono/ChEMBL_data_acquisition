@@ -343,7 +343,7 @@ def fetch_pubmed_records(
     if pubmed_cfg is None:
         pubmed_cfg = settings.pubmed
 
-    global_limiter = get_global_limiter(
+    system_limiter = get_global_limiter(
         rate_cfg.global_rps, rate_cfg.global_burst
     )
 
@@ -388,10 +388,13 @@ def fetch_pubmed_records(
     )
 
     def _acquire_documents(
-        limiter: RateLimiter | None, *, use_global: bool = True
+        limiter: RateLimiter | None,
+        *,
+        use_global: bool = True,
+        global_rate_limiter: RateLimiter | None = system_limiter,
     ) -> None:
-        if use_global and global_limiter is not None:
-            global_limiter.acquire()
+        if use_global and global_rate_limiter is not None:
+            global_rate_limiter.acquire()
         if limiter is not None:
             limiter.acquire()
 
