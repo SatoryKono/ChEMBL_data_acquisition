@@ -131,6 +131,23 @@ METADATA_SOURCE_COLUMNS: Mapping[str, Sequence[str]] = {
         "crossref.Error",
     ),
 }
+
+CHEMBL_EXPORT_ALIASES: Mapping[str, str] = {
+    "ChEMBL.document_chembl_id": "document_chembl_id",
+    "ChEMBL.title": "title",
+    "ChEMBL.abstract": "abstract",
+    "ChEMBL.doi": "doi",
+    "ChEMBL.year": "year",
+    "ChEMBL.journal": "journal",
+    "ChEMBL.journal_abbrev": "journal_abbrev",
+    "ChEMBL.volume": "volume",
+    "ChEMBL.issue": "issue",
+    "ChEMBL.first_page": "first_page",
+    "ChEMBL.last_page": "last_page",
+    "ChEMBL.pubmed_id": "pubmed_id",
+    "ChEMBL.authors": "authors",
+    "ChEMBL.source": "source",
+}
 ERROR_COLUMN_MAP: Mapping[str, str] = {
     "pubmed": "PubMed.Error",
     "semantic_scholar": "scholar.Error",
@@ -208,6 +225,22 @@ def _string_series(series: pd.Series) -> pd.Series:
         return pd.Series(dtype="string")
     result = series.astype("string").fillna("").str.strip()
     return result
+
+
+def _apply_export_aliases(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of ``df`` with ChEMBL export aliases populated."""
+
+    frame = df.copy()
+    for source, target in CHEMBL_EXPORT_ALIASES.items():
+        if source not in frame.columns:
+            continue
+        if target in frame.columns:
+            mask = _string_series(frame[target]) == ""
+            if mask.any():
+                frame.loc[mask, target] = frame.loc[mask, source]
+        else:
+            frame[target] = frame[source]
+    return frame
 
 
 def _truthy_mask(series: pd.Series) -> pd.Series:
@@ -409,7 +442,10 @@ def _ensure_document_identifier(frame: pd.DataFrame) -> pd.DataFrame:
 def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     """Return analytics-oriented projection of ``df``."""
 
-    frame = _ensure_document_identifier(df)
+
+
+    frame = _apply_export_aliases(df)
+
 
     validate_columns(frame, REQUIRED_INPUT_COLUMNS)
     if frame.empty:
@@ -425,9 +461,11 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     if "publication_class" in frame.columns:
         result["publication_class"] = _string_series(frame["publication_class"])
     else:
-        result["publication_class"] = pd.Series([""] * len(df), index=df.index, dtype="string")
+        result["publication_class"] = pd.Series(
+            [""] * len(frame), index=frame.index, dtype="string"
+        )
 
-    review_series = pd.Series([False] * len(df), index=df.index)
+    review_series = pd.Series([False] * len(frame), index=frame.index)
     if "publication_class" in result.columns:
         review_series = review_series | (
             result["publication_class"].str.lower() == "review"
@@ -465,14 +503,20 @@ def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
             publication_year, errors="coerce"
         ).astype("Int64")
     else:
-        result["publication_year"] = pd.Series([pd.NA] * len(df), index=df.index, dtype="Int64")
+        result["publication_year"] = pd.Series(
+            [pd.NA] * len(frame), index=frame.index, dtype="Int64"
+        )
 
     for column in PASS_THROUGH_COLUMNS:
         if column not in frame.columns:
             if column == "Index":
-                result[column] = pd.Series([""] * len(df), index=df.index, dtype="string")
+                result[column] = pd.Series(
+                    [""] * len(frame), index=frame.index, dtype="string"
+                )
             else:
-                result[column] = pd.Series([""] * len(df), index=df.index, dtype="string")
+                result[column] = pd.Series(
+                    [""] * len(frame), index=frame.index, dtype="string"
+                )
             continue
         if column == "Index":
             index_series = frame[column]

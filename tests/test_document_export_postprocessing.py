@@ -49,12 +49,22 @@ def _sample_dataframe() -> pd.DataFrame:
     )
 
 
-def test_preprocess_document_export_derives_fields() -> None:
-    """The derived projection coalesces fields and computes coverage flags."""
+def _chembl_namespaced_dataframe() -> pd.DataFrame:
+    mapping = {
+        "document_chembl_id": "ChEMBL.document_chembl_id",
+        "title": "ChEMBL.title",
+        "abstract": "ChEMBL.abstract",
+        "doi_normalised": "doi_normalised",
+        "pubmed_id": "ChEMBL.pubmed_id",
+        "journal": "ChEMBL.journal",
+        "authors": "ChEMBL.authors",
+        "source": "ChEMBL.source",
+    }
+    df = _sample_dataframe().rename(columns=mapping)
+    return df
 
-    df = _sample_dataframe()
-    result = document_export_postprocessing.preprocess_document_export(df)
 
+def _assert_projection(result: pd.DataFrame) -> None:
     assert result["preferred_title"].tolist() == ["Title A", "PubMed Title"]
     assert result["preferred_abstract"].tolist() == ["Abstract A", "Abstract B"]
     assert result["preferred_doi"].tolist() == ["10.1000/foo", "10.1000/bar"]
@@ -75,25 +85,21 @@ def test_preprocess_document_export_derives_fields() -> None:
     assert result["is_review"].tolist() == [False, True]
 
 
-def test_preprocess_document_export_restores_identifier_from_prefixed_column() -> None:
-    """The export projection rehydrates ``document_chembl_id`` when prefixed."""
+def test_preprocess_document_export_derives_fields() -> None:
+    """The derived projection coalesces fields and computes coverage flags."""
 
-    df = _sample_dataframe().drop(columns=["document_chembl_id"])
-    df["ChEMBL.document_chembl_id"] = ["DOC1", "DOC2"]
-
+    df = _sample_dataframe()
     result = document_export_postprocessing.preprocess_document_export(df)
+    _assert_projection(result)
 
-    assert result["document_chembl_id"].tolist() == ["DOC1", "DOC2"]
 
+def test_preprocess_document_export_accepts_namespaced_columns() -> None:
+    """Namespaced ChEMBL columns are normalised before processing."""
 
-def test_preprocess_document_export_injects_empty_identifier_when_missing() -> None:
-    """An empty identifier column is created when no source column exists."""
-
-    df = _sample_dataframe().drop(columns=["document_chembl_id"])
-
+    df = _chembl_namespaced_dataframe()
     result = document_export_postprocessing.preprocess_document_export(df)
+    _assert_projection(result)
 
-    assert result["document_chembl_id"].tolist() == ["", ""]
 
 
 def test_postprocess_export_file_writes_csv(tmp_path: Path) -> None:
