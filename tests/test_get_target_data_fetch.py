@@ -177,7 +177,13 @@ def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) ->
     def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         input_df = pd.read_csv(args.input_csv)
         captured["input"] = input_df
-        pd.DataFrame({"uniprot_id": ["P12345"], "names": ["Foo"]}).to_csv(
+        pd.DataFrame(
+            {
+                "uniprot_id": ["P12345"],
+                "original_id": ["response"],
+                "names": ["Foo"],
+            }
+        ).to_csv(
             args.output_csv, index=False
         )
         return 0
@@ -189,6 +195,70 @@ def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) ->
     assert list(captured["input"]["uniprot_id"]) == ["P12345"]
     assert list(captured["input"]["original_id"]) == ["P12345"]
     assert list(df["original_id"]) == ["P12345"]
+
+
+def test_fetch_uniprot_collects_unique_ids(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:
+    chembl_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P1|P2", ""],
+            "mapping_uniprot_id": ["Q1|P1", "Q2"],
+            "secondary_accession": ["", "Q3"],
+        }
+    )
+    out = tmp_path / "uniprot.csv"
+    captured: dict[str, pd.DataFrame] = {}
+
+    def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
+        input_df = pd.read_csv(args.input_csv)
+        captured["input"] = input_df
+        output = input_df.assign(names=["name"] * len(input_df))
+        output.to_csv(args.output_csv, index=False)
+        return 0
+
+    monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
+    df = gtd.fetch_uniprot(cfg, chembl_df, out)
+
+    expected_ids = ["P1", "P2", "Q1", "Q2", "Q3"]
+    assert list(captured["input"]["uniprot_id"]) == expected_ids
+    assert list(captured["input"]["original_id"]) == expected_ids
+    assert list(df["uniprot_id"]) == expected_ids
+    assert list(df["original_id"]) == expected_ids
+
+
+def test_fetch_uniprot_uses_mapping_when_primary_missing(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    chembl_df = pd.DataFrame(
+        {"uniprot_id": ["", ""], "mapping_uniprot_id": ["P1", "P2"]}
+    )
+    out = tmp_path / "uniprot.csv"
+    captured: dict[str, pd.DataFrame] = {}
+
+    def fake_run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
+        input_df = pd.read_csv(args.input_csv)
+        captured["input"] = input_df
+        input_df.assign(names=["name"] * len(input_df)).to_csv(
+            args.output_csv, index=False
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
+    gtd.fetch_uniprot(cfg, chembl_df, out)
+
+    assert list(captured["input"]["uniprot_id"]) == ["P1", "P2"]
+    assert list(captured["input"]["original_id"]) == ["P1", "P2"]
+
+
+def test_resolve_uniprot_matches_uses_original_ids(cfg: Config) -> None:
+    chembl_df = pd.DataFrame(
+        {"uniprot_id": [""], "mapping_uniprot_id": ["ALT1"]}
+    )
+    plan = gtd._build_uniprot_query_plan(chembl_df, cfg)
+    uniprot_df = pd.DataFrame({"uniprot_id": ["P1"], "original_id": ["ALT1"]})
+
+    resolved = gtd._resolve_uniprot_matches(plan, uniprot_df)
+
+    assert list(resolved) == ["P1"]
 
 
 def test_run_uniprot_initialises_session(
