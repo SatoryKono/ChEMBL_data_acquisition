@@ -1569,6 +1569,21 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             limit=limit,
         )
         return 1
+    offset = getattr(args, "offset", 0)
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    logger.info(
+        "document_pubmed_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        workers=getattr(args, "workers", pubmed_defaults.workers),
+        batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
+        sleep=getattr(args, "sleep", pubmed_defaults.sleep),
+        fallback_doi=bool(getattr(args, "fallback_doi_csv", None)),
+    )
     try:
         pmids_iter = io.read_ids(
             args.input_csv,
@@ -1582,7 +1597,6 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             path=str(args.input_csv),
         )
         return 1
-    offset = getattr(args, "offset", 0)
     if offset:
         pmids_iter = islice(pmids_iter, offset, None)
         logger.info("process_offset", offset=offset)
@@ -1634,7 +1648,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             fallback_doi_map=fallback_doi_map,
             return_generator=True,
         )
-        output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
+        output = output_path
         normalised_frames = (normalize_documents(frame) for frame in frame_iter)
         exit_code = _finalise_export(
             normalised_frames,
@@ -1645,10 +1659,22 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("pubmed_pipeline_failed", error=str(exc))
+        logger.error(
+            "pubmed_pipeline_failed",
+            error=str(exc),
+            output=str(output_path),
+        )
         return 1
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
+    if exit_code == 0:
+        logger.info("document_pubmed_done", output=str(output_path))
+    else:
+        logger.error(
+            "document_pubmed_failed",
+            output=str(output_path),
+            exit_code=exit_code,
+        )
     return exit_code
 
 
@@ -1675,6 +1701,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if limit is not None and limit < 0:
         logger.error("invalid_limit", section="document.chembl", limit=limit)
         return 1
+    offset = getattr(args, "offset", 0)
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    logger.info(
+        "document_chembl_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+        timeout=getattr(args, "timeout", chembl_defaults.timeout),
+    )
 
     # Configure session for ChEMBL requests
     rate_cfg = cfg.rate
@@ -1699,7 +1738,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             return 1
 
-        offset = getattr(args, "offset", 0)
         if offset:
             ids_iter = islice(ids_iter, offset, None)
             logger.info("process_offset", offset=offset)
@@ -1727,7 +1765,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             return 1
         if "doi" in df.columns:
             df["doi"] = df["doi"].map(normalise_doi)
-        output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
+        output = output_path
         df = normalize_documents(df)
         exit_code = _finalise_export(
             df,
@@ -1737,6 +1775,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
         )
+        if exit_code == 0:
+            logger.info("document_chembl_done", output=str(output_path))
+        else:
+            logger.error(
+                "document_chembl_failed",
+                output=str(output_path),
+                exit_code=exit_code,
+            )
         return exit_code
 
 
@@ -1846,6 +1892,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             key_columns=["document_chembl_id"],
             chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
         )
+        if exit_code == 0:
+            logger.info("document_all_done", output=str(output_path))
+        else:
+            logger.error(
+                "document_all_failed",
+                output=str(output_path),
+                exit_code=exit_code,
+            )
         return exit_code
 
     # Normalise PubMed identifiers to strings to avoid dtype mismatches
@@ -1909,7 +1963,11 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 metadata_iter = iter(())
             merged = merge_with_chembl(doc_df, metadata_iter)
     except (FileNotFoundError, ValueError, OSError) as exc:
-        logger.error("pubmed_pipeline_failed", error=str(exc))
+        logger.error(
+            "pubmed_pipeline_failed",
+            error=str(exc),
+            output=str(output_path),
+        )
         return 1
     processed = dp.postprocess_documents(merged)
     extra_cols = [c for c in merged.columns if c not in processed.columns]
@@ -1928,6 +1986,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         key_columns=["document_chembl_id"],
         chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
     )
+    if exit_code == 0:
+        logger.info("document_all_done", output=str(output_path))
+    else:
+        logger.error(
+            "document_all_failed",
+            output=str(output_path),
+            exit_code=exit_code,
+        )
     return exit_code
 
 
