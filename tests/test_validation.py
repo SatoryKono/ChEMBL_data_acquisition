@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from library import validation
-from schemas import normalize_testitems
+from library.schemas import normalize_testitems
 
 
 def test_validate_columns_ok() -> None:

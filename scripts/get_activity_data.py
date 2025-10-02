@@ -75,7 +75,7 @@ from library.processing.activity import (
 from library.rate_limiter import get_global_limiter
 from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
-from schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
+from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 DEFAULT_INPUT_NAME = "activity.csv"
@@ -130,9 +130,37 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("invalid_limit", section="activity.limit", limit=limit)
         return 1
 
+    offset = getattr(args, "offset", 0)
+    workers_override = getattr(args, "workers", None)
+    configured_workers = (
+        workers_override
+        if workers_override is not None
+        else getattr(cfg.activity, "workers", 1)
+    )
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    logger.info(
+        "activity_pipeline_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        batch_size=cfg.activity.batch_size,
+        timeout=cfg.activity.timeout,
+        dry_run=cfg.activity.dry_run,
+        workers=configured_workers,
+    )
+
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
         logger.info("dry_run", limit=expected)
+        logger.info(
+            "activity_pipeline_done",
+            output=str(output_path),
+            processed=0,
+            dry_run=True,
+        )
         return 0
 
     try:
@@ -145,7 +173,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
-    offset = getattr(args, "offset", 0)
     if offset:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
@@ -174,10 +201,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     invocation = _args_invocation(args)
 
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
-    fetch_failure_path = Path(output).with_name(
-        f"{Path(output).stem}_fetch_failures.csv"
+    failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
+    fetch_failure_path = output_path.with_name(
+        f"{output_path.stem}_fetch_failures.csv"
     )
 
 
@@ -231,13 +257,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if doc_quality_cfg.enable:
         table_quality = partial(
             analyze_table_quality,
-            table_name=str(Path(output).with_suffix("")),
-            destination_dir=Path(output).parent,
+            table_name=str(Path(output_path).with_suffix("")),
+            destination_dir=Path(output_path).parent,
             sample_rows=doc_quality_cfg.sample_rows,
             include_columns=doc_quality_cfg.include_columns,
             exclude_columns=doc_quality_cfg.exclude_columns,
         )
     else:
+
         def table_quality(_: Path) -> None:
             return None
 
@@ -287,7 +314,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                             **log_context,
                         )
                         chunk_failures.add_failure(chunk_ids, error_message)
-                        return pd.DataFrame(columns=ACTIVITY_COLUMNS)
+                        raise PipelineError("chunk_fetch_failed")
                     delay = compute_backoff_delay(attempt, retry_cfg)
                     logger.warning(
                         "activity_fetch_retry",
@@ -347,7 +374,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 validators=validators,
                 metadata_hooks=metadata_hooks,
                 writer=writer,
-                output_path=output,
+                output_path=output_path,
                 failure_path=failure_path,
                 command=" ".join(_args_invocation(args)),
                 config_snapshot=_serialize_paths(cfg.to_dict()),
@@ -363,6 +390,21 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)
+
+    if exit_code == 0:
+        logger.info(
+            "activity_pipeline_done",
+            output=str(output_path),
+            processed=processed_ids,
+            dry_run=False,
+        )
+    else:
+        logger.error(
+            "activity_pipeline_failed",
+            output=str(output_path),
+            processed=processed_ids,
+            exit_code=exit_code,
+        )
 
     return exit_code
 

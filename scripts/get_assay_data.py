@@ -47,7 +47,7 @@ from library.log import logger
 from library.pipeline_metadata import add_pipeline_metadata
 from library.table_quality import analyze_table_quality
 from library.validation import validate_assays
-from schemas import AssaysSchema, normalize_assays
+from library.schemas import AssaysSchema, normalize_assays
 from library.pipeline_helpers import (
     ChunkedFetchConfig,
     CsvWriterConfig,
@@ -66,7 +66,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute assay retrieval from the ChEMBL API.
 
     The output CSV arranges columns so that fields defined in
-    :class:`~schemas.assays.AssaysSchema` appear first. Any additional columns
+    :class:`~library.schemas.assays.AssaysSchema` appear first. Any additional columns
     are appended alphabetically.
 
     Parameters
@@ -100,6 +100,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         return 1
 
     offset = getattr(args, "offset", 0)
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    logger.info(
+        "assay_pipeline_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        batch_size=cfg.assay.batch_size,
+        timeout=cfg.assay.timeout,
+    )
     if offset:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
@@ -117,10 +129,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         ids_source = _iter_ids()
 
-    output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
-    fetch_failure_path = Path(output).with_name(
-        f"{Path(output).stem}_fetch_failures.csv"
+    failure_path = output_path.with_name(f"{output_path.stem}_failure_cases.csv")
+    fetch_failure_path = output_path.with_name(
+        f"{output_path.stem}_fetch_failures.csv"
     )
 
     metadata_hooks = [
@@ -135,8 +146,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if doc_quality_cfg.enable:
         table_quality = partial(
             analyze_table_quality,
-            table_name=str(Path(output).with_suffix("")),
-            destination_dir=Path(output).parent,
+            table_name=str(output_path.with_suffix("")),
+            destination_dir=output_path.parent,
             sample_rows=doc_quality_cfg.sample_rows,
             include_columns=doc_quality_cfg.include_columns,
             exclude_columns=doc_quality_cfg.exclude_columns,
@@ -233,7 +244,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 validators=validators,
                 metadata_hooks=metadata_hooks,
                 writer=writer,
-                output_path=output,
+                output_path=output_path,
                 failure_path=failure_path,
                 command=" ".join(sys.argv),
                 config_snapshot=_serialize_paths(cfg.to_dict()),
@@ -251,6 +262,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("process_limit", limit=processed_ids)
     else:
         logger.info("processed_count", count=processed_ids)
+
+    if exit_code == 0:
+        logger.info(
+            "assay_pipeline_done",
+            output=str(output_path),
+            processed=processed_ids,
+        )
+    else:
+        logger.error(
+            "assay_pipeline_failed",
+            output=str(output_path),
+            processed=processed_ids,
+            exit_code=exit_code,
+        )
 
     return exit_code
 

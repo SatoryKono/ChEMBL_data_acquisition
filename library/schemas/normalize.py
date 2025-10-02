@@ -1,7 +1,7 @@
 """Normalization helpers for schema dataframes.
 
 This module provides utility functions for cleaning raw data before
-validation against the :mod:`schemas` definitions.  The helpers ensure
+validation against the :mod:`library.schemas` definitions.  The helpers ensure
 consistent relation operators, unify units and trim identifier values.
 """
 

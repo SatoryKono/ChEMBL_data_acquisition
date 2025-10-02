@@ -29,8 +29,6 @@ from typing import (
     cast,
 )
 
-import logging
-
 import pandas as pd
 import requests
 
@@ -837,7 +835,25 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
-    return run_chembl(cfg, args)
+    logger.info(
+        "testitem_pipeline_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=getattr(cfg.testitem, "limit", None),
+        offset=getattr(args, "offset", getattr(cfg.testitem, "offset", None)),
+        batch_size=getattr(cfg.testitem, "batch_size", None),
+        timeout=getattr(cfg.testitem, "timeout", None),
+    )
+    exit_code = run_chembl(cfg, args)
+    if exit_code == 0:
+        logger.info("testitem_pipeline_done", output=str(output_path))
+    else:
+        logger.error(
+            "testitem_pipeline_failed",
+            output=str(output_path),
+            exit_code=exit_code,
+        )
+    return exit_code
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
@@ -933,7 +949,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_cfg=log_cfg,
         mapping=mapping,
         run=run,
-        logger=cast(logging.Logger, logger),
+        logger=logger,
     )
 
 

@@ -4,8 +4,8 @@ The README is available in multiple languages:
 
 | Language | Link |
 |----------|------|
-| English  | [README_EN.md](README_EN.md) |
-| Русский  | [README_RU.md](README_RU.md) |
+| English  | [README_EN.md](docs/README_EN.md) |
+| Русский  | [README_RU.md](docs/README_RU.md) |
 
  
 * Командные скрипты с унифицированными флагами `--input`, `--output`

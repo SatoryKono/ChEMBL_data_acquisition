@@ -31,7 +31,7 @@ import library.testitem_pipeline.cli as pipeline_cli
 
 from library.config import ApiCfg, Config, IoCfg
 
-from schemas import TestitemsSchema
+from library.schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
 
 

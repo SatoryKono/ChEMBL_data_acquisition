@@ -41,8 +41,8 @@ from library.io.writers import write_csv
 from library.log import logger
 from library.pipeline_metadata import pipeline_metadata
 from library.pipeline_targets import run_pipeline
-from schemas import TargetsSchema
-from schemas.targets import TARGETS_COLUMN_ORDER
+from library.schemas import TargetsSchema
+from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
 class PipelineConfig(BaseModel):
