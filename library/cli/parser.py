@@ -17,10 +17,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .. import log
+from ..common.log import logger
 from ..config import Config, ConfigError, load_config
-from ..logging_setup import Logger, LoggerConfig
-from ..logging_setup import configure_logger as _configure_logger
+from ..common.logging_setup import Logger, LoggerConfig
+from ..common.logging_setup import configure_logger as _configure_logger
 from ..version import require_python_version
 from ..utils.config import DEFAULT_CONFIG_PATH
 
@@ -38,7 +38,7 @@ def _emit_deprecated_output_warning() -> None:
     """Log a deprecation warning without failing when the logger stream is closed."""
 
     try:
-        log.logger.warning(
+        logger.warning(
             "cli_option_deprecated",
             option=_DEPRECATED_OUTPUT_OPTION,
             replacement=_DEPRECATED_OUTPUT_REPLACEMENT,
@@ -394,10 +394,10 @@ def configure_logger(
     )
     # Update the shared logger instance in place so existing references remain
     # valid across the code base.
-    log.logger._cfg = new_logger._cfg
+    logger._cfg = new_logger._cfg
     # Preserve default structured fields for downstream log records.
-    log.logger._context = {"status": None, "rps": None}
-    return log.logger
+    logger._context = {"status": None, "rps": None}
+    return logger
 
 
 # ---------------------------------------------------------------------------
@@ -550,7 +550,7 @@ def apply_config_overrides(
             strict=True,
         )
     except ConfigError as exc:
-        log.logger.error(
+        logger.error(
             "config_load_failed",
             error=str(exc),
             config=str(config_path),

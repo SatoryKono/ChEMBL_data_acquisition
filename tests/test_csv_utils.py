@@ -16,10 +16,10 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
-import library.csv_utils as csv_utils
+import library.common.csv_utils as csv_utils
 import library.git_utils as git_utils
 from library.config import Config
-from library.csv_utils import sha256_file, write_csv_deterministic
+from library.common.csv_utils import sha256_file, write_csv_deterministic
 
 
 def test_write_csv_deterministic(tmp_path: Path) -> None:

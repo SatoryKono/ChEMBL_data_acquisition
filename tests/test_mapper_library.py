@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.mapper_library`."""
+"""Tests for :mod:`library.integration.mapper_library`."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-import library.mapper_library as mapper_library
+import library.integration.mapper_library as mapper_library
 from library.config import UniprotMappingCfg
-from library.mapper_library import map_chembl_to_uniprot
+from library.integration.mapper_library import map_chembl_to_uniprot
 
 
 class _BytesIOContext:

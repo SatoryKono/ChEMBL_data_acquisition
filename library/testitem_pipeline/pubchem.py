@@ -13,12 +13,12 @@ from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence, T
 import pandas as pd
 import requests
 
-from library import chembl_library as cl
-from library import pubchem_library as pl
-from library.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
-from library.chembl_client import ChemblClient
+from library.integration import chembl_library as cl
+from library.integration import pubchem_library as pl
+from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
+from library.integration.chembl_client import ChemblClient
 from library.config import ApiCfg, PubChemCfg, RetryCfg
-from library.log import logger
+from library.common.log import logger
 from library.utils.atomic import open_atomic
 
 UTC = timezone.utc  # noqa: UP017

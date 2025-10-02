@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from library import mapper_batch_library as mbl
+from library.integration import mapper_batch_library as mbl
 from library.cli import LoggerConfig, configure_logger
 from library.config import UniprotMappingCfg
 

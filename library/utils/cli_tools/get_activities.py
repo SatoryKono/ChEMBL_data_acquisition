@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from library import cli
-from library.activities import get_activities
-from library.log import logger
+from library.common.log import logger
+from library.pipelines.activity import get_activities
 
 
 def parse_args(

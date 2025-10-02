@@ -7,7 +7,7 @@ import json
 import re
 import sys
 
-from library import log
+from library.common import log
 from library.cli import LoggerConfig, configure_logger
 
 

@@ -27,7 +27,7 @@ def test_warnings_are_logged() -> None:
 
     code = (
         "import sys, warnings, io; "
-        "from library.logging_setup import LoggerConfig, configure_logger; "
+        "from library.common.logging_setup import LoggerConfig, configure_logger; "
         "buf = io.StringIO(); "
         "configure_logger(LoggerConfig(level='WARNING', run_id='rid', stream=buf)); "
         "warnings.warn('problem occurred'); "
@@ -48,7 +48,7 @@ def test_debug_events_filtered_by_default() -> None:
 
     code = (
         "import io; "
-        "from library.logging_setup import LoggerConfig, configure_logger; "
+        "from library.common.logging_setup import LoggerConfig, configure_logger; "
         "buf = io.StringIO(); "
         "logger = configure_logger(LoggerConfig(level='INFO', run_id='rid', stream=buf)); "
         "logger.debug('request_start', url='https://example.org'); "

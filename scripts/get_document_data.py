@@ -1,7 +1,7 @@
 """Command line interface for retrieving document metadata from external sources.
 
-The tool integrates :mod:`library.pubmed_library` and
-:mod:`library.chembl_library` to collect information about publications from
+The tool integrates :mod:`library.integration.pubmed_library` and
+:mod:`library.integration.chembl_library` to collect information about publications from
 several public APIs.  The interface mirrors :mod:`scripts.get_target_data` and
 provides three sub-commands:
 
@@ -56,15 +56,15 @@ except ModuleNotFoundError:  # pragma: no cover - environment bootstrap
 if __package__ in {None, ""}:
     ensure_project_root()
 
-from library import chembl_library as cl
 from library import cli
-from library import document_postprocessing as dp
-from library.postprocessing import document as document_export_postprocessing
 from library import io
-from library.csv_utils import write_csv_chunks_deterministic
-from library import openalex_crossref_library as ocl
-from library import pubmed_library as pl
-from library import semantic_scholar_library as ssl
+from library.common.csv_utils import write_csv_chunks_deterministic
+from library.integration import chembl_library as cl
+from library.integration import openalex_crossref_library as ocl
+from library.integration import pubmed_library as pl
+from library.integration import semantic_scholar_library as ssl
+from library.pipelines.document import postprocessing as dp
+from library.postprocessing import document as document_export_postprocessing
 from library.clients import ChemblClient, _chunked
 from library.cli import (
     LoggerConfig,
@@ -85,7 +85,7 @@ from library.config import (
     openalex_session,
     session_with_retry,
 )
-from library.document_pipeline import (
+from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,
     build_dataframe,
@@ -96,11 +96,11 @@ from library.document_pipeline import (
     normalise_doi,
     save_quality_report,
 )
-from library.log import logger
+from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.postprocessing.document import preprocess_documents_csv
-from library.pipeline_metadata import add_pipeline_metadata
-from library.rate_limiter import RateLimiter, get_global_limiter, get_limiter
+from library.pipelines.common import add_pipeline_metadata
+from library.common.rate_limiter import RateLimiter, get_global_limiter, get_limiter
 from library.sidecar import SidecarErrors
 from library.table_quality import TableQualityProfiler, analyze_table_quality
 from library.schemas import DocumentsSchema, normalize_documents

@@ -9,7 +9,7 @@ import requests
 
 from library.clients import ChemblClient
 from library.config import ApiCfg, MoleculeCatalogCfg
-from library.molecule_catalog import (
+from library.integration.molecule_catalog import (
     _read_cache,
     fetch_parent_catalog,
     fetch_parent_catalog_for,
@@ -262,13 +262,13 @@ def test_fetch_parent_catalog_for_small_batch_uses_single_helper(
     api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 10
+        "library.integration.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 10
     )
     monkeypatch.setattr(
-        "library.molecule_catalog.load_parent_catalog", lambda **_: None
+        "library.integration.molecule_catalog.load_parent_catalog", lambda **_: None
     )
     monkeypatch.setattr(
-        "library.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
+        "library.integration.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
     )
     responses = [
         {
@@ -298,12 +298,12 @@ def test_fetch_parent_catalog_for_falls_back_on_bulk_error(
     api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     api_cfg = api_cfg.model_copy(update={"backoff_factor": 0})
-    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 1)
+    monkeypatch.setattr("library.integration.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 1)
     monkeypatch.setattr(
-        "library.molecule_catalog.load_parent_catalog", lambda **_: None
+        "library.integration.molecule_catalog.load_parent_catalog", lambda **_: None
     )
     monkeypatch.setattr(
-        "library.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
+        "library.integration.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
     )
 
     class FallbackClient(DummyClient):
@@ -337,7 +337,7 @@ def test_fetch_parent_catalog_for_partial_fallback_failure(
     api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     api_cfg = api_cfg.model_copy(update={"retries": 2, "backoff_factor": 0})
-    monkeypatch.setattr("library.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 1)
+    monkeypatch.setattr("library.integration.molecule_catalog._PARENT_LOOKUP_FALLBACK_THRESHOLD", 1)
 
     class PartiallyFailingClient(DummyClient):
         def __init__(self) -> None:
@@ -376,10 +376,10 @@ def test_fetch_parent_catalog_for_retries_smaller_batch(
     api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "library.molecule_catalog.load_parent_catalog", lambda **_: None
+        "library.integration.molecule_catalog.load_parent_catalog", lambda **_: None
     )
     monkeypatch.setattr(
-        "library.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
+        "library.integration.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
     )
     responses = [
         {
@@ -432,10 +432,10 @@ def test_fetch_parent_catalog_for_respects_single_limit(
     api_cfg: ApiCfg, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "library.molecule_catalog.load_parent_catalog", lambda **_: None
+        "library.integration.molecule_catalog.load_parent_catalog", lambda **_: None
     )
     monkeypatch.setattr(
-        "library.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
+        "library.integration.molecule_catalog.query_parent_catalog", lambda *_, **__: {}
     )
     responses = [
         {"molecules": []},
@@ -528,7 +528,7 @@ def test_load_parent_catalog_fetches_and_persists(
         return data
 
     monkeypatch.setattr(
-        "library.molecule_catalog.fetch_parent_catalog",
+        "library.integration.molecule_catalog.fetch_parent_catalog",
         fake_fetch,
     )
 

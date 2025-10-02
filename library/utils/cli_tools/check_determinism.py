@@ -23,13 +23,13 @@ except ImportError as exc:  # pragma: no cover - import-time check
     ) from exc
 
 from library.cli import configure_logger, create_logger_config
-from library.csv_utils import (
+from library.common.csv_utils import (
     sha256_file,
     write_csv_chunks_deterministic,
     write_csv_deterministic,
 )
-from library.log import logger
-from library.timing import log_duration
+from library.common.log import logger
+from library.common.timing import log_duration
 
 
 def run_check(tmp_dir: Path) -> bool:

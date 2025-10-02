@@ -5,8 +5,8 @@ import requests
 
 import pytest
 
-from library import openalex_crossref_library as ocl
-from library import rate_limiter as rl
+from library.integration import openalex_crossref_library as ocl
+from library.common import rate_limiter as rl
 from library.config import Config
 
 

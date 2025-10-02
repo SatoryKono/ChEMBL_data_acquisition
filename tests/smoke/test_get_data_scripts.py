@@ -11,10 +11,10 @@ import pandas as pd
 import pytest
 from pandas.api import types as ptypes
 
-from library import chembl_library as cl
-from library import pubchem_library as pl
+from library.integration import chembl_library as cl
+from library.integration import pubchem_library as pl
 from library.clients import pubchem as pc
-from library.logging_setup import LoggerConfig, configure_logger
+from library.common.logging_setup import LoggerConfig, configure_logger
 from library.table_quality import TableQualityProfiler
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import (

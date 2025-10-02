@@ -16,8 +16,8 @@ from library.cli import (
 )
 from library.cli import build_parser as base_parser
 from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.log import logger
-from library.mapper_batch_library import map_chembl_ids_to_uniprot
+from library.common.log import logger
+from library.integration.mapper_batch_library import map_chembl_ids_to_uniprot
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

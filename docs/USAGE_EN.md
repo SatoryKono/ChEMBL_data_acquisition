@@ -77,7 +77,7 @@ During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preser
 
 ### Monitoring structured logs
 
-All entry points rely on `library.logging_setup.Logger` and emit JSON lines enriched with a unique `run_id`, the staging `stage` (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`) and context such as `status`/`rps`. Key lifecycle events include:
+All entry points rely on `library.common.logging_setup.Logger` and emit JSON lines enriched with a unique `run_id`, the staging `stage` (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`) and context such as `status`/`rps`. Key lifecycle events include:
 
 | Event | When it appears |
 | --- | --- |
@@ -264,7 +264,7 @@ python -m library.utils.cli_tools.pipeline_targets_main \
 ```
 
 This lightweight CLI mirrors the argument structure of `get_target_data.py`
-while exercising `library.pipeline_targets.run_pipeline` with cached ChemBL
+while exercising `library.pipelines.target.pipeline.run_pipeline` with cached ChemBL
 chunks only. It reads identifiers via `read_ids`, honours `--chunk-size`,
 `--limit`, delimiter/encoding overrides, forwards the batch size to the
 pipeline and writes the resulting table with `add_pipeline_metadata` and
@@ -338,7 +338,7 @@ python -m scripts.get_testitem_data \
 PubChem enrichment adds deterministic property columns (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
 `pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`). To
 monitor changes across releases, export just these columns to a temporary file and compute a SHA-256 digest via
-`library.metadata.file_sha256` or `library.csv_utils.sha256_file`. Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
+`library.metadata.file_sha256` or `library.common.csv_utils.sha256_file`. Recording the resulting `properties_hash` alongside the run metadata highlights when PubChem values drift even if the
 row count stays constant.
 
 ### Parent molecule catalogue requirements
@@ -354,7 +354,7 @@ keep the JSON file accessible to the runner or adjust the location by setting
 
  
 
-Use `library.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
+Use `library.integration.molecule_catalog.load_parent_catalog` in a short Python snippet to initialise or refresh the
 file before executing the pipeline. The helper reuses the cached mapping when present and fetches the latest
 relationships from the ChEMBL API otherwise.
 
@@ -425,7 +425,7 @@ Inspect the effective configuration with `--print-config` before running the pip
 
 ## Monitoring structured logs
 
-All CLIs emit JSON logs via `library.logging_setup`. Each record contains a timestamp (`ts`), severity (`level`), event name
+All CLIs emit JSON logs via `library.common.logging_setup`. Each record contains a timestamp (`ts`), severity (`level`), event name
 (`event`) and the `run_id` inherited from CLI options; additional key/value pairs are merged after secret redaction. Use tools
 such as `jq` to filter by `event`, `stage` or warning codes (`activity_bounds_*`, `parent_lookup_*`, etc.) when triaging runs.
 Adjust verbosity on demand with `--log-level` or environment overrides without touching `config/config.yaml`.

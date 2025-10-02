@@ -431,7 +431,7 @@ experimentation.
 You can also run the PubMed pipeline directly using the library module:
 
 ```bash
-python -m library.pubmed_library \
+python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
     --output out/documents.csv \
     --log-level INFO
@@ -471,7 +471,7 @@ python -m library.utils.cli_tools.pipeline_targets_main \
 
 The command reads target identifiers from the CSV, chunks them according
 to ``--chunk-size`` and ``--limit``, forwards the batch size to
-``library.pipeline_targets.run_pipeline`` and writes the cached ChemBL
+``library.pipelines.target.pipeline.run_pipeline`` and writes the cached ChemBL
 table with pipeline metadata via ``write_csv``. Use it to verify CLI
 overrides, logging and deterministic output before launching the network
 backed ``get_target_data`` pipeline.
@@ -627,9 +627,9 @@ api:
 
 ## Logging / Логирование
 
-**EN.** CLI helpers configure structured JSON logging via ``library.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity. The JSON layout is fixed and now stamps the staging phase (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
+**EN.** CLI helpers configure structured JSON logging via ``library.common.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity. The JSON layout is fixed and now stamps the staging phase (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
 
-**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.logging_setup.configure_logger``. Управляйте уровнем логов переменными окружения или ключами CLI. Формат JSON фиксирован и теперь дополнительно фиксирует стадию (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
+**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.common.logging_setup.configure_logger``. Управляйте уровнем логов переменными окружения или ключами CLI. Формат JSON фиксирован и теперь дополнительно фиксирует стадию (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
 
 
 Уровень логов можно задать флагом `--log-level` или переменной
@@ -689,7 +689,7 @@ Smoke fixtures for full orchestration live in ``tests/data/input-smoke/``. The e
 
 **RU.** Детерминированные CSV-выгрузки из ``library.io`` обеспечивают повторяемость данных и метаданных между запусками.
 
-The function ``library.csv_utils.write_csv_deterministic`` normalises column
+The function ``library.common.csv_utils.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
 files. Every CSV must be stored alongside a ``<name>.meta.yaml`` file capturing
 the Git commit, command-line arguments and relevant configuration to allow
@@ -713,7 +713,7 @@ For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
 argument which streams the CSV in smaller pieces to reduce memory usage:
 
 ```python
-from library.csv_utils import write_csv_deterministic
+from library.common.csv_utils import write_csv_deterministic
 import pandas as pd
 
 df = pd.read_csv("large.csv")

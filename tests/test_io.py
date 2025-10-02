@@ -15,7 +15,7 @@ import yaml
 import library.git_utils as git_utils
 from library import io
 from library.config import Config, IoCfg
-from library.logging_setup import LoggerConfig, configure_logger
+from library.common.logging_setup import LoggerConfig, configure_logger
 
 
 def _bind_io_logger(monkeypatch: pytest.MonkeyPatch) -> StringIO:

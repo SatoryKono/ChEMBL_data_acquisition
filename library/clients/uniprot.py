@@ -15,7 +15,7 @@ import requests
 from requests import Session
 
 from ..config import ApiCfg, RetryCfg, UniprotCfg, session_with_retry
-from ..rate_limiter import get_limiter, sleep
+from ..common.rate_limiter import get_limiter, sleep
 
 __all__ = [
     "UniProtFetchError",

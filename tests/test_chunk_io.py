@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from library.chunk_io import process_csv_chunks, read_csv_chunks
+from library.common.chunk_io import process_csv_chunks, read_csv_chunks
 from library.config import IoCfg
 
 

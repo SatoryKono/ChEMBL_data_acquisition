@@ -9,8 +9,8 @@ from pathlib import Path
 import pandas as pd
 
 from ..config import Config
-from ..log import logger
-from ..csv_utils import write_csv_chunks_deterministic
+from ..common.log import logger
+from ..common.csv_utils import write_csv_chunks_deterministic
 
 
 def write_csv(
@@ -28,7 +28,7 @@ def write_csv(
 
     sep = sep or cfg.io.csv_sep
     encoding = encoding or cfg.io.csv_encoding
-    from ..csv_utils import write_csv_deterministic
+    from ..common.csv_utils import write_csv_deterministic
 
     if isinstance(df, pd.DataFrame):
         key_cols_list = list(key_cols) if key_cols is not None else sorted(df.columns)

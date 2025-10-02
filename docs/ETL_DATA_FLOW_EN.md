@@ -19,7 +19,7 @@ pipelines.
 | Aspect | Details |
 | --- | --- |
 | **Input sources & format** | CSV of assay identifiers (default `assay_chembl_id`) streamed from disk with optional row limits. |
-| **External services / files** | ChEMBL API via `ChemblClient`; assay-specific post-processing handled by `library.assay_postprocessing`. |
+| **External services / files** | ChEMBL API via `ChemblClient`; assay-specific post-processing handled by `library.pipelines.assay.postprocessing`. |
 | **Key transformations** | Post-process raw payloads, normalise column values, inject pipeline metadata, reorder columns per `AssaysSchema`, and validate with sidecar failure capture. |
 | **Outputs & storage** | CSV export with deterministic ordering, run metadata YAML, and table-quality analysis artefacts. |
 | **Downstream links** | Assay records reference `document_chembl_id` (documents) and `target_chembl_id` (targets), providing joins for the activity and target pipelines. |
@@ -42,7 +42,7 @@ The target pipeline offers `uniprot`, `chembl`, `iuphar`, and `all` workflows.
 
 | Sub-command | Input & sources | External services / files | Transformations | Outputs |
 | --- | --- | --- | --- | --- |
-| `uniprot` | CSV of UniProt accessions derived from earlier steps (default column `uniprot_id`). | UniProt REST/flat-file downloads via `library.uniprot_library`, with optional local cache directory. | Prepare temporary input list, trigger UniProt processing, and merge back mapping columns before export. | CSV, metadata YAML, and quality analysis for UniProt enrichment. |
+| `uniprot` | CSV of UniProt accessions derived from earlier steps (default column `uniprot_id`). | UniProt REST/flat-file downloads via `library.integration.uniprot_library`, with optional local cache directory. | Prepare temporary input list, trigger UniProt processing, and merge back mapping columns before export. | CSV, metadata YAML, and quality analysis for UniProt enrichment. |
 | `chembl` | CSV of ChEMBL target IDs (default `target_chembl_id`). | ChEMBL API plus UniProt mapping service for protein accessions. | Normalise, add pipeline metadata, align to schema, validate, and persist with stats. | Target CSV, metadata YAML, table-quality results. |
 | `iuphar` | CSV (usually combined ChEMBL/UniProt output) optionally limited for testing. | Local IUPHAR CSV resources (`target_csv`, `family_csv`). | Map UniProt IDs to IUPHAR classifications and export mapping table. | Classification CSV with metadata and quality analysis. |
 | `all` | Master CSV of target IDs driving chained retrieval; configurable intermediate output paths. | Invokes the three pipelines above sequentially (ChEMBL API, UniProt services, IUPHAR files). | Merge intermediate outputs, perform target post-processing, and validate final schema before writing. | Consolidated target CSV plus intermediate artefacts for each sub-step, each with metadata and quality checks. |

@@ -215,7 +215,7 @@ python -m scripts.get_document_data pubmed \
 Запустить PubMed-пайплайн можно и напрямую через модуль библиотеки:
 
 ```bash
-python -m library.pubmed_library \
+python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
     --output out/documents.csv \
     --log-level INFO
@@ -256,7 +256,7 @@ python -m library.utils.cli_tools.pipeline_targets_main \
     --limit 100
 ```
 
-Команда считывает идентификаторы таргетов из CSV, разбивает их по `--chunk-size` и `--limit`, передаёт размер батча в `library.pipeline_targets.run_pipeline` и сохраняет кешированную таблицу ChemBL вместе с метаданными через `write_csv`. Используйте её для проверки переопределений CLI, логирования и детерминированного вывода перед запуском сетевого пайплайна `get_target_data`.
+Команда считывает идентификаторы таргетов из CSV, разбивает их по `--chunk-size` и `--limit`, передаёт размер батча в `library.pipelines.target.pipeline.run_pipeline` и сохраняет кешированную таблицу ChemBL вместе с метаданными через `write_csv`. Используйте её для проверки переопределений CLI, логирования и детерминированного вывода перед запуском сетевого пайплайна `get_target_data`.
 
 ### `library/utils/cli_tools/get_activities.py`
 
@@ -413,7 +413,7 @@ api:
 
 ## Логирование
 
-CLI-хелперы настраивают структурированное JSON-логирование через `library.logging_setup.configure_logger`. Управляйте уровнем логов
+CLI-хелперы настраивают структурированное JSON-логирование через `library.common.logging_setup.configure_logger`. Управляйте уровнем логов
 переменными окружения или флагами CLI. Формат JSON фиксирован, не настраивается и теперь включает этап конвейера: `fetch`,
 `raw`, `cleanup`, `normalize`, `validate` или `final_export`.
 
@@ -467,7 +467,7 @@ jq 'select(.event=="dry_run")' log.jsonl
 
 ## Воспроизводимость
 
-Детерминированные писатели CSV в `library.io` обеспечивают стабильность данных и метаданных между запусками. Функция `library.csv_utils.write_csv_deterministic` нормализует порядок колонок и метаданные, чтобы повторные запуски давали идентичные файлы. Все CLI-скрипты поддерживают общий набор флагов:
+Детерминированные писатели CSV в `library.io` обеспечивают стабильность данных и метаданных между запусками. Функция `library.common.csv_utils.write_csv_deterministic` нормализует порядок колонок и метаданные, чтобы повторные запуски давали идентичные файлы. Все CLI-скрипты поддерживают общий набор флагов:
 
 ```bash
 python -m library.utils.cli_tools.table_quality_main --input tests/data/activity.csv \

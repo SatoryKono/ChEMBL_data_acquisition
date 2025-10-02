@@ -33,18 +33,17 @@ if __package__ in {None, ""}:
 import pandas as pd
 import requests
 
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
 from library import cli
 from library import io
 from library.clients import ChemblClient
-from library.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
-from library.chembl_assay import ACTIVITY_COLUMNS
-from library.pipeline_helpers import (
+from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
+from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
+from library.pipelines.common import (
     ChunkedFetchConfig,
     CsvWriterConfig,
     prepare_chunked_pipeline,
 )
-from library.rate_limiter import get_global_limiter
 
 from library.cli import (
     LoggerConfig,
@@ -66,17 +65,16 @@ from library.cli_utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
 from library.config import Config, _serialize_paths
-from library.log import logger
-from library.pipeline_metadata import add_pipeline_metadata
+from library.common.log import logger
+from library.pipelines.common import add_pipeline_metadata
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from library.rate_limiter import get_global_limiter
 from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
-from library.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"

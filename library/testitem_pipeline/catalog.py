@@ -11,11 +11,11 @@ from typing import Any, Mapping, MutableMapping, NamedTuple, Sequence
 import pandas as pd
 import requests
 
-from library import molecule_catalog
-from library.chembl_client import ChemblClient
+from library.integration import molecule_catalog
+from library.integration.chembl_client import ChemblClient
 from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
-from library.log import logger
-from library.molecule_catalog import (
+from library.common.log import logger
+from library.integration.molecule_catalog import (
     load_parent_catalog,
     query_parent_catalog,
     update_parent_catalog_cache,

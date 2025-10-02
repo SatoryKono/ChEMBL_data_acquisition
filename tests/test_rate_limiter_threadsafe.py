@@ -1,4 +1,4 @@
-"""Thread-safety tests for :mod:`library.rate_limiter`."""
+"""Thread-safety tests for :mod:`library.common.rate_limiter`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from library import rate_limiter as rl
+from library.common import rate_limiter as rl
 
 
 class ThreadSafeFakeTime:

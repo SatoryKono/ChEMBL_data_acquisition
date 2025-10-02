@@ -3,7 +3,7 @@
 The helpers in this module provide a thin client layer that encapsulates all
 network and CSV loading concerns for the rest of the IUPHAR integration.  They
 mirror the retry, rate limiting and column validation behaviour from the
-original :mod:`library.iuphar_library` implementation while keeping the data
+original :mod:`library.integration.iuphar_library` implementation while keeping the data
 transformation logic decoupled from IO primitives.
 """
 
@@ -22,9 +22,9 @@ import pandas as pd
 import requests
 from requests import Session
 
+from ..common.log import logger
+from ..common.rate_limiter import get_limiter, sleep
 from ..config import ApiCfg, IupharCfg, RetryCfg, session_with_retry
-from ..log import logger
-from ..rate_limiter import get_limiter, sleep
 
 __all__ = [
     "EXPECTED_FAMILY_COLUMNS",

@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.document_postprocessing`."""
+"""Tests for :mod:`library.pipelines.document.postprocessing`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from library import document_postprocessing as dp
+from library.pipelines.document import postprocessing as dp
 from library.config import IoCfg
 
 

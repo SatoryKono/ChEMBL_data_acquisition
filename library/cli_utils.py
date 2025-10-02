@@ -32,7 +32,7 @@ from .cli import (
     positive_int,
 )
 from .config import Config, ConfigError, ensure_dirs, print_config
-from .log import logger as default_logger
+from .common.log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
 from .sidecar import SidecarErrors
 from .utils.config import DEFAULT_CONFIG_PATH
@@ -273,7 +273,7 @@ def run_pipeline(
         statistics merged into the metadata output. Intended for
         pipeline-specific diagnostics such as fetch failures.
     logger:
-        Optional logger.  Defaults to :data:`library.log.logger` when omitted.
+        Optional logger.  Defaults to :data:`library.common.log.logger` when omitted.
 
     Returns
     -------
@@ -651,7 +651,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "CLI wrapper for :func:`write_csv_deterministic`. This script reads "
             "an input CSV file and re-serialises it deterministically using "
-            ":func:`library.csv_utils.write_csv_deterministic`."
+            ":func:`library.common.csv_utils.write_csv_deterministic`."
         )
     )
     add_common_arguments(parser)

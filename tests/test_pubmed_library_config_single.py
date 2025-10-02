@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import pubmed_library as pl
+from library.integration import pubmed_library as pl
 from library.config import RetryCfg
 
 
