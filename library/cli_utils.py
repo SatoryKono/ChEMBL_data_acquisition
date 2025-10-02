@@ -381,6 +381,9 @@ def run_pipeline(
 
         if total_failures:
             errors.save(failure_path, cfg=cfg)
+        else:
+            failure_path.unlink(missing_ok=True)
+            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
 
         if exit_code != 0:
             return exit_code
