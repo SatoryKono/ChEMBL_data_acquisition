@@ -1,6 +1,6 @@
 # Utility CLI modules
 
-> **Languages:** [English](CLI_TOOLS.md) · [Русский](CLI_TOOLS_RU.md)
+> **Languages:** [English](CLI_TOOLS.md) · [Русский](../ru/CLI_TOOLS.md)
 
 The lightweight helper commands previously exposed as loose modules under
 `scripts/` now live in the `library.utils.cli_tools` package so that they can be
@@ -21,8 +21,8 @@ while preserving direct module execution for ad-hoc debugging.
 | `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Run the cached target pipeline harness to refresh stored artefacts and exercise staging flags (`--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, `--normalize-at-export` / `--no-normalize-at-export`). |
 | `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Generate column-level quality reports for arbitrary CSV datasets with optional sampling and column filters. |
 
-Both mapping CLIs honour the [`io.na_markers`](CONFIG_EN.md#io) list when filtering
-placeholder identifiers and use [`io.keep_na_markers`](CONFIG_EN.md#io) to decide
+Both mapping CLIs honour the [`io.na_markers`](CONFIG.md#io) list when filtering
+placeholder identifiers and use [`io.keep_na_markers`](CONFIG.md#io) to decide
 whether to keep those placeholders in the mapping input.
 
 All modules continue to expose a `main` function so they can still be wired into
