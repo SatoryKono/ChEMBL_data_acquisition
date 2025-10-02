@@ -37,7 +37,6 @@ def _run_activity(limit: int, destination: Path) -> subprocess.CompletedProcess[
     cmd = [
         sys.executable,
         str(Path(__file__).resolve().parents[0] / "get_activity_data.py"),
-        "--dry-run",
         "--limit",
         str(limit),
         "--output",
