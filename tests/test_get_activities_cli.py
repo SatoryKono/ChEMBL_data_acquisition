@@ -20,3 +20,24 @@ def test_get_activities_cli_smoke() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_get_activities_cli_rejects_negative_limit() -> None:
+    """Expect ``argparse`` validation errors for negative ``--limit`` values."""
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "library.utils.cli_tools.get_activities",
+            "--limit",
+            "-1",
+            "--dry-run",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stderr.startswith("usage:")

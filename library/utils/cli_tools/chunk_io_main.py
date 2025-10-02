@@ -29,13 +29,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     add_common_arguments(parser)
     parser.add_argument(
         "--chunk-size",
-        type=int,
+        type=cli.positive_int,
         default=1000,
         help="Number of rows processed per chunk",
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=cli.positive_int,
         default=None,
         help="Optional maximum number of rows to process",
     )
@@ -63,19 +63,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 def run(cfg: Config, args: argparse.Namespace) -> int:
     """Execute the chunked copy operation."""
     try:
-        if args.chunk_size <= 0:
-            logger.error(
-                "invalid_chunk_size",
-                chunk_size=args.chunk_size,
-            )
-            return 1
-        if args.limit is not None and args.limit <= 0:
-            logger.error(
-                "invalid_limit",
-                limit=args.limit,
-            )
-            return 1
-
         output = Path(args.output_csv or default_output_path(args.input_csv, cfg.io))
         parent = output.parent
         if not parent.exists():

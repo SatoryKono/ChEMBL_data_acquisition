@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import io
 import shutil
 import json
@@ -11,6 +12,8 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable
+
+from contextlib import contextmanager
 
 from itertools import islice
 
@@ -1040,6 +1043,100 @@ def test_fetch_pubmed_records_returns_generator_in_order(
     )
 
     assert combined["PubMed.PMID"].tolist() == pmids
+
+
+def test_fetch_pubmed_records_closes_sessions_when_generator_gc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generator GC should release thread resources and close sessions."""
+
+    pmids = ["1", "2", "3"]
+
+    class TrackingSession:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class TrackingContext:
+        def __init__(self, session: TrackingSession) -> None:
+            self._session = session
+
+        def __enter__(self) -> TrackingSession:
+            sessions.append(self._session)
+            return self._session
+
+        def __exit__(self, *exc: object) -> None:  # pragma: no cover - deterministic
+            self._session.close()
+
+    sessions: list[TrackingSession] = []
+
+    monkeypatch.setattr(
+        gdd,
+        "session_with_retry",
+        lambda *_, **__: TrackingContext(TrackingSession()),
+    )
+
+    def fake_pubmed_batch(
+        session: Any,
+        batch: list[str],
+        sleep: float,
+        cfg: Any | None = None,
+        *,
+        retry_cfg: Any | None = None,
+        client: Any | None = None,
+    ) -> list[dict[str, str]]:
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1000/{pmid}"} for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar_batch",
+        lambda *_, **__: [],
+    )
+    monkeypatch.setattr(
+        gdd.ssl,
+        "fetch_semantic_scholar",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_openalex",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        gdd.ocl,
+        "fetch_crossref",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    generator = gdd.fetch_pubmed_records(
+        pmids,
+        sleep=0.0,
+        semantic_scholar_cfg=SemanticScholarCfg(),
+        openalex_cfg=OpenAlexCfg(),
+        crossref_cfg=CrossRefCfg(),
+        max_workers=1,
+        batch_size=1,
+        return_generator=True,
+    )
+
+    next(generator)
+    assert any(not session.closed for session in sessions)
+
+    del generator
+    gc.collect()
+
+    deadline = time.time() + 1.0
+    while any(not session.closed for session in sessions) and time.time() < deadline:
+        gc.collect()
+        time.sleep(0.01)
+
+    assert sessions and all(session.closed for session in sessions)
 
 
 def test_fetch_pubmed_records_drains_pending_batches(
@@ -2874,3 +2971,116 @@ def test_fetch_pubmed_records_generator_batches(
         ["300"],
         ["400"],
     ]
+
+
+def test_fetch_pubmed_records_reuses_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = Config()
+    cfg.openalex.mailto = "openalex@test"
+    cfg.crossref.mailto = "crossref@test"
+
+    class DummySession:
+        creation_lock = threading.Lock()
+        creation_count = 0
+        closed_count = 0
+
+        def __init__(self) -> None:
+            with DummySession.creation_lock:
+                DummySession.creation_count += 1
+            self.headers: dict[str, str] = {}
+            self._closed = False
+
+        def close(self) -> None:
+            if self._closed:
+                return
+            self._closed = True
+            with DummySession.creation_lock:
+                DummySession.closed_count += 1
+
+    @contextmanager
+    def dummy_session_with_retry(*_: Any, **__: Any) -> Iterator[DummySession]:
+        session = DummySession()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    monkeypatch.setattr(gdd, "session_with_retry", dummy_session_with_retry)
+    monkeypatch.setattr(gdd, "get_limiter", lambda *_, **__: DummyLimiter())
+
+    pmids = ["1", "2"]
+
+    def fake_pubmed_batch(
+        session: requests.Session,
+        batch: Sequence[str],
+        sleep: float | None,
+        *,
+        cfg: PubMedCfg,
+        retry_cfg: Any,
+    ) -> list[dict[str, str]]:
+        assert isinstance(session, DummySession)
+        return [
+            {"PubMed.PMID": pmid, "PubMed.DOI": f"10.1234/{pmid}"}
+            for pmid in batch
+        ]
+
+    monkeypatch.setattr(gdd.pl, "fetch_pubmed_batch", fake_pubmed_batch)
+
+    def fake_semantic_batch(
+        session: requests.Session,
+        identifiers: Sequence[str],
+        sleep: float | None,
+        *,
+        cfg: SemanticScholarCfg,
+    ) -> list[dict[str, str]]:
+        assert isinstance(session, DummySession)
+        return [
+            {"scholar.PMID": pmid, "scholar.DOI": f"10.1234/{pmid}"}
+            for pmid in identifiers
+        ]
+
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar_batch", fake_semantic_batch)
+    monkeypatch.setattr(gdd.ssl, "fetch_semantic_scholar", lambda *_, **__: {})
+
+    openalex_sessions: set[int] = set()
+    crossref_sessions: set[int] = set()
+
+    def fake_openalex(
+        session: requests.Session,
+        identifier: str,
+        cfg_obj: OpenAlexCfg,
+        limiter: Any,
+    ) -> dict[str, str]:
+        assert isinstance(session, DummySession)
+        openalex_sessions.add(id(session))
+        return {"OpenAlex.PMID": identifier}
+
+    def fake_crossref(
+        session: requests.Session,
+        identifier: str,
+        cfg_obj: CrossRefCfg,
+        limiter: Any,
+    ) -> dict[str, str]:
+        assert isinstance(session, DummySession)
+        crossref_sessions.add(id(session))
+        return {"crossref.DOI": identifier}
+
+    monkeypatch.setattr(gdd.ocl, "fetch_openalex", fake_openalex)
+    monkeypatch.setattr(gdd.ocl, "fetch_crossref", fake_crossref)
+
+    gdd.fetch_pubmed_records(
+        pmids,
+        cfg,
+        sleep=0.0,
+        pubmed_cfg=cfg.pubmed,
+        semantic_scholar_cfg=cfg.semantic_scholar,
+        openalex_cfg=cfg.openalex,
+        crossref_cfg=cfg.crossref,
+        max_workers=1,
+        batch_size=2,
+    )
+
+    assert DummySession.creation_count == 3
+    assert openalex_sessions and len(openalex_sessions) == 1
+    assert crossref_sessions and len(crossref_sessions) == 1
+    assert DummySession.closed_count == DummySession.creation_count
+

@@ -27,9 +27,17 @@ def parse_args(
         Parsed arguments and logging configuration.
     """
     parser, log_cfg = cli.build_parser("Generate dummy activity data", column="id")
+
+    def _limit(value: str) -> int:
+        """Return ``value`` validated as a non-negative integer."""
+
+        if value == "0":
+            return 0
+        return cli.positive_int(value)
+
     parser.add_argument(
         "--limit",
-        type=int,
+        type=_limit,
         default=10,
         help="Maximum number of activity rows to emit",
     )
