@@ -137,6 +137,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
 
+
             def _fetch_chunk(ids: Sequence[str]) -> pd.DataFrame:
 
                 try:
@@ -171,7 +172,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             next_index = 0
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
+
                 for index, chunk_ids in enumerate(chunk_iter):
+
                     future = executor.submit(_fetch_chunk, chunk_ids)
                     pending[future] = index
                     if len(pending) >= workers:
