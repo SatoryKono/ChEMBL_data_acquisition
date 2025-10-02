@@ -329,11 +329,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg=cfg,
         )
 
-    table_quality = partial(
-        analyze_table_quality,
-        table_name=str(output_path.with_suffix("")),
-        destination_dir=output_path.parent,
-    )
+    doc_quality_cfg = cfg.system.doc_quality
+    if doc_quality_cfg.enable:
+        table_quality = partial(
+            analyze_table_quality,
+            table_name=str(output_path.with_suffix("")),
+            destination_dir=output_path.parent,
+            sample_rows=doc_quality_cfg.sample_rows,
+            include_columns=doc_quality_cfg.include_columns,
+            exclude_columns=doc_quality_cfg.exclude_columns,
+        )
+    else:
+        def table_quality(_: Path) -> None:
+            return None
 
     command = " ".join(["pubmed_library"] + (list(argv) if argv else []))
     config_snapshot = _serialize_paths(cfg.to_dict())

@@ -74,7 +74,9 @@ def test_run_chembl_respects_limit(
         return path
 
     monkeypatch.setattr(gad, "write_csv_chunks_deterministic", fake_write_chunks)
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gad, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
@@ -135,7 +137,9 @@ def test_run_chembl_column_order(
     )
 
     monkeypatch.setattr(cl, "get_activities", lambda *_, **__: df)
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gad, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
@@ -228,7 +232,9 @@ def test_run_chembl_streams_large_output(
         "validate_activities",
         lambda df, return_result: _Result(df),
     )
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gad, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 
@@ -318,7 +324,9 @@ def test_run_chembl_writer_missing_output(
         lambda df, return_result: _Result(df),
     )
 
-    monkeypatch.setattr(gad, "analyze_table_quality", lambda df, table_name: None)
+    monkeypatch.setattr(
+        gad, "analyze_table_quality", lambda df, table_name, **_: None
+    )
     monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **kwargs: None)
     monkeypatch.setattr(cli_utils, "file_sha256", lambda p: "deadbeef")
 

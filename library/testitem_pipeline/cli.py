@@ -775,12 +775,17 @@ def finalize_output(
         schema="TestitemsSchema",
     )
 
+    doc_quality_cfg = cfg.system.doc_quality
     try:
-        analyze_table_quality(
-            csv_path,
-            table_name=str(output.with_suffix("")),
-            destination_dir=output.parent,
-        )
+        if doc_quality_cfg.enable:
+            analyze_table_quality(
+                csv_path,
+                table_name=str(output.with_suffix("")),
+                destination_dir=output.parent,
+                sample_rows=doc_quality_cfg.sample_rows,
+                include_columns=doc_quality_cfg.include_columns,
+                exclude_columns=doc_quality_cfg.exclude_columns,
+            )
     except Exception as exc:
         logger.exception(
             "quality_report_failed",

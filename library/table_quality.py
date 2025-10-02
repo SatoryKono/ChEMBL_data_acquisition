@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import warnings
 from collections import Counter
-from collections.abc import Iterable, Sized
+from collections.abc import Iterable, Sequence, Sized
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +62,66 @@ def _load_table(table: pd.DataFrame | str | Path) -> pd.DataFrame:
             logger.debug("failed to decode %s with %s", path, enc)
             continue
     raise UnicodeDecodeError("utf-8", b"", 0, 1, "Unable to decode CSV")
+
+
+def _apply_sampling_and_filters(
+    frame: pd.DataFrame,
+    *,
+    table_name: str,
+    sample_rows: int | None,
+    include_columns: tuple[str, ...] | None,
+    exclude_columns: tuple[str, ...] | None,
+    include_warning_logged: list[bool],
+    exclude_warning_logged: list[bool],
+    no_columns_logged: list[bool],
+) -> tuple[pd.DataFrame, int | None]:
+    """Apply row sampling and column filters to ``frame``."""
+
+    remaining: int | None = sample_rows
+    filtered = frame
+    if remaining is not None:
+        if remaining <= 0:
+            return frame.iloc[0:0], 0
+        filtered = filtered.head(remaining)
+
+    if include_columns:
+        missing = sorted(set(include_columns) - set(frame.columns))
+        if missing and not include_warning_logged[0]:
+            logger.warning(
+                "include_columns_missing",
+                columns=missing,
+                table_name=table_name,
+            )
+            include_warning_logged[0] = True
+        include_set = set(include_columns)
+        filtered = filtered.loc[:, [col for col in filtered.columns if col in include_set]]
+
+    if exclude_columns:
+        missing = sorted(set(exclude_columns) - set(frame.columns))
+        if missing and not exclude_warning_logged[0]:
+            logger.warning(
+                "exclude_columns_missing",
+                columns=missing,
+                table_name=table_name,
+            )
+            exclude_warning_logged[0] = True
+        exclude_set = set(exclude_columns)
+        filtered = filtered.loc[
+            :, [col for col in filtered.columns if col not in exclude_set]
+        ]
+
+    if (
+        (include_columns or exclude_columns)
+        and filtered.shape[1] == 0
+        and not no_columns_logged[0]
+    ):
+        logger.warning("no_columns_after_filter", table_name=table_name)
+        no_columns_logged[0] = True
+
+    if remaining is not None:
+        remaining = max(remaining - len(filtered), 0)
+
+    return filtered, remaining
 
 
 def _is_isbn(value: str) -> bool:
@@ -565,6 +625,9 @@ def analyze_table_quality(
     table_name: str,
     *,
     destination_dir: Path | str | None = None,
+    sample_rows: int | None = None,
+    include_columns: Sequence[str] | None = None,
+    exclude_columns: Sequence[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Profile ``table`` and compute correlations for numeric columns.
 
@@ -588,23 +651,71 @@ def analyze_table_quality(
     # level import was stripped by the execution environment.
     import pandas as pd
 
+    include_tuple: tuple[str, ...] | None = (
+        tuple(include_columns)
+        if include_columns is not None
+        else None
+    )
+    exclude_tuple: tuple[str, ...] | None = (
+        tuple(exclude_columns)
+        if exclude_columns is not None
+        else None
+    )
+
+    include_warning_logged = [False]
+    exclude_warning_logged = [False]
+    no_columns_logged = [False]
+
     profiler: TableQualityProfiler
     if isinstance(table, TableQualityProfiler):
         profiler = table
     else:
         profiler = TableQualityProfiler()
         if isinstance(table, pd.DataFrame):
-            profiler.consume(table)
+            filtered, _ = _apply_sampling_and_filters(
+                table,
+                table_name=table_name,
+                sample_rows=sample_rows,
+                include_columns=include_tuple,
+                exclude_columns=exclude_tuple,
+                include_warning_logged=include_warning_logged,
+                exclude_warning_logged=exclude_warning_logged,
+                no_columns_logged=no_columns_logged,
+            )
+            profiler.consume(filtered)
         elif isinstance(table, (str, Path)):
             df = _load_table(table)
-            profiler.consume(df)
+            filtered, _ = _apply_sampling_and_filters(
+                df,
+                table_name=table_name,
+                sample_rows=sample_rows,
+                include_columns=include_tuple,
+                exclude_columns=exclude_tuple,
+                include_warning_logged=include_warning_logged,
+                exclude_warning_logged=exclude_warning_logged,
+                no_columns_logged=no_columns_logged,
+            )
+            profiler.consume(filtered)
         elif isinstance(table, Iterable):
+            remaining = sample_rows
             for frame in table:
                 if not isinstance(frame, pd.DataFrame):
                     raise TypeError(
                         "Streaming quality analysis requires pandas DataFrame chunks"
                     )
-                profiler.consume(frame)
+                filtered, remaining = _apply_sampling_and_filters(
+                    frame,
+                    table_name=table_name,
+                    sample_rows=remaining,
+                    include_columns=include_tuple,
+                    exclude_columns=exclude_tuple,
+                    include_warning_logged=include_warning_logged,
+                    exclude_warning_logged=exclude_warning_logged,
+                    no_columns_logged=no_columns_logged,
+                )
+                profiler.consume(filtered)
+                if remaining is not None and remaining <= 0:
+                    break
         else:
             raise TypeError(
                 "Unsupported table type. Expected DataFrame, path or chunk iterable."
