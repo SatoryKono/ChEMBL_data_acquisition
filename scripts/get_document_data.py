@@ -1033,11 +1033,33 @@ def _coalesce_columns(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
     return result
 
 
+def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Return a single series for ``column`` consolidating duplicate columns."""
+
+    if column not in frame.columns:
+        return pd.Series(index=frame.index, dtype=object)
+
+    selected = frame[column]
+    if isinstance(selected, pd.Series):
+        return selected
+
+    if selected.shape[1] == 1:
+        return selected.iloc[:, 0]
+
+    consolidated = (
+        selected.replace("", pd.NA)
+        .bfill(axis=1)
+        .ffill(axis=1)
+        .iloc[:, 0]
+        .fillna("")
+    )
+    return consolidated
+
+
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
     frame = df.copy()
-
 
     # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
     # keeping existing data intact.
@@ -1047,8 +1069,8 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
             continue
         if target in frame.columns:
 
-            target_series = frame[target]
-            source_series = frame[source]
+            target_series = _resolve_duplicate_column(frame, target)
+            source_series = _resolve_duplicate_column(frame, source)
             frame[target] = target_series.combine_first(source_series)
             if pd.api.types.is_object_dtype(target_series.dtype) or pd.api.types.is_string_dtype(
                 target_series.dtype
@@ -1060,6 +1082,9 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
             frame = frame.drop(columns=[source])
         else:
             frame = frame.rename(columns={source: target})
+
+    if frame.columns.duplicated().any():
+        frame = frame.loc[:, ~frame.columns.duplicated()]
 
     for target, sources in _EXPORT_COALESCE_SOURCES.items():
         frame[target] = _coalesce_columns(frame, sources)
