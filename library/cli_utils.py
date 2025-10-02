@@ -430,6 +430,7 @@ def run_pipeline(
             error=str(exc),
             error_type=exc.__class__.__name__,
             path=str(csv_path),
+
         )
         Path(csv_path).unlink(missing_ok=True)
         meta_path.unlink(missing_ok=True)

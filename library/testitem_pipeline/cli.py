@@ -773,8 +773,13 @@ def finalize_output(
 
     try:
         analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
-    except ValueError as exc:
-        logger.error("quality_report_failed", error=str(exc), path=str(output))
+    except Exception as exc:
+        logger.exception(
+            "quality_report_failed",
+            error=str(exc),
+            path=str(output),
+            exc=exc,
+        )
         return 1
 
     return exit_code

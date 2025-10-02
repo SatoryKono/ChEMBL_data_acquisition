@@ -478,3 +478,73 @@ def test_run_pipeline_writer_failure(tmp_path: Path, cfg: Config) -> None:
     write_errors = [record for record in records if record.get("event") == "write_fail"]
     assert write_errors
     assert write_errors[-1]["error"] == "writer boom"
+
+
+def test_run_pipeline_table_quality_failure(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frames = [
+        pd.DataFrame(
+            {
+                "assay_chembl_id": ["A1"],
+                "document_chembl_id": ["D1"],
+            }
+        )
+    ]
+
+    def fetcher() -> list[pd.DataFrame]:
+        return frames
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        collected = list(chunks)
+        if collected:
+            df = pd.concat(collected, ignore_index=True)
+        else:
+            df = pd.DataFrame(columns=col_order or [])
+        df.to_csv(destination, index=False)
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    def failing_quality(_: Path) -> None:
+        raise RuntimeError("quality boom")
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="",
+        validators=[],
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=[],
+        table_quality=failing_quality,
+        cfg=cfg,
+        logger=logger,
+    )
+
+    assert exit_code == 1
+    assert output.exists()
+    assert not failure_path.exists()
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert lines
+    records = [json.loads(line) for line in lines]
+    quality_errors = [
+        record for record in records if record.get("event") == "quality_report_failed"
+    ]
+    assert quality_errors
+    last_record = quality_errors[-1]
+    assert last_record["error"] == "quality boom"
+    assert last_record.get("traceback")
