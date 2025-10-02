@@ -19,6 +19,9 @@ class DummyLogger:
     def info(self, event: str, **payload: object) -> None:
         self.events.append((event, payload))
 
+    def error(self, event: str, **payload: object) -> None:
+        self.events.append((event, payload))
+
 
 def _configure_logger_factory(loggers: list[DummyLogger]):
     def _configure_logger(

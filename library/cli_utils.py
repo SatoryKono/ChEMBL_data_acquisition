@@ -35,7 +35,7 @@ from .config import Config, ensure_dirs, print_config
 from .log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml
 from .sidecar import SidecarErrors
-from .utils.config import DEFAULT_CONFIG_RELATIVE
+from .utils.config import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
 
@@ -131,6 +131,8 @@ def run_cli_command(
                 msg = "configuration path must be provided"
                 raise ValueError(msg)
             config_path = default_config
+
+        cli.prepare_io_paths(args)
 
         cfg: Config = apply_config_overrides(
             args,
@@ -614,8 +616,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         dest="config",
         type=path_argument,
-        default=DEFAULT_CONFIG_RELATIVE,
-        help="YAML configuration file",
+        default=DEFAULT_CONFIG_PATH,
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--print-config",

@@ -257,14 +257,25 @@ def read_csv(
 
     sep = sep or cfg.csv_sep
     encoding = encoding or cfg.csv_encoding
-    df = pd.read_csv(
-        path,
-        sep=sep,
-        encoding=encoding,
-        dtype=dtype,
-        na_values=na_values,
-        parse_dates=list(parse_dates) if parse_dates is not None else None,
-    )
+    path_obj = Path(path)
+
+    try:
+        df = pd.read_csv(
+            path_obj,
+            sep=sep,
+            encoding=encoding,
+            dtype=dtype,
+            na_values=na_values,
+            parse_dates=list(parse_dates) if parse_dates is not None else None,
+        )
+    except (FileNotFoundError, pd.errors.ParserError, UnicodeError) as exc:
+        logger.error(
+            "read_fail",
+            path=str(path_obj),
+            encoding=encoding,
+            error=str(exc),
+        )
+        raise SystemExit(1) from exc
     if schema is not None:
         if pa is None:
             raise RuntimeError(

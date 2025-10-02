@@ -89,7 +89,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Создайте и активируйте виртуальное окружение Python ≥ 3.11.
 2. Установите зависимости из lock-файла: `pip install -r requirements-lock.txt`.
 3. Включите контроль качества: `pre-commit install`.
-4. Рекомендуемые проверки (см. живой список — [English](QA_PROCESS_EN.md) / [Русский](QA_PROCESS_RU.md)):
+4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](QA_PROCESS_EN.md) / [Русский](QA_PROCESS_RU.md)):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`

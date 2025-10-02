@@ -141,8 +141,9 @@ for usage guidelines.
 ## Tests
 
 The `pre-commit` suite runs formatting, linting and static type checks. Execute `pytest` for unit tests and add coverage flags
-when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in the
-QA process documents listed below.
+when required. Determinism and smoke checks are available through dedicated CLI helpers. The canonical checklist lives in the QA
+process documents listed below.
+
 
 | Language | Checklist |
 |----------|-----------|
