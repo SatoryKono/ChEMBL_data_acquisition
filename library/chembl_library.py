@@ -18,8 +18,12 @@ from library.clients import _chunked
 from .chembl_document import get_documents
 from .chembl_target import (
     extend_target,
+    get_target_payload,
     get_target,
     get_targets,
+    get_targets_payloads,
+    get_targets_raw_frame,
+    iter_target_batches,
 )
 
 __all__ = [
@@ -29,7 +33,11 @@ __all__ = [
     "get_testitem",
     "get_documents",
     "get_target",
+    "get_target_payload",
     "get_targets",
+    "get_targets_payloads",
+    "get_targets_raw_frame",
+    "iter_target_batches",
     "extend_target",
     "_chunked",
 ]

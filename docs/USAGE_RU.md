@@ -34,13 +34,17 @@ CLI без вложенных подкоманд.
 | `--input-dir` | Каталог с входными артефактами; относительный путь сочетается с `--base-path`. |
 | `--output-dir` | Каталог для сохранения артефактов; относительный путь сочетается с `--base-path`. |
 | `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
-| `--output` | Выходной CSV. Если не указан, создаётся `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. |
+| `--output` / `--out` | Выходной CSV. Если не указан, создаётся `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. |
+| `--raw-out` | Путь для «сырого» снимка до очистки и нормализации. Если флаг опущен, этап пропускается. |
+| `--raw-format` | Формат снимка: `csv` (по умолчанию) или `parquet`. |
+| `--final-out` | Путь финального нормализованного экспорта. При отсутствии использует `--output` / `--out`. |
 | `--date` | Заменяет автогенерируемый суффикс `YYYYMMDD` при формировании имени файла по умолчанию. |
 | `--force` | Перезаписывать выходные файлы, даже если они уже существуют. |
 | `--skip-existing` | Пропускать выполнение, если целевой файл уже существует. |
 | `--sep` | Разделитель CSV; записывается в `cfg.io.csv_sep`. |
 | `--encoding` | Кодировка файла; записывается в `cfg.io.csv_encoding`. |
 | `--column` | Название колонки с идентификаторами. Значение подтягивается из конфигурации на этапе запуска. |
+| `--id-cols` | Список колонок идентификаторов (через запятую) для сохранения в «сыром» снимке до очистки. |
 | `--batch-size` / `--chunk-size` | Максимальное число идентификаторов в одном запросе (название опции зависит от пайплайна). |
 | `--offset` | Сколько идентификаторов пропустить перед обработкой — полезно для возобновления прерванных запусков. |
 
@@ -55,9 +59,22 @@ CLI без вложенных подкоманд.
 
 В репозитории есть несколько компактных наборов в `tests/data/` для быстрой проверки пайплайнов (например, `tests/data/activity_ids_small.csv` и `tests/data/input-smoke/testitem.csv`). Пайплайны без готовых примеров требуют пользовательских CSV с колонкой идентификатора из `config/config.yaml` или переданной через `--column`.
 
+### Стадии пайплайна
+
+Все сущности проходят через единый набор этапов:
+
+```mermaid
+flowchart LR
+  Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Очистка идентификаторов"] --> Normalize --> Validate --> Final["Финальный экспорт"]
+```
+
+`--raw-out` (совместно с `--raw-format parquet` при необходимости) сохраняет необработанный ответ, `--id-cols` удерживает составные ключи в этом снимке, а `--final-out`/`--out` записывает нормализованную таблицу после валидации. Если `--raw-out` не указан, этап выгрузки «сырых» данных пропускается для совместимости со старыми сценариями.
+
+Во время очистки временные идентификаторы (например, `CHEMBL_PENDING`) остаются только в «сыром» снимке и учитываются в метаданных (`error_placeholder_counts`), тогда как финальный экспорт содержит уже проверенные значения.
+
 ### Мониторинг структурированных логов
 
-Все утилиты используют `library.logging_setup.Logger` и пишут JSON-строки с уникальным `run_id` и дополнительными полями (`status`, `rps` и др.). Основные события:
+Все утилиты используют `library.logging_setup.Logger` и пишут JSON-строки с уникальным `run_id`, именем стадии (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`) и дополнительными полями (`status`, `rps` и др.). Основные события:
 
 | Событие | Когда появляется |
 | --- | --- |
@@ -77,10 +94,11 @@ CLI без вложенных подкоманд.
 
 ```bash
 get-document-data all --input documents.csv --column document_chembl_id \
+  --raw-out out/documents.raw.csv --final-out out/documents.final.csv \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
-При необходимости повышайте детализацию ключом `--log-level DEBUG`. JSON-структура совместима с системами сбора логов без дополнительных форматтеров.
+При необходимости повышайте детализацию ключом `--log-level DEBUG`. JSON-структура совместима с системами сбора логов без дополнительных форматтеров. Структура логов и набор стадий проверяются тестами `tests/test_logging.py`, `tests/test_logging_setup.py` и смоук-сценарием `tests/smoke/test_get_data_scripts.py`.
 
 ## Данные активностей (`get_activity_data.py`)
 
@@ -138,6 +156,9 @@ python -m scripts.get_assay_data \
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
+  --raw-out out/documents.raw.parquet \
+  --raw-format parquet \
+  --final-out out/documents.final.csv \
   --batch-size 20
 ```
 
@@ -147,6 +168,8 @@ get-document-data all --input path/to/documents.csv \
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
+  --raw-out out/documents.raw.csv \
+  --final-out out/documents.final.csv \
   --batch-size 20
 ```
 
@@ -172,6 +195,9 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
+  --raw-out out/documents.raw.parquet \
+  --raw-format parquet \
+  --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -185,6 +211,8 @@ get-document-data pubmed --input path/to/documents.csv \
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
+  --raw-out out/documents.raw.csv \
+  --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -202,7 +230,9 @@ python -m scripts.get_document_data pubmed \
 
 ```bash
 get-target-data chembl --input path/to/targets.csv \
-  --column target_chembl_id
+  --column target_chembl_id \
+  --raw-out out/targets.raw.csv \
+  --out out/targets.final.csv
 ```
 
 Запуск через модуль:
@@ -210,7 +240,9 @@ get-target-data chembl --input path/to/targets.csv \
 ```bash
 python -m scripts.get_target_data chembl \
   --input path/to/targets.csv \
-  --column target_chembl_id
+  --column target_chembl_id \
+  --raw-out out/targets.raw.csv \
+  --out out/targets.final.csv
 ```
 
 Комбинирует данные ChEMBL, UniProt и IUPHAR согласно разделу `sources.chembl.pipelines.target.*`. Соберите CSV с колонкой `target_chembl_id` (по одной записи в строке); готовый smoke-набор отсутствует.
@@ -220,7 +252,7 @@ python -m scripts.get_target_data chembl \
 ```bash
 python -m library.utils.cli_tools.pipeline_targets_main \
   --input tests/data/chembl_targets_min.csv \
-  --output out/targets_cached.csv \
+  --out out/targets_cached.csv \
   --chunk-size 50 \
   --batch-size 50 \
   --limit 200

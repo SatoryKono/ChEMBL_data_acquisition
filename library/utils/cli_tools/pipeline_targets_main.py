@@ -32,14 +32,17 @@ from library.cli import (
     LoggerConfig,
     build_root_parser,
     configure_logger,
+    path_argument,
 )
 from library.config import Config, ensure_dirs, print_config
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
 from library.io.writers import write_csv
 from library.log import logger
-from library.pipeline_metadata import add_pipeline_metadata
+from library.pipeline_metadata import pipeline_metadata
 from library.pipeline_targets import run_pipeline
+from schemas import TargetsSchema
+from schemas.targets import TARGETS_COLUMN_ORDER
 
 
 class PipelineConfig(BaseModel):
@@ -49,6 +52,8 @@ class PipelineConfig(BaseModel):
 
     input_csv: Path
     output_csv: Path | None = None
+    final_out: Path | None = None
+    raw_out: Path | None = None
     column: str = Field("target_chembl_id")
     chunk_size: int = Field(100, ge=1)
     batch_size: int | None = Field(100, ge=1)
@@ -117,6 +122,27 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         dest="na_markers",
         help="Additional value interpreted as missing",
     )
+    parser.add_argument(
+        "--raw-out",
+        dest="raw_out",
+        type=path_argument,
+        default=None,
+        help="Optional CSV capturing the raw concatenated payload",
+    )
+    parser.add_argument(
+        "--final-out",
+        dest="final_out",
+        type=path_argument,
+        default=None,
+        help="Destination CSV aligned to TargetsSchema",
+    )
+    parser.add_argument(
+        "--out",
+        dest="final_out",
+        type=path_argument,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
     return parser, log_cfg
 
 
@@ -144,6 +170,123 @@ def _chembl_frame_stream(chunks: Iterator[Iterable[str]]) -> Iterator[pd.DataFra
         frame = pd.DataFrame({"target_chembl_id": ids})
         frame["source"] = "chembl"
         yield frame
+
+
+_PIPELINE_METADATA_COLUMNS = tuple(pipeline_metadata().keys())
+_PLACEHOLDER = "-"
+
+
+def _raw_dump(
+    frames: Iterable[pd.DataFrame],
+    path: Path,
+    *,
+    cfg: Config,
+    sep: str | None = None,
+    encoding: str | None = None,
+) -> Path:
+    """Persist ``frames`` to ``path`` preserving columns and row order."""
+
+    sep = sep or cfg.io.csv_sep
+    encoding = encoding or cfg.io.csv_encoding
+    path.parent.mkdir(parents=True, exist_ok=True)
+    iterator = iter(frames)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        first = pd.DataFrame()
+    columns = list(first.columns)
+    first.to_csv(path, index=False, sep=sep, encoding=encoding)
+    for chunk in iterator:
+        if columns:
+            chunk = chunk.reindex(columns=columns)
+        else:
+            columns = list(chunk.columns)
+        chunk.to_csv(
+            path,
+            index=False,
+            sep=sep,
+            encoding=encoding,
+            mode="a",
+            header=False,
+        )
+    return path
+
+
+def _replace_id_placeholders(
+    df: pd.DataFrame, placeholder: str = _PLACEHOLDER
+) -> pd.DataFrame:
+    """Return ``df`` with placeholder values removed from identifier columns."""
+
+    if df.empty:
+        return df.copy()
+    result = df.copy()
+    id_columns = [column for column in result.columns if "id" in column.lower()]
+    for column in id_columns:
+        series = result[column]
+        mask = series == placeholder
+        if mask.any():
+            result.loc[mask, column] = ""
+    return result
+
+
+def _prepare_final_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Align ``df`` to :data:`TARGETS_COLUMN_ORDER` with placeholder fills."""
+
+    required_columns = [
+        name for name, column in TargetsSchema.columns.items() if column.required
+    ]
+    if required_columns:
+        required_schema = TargetsSchema.select_columns(required_columns)
+        required_schema.validate(df, lazy=True)
+
+    prepared = df.reindex(columns=TARGETS_COLUMN_ORDER, fill_value=_PLACEHOLDER)
+    prepared = _replace_id_placeholders(prepared)
+    return prepared
+
+
+def _validate_and_write(
+    df: pd.DataFrame,
+    path: Path,
+    *,
+    cfg: Config,
+    sep: str | None = None,
+    encoding: str | None = None,
+) -> Path:
+    """Validate ``df`` against :data:`TargetsSchema` and serialise to CSV."""
+
+    prepared = _prepare_final_frame(df)
+    validated = TargetsSchema.validate(prepared, lazy=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_csv(
+        validated,
+        path,
+        cfg=cfg,
+        sep=sep,
+        encoding=encoding,
+        key_cols=["target_chembl_id"],
+        col_order=TARGETS_COLUMN_ORDER,
+    )
+    return path
+
+
+def _resolve_optional_output(
+    path: Path | None | object,
+    *,
+    base_path: Path | None,
+    output_dir: Path | None,
+) -> Path | None:
+    """Return an absolute path for optional outputs respecting CLI roots."""
+
+    if path in (None, argparse.SUPPRESS):
+        return None
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate
+    if output_dir is not None:
+        return (output_dir / candidate).resolve()
+    if base_path is not None:
+        return (base_path / candidate).resolve()
+    return candidate.resolve()
 
 
 def _cached_chembl_fetch(
@@ -175,55 +318,40 @@ def _cached_chembl_fetch(
     return pd.concat(chain([first], frames), ignore_index=True)
 
 
-def _write_outputs(
-    cfg: Config, options: PipelineConfig, frames: Iterable[pd.DataFrame]
-) -> Path:
-    output = options.output_csv or default_output_path(options.input_csv, cfg.io)
-    iterator = iter(frames)
-    try:
-        first = next(iterator)
-    except StopIteration:
-        empty = add_pipeline_metadata(
-            pd.DataFrame(
-                {
-                    "target_chembl_id": pd.Series(dtype="string"),
-                    "source": pd.Series(dtype="string"),
-                }
-            )
-        )
-        write_csv(
-            empty,
-            output,
-            cfg=cfg,
-            sep=options.sep,
-            encoding=options.encoding,
-        )
-        return output
-
-    annotated_first = add_pipeline_metadata(first)
-    annotated_rest = (add_pipeline_metadata(chunk) for chunk in iterator)
-    annotated_chunks = chain([annotated_first], annotated_rest)
-    write_csv(
-        annotated_chunks,
-        output,
-        cfg=cfg,
-        sep=options.sep,
-        encoding=options.encoding,
-    )
-    return output
-
-
 def run(cfg: Config, options: PipelineConfig) -> int:
     chunk_factory = lambda: _chunk_iterator(cfg, options)
-    _ = run_pipeline(
+    result = run_pipeline(
         chunk_factory,
         cfg,
         chembl_fetcher=_cached_chembl_fetch,
         chembl_kwargs={"chunk_size": options.chunk_size},
         batch_size=options.batch_size,
     )
-    output = _write_outputs(cfg, options, _chembl_frame_stream(chunk_factory()))
-    logger.info("write_done", extra={"path": str(output)})
+
+    final_path = options.final_out or options.output_csv
+    if final_path is None:
+        final_path = default_output_path(options.input_csv, cfg.io)
+
+    final_df = result.chembl
+    raw_df = final_df.drop(columns=_PIPELINE_METADATA_COLUMNS, errors="ignore")
+
+    if options.raw_out is not None:
+        _raw_dump(
+            [raw_df],
+            options.raw_out,
+            cfg=cfg,
+            sep=options.sep,
+            encoding=options.encoding,
+        )
+
+    _validate_and_write(
+        final_df,
+        final_path,
+        cfg=cfg,
+        sep=options.sep,
+        encoding=options.encoding,
+    )
+    logger.info("write_done", extra={"path": str(final_path)})
     return 0
 
 
@@ -233,6 +361,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     input_path = getattr(args, "input_csv", None)
     output_stem = Path(input_path).stem if input_path else None
     cli.prepare_io_paths(args, output_stem=output_stem)
+    base_path = getattr(args, "base_path", None)
+    output_dir = getattr(args, "output_dir", None)
+    raw_candidate = getattr(args, "raw_out", None)
+    resolved_raw = _resolve_optional_output(
+        raw_candidate,
+        base_path=base_path,
+        output_dir=output_dir,
+    )
+    setattr(args, "raw_out", resolved_raw)
+    final_candidate = getattr(args, "final_out", None)
+    if final_candidate in (None, argparse.SUPPRESS):
+        final_candidate = getattr(args, "output_csv", None)
+    resolved_final = _resolve_optional_output(
+        final_candidate,
+        base_path=base_path,
+        output_dir=output_dir,
+    )
+    setattr(args, "final_out", resolved_final)
     log_cfg.level = args.log_level
     log_cfg = LoggerConfig(level=log_cfg.level, run_id=log_cfg.run_id)
     logger_inst = configure_logger(log_cfg)
@@ -248,6 +394,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "input_csv": args.input_csv,
                 "output_csv": args.output_csv,
+                "final_out": args.final_out,
+                "raw_out": args.raw_out,
                 "column": args.column,
                 "chunk_size": args.chunk_size,
                 "batch_size": args.batch_size,

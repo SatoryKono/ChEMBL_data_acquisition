@@ -31,13 +31,17 @@ directly.
 | `--input-dir` | Directory containing input artefacts; resolved against `--base-path` when relative. |
 | `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
-| `--output` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `--output-dir` or `--base-path`. |
+| `--output` / `--out` | Destination CSV. When omitted, a file named `output.<input-stem>_<YYYYMMDD>.csv` is created inside `--output-dir` or `--base-path`. |
+| `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Skipped when omitted. |
+| `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. |
+| `--final-out` | Path for the final cleaned export. When omitted, falls back to `--output` / `--out`. |
 | `--date` | Override the auto-generated `YYYYMMDD` suffix when building default output filenames. |
 | `--force` | Overwrite outputs even when they already exist. |
 | `--skip-existing` | Skip processing if the destination file is already present. |
 | `--sep` | CSV delimiter forwarded to `cfg.io.csv_sep`. |
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
+| `--id-cols` | Comma-separated list of identifier columns to preserve in the raw snapshot before cleanup. |
 | `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
 | `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
 
@@ -52,9 +56,22 @@ Before any network calls the utilities invoke `library.config.ensure_dirs`, ensu
 
 The repository includes a few compact fixtures under `tests/data/` for smoke-level experimentation (for example, `tests/data/activity_ids_small.csv` and `tests/data/input-smoke/testitem.csv`). Pipelines without bundled samples require user-provided CSVs that expose the identifier column referenced in `config/config.yaml` or overridden via `--column`.
 
+### Staged pipeline flow
+
+All entity pipelines share a unified staging flow:
+
+```mermaid
+flowchart LR
+  Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
+```
+
+`--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out`/`--out` writes the cleaned table after normalisation and validation. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility.
+
+During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preserved in the raw snapshot and counted in the metadata under `error_placeholder_counts` while being removed from the final export.
+
 ### Monitoring structured logs
 
-All entry points rely on `library.logging_setup.Logger` and emit JSON lines enriched with a unique `run_id` and context such as `status`/`rps`. Key lifecycle events include:
+All entry points rely on `library.logging_setup.Logger` and emit JSON lines enriched with a unique `run_id`, the staging `stage` (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`) and context such as `status`/`rps`. Key lifecycle events include:
 
 | Event | When it appears |
 | --- | --- |
@@ -75,10 +92,11 @@ Pipe the output through `jq` or similar tooling for real-time monitoring:
 
 ```bash
 get-document-data all --input docs.csv --column document_chembl_id \
+  --raw-out out/documents.raw.csv --final-out out/documents.final.csv \
   | tee run.log | jq -r '"\(.level) \(.event) :: \(.msg // "")"'
 ```
 
-Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the default JSON structure for ingestion into log collectors without needing custom formatters.
+Adjust verbosity with `--log-level DEBUG` for troubleshooting, or rely on the default JSON structure for ingestion into log collectors without needing custom formatters. The expected structure is exercised by `tests/test_logging.py`, `tests/test_logging_setup.py`, and the smoke orchestrator `tests/smoke/test_get_data_scripts.py`.
 
 ## Activity data (`get_activity_data.py`)
 
@@ -138,6 +156,9 @@ Console form:
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
+  --raw-out out/documents.raw.parquet \
+  --raw-format parquet \
+  --final-out out/documents.final.csv \
   --batch-size 20
 ```
 
@@ -147,6 +168,8 @@ Module form:
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
+  --raw-out out/documents.raw.csv \
+  --final-out out/documents.final.csv \
   --batch-size 20
 ```
 
@@ -170,6 +193,9 @@ Console form:
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
+  --raw-out out/documents.raw.parquet \
+  --raw-format parquet \
+  --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -183,6 +209,8 @@ Module form:
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
+  --raw-out out/documents.raw.csv \
+  --final-out out/documents.final.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -199,7 +227,9 @@ Console form:
 
 ```bash
 get-target-data chembl --input path/to/targets.csv \
-  --column target_chembl_id
+  --column target_chembl_id \
+  --raw-out out/targets.raw.csv \
+  --out out/targets.final.csv
 ```
 
 Module form:
@@ -207,7 +237,9 @@ Module form:
 ```bash
 python -m scripts.get_target_data chembl \
   --input path/to/targets.csv \
-  --column target_chembl_id
+  --column target_chembl_id \
+  --raw-out out/targets.raw.csv \
+  --out out/targets.final.csv
 ```
 
 Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelines.target.*`. Create a CSV with a `target_chembl_id` header (one identifier per row) to execute the pipeline; no fixture ships with the repository. Swap `chembl` in the example for `uniprot`, `iuphar` or `all` to choose a different source mix.
@@ -219,7 +251,7 @@ Combines ChEMBL, UniProt and IUPHAR sources according to `sources.chembl.pipelin
 ```bash
 python -m library.utils.cli_tools.pipeline_targets_main \
   --input tests/data/chembl_targets_min.csv \
-  --output out/targets_cached.csv \
+  --out out/targets_cached.csv \
   --chunk-size 50 \
   --batch-size 50 \
   --limit 200

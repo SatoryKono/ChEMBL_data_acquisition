@@ -4,9 +4,9 @@
 
 ## Особенности
 
-* Унифицированные CLI-флаги `--input`, `--output`, `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
-  `--print-config` для управления конфигурацией. Размер партий задаётся параметрами `--chunk-size` или `--batch-size`
-  в зависимости от пайплайна.
+* Унифицированные CLI-флаги `--input`, `--output`/`--out`, `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`,
+  `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и `--print-config` для управления конфигурацией.
+  Размер партий задаётся параметрами `--chunk-size` или `--batch-size` в зависимости от пайплайна.
 * Потоковая обработка крупных CSV-файлов с детерминированным выводом.
 * Валидаторы схем в [`schemas/`](schemas/) и словари в [`dictionary/`](dictionary/) для проверки типов, диапазонов и справочных данных.
 * Конфигурация через `config/config.yaml`, переменные окружения и CLI-переопределения.
@@ -90,24 +90,27 @@ pre-commit install
 
    Используйте `--help`, чтобы изучить интерфейс, и запускайте дымовые проверки напрямую из консоли:
 
-   ```bash
-   get-activity-data --input tests/data/activity_ids_small.csv \
-       --output out/activities.csv --limit 10 --log-level INFO
-   get-document-data pubmed --input tests/data/pmids.csv \
-       --output out/documents.csv --limit 5 --log-level INFO
-   ```
+  ```bash
+  get-activity-data --input tests/data/activity_ids_small.csv \
+      --out out/activities.final.csv --raw-out out/activities.raw.csv \
+      --limit 10 --log-level INFO
+  get-document-data pubmed --input tests/data/pmids.csv \
+      --raw-out out/documents.raw.parquet --raw-format parquet \
+      --final-out out/documents.final.csv --id-cols PMID doi --limit 5 \
+      --log-level INFO
+  ```
 
    Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
 
    ```bash
    python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
-   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-       --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
-   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-       --output out/quality --table-name chembl_targets --log-level INFO
-   ```
+  python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
+      --column target_chembl_id --out out/targets_mapped.csv --log-level DEBUG
+  python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
+      --out out/quality --table-name chembl_targets --log-level INFO
+  ```
 
-   В примере с отчётностью аргумент `--output` должен указывать на каталог, где будут сохранены результаты.
+  В примере с отчётностью аргумент `--out`/`--output` должен указывать на каталог, где будут сохранены результаты.
 
 4. **Запустите тесты** — см. раздел [Тесты](#тесты).
 
@@ -155,11 +158,17 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 ## Использование
 
-Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--output`, `--limit`). Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации.
+Ниже приведены примеры запуска основных CLI-инструментов с типовыми флагами (`--input`, `--out`/`--output`, `--raw-out`, `--limit`). Параметр `--limit 0` допустим: пайплайн завершится до любых сетевых и файловых операций, что удобно для быстрых smoke-тестов конфигурации.
 После установки пакета через `pip install .` те же пайплайны доступны в виде консольных скриптов из таблицы в разделе
 [Быстрый старт](#быстрый-старт) — например, `get-activity-data --help` полностью эквивалентен
 `python -m scripts.get_activity_data --help`. Оба варианта принимают одинаковые аргументы, поэтому выбирайте форму, удобную
 для вашей среды.
+
+Обновлённая конвейерная обработка разделяет необработанные и нормализованные артефакты. Параметр `--raw-out` сохраняет
+ответы API до любых преобразований, формат задаётся через `--raw-format` (`csv` по умолчанию, либо `parquet`). Опция
+`--final-out` переопределяет путь нормализованного экспорта, сохраняя побочные файлы метаданных. Для одиночного переключателя
+подойдёт короткий алиас `--out`, полностью эквивалентный `--output`. Пайплайны с составными ключами принимают список столбцов
+через `--id-cols`, чтобы фиксировать исходные идентификаторы в «сыром» снимке до очистки.
 
 ### `scripts/get_document_data.py`
 
@@ -168,7 +177,10 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --output out/documents.csv \
+    --raw-out out/documents.raw.parquet \
+    --raw-format parquet \
+    --final-out out/documents.final.csv \
+    --id-cols PMID doi \
     --limit 5 \
     --log-level INFO
 ```
@@ -180,7 +192,8 @@ python -m scripts.get_document_data pubmed \
 ```bash
 python -m library.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --output out/documents.csv \
+    --raw-out out/documents.raw.csv \
+    --final-out out/documents.final.csv \
     --log-level INFO
 ```
 
@@ -191,12 +204,14 @@ python -m library.pubmed_library \
 ```bash
 python -m scripts.get_target_data chembl \
     --input path/to/targets.csv \
-    --output out/targets.csv \
+    --out out/targets.final.csv \
+    --raw-out out/targets.raw.csv \
     --limit 5 \
     --log-level INFO
 ```
 
-Замените `path/to/targets.csv` на CSV со столбцом `target_chembl_id`. Вход и выход используют одноимённый столбец для соответствия схемам валидации.
+Замените `path/to/targets.csv` на CSV со столбцом `target_chembl_id`. `--raw-out` фиксирует снимок до нормализации для
+диагностики, а `--out` (`--output`) формирует чистый экспорт, согласованный со схемами валидации.
 
 ### `library.utils.cli_tools.pipeline_targets_main`
 
@@ -222,6 +237,31 @@ python -m library.utils.cli_tools.get_activities --limit 500 --dry-run
 ```
 
 Команда лишь логирует факт генерации 500 строк и завершает работу без создания файлов.
+
+## Конвейер с поэтапным выводом
+
+Каждый пайплайн теперь следует единой схеме этапов:
+
+```mermaid
+flowchart LR
+  Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Очистка идентификаторов"] --> Normalize --> Validate --> Final["Финальный экспорт"]
+```
+
+* **Fetch** — чтение идентификаторов (одиночных либо составных через `--id-cols`) и обращение к внешним сервисам.
+* **Raw CSV / Parquet** — сохранение необработанного ответа в `--raw-out` с заданным `--raw-format`.
+* **Очистка идентификаторов** — обрезка пробелов, дедупликация и пометка заглушек до дальнейшей обработки.
+* **Normalize** — выравнивание текста, операторов и типов для детерминированной валидации.
+* **Validate** — применение схем `pandera`, перенос ошибочных строк в sidecar-файлы, описанные в YAML метаданных.
+* **Финальный экспорт** — запись очищенной таблицы в `--final-out`/`--out` вместе с метаданными и отчётами о качестве.
+
+Если `--raw-out` не указан, снимок «сырых» данных пропускается для обратной совместимости. Sidecar-файлы по-прежнему
+содержат параметры запуска, конфигурационные диффы и хеши независимо от выбранных форматов.
+
+### Заглушки идентификаторов
+
+Поставщики иногда возвращают временные идентификаторы (например, `CHEMBL_PENDING` или промежуточные PubMed ID). На этапе
+**Очистка идентификаторов** они агрегируются в отдельные строки-заглушки и считаются в разделе `error_placeholder_counts`
+метаданных. Финальный экспорт исключает такие значения, тогда как «сырой» снимок оставляет их для аудита.
 
 ## Обновление зависимостей
 
@@ -336,14 +376,16 @@ api:
 
 ## Логирование
 
-CLI-хелперы настраивают структурированное JSON-логирование через `library.logging_setup.configure_logger`. Управляйте уровнем логов переменными окружения или флагами CLI. Формат JSON фиксирован и не настраивается.
+CLI-хелперы настраивают структурированное JSON-логирование через `library.logging_setup.configure_logger`. Управляйте уровнем логов
+переменными окружения или флагами CLI. Формат JSON фиксирован, не настраивается и теперь включает этап конвейера: `fetch`,
+`raw`, `cleanup`, `normalize`, `validate` или `final_export`.
 
 
 Уровень логов можно задать флагом `--log-level` или переменной `CHEMBL_DA_LOG_LEVEL`:
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.csv
+    --out out/assays.final.csv
 ```
 
 Пример строки лога:
@@ -382,6 +424,10 @@ jq 'select(.event=="dry_run")' log.jsonl
 {"ts":"2024-05-01T12:00:03Z","level":"INFO","event":"pipeline_done","run_id":"abc123","stage":"pipeline","elapsed":3.2}
 ```
 
+Набор smoke-файлов для полноценного прогона расположен в `tests/data/input-smoke/`. Ожидаемые JSON-логи (включая названия
+этапов и счётчики заглушек) проверяются тестами `tests/test_logging.py`, `tests/test_logging_setup.py`, а также смоук-оркестратором
+`tests/smoke/test_get_data_scripts.py`.
+
 ## Воспроизводимость
 
 Детерминированные писатели CSV в `library.io` обеспечивают стабильность данных и метаданных между запусками. Функция `library.csv_utils.write_csv_deterministic` нормализует порядок колонок и метаданные, чтобы повторные запуски давали идентичные файлы. Все CLI-скрипты поддерживают общий набор флагов:
@@ -391,7 +437,9 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
     --table-name activity
 ```
 
-По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`. Дополнительные примеры приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+По умолчанию `--output`/`--out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
+При необходимости разделяйте «сырой» и чистый вывод флагами `--raw-out` (с `--raw-format`) и `--final-out`. Дополнительные примеры
+приведены в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Структура проекта
 
@@ -498,7 +546,9 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Дополнительные примеры см. в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
+По умолчанию `--output`/`--out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. При необходимости
+используйте `--raw-out` и `--final-out`, чтобы явно развести «сырые» и чистые артефакты (при желании указав `--raw-format`).
+Дополнительные примеры см. в [`docs/USAGE_RU.md`](docs/USAGE_RU.md) (английская версия — [`docs/USAGE_EN.md`](docs/USAGE_EN.md)).
 
 ## Вывод и метаданные
 

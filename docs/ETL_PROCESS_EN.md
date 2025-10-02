@@ -17,6 +17,26 @@ The pipeline is orchestrated through the shared configuration file `config/confi
 
 ## Data Transformation
 
+### Unified staging pipeline
+
+Every entity pipeline now honours the same staged flow, ensuring consistent logging and artefact layout:
+
+```mermaid
+flowchart LR
+  Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
+```
+
+* **Fetch** — pull identifiers (single or composite via `--id-cols`) and call external services or local caches.
+* **Raw CSV / Parquet** — persist the untouched payload to the optional `--raw-out` path (`--raw-format parquet` supported).
+* **Cleanup IDs** — trim whitespace, deduplicate rows and isolate placeholder identifiers while retaining them in raw snapshots.
+* **Normalize** — harmonise datatypes, operators and casing to prepare deterministic validation.
+* **Validate** — run the Pandera schemas, routing violations to sidecar CSVs referenced in the metadata YAML.
+* **Final export** — write the cleaned table to `--final-out`/`--out`, append metadata and table-quality diagnostics.
+
+Placeholder identifiers such as temporary ChEMBL or PubMed IDs are converted into explicit placeholder rows during the cleanup
+stage. The raw export retains them for auditing, while the final output omits them and surfaces aggregate counts via
+`error_placeholder_counts` in the metadata.
+
 ### Shared normalization and quality checks
 
 All entities are processed through the unified `schemas.normalize` layer, which replaces non-standard characters such as “μ” with “u”, aligns comparison operators (`<` → `<=`, `>` → `>=`), and trims identifiers across the dataframe, eliminating discrepancies before validation. After normalization each script adds the technical columns `pipeline_version` and `timestamp_utc` via `add_pipeline_metadata`, sourcing the version from `pyproject.toml` or the installed package to preserve export lineage.

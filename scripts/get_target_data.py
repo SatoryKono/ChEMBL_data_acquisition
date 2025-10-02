@@ -20,6 +20,8 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, cast
 
+from datetime import datetime, timezone
+
 from library.utils.bootstrap import ensure_project_root
 
 
@@ -37,12 +39,13 @@ from library import iuphar_library as ii
 from library import protein_classification as pc
 from library import target_postprocessing as tp
 from library import uniprot_library as uu
-from library.clients import ChemblClient, _chunked
+from library.clients import ChemblClient
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
 from library.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
     build_root_parser,
+    configure_logger,
     path_argument,
     positive_int,
     prepare_io_paths,
@@ -80,6 +83,8 @@ UNIPROT_MISSING_VALUE = ""
 
 DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
+RAW_SUFFIX = "_raw"
+NORMALIZED_SUFFIX = "_normalized"
 
 
 @dataclass(frozen=True)
@@ -215,6 +220,49 @@ def _resolve_uniprot_matches(
         resolved.append(match)
 
     return pd.Series(resolved, index=plan.row_index, dtype=object)
+
+
+def _normalized_output_path(base: Path) -> Path:
+    """Return deterministic path for the normalized export derived from ``base``."""
+
+    suffix = base.suffix or ".csv"
+    return base.with_name(f"{base.stem}{NORMALIZED_SUFFIX}{suffix}")
+
+
+def _raw_output_path(base: Path) -> Path:
+    """Return default path for the raw payload dump derived from ``base``."""
+
+    suffix = base.suffix or ".csv"
+    return base.with_name(f"{base.stem}{RAW_SUFFIX}{suffix}")
+
+
+def _write_raw_dump(
+    df: pd.DataFrame,
+    destination: Path,
+    *,
+    cfg: Config,
+    reindex_columns: bool,
+) -> Path:
+    """Persist ``df`` to ``destination`` honouring CSV or Parquet formats."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if reindex_columns and not df.empty:
+        df = df.reindex(columns=sorted(df.columns))
+    suffix = destination.suffix.lower()
+    if suffix in {".parquet", ".pq"}:
+        try:
+            df.to_parquet(destination, index=False)
+        except (ImportError, ValueError) as exc:
+            raise OSError(f"failed to write parquet: {exc}") from exc
+    else:
+        df.to_csv(
+            destination,
+            index=False,
+            sep=cfg.io.csv_sep,
+            encoding=cfg.io.csv_encoding,
+        )
+    logger.info("raw_dump_written", rows=len(df), path=str(destination))
+    return destination
 
 
 def _pipe_merge(values: Sequence[str | None]) -> str:
@@ -553,6 +601,32 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=0,
         help="Number of identifiers to skip before processing",
     )
+    chembl.add_argument(
+        "--id-cols",
+        nargs="+",
+        dest="id_cols",
+        default=None,
+        help="Columns used to identify and sort rows in the output",
+     
+        ),
+    )
+    chembl.add_argument(
+        "--normalize-at-export",
+        dest="normalize_at_export",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Apply normalization and schema validation before writing the final export. "
+            "Use --no-normalize-at-export to emit raw payload output."
+        ),
+    )
+    chembl.add_argument(
+        "--no-reindex-raw",
+        dest="reindex_raw",
+        action="store_false",
+        default=True,
+        help="Preserve raw payload column order when writing dumps.",
+    )
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
@@ -876,19 +950,107 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if offset:
         ids_iter = islice(ids_iter, offset, None)
         logger.info("process_offset", offset=offset)
-    processed_ids = 0
+    limited_ids = list(islice(ids_iter, limit)) if limit is not None else list(ids_iter)
+    processed_ids = len(limited_ids)
 
-    def _iter_ids() -> Iterator[str]:
-        nonlocal processed_ids
-        for identifier in ids_iter:
-            processed_ids += 1
-            yield identifier
+    base_output = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    raw_destination = (
+        Path(args.raw_output)
+        if getattr(args, "raw_output", None) is not None
+        else _raw_output_path(base_output)
+    )
+    normalized_output = _normalized_output_path(base_output)
+    normalize_at_export = getattr(args, "normalize_at_export", True)
+    reindex_raw = getattr(args, "reindex_raw", True)
 
-    limited_ids: Iterator[str]
-    if limit is not None:
-        limited_ids = islice(_iter_ids(), limit)
+    raw_chunks: list[pd.DataFrame] = []
+    parsed_chunks: list[pd.DataFrame] = []
+
+    if limited_ids:
+        try:
+            with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+                for _, raw_chunk, parsed_chunk in cl.iter_target_batches(
+                    limited_ids,
+                    cfg=cfg.api,
+                    client=client,
+                    mapping_cfg=cfg.uniprot_mapping,
+                    chunk_size=cfg.target.chembl.chunk_size,
+                    timeout=cfg.target.chembl.timeout,
+                ):
+                    if not raw_chunk.empty:
+                        raw_chunks.append(raw_chunk)
+                    if not parsed_chunk.empty:
+                        parsed_chunks.append(parsed_chunk)
+        except (requests.RequestException, ValueError) as exc:
+            logger.error(
+                "chembl_fetch_failed",
+                error=str(exc),
+                chunk_size=cfg.target.chembl.chunk_size,
+                timeout=cfg.target.chembl.timeout,
+            )
+            return 1
+
+    raw_df = (
+        pd.concat(raw_chunks, ignore_index=True) if raw_chunks else pd.DataFrame()
+    )
+
+    if normalize_at_export:
+        try:
+            _write_raw_dump(
+                raw_df, raw_destination, cfg=cfg, reindex_columns=reindex_raw
+            )
+        except (OSError, ValueError) as exc:
+            logger.error("raw_dump_failed", error=str(exc), path=str(raw_destination))
+            return 1
     else:
-        limited_ids = _iter_ids()
+        def _raw_fetcher() -> Iterator[pd.DataFrame]:
+            yield raw_df
+
+        def _raw_writer(
+            chunks: Iterator[pd.DataFrame],
+            destination: Path,
+            col_order: Sequence[str] | None,
+            key_cols: Sequence[str],
+        ) -> Path:
+            frames = list(chunks)
+            if frames:
+                merged = pd.concat(frames, ignore_index=True)
+            else:
+                merged = pd.DataFrame()
+            _write_raw_dump(merged, destination, cfg=cfg, reindex_columns=reindex_raw)
+            return destination
+
+        failure_path = raw_destination.with_name(
+            f"{raw_destination.stem}_failure_cases.csv"
+        )
+        exit_code = run_pipeline(
+            fetcher=_raw_fetcher,
+            schema=None,
+            schema_name="raw_target_payload",
+            validators=[],
+            metadata_hooks=[],
+            writer=_raw_writer,
+            output_path=raw_destination,
+            failure_path=failure_path,
+            command=" ".join(sys.argv),
+            config_snapshot=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            key_columns=[],
+            table_quality=lambda _: None,
+            cfg=cfg,
+            logger=logger,
+        )
+        if limit is not None:
+            logger.info("process_limit", limit=processed_ids)
+        logger.info(
+            "chembl_normalization_skipped",
+            output=str(raw_destination),
+            rows=len(raw_df),
+        )
+        return exit_code
+
 
     final_candidate = getattr(args, "final_out", None)
     if final_candidate in (None, argparse.SUPPRESS):
@@ -919,12 +1081,27 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         key_columns = list(id_cols_value) or ["target_chembl_id"]
     failure_path = final_output.with_name(f"{final_output.stem}_failure_cases.csv")
 
+
     missing_optional_columns: set[str] = set()
+    placeholder_replacements = 0
+    fetched_rows_total = 0
+    raw_dump_rows_total = 0
+    post_cleanup_rows_total = 0
 
     def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
+        nonlocal placeholder_replacements, post_cleanup_rows_total
         prepared, _, missing_optional = _prepare_targets_for_schema(frame)
+        if missing_optional and not frame.empty:
+            placeholder_replacements += len(frame) * len(missing_optional)
+        post_cleanup_rows_total += len(prepared)
         missing_optional_columns.update(missing_optional)
         return prepared
+
+    def _normalize_chunk(frame: pd.DataFrame) -> pd.DataFrame:
+        nonlocal raw_dump_rows_total
+        normalized_chunk = normalize_targets(frame)
+        raw_dump_rows_total += len(normalized_chunk)
+        return normalized_chunk
 
     def _validate_chunk(frame: pd.DataFrame) -> ValidationResult:
         try:
@@ -938,7 +1115,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         return ValidationResult(validated, pd.DataFrame(), "TargetsSchema")
 
+    fetch_source: list[pd.DataFrame]
+    if parsed_chunks:
+        fetch_source = parsed_chunks
+    else:
+        fetch_source = [pd.DataFrame(columns=TARGET_FIELDS)]
+
     def fetcher() -> Iterator[pd.DataFrame]:
+
+        nonlocal fetched_rows_total
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
             for chunk_ids in _chunked(limited_ids, cfg.target.chembl.chunk_size):
                 if not chunk_ids:
@@ -960,12 +1145,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         timeout=cfg.target.chembl.timeout,
                     )
                     raise PipelineError(str(exc)) from exc
+                fetched_rows_total += len(chunk_df)
                 yield chunk_df
+
 
     def writer(
         chunks: Iterator[pd.DataFrame],
         destination: Path,
-        col_order: Sequence[str],
+        col_order: Sequence[str] | None,
         key_cols: Sequence[str],
     ) -> Path:
         resolved_keys = list(key_cols) if key_cols else key_columns
@@ -1043,14 +1230,19 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
         return final_path
 
+    failure_path = normalized_output.with_name(
+        f"{normalized_output.stem}_failure_cases.csv"
+    )
     table_quality = partial(
         analyze_table_quality,
+
         table_name=str(final_output.with_suffix("")),
     )
 
     metadata_hooks = [add_pipeline_metadata, _prepare_chunk]
     if not normalize_at_export:
         metadata_hooks.insert(0, normalize_targets)
+
 
     exit_code = run_pipeline(
         fetcher=fetcher,
@@ -1059,12 +1251,16 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         validators=[_validate_chunk],
         metadata_hooks=metadata_hooks,
         writer=writer,
+
         output_path=raw_output,
+
         failure_path=failure_path,
         command=" ".join(sys.argv),
         config_snapshot=_serialize_paths(cfg.to_dict()),
         inputs={"input_csv": str(args.input_csv)},
+ч
         key_columns=key_columns,
+
         table_quality=table_quality,
         cfg=cfg,
         logger=logger,
@@ -1078,6 +1274,18 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             "schema_optional_columns_missing",
             columns=sorted(missing_optional_columns),
         )
+
+    logger.info("chembl_stage_rows", stage="fetch", rows=fetched_rows_total)
+    logger.info("chembl_stage_rows", stage="raw_dump", rows=raw_dump_rows_total)
+    logger.info(
+        "chembl_stage_rows",
+        stage="post_cleanup",
+        rows=post_cleanup_rows_total,
+    )
+    logger.info(
+        "chembl_placeholder_replacements",
+        total=placeholder_replacements,
+    )
 
     return exit_code
 
@@ -1246,8 +1454,11 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
+    normalized_output = _normalized_output_path(output_csv)
     df = pd.read_csv(
+
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
+
     )
     logger.info("fetch_chembl_done", rows=len(df))
     return df
@@ -1751,6 +1962,7 @@ def validate_and_write(
     """
 
     logger.info("validate_write_start", output=str(output))
+
     key_columns = list(id_cols) if id_cols else ["target_chembl_id"]
 
     if raw_out is not None:
@@ -1779,11 +1991,44 @@ def validate_and_write(
                 col_order=raw_order,
             )
 
+
     normalized = normalize_targets(df)
+    normalized_rows = len(normalized)
+    logger.info(
+        "normalize_targets_counts",
+        before=input_rows,
+        after=normalized_rows,
+    )
     normalized = add_pipeline_metadata(normalized)
-    final_df, missing_required, missing_optional = _prepare_targets_for_schema(
+    prepared, missing_required, missing_optional = _prepare_targets_for_schema(
         normalized
     )
+    logger.info("prepare_targets_rows", rows=len(final_df))
+
+    drop_reasons: dict[str, set[Any]] = {
+        "schema": set(),
+        "fk": set(),
+        "regex": set(),
+        "not_null": set(),
+    }
+
+    def _categorize_failure(row: pd.Series) -> str:
+        check_value = str(row.get("check", "")).lower()
+        context_value = str(row.get("schema_context", "")).lower()
+        failure_value = str(row.get("failure_case", "")).lower()
+        if "fk" in check_value or "foreign" in check_value or "fk" in context_value:
+            return "fk"
+        if "regex" in check_value or "match" in check_value or "pattern" in check_value:
+            return "regex"
+        if (
+            "notnull" in check_value
+            or "not null" in check_value
+            or "nullable" in check_value
+            or "null" in failure_value
+        ):
+            return "not_null"
+        return "schema"
+
     exit_code = 0
     if not missing_required:
         if missing_optional:
@@ -1791,6 +2036,7 @@ def validate_and_write(
                 "optional_columns_missing",
                 columns=sorted(missing_optional),
             )
+        logger.info("targets_schema_validate_start", rows=len(final_df))
         try:
             final_df = TargetsSchema.validate(final_df, lazy=True)
         except SchemaErrors as exc:
@@ -1804,18 +2050,58 @@ def validate_and_write(
                 failures=len(exc.failure_cases),
                 path=str(failure_path),
             )
+            failure_cases = exc.failure_cases.copy()
+            for _, failure_row in failure_cases.iterrows():
+                reason = _categorize_failure(failure_row)
+                identifier = failure_row.get("index")
+                if pd.isna(identifier):
+                    identifier = (
+                        failure_row.get("column"),
+                        failure_row.get("failure_case"),
+                    )
+                drop_reasons[reason].add(identifier)
+            logger.info(
+                "targets_schema_validate_result",
+                status="failed",
+                rows=len(final_df),
+                failures=len(failure_cases),
+            )
             final_df = getattr(exc, "validated_data", final_df)
             exit_code = 1
+        else:
+            logger.info(
+                "targets_schema_validate_result",
+                status="success",
+                rows=len(final_df),
+                failures=0,
+            )
     else:
+
         logger.warning(
             "validation_skipped",
             missing_columns=sorted(missing_required),
         )
+
+
+    total_dropped = sum(len(ids) for ids in drop_reasons.values())
+    logger.info(
+        "validation_drop_stats",
+        total=total_dropped,
+        schema=len(drop_reasons["schema"]),
+        fk=len(drop_reasons["fk"]),
+        regex=len(drop_reasons["regex"]),
+        not_null=len(drop_reasons["not_null"]),
+    )
+
+    placeholders_before_fill = int(final_df.isna().sum().sum())
+    logger.info("placeholder_fillna_pending", replacements=placeholders_before_fill)
     final_df = final_df.fillna("-")
+    before_dedup = len(final_df)
     final_df = final_df.drop_duplicates()
+    logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
     io.write_csv(
         final_df,
-        output,
+        normalized_output,
         cfg=cfg,
         sep=cfg.io.csv_sep,
         encoding=cfg.io.csv_encoding,
@@ -1826,16 +2112,18 @@ def validate_and_write(
         logger.info(
             "quality_report_skipped",
             reason="empty_dataframe",
-            table=str(output.with_suffix("")),
+            table=str(normalized_output.with_suffix("")),
         )
     else:
         try:
-            analyze_table_quality(final_df, table_name=str(output.with_suffix("")))
+            analyze_table_quality(
+                final_df, table_name=str(normalized_output.with_suffix(""))
+            )
         except ValueError as exc:
             logger.error(
                 "quality_report_failed",
                 error=str(exc),
-                path=str(output),
+                path=str(normalized_output),
             )
             return 1
     logger.info("validate_write_done", rows=len(final_df))
@@ -1948,6 +2236,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     if args.skip_existing and final_output.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(final_output))
         return 0
+    if getattr(args, "_out_alias_used", False):
+        logger.warning(
+            "deprecated_output_alias_used",
+            alias="--out",
+            replacement="--output",
+        )
     func = getattr(args, "func", None)
     if func is None:
         logger.error(
@@ -1984,58 +2278,71 @@ def main(argv: Sequence[str] | None = None) -> int:
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
-    limit_value = getattr(args, "limit", None)
-    if limit_value == 0:
-        logger.info("pipeline_skip_limit", limit=limit_value)
-        return 0
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
-    if limit_value is not None and limit_value < 0:
-        subparser.error("--limit must be zero or a positive integer")
-    offset_value = getattr(args, "offset", 0)
-    if offset_value < 0:
-        subparser.error("--offset must be zero or a positive integer")
-    mapping: dict[str, str] = {}
-    if args.command == "uniprot":
-        mapping = {
-            "column": "target.uniprot.column",
-            "data_dir": "target.uniprot.data_dir",
-            "limit": "target.uniprot.limit",
-        }
-    elif args.command == "chembl":
-        mapping = {
-            "column": "target.chembl.column",
-            "chunk_size": "target.chembl.chunk_size",
-            "timeout": "target.chembl.timeout",
-            "limit": "target.chembl.limit",
-        }
-    elif args.command == "iuphar":
-        mapping = {
-            "target_csv": "target.iuphar.target_csv",
-            "family_csv": "target.iuphar.family_csv",
-            "limit": "target.iuphar.limit",
-        }
-    elif args.command == "all":
-        mapping = {
-            "timeout": "target.all.timeout",
-            "data_dir": "target.all.data_dir",
-            "target_csv": "target.all.target_csv",
-            "family_csv": "target.all.family_csv",
-            "uniprot_column": "target.all.uniprot_column",
-            "chembl_out": "target.all.chembl_out",
-            "uniprot_out": "target.all.uniprot_out",
-            "iuphar_out": "target.all.iuphar_out",
-            "limit": "target.all.limit",
-        }
-    return run_cli_command(
-        args=args,
-        parser=subparser,
-        base_parser=parser,
-        log_cfg=log_cfg,
-        mapping=mapping,
-        run=run,
-        logger=logger,
-    )
+    date_value = getattr(args, "date", None)
+    if not isinstance(date_value, str) or not date_value:
+        date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
+        setattr(args, "date", date_value)
+    log_dir = Path("logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"get_target_data_{date_value}.log"
+    with log_path.open("a", encoding="utf-8") as log_stream:
+        log_cfg.stream = log_stream
+        configure_logger(log_cfg)
+
+        limit_value = getattr(args, "limit", None)
+        if limit_value == 0:
+            logger.info("pipeline_skip_limit", limit=limit_value)
+            return 0
+        subparser_map = getattr(parser, "subparsers_map", {})
+        subparser = subparser_map.get(args.command, parser)
+        if limit_value is not None and limit_value < 0:
+            subparser.error("--limit must be zero or a positive integer")
+        offset_value = getattr(args, "offset", 0)
+        if offset_value < 0:
+            subparser.error("--offset must be zero or a positive integer")
+        mapping: dict[str, str] = {}
+        if args.command == "uniprot":
+            mapping = {
+                "column": "target.uniprot.column",
+                "data_dir": "target.uniprot.data_dir",
+                "limit": "target.uniprot.limit",
+            }
+        elif args.command == "chembl":
+            mapping = {
+                "column": "target.chembl.column",
+                "chunk_size": "target.chembl.chunk_size",
+                "timeout": "target.chembl.timeout",
+                "limit": "target.chembl.limit",
+            }
+        elif args.command == "iuphar":
+            mapping = {
+                "target_csv": "target.iuphar.target_csv",
+                "family_csv": "target.iuphar.family_csv",
+                "limit": "target.iuphar.limit",
+            }
+        elif args.command == "all":
+            mapping = {
+                "timeout": "target.all.timeout",
+                "data_dir": "target.all.data_dir",
+                "target_csv": "target.all.target_csv",
+                "family_csv": "target.all.family_csv",
+                "uniprot_column": "target.all.uniprot_column",
+                "chembl_out": "target.all.chembl_out",
+                "uniprot_out": "target.all.uniprot_out",
+                "iuphar_out": "target.all.iuphar_out",
+                "limit": "target.all.limit",
+            }
+        exit_code = run_cli_command(
+            args=args,
+            parser=subparser,
+            base_parser=parser,
+            log_cfg=log_cfg,
+            mapping=mapping,
+            run=run,
+            logger=logger,
+        )
+
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
