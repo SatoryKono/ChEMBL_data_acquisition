@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from library import document_postprocessing as dp
+from library.postprocessing import document as document_export_postprocessing
 from library.config import IoCfg
 
 
@@ -67,3 +68,19 @@ def test_postprocess_file_roundtrip(tmp_path: Path) -> None:
 
     meta_path = Path(f"{output_path}.meta.yaml")
     assert meta_path.exists()
+
+
+def test_preprocess_document_export_accepts_chembl_alias() -> None:
+    """``preprocess_document_export`` tolerates renamed ChEMBL identifiers."""
+
+    df = pd.DataFrame(
+        {
+            "ChEMBL.document_chembl_id": ["DOC-001", "DOC-002"],
+            "ChEMBL.title": ["Alpha", "Beta"],
+            "PubMed.PMID": ["100", "200"],
+        }
+    )
+
+    result = document_export_postprocessing.preprocess_document_export(df)
+
+    assert result["document_chembl_id"].tolist() == ["DOC-001", "DOC-002"]

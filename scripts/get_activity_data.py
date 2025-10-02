@@ -9,13 +9,20 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable, Iterator, Sequence
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
+from collections.abc import Iterator, Sequence
 from functools import partial
 from itertools import islice
 from pathlib import Path
 
-from library.utils.bootstrap import ensure_project_root
+try:
+    from library.utils.bootstrap import ensure_project_root
+except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
+    def ensure_project_root() -> None:
+        """Add the repository root to ``sys.path`` when executed as a script."""
+
+        project_root = str(Path(__file__).resolve().parent.parent)
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
 
 
 if __package__ in {None, ""}:
@@ -27,8 +34,13 @@ import requests
 from library import chembl_library as cl
 from library import cli
 from library import io
-from library.csv_utils import write_csv_chunks_deterministic
-from library.clients import ChemblClient, _chunked
+from library.clients import ChemblClient
+from library.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
+from library.pipeline_helpers import (
+    ChunkedFetchConfig,
+    CsvWriterConfig,
+    prepare_chunked_pipeline,
+)
 from library.rate_limiter import get_global_limiter
 from library.cli import (
     LoggerConfig,
@@ -138,6 +150,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output = args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
+
     def fetcher() -> Iterator[pd.DataFrame]:
         id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
         global_limiter = get_global_limiter(
@@ -242,6 +255,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     validators = [partial(validate_activities, return_result=True)]
 
+
     def writer(
         chunks: Iterable[pd.DataFrame],
         destination: Path,
@@ -264,28 +278,89 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             raise PipelineError(f"writer failed to create output: {path_obj}")
         return path_obj
 
+
     table_quality = partial(
         analyze_table_quality,
         table_name=str(Path(output).with_suffix("")),
     )
 
-    exit_code = run_pipeline(
-        fetcher=fetcher,
-        schema=ActivitiesSchema,
-        schema_name="ActivitiesSchema",
-        validators=validators,
-        metadata_hooks=metadata_hooks,
-        writer=writer,
-        output_path=output,
-        failure_path=failure_path,
-        command=" ".join(sys.argv),
-        config_snapshot=_serialize_paths(cfg.to_dict()),
-        inputs={"input_csv": str(args.input_csv)},
-        key_columns=["activity_id"],
-        table_quality=table_quality,
-        cfg=cfg,
-        logger=logger,
+    global_limiter = get_global_limiter(
+        cfg.rate.global_rps,
+        cfg.rate.global_burst,
     )
+
+    with ChemblClient(
+        cfg.api,
+        cfg.retry,
+        cfg.chembl,
+        global_limiter=global_limiter,
+    ) as client:
+
+        def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+            try:
+                return cl.get_activities(
+                    chunk_ids,
+                    cfg=cfg.api,
+                    client=client,
+                    chunk_size=cfg.activity.batch_size,
+                    timeout=cfg.activity.timeout,
+                    **extra_kwargs,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.error(
+                    "activity_fetch_failed",
+                    extra={
+                        "msg": str(exc),
+                        "chunk_ids": list(chunk_ids),
+                    },
+                    error=str(exc),
+                    batch_size=cfg.activity.batch_size,
+                    timeout=cfg.activity.timeout,
+                )
+                raise PipelineError(str(exc)) from exc
+
+        worker_count = getattr(cfg.activity, "workers", 1) or 1
+        fetch_config = ChunkedFetchConfig(
+            ids=limited_ids,
+            chunk_size=cfg.activity.batch_size,
+            workers=max(1, worker_count),
+        )
+
+        writer_config = CsvWriterConfig(
+            writer=write_csv_chunks_deterministic,
+            kwargs={
+                "cfg": cfg,
+                "chunksize": cfg.io.csv_chunksize,
+                "sort_chunksize": cfg.io.csv_chunksize,
+                "sep": cfg.io.csv_sep,
+                "encoding": cfg.io.csv_encoding,
+            },
+            ensure_destination=True,
+        )
+
+        fetcher, writer = prepare_chunked_pipeline(
+            fetch_config=fetch_config,
+            fetch_chunk=fetch_chunk,
+            csv_writer=writer_config,
+        )
+
+        exit_code = run_pipeline(
+            fetcher=fetcher,
+            schema=ActivitiesSchema,
+            schema_name="ActivitiesSchema",
+            validators=validators,
+            metadata_hooks=metadata_hooks,
+            writer=writer,
+            output_path=output,
+            failure_path=failure_path,
+            command=" ".join(sys.argv),
+            config_snapshot=_serialize_paths(cfg.to_dict()),
+            inputs={"input_csv": str(args.input_csv)},
+            key_columns=["activity_id"],
+            table_quality=table_quality,
+            cfg=cfg,
+            logger=logger,
+        )
 
     if limit is not None:
         logger.info("process_limit", limit=processed_ids)

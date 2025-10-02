@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from functools import partial
 from itertools import islice
 from pathlib import Path
-from typing import Any, cast
+from typing import IO, Any, cast
 
 from datetime import datetime, timezone
 
@@ -195,6 +195,39 @@ COMMAND_ALIAS_TO_CANONICAL: dict[str, str] = {
     for command, aliases in COMMAND_KEYBOARD_ALIASES.items()
     for alias in aliases
 }
+
+
+class _TeeStream:
+    """Mirror writes to multiple text streams without closing them."""
+
+    def __init__(self, *streams: IO[str] | None) -> None:
+        unique_streams: list[IO[str]] = []
+        for stream in streams:
+            if stream is None:
+                continue
+            if any(stream is existing for existing in unique_streams):
+                continue
+            unique_streams.append(stream)
+        self._streams: tuple[IO[str], ...] = tuple(unique_streams)
+
+    def write(self, data: str) -> int:  # pragma: no cover - direct delegation
+        for stream in self._streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:  # pragma: no cover - direct delegation
+        for stream in self._streams:
+            flush = getattr(stream, "flush", None)
+            if callable(flush):
+                flush()
+
+    def writable(self) -> bool:  # pragma: no cover - interface helper
+        if not self._streams:
+            return False
+        return all(getattr(stream, "writable", lambda: True)() for stream in self._streams)
+
+    def isatty(self) -> bool:  # pragma: no cover - interface helper
+        return any(getattr(stream, "isatty", lambda: False)() for stream in self._streams)
 
 
 @dataclass(frozen=True)
@@ -2608,8 +2641,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     original_stream = log_cfg.stream
     with log_path.open("a", encoding="utf-8") as log_stream:
-        log_cfg.stream = log_stream
+        tee_stream = _TeeStream(log_stream, original_stream)
+        log_cfg.stream = tee_stream
         configure_logger(log_cfg)
+        console_stream = original_stream or sys.stdout
+        if console_stream is None:  # pragma: no cover - defensive fallback
+            console_stream = sys.stdout
+        print(
+            f"[INFO] Structured logs are mirrored to '{log_path}'.",
+            file=console_stream,
+            flush=True,
+        )
         try:
 
             limit_value = getattr(args, "limit", None)

@@ -403,7 +403,9 @@ def _coverage_status(score: int, has_error: bool) -> str:
 def preprocess_document_export(df: pd.DataFrame) -> pd.DataFrame:
     """Return analytics-oriented projection of ``df``."""
 
+
     frame = _apply_export_aliases(df)
+
     validate_columns(frame, REQUIRED_INPUT_COLUMNS)
     if frame.empty:
         result = pd.DataFrame(columns=list(PREPROCESSED_COLUMN_ORDER))
