@@ -18,7 +18,7 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import io, testitem_enrichment
+from library import chembl_library as cl, io, testitem_enrichment
 from library.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.config import (
