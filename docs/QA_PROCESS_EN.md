@@ -58,3 +58,22 @@ mypy --strict
 Record the command output (pass/fail status, failure counts, timestamps) in the audit trail — typically `docs/code_review.md` —
 whenever you re-certify the repository. When sharing summaries, link back to this living document instead of copying the
 checklist.
+
+## 6. Document post-processing QA
+
+The document export now includes an automated regression check against the legacy Power Query workbook.
+
+1. Populate `data/input/full/ref_document.csv` with the authoritative export.
+2. Run the document pipeline (`python -m scripts.get_document_data ...`) and confirm it produces:
+   * `preprocessed_output.document_YYYYMMDD.csv`
+   * `qa_document_postprocessing_report_YYYYMMDD.json`
+   * `qa_document_postprocessing_report_YYYYMMDD.md`
+   * `qa_document_postprocessing_diff_YYYYMMDD.csv` (only when mismatches are present)
+3. Alternatively execute the QA script directly:
+   ```bash
+   python -m qa.check_document_postprocessing \
+       --base-path data \
+       --ref input\\full\\ref_document.csv \
+       --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv
+   ```
+4. Treat a non-zero exit code as a blocking failure; consult the Markdown summary and diff extract for remediation.
