@@ -116,8 +116,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     else:
         limited_ids = _iter_ids()
 
-    id_chunks = _chunked(limited_ids, cfg.activity.batch_size)
-
     enrichment_cfg = cfg.activity_enrichment
     extra_columns: list[str] = []
     action_cfg = enrichment_cfg.action_type
@@ -130,7 +128,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
-
+        chunk_iter = _chunked(limited_ids, cfg.activity.batch_size)
         global_limiter = get_global_limiter(
             cfg.rate.global_rps, cfg.rate.global_burst
         )
@@ -138,11 +136,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
-            for chunk_ids in id_chunks:
-
+            def _fetch_chunk(ids: Sequence[str]) -> pd.DataFrame:
                 try:
                     return cl.get_activities(
-                        chunk_ids,
+                        ids,
                         cfg=cfg.api,
                         client=client,
                         chunk_size=cfg.activity.batch_size,
@@ -161,7 +158,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
             workers = max(1, cfg.activity.workers)
             if workers == 1:
-                for chunk_ids in id_chunks:
+                for chunk_ids in chunk_iter:
                     yield _fetch_chunk(chunk_ids)
                 return
 
@@ -170,8 +167,8 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             next_index = 0
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
-                for index, chunk_ids in enumerate(id_chunks):
-                    future = executor.submit(_fetch_chunk, list(chunk_ids))
+                for index, chunk_ids in enumerate(chunk_iter):
+                    future = executor.submit(_fetch_chunk, chunk_ids)
                     pending[future] = index
                     if len(pending) >= workers:
                         done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
@@ -359,6 +356,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "column": "activity.column",
             "batch_size": "activity.batch_size",
             "limit": "activity.limit",
+            "offset": "activity.offset",
             "dry_run": "activity.dry_run",
         },
         run=run,
