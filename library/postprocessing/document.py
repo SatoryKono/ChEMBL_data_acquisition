@@ -9,11 +9,12 @@ Changelog
 
 from __future__ import annotations
 
+import importlib
 import math
 import os
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 import numpy as np
 import pandas as pd
@@ -684,7 +685,7 @@ def to_text(value: Any) -> str:
         if float(integer).is_integer():
             return str(int(integer))
         return str(integer)
-    if pd.isna(value):  # type: ignore[arg-type]
+    if pd.isna(cast(object, value)):
         return ""
     return str(value)
 
@@ -1209,8 +1210,11 @@ def preprocess_documents_csv(
         qa_reference_path = _resolve_relative(base_dir, qa_reference_rel)
         if qa_reference_path.exists():
             try:
-                from qa.check_document_postprocessing import (
-                    run_document_postprocessing_check,
+                qa_module = importlib.import_module(
+                    "qa.check_document_postprocessing"
+                )
+                run_document_postprocessing_check = getattr(
+                    qa_module, "run_document_postprocessing_check", None
                 )
             except Exception:
                 logger.exception(
@@ -1218,26 +1222,34 @@ def preprocess_documents_csv(
                     reference=str(qa_reference_path),
                 )
             else:
-                qa_result = run_document_postprocessing_check(
-                    base_path=base_dir,
-                    reference_path=qa_reference_path,
-                    candidate_path=out_path,
-                    output_dir=target_path.parent,
-                    delimiter=CSV_DELIMITER,
-                )
-                if qa_result.passed:
-                    logger.info(
-                        "document_postprocess_qa_passed",
-                        report=str(qa_result.report_json),
+                if callable(run_document_postprocessing_check):
+                    qa_result = run_document_postprocessing_check(
+                        base_path=base_dir,
+                        reference_path=qa_reference_path,
+                        candidate_path=out_path,
+                        output_dir=target_path.parent,
+                        delimiter=CSV_DELIMITER,
                     )
+                    if qa_result.passed:
+                        logger.info(
+                            "document_postprocess_qa_passed",
+                            report=str(qa_result.report_json),
+                        )
+                    else:
+                        logger.error(
+                            "document_postprocess_qa_failed",
+                            report=str(qa_result.report_json),
+                            diff=str(qa_result.diff_csv)
+                            if qa_result.diff_csv
+                            else None,
+                        )
+                        msg = "Document post-processing QA mismatches detected"
+                        raise RuntimeError(msg)
                 else:
                     logger.error(
-                        "document_postprocess_qa_failed",
-                        report=str(qa_result.report_json),
-                        diff=str(qa_result.diff_csv) if qa_result.diff_csv else None,
+                        "document_postprocess_qa_missing_callable",
+                        reference=str(qa_reference_path),
                     )
-                    msg = "Document post-processing QA mismatches detected"
-                    raise RuntimeError(msg)
         else:
             logger.info(
                 "document_postprocess_qa_reference_missing",

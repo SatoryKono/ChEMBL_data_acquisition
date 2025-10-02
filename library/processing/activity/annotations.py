@@ -317,10 +317,14 @@ def build_activity_properties(
         if mapped is None:
             triage_unmapped.add(token)
             continue
+        label = _normalise_output(mapped)
+        source_value = _normalise_output(raw_value)
+        if label is None or source_value is None:
+            continue
         triage_payload = {
-            "label": _normalise_output(mapped),
+            "label": label,
             "source_field": field,
-            "source_value": _normalise_output(raw_value),
+            "source_value": source_value,
         }
         break
 

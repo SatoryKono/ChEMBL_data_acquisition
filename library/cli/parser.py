@@ -555,9 +555,9 @@ def apply_config_overrides(
 
 
 def _resolve_base_path(value: Path | str | None) -> Path | None:
-    if value in (None, argparse.SUPPRESS):
+    if value is None or value is argparse.SUPPRESS:
         return None
-    path = Path(value).expanduser()
+    path = (value if isinstance(value, Path) else Path(value)).expanduser()
     if path.is_absolute():
         return path
     return (Path.cwd() / path).resolve()
@@ -568,9 +568,11 @@ def _resolve_directory(
     *,
     base: Path | None,
 ) -> Path | None:
-    if directory in (None, argparse.SUPPRESS):
+    if directory is None or directory is argparse.SUPPRESS:
         return None
-    resolved = Path(directory).expanduser()
+    resolved = (
+        directory if isinstance(directory, Path) else Path(directory)
+    ).expanduser()
     if resolved.is_absolute():
         return resolved
     if base is not None:
@@ -584,9 +586,9 @@ def _resolve_file(
     directory: Path | None,
     base: Path | None,
 ) -> Path | None:
-    if path in (None, argparse.SUPPRESS):
+    if path is None or path is argparse.SUPPRESS:
         return None
-    candidate = Path(path).expanduser()
+    candidate = (path if isinstance(path, Path) else Path(path)).expanduser()
     if candidate.is_absolute():
         return candidate
     if directory is not None:
@@ -691,7 +693,7 @@ def prepare_io_paths(
         )
         setattr(args, "output_csv", resolved_output)
         setattr(args, "final_out", resolved_output)
-    elif final_value not in (None, argparse.SUPPRESS):
+    elif isinstance(final_value, (str, Path)):
         candidate_path = Path(final_value)
         setattr(args, "output_csv", candidate_path)
         setattr(args, "final_out", candidate_path)

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from importlib import import_module
 
 from inspect import signature
-from typing import Callable, cast
+from typing import Callable
 
 from types import ModuleType
 
@@ -39,8 +39,10 @@ def _run(module: str, argv: Sequence[str] | None = None) -> int:
     main_func: Callable[..., int] = _resolve_module(module).main
     params = signature(main_func).parameters
     if not params:
-        return cast(int, main_func())
-    return cast(int, main_func(argv))
+        return main_func()
+    if argv is None:
+        argv = []
+    return main_func(argv)
 
 
 __all__: list[str] = ["_run"]
