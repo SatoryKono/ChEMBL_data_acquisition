@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import warnings
 from argparse import Namespace
 from pathlib import Path
@@ -22,12 +21,11 @@ def test_analyze_table_quality(tmp_path: Path) -> None:
             "flag": pd.Series([True, False, True, False], dtype="boolean"),
         }
     )
-    cwd = os.getcwd()
-    os.chdir(tmp_path)
-    try:
-        quality, corr = analyze_table_quality(df, table_name="sample")
-    finally:
-        os.chdir(cwd)
+    quality, corr = analyze_table_quality(
+        df,
+        table_name="sample",
+        destination_dir=tmp_path,
+    )
 
     assert set(quality["column"]) == {"num", "str", "flag"}
     assert (tmp_path / "sample_quality_report_table.csv").exists()
@@ -35,18 +33,36 @@ def test_analyze_table_quality(tmp_path: Path) -> None:
     assert corr.shape == (2, 2)
 
 
+def test_analyze_table_quality_supports_relative_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    df = pd.DataFrame({"value": [1, 2, 3]})
+    monkeypatch.chdir(tmp_path)
+    destination = Path("relative_output")
+
+    quality, _ = analyze_table_quality(
+        df,
+        table_name="relative",
+        destination_dir=destination,
+    )
+
+    expected_dir = tmp_path / destination
+    assert expected_dir.exists()
+    assert (expected_dir / "relative_quality_report_table.csv").exists()
+    assert not quality.empty
+
+
 def test_analyze_table_quality_suppresses_warnings(tmp_path: Path) -> None:
     csv_path = tmp_path / "mixed.csv"
     csv_path.write_text("num,str\n1,2020-01-01\nx,1a; DPCPX\n")
 
-    cwd = os.getcwd()
-    os.chdir(tmp_path)
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            analyze_table_quality(csv_path, table_name="mixed")
-    finally:
-        os.chdir(cwd)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        analyze_table_quality(
+            csv_path,
+            table_name="mixed",
+            destination_dir=tmp_path,
+        )
 
     assert (tmp_path / "mixed_quality_report_table.csv").exists()
 
@@ -57,12 +73,11 @@ def test_analyze_table_quality_handles_sequences(tmp_path: Path) -> None:
             "seq": [[1], [], np.array([1]), np.array([])],
         }
     )
-    cwd = os.getcwd()
-    os.chdir(tmp_path)
-    try:
-        quality, _ = analyze_table_quality(df, table_name="seq")
-    finally:
-        os.chdir(cwd)
+    quality, _ = analyze_table_quality(
+        df,
+        table_name="seq",
+        destination_dir=tmp_path,
+    )
 
     non_empty = int(quality.loc[quality["column"] == "seq", "non_empty"].iloc[0])
     assert non_empty == 2
@@ -165,12 +180,11 @@ def test_table_quality_run_handles_mixed_types(tmp_path: Path) -> None:
     assert report_path.exists()
     report = pd.read_csv(report_path)
 
-    cwd = os.getcwd()
-    os.chdir(tmp_path)
-    try:
-        expected_quality, _ = analyze_table_quality(df, table_name="expected")
-    finally:
-        os.chdir(cwd)
+    expected_quality, _ = analyze_table_quality(
+        df,
+        table_name="expected",
+        destination_dir=tmp_path,
+    )
 
     expected_mixed = expected_quality.loc[expected_quality["column"] == "mixed"].iloc[0]
     actual_mixed = report.loc[report["column"] == "mixed"].iloc[0]

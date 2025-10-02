@@ -490,7 +490,11 @@ class TableQualityProfiler:
 
         self._rows_processed += len(frame)
 
-    def build(self, table_name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def build(
+        self,
+        table_name: str,
+        destination_dir: Path | str | None = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         rows: list[dict[str, object]] = []
         numeric_candidates: dict[str, pd.Series] = {}
         for column in self._columns:
@@ -534,7 +538,11 @@ class TableQualityProfiler:
             "top_values",
         ]
         quality_report = pd.DataFrame(rows, columns=column_order)
-        quality_path = f"{table_name}_quality_report_table.csv"
+        destination = Path(destination_dir) if destination_dir is not None else Path(".")
+        if destination_dir is not None:
+            destination.mkdir(parents=True, exist_ok=True)
+
+        quality_path = destination / f"{table_name}_quality_report_table.csv"
         quality_report.to_csv(quality_path, index=False, encoding="utf-8-sig")
 
         if numeric_candidates:
@@ -542,7 +550,7 @@ class TableQualityProfiler:
         else:
             corr_report = pd.DataFrame()
 
-        corr_path = f"{table_name}_data_correlation_report_table.csv"
+        corr_path = destination / f"{table_name}_data_correlation_report_table.csv"
         corr_report.reset_index().to_csv(corr_path, index=False, encoding="utf-8-sig")
 
         return quality_report, corr_report
@@ -551,6 +559,8 @@ class TableQualityProfiler:
 def analyze_table_quality(
     table: pd.DataFrame | str | Path | Iterable[pd.DataFrame] | TableQualityProfiler,
     table_name: str,
+    *,
+    destination_dir: Path | str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Profile ``table`` and compute correlations for numeric columns.
 
@@ -560,6 +570,9 @@ def analyze_table_quality(
         :class:`pandas.DataFrame` or path to a CSV file.
     table_name:
         Base name used for output files.
+    destination_dir:
+        Directory where output files are stored. When ``None`` the current
+        working directory is used.
 
     Returns
     -------
@@ -593,7 +606,7 @@ def analyze_table_quality(
                 "Unsupported table type. Expected DataFrame, path or chunk iterable."
             )
 
-    return profiler.build(table_name)
+    return profiler.build(table_name, destination_dir=destination_dir)
 
 
 if __name__ == "__main__":  # pragma: no cover - illustrative usage

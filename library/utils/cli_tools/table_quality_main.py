@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import argparse
-import os
 from argparse import BooleanOptionalAction
 from collections.abc import Sequence
 
@@ -128,12 +127,12 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
                 return 1
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        original_cwd = Path.cwd()
-        try:
-            os.chdir(output_dir)
-            analyze_table_quality(df, table_name=args.table_name)
-        finally:
-            os.chdir(original_cwd)
+        destination_dir = output_dir.resolve()
+        analyze_table_quality(
+            df,
+            table_name=args.table_name,
+            destination_dir=destination_dir,
+        )
         return 0
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("run_fail", exc=exc)
