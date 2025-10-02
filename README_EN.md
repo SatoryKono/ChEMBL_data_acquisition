@@ -259,7 +259,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 
 Use either the short alias `CHEMBL_DA_BASE` or the fully qualified
 `CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; both expand to the same setting.
-See the [alias table](library/config.py#L1531-L1602) in `library/config.py` for
+See the [alias table](library/config.py#L1531-L1634) in `library/config.py` for
 the complete mapping list.
 
 See `.env.example` for typical contact e-mail variables.
@@ -452,7 +452,7 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 ```
 
 Most options also provide short aliases for backwards compatibility. The table lists every supported alias and the canonical key it
- maps to. See [`_ALIAS_OVERRIDES`](library/config.py#L1544-L1616) and [`_ALIAS_MAP`](library/config.py#L1618-L1620) for the authoritative
+ maps to. See [`_ALIAS_OVERRIDES`](library/config.py#L1569-L1634) and [`_ALIAS_MAP`](library/config.py#L1637-L1640) for the authoritative
 source:
 
 | Alias | Equivalent key |
