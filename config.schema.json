@@ -1818,6 +1818,31 @@
       "title": "TargetUniprotCfg",
       "type": "object"
     },
+    "TestitemBatchRetryCfg": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "default": false,
+          "title": "Enable",
+          "type": "boolean"
+        },
+        "shrink_factor": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "title": "Shrink Factor",
+          "type": "number"
+        },
+        "min_size": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Min Size",
+          "type": "integer"
+        }
+      },
+      "title": "TestitemBatchRetryCfg",
+      "type": "object"
+    },
     "TestitemCfg": {
       "additionalProperties": false,
       "properties": {
@@ -1913,6 +1938,9 @@
           ],
           "default": null,
           "title": "Backoff Factor"
+        },
+        "batch_retry": {
+          "$ref": "#/$defs/TestitemBatchRetryCfg"
         }
       },
       "title": "TestitemCfg",
