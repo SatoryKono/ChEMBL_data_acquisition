@@ -86,6 +86,7 @@ class _UniprotCandidate:
 
     value: str
     source: str
+    original_id: str
 
 
 @dataclass(frozen=True)
@@ -153,11 +154,15 @@ def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPla
                 if token in row_seen:
                     continue
                 row_seen.add(token)
-                candidate = _UniprotCandidate(value=token, source=column)
+                candidate = _UniprotCandidate(
+                    value=token, source=column, original_id=token
+                )
                 candidates.append(candidate)
                 if token not in seen:
                     seen.add(token)
-                    unique_records.append({"uniprot_id": token, "original_id": token})
+                    unique_records.append(
+                        {"uniprot_id": candidate.value, "original_id": candidate.original_id}
+                    )
         row_candidates.append(candidates)
 
     return _UniprotQueryPlan(unique_records, row_candidates, row_index)
@@ -179,13 +184,32 @@ def _resolve_uniprot_matches(
             dtype=object,
         )
 
-    cleaned = (
-        uniprot_df[lookup_column].dropna().astype(str).map(str.strip)
-    )
-    available = {value for value in cleaned if value}
+    cleaned = uniprot_df[lookup_column].dropna().astype(str).map(str.strip)
+
+    if "original_id" in uniprot_df.columns:
+        original_series = (
+            uniprot_df["original_id"].fillna("").astype(str).map(str.strip)
+        )
+        candidate_map: dict[str, str] = {}
+        for canonical, original in zip(cleaned, original_series):
+            if not canonical:
+                continue
+            candidate_map.setdefault(canonical, canonical)
+            if original:
+                for token in _split_uniprot_tokens(original):
+                    if token and token not in candidate_map:
+                        candidate_map[token] = canonical
+    else:
+        available = {value for value in cleaned if value}
+        candidate_map = {value: value for value in available}
     resolved: list[str] = []
     for candidates in plan.row_candidates:
-        match = next((c.value for c in candidates if c.value in available), UNIPROT_MISSING_VALUE)
+        match = UNIPROT_MISSING_VALUE
+        for candidate in candidates:
+            mapped = candidate_map.get(candidate.value)
+            if mapped:
+                match = mapped
+                break
         resolved.append(match)
 
     return pd.Series(resolved, index=plan.row_index, dtype=object)
@@ -1062,6 +1086,10 @@ def fetch_uniprot(
     else:
         id_df = pd.DataFrame(columns=["uniprot_id", "original_id"], dtype=object)
 
+    id_df = id_df.copy()
+    id_df["__query_order"] = range(len(id_df))
+    query_input_df = id_df.drop(columns=["__query_order"], errors="ignore")
+
     from tempfile import NamedTemporaryFile
 
     with NamedTemporaryFile(
@@ -1069,7 +1097,7 @@ def fetch_uniprot(
     ) as tmp:
         tmp_path = Path(tmp.name)
 
-    id_df.to_csv(
+    query_input_df.to_csv(
         tmp_path,
         index=False,
         sep=cfg.io.csv_sep,
@@ -1093,7 +1121,17 @@ def fetch_uniprot(
         df = id_df.merge(fetched_df, on="uniprot_id", how="left", sort=False)
     else:
         df = id_df.copy()
-    if "original_id" not in df.columns:
+
+    if "__query_order" in df.columns:
+        df = df.sort_values("__query_order").drop(columns=["__query_order"], errors="ignore")
+        df = df.reset_index(drop=True)
+
+    left_original = df.pop("original_id_x") if "original_id_x" in df.columns else None
+    right_original = df.pop("original_id_y") if "original_id_y" in df.columns else None
+
+    if left_original is not None or right_original is not None:
+        df["original_id"] = _prefer_primary(left_original, right_original)
+    elif "original_id" not in df.columns:
         df["original_id"] = pd.Series(dtype=object)
     logger.info("fetch_uniprot_done", rows=len(df))
     return df
@@ -1240,6 +1278,45 @@ def fetch_iuphar(
     combined_df = combined_df.drop(columns=[lookup_column], errors="ignore")
     if "original_id" in combined_df.columns:
         combined_df = combined_df.drop(columns=["original_id"])
+
+    overlap_columns = sorted(
+        set(chembl_for_merge.columns)
+        & (set(uniprot_df.columns) - {"original_id"})
+    )
+    for column in overlap_columns:
+        chembl_col = f"{column}_chembl"
+        uniprot_col = f"{column}_uniprot"
+        chembl_series = (
+            combined_df.pop(chembl_col)
+            if chembl_col in combined_df.columns
+            else None
+        )
+        uniprot_series = (
+            combined_df.pop(uniprot_col)
+            if uniprot_col in combined_df.columns
+            else None
+        )
+        if column == "reaction_ec_numbers":
+            chembl_values = (
+                chembl_series.reindex(combined_df.index)
+                if chembl_series is not None
+                else pd.Series(index=combined_df.index, dtype=object)
+            )
+            uniprot_values = (
+                uniprot_series.reindex(combined_df.index)
+                if uniprot_series is not None
+                else pd.Series(index=combined_df.index, dtype=object)
+            )
+            combined_df[column] = pd.Series(
+                [
+                    normalize_reaction_ec_numbers([u, c])
+                    for u, c in zip(uniprot_values, chembl_values)
+                ],
+                index=combined_df.index,
+                dtype=object,
+            )
+        else:
+            combined_df[column] = _prefer_primary(uniprot_series, chembl_series)
 
     if "gene" not in combined_df.columns:
         combined_df["gene"] = pd.Series(
