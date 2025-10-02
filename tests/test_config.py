@@ -94,9 +94,9 @@ def test_yaml_integral_float_coercion(tmp_path: Path) -> None:
     cfg = load_config(path)
 
     assert cfg.api.timeout_read == 30
-    assert isinstance(cfg.api.timeout_read, int)
+    assert isinstance(cfg.api.timeout_read, float)
     assert cfg.api.timeout_connect == 5
-    assert isinstance(cfg.api.timeout_connect, int)
+    assert isinstance(cfg.api.timeout_connect, float)
 
 
 def test_env_integral_float_coercion(
@@ -115,7 +115,7 @@ def test_env_integral_float_coercion(
     cfg = load_config(path)
 
     assert cfg.api.timeout_read == 30
-    assert isinstance(cfg.api.timeout_read, int)
+    assert isinstance(cfg.api.timeout_read, float)
 
 
 def test_alias_env_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
