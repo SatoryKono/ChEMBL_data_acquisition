@@ -147,7 +147,7 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 
 ## Генерация данных
 
-Пять рабочих пайплайнов находятся в каталоге [`scripts/`](scripts/) и сохраняют CSV в `data/output/`:
+Пять рабочих пайплайнов находятся в каталоге [`scripts/`](scripts/) и по умолчанию сохраняют CSV в `~/.local/share/chembl-da/output`:
 
 * `get_activity_data.py` — выгружает активности из ChEMBL и обогащает расчётными границами значений.
 * `get_assay_data.py` — загружает описания ассайев.
@@ -578,7 +578,7 @@ python -m library.utils.cli_tools.table_quality_main \
 
 ## Вывод и метаданные
 
-Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `data/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
+Пайплайны записывают детерминированные CSV через `library.io.write_csv` и сохраняют рядом `*.meta.yaml` в `~/.local/share/chembl-da/output`. Файлы метаданных содержат Git-коммит, параметры запуска, SHA-256 и статистику по строкам/колонкам. Подробности описаны в [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) (английская версия — [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md)).
 
 ## Dtype Inspector
 

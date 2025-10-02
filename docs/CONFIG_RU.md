@@ -16,6 +16,12 @@
 
 Чувствительные данные (токены, персональные e-mail) задавайте через переменные окружения, а не в файле.
 
+Пути в конфигурации могут содержать плейсхолдер ``$CHEMBL_DA_BASE_PATH``. Во
+время работы он раскрывается относительно аргумента CLI ``--base-path``,
+переменной окружения ``CHEMBL_DA_BASE_PATH`` или, по умолчанию, каталога
+``~/.local/share/chembl-da``. Символ ``~`` разворачивается в домашний каталог
+перед приведением относительных путей к файлу конфигурации.
+
 ## `sources.chembl`
 
 ### Клиент API (`sources.chembl.api`)
@@ -43,8 +49,8 @@
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `cache_path` | `../data/cache/molecule_parent_catalog.json` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами; переопределяется через `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
-| `sqlite_path` | `../data/cache/molecule_parent_catalog.sqlite` | Путь к SQLite-кэшу для быстрых запросов по связям; используйте `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` или каноничную форму `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`. |
+| `cache_path` | `"$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json"` | Путь к локальному JSON с отношениями родитель→потомок, который переиспользуется конвейерами; переопределяется через `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `"$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite"` | Путь к SQLite-кэшу для быстрых запросов по связям; используйте `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` или каноничную форму `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`. |
 | `endpoint` | `molecule` | Ресурс REST API ChEMBL, из которого подкачиваются данные при обновлении кэша. |
 | `child_field` | `molecule_chembl_id` | Поле ответа API с идентификатором дочерней молекулы. |
 | `parent_field` | `parent_molecule_chembl_id` | Поле ответа API с идентификатором родительской молекулы. |
@@ -274,7 +280,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `resolve_order` | `cache → smiles → inchikey → inchi → pref_name` | Очерёдность стратегий при поиске PubChem CID. | `CHEMBL_DA_SOURCES_PUBCHEM_RESOLVE_ORDER`, `CHEMBL_DA__SOURCES__PUBCHEM__RESOLVE_ORDER` |
 | `cache_ttl` | `3600` | Время жизни in-memory кэша HTTP (сек.). | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_ttl_hours` | `null` | TTL (часы) для постоянного CID-кэша; `null` отключает истечение. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
-| `cid_cache_path` | `"../data/cache/pubchem_cid_cache.json"` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `cid_cache_path` | `"$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json"` | Путь к JSON с сохранёнными CID для повторного использования. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
 | `batch_size` | `50` | Размер батча для обработчика PubChem; параллелизм ограничен `min(batch_size, rps)`. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Пропускать запросы, если локальные SMILES/InChIKey уже заполнены. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Сохранять существующие колонки `pubchem_*`, если ответ пуст. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
@@ -291,7 +297,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `dictionary_dir` | `dictionary` | Корневая папка словарей. |
+| `dictionary_dir` | `../dictionary` | Корневая папка словарей. |
 | `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
 | `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 | `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
@@ -307,8 +313,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `output_dir` | `../data/output` | Каталог для результирующих наборов данных. |
-| `cache_dir` | `.cache` | Каталог HTTP-кэша. |
+| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output"` | Каталог для результирующих наборов данных. |
+| `cache_dir` | `"~/.cache/chembl-da"` | Каталог HTTP-кэша. |
 | `csv_sep` | `,` | Разделитель CSV по умолчанию. |
 | `csv_fallback_separators` | `["\t", ";"]` | Дополнительные разделители, которые пробуются, если основной не раскрывает требуемый столбец. |
 | `csv_encoding` | `utf-8-sig` | Кодировка экспорта CSV. |
@@ -321,9 +327,9 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `same_doc` | `../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Источник пар «тот же документ». |
-| `all_doc` | `../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Источник пар «разные документы». |
-| `output_dir` | `../data/output/ChEMBL/processed` | Каталог для подготовленных файлов. |
+| `same_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"` | Источник пар «тот же документ». |
+| `all_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"` | Источник пар «разные документы». |
+| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"` | Каталог для подготовленных файлов. |
 
 Пути вида `data/input/ChEMBL/*.xlsx` являются заглушками для локальных проверок. Перед запуском процедур инициализации замените их на книги, подготовленные вашей организацией (или разместите вручную выданные файлы в нужном каталоге). Подробности подготовки входных данных приведены в [docs/USAGE_RU.md](./USAGE_RU.md).
 

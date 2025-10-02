@@ -444,12 +444,12 @@
       "additionalProperties": false,
       "properties": {
         "cache_path": {
-          "default": "../data/cache/molecule_parent_catalog.json",
+          "default": "$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json",
           "title": "Cache Path",
           "type": "string"
         },
         "sqlite_path": {
-          "default": "../data/cache/molecule_parent_catalog.sqlite",
+          "default": "$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite",
           "title": "Sqlite Path",
           "type": "string"
         },
@@ -941,19 +941,19 @@
       "additionalProperties": false,
       "properties": {
         "same_doc": {
-          "default": "../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx",
+          "default": "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx",
           "format": "path",
           "title": "Same Doc",
           "type": "string"
         },
         "all_doc": {
-          "default": "../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx",
+          "default": "$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx",
           "format": "path",
           "title": "All Doc",
           "type": "string"
         },
         "output_dir": {
-          "default": "../data/output/ChEMBL/processed",
+          "default": "$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed",
           "format": "path",
           "title": "Output Dir",
           "type": "string"
@@ -966,13 +966,13 @@
       "additionalProperties": false,
       "properties": {
         "output_dir": {
-          "default": "../data/output",
+          "default": "$CHEMBL_DA_BASE_PATH/output",
           "format": "path",
           "title": "Output Dir",
           "type": "string"
         },
         "cache_dir": {
-          "default": ".cache",
+          "default": "~/.cache/chembl-da",
           "format": "path",
           "title": "Cache Dir",
           "type": "string"
@@ -1264,7 +1264,7 @@
           ]
         },
         "cid_cache_path": {
-          "default": "../data/cache/pubchem_cid_cache.json",
+          "default": "$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json",
           "description": "Optional JSON cache storing PubChem CIDs by molecule_chembl_id",
           "title": "Cid Cache Path",
           "type": [
@@ -1410,7 +1410,7 @@
       "additionalProperties": false,
       "properties": {
         "dictionary_dir": {
-          "default": "dictionary",
+          "default": "../dictionary",
           "format": "path",
           "title": "Dictionary Dir",
           "type": "string"

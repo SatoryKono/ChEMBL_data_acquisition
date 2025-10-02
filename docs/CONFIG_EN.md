@@ -16,6 +16,12 @@
 
 Sensitive values (API tokens, personal e-mails) should be injected via environment variables rather than committed to the repository.
 
+Path settings may reference the ``$CHEMBL_DA_BASE_PATH`` placeholder. During
+runtime it resolves to the CLI ``--base-path`` argument, the
+``CHEMBL_DA_BASE_PATH`` environment variable or, by default,
+``~/.local/share/chembl-da``. User-home shortcuts (``~``) are expanded before
+relative paths are resolved against the configuration file.
+
 ## `sources.chembl`
 
 ### API client (`sources.chembl.api`)
@@ -44,8 +50,8 @@ Sensitive values (API tokens, personal e-mails) should be injected via environme
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `cache_path` | `../data/cache/molecule_parent_catalog.json` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
-| `sqlite_path` | `../data/cache/molecule_parent_catalog.sqlite` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
+| `cache_path` | `"$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.json"` | Location of the JSON cache storing molecule parent-child relationships reused by enrichment jobs; override via `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`). |
+| `sqlite_path` | `"$CHEMBL_DA_BASE_PATH/cache/molecule_parent_catalog.sqlite"` | Location of the SQLite cache powering parent-child lookups; override via `CHEMBL_DA_SOURCES_CHEMBL_MOLECULE_CATALOG_SQLITE_PATH` (or the canonical `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__SQLITE_PATH`). |
 | `endpoint` | `molecule` | ChEMBL REST resource queried when the cache needs to be refreshed. |
 | `child_field` | `molecule_chembl_id` | JSON field containing the child molecule identifier extracted from API responses. |
 | `parent_field` | `parent_molecule_chembl_id` | JSON field containing the parent molecule identifier extracted from API responses. |
@@ -287,7 +293,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 | `cache_ttl` | `3600` | Lifespan (seconds) of the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL` |
 | `cache_maxsize` | `1024` | Maximum number of entries retained by the in-memory HTTP response cache. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_MAXSIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_MAXSIZE` |
 | `cache_ttl_hours` | `null` | Optional expiry (hours) for the persisted CID cache; `null` keeps entries indefinitely. | `CHEMBL_DA_SOURCES_PUBCHEM_CACHE_TTL_HOURS`, `CHEMBL_DA__SOURCES__PUBCHEM__CACHE_TTL_HOURS` |
-| `cid_cache_path` | `"../data/cache/pubchem_cid_cache.json"` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
+| `cid_cache_path` | `"$CHEMBL_DA_BASE_PATH/cache/pubchem_cid_cache.json"` | Path to a JSON file storing resolved CIDs for re-use across runs. | `CHEMBL_DA_SOURCES_PUBCHEM_CID_CACHE_PATH`, `CHEMBL_DA__SOURCES__PUBCHEM__CID_CACHE_PATH` |
 | `batch_size` | `50` | Number of rows processed per PubChem batch request; concurrency never exceeds `min(batch_size, rps)`. | `CHEMBL_DA_SOURCES_PUBCHEM_BATCH_SIZE`, `CHEMBL_DA__SOURCES__PUBCHEM__BATCH_SIZE` |
 | `prefer_local_smiles` | `false` | Skip remote lookups when local SMILES/InChIKey columns are already populated. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_SMILES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_SMILES` |
 | `prefer_local_values` | `true` | Preserve existing `pubchem_*` columns when lookups return empty payloads. | `CHEMBL_DA_SOURCES_PUBCHEM_PREFER_LOCAL_VALUES`, `CHEMBL_DA__SOURCES__PUBCHEM__PREFER_LOCAL_VALUES` |
@@ -304,7 +310,7 @@ supports the short alias documented in the [Environment variable aliases](#envir
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `dictionary_dir` | `dictionary` | Root directory with lookup tables. |
+| `dictionary_dir` | `../dictionary` | Root directory with lookup tables. |
 | `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
 | `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
 | `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
@@ -319,8 +325,8 @@ IUPHAR and UniProt lookups are stored there by default.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `output_dir` | `../data/output` | Base directory for generated datasets. |
-| `cache_dir` | `.cache` | Location of the HTTP cache. |
+| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output"` | Base directory for generated datasets. |
+| `cache_dir` | `"~/.cache/chembl-da"` | Location of the HTTP cache. |
 | `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
 | `csv_fallback_separators` | `["\t", ";"]` | Additional delimiters tried when the primary separator does not expose the requested column. |
 | `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
@@ -333,9 +339,9 @@ IUPHAR and UniProt lookups are stored there by default.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `same_doc` | `../data/input/ChEMBL/ChEMBL_same_document_20_05.xlsx` | Workbook with same-document pairs for initialisation. |
-| `all_doc` | `../data/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx` | Workbook with cross-document pairs for initialisation. |
-| `output_dir` | `../data/output/ChEMBL/processed` | Destination for pre-processed initialisation files. |
+| `same_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_same_document_20_05.xlsx"` | Workbook with same-document pairs for initialisation. |
+| `all_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"` | Workbook with cross-document pairs for initialisation. |
+| `output_dir` | `"$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"` | Destination for pre-processed initialisation files. |
 
 Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke tests. Replace them with the workbooks prepared by your organisation (or copy the manually supplied files into the desired location) before starting the initialisation routines. Refer to [docs/USAGE_EN.md](./USAGE_EN.md) for guidance on preparing the input templates.
 
