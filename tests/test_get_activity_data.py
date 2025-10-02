@@ -326,9 +326,14 @@ def test_run_chembl_writer_missing_output(
         chunks,
         destination,
         *,
-        col_order,
         key_cols,
-        **kwargs,
+        col_order,
+        chunksize,
+        sort_chunksize,
+        sep,
+        encoding,
+        cfg,
+
     ):
         return destination
 
