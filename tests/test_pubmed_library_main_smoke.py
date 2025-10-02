@@ -170,12 +170,14 @@ def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
 
     responses = iter(
         [
-            (429, "Too Many Requests", None, ""),
-            (200, "<xml/>", "<xml/>", ""),
+            (429, "Too Many Requests", None, "", {"Retry-After": "1.7"}),
+            (200, "<xml/>", "<xml/>", "", {}),
         ]
     )
 
-    def fake_make_request(*_args: Any, **_kwargs: Any) -> tuple[int, str, Any, str]:
+    def fake_make_request(
+        *_args: Any, **_kwargs: Any
+    ) -> tuple[int, str, Any, str, dict[str, str]]:
         try:
             return next(responses)
         except StopIteration:  # pragma: no cover - defensive
@@ -219,7 +221,7 @@ def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     assert error == ""
 
     base = retry_cfg.backoff_factor * (2 ** (1 - 1))
-    expected_delay = pytest.approx(max(0.3, base + 0.2))
+    expected_delay = pytest.approx(1.7)
     assert sleep_calls == [expected_delay]
 
     retry_records = [r for r in fake_logger.records if r[1] == "request_retry"]

@@ -157,7 +157,13 @@ def test_do_request_retry_after_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pc, "_make_request", fake_make_request)
     monkeypatch.setattr(pc, "sleep", lambda value: sleeps.append(value))
 
-    data, err = pc._do_request(requests.Session(), "http://example.org", delay=0.1, retries=1)
+    data, err = pc._do_request(
+        requests.Session(),
+        "http://example.org",
+        delay=3.0,
+        retries=1,
+        retry_cfg=RetryCfg(backoff_factor=2.0),
+    )
 
     assert data == {"ok": True}
     assert err == ""
