@@ -30,6 +30,24 @@ def test_extract_names() -> None:
     assert names == {"Protein X", "Alt Name", "GENE1", "G1"}
 
 
+def test_extract_crossrefs_includes_structural_ids() -> None:
+    sample = {
+        "uniProtKBCrossReferences": [
+            {"database": "GuidetoPHARMACOLOGY", "id": "GT123"},
+            {"database": "AlphaFoldDB", "id": "AF-P12345-F1"},
+            {"database": "PDB", "id": "1ABC"},
+            {"database": "Ensembl", "id": "ENSP000003"},
+        ]
+    }
+
+    crossrefs = ul.extract_crossrefs(sample)
+
+    assert crossrefs["GuidetoPHARMACOLOGY"] == "GT123"
+    assert crossrefs["xref_alphafold"] == "AF-P12345-F1"
+    assert crossrefs["xref_pdb"] == "1ABC"
+    assert crossrefs["xref_ensembl"] == "ENSP000003"
+
+
 @responses.activate
 def test_fetch_uniprot_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = UniprotCfg(base="https://example.org", delay=0)
@@ -294,3 +312,36 @@ def test_collect_info_enriches_gtop(tmp_path: Path) -> None:
         == "Physiological function: Regulates sample process"
     )
     assert len(responses.calls) == 3
+
+
+def test_collect_info_uses_canonical_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = UniprotCfg(base="https://example.org", delay=0)
+    isoform_id = "P12345-2"
+    canonical_id = "P12345"
+    payload = {
+        "primaryAccession": canonical_id,
+        "sequence": {"length": 42},
+        "proteinDescription": {
+            "recommendedName": {"fullName": {"value": "Canonical protein"}}
+        },
+        "genes": [{"geneName": {"value": "GENE"}}],
+    }
+    calls: list[str] = []
+
+    def fake_fetch(uniprot_id: str, *, cfg: UniprotCfg) -> dict[str, object]:
+        calls.append(uniprot_id)
+        if uniprot_id == isoform_id:
+            raise ul.UniProtFetchError("not found")
+        assert uniprot_id == canonical_id
+        return payload
+
+    monkeypatch.setattr(ul, "fetch_uniprot", fake_fetch)
+
+    result = ul.collect_info(isoform_id, data_dir=tmp_path, cfg=cfg)
+
+    assert calls == [isoform_id, canonical_id]
+    assert result["sequence_length"] == "42"
+    assert result["uniProtkbIdFallback"] == canonical_id
+    assert (tmp_path / f"{isoform_id}.json").exists()

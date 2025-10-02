@@ -6,4 +6,6 @@
 - Documented the requirement to configure `api.user_agent` with a real contact, including validation behaviour and the
   `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` environment override.
 - Downgraded ChEMBL and PubChem cache hit/miss logging to DEBUG to reduce noise in default INFO logs.
+- Added UniProt isoform fallbacks, richer cross-reference extraction (AlphaFold, PDB, Ensembl), and additional logging to
+  trace identifier coverage through the target merge pipeline.
 
