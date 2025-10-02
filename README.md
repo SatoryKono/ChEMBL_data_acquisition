@@ -4,8 +4,8 @@ The README is available in multiple languages:
 
 | Language | Link |
 |----------|------|
-| English  | [README_EN.md](docs/README_EN.md) |
-| Русский  | [README_RU.md](docs/README_RU.md) |
+| English  | [README_EN.md](./docs/README_EN.md) |
+| Русский  | [README_RU.md](./docs/README_RU.md) |
 
  
 * Командные скрипты с унифицированными флагами `--input`, `--output`
@@ -280,8 +280,8 @@ until then the deprecated aliases remain available with matching warnings.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English         | [docs/QA_PROCESS_EN.md](docs/QA_PROCESS_EN.md) |
-| Русский         | [docs/QA_PROCESS_RU.md](docs/QA_PROCESS_RU.md) |
+| English         | [docs/QA_PROCESS_EN.md](./docs/QA_PROCESS_EN.md) |
+| Русский         | [docs/QA_PROCESS_RU.md](./docs/QA_PROCESS_RU.md) |
 
 
 ```bash
@@ -389,8 +389,8 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 `*.meta.yaml`. Утилиты разработки и отладки перенесены в
 `library/utils/cli_tools/`, например модуль `get_activities` предназначен
 только для демонстрационного логирования и не выполняет файловых операций.
-См. [docs/CLI_TOOLS.md](docs/CLI_TOOLS.md) (English) и
-[docs/CLI_TOOLS_RU.md](docs/CLI_TOOLS_RU.md) (Русский) для кратких описаний и
+См. [docs/CLI_TOOLS.md](./docs/CLI_TOOLS.md) (English) и
+[docs/CLI_TOOLS_RU.md](./docs/CLI_TOOLS_RU.md) (Русский) для кратких описаний и
 типовых команд. Каталог с результатами игнорируется Git и автоматически публикуется
 как артефакт CI.
 
@@ -930,8 +930,8 @@ python -m library.utils.cli_tools.table_quality_main \
 `--output`/`--out` по-прежнему работают, но сопровождаются предупреждением и будут
 удалены после миграции всех пайплайнов. Пайплайн таргетов может использовать
 `--raw-out` и `--final-out` (с `--raw-format`) для разведения «сырого» снимка и
-финального экспорта. Для дополнительных примеров см. [`docs/USAGE_RU.md`](docs/USAGE_RU.md)
-и английскую версию [`docs/USAGE_EN.md`](docs/USAGE_EN.md).
+финального экспорта. Для дополнительных примеров см. [`docs/USAGE_RU.md`](./docs/USAGE_RU.md)
+и английскую версию [`docs/USAGE_EN.md`](./docs/USAGE_EN.md).
 
 ## Структура проекта
 
@@ -961,7 +961,7 @@ ChEMBL_data_acquisition/
 
 Параметры читаются из `config/config.yaml`, переменных окружения
 (`CHEMBL_DA__...`) и ключей CLI.
-Подробности в [`docs/CONFIG_RU.md`](docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](docs/CONFIG_EN.md).
+Подробности в [`docs/CONFIG_RU.md`](./docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](./docs/CONFIG_EN.md).
 
 ## Output and metadata / Вывод и метаданные
 
@@ -969,7 +969,7 @@ ChEMBL_data_acquisition/
 
 **RU.** Пайплайны сохраняют детерминированные CSV с помощью ``library.io.write_csv`` и добавляют рядом файлы ``*.meta.yaml`` в каталоге ``~/.local/share/chembl-da/output``.
 
-Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) for layout details.
+Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/OUTPUT_EN.md`](./docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./docs/OUTPUT_RU.md) for layout details.
 
 ## Dtype Inspector
 
@@ -1019,5 +1019,5 @@ MIT License. См. файл `LICENSE` (если присутствует).
 
 При обновлении справочных материалов добавляйте их непосредственно в папку `docs`.
  
-Additional reference materials live in the [docs/](docs/) directory.
+Additional reference materials live in the [docs/](./docs/) directory.
  
