@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import traceback
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Protocol, TypeVar, overload
 
 import pandas as pd
@@ -250,103 +250,18 @@ def run_pipeline(
         use_logger.error("fetch_failed", error=str(exc))
         return 1
 
-    with TemporaryDirectory() as tmpdir_name:
-        tmpdir = Path(tmpdir_name)
-        chunk_paths: list[Path] = []
+    processed_chunks: list[pd.DataFrame] = []
 
-        try:
-            iterator = enumerate(iterable)
-            for index, chunk in iterator:
-                if chunk is None:
-                    continue
-                chunk_rows_total = len(chunk)
-                rows_total += chunk_rows_total
+    try:
+        for chunk in iterable:
+            if chunk is None:
+                continue
+            chunk_rows_total = len(chunk)
+            rows_total += chunk_rows_total
 
-                for hook in metadata_hooks:
-                    try:
-                        chunk = hook(chunk)
-                    except Exception as exc:
-                        use_logger.error(
-                            "metadata_hook_failed",
-                            hook=_callable_name(hook),
-                            error=str(exc),
-                        )
-                        return 1
-
-                chunk_columns = set(chunk.columns)
-                present_columns.update(chunk_columns)
-                all_columns.update(chunk_columns)
-
-                missing_chunk_required = required_cols - chunk_columns
-                if missing_chunk_required:
-                    missing_required_columns.update(missing_chunk_required)
-                    validation_enabled = False
-                    exit_code = 1
-                    break
-
-                validated_chunk = chunk
-                if validation_enabled and validators and not chunk.empty:
-                    for validator in validators:
-                        try:
-                            result = validator(validated_chunk)
-                        except SchemaErrors as exc:
-                            failure_cases = exc.failure_cases
-                            if not failure_cases.empty:
-                                for row in failure_cases.to_dict("records"):
-                                    errors.add_error(row)
-                                total_failures += len(failure_cases)
-                                exit_code = 1
-                                use_logger.error(
-                                    "validation_failed",
-                                    failures=len(failure_cases),
-                                    path=str(failure_path),
-                                )
-                            validated_chunk = getattr(
-                                exc, "validated_data", validated_chunk
-                            )
-                        else:
-                            validated_chunk = result.data
-                            failure_cases = result.failure_cases
-                            if not failure_cases.empty:
-                                for row in failure_cases.to_dict("records"):
-                                    errors.add_error(row)
-                                total_failures += len(failure_cases)
-                                exit_code = 1
-                                use_logger.error(
-                                    "validation_failed",
-                                    failures=len(failure_cases),
-                                    path=str(failure_path),
-                                )
-
-                rows_kept += len(validated_chunk)
-                rows_dropped += chunk_rows_total - len(validated_chunk)
-                present_columns.update(validated_chunk.columns)
-                all_columns.update(validated_chunk.columns)
-
-                chunk_path = tmpdir / f"chunk_{index}.pkl"
-                validated_chunk.to_pickle(chunk_path)
-                chunk_paths.append(chunk_path)
-        except PipelineError:
-            return 1
-        except Exception as exc:
-            use_logger.error(
-                "chunk_processing_failed",
-                error=str(exc),
-            )
-            return 1
-
-        if missing_required_columns:
-            use_logger.warning(
-                "validation_skipped",
-                missing_columns=sorted(missing_required_columns),
-            )
-            return exit_code or 1
-
-        if not chunk_paths:
-            empty = pd.DataFrame()
             for hook in metadata_hooks:
                 try:
-                    empty = hook(empty)
+                    chunk = hook(chunk)
                 except Exception as exc:
                     use_logger.error(
                         "metadata_hook_failed",
@@ -354,58 +269,141 @@ def run_pipeline(
                         error=str(exc),
                     )
                     return 1
-            present_columns.update(empty.columns)
-            all_columns.update(empty.columns)
-            chunk_path = tmpdir / "chunk_0.pkl"
-            empty.to_pickle(chunk_path)
-            chunk_paths.append(chunk_path)
 
-        if schema is not None:
-            schema_columns = list(getattr(schema, "columns", {}))
-            head = [column for column in schema_columns if column in all_columns]
-            tail = sorted(
-                column for column in all_columns if column not in schema_columns
-            )
-            col_order: Sequence[str] | None = head + tail
-            available_columns = set(col_order)
-        else:
-            col_order = None
-            available_columns = set(all_columns)
-        resolved_keys = [column for column in key_columns if column in available_columns]
+            chunk_columns = set(chunk.columns)
+            present_columns.update(chunk_columns)
+            all_columns.update(chunk_columns)
 
-        if optional_cols and (missing_optional := optional_cols - present_columns):
-            use_logger.warning(
-                "optional_columns_missing",
-                columns=sorted(missing_optional),
-            )
+            missing_chunk_required = required_cols - chunk_columns
+            if missing_chunk_required:
+                missing_required_columns.update(missing_chunk_required)
+                validation_enabled = False
+                exit_code = 1
+                break
 
-        if total_failures:
-            errors.save(failure_path, cfg=cfg)
-        else:
-            failure_path.unlink(missing_ok=True)
-            Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+            validated_chunk = chunk
+            if validation_enabled and validators and not chunk.empty:
+                for validator in validators:
+                    try:
+                        result = validator(validated_chunk)
+                    except SchemaErrors as exc:
+                        failure_cases = exc.failure_cases
+                        if not failure_cases.empty:
+                            for row in failure_cases.to_dict("records"):
+                                errors.add_error(row)
+                            total_failures += len(failure_cases)
+                            exit_code = 1
+                            use_logger.error(
+                                "validation_failed",
+                                failures=len(failure_cases),
+                                path=str(failure_path),
+                            )
+                        validated_chunk = getattr(
+                            exc, "validated_data", validated_chunk
+                        )
+                    else:
+                        validated_chunk = result.data
+                        failure_cases = result.failure_cases
+                        if not failure_cases.empty:
+                            for row in failure_cases.to_dict("records"):
+                                errors.add_error(row)
+                            total_failures += len(failure_cases)
+                            exit_code = 1
+                            use_logger.error(
+                                "validation_failed",
+                                failures=len(failure_cases),
+                                path=str(failure_path),
+                            )
 
-        if exit_code != 0:
-            return exit_code
+            rows_kept += len(validated_chunk)
+            rows_dropped += chunk_rows_total - len(validated_chunk)
+            present_columns.update(validated_chunk.columns)
+            all_columns.update(validated_chunk.columns)
 
-        def _iter_validated() -> Iterator[pd.DataFrame]:
-            for path in chunk_paths:
-                df = pd.read_pickle(path)
-                if col_order:
-                    df = df.reindex(columns=col_order)
-                yield df
+            processed_chunks.append(validated_chunk)
+    except PipelineError:
+        return 1
+    except Exception as exc:
+        use_logger.error(
+            "chunk_processing_failed",
+            error=str(exc),
+        )
+        return 1
 
-        try:
-            csv_path = writer(
-                _iter_validated(), output_path, col_order, resolved_keys
-            )
-        except Exception as exc:
-            use_logger.error(
-                "write_fail",
-                error=str(exc),
-                path=str(output_path),
-            )
-            return 1
+    if missing_required_columns:
+        use_logger.warning(
+            "validation_skipped",
+            missing_columns=sorted(missing_required_columns),
+        )
+        return exit_code or 1
+
+    if not processed_chunks:
+        empty = pd.DataFrame()
+        for hook in metadata_hooks:
+            try:
+                empty = hook(empty)
+            except Exception as exc:
+                use_logger.error(
+                    "metadata_hook_failed",
+                    hook=_callable_name(hook),
+                    error=str(exc),
+                )
+                return 1
+        present_columns.update(empty.columns)
+        all_columns.update(empty.columns)
+        processed_chunks.append(empty)
+
+    if schema is not None:
+        schema_columns = list(getattr(schema, "columns", {}))
+        head = [column for column in schema_columns if column in all_columns]
+        tail = sorted(
+            column for column in all_columns if column not in schema_columns
+        )
+        col_order: Sequence[str] | None = head + tail
+        available_columns = set(col_order)
+    else:
+        col_order = None
+        available_columns = set(all_columns)
+    resolved_keys = [column for column in key_columns if column in available_columns]
+
+    if optional_cols and (missing_optional := optional_cols - present_columns):
+        use_logger.warning(
+            "optional_columns_missing",
+            columns=sorted(missing_optional),
+        )
+
+    if total_failures:
+        errors.save(failure_path, cfg=cfg)
+    else:
+        failure_path.unlink(missing_ok=True)
+        Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
+
+    if exit_code != 0:
+        return exit_code
+
+    def _iter_validated() -> Iterator[pd.DataFrame]:
+        for chunk in processed_chunks:
+            if col_order:
+                yield chunk.reindex(columns=col_order)
+            else:
+                yield chunk
+
+    csv_path: Path | None = None
+    try:
+        csv_path = writer(
+            _iter_validated(), output_path, col_order, resolved_keys
+        )
+    except Exception as exc:
+        use_logger.error(
+            "write_fail",
+            error=str(exc),
+            path=str(output_path),
+        )
+        return 1
+
+    if csv_path is None:
+        use_logger.error("write_fail", error="writer returned None", path=str(output_path))
+        return 1
 
     stats: Stats = {
         "rows_total": rows_total,
@@ -430,9 +428,11 @@ def run_pipeline(
             error=str(exc),
             error_type=exc.__class__.__name__,
             path=str(csv_path),
+            traceback=traceback.format_exc(),
 
         )
-        Path(csv_path).unlink(missing_ok=True)
+        if schema is not None:
+            Path(csv_path).unlink(missing_ok=True)
         meta_path.unlink(missing_ok=True)
         return 1
 
