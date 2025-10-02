@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from library.config import Config, _mask_secrets, _serialize_paths
-from library.cli_utils import build_parser, run_pipeline
+from library.cli_utils import build_parser, resolve_invocation, run_pipeline
 from library.logging_setup import LoggerConfig, configure_logger as setup_logger
 from schemas import AssaysSchema
 
@@ -60,6 +60,11 @@ def test_cli_utils_flags_and_help() -> None:
     assert parser.description.startswith(
         "CLI wrapper for :func:`write_csv_deterministic`"
     )
+
+
+def test_resolve_invocation_normalises_arguments() -> None:
+    invocation = resolve_invocation("tool", ["--flag", "value with space"])
+    assert invocation == ("tool", "--flag", "value with space")
 
 
 class _ValidationResult:
@@ -213,6 +218,49 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> N
 
     meta_path = output.with_name(output.name + ".meta.yaml")
     assert meta_path.exists()
+
+
+def test_run_pipeline_records_invocation(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frame = pd.DataFrame({"assay_chembl_id": ["A1"], "value": [1]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        frames = list(chunks)
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        df.to_csv(destination, index=False)
+        return destination
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="",  # ignored when schema is None
+        validators=None,
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        invocation=("tool", "--flag", "value with space"),
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _path: None,
+        cfg=cfg,
+    )
+
+    assert exit_code == 0
+    meta_path = output.with_name(output.name + ".meta.yaml")
+    metadata = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+    assert metadata["command"] == "tool --flag 'value with space'"
 
 
 def test_run_pipeline_removes_outputs_on_table_quality_failure(
