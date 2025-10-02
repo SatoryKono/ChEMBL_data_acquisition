@@ -114,9 +114,12 @@ def test_get_testitem_parent_catalog(
         "update_parent_catalog_cache",
         lambda data, cfg: None,
     )
-    monkeypatch.setattr(
-        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
-    )
+    quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_quality(*args: object, **kwargs: object) -> None:
+        quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", _capture_quality)
     monkeypatch.setattr(
         get_testitem_data.cli,
         "apply_config_overrides",
@@ -138,6 +141,11 @@ def test_get_testitem_parent_catalog(
 
     assert exit_code == 0
     assert output_csv.exists()
+
+    assert quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = quality_calls[-1]
+    assert Path(quality_args[0]) == output_csv
+    assert Path(quality_kwargs.get("destination_dir")).resolve() == output_csv.parent.resolve()
 
     df = pd.read_csv(output_csv)
     assert "parent_molecule_chembl_id" in df.columns
@@ -222,9 +230,12 @@ def test_get_testitem_skips_parent_lookup_when_present(
         cfg.pubchem.resolve_order = ("smiles",)
         return cfg
 
-    monkeypatch.setattr(
-        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
-    )
+    quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_quality(*args: object, **kwargs: object) -> None:
+        quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", _capture_quality)
     monkeypatch.setattr(
         get_testitem_data.cli,
         "apply_config_overrides",
@@ -246,6 +257,11 @@ def test_get_testitem_skips_parent_lookup_when_present(
 
     assert exit_code == 0
     assert output_csv.exists()
+
+    assert quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = quality_calls[-1]
+    assert Path(quality_args[0]) == output_csv
+    assert Path(quality_kwargs.get("destination_dir")).resolve() == output_csv.parent.resolve()
 
     df = pd.read_csv(output_csv)
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
@@ -318,9 +334,13 @@ def test_get_testitem_refreshes_outdated_parents(
         "update_parent_catalog_cache",
         lambda data, cfg: None,
     )
-    monkeypatch.setattr(
-        get_testitem_data, "analyze_table_quality", lambda *_, **__: None
-    )
+
+    quality_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _capture_quality(*args: object, **kwargs: object) -> None:
+        quality_calls.append((args, kwargs))
+
+    monkeypatch.setattr(get_testitem_data, "analyze_table_quality", _capture_quality)
     monkeypatch.setattr(get_testitem_data, "query_parent_catalog", lambda *_, **__: {})
 
     def patched_apply_config_overrides(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
@@ -355,6 +375,11 @@ def test_get_testitem_refreshes_outdated_parents(
     assert list(df["parent_molecule_chembl_id"]) == ["CHEMBL9001", "CHEMBL9002"]
     assert fetch_calls and len(fetch_calls) == 1
     assert set(fetch_calls[0]) == {"CHEMBL1", "CHEMBL2"}
+
+    assert quality_calls, "quality profiler should be invoked"
+    quality_args, quality_kwargs = quality_calls[-1]
+    assert Path(quality_args[0]) == output_csv
+    assert Path(quality_kwargs.get("destination_dir")).resolve() == output_csv.parent.resolve()
 
 
 CONFIG_CLI_PATH = str(DEFAULT_CONFIG_RELATIVE)

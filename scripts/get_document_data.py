@@ -1461,7 +1461,11 @@ def _finalise_export(
         return 1
 
     try:
-        analyze_table_quality(quality_profiler, table_name=str(csv_path.with_suffix("")))
+        analyze_table_quality(
+            quality_profiler,
+            table_name=str(csv_path.with_suffix("")),
+            destination_dir=csv_path.parent,
+        )
     except Exception as exc:
         logger.exception(
             "quality_report_generation_failed",

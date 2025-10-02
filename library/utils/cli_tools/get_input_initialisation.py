@@ -106,7 +106,11 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         report_dir.mkdir(parents=True, exist_ok=True)
         for entity, path in paths.items():
             logger.info("profiling", entity=entity)
-            analyze_table_quality(path, table_name=str(report_dir / path.stem))
+            analyze_table_quality(
+                path,
+                table_name=path.stem,
+                destination_dir=report_dir,
+            )
 
         logger.info("save_done", tables=len(paths), path=str(out_dir))
         return 0

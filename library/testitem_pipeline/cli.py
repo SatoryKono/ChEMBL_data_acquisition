@@ -776,7 +776,11 @@ def finalize_output(
     )
 
     try:
-        analyze_table_quality(csv_path, table_name=str(output.with_suffix("")))
+        analyze_table_quality(
+            csv_path,
+            table_name=str(output.with_suffix("")),
+            destination_dir=output.parent,
+        )
     except Exception as exc:
         logger.exception(
             "quality_report_failed",
