@@ -92,6 +92,8 @@ def test_run_document_postprocessing_check_pass(tmp_path: Path) -> None:
 
     markdown = result.report_markdown.read_text(encoding="utf-8")
     assert "- Status: **passed**" in markdown
+    assert "- Column sets identical: ✅ yes" in markdown
+    assert "- Column order identical: ✅ yes" in markdown
     assert "- Diff excerpt: not generated" in markdown
 
 
@@ -137,27 +139,55 @@ def test_run_document_postprocessing_check_failure(
 
     markdown = result.report_markdown.read_text(encoding="utf-8")
     assert "- Status: **failed**" in markdown
+    assert "- Column sets identical:" in markdown
+    assert "- Column order identical:" in markdown
     assert result.diff_csv.name in markdown
 
 
-def test_diff_extract_limited_by_keys(tmp_path: Path) -> None:
+def test_diff_extract_limited_by_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     base_dir, reference_path, candidate_path = _prepare_environment(tmp_path)
 
-    template = pd.read_csv(reference_path, dtype=str)
-    rows: list[pd.Series] = []
+    candidate_template = pd.read_csv(candidate_path, dtype=str)
+    candidate_rows: list[pd.Series] = []
     for idx in range(150):
-        record = template.iloc[0].copy()
-        record["PMID"] = f"{100000 + idx}"
-        record["document_chembl_id"] = f"DOC{idx:05d}"
-        record["completed"] = "2020-01-01"
-        record["doi"] = f"10.1000/{idx:03d}"
-        rows.append(record)
-    reference_df = pd.DataFrame(rows)
-    reference_df.to_csv(reference_path, index=False)
+        record = candidate_template.iloc[0].copy()
+        record["ChEMBL.document_chembl_id"] = f"DOC{idx:05d}"
+        record["ChEMBL.doi"] = f"10.1000/{idx:03d}"
+        record["ChEMBL.pubmed_id"] = f"{100000 + idx}"
+        record["PubMed.PMID"] = f"{100000 + idx}"
+        record["PubMed.YearCompleted"] = "2020"
+        record["PubMed.MonthCompleted"] = "01"
+        record["PubMed.DayCompleted"] = "01"
+        record["ChEMBL.year"] = "2020"
+        record["ChEMBL.volume"] = "1"
+        record["ChEMBL.issue"] = "1"
+        record["ChEMBL.first_page"] = "1"
+        record["ChEMBL.last_page"] = "2"
+        candidate_rows.append(record)
+    candidate_raw = pd.DataFrame(candidate_rows)
+    candidate_raw.to_csv(candidate_path, index=False)
 
-    candidate_df = reference_df.copy()
-    candidate_df["doi"] = candidate_df["doi"] + ".mismatch"
-    candidate_df.to_csv(candidate_path, index=False)
+    original = dp.postprocess_documents
+
+    def mutate(
+        frame,
+        *,
+        required_columns=None,
+        ref_document=None,
+        ref_document_path=None,
+    ):
+        processed = original(
+            frame,
+            required_columns=required_columns,
+            ref_document=ref_document,
+            ref_document_path=ref_document_path,
+        )
+        processed["doi"] = processed["doi"].astype(str) + ".mismatch"
+        return processed
+
+    monkeypatch.setattr(dp, "postprocess_documents", mutate)
 
     result = run_document_postprocessing_check(
         base_path=base_dir,
@@ -206,12 +236,8 @@ def test_cli_exit_codes(
         [
             "--base-path",
             str(base_dir),
-
-            "--ref",
-            "input\\full\\document.csv",
-            "--actual",
+            "--out",
             "output\\document\\output.document_20230101.csv",
-
         ]
     )
 
