@@ -36,6 +36,7 @@ sources:
       activity:
         column: "activity_chembl_id"
         batch_size: 50
+        workers: 1
         timeout: 30.0
         limit: null
         dry_run: false

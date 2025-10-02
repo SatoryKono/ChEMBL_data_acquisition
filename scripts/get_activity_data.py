@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable, Iterator, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -128,9 +129,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
 
     def fetcher() -> Iterator[pd.DataFrame]:
         with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
-            for chunk_ids in id_chunks:
+            def _fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
                 try:
-                    chunk_df = cl.get_activities(
+                    return cl.get_activities(
                         chunk_ids,
                         cfg=cfg.api,
                         client=client,
@@ -147,7 +148,36 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         timeout=cfg.activity.timeout,
                     )
                     raise PipelineError(str(exc)) from exc
-                yield chunk_df
+
+            workers = max(1, cfg.activity.workers)
+            if workers == 1:
+                for chunk_ids in id_chunks:
+                    yield _fetch_chunk(chunk_ids)
+                return
+
+            pending: dict[Future[pd.DataFrame], int] = {}
+            completed: dict[int, pd.DataFrame] = {}
+            next_index = 0
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                for index, chunk_ids in enumerate(id_chunks):
+                    future = executor.submit(_fetch_chunk, list(chunk_ids))
+                    pending[future] = index
+                    if len(pending) >= workers:
+                        done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+                        for finished in done:
+                            chunk_index = pending.pop(finished)
+                            completed[chunk_index] = finished.result()
+                        while next_index in completed:
+                            yield completed.pop(next_index)
+                            next_index += 1
+
+                for future in as_completed(list(pending)):
+                    chunk_index = pending.pop(future)
+                    completed[chunk_index] = future.result()
+                    while next_index in completed:
+                        yield completed.pop(next_index)
+                        next_index += 1
 
     def _compute_bounds(frame: pd.DataFrame) -> pd.DataFrame:
         return compute_activity_bounds(frame, cfg.activity_bounds)

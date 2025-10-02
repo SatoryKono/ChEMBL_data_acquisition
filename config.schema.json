@@ -14,6 +14,12 @@
           "title": "Batch Size",
           "type": "integer"
         },
+        "workers": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Workers",
+          "type": "integer"
+        },
         "timeout": {
           "default": 30.0,
           "minimum": 0,
