@@ -28,6 +28,7 @@ from library import cli
 from library import io
 from library.csv_utils import write_csv_chunks_deterministic
 from library.clients import ChemblClient, _chunked
+from library.rate_limiter import get_global_limiter
 from library.cli import (
     LoggerConfig,
 )
@@ -127,7 +128,13 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")
 
     def fetcher() -> Iterator[pd.DataFrame]:
-        with ChemblClient(cfg.api, cfg.retry, cfg.chembl) as client:
+        global_limiter = get_global_limiter(
+            cfg.rate.global_rps, cfg.rate.global_burst
+        )
+
+        with ChemblClient(
+            cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
+        ) as client:
             for chunk_ids in id_chunks:
                 try:
                     chunk_df = cl.get_activities(

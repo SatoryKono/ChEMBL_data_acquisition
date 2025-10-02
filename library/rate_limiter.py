@@ -16,6 +16,9 @@ import time
 from cachetools import TTLCache
 
 
+GLOBAL_LIMITER_NAME = "system_global"
+
+
 class RateLimiter:
     """Token bucket rate limiter.
 
@@ -105,6 +108,20 @@ def get_limiter(name: str, rps: float, burst: int | None = None) -> RateLimiter:
             limiter = RateLimiter(rps, burst)
             _limiters[name] = limiter
         return limiter
+
+
+def get_global_limiter(rps: float, burst: int) -> RateLimiter:
+    """Return the shared system-wide :class:`RateLimiter`.
+
+    Parameters
+    ----------
+    rps:
+        Allowed requests per second for the entire pipeline.
+    burst:
+        Maximum burst size for the global limiter.
+    """
+
+    return get_limiter(GLOBAL_LIMITER_NAME, rps, burst)
 
 
 def sleep(delay: float) -> None:

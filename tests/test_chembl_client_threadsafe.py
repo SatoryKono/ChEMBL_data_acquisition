@@ -7,8 +7,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+import pytest
+
+import library.rate_limiter as rl
 from library.clients import ChemblClient
 from library.config import ApiCfg, RetryCfg
+from library.clients import chembl as chembl_module
 
 USER_AGENT = "test-agent/1.0 (mailto:test@example.org)"
 
@@ -122,7 +126,10 @@ def test_thread_local_sessions_created(monkeypatch) -> None:
 
     urls = [f"http://example.com/thread/{idx}" for idx in range(5)]
 
+    barrier = threading.Barrier(len(urls))
+
     def worker(target_url: str) -> dict[str, Any]:
+        barrier.wait()
         return client.request_json(target_url, cfg=api_cfg())
 
     with ThreadPoolExecutor(max_workers=len(urls)) as pool:
@@ -236,3 +243,86 @@ def test_concurrent_fetches_no_longer_block(monkeypatch) -> None:
     assert len(results) == len(urls)
     assert all(result == {"ok": True} for result in results)
     assert max_active > 1
+
+
+def test_parallel_clients_respect_global_rate(monkeypatch) -> None:
+    """Multiple clients should share the system-wide rate limiter."""
+
+    fake_time = 0.0
+    sleep_calls: list[float] = []
+
+    def fake_monotonic() -> float:
+        return fake_time
+
+    def fake_sleep(delay: float) -> None:
+        nonlocal fake_time
+        sleep_calls.append(delay)
+        fake_time += delay
+
+    monkeypatch.setattr(rl.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(rl, "sleep", fake_sleep)
+
+    class ImmediateLimiter:
+        def acquire(self) -> None:  # pragma: no cover - simple stub
+            return None
+
+    monkeypatch.setattr(
+        chembl_module,
+        "get_limiter",
+        lambda *args, **kwargs: ImmediateLimiter(),
+    )
+
+    global_limiter = rl.RateLimiter(rps=2, burst=2)
+
+    class RecordingSession:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def get(self, url: str, timeout: Any) -> DummyResponse:
+            self.calls.append(url)
+            return DummyResponse()
+
+        def close(self) -> None:  # pragma: no cover - compatibility stub
+            return None
+
+    cfg = api_cfg(rps=100, burst=100)
+    session_one = RecordingSession()
+    session_two = RecordingSession()
+
+    client_one = ChemblClient(
+        cfg,
+        RetryCfg(),
+        global_limiter=global_limiter,
+        session=session_one,
+    )
+    client_two = ChemblClient(
+        cfg,
+        RetryCfg(),
+        global_limiter=global_limiter,
+        session=session_two,
+    )
+
+    urls = [f"http://example.com/global/{idx}" for idx in range(4)]
+    barrier = threading.Barrier(len(urls))
+
+    def worker(client: ChemblClient, url: str) -> None:
+        barrier.wait()
+        client.request_json(url, cfg=cfg)
+
+    threads: list[threading.Thread] = []
+    for index, url in enumerate(urls):
+        target_client = client_one if index % 2 == 0 else client_two
+        thread = threading.Thread(target=worker, args=(target_client, url))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    assert len(session_one.calls) == 2
+    assert len(session_two.calls) == 2
+    assert set(session_one.calls) == set(urls[::2])
+    assert set(session_two.calls) == set(urls[1::2])
+    assert len(sleep_calls) == 2
+    assert all(pytest.approx(0.5, rel=1e-6) == call for call in sleep_calls)
+    assert fake_time == pytest.approx(1.0, rel=1e-6)

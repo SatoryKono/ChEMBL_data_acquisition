@@ -18,7 +18,7 @@ from requests import Session
 
 from ..config import ApiCfg, ChemblCacheCfg, RetryCfg, session_with_retry
 from ..log import logger
-from ..rate_limiter import get_limiter, sleep
+from ..rate_limiter import RateLimiter, get_limiter, sleep
 
 
 @dataclass
@@ -36,6 +36,9 @@ class ChemblClient:
     session:
         Optional pre-configured :class:`requests.Session` instance; primarily
         intended for tests.
+    global_limiter:
+        Optional system-wide :class:`RateLimiter` enforcing ``Config.rate``
+        across all HTTP clients.
     """
 
     cache: TTLCache[str, dict[str, Any]] = field(init=False)
@@ -44,6 +47,7 @@ class ChemblClient:
     _sessions: set[Session] = field(init=False)
     _sessions_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _session_factory: Callable[[], Session] = field(init=False)
+    _global_limiter: RateLimiter | None = field(default=None, init=False)
 
     def __init__(
         self,
@@ -52,6 +56,7 @@ class ChemblClient:
         chembl: ChemblCacheCfg | None = None,
         *,
         session: Session | None = None,
+        global_limiter: RateLimiter | None = None,
     ) -> None:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
@@ -72,6 +77,7 @@ class ChemblClient:
         self._session_local = threading.local()
         self._sessions = set()
         self._sessions_lock = threading.Lock()
+        self._global_limiter = global_limiter
 
     def close(self) -> None:
         """Close the underlying HTTP session.
@@ -179,6 +185,8 @@ class ChemblClient:
         total_attempts = cfg.retries + 1
 
         for attempt in range(1, total_attempts + 1):
+            if self._global_limiter is not None:
+                self._global_limiter.acquire()
             limiter.acquire()
             event = "request_start" if attempt == 1 else "request_retry"
             logger.debug(event, extra={"url": url, "attempt": attempt, "rps": cfg.rps})
