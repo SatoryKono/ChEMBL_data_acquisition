@@ -2352,84 +2352,94 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"get_target_data_{date_value}.log"
-    with log_path.open("a", encoding="utf-8") as log_stream:
-        log_cfg.stream = log_stream
-        configure_logger(log_cfg)
+    exit_code = 0
+    try:
+        with log_path.open("a", encoding="utf-8") as log_stream:
+            log_cfg.stream = log_stream
+            configure_logger(log_cfg)
 
-        limit_value = getattr(args, "limit", None)
-        if limit_value == 0:
-            logger.info("pipeline_skip_limit", limit=limit_value)
-            return 0
-        subparser_map = getattr(parser, "subparsers_map", {})
-        subparser = subparser_map.get(args.command, parser)
-        if limit_value is not None and limit_value < 0:
-            subparser.error("--limit must be zero or a positive integer")
-        offset_value = getattr(args, "offset", 0)
-        if offset_value < 0:
-            subparser.error("--offset must be zero or a positive integer")
-        mapping: dict[str, str] = {}
-        if args.command == "uniprot":
-            mapping = {
-                "column": "target.uniprot.column",
-                "data_dir": "target.uniprot.data_dir",
-                "limit": "target.uniprot.limit",
-            }
-        elif args.command == "chembl":
-            mapping = {
-                "column": "target.chembl.column",
-                "chunk_size": "target.chembl.chunk_size",
-                "timeout": "target.chembl.timeout",
-                "limit": "target.chembl.limit",
-            }
-        elif args.command == "iuphar":
-            mapping = {
-                "target_csv": "target.iuphar.target_csv",
-                "family_csv": "target.iuphar.family_csv",
-                "limit": "target.iuphar.limit",
-            }
-        elif args.command == "all":
-            mapping = {
-                "timeout": "target.all.timeout",
-                "data_dir": "target.all.data_dir",
-                "target_csv": "target.all.target_csv",
-                "family_csv": "target.all.family_csv",
-                "uniprot_column": "target.all.uniprot_column",
-                "chembl_out": "target.all.chembl_out",
-                "uniprot_out": "target.all.uniprot_out",
-                "iuphar_out": "target.all.iuphar_out",
-                "limit": "target.all.limit",
-            }
-        args_dict = vars(args).copy()
-        output_candidate = args_dict.get("output_csv")
-        if output_candidate in (
-            None,
-            argparse.SUPPRESS,
-        ):
-            final_value = args_dict.get("final_out")
-            if final_value in (None, argparse.SUPPRESS):
-                date_token = args_dict.get(
-                    "date", datetime.now(timezone.utc).strftime("%Y%m%d")
-                )
-                inferred = Path(args_dict["input_csv"]).with_name(
-                    f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
-                )
-                args_dict["final_out"] = inferred
-                args_dict["output_csv"] = inferred
+            limit_value = getattr(args, "limit", None)
+            if limit_value == 0:
+                logger.info("pipeline_skip_limit", limit=limit_value)
+                exit_code = 0
             else:
-                candidate = Path(final_value)
-                args_dict["final_out"] = candidate
-                args_dict["output_csv"] = candidate
-        else:
-            args_dict["output_csv"] = Path(output_candidate)
-        exit_code = run_cli_command(
-            args=argparse.Namespace(**args_dict),
-            parser=subparser,
-            base_parser=parser,
-            log_cfg=log_cfg,
-            mapping=mapping,
-            run=run,
-            logger=logger,
+                subparser_map = getattr(parser, "subparsers_map", {})
+                subparser = subparser_map.get(args.command, parser)
+                if limit_value is not None and limit_value < 0:
+                    subparser.error("--limit must be zero or a positive integer")
+                offset_value = getattr(args, "offset", 0)
+                if offset_value < 0:
+                    subparser.error("--offset must be zero or a positive integer")
+                mapping: dict[str, str] = {}
+                if args.command == "uniprot":
+                    mapping = {
+                        "column": "target.uniprot.column",
+                        "data_dir": "target.uniprot.data_dir",
+                        "limit": "target.uniprot.limit",
+                    }
+                elif args.command == "chembl":
+                    mapping = {
+                        "column": "target.chembl.column",
+                        "chunk_size": "target.chembl.chunk_size",
+                        "timeout": "target.chembl.timeout",
+                        "limit": "target.chembl.limit",
+                    }
+                elif args.command == "iuphar":
+                    mapping = {
+                        "target_csv": "target.iuphar.target_csv",
+                        "family_csv": "target.iuphar.family_csv",
+                        "limit": "target.iuphar.limit",
+                    }
+                elif args.command == "all":
+                    mapping = {
+                        "timeout": "target.all.timeout",
+                        "data_dir": "target.all.data_dir",
+                        "target_csv": "target.all.target_csv",
+                        "family_csv": "target.all.family_csv",
+                        "uniprot_column": "target.all.uniprot_column",
+                        "chembl_out": "target.all.chembl_out",
+                        "uniprot_out": "target.all.uniprot_out",
+                        "iuphar_out": "target.all.iuphar_out",
+                        "limit": "target.all.limit",
+                    }
+                args_dict = vars(args).copy()
+                output_candidate = args_dict.get("output_csv")
+                if output_candidate in (
+                    None,
+                    argparse.SUPPRESS,
+                ):
+                    final_value = args_dict.get("final_out")
+                    if final_value in (None, argparse.SUPPRESS):
+                        date_token = args_dict.get(
+                            "date", datetime.now(timezone.utc).strftime("%Y%m%d")
+                        )
+                        inferred = Path(args_dict["input_csv"]).with_name(
+                            f"output.{DEFAULT_OUTPUT_STEM}_{date_token}.csv"
+                        )
+                        args_dict["final_out"] = inferred
+                        args_dict["output_csv"] = inferred
+                    else:
+                        candidate = Path(final_value)
+                        args_dict["final_out"] = candidate
+                        args_dict["output_csv"] = candidate
+                else:
+                    args_dict["output_csv"] = Path(output_candidate)
+                exit_code = run_cli_command(
+                    args=argparse.Namespace(**args_dict),
+                    parser=subparser,
+                    base_parser=parser,
+                    log_cfg=log_cfg,
+                    mapping=mapping,
+                    run=run,
+                    logger=logger,
+                )
+    finally:
+        fallback_cfg = LoggerConfig(
+            level=log_cfg.level,
+            run_id=log_cfg.run_id,
+            redact_secrets=log_cfg.redact_secrets,
         )
+        configure_logger(fallback_cfg)
 
     return exit_code
 
