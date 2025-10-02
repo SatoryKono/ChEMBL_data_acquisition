@@ -5,14 +5,15 @@ Acquisition, а также вспомогательные модули, отве
 
 ## Структура каталогов
 
-Экспорты сохраняются в `local.io.output_dir` (по умолчанию `../data/output`). По
+Экспорты сохраняются в `local.io.output_dir` (по умолчанию
+`~/.local/share/chembl-da/output`). По
 умолчанию CLI формирует имя как `output.<stem>_<date>.csv`, где `<stem>` — имя
 входного файла без расширения, а `<date>` — текущая дата в формате `YYYYMMDD`.
 Запись автоматически создаёт родительские каталоги, если `local.io.exist_ok`
 равно `true`.
 
 ```
-../data/output/
+~/.local/share/chembl-da/output/
 ├── output.activities_20240105.csv
 ├── output.activities_20240105.csv.meta.yaml
 ├── output.activities_20240105_failure_cases.csv
@@ -27,7 +28,7 @@ Acquisition, а также вспомогательные модули, отве
 Промежуточные файлы таргет-пайплайна в режиме `all`
 (`*_chembl.csv`, `*_uniprot.csv`, `*_iuphar.csv`) используют тот же шаблон.
 Параметр `--output` по-прежнему позволяет задать альтернативную структуру,
-например `../data/output/ChEMBL/processed/activities.csv`.
+например `~/.local/share/chembl-da/output/ChEMBL/processed/activities.csv`.
 
 ## Sidecar с метаданными (`*.csv.meta.yaml`)
 

@@ -113,7 +113,7 @@ Detailed command walkthroughs live in `docs/USAGE_EN.md` and
 
 ## Outputs
 
-* Primary CSV exports live under `local.io.output_dir` (default `../data/output`).
+* Primary CSV exports live under `local.io.output_dir` (default `~/.local/share/chembl-da/output`).
 * Every run writes a `<name>.csv.meta.yaml` sidecar with configuration, command
   line, row counts and SHA-256 digests. Validation errors go into
   `<name>_failure_cases.csv`, and table-quality reports are produced for each

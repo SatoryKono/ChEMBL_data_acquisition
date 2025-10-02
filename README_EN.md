@@ -173,7 +173,7 @@ The command exits with status code `1` when mismatches occur and stores the diff
 
 ## Data generation
 
-Five production pipelines live in [`scripts/`](scripts/) and write CSV outputs to `data/output/`:
+Five production pipelines live in [`scripts/`](scripts/) and write CSV outputs to `~/.local/share/chembl-da/output` by default:
 
 * `get_activity_data.py` — retrieves activity data from ChEMBL and enriches it with derived value ranges.
 * `get_assay_data.py` — exports assay descriptions.
@@ -644,7 +644,7 @@ examples see [`docs/USAGE_EN.md`](docs/USAGE_EN.md) (Russian version:
 ## Output and metadata
 
 Pipelines persist deterministic CSV tables via `library.io.write_csv` and store accompanying `*.meta.yaml` sidecars in
-`data/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
+`~/.local/share/chembl-da/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
 [`docs/OUTPUT_EN.md`](docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](docs/OUTPUT_RU.md) for layout details.
 
 ## Dtype Inspector
