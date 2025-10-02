@@ -1432,6 +1432,7 @@ def fetch_chembl(
     chembl_args = argparse.Namespace(
         input_csv=input_csv,
         final_out=final_out,
+        output_csv=final_out,
         raw_out=raw_out,
         raw_format=raw_format,
         id_cols=list(id_cols) if id_cols is not None else None,
@@ -1453,7 +1454,7 @@ def fetch_chembl(
             cfg.target.chembl.limit = original_limit
         if chunk_size is not None:
             cfg.target.chembl.chunk_size = original_chunk_size
-    normalized_output = _normalized_output_path(output_csv)
+    normalized_output = _normalized_output_path(final_out)
     df = pd.read_csv(
 
         final_out, sep=cfg.io.csv_sep, encoding=cfg.io.csv_encoding, dtype=str
