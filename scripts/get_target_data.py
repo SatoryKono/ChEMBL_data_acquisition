@@ -2028,6 +2028,7 @@ def fetch_iuphar(
         how="left",
         suffixes=("_chembl", "_uniprot"),
     )
+    combined_df = combined_df.copy()
 
     merge_suffix_priority = ("_uniprot", "_chembl")
 
@@ -2140,21 +2141,29 @@ def fetch_iuphar(
         else:
             combined_df[column] = _prefer_primary(uniprot_series, chembl_series)
 
-    if "gene" not in combined_df.columns:
-        combined_df["gene"] = pd.Series(
+    column_updates: dict[str, pd.Series] = {}
+    index = combined_df.index
+
+    if "gene" in combined_df.columns:
+        gene_series = combined_df["gene"].astype(object)
+    else:
+        gene_series = pd.Series(
             UNIPROT_MISSING_VALUE,
-            index=combined_df.index,
+            index=index,
             dtype=object,
         )
+        column_updates["gene"] = gene_series
 
     ec_number_columns = [
         column for column in combined_df.columns if column.startswith("ec_numbers")
     ]
+    ec_numbers_series: pd.Series | None = None
     if ec_number_columns:
-        combined_df["ec_numbers"] = combined_df.apply(
+        ec_numbers_series = combined_df.apply(
             lambda r: _pipe_merge([r.get(column) for column in ec_number_columns]),
             axis=1,
         )
+        column_updates["ec_numbers"] = ec_numbers_series
         extra_ec_columns = [
             column for column in ec_number_columns if column != "ec_numbers"
         ]
@@ -2166,13 +2175,15 @@ def fetch_iuphar(
         for column in combined_df.columns
         if column.startswith("reaction_ec_numbers")
     ]
+    reaction_ec_series: pd.Series | None = None
     if reaction_ec_columns:
-        combined_df["reaction_ec_numbers"] = combined_df.apply(
+        reaction_ec_series = combined_df.apply(
             lambda r: normalize_reaction_ec_numbers(
                 [r.get(column) for column in reaction_ec_columns]
             ),
             axis=1,
         )
+        column_updates["reaction_ec_numbers"] = reaction_ec_series
         extra_reaction_columns = [
             column for column in reaction_ec_columns if column != "reaction_ec_numbers"
         ]
@@ -2180,33 +2191,62 @@ def fetch_iuphar(
             combined_df = combined_df.drop(
                 columns=extra_reaction_columns, errors="ignore"
             )
+    elif "reaction_ec_numbers" in combined_df.columns:
+        reaction_ec_series = combined_df["reaction_ec_numbers"].astype(object)
 
-    combined_df["synonyms"] = combined_df.apply(
-        lambda r: _pipe_merge(
-            [
-                r.get("pref_name"),
-                r.get("component_description"),
-                r.get("gene"),
-                r.get("chembl_alternative_name"),
-                r.get("names"),
-                r.get("secondaryAccessionNames"),
-            ]
+    def _series_or_empty(name: str) -> pd.Series:
+        if name in combined_df.columns:
+            return combined_df[name].reindex(index).astype(object)
+        return pd.Series(index=index, dtype=object)
+
+    synonyms_components = pd.concat(
+        [
+            _series_or_empty("pref_name"),
+            _series_or_empty("component_description"),
+            gene_series.reindex(index),
+            _series_or_empty("chembl_alternative_name"),
+            _series_or_empty("names"),
+            _series_or_empty("secondaryAccessionNames"),
+        ],
+        axis=1,
+    )
+    column_updates["synonyms"] = synonyms_components.apply(
+        lambda r: _pipe_merge(r.tolist()),
+        axis=1,
+    )
+
+    if ec_numbers_series is None and "ec_numbers" in combined_df.columns:
+        ec_numbers_series = combined_df["ec_numbers"].reindex(index).astype(object)
+    if ec_numbers_series is None:
+        ec_numbers_series = pd.Series(index=index, dtype=object)
+
+    if reaction_ec_series is None:
+        reaction_ec_series = pd.Series(index=index, dtype=object)
+    else:
+        reaction_ec_series = reaction_ec_series.reindex(index).astype(object)
+
+    ec_numbers_values = ec_numbers_series.reindex(index, fill_value=None)
+    reaction_values = reaction_ec_series.reindex(index, fill_value=None)
+    column_updates["ec_number"] = pd.Series(
+        (
+            _pipe_merge([ec_val, reaction_val])
+            for ec_val, reaction_val in zip(ec_numbers_values, reaction_values)
         ),
-        axis=1,
+        index=index,
+        dtype=object,
     )
-    combined_df["ec_number"] = combined_df.apply(
-        lambda r: _pipe_merge([r.get("ec_numbers"), r.get("reaction_ec_numbers")]),
-        axis=1,
-    )
-    combined_df["gene_name"] = combined_df.get("gene", pd.Series(dtype=str)).apply(
-        _first_token
-    )
-    combined_df = combined_df.drop(columns=["ec_numbers"], errors="ignore")
+
+    column_updates["gene_name"] = gene_series.reindex(index).apply(_first_token)
 
     if "mapping_uniprot_id" in combined_df.columns:
-        combined_df["mapping_uniprot_id"] = (
+        column_updates["mapping_uniprot_id"] = (
             combined_df["mapping_uniprot_id"].fillna("").astype(str)
         )
+
+    if column_updates:
+        combined_df = combined_df.assign(**column_updates)
+
+    combined_df = combined_df.drop(columns=["ec_numbers"], errors="ignore")
 
     resolved_for_combined = resolved_series.reindex(
         combined_df.index, fill_value=UNIPROT_MISSING_VALUE
