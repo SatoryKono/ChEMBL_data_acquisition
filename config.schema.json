@@ -1484,6 +1484,15 @@
           "title": "Backoff Factor",
           "type": "number"
         },
+        "backoff_cap": {
+          "default": null,
+          "minimum": 0,
+          "title": "Backoff Cap",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "status_forcelist": {
           "items": {
             "type": "integer"

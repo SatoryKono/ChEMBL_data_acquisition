@@ -168,6 +168,51 @@ def test_run_pipeline_multiple_chunks(tmp_path: Path, cfg: Config) -> None:
     assert metadata["stats"]["rows_dropped"] == 0
 
 
+def test_run_pipeline_includes_extra_stats(tmp_path: Path, cfg: Config) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frame = pd.DataFrame({"assay_chembl_id": ["A1"]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        combined = pd.concat(list(chunks), ignore_index=True)
+        combined.to_csv(destination, index=False)
+        return destination
+
+    extra = {"chunk_fetch_failure_chunks": 3, "chunk_fetch_failure_ids": ["C1"]}
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=None,
+        schema_name="none",
+        validators=None,
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda _path: None,
+        cfg=cfg,
+        stats_extra=lambda: extra,
+    )
+
+    assert exit_code == 0
+    metadata = yaml.safe_load(output.with_name(output.name + ".meta.yaml").read_text())
+    assert metadata["stats"]["chunk_fetch_failure_chunks"] == 3
+    assert metadata["stats"]["chunk_fetch_failure_ids"] == ["C1"]
+
+
 def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"
