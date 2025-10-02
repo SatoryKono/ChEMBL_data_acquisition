@@ -34,7 +34,7 @@ from library.cli import (
     configure_logger,
     path_argument,
 )
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
 from library.io.writers import write_csv
@@ -479,10 +479,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger_inst = configure_logger(log_cfg)
     pipeline_logger = logger_inst.bind(stage="pipeline")
     pipeline_logger.info("pipeline_start")
-    cfg = cli.apply_config_overrides(args, parser, args.config)
+    try:
+        cfg = cli.apply_config_overrides(args, parser, args.config)
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        pipeline_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        pipeline_logger.info("pipeline_done", exit_code=1)
+        return 1
+
     if args.print_config:
         print_config(cfg)
         return 0
+
     try:
         ensure_dirs(cfg)
         options = PipelineConfig.model_validate(
@@ -500,6 +511,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "limit": args.limit,
             }
         )
+    except (ValueError, TypeError) as exc:
+        pipeline_logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        pipeline_logger.info("pipeline_done", exit_code=1)
+        return 1
     except (FileNotFoundError, NotADirectoryError) as exc:
         pipeline_logger.error(
             "directory_setup_failed",

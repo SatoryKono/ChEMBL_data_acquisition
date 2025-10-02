@@ -218,12 +218,15 @@ def test_cli_missing_output_directory_logs_error(tmp_path: Path, monkeypatch) ->
     input_path = tmp_path / "input.csv"
     input_path.write_text("a\n1\n", encoding="utf-8")
     output_path = tmp_path / "missing" / "out.csv"
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         textwrap.dedent(
-            """
+            f"""
             local:
               io:
+                cache_dir: {cache_dir}
                 exist_ok: false
             """
         ),

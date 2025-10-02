@@ -20,7 +20,7 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.config import Config, ensure_dirs, print_config
+from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.document_type_classifier import compute_scores, decide_label
 from library.log import logger
 
@@ -162,6 +162,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "limit": "doc_type.limit",
             },
         )
+    except (ConfigError, FileNotFoundError, ValueError) as exc:
+        logger.error(
+            "config_error",
+            error=str(exc),
+            config=str(args.config),
+        )
+        logger_inst.info("pipeline_fail", run_id=log_cfg.run_id)
+        return 1
+
+    try:
         if args.print_config:
             print_config(cfg)
             configure_logger(log_cfg)
