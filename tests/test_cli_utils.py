@@ -143,6 +143,68 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> N
     assert meta_path.exists()
 
 
+def test_run_pipeline_removes_outputs_on_table_quality_failure(
+    tmp_path: Path, cfg: Config
+) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frames = [
+        pd.DataFrame(
+            {
+                "assay_chembl_id": ["A1"],
+                "document_chembl_id": ["D1"],
+            }
+        )
+    ]
+
+    def fetcher() -> list[pd.DataFrame]:
+        return frames
+
+    def validator(df: pd.DataFrame) -> _ValidationResult:
+        return _ValidationResult(df, pd.DataFrame())
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str],
+        key_cols: list[str],
+    ) -> Path:
+        frames = list(chunks)
+        pd.concat(frames, ignore_index=True).to_csv(destination, index=False)
+        return destination
+
+    quality_calls: list[Path] = []
+
+    def table_quality(path: Path) -> None:
+        quality_calls.append(path)
+        raise RuntimeError("quality failed")
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[validator],
+        metadata_hooks=[lambda df: df],
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=table_quality,
+        cfg=cfg,
+    )
+
+    meta_path = output.with_name(output.name + ".meta.yaml")
+
+    assert exit_code == 1
+    assert quality_calls == [output]
+    assert not output.exists()
+    assert not meta_path.exists()
+
+
 def test_run_pipeline_removes_stale_failure_outputs(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"

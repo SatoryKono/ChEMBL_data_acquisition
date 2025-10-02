@@ -413,7 +413,7 @@ def run_pipeline(
         "rows_dropped": rows_dropped,
         "output_sha256": file_sha256(csv_path),
     }
-    write_meta_yaml(
+    meta_path = write_meta_yaml(
         csv_path=csv_path,
         command=command,
         config_subset=config_snapshot,
@@ -424,12 +424,15 @@ def run_pipeline(
 
     try:
         table_quality(csv_path)
-    except ValueError as exc:
+    except Exception as exc:
         use_logger.error(
             "quality_report_failed",
             error=str(exc),
-            path=str(output_path),
+            error_type=exc.__class__.__name__,
+            path=str(csv_path),
         )
+        Path(csv_path).unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
         return 1
 
     if exit_code == 0:
