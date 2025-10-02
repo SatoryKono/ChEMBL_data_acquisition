@@ -1712,6 +1712,24 @@
           ],
           "default": null,
           "title": "Limit"
+        },
+        "id_cols": {
+          "default": [
+            "target_chembl_id",
+            "uniprot_id",
+            "uniprot_id_primary",
+            "mapping_uniprot_id",
+            "uniProtkbId",
+            "uniprotkb_Id",
+            "iuphar_target_id",
+            "iuphar_family_id",
+            "gtop_target_id"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Id Cols",
+          "type": "array"
         }
       },
       "title": "TargetChemblCfg",

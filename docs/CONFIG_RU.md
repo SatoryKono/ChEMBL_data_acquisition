@@ -219,6 +219,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 |  | `chunk_size` | `5` | Размер батча запросов. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
+|  | `id_cols` | `["target_chembl_id", "uniprot_id", "uniprot_id_primary", "mapping_uniprot_id", "uniProtkbId", "uniprotkb_Id", "iuphar_target_id", "iuphar_family_id", "gtop_target_id"]` | Идентификаторы, где плейсхолдеры заменяются на пустую строку. |
 | `iuphar` | `target_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
 |  | `family_csv` | `dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
