@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import uuid
 import os
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -24,6 +25,32 @@ from ..version import require_python_version
 from ..utils.config import DEFAULT_CONFIG_PATH
 
 require_python_version()
+
+
+_DEPRECATED_OUTPUT_OPTION = "--output"
+_DEPRECATED_OUTPUT_REPLACEMENT = "--final-out"
+_DEPRECATED_OUTPUT_MESSAGE = (
+    f"{_DEPRECATED_OUTPUT_OPTION} is deprecated; use {_DEPRECATED_OUTPUT_REPLACEMENT}"
+)
+
+
+def _emit_deprecated_output_warning() -> None:
+    """Log a deprecation warning without failing when the logger stream is closed."""
+
+    try:
+        log.logger.warning(
+            "cli_option_deprecated",
+            option=_DEPRECATED_OUTPUT_OPTION,
+            replacement=_DEPRECATED_OUTPUT_REPLACEMENT,
+        )
+    except ValueError as exc:
+        if "closed file" not in str(exc).lower():
+            raise
+        warnings.warn(
+            _DEPRECATED_OUTPUT_MESSAGE,
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
 
 def create_logger_config(level: str) -> LoggerConfig:
@@ -621,11 +648,7 @@ def prepare_io_paths(
         if final_candidate in (None, argparse.SUPPRESS):
             final_candidate = output_candidate
             setattr(args, "final_out", final_candidate)
-        log.logger.warning(
-            "cli_option_deprecated",
-            option="--output",
-            replacement="--final-out",
-        )
+        _emit_deprecated_output_warning()
 
     raw_format_value = getattr(args, "raw_format", None)
     if raw_format_value in (None, argparse.SUPPRESS):
