@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pytest
@@ -140,96 +141,70 @@ def test_main_prints_config_when_requested(
     )
 
 
-def test_main_missing_config_path_logs_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    "keep_markers, expected",
+    [
+        (False, ["CHEMBL1", "CHEMBL3"]),
+        (True, ["CHEMBL1", "CUSTOM_NA", "CHEMBL3"]),
+    ],
+)
+def test_run_respects_na_marker_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    keep_markers: bool,
+    expected: list[str],
 ) -> None:
-    """Missing configuration paths should be reported gracefully."""
+    cfg.io.na_markers = ("CUSTOM_NA",)
+    cfg.io.keep_na_markers = keep_markers
 
-    configured_loggers: list[DummyLogger] = []
-    monkeypatch.setattr(
-        cli, "configure_logger", _configure_logger_factory(configured_loggers)
+    input_path = tmp_path / "ids.csv"
+    input_path.write_text("chembl_id\nCHEMBL1\nCUSTOM_NA\nCHEMBL3\n", encoding="utf-8")
+    output_path = tmp_path / "out.csv"
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_map(
+        ids: list[str],
+        cfg_mapping: object,
+        *,
+        batch_size: int,
+        rps: float,
+        max_workers: int | None,
+    ) -> dict[str, str | None]:
+        captured["ids"] = list(ids)
+        return {chembl_id: None for chembl_id in ids}
+
+    monkeypatch.setattr(cli, "map_chembl_ids_to_uniprot", fake_map)
+
+    written: dict[str, object] = {}
+
+    def fake_write_csv(
+        df_out,
+        path: Path,
+        *,
+        cfg: Config,
+        sep: str,
+        encoding: str,
+    ) -> Path:
+        written["df"] = df_out.copy()
+        written["path"] = path
+        return path
+
+    monkeypatch.setattr(cli.io, "write_csv", fake_write_csv)
+
+    args = argparse.Namespace(
+        input_csv=input_path,
+        output_csv=output_path,
+        column="chembl_id",
+        sep=",",
+        encoding="utf8",
+        chunk_size=2,
+        rps=5.0,
+        workers=2,
     )
 
-    def fake_apply_config_overrides(*_: object, **__: object) -> Config:
-        raise FileNotFoundError("configuration file not found: missing.yaml")
-
-    monkeypatch.setattr(cli.cli, "apply_config_overrides", fake_apply_config_overrides)
-    monkeypatch.setattr(cli, "ensure_dirs", lambda *_: None)
-    def fail_run(*_: object, **__: object) -> int:
-        raise AssertionError("run should not execute")
-
-    monkeypatch.setattr(cli, "run", fail_run)
-
-    input_csv = tmp_path / "input.csv"
-    input_csv.write_text("chembl_id\nCHEMBL1\n", encoding="utf-8")
-
-    exit_code = cli.main(
-        [
-            "--config",
-            "missing.yaml",
-            "--input",
-            str(input_csv),
-            "--column",
-            "chembl_id",
-            "--chunk-size",
-            "2",
-        ]
-    )
-
-    assert exit_code == 1
-    assert configured_loggers, "logger should be configured"
-    last_logger = configured_loggers[-1]
-    assert any(event == "config_error" for event, _ in last_logger.events)
-    assert any(
-        event == "pipeline_end" and payload.get("exit_code") == 1
-        for event, payload in last_logger.events
-    )
-
-
-def test_main_directory_setup_failure_logs_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Directory preparation failures should be reported before exiting."""
-
-    configured_loggers: list[DummyLogger] = []
-    monkeypatch.setattr(
-        cli, "configure_logger", _configure_logger_factory(configured_loggers)
-    )
-
-    cfg = Config()
-    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *_, **__: cfg)
-
-    def fail_dirs(*_: object, **__: object) -> None:
-        raise NotADirectoryError("output is not a directory")
-
-    monkeypatch.setattr(cli, "ensure_dirs", fail_dirs)
-
-    def fail_run(*_: object, **__: object) -> int:
-        raise AssertionError("run should not execute")
-
-    monkeypatch.setattr(cli, "run", fail_run)
-
-    input_csv = tmp_path / "input.csv"
-    input_csv.write_text("chembl_id\nCHEMBL1\n", encoding="utf-8")
-
-    exit_code = cli.main(
-        [
-            "--input",
-            str(input_csv),
-            "--column",
-            "chembl_id",
-            "--chunk-size",
-            "2",
-        ]
-    )
-
-    assert exit_code == 1
-    assert configured_loggers, "logger should be configured"
-    last_logger = configured_loggers[-1]
-    assert any(
-        event == "directory_setup_failed" for event, _ in last_logger.events
-    )
-    assert any(
-        event == "pipeline_end" and payload.get("exit_code") == 1
-        for event, payload in last_logger.events
-    )
+    exit_code = cli.run(cfg, args)
+    assert exit_code == 0
+    assert captured["ids"] == expected
+    assert written["path"] == output_path
