@@ -5,6 +5,7 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import pytest
@@ -397,3 +398,60 @@ def test_run_chembl_workers_respect_rate_limit(
     assert rc == 0
     assert processed == [["0"], ["1"], ["2"]]
     assert clock.sleeps == pytest.approx([1.0, 1.0])
+
+
+def test_run_chembl_integration_with_stubbed_request_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    """Integration test exercising ``run_chembl`` with the real pipeline."""
+
+    input_csv = tmp_path / "activity.csv"
+    output_csv = tmp_path / "output.csv"
+    input_csv.write_text("activity_id\n1\n2\n")
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+
+    monkeypatch.setattr(gad, "analyze_table_quality", lambda *_, **__: None)
+    monkeypatch.setattr(cli_utils, "write_meta_yaml", lambda **__: None)
+    monkeypatch.setattr(cli_utils, "file_sha256", lambda _path: "stubbed")
+
+    cfg.activity.batch_size = 2
+    cfg.activity.workers = 1
+
+    calls: list[tuple[str, ...]] = []
+
+    def fake_request_json(self, url: str, *, cfg, timeout=None):
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        joined = params.get("activity_id__in", [""])[0]
+        identifiers = tuple(filter(None, joined.split(",")))
+        calls.append(identifiers)
+        activities = [
+            {
+                "activity_id": identifier,
+                "assay_chembl_id": f"ASSAY{identifier}",
+                "molecule_chembl_id": f"CHEMBL{identifier}",
+                "standard_type": "IC50",
+                "standard_value": float(index + 1),
+                "type": "IC50",
+                "relation": "=",
+                "value": None,
+                "pchembl_value": None,
+                "units": "nM",
+            }
+            for index, identifier in enumerate(identifiers)
+        ]
+        return {"activities": activities}
+
+    monkeypatch.setattr(gad.ChemblClient, "request_json", fake_request_json)
+
+    rc = gad.run_chembl(cfg, args)
+
+    assert rc == 0
+    assert calls == [("1", "2")]
+    assert output_csv.exists()
+
+    result = pd.read_csv(output_csv)
+    assert list(result["activity_id"].astype(str)) == ["1", "2"]
+    assert result["standard_value"].tolist() == [1.0, 2.0]
+    assert result.empty is False
