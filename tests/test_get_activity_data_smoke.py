@@ -20,6 +20,7 @@ def test_get_activity_data_smoke(
             {
                 "activity_id": int_ids,
                 "molecule_chembl_id": ["CHEMBL1" for _ in int_ids],
+                "assay_chembl_id": ["CHEMBL_ASSAY" for _ in int_ids],
                 "target_id": ["CHEMBL2" for _ in int_ids],
                 "standard_type": ["IC50" for _ in int_ids],
                 "standard_value": [1.0 for _ in int_ids],
@@ -37,7 +38,7 @@ def test_get_activity_data_smoke(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",

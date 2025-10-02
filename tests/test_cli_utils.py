@@ -24,6 +24,7 @@ def test_cli_utils_flags_and_help() -> None:
         "--help",
         "--log-level",
         "--input",
+        "--final-out",
         "--output",
         "--out",
         "--config",
@@ -45,7 +46,7 @@ def test_cli_utils_flags_and_help() -> None:
     assert actions["--log-level"].help == "Logging level"
     assert actions["--input"].help == "Input CSV file"
     assert (
-        actions["--output"].help
+        actions["--final-out"].help
         == "Destination CSV file (default: output.<stem>_<YYYYMMDD>.csv)"
     )
     assert actions["--sep"].help == "CSV delimiter"

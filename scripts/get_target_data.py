@@ -727,16 +727,18 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         id_cols_default: object = None if defaults else argparse.SUPPRESS
         no_reindex_default: object = False if defaults else argparse.SUPPRESS
         normalize_default: object = False if defaults else argparse.SUPPRESS
-        parser_obj.add_argument(
-            "--final-out",
-            dest="final_out",
-            type=path_argument,
-            default=final_default,
-            help=(
-                "Destination for the validated target export "
-                "(default: derived from input name)"
-            ),
-        )
+        option_actions = parser_obj._option_string_actions
+        if "--final-out" not in option_actions:
+            parser_obj.add_argument(
+                "--final-out",
+                dest="final_out",
+                type=path_argument,
+                default=final_default,
+                help=(
+                    "Destination for the validated target export "
+                    "(default: derived from input name)"
+                ),
+            )
         parser_obj.add_argument(
             "--raw-out",
             dest="raw_out",
