@@ -1056,16 +1056,28 @@ def _resolve_duplicate_column(frame: pd.DataFrame, column: str) -> pd.Series:
     return consolidated
 
 
+def _collapse_duplicate_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return ``frame`` with duplicate-named columns merged into single columns."""
+
+    if frame.columns.empty:
+        return frame.copy()
+
+    column_order = list(dict.fromkeys(frame.columns))
+    collapsed_columns: dict[Any, pd.Series] = {}
+    for column in column_order:
+        collapsed_columns[column] = _resolve_duplicate_column(frame, column)
+
+    if not collapsed_columns:
+        return frame.iloc[:, :0].copy()
+
+    return pd.DataFrame(collapsed_columns, index=frame.index)
+
+
 def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Rename and project columns to match the export schema."""
 
-
-
-    return pd.DataFrame(collapsed_columns, index=df.index)
-
     # Coalesce legacy column names into the canonical ``ChEMBL.*`` aliases while
     # keeping existing data intact.
-
 
     frame = _collapse_duplicate_columns(df.copy())
 
@@ -1075,27 +1087,23 @@ def _prepare_export_frame(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         if target in frame.columns:
-
             target_series = _resolve_duplicate_column(frame, target)
             source_series = _resolve_duplicate_column(frame, source)
-            frame[target] = target_series.combine_first(source_series)
+            combined = target_series.combine_first(source_series)
             if pd.api.types.is_object_dtype(target_series.dtype) or pd.api.types.is_string_dtype(
                 target_series.dtype
             ):
-                mask = target_series.fillna("") == ""
+                mask = target_series.fillna("").eq("")
                 if mask.any():
-                    frame.loc[mask, target] = source_series.loc[mask]
+                    combined.loc[mask] = source_series.loc[mask]
 
-
+            frame[target] = combined
             frame = frame.drop(columns=[source])
             continue
         rename_map[source] = target
     if rename_map:
         frame = frame.rename(columns=rename_map)
 
-
-    if frame.columns.duplicated().any():
-        frame = frame.loc[:, ~frame.columns.duplicated()]
 
     if frame.columns.duplicated().any():
         frame = frame.loc[:, ~frame.columns.duplicated()]
