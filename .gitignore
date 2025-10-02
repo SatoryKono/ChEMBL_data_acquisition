@@ -8,6 +8,8 @@ data/output/ChEMBL/processed/pairs_non_independent.csv
 data/output/ChEMBL/processed/pairs_same_document.csv
 .env
 *.env
+.env.local
+.env.*.local
 .cache/
 data/output/
 data/output-smoke/
@@ -24,3 +26,4 @@ config/config.local.yaml
 config/*.local.yaml
 config/*.secrets.yaml
 config/*.override.yaml
+config/**/secrets*.yaml
