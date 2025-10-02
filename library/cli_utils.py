@@ -54,7 +54,9 @@ class Validator(Protocol):
 
 
 MetadataHook = Callable[[pd.DataFrame], pd.DataFrame]
-Writer = Callable[[Iterable[pd.DataFrame], Path, Sequence[str], Sequence[str]], Path]
+Writer = Callable[
+    [Iterable[pd.DataFrame], Path, Sequence[str] | None, Sequence[str]], Path
+]
 TableQualityHook = Callable[[Path], None]
 Fetcher = Callable[[], Iterable[pd.DataFrame] | pd.DataFrame]
 
@@ -141,10 +143,10 @@ def _as_iterable(
 def run_pipeline(
     *,
     fetcher: Fetcher,
-    schema: SchemaT,
+    schema: SchemaT | None,
     schema_name: str,
-    validators: Sequence[Validator],
-    metadata_hooks: Sequence[MetadataHook],
+    validators: Sequence[Validator] | None,
+    metadata_hooks: Sequence[MetadataHook] | None,
     writer: Writer,
     output_path: Path,
     failure_path: Path,
@@ -209,12 +211,19 @@ def run_pipeline(
 
     use_logger = logger or default_logger
 
-    required_cols = {
-        name
-        for name, column in getattr(schema, "columns", {}).items()
-        if column.required
-    }
-    optional_cols = set(getattr(schema, "columns", {})) - required_cols
+    metadata_hooks = list(metadata_hooks or [])
+    validators = list(validators or [])
+
+    if schema is not None:
+        required_cols = {
+            name
+            for name, column in getattr(schema, "columns", {}).items()
+            if column.required
+        }
+        optional_cols = set(getattr(schema, "columns", {})) - required_cols
+    else:
+        required_cols = set()
+        optional_cols = set()
 
     errors = SidecarErrors()
     rows_total = 0
@@ -320,11 +329,18 @@ def run_pipeline(
             empty.to_pickle(chunk_path)
             chunk_paths.append(chunk_path)
 
-        schema_columns = list(getattr(schema, "columns", {}))
-        head = [column for column in schema_columns if column in all_columns]
-        tail = sorted(column for column in all_columns if column not in schema_columns)
-        col_order = head + tail
-        resolved_keys = [column for column in key_columns if column in col_order]
+        if schema is not None:
+            schema_columns = list(getattr(schema, "columns", {}))
+            head = [column for column in schema_columns if column in all_columns]
+            tail = sorted(
+                column for column in all_columns if column not in schema_columns
+            )
+            col_order: Sequence[str] | None = head + tail
+            available_columns = set(col_order)
+        else:
+            col_order = None
+            available_columns = set(all_columns)
+        resolved_keys = [column for column in key_columns if column in available_columns]
 
         def _iter_validated() -> Iterator[pd.DataFrame]:
             for path in chunk_paths:
@@ -343,7 +359,7 @@ def run_pipeline(
             )
             return 1
 
-    if optional_cols - present_columns:
+    if optional_cols and (optional_cols - present_columns):
         use_logger.warning(
             "optional_columns_missing",
             columns=sorted(optional_cols - present_columns),

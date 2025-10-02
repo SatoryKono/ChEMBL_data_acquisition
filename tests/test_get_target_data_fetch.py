@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -49,8 +50,9 @@ def test_fetch_chembl(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     inp = tmp_path / "in.csv"
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
+        normalized = gtd._normalized_output_path(Path(args.output_csv))
         pd.DataFrame({"target_chembl_id": ["C1"], "uniprot_id": ["P1"]}).to_csv(
-            args.output_csv, index=False
+            normalized, index=False
         )
         return 0
 
@@ -70,7 +72,10 @@ def test_fetch_chembl_custom_chunk_size(
 
     def fake_run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         recorded["chunk_size"] = cfg.target.chembl.chunk_size
-        pd.DataFrame({"target_chembl_id": ["C1"]}).to_csv(args.output_csv, index=False)
+        normalized = gtd._normalized_output_path(Path(args.output_csv))
+        pd.DataFrame({"target_chembl_id": ["C1"]}).to_csv(
+            normalized, index=False
+        )
         return 0
 
     monkeypatch.setattr(gtd, "run_chembl", fake_run_chembl)
@@ -99,18 +104,26 @@ def test_run_chembl_streams_chunks(
 
     chunk_calls: list[list[str]] = []
 
-    def fake_get_targets(
-        chunk_ids: list[str],
+    def fake_iter_target_batches(
+        ids: Sequence[str],
         *,
         cfg: object,
         client: object,
         mapping_cfg: object,
         chunk_size: int,
         timeout: float | None,
-    ) -> pd.DataFrame:
-        ids = list(chunk_ids)
-        chunk_calls.append(ids)
-        return pd.DataFrame({"target_chembl_id": ids})
+    ) -> Iterator[tuple[list[dict[str, str]], pd.DataFrame, pd.DataFrame]]:
+        records = list(ids)
+        for start in range(0, len(records), chunk_size):
+            chunk = list(records[start : start + chunk_size])
+            chunk_calls.append(chunk)
+            payloads = [
+                {"target_chembl_id": value, "pref_name": value.lower()}
+                for value in chunk
+            ]
+            raw = pd.DataFrame(payloads)
+            parsed = pd.DataFrame({"target_chembl_id": chunk})
+            yield payloads, raw, parsed
 
     class DummyClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -128,6 +141,7 @@ def test_run_chembl_streams_chunks(
             return False
 
     frames_to_write: list[pd.DataFrame] = []
+    raw_dumps: list[pd.DataFrame] = []
 
     def fake_write_csv(
         df: pd.DataFrame | list[pd.DataFrame],
@@ -147,9 +161,21 @@ def test_run_chembl_streams_chunks(
         destination.write_text("dummy", encoding=encoding or cfg.io.csv_encoding)
         return destination
 
-    monkeypatch.setattr(gtd.cl, "get_targets", fake_get_targets)
+    def fake_write_raw_dump(
+        df: pd.DataFrame,
+        destination: Path,
+        *,
+        cfg: Config,
+        reindex_columns: bool,
+    ) -> Path:
+        raw_dumps.append(df.copy())
+        df.to_csv(destination, index=False)
+        return destination
+
+    monkeypatch.setattr(gtd.cl, "iter_target_batches", fake_iter_target_batches)
     monkeypatch.setattr(gtd, "ChemblClient", DummyClient)
     monkeypatch.setattr(gtd.io, "write_csv", fake_write_csv)
+    monkeypatch.setattr(gtd, "_write_raw_dump", fake_write_raw_dump)
     monkeypatch.setattr(gtd, "analyze_table_quality", lambda *_, **__: None)
     monkeypatch.setattr(
         TargetsSchema, "validate", staticmethod(lambda df, lazy=True: df)
@@ -164,6 +190,13 @@ def test_run_chembl_streams_chunks(
         ["CHEMBL5"],
     ]
     assert [df["target_chembl_id"].tolist() for df in frames_to_write] == chunk_calls
+    assert raw_dumps and raw_dumps[0]["target_chembl_id"].tolist() == [
+        "CHEMBL1",
+        "CHEMBL2",
+        "CHEMBL3",
+        "CHEMBL4",
+        "CHEMBL5",
+    ]
 
 
 def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> None:

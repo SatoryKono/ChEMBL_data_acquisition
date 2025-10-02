@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -108,19 +109,31 @@ def test_run_chembl_limit_uses_generator(
 
         return generator()
 
-    consumed: list[str] = []
+    received_batches: list[list[str]] = []
 
-    def fake_get_targets(ids_iter: Any, **__: object) -> pd.DataFrame:
-        if isinstance(ids_iter, list):
-            assert len(ids_iter) <= config.target.chembl.chunk_size
-        for value in ids_iter:
-            consumed.append(value)
-        return pd.DataFrame({"target_chembl_id": consumed})
+    def fake_iter_target_batches(
+        ids: Sequence[str],
+        *,
+        cfg: object,
+        client: object,
+        mapping_cfg: object,
+        chunk_size: int,
+        timeout: float | None,
+    ) -> Iterator[tuple[list[dict[str, str]], pd.DataFrame, pd.DataFrame]]:
+        batch = list(ids)
+        received_batches.append(batch)
+        payloads = [
+            {"target_chembl_id": value, "pref_name": value.lower()}
+            for value in batch
+        ]
+        raw = pd.DataFrame(payloads)
+        parsed = pd.DataFrame({"target_chembl_id": batch})
+        yield payloads, raw, parsed
 
     dummy_logger = DummyLogger()
     monkeypatch.setattr(gtd, "logger", dummy_logger)
     monkeypatch.setattr(gtd.io, "read_ids", fake_read_ids)
-    monkeypatch.setattr(gtd.cl, "get_targets", fake_get_targets)
+    monkeypatch.setattr(gtd.cl, "iter_target_batches", fake_iter_target_batches)
     monkeypatch.setattr(gtd, "ChemblClient", DummyClient)
     monkeypatch.setattr(gtd, "normalize_targets", lambda df: df)
     monkeypatch.setattr(gtd, "add_pipeline_metadata", lambda df: df)
@@ -144,10 +157,10 @@ def test_run_chembl_limit_uses_generator(
     exit_code = gtd.run_chembl(config, args)
 
     assert exit_code == 0
-    assert consumed == ["CHEMBL1", "CHEMBL2"]
+    assert received_batches == [["CHEMBL1", "CHEMBL2"]]
     assert any(
         level == "info"
         and event == "process_limit"
-        and call_kwargs.get("limit") == len(consumed)
+        and call_kwargs.get("limit") == len(received_batches[0])
         for level, event, call_kwargs in dummy_logger.calls
     )
