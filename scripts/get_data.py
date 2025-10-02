@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -70,6 +71,11 @@ _DEFAULT_OUTPUT_STEMS = {
     "testitem": "testitems",
     "activity": "activities",
 }
+
+
+_UNLINK_MAX_ATTEMPTS = 5
+_UNLINK_RETRY_SLEEP_SECONDS = 0.1
+_WINDOWS_SHARING_VIOLATION = 32
 
 
 @dataclass(frozen=True)
@@ -392,6 +398,45 @@ def _discover_sidecars(final_output: Path, working_output: Path) -> dict[Path, S
     return sidecars
 
 
+def _remove_path(path: Path) -> None:
+    """Remove ``path`` handling transient Windows sharing violations."""
+
+    if not path.exists():
+        return
+    for attempt in range(1, _UNLINK_MAX_ATTEMPTS + 1):
+        try:
+            path.unlink()
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError as exc:
+            if attempt == _UNLINK_MAX_ATTEMPTS:
+                raise
+            _LOGGER.debug(
+                "unlink_retry_permission",
+                path=str(path),
+                attempt=attempt,
+                error=str(exc),
+            )
+            time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
+            continue
+        except OSError as exc:
+            winerror = getattr(exc, "winerror", None)
+            if (
+                winerror == _WINDOWS_SHARING_VIOLATION
+                and attempt < _UNLINK_MAX_ATTEMPTS
+            ):
+                _LOGGER.debug(
+                    "unlink_retry_sharing_violation",
+                    path=str(path),
+                    attempt=attempt,
+                    error=str(exc),
+                )
+                time.sleep(_UNLINK_RETRY_SLEEP_SECONDS)
+                continue
+            raise
+
+
 def _cleanup_empty_directories(path: Path, *, root: Path) -> None:
     """Remove empty directories upward from ``path`` until reaching ``root``."""
 
@@ -462,7 +507,7 @@ def _finalize_step_success(
 
     if working_output.exists():
         if final_output.exists():
-            final_output.unlink()
+            _remove_path(final_output)
         working_output.replace(final_output)
 
     for sidecar in sidecars.values():
@@ -483,11 +528,11 @@ def _finalize_step_success(
                 and final_path != destination
             ):
                 final_parent = final_path.parent
-                final_path.unlink()
+                _remove_path(final_path)
                 _cleanup_empty_directories(final_parent, root=final_dir)
             continue
         if destination.exists():
-            destination.unlink()
+            _remove_path(destination)
         original_parent = working_path.parent
         working_path.replace(destination)
         _cleanup_empty_directories(original_parent, root=working_dir)
@@ -498,10 +543,10 @@ def _finalize_step_success(
             and final_path != destination
         ):
             final_parent = final_path.parent
-            final_path.unlink()
+            _remove_path(final_path)
             _cleanup_empty_directories(final_parent, root=final_dir)
     if sentinel_path.exists():
-        sentinel_path.unlink()
+        _remove_path(sentinel_path)
 
 
 def _cleanup_failed_step(
@@ -523,7 +568,7 @@ def _cleanup_failed_step(
     for candidate in candidates:
         if candidate.exists():
             try:
-                candidate.unlink()
+                _remove_path(candidate)
             except OSError as exc:  # pragma: no cover - defensive guard
                 _LOGGER.warning(
                     "step_cleanup_failed",
@@ -542,7 +587,7 @@ def _cleanup_failed_step(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     if destination.exists():
-                        destination.unlink()
+                        _remove_path(destination)
                 except OSError as exc:  # pragma: no cover - defensive guard
                     _LOGGER.warning(
                         "failure_sidecar_cleanup_failed",
@@ -561,7 +606,7 @@ def _cleanup_failed_step(
                     )
             elif executed and destination.exists():
                 try:
-                    destination.unlink()
+                    _remove_path(destination)
                 except OSError as exc:  # pragma: no cover - defensive guard
                     _LOGGER.warning(
                         "failure_sidecar_cleanup_failed",
@@ -577,7 +622,7 @@ def _cleanup_failed_step(
             ):
                 try:
                     final_parent = final_path.parent
-                    final_path.unlink()
+                    _remove_path(final_path)
                     _cleanup_empty_directories(final_parent, root=final_dir)
                 except OSError as exc:  # pragma: no cover - defensive guard
                     _LOGGER.warning(
@@ -590,7 +635,7 @@ def _cleanup_failed_step(
         if working_path is not None and working_path.exists():
             try:
                 original_parent = working_path.parent
-                working_path.unlink()
+                _remove_path(working_path)
                 _cleanup_empty_directories(original_parent, root=working_dir)
             except OSError as exc:  # pragma: no cover - defensive guard
                 _LOGGER.warning(
@@ -606,7 +651,7 @@ def _cleanup_failed_step(
                 if path.exists():
                     try:
                         parent = path.parent
-                        path.unlink()
+                        _remove_path(path)
                         _cleanup_empty_directories(parent, root=final_dir)
                     except OSError as exc:  # pragma: no cover - defensive guard
                         _LOGGER.warning(
@@ -635,7 +680,7 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
         working_output = _temporary_output_path(final_output)
         sentinel_path = _failure_sentinel_path(final_output)
         if working_output.exists():
-            working_output.unlink()
+            _remove_path(working_output)
         try:
             result = _run_step(step, cfg, final_output, working_output)
         except SystemExit as exc:  # pragma: no cover - defensive guard
