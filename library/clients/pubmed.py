@@ -193,7 +193,7 @@ def _do_request(
 
         if attempt:
 
-            retry_delay = _retry_delay(attempt, delay, retry_cfg, timeout)
+            retry_delay = _retry_delay(attempt, delay, retry_policy, timeout)
             extra["delay"] = retry_delay
             logger.info(event, extra=extra)
             if retry_delay > 0:

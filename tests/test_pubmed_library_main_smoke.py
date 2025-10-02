@@ -168,18 +168,31 @@ def test_pubmed_library_main_smoke(
 def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     """PubMed client should log retry delay with jitter for 429 responses."""
 
-    responses = iter(
+    response_sequences = [
         [
-            (429, "Too Many Requests", None, ""),
-            (200, "<xml/>", "<xml/>", ""),
-        ]
-    )
+            (429, "Too Many Requests", None, "", {}),
+            (200, "<xml/>", "<xml/>", "", {}),
+        ],
+        [
+            (429, "Too Many Requests", None, "", {}),
+            (200, "<xml/>", "<xml/>", "", {}),
+        ],
+    ]
 
-    def fake_make_request(*_args: Any, **_kwargs: Any) -> tuple[int, str, Any, str]:
-        try:
-            return next(responses)
-        except StopIteration:  # pragma: no cover - defensive
+    call_state = {"seq": 0, "idx": 0}
+
+    def fake_make_request(*_args: Any, **_kwargs: Any) -> tuple[int, str, Any, str, dict[str, str]]:
+        seq = call_state["seq"]
+        idx = call_state["idx"]
+        if seq >= len(response_sequences):  # pragma: no cover - defensive
             raise AssertionError("Unexpected request count")
+        responses = response_sequences[seq]
+        result = responses[idx]
+        call_state["idx"] += 1
+        if call_state["idx"] >= len(responses):
+            call_state["seq"] += 1
+            call_state["idx"] = 0
+        return result
 
     sleep_calls: list[float] = []
 
@@ -204,27 +217,53 @@ def test_pubmed_client_retry_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_logger = RecordingLogger()
     monkeypatch.setattr(pubmed_client, "logger", fake_logger)
 
+    def run_request(local_retry_cfg: RetryCfg | None) -> tuple[Any, str, list, list]:
+        start_record = len(fake_logger.records)
+        start_sleep = len(sleep_calls)
+        data, error = pubmed_client._do_request(
+            session=object(),
+            url="http://example",
+            delay=0.3,
+            expect_json=False,
+            retries=1,
+            timeout=(1, 5),
+            retry_cfg=local_retry_cfg,
+        )
+        new_records = fake_logger.records[start_record:]
+        new_sleeps = sleep_calls[start_sleep:]
+        return data, error, new_records, new_sleeps
+
     retry_cfg = RetryCfg(max_attempts=2, backoff_factor=0.5)
-    data, error = pubmed_client._do_request(
-        session=object(),
-        url="http://example",
-        delay=0.3,
-        expect_json=False,
-        retries=1,
-        timeout=(1, 5),
-        retry_cfg=retry_cfg,
-    )
+    data, error, records, sleeps = run_request(retry_cfg)
 
     assert data == "<xml/>"
     assert error == ""
 
     base = retry_cfg.backoff_factor * (2 ** (1 - 1))
     expected_delay = pytest.approx(max(0.3, base + 0.2))
-    assert sleep_calls == [expected_delay]
+    assert sleeps == [expected_delay]
 
-    retry_records = [r for r in fake_logger.records if r[1] == "request_retry"]
+    retry_records = [r for r in records if r[1] == "request_retry"]
     assert retry_records and "delay" in retry_records[0][2]
     assert retry_records[0][2]["delay"] == expected_delay
 
-    sleep_logs = [r for r in fake_logger.records if r[1] == "retry_sleep"]
+    sleep_logs = [r for r in records if r[1] == "retry_sleep"]
     assert sleep_logs and sleep_logs[0][2]["delay"] == expected_delay
+    assert sleep_logs[0][2]["delay"] > 0
+
+    fallback = RetryCfg()
+    data2, error2, records2, sleeps2 = run_request(None)
+
+    assert data2 == "<xml/>"
+    assert error2 == ""
+
+    base_default = fallback.backoff_factor * (2 ** (1 - 1))
+    expected_default_delay = pytest.approx(max(0.3, base_default + 0.2))
+    assert sleeps2 == [expected_default_delay]
+
+    retry_records2 = [r for r in records2 if r[1] == "request_retry"]
+    assert retry_records2 and retry_records2[0][2]["delay"] == expected_default_delay
+
+    sleep_logs2 = [r for r in records2 if r[1] == "retry_sleep"]
+    assert sleep_logs2 and sleep_logs2[0][2]["delay"] == expected_default_delay
+    assert sleep_logs2[0][2]["delay"] > 0
