@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from numbers import Real
 from threading import Lock
 from time import monotonic
 from typing import Any, cast
@@ -222,14 +223,36 @@ def make_request(url: str, cfg: PubChemCfg) -> dict[str, Any] | None:
     """Make an HTTP GET request and return parsed JSON."""
 
     global _CACHE
+    timeout_retry_in: float | None = None
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
         cached = cache.get(url) if cache is not None else None
+        if (
+            cached is not None
+            and not cached.is_hit
+            and cached.outcome == "timeout"
+            and cached.details
+        ):
+            stored_at = cached.details.get("timeout_stored_at")
+            retry_after = cached.details.get("timeout_retry_after")
+            if isinstance(stored_at, Real) and isinstance(retry_after, Real):
+                elapsed = monotonic() - float(stored_at)
+                if elapsed < float(retry_after):
+                    timeout_retry_in = float(retry_after) - elapsed
+                else:
+                    cache.pop(url, None)
+                    cached = None
     if cached is not None:
         if cached.is_hit:
             logger.debug("cache_hit", url=url, rps=cfg.rps, status="hit")
             return cast(dict[str, Any], cached.payload)
-        miss_details = cached.details or {}
+        miss_details = {
+            key: value
+            for key, value in (cached.details or {}).items()
+            if key != "timeout_stored_at"
+        }
+        if timeout_retry_in is not None:
+            miss_details["timeout_retry_in"] = timeout_retry_in
         logger.debug(
             "cache_hit",
             url=url,
@@ -489,19 +512,79 @@ def _store_cache_miss(
 ) -> None:
     """Persist a cached miss outcome for ``url`` including optional details."""
 
-    details_copy = dict(details) if details else None
+    details_data = dict(details) if details else {}
+    cached = False
+    log_details: dict[str, Any] = {}
     with _CACHE_LOCK:
         cache = _ensure_cache(cfg.cache_ttl, cfg.cache_maxsize)
-        cache[url] = _CacheEntry(payload=None, outcome=outcome, details=details_copy)
+        if outcome == "timeout":
+            base_backoff = cfg.backoff_initial_seconds if cfg.backoff_initial_seconds > 0 else cfg.delay
+            retry_after_hint = details_data.get("retry_after")
+            if isinstance(retry_after_hint, Real) and float(retry_after_hint) > 0:
+                hint_value = float(retry_after_hint)
+                if base_backoff and base_backoff > 0:
+                    base_backoff = max(base_backoff, hint_value)
+                else:
+                    base_backoff = hint_value
+            existing = cache.get(url)
+            if (
+                existing is not None
+                and not existing.is_hit
+                and existing.outcome == "timeout"
+                and existing.details
+            ):
+                previous_retry = existing.details.get("timeout_retry_after")
+                if isinstance(previous_retry, Real):
+                    doubled = float(previous_retry) * 2
+                    if base_backoff and base_backoff > 0:
+                        base_backoff = max(base_backoff, doubled)
+                    else:
+                        base_backoff = doubled
+            max_backoff = cfg.timeout_seconds if cfg.timeout_seconds and cfg.timeout_seconds > 0 else None
+            effective_backoff = base_backoff if base_backoff and base_backoff > 0 else None
+            if effective_backoff is not None:
+                if max_backoff is not None:
+                    effective_backoff = min(effective_backoff, max_backoff)
+                stored_at = monotonic()
+                details_data.update(
+                    {
+                        "timeout": True,
+                        "timeout_retry_after": effective_backoff,
+                        "timeout_stored_at": stored_at,
+                    }
+                )
+                cache[url] = _CacheEntry(
+                    payload=None,
+                    outcome=outcome,
+                    details=details_data.copy(),
+                )
+                cached = True
+                log_details = {
+                    key: value
+                    for key, value in details_data.items()
+                    if key != "timeout_stored_at"
+                }
+            else:
+                cache.pop(url, None)
+                log_details = details_data.copy()
+        else:
+            cache[url] = _CacheEntry(
+                payload=None,
+                outcome=outcome,
+                details=details_data.copy() if details_data else None,
+            )
+            cached = True
+            log_details = details_data.copy()
     log_data: dict[str, Any] = {
         "url": url,
         "rps": cfg.rps,
         "status": "miss",
         "outcome": outcome,
     }
-    if details_copy:
-        log_data.update(details_copy)
-    logger.debug("cache_set", **log_data)
+    if log_details:
+        log_data.update(log_details)
+    event = "cache_set" if cached else "cache_skip"
+    logger.debug(event, **log_data)
 
 
 def _extract_cids(bindings: list[dict[str, Any]]) -> list[str]:

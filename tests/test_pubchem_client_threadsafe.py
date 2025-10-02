@@ -475,9 +475,11 @@ def test_make_request_logs_cache_set_hit_as_debug(monkeypatch) -> None:
 
     url = "https://example.org/cache-hit"
     payload = {"value": 1}
-    cfg = pl.PubChemCfg(retries=0, delay=0)
 
     api_cfg = _configure_session()
+    cfg = pl.PubChemCfg(retries=0, delay=0).model_copy(
+        update={"user_agent": api_cfg.user_agent}
+    )
     session = pc.get_session(api_cfg)
 
     monkeypatch.setattr(pc, "get_limiter", lambda *args, **kwargs: NoopLimiter())
