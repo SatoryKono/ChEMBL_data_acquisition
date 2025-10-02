@@ -259,58 +259,47 @@ def resolve_pubchem_cid(
             return None
         visited.add(chembl_id)
 
-    if resolution_cache is not None and resolution_key in resolution_cache:
-        resolution = resolution_cache[resolution_key]
-    else:
-        try:
-            resolution = pl.resolve(
-                identifiers,
-                cfg,
-                fields=getattr(cfg, "resolver_fields", None),
-                request_kwargs=getattr(cfg, "resolver_request", None) or {},
-            )
-        except (requests.RequestException, ValueError) as exc:
-            logger.warning(
-                "pubchem_resolution_failed",
-                chembl_id=chembl_id,
-                error=str(exc),
-            )
-            if chembl_id and chembl_id not in cache:
-                cache[chembl_id] = None
-            return None
-        if resolution_cache is not None:
-            resolution_cache[resolution_key] = resolution
-
-    if resolution.cid:
-        cid = _select_primary_cid(
-            resolution.cid,
-            chembl_id=chembl_id,
-            identifier="resolver",
-            value=resolution.cid,
-        )
-        if chembl_id:
-            cache[chembl_id] = cid
+    resolution = pl.resolve_pubchem_record(
+        identifiers,
+        cfg,
+        cid_cache=cache,
+        cache_key=chembl_id,
+        resolution_cache=resolution_cache,
+        resolution_key=resolution_key,
+    )
+    cid = resolution.cid
+    if cid is not None:
         return cid
 
-    parent_id = _normalise_identifier(resolution.parent, uppercase=True)
+    if not cfg.use_parent_for_salts:
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
+        return None
+
+    parent_id = _normalise_identifier(
+        row.get("parent_molecule_chembl_id"), uppercase=True
+    )
     if not parent_id:
-        if chembl_id:
-            cache.setdefault(chembl_id, None)
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
         return None
 
     if parent_loader is None:
-        if chembl_id:
-            cache.setdefault(chembl_id, None)
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
         return None
 
-    if parent_id == chembl_id:
+    if parent_id in visited:
         logger.info(
             "pubchem_parent_structure_missing",
             child=chembl_id,
             parent=parent_id,
-            reason="self_reference",
+            reason="parent_cycle_detected",
         )
-        cache.setdefault(chembl_id, None)
+        if parent_id not in cache:
+            cache[parent_id] = None
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
         return None
 
     parent_row = parent_loader(parent_id)
@@ -321,7 +310,8 @@ def resolve_pubchem_cid(
             parent=parent_id,
             reason="parent_unavailable",
         )
-        cache.setdefault(chembl_id, None)
+        if chembl_id and chembl_id not in cache:
+            cache[chembl_id] = None
         return None
 
     parent_cid = resolve_pubchem_cid(

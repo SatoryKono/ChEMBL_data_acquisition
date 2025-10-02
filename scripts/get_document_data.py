@@ -32,8 +32,10 @@ from contextlib import ExitStack, contextmanager, AbstractContextManager
 from itertools import chain, islice, tee
 import tempfile
 from pathlib import Path
-
+import weakref
+import heapq
 from threading import Lock, local
+
 from typing import Any, cast, TypeVar
 
 
@@ -421,20 +423,6 @@ def fetch_pubmed_records(
             limit = min(limit, limiter_burst)
         return max(1, limit)
 
-    class _SessionPool:
-        def __init__(
-            self,
-            stack: ExitStack,
-            factory: Callable[[], AbstractContextManager[requests.Session]],
-        ) -> None:
-            self._stack = stack
-            self._factory = factory
-
-        @contextmanager
-        def session(self) -> Iterator[requests.Session]:
-            with self._factory() as nested_session:
-                yield nested_session
-
     class _ThreadResources:
         def __init__(
             self,
@@ -445,10 +433,47 @@ def fetch_pubmed_records(
             self.stack = stack
             self.base_session = base_session
             self.session_pools = session_pools
+            self.sessions: dict[str, requests.Session] = {}
+            self.session_finalizers: dict[str, Callable[[], None]] = {}
+
+    class _SessionPool:
+        def __init__(
+            self,
+            stack: ExitStack,
+            factory: Callable[[], AbstractContextManager[requests.Session]],
+            resources: _ThreadResources,
+            service: str,
+        ) -> None:
+            self._stack = stack
+            self._factory = factory
+            self._resources = resources
+            self._service = service
+
+        @contextmanager
+        def session(self) -> Iterator[requests.Session]:
+            cached = self._resources.sessions.get(self._service)
+            if cached is None:
+                context = self._factory()
+                session = cast(requests.Session, context.__enter__())
+
+                def _finalizer(
+                    _context: AbstractContextManager[requests.Session] = context,
+                ) -> None:
+                    _context.__exit__(None, None, None)
+
+                self._resources.sessions[self._service] = session
+                self._resources.session_finalizers[self._service] = _finalizer
+                self._stack.callback(_finalizer)
+                cached = session
+            yield cached
 
     thread_local_state = local()
-    thread_resources: list[_ThreadResources] = []
-    thread_resources_lock = Lock()
+
+    def _close_thread_resources(resources: _ThreadResources) -> None:
+        try:
+            resources.stack.close()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("thread_resources_close_failed")
 
     def _get_thread_resources() -> _ThreadResources:
         resources = getattr(thread_local_state, "resources", None)
@@ -482,16 +507,17 @@ def fetch_pubmed_records(
             "crossref": _service_factory(crossref_cfg.mailto),
         }
 
-        pools = {
-            service: _SessionPool(session_stack, factory)
+        resources = _ThreadResources(session_stack, base_session, {})
+        resources.session_pools = {
+            service: _SessionPool(session_stack, factory, resources, service)
             for service, factory in session_factories.items()
         }
-
-        resources = _ThreadResources(session_stack, base_session, pools)
         setattr(thread_local_state, "resources", resources)
 
-        with thread_resources_lock:
-            thread_resources.append(resources)
+        finalizer = weakref.finalize(
+            thread_local_state, _close_thread_resources, resources
+        )
+        setattr(thread_local_state, "resources_finalizer", finalizer)
 
         return resources
 
@@ -725,7 +751,7 @@ def fetch_pubmed_records(
     iterator = (p for p in pmids if p)
 
     tasks: dict[Future[list[dict[str, str]]], tuple[int, list[str]]] = {}
-    completed: dict[int, list[dict[str, str]]] = {}
+    record_heap: list[tuple[int, list[dict[str, str]]]] = []
     next_to_emit = 0
     processed = 0
     completed_batches = 0
@@ -759,7 +785,8 @@ def fetch_pubmed_records(
 
         pending.remove(done_future)
         batch_id, batch_pmids = tasks.pop(done_future)
-        completed[batch_id] = done_future.result()
+        records = done_future.result()
+        heapq.heappush(record_heap, (batch_id, records))
         processed += len(batch_pmids)
         completed_batches += 1
         log_kwargs = {"count": processed, "batches": completed_batches}
@@ -768,16 +795,13 @@ def fetch_pubmed_records(
         else:
             logger.debug("documents_processed", **log_kwargs)
 
-        while next_to_emit in completed:
-            records = completed.pop(next_to_emit)
-            yield records
-            next_to_emit += len(records)
+        yield from _emit_ready_batches()
 
     def _emit_ready_batches() -> Iterator[list[dict[str, str]]]:
         nonlocal next_to_emit
 
-        while next_to_emit in completed:
-            records = completed.pop(next_to_emit)
+        while record_heap and record_heap[0][0] == next_to_emit:
+            _, records = heapq.heappop(record_heap)
             yield records
             next_to_emit += len(records)
 
@@ -785,6 +809,9 @@ def fetch_pubmed_records(
         nonlocal offset
 
         for batch in _chunked(iterator, batch_size):
+            while record_heap and len(record_heap) >= max_in_flight and pending:
+                done_future = next(as_completed(list(pending)))
+                yield from _drain_future(done_future)
             if not batch:
                 continue
             future = batch_executor.submit(_fetch_batch, batch)
@@ -814,11 +841,14 @@ def fetch_pubmed_records(
                 yield build_dataframe(records_batch, columns=DOCUMENT_SCHEMA_COLUMNS)
         finally:
             stack.close()
-            with thread_resources_lock:
-                resources_to_close = list(thread_resources)
-                thread_resources.clear()
-            for resources in resources_to_close:
-                resources.stack.close()
+            finalizer = getattr(thread_local_state, "resources_finalizer", None)
+            if finalizer is not None:
+                try:
+                    finalizer()
+                finally:
+                    delattr(thread_local_state, "resources_finalizer")
+            if hasattr(thread_local_state, "resources"):
+                delattr(thread_local_state, "resources")
 
     frame_iter = _iter_frames()
     if return_generator:
