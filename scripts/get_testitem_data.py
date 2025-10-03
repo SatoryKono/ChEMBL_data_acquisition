@@ -656,7 +656,9 @@ def attach_parent_molecule_ids(
     partial_fetch_used = False
     full_sync_used = False
     uncovered_children = 0
-    parentless_filtered = molecule_catalog._filters_exclude_parentless(catalog_cfg)
+    parentless_filtered = bool(
+        molecule_catalog._filters_exclude_parentless(catalog_cfg)
+    )
     json_cache_exists = catalog_cfg.cache_path.is_file()
     sqlite_exists = catalog_cfg.sqlite_path.is_file()
 
@@ -726,6 +728,19 @@ def attach_parent_molecule_ids(
             identifiers=missing_ids,
         )
         source_resolved = PARENT_LOOKUP_SOURCE_SKIPPED
+    elif needs_full_sync and parentless_filtered:
+        needs_full_sync = False
+        logger.info(
+            "parent_lookup_skip_full_sync",
+            missing=len(missing_ids),
+            parentless_filtered=True,
+        )
+        if source_resolved is None and not partial_fetch_used:
+            source_resolved = (
+                PARENT_LOOKUP_SOURCE_CACHE
+                if used_partial_cache
+                else PARENT_LOOKUP_SOURCE_SKIPPED
+            )
     elif missing_ids and catalog is None and needs_full_sync:
         cache_before_load = _cache_state(catalog_cfg.cache_path)
         catalog_data = load_parent_catalog(
