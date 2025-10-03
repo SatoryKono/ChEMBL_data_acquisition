@@ -11,9 +11,25 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
 
-from .. import validation
 from ..config import IoCfg
 from ..common.log import logger
+
+if TYPE_CHECKING:  # pragma: no cover - import only for typing
+    from .. import validation as _validation_module
+
+
+_validation_mod: "_validation_module" | None = None
+
+
+def _get_validation_module() -> "_validation_module":
+    """Return the lazily imported :mod:`library.validation` module."""
+
+    global _validation_mod
+    if _validation_mod is None:
+        from .. import validation as _validation_module_runtime
+
+        _validation_mod = _validation_module_runtime
+    return _validation_mod
 
 
 class _EncodingDecodeError(Exception):
@@ -286,5 +302,5 @@ def read_csv(
         else:
             df = schema.to_schema().validate(df)
     elif required_columns is not None:
-        validation.validate_columns(df, required_columns)
+        _get_validation_module().validate_columns(df, required_columns)
     return df
