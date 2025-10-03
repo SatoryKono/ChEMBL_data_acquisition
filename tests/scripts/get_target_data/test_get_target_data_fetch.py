@@ -8,9 +8,11 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pandas as pd
+import pytest
 import yaml
 from pytest import MonkeyPatch
 
+from library.cli_utils import PipelineError
 from library.pipelines.target import protein_classification as pc
 from library.config import Config
 from library.schemas import TargetsSchema
@@ -248,9 +250,14 @@ def test_fetch_uniprot(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) ->
     monkeypatch.setattr(gtd, "run_uniprot", fake_run_uniprot)
     df = gtd.fetch_uniprot(cfg, chembl_df, out)
     assert "input" in captured
-    assert list(captured["input"].columns) == ["uniprot_id", "original_id"]
+    assert list(captured["input"].columns) == [
+        "uniprot_id",
+        "original_id",
+        "source_column",
+    ]
     assert list(captured["input"]["uniprot_id"]) == ["P12345"]
     assert list(captured["input"]["original_id"]) == ["P12345"]
+    assert list(captured["input"]["source_column"]) == ["uniprot_id"]
     assert list(df["original_id"]) == ["P12345"]
 
 
@@ -475,24 +482,35 @@ def test_fetch_iuphar(monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config) -> 
     assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
 
 
-def test_fetch_iuphar_missing_uniprot_column(
-    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+def test_fetch_iuphar_invalid_uniprot_column(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+    cfg: Config,
 ) -> None:
     chembl_df = pd.DataFrame({"target_chembl_id": ["C1"]})
     uniprot_df = pd.DataFrame(columns=["uniprot_id", "original_id"])
     out = tmp_path / "iuphar.csv"
 
+    monkeypatch.setattr(cfg.target.all, "uniprot_column", "original_id")
+
     def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
-        pd.DataFrame(columns=["uniprot_id"]).to_csv(args.output_csv, index=False)
-        return 0
+        pytest.fail("run_iuphar should not be invoked when configuration is invalid")
 
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
-    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
 
-    merge_column = cfg.target.all.uniprot_column
-    assert merge_column in combined_df.columns
-    assert combined_df.loc[0, merge_column] == gtd.UNIPROT_MISSING_VALUE
-    assert iuphar_df.empty
+    error_events: list[str] = []
+    original_error = gtd.logger.error
+
+    def tracking_error(event: str, *args: object, **kwargs: object) -> object:
+        error_events.append(event)
+        return original_error(event, *args, **kwargs)
+
+    monkeypatch.setattr(gtd.logger, "error", tracking_error)
+
+    with pytest.raises(PipelineError, match="original_id"):
+        gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    assert "invalid_uniprot_column" in error_events
 
 
 def test_fetch_iuphar_uses_mapping_when_uniprot_empty(
@@ -615,4 +633,5 @@ def test_validate_and_write_skips_quality_for_empty(
     exit_code = gtd.validate_and_write(df, output, cfg)
 
     assert exit_code == 0
-    assert output.exists()
+    normalized_output = gtd._normalized_output_path(output)
+    assert normalized_output.exists()

@@ -1652,7 +1652,7 @@
           "type": "number"
         },
         "uniprot_column": {
-          "default": "mapping_uniprot_id",
+          "default": "uniprot_id",
           "title": "Uniprot Column",
           "type": "string"
         },
