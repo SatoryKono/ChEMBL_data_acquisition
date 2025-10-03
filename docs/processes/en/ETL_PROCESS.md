@@ -94,7 +94,7 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 * **`config/config.yaml`** — Central configuration for APIs, limits, paths, reference data, and parameters of each subsystem.
 * **`scripts/`** — CLI wrappers dedicated to entity acquisition (documents, assays, activities, test items, targets), covering input reading, client calls, normalization, validation, and export; quality reporting and dictionary utilities reside in `library/utils/cli_tools`.
 * **`library/`** — Core business logic: API clients, post-processing (documents, targets, assays), normalization, validation, logging, CSV operations, and sidecar handling.
-* **`schemas/`** — `pandera` schemas and normalization routines for every entity.
+* **`library/schemas/`** — `pandera` schemas and normalization routines for every entity.
 * **`dictionary/` and `data/`** — Local dictionaries, UniProt/IUPHAR caches, and input CSV/Excel files for launching pipelines.
 * **`docs/`** — Documentation for configuration, execution, and outputs; this report extends it with an end-to-end ETL description.
 

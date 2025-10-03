@@ -13,7 +13,7 @@ The primary documentation and reference material live in this directory.
 
 
 * Streaming CSV handling with deterministic output for large datasets.
-* Schema validators in [`schemas/`](../../schemas/) and dictionaries in [`dictionary/`](../../dictionary/) that enforce types,
+* Schema validators in [`library/schemas/`](../../library/schemas/) and dictionaries in [`dictionary/`](../../dictionary/) that enforce types,
   ranges and reference data.
 * Configuration driven by `config/config.yaml`, environment variables and CLI overrides.
 * Logging based on the standard `logging` module with configurable verbosity.
