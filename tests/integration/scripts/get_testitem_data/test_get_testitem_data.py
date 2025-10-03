@@ -3132,10 +3132,13 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
     if not hasattr(attach_module, "attach_parent_molecule_ids"):
         attach_module = gtd
 
-    def unexpected_load_parent_catalog(**_: object) -> dict[str, str]:
-        raise AssertionError("load_parent_catalog should not be called")
+    load_calls: list[dict[str, object]] = []
 
-    monkeypatch.setattr(attach_module, "load_parent_catalog", unexpected_load_parent_catalog)
+    def tracking_load_parent_catalog(**kwargs: object) -> dict[str, str]:
+        load_calls.append(dict(kwargs))
+        return {}
+
+    monkeypatch.setattr(attach_module, "load_parent_catalog", tracking_load_parent_catalog)
     monkeypatch.setattr(attach_module, "query_parent_catalog", lambda *_, **__: {})
     monkeypatch.setattr(
         molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
@@ -3168,9 +3171,28 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
     )
     assert stats.missing == 1
     assert stats.uncovered == 1
+    assert not load_calls
     skip_events = [event for event, _ in captured_warnings]
     assert "parent_lookup_full_sync_skipped_parentless" in skip_events
     assert "parent_lookup_missing_parents" in skip_events
+    skipped_payload = next(
+        payload
+        for event, payload in captured_warnings
+        if event == "parent_lookup_full_sync_skipped_parentless"
+    )
+    missing_payload = next(
+        payload
+        for event, payload in captured_warnings
+        if event == "parent_lookup_missing_parents"
+    )
+    assert skipped_payload == {
+        "count": 1,
+        "identifiers": ["CHEMBL_NO_PARENT"],
+    }
+    assert missing_payload == {
+        "count": 1,
+        "identifiers": ["CHEMBL_NO_PARENT"],
+    }
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
