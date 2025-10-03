@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+import threading
+import time
 import traceback
 from collections import OrderedDict, deque
 from dataclasses import dataclass
@@ -245,6 +247,140 @@ class TestitemPipelineStageError(RuntimeError):
         super().__init__(detail)
         self.code = code
 
+
+class StageExecutionBudget:
+    """Track a shared execution budget for a pipeline stage."""
+
+    def __init__(
+        self,
+        stage_name: str,
+        *,
+        minutes: float | None,
+        logger: Any = logger,
+    ) -> None:
+        self.stage_name = stage_name
+        self._logger = logger
+        if minutes is None or minutes <= 0:
+            self._budget_seconds: float | None = None
+            self._deadline: float | None = None
+        else:
+            self._budget_seconds = float(minutes) * 60.0
+            self._deadline = time.monotonic() + self._budget_seconds
+        self._exhausted = False
+
+    def start(self) -> None:
+        if self._deadline is None or self._budget_seconds is None:
+            return
+        self._logger.info(
+            f"{self.stage_name}_execution_budget_started",
+            budget_seconds=int(self._budget_seconds),
+        )
+
+    def enforce(self, label: str | None = None) -> None:
+        if self._deadline is None or self._budget_seconds is None:
+            return
+        remaining = self._deadline - time.monotonic()
+        if remaining >= 0:
+            return
+        if not self._exhausted:
+            self._logger.error(
+                f"{self.stage_name}_execution_budget_exhausted",
+                label=label,
+                budget_seconds=int(self._budget_seconds),
+            )
+            self._exhausted = True
+        raise TestitemPipelineStageError(
+            1,
+            (
+                f"{self.stage_name} stage exceeded execution budget "
+                f"({self._budget_seconds / 60:.1f} minutes)"
+            ),
+        )
+
+
+class StageWatchdog:
+    """Background timer that monitors progress for a pipeline stage."""
+
+    def __init__(
+        self,
+        stage_name: str,
+        *,
+        idle_minutes: float,
+        logger: Any = logger,
+        check_interval: float = 60.0,
+    ) -> None:
+        self.stage_name = stage_name
+        self._logger = logger
+        self._idle_timeout_seconds = max(0.0, float(idle_minutes)) * 60.0
+        self._check_interval = check_interval
+        self._stop_event = threading.Event()
+        self._timed_out = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._last_activity = time.monotonic()
+        self._effective_interval = 0.0
+
+    def __enter__(self) -> "StageWatchdog":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.stop()
+
+    def start(self) -> None:
+        if self._idle_timeout_seconds <= 0:
+            return
+        self._stop_event.clear()
+        self._timed_out.clear()
+        self._last_activity = time.monotonic()
+        interval = self._idle_timeout_seconds / 2 if self._idle_timeout_seconds else 0
+        self._effective_interval = max(1.0, min(self._check_interval, interval or self._check_interval))
+        self._thread = threading.Thread(
+            target=self._monitor,
+            name=f"{self.stage_name}-watchdog",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._thread is None:
+            return
+        self._stop_event.set()
+        self._thread.join(timeout=1)
+        self._thread = None
+
+    def ping(self, event: str | None = None, **payload: Any) -> None:
+        self._last_activity = time.monotonic()
+        if event:
+            self._logger.info(
+                f"{self.stage_name}_watchdog_progress",
+                event=event,
+                **payload,
+            )
+
+    def raise_if_timed_out(self) -> None:
+        if self._timed_out.is_set():
+            raise TestitemPipelineStageError(
+                1,
+                (
+                    f"{self.stage_name} stage stalled (idle timeout "
+                    f"{self._idle_timeout_seconds / 60:.1f} minutes)"
+                ),
+            )
+
+    def _monitor(self) -> None:
+        if self._idle_timeout_seconds <= 0:
+            return
+        interval = self._effective_interval or max(1.0, self._idle_timeout_seconds / 2)
+        while not self._stop_event.wait(interval):
+            idle = time.monotonic() - self._last_activity
+            if idle >= self._idle_timeout_seconds:
+                self._logger.error(
+                    f"{self.stage_name}_watchdog_timeout",
+                    idle_seconds=int(idle),
+                    timeout_seconds=int(self._idle_timeout_seconds),
+                )
+                self._timed_out.set()
+                return
 
 def _batched(iterable: Iterable[str], size: int) -> Iterator[list[str]]:
     """Yield lists of at most ``size`` elements from ``iterable``."""
@@ -571,59 +707,103 @@ def run_testitem_pipeline(
 
         def _processed_chunks() -> Iterator[pd.DataFrame]:
             nonlocal rows_counter
+            idle_minutes = getattr(cfg.testitem, "parent_watchdog_idle_minutes", 0.0)
+            budget = StageExecutionBudget(
+                "parent_lookup",
+                minutes=getattr(cfg.testitem, "execution_budget_minutes", None),
+            )
+            budget.start()
             try:
                 for chunk in chunk_iter:
+                    budget.enforce("chunk_start")
                     rows_counter += len(chunk)
-                    prep_status, prep = prepare_parent_enrichment(
-                        chunk,
-                        catalog_cfg=cfg.molecule_catalog,
-                        io_cfg=cfg.io,
-                        api_cfg=api_cfg,
-                        timeout=parent_timeout,
-                        client=client,
-                        hierarchy_lookup_path=hierarchy_lookup_path,
-                    )
-                    if prep_status != 0 or prep is None:
-                        raise TestitemPipelineStageError(prep_status)
+                    with StageWatchdog(
+                        "parent_lookup",
+                        idle_minutes=idle_minutes,
+                    ) as watchdog:
+                        watchdog.ping("chunk_received", rows=len(chunk))
 
-                    parent_status, parent_result = run_parent_enrichment(
-                        prep,
-                        client=client,
-                        api_cfg=api_cfg,
-                        catalog_cfg=cfg.molecule_catalog,
-                        timeout=parent_timeout,
-                    )
-                    if parent_status != 0 or parent_result is None:
-                        raise TestitemPipelineStageError(parent_status)
-
-                    current = parent_result.df
-                    parent_stats_holder["value"] = _merge_parent_stats(
-                        parent_stats_holder["value"], parent_result.parent_stats
-                    )
-
-                    if pubchem_enabled:
-                        current = augment_pubchem(
-                            current,
-                            pubchem_cfg=cfg.pubchem,
-                            api_cfg=pubchem_api_cfg,
-                            retry_cfg=cfg.retry,
+                        prep_status, prep = prepare_parent_enrichment(
+                            chunk,
+                            catalog_cfg=cfg.molecule_catalog,
+                            io_cfg=cfg.io,
+                            api_cfg=api_cfg,
                             timeout=parent_timeout,
                             client=client,
-                            fields=cfg.testitem.fields,
-                            request_limit=cfg.testitem.request_limit,
+                            hierarchy_lookup_path=hierarchy_lookup_path,
+                        )
+                        if prep_status != 0 or prep is None:
+                            raise TestitemPipelineStageError(prep_status)
+                        watchdog.raise_if_timed_out()
+                        budget.enforce("after_parent_prepare")
+                        watchdog.ping(
+                            "parent_prepare_completed",
+                            rows=int(len(prep.df)),
                         )
 
-                    enrichment_status, enriched_df = apply_testitem_enrichment(
-                        current,
-                        enrichment_cfg=cfg.testitem_molecule_enrichment,
-                        io_cfg=cfg.io,
-                    )
-                    if enrichment_status != 0 or enriched_df is None:
-                        raise TestitemPipelineStageError(enrichment_status)
+                        parent_status, parent_result = run_parent_enrichment(
+                            prep,
+                            client=client,
+                            api_cfg=api_cfg,
+                            catalog_cfg=cfg.molecule_catalog,
+                            timeout=parent_timeout,
+                        )
+                        if parent_status != 0 or parent_result is None:
+                            raise TestitemPipelineStageError(parent_status)
+                        watchdog.raise_if_timed_out()
+                        budget.enforce("after_parent_enrichment")
 
-                    if "molecule_chembl_id" in enriched_df.columns:
+                        current = parent_result.df
+                        parent_stats_holder["value"] = _merge_parent_stats(
+                            parent_stats_holder["value"], parent_result.parent_stats
+                        )
+                        watchdog.ping(
+                            "parent_enrichment_completed",
+                            attached=int(parent_result.parent_stats.attached),
+                            missing=int(parent_result.parent_stats.missing),
+                        )
+
+                        if pubchem_enabled:
+                            watchdog.ping(
+                                "pubchem_enrichment_started",
+                                rows=int(len(current)),
+                            )
+                            current = augment_pubchem(
+                                current,
+                                pubchem_cfg=cfg.pubchem,
+                                api_cfg=pubchem_api_cfg,
+                                retry_cfg=cfg.retry,
+                                timeout=parent_timeout,
+                                client=client,
+                                fields=cfg.testitem.fields,
+                                request_limit=cfg.testitem.request_limit,
+                            )
+                            watchdog.raise_if_timed_out()
+                            budget.enforce("after_pubchem")
+                            watchdog.ping(
+                                "pubchem_enrichment_completed",
+                                rows=int(len(current)),
+                            )
+
+                        enrichment_status, enriched_df = apply_testitem_enrichment(
+                            current,
+                            enrichment_cfg=cfg.testitem_molecule_enrichment,
+                            io_cfg=cfg.io,
+                        )
+                        if enrichment_status != 0 or enriched_df is None:
+                            raise TestitemPipelineStageError(enrichment_status)
+                        watchdog.raise_if_timed_out()
+                        budget.enforce("after_enrichment")
+                        watchdog.ping(
+                            "chunk_ready",
+                            rows=int(len(enriched_df)),
+                        )
+                        watchdog.raise_if_timed_out()
+                        processed_df = enriched_df
+
+                    if "molecule_chembl_id" in processed_df.columns:
                         ids_series = (
-                            enriched_df["molecule_chembl_id"]
+                            processed_df["molecule_chembl_id"]
                             .dropna()
                             .astype(str)
                             .str.strip()
@@ -632,7 +812,8 @@ def run_testitem_pipeline(
                             {value.upper() for value in ids_series if value}
                         )
 
-                    yield enriched_df
+                    budget.enforce("after_chunk")
+                    yield processed_df
             except (
                 TestitemFetchError
             ) as exc:  # pragma: no cover - propagated network error
