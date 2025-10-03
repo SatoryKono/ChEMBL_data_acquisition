@@ -39,7 +39,7 @@ def _run_activity(limit: int, destination: Path) -> subprocess.CompletedProcess[
         str(Path(__file__).resolve().parents[0] / "get_activity_data.py"),
         "--limit",
         str(limit),
-        "--output",
+        "--final-out",
         str(destination),
     ]
     return subprocess.run(cmd, text=True, capture_output=True, env=env)

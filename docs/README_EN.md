@@ -43,8 +43,8 @@ page for engineers and analysts before diving into the detailed manuals.
 
 Install the project (`pip install .` or `pip install dist/*.whl`) to register the
 following console scripts. They correspond to the modules inside
-`scripts/` or `library/cli/commands/` and accept the same arguments as their
-`python -m …` equivalents.
+`scripts/`, `library/cli/commands/`, or `library/utils/cli_tools/` and accept the
+same arguments as their `python -m …` equivalents.
 
 | Console script | Module | Description |
 |----------------|--------|-------------|
@@ -54,14 +54,14 @@ following console scripts. They correspond to the modules inside
 | `get-assay-data` | `library.cli.commands.get_assay_data:main` | Export assay metadata. |
 | `get-activity-data` | `library.cli.commands.get_activity_data:main` | Export normalised activity records. |
 | `get-testitem-data` | `library.cli.commands.get_testitem_data:main` | Enrich molecule records with PubChem details. |
-| `get-document-type` | `library.cli.commands.get_document_type:main` | Classify publication types for QA tasks. |
-| `csv-utils` | `library.cli.commands.csv_utils:main` | Deterministic CSV re-serialisation helpers. |
-| `mapper` | `library.cli.commands.mapper:main` | Interactive UniProt/ChEMBL mapper. |
-| `table-quality` | `library.cli.commands.table_quality:main` | Generate column-level quality profiles. |
-| `chunk-io` | `library.cli.commands.chunk_io:main` | Stream CSV chunks while keeping ordering stable. |
-| `get-input-initialisation` | `library.cli.commands.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
-| `get-activities` | `library.cli.commands.get_activities:main` | Emit synthetic activity rows for smoke tests. |
-| `check-determinism` | `library.cli.commands.check_determinism:main` | Compare CSV hashes across runs. |
+| `get-document-type` | `library.utils.cli_tools.get_document_type:main` | Classify publication types for QA tasks. |
+| `csv-utils` | `library.utils.cli_tools.csv_utils_main:main` | Deterministic CSV re-serialisation helpers. |
+| `mapper` | `library.utils.cli_tools.mapper_main:main` | Interactive UniProt/ChEMBL mapper. |
+| `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Generate column-level quality profiles. |
+| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Stream CSV chunks while keeping ordering stable. |
+| `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
+| `get-activities` | `library.utils.cli_tools.get_activities:main` | Emit synthetic activity rows for smoke tests. |
+| `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |
 
 The dedicated reference [`docs/USAGE_EN.md`](./USAGE_EN.md) (and
 [`docs/USAGE_RU.md`](./USAGE_RU.md)) covers arguments, sub-commands, and advanced
