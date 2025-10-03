@@ -1,21 +1,38 @@
 # Developer Documentation Index
 
-Developer resources are now grouped under `docs/en/devel` (English) and
-`docs/ru/devel` (Russian). Bookmark the folders or use the curated links below.
+Developer resources are now grouped by topic. Bookmark the folders or use the curated links below.
 
 ## English
-- [Contribution guide](./en/devel/CONTRIBUTING.md)
-- [Configuration matrix](./en/devel/CONFIG.md)
-- [CLI helper reference](./en/devel/CLI_TOOLS.md)
-- [Data schema](./en/devel/DATA_SCHEMA.md)
-- [Architecture overview](./en/devel/ARCHITECTURE.md)
+
+### Development
+- [Contribution guide](./en/development/CONTRIBUTING.md)
+- [QA process](./en/development/QA_PROCESS.md)
+
+### Reference
+- [Configuration matrix](./en/reference/CONFIG.md)
+- [CLI helper reference](./en/reference/CLI_TOOLS.md)
+- [Data schema](./en/reference/DATA_SCHEMA.md)
+
+### Architecture
+- [Architecture overview](./en/architecture/ARCHITECTURE.md)
+- [ETL process report](./en/architecture/ETL_PROCESS.md)
+- [ETL data flow](./en/architecture/ETL_DATA_FLOW.md)
 
 ## Русский
-- [Руководство по контрибуции](./ru/devel/CONTRIBUTING.md)
-- [Матрица настроек](./ru/devel/CONFIG.md)
-- [Справочник по CLI](./ru/devel/CLI_TOOLS.md)
-- [Схема данных](./ru/devel/DATA_SCHEMA.md)
-- [Обзор архитектуры](./ru/devel/ARCHITECTURE.md)
 
-The unified [documentation index](index.md) lists user and QA materials
-alongside these developer references.
+### Разработка
+- [Руководство по контрибуции](./ru/development/CONTRIBUTING.md)
+- [QA-процесс](./ru/development/QA_PROCESS.md)
+
+### Справочники
+- [Матрица настроек](./ru/reference/CONFIG.md)
+- [Справочник по CLI](./ru/reference/CLI_TOOLS.md)
+- [Схема данных](./ru/reference/DATA_SCHEMA.md)
+
+### Архитектура
+- [Обзор архитектуры](./ru/architecture/ARCHITECTURE.md)
+- [Описание ETL-процесса](./ru/architecture/ETL_PROCESS.md)
+- [Поток данных ETL](./ru/architecture/ETL_DATA_FLOW.md)
+
+
+The unified [documentation index](index.md) lists user guides alongside these developer references.
