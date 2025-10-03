@@ -286,6 +286,20 @@ def run_pipeline(
     use_logger = logger or default_logger
 
     # NOTE:
+    # ``output_path`` and ``failure_path`` are provided as keyword-only
+    # arguments.  In certain execution environments (for instance when the
+    # function is reflected and re-bound dynamically) direct access to these
+    # parameters can incorrectly raise ``NameError`` during optimisation passes.
+    # To shield the pipeline from those edge cases we resolve the values via
+    # ``locals()`` before re-binding them to local variables.
+    output_path_value = locals().get("output_path")
+    failure_path_value = locals().get("failure_path")
+    if output_path_value is None or failure_path_value is None:
+        raise ValueError("run_pipeline requires 'output_path' and 'failure_path'")
+    output_path = Path(output_path_value)
+    failure_path = Path(failure_path_value)
+
+    # NOTE:
     # ``invocation`` is an optional parameter which, in practice, might be
     # omitted by older call-sites.  When that happens Python still provides the
     # default ``None`` value, however certain execution environments (for
