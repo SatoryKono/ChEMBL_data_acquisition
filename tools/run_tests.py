@@ -15,10 +15,10 @@ from typing import Any
 
 import pytest
 
-from scripts.run_test_suite import SUCCESS_RATE_THRESHOLD
-
 
 REPO_NAME = "SatoryKono/ChEMBL_data_acquisition"
+
+SUCCESS_RATE_THRESHOLD = 0.95
 
 
 logger = logging.getLogger(__name__)
@@ -193,6 +193,7 @@ def _build_json(
 def _write_markdown(summary_path: Path, data: dict[str, Any]) -> None:
     summary = data["summary"]
     meta = data["meta"]
+    success_rate_ratio = summary["success_rate"]
     lines = [
         "# Test Summary",
         "",
@@ -201,7 +202,7 @@ def _write_markdown(summary_path: Path, data: dict[str, Any]) -> None:
         f"- Branch: {meta['branch']}",
         f"- Timestamp (UTC): {meta['ts_utc']}",
         f"- Duration: {meta['duration_sec']} s",
-        f"- Success rate: {summary['success_rate'] * 100:.2f}%",
+        f"- Success rate: {success_rate_ratio * 100:.2f}%",
         "",
         "| total | passed | failed | skipped | xfailed | xpassed | error |",
         "|------:|-------:|-------:|--------:|--------:|--------:|------:|",
@@ -267,12 +268,11 @@ def main(argv: list[str] | None = None) -> int:
     data = _build_json(collector, report_path=args.json)
     _write_markdown(args.markdown, data)
 
-    success_rate_percent = data["summary"]["success_rate"]
-    success_rate_ratio = success_rate_percent / 100.0
+    success_rate_ratio = data["summary"]["success_rate"]
     if success_rate_ratio < SUCCESS_RATE_THRESHOLD:
         logger.error(
             "Success rate %.2f%% is below the required threshold of %.2f%%",
-            success_rate_percent,
+            success_rate_ratio * 100,
             SUCCESS_RATE_THRESHOLD * 100,
         )
         if exit_code == 0:
