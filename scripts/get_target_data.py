@@ -50,7 +50,7 @@ from library import io
 from library.integration import chembl_library as cl
 from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
-from library import protein_classification as pc
+from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter

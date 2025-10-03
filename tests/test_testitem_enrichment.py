@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from library import testitem_enrichment
+from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.config import Config
 
 

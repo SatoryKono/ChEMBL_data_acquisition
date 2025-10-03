@@ -19,7 +19,7 @@ except ImportError as exc:  # pragma: no cover - Python <3.7
 
 import pandas as pd
 
-from .. import organism_classification
+from ..pipelines.target import organism_classification
 from ..config import Config
 from ..io.writers import write_csv
 from ..common.log import logger
