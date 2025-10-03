@@ -488,6 +488,14 @@ def _normalise_export_basename(source: Path | str) -> str:
     return name
 
 
+def _build_default_destination(source: Path | str) -> Path:
+    """Return the default output path for ``source``."""
+
+    source_path = Path(source)
+    base_name = _normalise_export_basename(source_path)
+    return source_path.with_name(f"{DEFAULT_OUTPUT_PREFIX}{base_name}")
+
+
 def postprocess_export_file(
     input_path: Path | str,
     *,
@@ -514,13 +522,7 @@ def postprocess_export_file(
         ref_document=ref_document,
         ref_document_path=ref_document_path,
     )
-    destination = (
-        Path(output_path)
-        if output_path
-        else Path(input_path).with_name(
-            f"{DEFAULT_OUTPUT_PREFIX}{_normalise_export_basename(input_path)}"
-        )
-    )
+    destination = Path(output_path) if output_path else _build_default_destination(input_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     col_order = [
         column
