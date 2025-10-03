@@ -39,6 +39,8 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .common.rate_limiter import configure_limiter_cache
+
 from .common.log import logger
 from .common.rate_limiter import configure_limiter_cache
 from .utils.config import ConfigLoaderError, load_yaml_config
