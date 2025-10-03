@@ -28,8 +28,8 @@ All content is maintained in synchronised English (`*_EN.md`) and Russian
 ## Console entry points
 
 Installing the package (`pip install .` or the published wheel) registers the
-following scripts. They mirror the modules in `scripts/` or
-`library/cli/commands/`.
+following scripts. They mirror the modules in `scripts/`,
+`library/cli/commands/`, or `library/utils/cli_tools/`.
 
 | Script | Module | Purpose |
 |--------|--------|---------|
@@ -39,14 +39,14 @@ following scripts. They mirror the modules in `scripts/` or
 | `get-assay-data` | `library.cli.commands.get_assay_data:main` | Assay metadata export. |
 | `get-activity-data` | `library.cli.commands.get_activity_data:main` | Activity export with normalisation. |
 | `get-testitem-data` | `library.cli.commands.get_testitem_data:main` | Molecule enrichment with PubChem. |
-| `get-document-type` | `library.cli.commands.get_document_type:main` | Publication classification helper. |
-| `csv-utils` | `library.cli.commands.csv_utils:main` | Deterministic CSV utilities. |
-| `mapper` | `library.cli.commands.mapper:main` | UniProt/ChEMBL mapping tool. |
-| `table-quality` | `library.cli.commands.table_quality:main` | Column-level quality reports. |
-| `chunk-io` | `library.cli.commands.chunk_io:main` | Chunked CSV IO harness. |
-| `get-input-initialisation` | `library.cli.commands.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
-| `get-activities` | `library.cli.commands.get_activities:main` | Synthetic activity generator for smoke tests. |
-| `check-determinism` | `library.cli.commands.check_determinism:main` | Compare CSV hashes across runs. |
+| `get-document-type` | `library.utils.cli_tools.get_document_type:main` | Publication classification helper. |
+| `csv-utils` | `library.utils.cli_tools.csv_utils_main:main` | Deterministic CSV utilities. |
+| `mapper` | `library.utils.cli_tools.mapper_main:main` | UniProt/ChEMBL mapping tool. |
+| `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Column-level quality reports. |
+| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Chunked CSV IO harness. |
+| `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
+| `get-activities` | `library.utils.cli_tools.get_activities:main` | Synthetic activity generator for smoke tests. |
+| `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |
 
 Helper utilities under `library.utils.cli_tools` are documented in
 [`docs/CLI_TOOLS_EN.md`](./docs/CLI_TOOLS_EN.md) /

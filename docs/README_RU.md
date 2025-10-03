@@ -43,8 +43,9 @@
 ## Поддерживаемые команды
 
 Установка (`pip install .` или установка wheel) регистрирует следующие консольные
-скрипты. Они соответствуют модулям из `scripts/` или `library/cli/commands/` и
-принимают те же аргументы, что и вызовы `python -m …`.
+скрипты. Они соответствуют модулям из `scripts/`, `library/cli/commands/` или
+`library/utils/cli_tools/` и принимают те же аргументы, что и вызовы
+`python -m …`.
 
 | Консольная команда | Модуль | Описание |
 |--------------------|--------|----------|
@@ -54,14 +55,14 @@
 | `get-assay-data` | `library.cli.commands.get_assay_data:main` | Выгружает метаданные ассайев. |
 | `get-activity-data` | `library.cli.commands.get_activity_data:main` | Выгружает нормализованные активности. |
 | `get-testitem-data` | `library.cli.commands.get_testitem_data:main` | Обогащает молекулы данными PubChem. |
-| `get-document-type` | `library.cli.commands.get_document_type:main` | Классифицирует публикации для QA. |
-| `csv-utils` | `library.cli.commands.csv_utils:main` | Детерминированная пересериализация CSV. |
-| `mapper` | `library.cli.commands.mapper:main` | Интерактивный маппер UniProt/ChEMBL. |
-| `table-quality` | `library.cli.commands.table_quality:main` | Формирует отчёты качества по колонкам. |
-| `chunk-io` | `library.cli.commands.chunk_io:main` | Потоковое чтение/запись CSV с сохранением порядка. |
-| `get-input-initialisation` | `library.cli.commands.get_input_initialisation:main` | Объединяет Excel-книги инициализации. |
-| `get-activities` | `library.cli.commands.get_activities:main` | Генерирует синтетические активности для смоук-тестов. |
-| `check-determinism` | `library.cli.commands.check_determinism:main` | Сравнивает хэши CSV между запусками. |
+| `get-document-type` | `library.utils.cli_tools.get_document_type:main` | Классифицирует публикации для QA. |
+| `csv-utils` | `library.utils.cli_tools.csv_utils_main:main` | Детерминированная пересериализация CSV. |
+| `mapper` | `library.utils.cli_tools.mapper_main:main` | Интерактивный маппер UniProt/ChEMBL. |
+| `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Формирует отчёты качества по колонкам. |
+| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Потоковое чтение/запись CSV с сохранением порядка. |
+| `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Объединяет Excel-книги инициализации. |
+| `get-activities` | `library.utils.cli_tools.get_activities:main` | Генерирует синтетические активности для смоук-тестов. |
+| `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Сравнивает хэши CSV между запусками. |
 
 Подробные сценарии приведены в [`docs/USAGE_RU.md`](./USAGE_RU.md) и английской
 версии [`docs/USAGE_EN.md`](./USAGE_EN.md).
