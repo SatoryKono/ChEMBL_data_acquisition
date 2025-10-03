@@ -28,6 +28,11 @@ Use the sections below to browse manuals, reference sheets, operational processe
   - [Схема данных](reference/ru/DATA_SCHEMA.md)
   - [Структура выходных данных](reference/ru/OUTPUT.md)
 
+## Architecture
+
+- English
+  - [Architecture overview](architecture/index.md)
+
 ## Processes
 
 - English
