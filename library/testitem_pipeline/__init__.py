@@ -13,7 +13,7 @@ from importlib.util import (
 from types import ModuleType
 from typing import Any
 
-from pathlib import Path
+import pathlib
 
 import requests
 
@@ -87,7 +87,7 @@ def _load_local_module(module_name: str) -> ModuleType:
     qualified_name = f"{package_name}.{module_name}"
     resource_name = f"{module_name}.py"
 
-    def _load_from_path(module_path: Path) -> ModuleType:
+    def _load_from_path(module_path: pathlib.Path) -> ModuleType:
         spec = spec_from_file_location(qualified_name, module_path)
         if spec is None or spec.loader is None:
             raise ModuleNotFoundError(qualified_name)
@@ -111,9 +111,9 @@ def _load_local_module(module_name: str) -> ModuleType:
 
     if module_resource is not None and module_resource.is_file():
         with resources.as_file(module_resource) as module_path:
-            return _load_from_path(Path(module_path))
+            return _load_from_path(pathlib.Path(module_path))
 
-    local_path = Path(__file__).resolve().with_name(resource_name)
+    local_path = pathlib.Path(__file__).resolve().with_name(resource_name)
     if local_path.is_file():
         return _load_from_path(local_path)
 
