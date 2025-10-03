@@ -8,8 +8,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .config import Config
-from .io.metadata import write_meta_yaml
+from ..config import Config
+from ..io.metadata import write_meta_yaml
 
 
 class SidecarErrors:

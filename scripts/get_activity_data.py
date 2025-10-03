@@ -52,27 +52,28 @@ from library.cli import (
 from library.cli import (
     build_parser as base_parser,
 )
-from library.cli_utils import (
+from library.cli.utils import (
     PipelineError,
     resolve_invocation,
     run_cli_command,
     run_pipeline,
 )
-from library.cli_utils import (
+from library.cli.utils import (
     file_sha256 as _cli_file_sha256,
 )
-from library.cli_utils import (
+from library.cli.utils import (
     write_meta_yaml as _cli_write_meta_yaml,
 )
 from library.config import Config, _serialize_paths
 from library.common.log import logger
+from library.common.rate_limiter import get_global_limiter
 from library.pipelines.common import add_pipeline_metadata
 from library.processing.activity import (
     apply_activity_annotations,
     compute_activity_bounds,
 )
-from library.table_quality import analyze_table_quality
-from library.validation import validate_activities
+from library.qa.table_quality import analyze_table_quality
+from library.qa.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
@@ -121,7 +122,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     int
         ``0`` on success, non-zero when validation or I/O failures are
         encountered. Upstream API errors are logged and converted into a
-        failure code by :func:`library.cli_utils.run_pipeline`.
+        failure code by :func:`library.cli.utils.run_pipeline`.
     """
     limit = cfg.activity.limit
     if limit is not None and limit < 0:

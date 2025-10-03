@@ -9,7 +9,7 @@ import pytest
 from library.integration import chembl_library as cl
 from library.integration import pubchem_library as pl
 from library.clients import pubchem as pc
-from library import testitem_enrichment
+from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 from scripts import get_testitem_data
 

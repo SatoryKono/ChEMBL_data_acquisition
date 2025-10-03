@@ -43,7 +43,7 @@ from library.cli import (
 )
 from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.common.log import logger
-from library.table_quality import analyze_table_quality
+from library.qa.table_quality import analyze_table_quality
 
 
 def run(cfg: Config, args: argparse.Namespace) -> int:

@@ -44,17 +44,17 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-import library.cli_utils as cli_utils_module
+import library.cli.utils as cli_utils_module
 from library import cli
 from library import io
 from library.integration import chembl_library as cl
 from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
-from library import protein_classification as pc
+from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
-from library.cli_utils import PipelineError, run_cli_command, run_pipeline
+from library.cli.utils import PipelineError, run_cli_command, run_pipeline
 from library.pipelines.target.chembl_target import normalize_reaction_ec_numbers
 from library.cli import (
     LoggerConfig,
@@ -70,11 +70,11 @@ from library.config import (
 )
 from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.common.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
-from library.validation import ValidationResult
+from library.common.sidecar import SidecarErrors
+from library.qa.table_quality import analyze_table_quality
+from library.qa.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 

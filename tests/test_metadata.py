@@ -8,8 +8,8 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-import library.git_utils as git_utils
-from library.metadata import Stats, write_meta_yaml
+import library.common.git as git_utils
+from library.common.metadata import Stats, write_meta_yaml
 
 
 def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
@@ -155,7 +155,7 @@ def test_git_sha_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
 
     git_utils._git_sha.cache_clear()
     monkeypatch.setenv("GIT_SHA", "envsha")
-    with patch("library.git_utils.subprocess.run") as mock:
+    with patch("library.common.git.subprocess.run") as mock:
         assert git_utils._git_sha() == "envsha"
         mock.assert_not_called()
 

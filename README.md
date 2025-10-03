@@ -760,7 +760,7 @@ statistics along with correlations between numeric fields. Example usage:
 
 ```python
 import pandas as pd
-from library.table_quality import analyze_table_quality
+from library.qa.table_quality import analyze_table_quality
 
 df = pd.read_csv("data.csv", encoding="utf-8-sig")
 quality, corr = analyze_table_quality(df, table_name="data")

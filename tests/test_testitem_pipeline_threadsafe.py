@@ -1,4 +1,4 @@
-"""Concurrency tests for :mod:`library.testitem_pipeline`."""
+"""Concurrency tests for :mod:`library.pipelines.testitem`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pandas as pd
 from types import SimpleNamespace
 
 from library.config import ApiCfg, PubChemCfg, RetryCfg
-import library.testitem_pipeline as pipeline
+import library.pipelines.testitem as pipeline
 
 
 def test_augment_pubchem_single_initialisation(monkeypatch) -> None:
@@ -144,18 +144,18 @@ def test_run_pipeline_streams_chunks(monkeypatch, tmp_path, cfg) -> None:
         def __exit__(self, *_args) -> bool:
             return False
 
-    monkeypatch.setattr("library.testitem_pipeline.cli.read_input_ids", fake_read_ids)
-    monkeypatch.setattr("library.testitem_pipeline.cli.fetch_testitems", fake_fetch)
-    monkeypatch.setattr("library.testitem_pipeline.cli.prepare_parent_enrichment", fake_prepare)
-    monkeypatch.setattr("library.testitem_pipeline.cli.run_parent_enrichment", fake_run)
-    monkeypatch.setattr("library.testitem_pipeline.cli.augment_pubchem", fake_augment)
+    monkeypatch.setattr("library.pipelines.testitem.cli.read_input_ids", fake_read_ids)
+    monkeypatch.setattr("library.pipelines.testitem.cli.fetch_testitems", fake_fetch)
+    monkeypatch.setattr("library.pipelines.testitem.cli.prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr("library.pipelines.testitem.cli.run_parent_enrichment", fake_run)
+    monkeypatch.setattr("library.pipelines.testitem.cli.augment_pubchem", fake_augment)
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.apply_testitem_enrichment", fake_enrich
+        "library.pipelines.testitem.cli.apply_testitem_enrichment", fake_enrich
     )
-    monkeypatch.setattr("library.testitem_pipeline.cli.finalize_output", fake_finalize)
-    monkeypatch.setattr("library.testitem_pipeline.cli.ChemblClient", DummyClient)
+    monkeypatch.setattr("library.pipelines.testitem.cli.finalize_output", fake_finalize)
+    monkeypatch.setattr("library.pipelines.testitem.cli.ChemblClient", DummyClient)
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.pc.init_session",
+        "library.pipelines.testitem.cli.pc.init_session",
         lambda *_args, **_kwargs: None,
     )
 
@@ -242,21 +242,21 @@ def test_run_pipeline_streams_missing(monkeypatch, tmp_path, cfg) -> None:
         def __exit__(self, *_args) -> bool:
             return False
 
-    monkeypatch.setattr("library.testitem_pipeline.cli.read_input_ids", fake_read_ids)
-    monkeypatch.setattr("library.testitem_pipeline.cli.fetch_testitems", fake_fetch)
-    monkeypatch.setattr("library.testitem_pipeline.cli.prepare_parent_enrichment", fake_prepare)
-    monkeypatch.setattr("library.testitem_pipeline.cli.run_parent_enrichment", fake_run)
+    monkeypatch.setattr("library.pipelines.testitem.cli.read_input_ids", fake_read_ids)
+    monkeypatch.setattr("library.pipelines.testitem.cli.fetch_testitems", fake_fetch)
+    monkeypatch.setattr("library.pipelines.testitem.cli.prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr("library.pipelines.testitem.cli.run_parent_enrichment", fake_run)
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.augment_pubchem", lambda df, **_: df
+        "library.pipelines.testitem.cli.augment_pubchem", lambda df, **_: df
     )
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.apply_testitem_enrichment",
+        "library.pipelines.testitem.cli.apply_testitem_enrichment",
         lambda df, **_: (0, df),
     )
-    monkeypatch.setattr("library.testitem_pipeline.cli.finalize_output", fake_finalize)
-    monkeypatch.setattr("library.testitem_pipeline.cli.ChemblClient", DummyClient)
+    monkeypatch.setattr("library.pipelines.testitem.cli.finalize_output", fake_finalize)
+    monkeypatch.setattr("library.pipelines.testitem.cli.ChemblClient", DummyClient)
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.pc.init_session",
+        "library.pipelines.testitem.cli.pc.init_session",
         lambda *_args, **_kwargs: None,
     )
 
@@ -349,23 +349,23 @@ def test_run_pipeline_skips_pubchem_when_disabled(monkeypatch, tmp_path, cfg) ->
         def __exit__(self, *_args) -> bool:
             return False
 
-    monkeypatch.setattr("library.testitem_pipeline.cli.read_input_ids", fake_read_ids)
-    monkeypatch.setattr("library.testitem_pipeline.cli.fetch_testitems", fake_fetch)
-    monkeypatch.setattr("library.testitem_pipeline.cli.prepare_parent_enrichment", fake_prepare)
-    monkeypatch.setattr("library.testitem_pipeline.cli.run_parent_enrichment", fake_run)
+    monkeypatch.setattr("library.pipelines.testitem.cli.read_input_ids", fake_read_ids)
+    monkeypatch.setattr("library.pipelines.testitem.cli.fetch_testitems", fake_fetch)
+    monkeypatch.setattr("library.pipelines.testitem.cli.prepare_parent_enrichment", fake_prepare)
+    monkeypatch.setattr("library.pipelines.testitem.cli.run_parent_enrichment", fake_run)
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.apply_testitem_enrichment", fake_enrich
+        "library.pipelines.testitem.cli.apply_testitem_enrichment", fake_enrich
     )
-    monkeypatch.setattr("library.testitem_pipeline.cli.finalize_output", fake_finalize)
-    monkeypatch.setattr("library.testitem_pipeline.cli.ChemblClient", DummyClient)
+    monkeypatch.setattr("library.pipelines.testitem.cli.finalize_output", fake_finalize)
+    monkeypatch.setattr("library.pipelines.testitem.cli.ChemblClient", DummyClient)
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli._prepare_pubchem_api_cfg",
+        "library.pipelines.testitem.cli._prepare_pubchem_api_cfg",
         fail_prepare_pubchem,
     )
     monkeypatch.setattr(
-        "library.testitem_pipeline.cli.pc.init_session", fail_init_session
+        "library.pipelines.testitem.cli.pc.init_session", fail_init_session
     )
-    monkeypatch.setattr("library.testitem_pipeline.cli.augment_pubchem", fail_augment)
+    monkeypatch.setattr("library.pipelines.testitem.cli.augment_pubchem", fail_augment)
 
     options = pipeline.TestitemPipelineOptions(
         input_csv=tmp_path / "input.csv",

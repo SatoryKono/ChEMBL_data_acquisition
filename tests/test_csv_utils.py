@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 import library.common.csv_utils as csv_utils
-import library.git_utils as git_utils
+import library.common.git as git_utils
 from library.config import Config
 from library.common.csv_utils import sha256_file, write_csv_deterministic
 
@@ -308,7 +308,7 @@ def test_git_sha_timeout_returns_unknown_and_logs_warning(
     git_utils._git_sha.cache_clear()
     monkeypatch.setattr(git_utils, "_read_head_sha", lambda *_: None)
     with patch(
-        "library.git_utils.subprocess.run",
+        "library.common.git.subprocess.run",
         side_effect=subprocess.CalledProcessError(
             returncode=1,
             cmd=["git", "rev-parse", "HEAD"],

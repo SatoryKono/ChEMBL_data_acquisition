@@ -14,7 +14,8 @@ import pandas as pd
 import requests
 from pandera.errors import SchemaErrors
 
-from library import io, testitem_enrichment
+from library import io
+from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.integration import chembl_library as cl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
@@ -29,7 +30,7 @@ from library.config import (
 )
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.common.log import logger
-from library.metadata import (
+from library.common.metadata import (
     Stats,
     file_sha256,
     write_meta_yaml,
@@ -37,9 +38,9 @@ from library.metadata import (
 )
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
-from library.sidecar import SidecarErrors
-from library.table_quality import analyze_table_quality
-from library.validation import validate_testitems
+from library.common.sidecar import SidecarErrors
+from library.qa.table_quality import analyze_table_quality
+from library.qa.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
 
 from .catalog import (

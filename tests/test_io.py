@@ -12,7 +12,7 @@ import pandera as pa
 import pytest
 import yaml
 
-import library.git_utils as git_utils
+import library.common.git as git_utils
 from library import io
 from library.config import Config, IoCfg
 from library.common.logging_setup import LoggerConfig, configure_logger

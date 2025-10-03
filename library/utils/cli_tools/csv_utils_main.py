@@ -22,7 +22,7 @@ import pandas as pd
 
 from library import cli
 from library.cli import LoggerConfig, configure_logger, create_logger_config
-from library.cli_utils import build_parser
+from library.cli.utils import build_parser
 from library.common.csv_utils import write_csv_chunks_deterministic
 from library.config import ConfigError, ensure_dirs, print_config
 from library.common.log import logger

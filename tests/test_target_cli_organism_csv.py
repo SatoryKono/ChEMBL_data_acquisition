@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from library import protein_classification as pc
+from library.pipelines.target import protein_classification as pc
 from library.config import Config
 from scripts import get_target_data as gtd
 

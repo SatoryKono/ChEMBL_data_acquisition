@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import library.cli_utils as cli_utils
+import library.cli.utils as cli_utils
 from library.config import Config
 from scripts import get_target_data as gtd
 

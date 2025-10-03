@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from library.config import Config
-from library.table_quality import TableQualityProfiler, analyze_table_quality
+from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
 from library.utils.cli_tools.table_quality_main import run
 
 

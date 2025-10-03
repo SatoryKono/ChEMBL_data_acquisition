@@ -65,14 +65,14 @@ from .pubchem import (
     resolve_pubchem_cid,
 )
 from library.integration import pubchem_library as pl
-from library import testitem_enrichment
+from . import enrichment as testitem_enrichment
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.common.csv_utils import write_csv_chunks_deterministic as write_csv_deterministic
 from library.common.log import logger
-from library.metadata import file_sha256, write_meta_yaml
-from library.table_quality import analyze_table_quality
-from library.validation import validate_testitems
+from library.common.metadata import file_sha256, write_meta_yaml
+from library.qa.table_quality import analyze_table_quality
+from library.qa.validation import validate_testitems
 
 __all__ = [
     "ChemblClient",

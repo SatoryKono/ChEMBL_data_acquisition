@@ -9,7 +9,7 @@ directory.
 
 from __future__ import annotations
 
-from . import io, qa, schemas, validation
+from . import io, qa, schemas
 from .config import Config, load_config
 from .common.csv_utils import (
     sha256_file,
@@ -25,7 +25,9 @@ from .pipelines.document.type_terms import (
     UNKNOWN_TERMS,
     parse_terms,
 )
-from .organism_classification import (
+from .common.sidecar import SidecarErrors
+from .parser_schema import CSVExportArgs
+from .pipelines.target.organism_classification import (
     TYPE_MULTICELLULAR,
     TYPE_UNICELLULAR,
     TYPE_VIRAL,
@@ -36,8 +38,6 @@ from .organism_classification import (
     classify_record,
     normalize,
 )
-from .parser_schema import CSVExportArgs
-from .sidecar import SidecarErrors
 
 __all__ = [
     "parse_terms",
@@ -49,7 +49,6 @@ __all__ = [
     "io",
     "qa",
     "schemas",
-    "validation",
     "Config",
     "load_config",
     "SidecarErrors",

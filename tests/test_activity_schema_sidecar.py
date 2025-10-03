@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from pandera.errors import SchemaErrors
 
-from library.sidecar import SidecarErrors
+from library.common.sidecar import SidecarErrors
 from library.schemas import ActivitiesSchema
 
 

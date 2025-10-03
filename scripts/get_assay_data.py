@@ -41,12 +41,12 @@ from library.cli import (
     LoggerConfig,
 )
 from library.cli import build_parser as base_parser
-from library.cli_utils import run_cli_command, run_pipeline
+from library.cli.utils import run_cli_command, run_pipeline
 from library.config import Config, _serialize_paths
 from library.common.log import logger
 from library.pipelines.common import add_pipeline_metadata
-from library.table_quality import analyze_table_quality
-from library.validation import validate_assays
+from library.qa.table_quality import analyze_table_quality
+from library.qa.validation import validate_assays
 from library.schemas import AssaysSchema, normalize_assays
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -82,7 +82,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     int
         ``0`` on success, non-zero when validation or I/O failures occur.
         Upstream API errors are logged and converted into a failure code by
-        :func:`library.cli_utils.run_pipeline`.
+        :func:`library.cli.utils.run_pipeline`.
     """
     limit = cfg.assay.limit
     if limit is not None and limit < 0:

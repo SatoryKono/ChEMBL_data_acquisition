@@ -27,8 +27,8 @@ from library.integration import chembl_library as cl
 from library import io
 from library.integration import molecule_catalog
 from library.integration import pubchem_library as pl
-import library.testitem_pipeline as pipeline
-import library.testitem_pipeline.cli as pipeline_cli
+import library.pipelines.testitem as pipeline
+import library.pipelines.testitem.cli as pipeline_cli
 
 from library.config import ApiCfg, Config, IoCfg
 

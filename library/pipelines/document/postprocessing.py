@@ -14,7 +14,7 @@ from typing import Any, Iterable, cast
 import numpy as np
 import pandas as pd
 
-from ... import validation
+from ...qa import validation
 from ...config import IoCfg
 from ...common.csv_utils import write_csv_deterministic
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 
-import library.testitem_pipeline as pipeline
+import library.pipelines.testitem as pipeline
 
 
 def test_pipeline_exports_are_available() -> None:

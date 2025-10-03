@@ -335,7 +335,7 @@ python -m scripts.get_testitem_data \
 PubChem-дополнение добавляет детерминированные свойства (`pubchem_cid`, `pubchem_iupac_name`, `pubchem_molecular_formula`,
 `pubchem_isomeric_smiles`, `pubchem_canonical_smiles`, `pubchem_inchi`, `pubchem_inchikey`). Чтобы
 отслеживать изменения между выгрузками, выгрузите только эти колонки во временный файл и посчитайте SHA-256 с помощью
-`library.metadata.file_sha256` или `library.common.csv_utils.sha256_file`. Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
+`library.common.metadata.file_sha256` или `library.common.csv_utils.sha256_file`. Полученное значение `properties_hash` удобно сохранять в журнале релиза или sidecar, чтобы фиксировать сдвиги в данных PubChem даже при неизменном количестве строк.
 
 ### Требования к каталогу родительских молекул
 

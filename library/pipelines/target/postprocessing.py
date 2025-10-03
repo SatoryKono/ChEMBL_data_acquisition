@@ -13,7 +13,7 @@ import pandas as pd
 
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
-from ... import organism_classification
+from . import organism_classification
 from ...config import Config, IoCfg
 from ...common.csv_utils import write_csv_deterministic
 from ...common.log import logger

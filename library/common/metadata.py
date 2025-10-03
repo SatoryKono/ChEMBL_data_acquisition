@@ -17,10 +17,10 @@ from typing import Any, TypedDict
 
 import yaml
 
-from .config import _mask_secrets
-from .git_utils import _git_sha
-from .common.log import logger
-from .utils.atomic import open_atomic
+from ..config import _mask_secrets
+from .git import _git_sha
+from .log import logger
+from ..utils.atomic import open_atomic
 
 
 def _load_metadata(meta_path: Path) -> dict[str, Any]:
