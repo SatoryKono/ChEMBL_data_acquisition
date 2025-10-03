@@ -1009,6 +1009,8 @@ class TestitemCfg(_BaseModel):
     batch_retry: TestitemBatchRetryCfg = Field(
         default_factory=lambda: TestitemBatchRetryCfg()
     )
+    parent_watchdog_idle_minutes: float = Field(0.0, ge=0)
+    execution_budget_minutes: float | None = Field(default=None, ge=0)
 
     @field_validator("fields", mode="before")
     @classmethod
