@@ -15,7 +15,6 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import io
-from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.integration import chembl_library as cl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
@@ -38,7 +37,7 @@ from library.metadata import (
 )
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
-from library.sidecar import SidecarErrors
+from library import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
@@ -56,6 +55,7 @@ from .catalog import (
     prepare_parent_enrichment,
     run_parent_enrichment,
 )
+from . import testitem_enrichment
 from .pubchem import PUBCHEM_COLUMNS, add_pubchem_data, augment_pubchem
 
 _FETCH_ERROR_SAMPLE_SIZE = 10

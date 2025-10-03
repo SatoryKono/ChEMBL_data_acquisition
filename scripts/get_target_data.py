@@ -102,7 +102,7 @@ from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
 from library.pipelines.common import add_pipeline_metadata
-from library.sidecar import SidecarErrors
+from library import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
