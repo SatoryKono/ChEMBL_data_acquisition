@@ -50,12 +50,26 @@ def _load_local_module(module_name: str) -> ModuleType:
     package_name = __name__
     qualified_name = f"{package_name}.{module_name}"
     module_path = Path(__file__).with_name(f"{module_name}.py")
+    if not module_path.is_file():
+        msg = (
+            f"Optional module '{qualified_name}' is not available. "
+            f"Expected file '{module_path}' is missing from this installation."
+        )
+        raise ModuleNotFoundError(msg)
     spec = spec_from_file_location(qualified_name, module_path)
     if spec is None or spec.loader is None:
         raise ModuleNotFoundError(qualified_name)
     module = module_from_spec(spec)
-    sys.modules[qualified_name] = module
-    spec.loader.exec_module(module)
+    try:
+        sys.modules[qualified_name] = module
+        spec.loader.exec_module(module)
+    except FileNotFoundError as exc:
+        sys.modules.pop(qualified_name, None)
+        msg = (
+            f"Optional module '{qualified_name}' could not be loaded. "
+            f"Ensure '{module_path}' is included in your environment."
+        )
+        raise ModuleNotFoundError(msg) from exc
     return module
 
 
