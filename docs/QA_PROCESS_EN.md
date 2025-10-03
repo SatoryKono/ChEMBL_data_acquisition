@@ -73,11 +73,8 @@ The document export now includes an automated regression check against the legac
    ```bash
    python -m library.qa.check_document_postprocessing \
        --base-path data \
-
        --ref input\\full\\document.csv \
-       --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv
-
+       --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv \
        --out output\\document\\output.document_YYYYMMDD.csv
-
    ```
 4. Treat a non-zero exit code as a blocking failure; consult the Markdown summary and diff extract for remediation.
