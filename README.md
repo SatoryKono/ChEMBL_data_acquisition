@@ -1,119 +1,84 @@
 # ChEMBL Data Acquisition Utilities
 
-The README is available in multiple languages:
+| Language | Overview |
+|----------|----------|
+| English  | [`docs/README_EN.md`](./docs/README_EN.md) |
+| Русский  | [`docs/README_RU.md`](./docs/README_RU.md) |
 
-| Language | Link |
-|----------|------|
-| English  | [README.md](./docs/guides/en/README.md) |
-| Русский  | [README.md](./docs/guides/ru/README.md) |
+Use the [documentation index](./docs/index.md) to navigate the full manual set.
+All content is maintained in synchronised English (`*_EN.md`) and Russian
+(`*_RU.md`) variants.
 
-Browse the reorganised knowledge base via the consolidated [documentation index](./docs/index.md).
+## Feature highlights
 
- 
-* Командные скрипты с унифицированными флагами `--input`, `--output`
+- Pipelines for documents, targets, assays, activities, and test items with
+  deterministic exports and YAML sidecars.
+- Orchestrator (`get-data`) that chains all pipelines with shared configuration
+  and logging.
+- Unified CLI layer with shared flags (`--input`, `--final-out`, `--config`,
+  `--log-level`) plus staging switches (`--raw-out`, `--raw-format`,
+  `--id-cols`, `--no-reindex-raw`, `--normalize-at-export`) for the target
+  pipeline.
+- Configuration via YAML (`config/config.yaml`), `config.local.yaml`,
+  environment variables (`CHEMBL_DA__*`) and CLI overrides. Optional `.env`
+  files can be sourced locally.
+- Quality gates: schema validation, table-quality reports, deterministic CSV
+  writing, strict typing, linting, and unit tests.
 
-  (основной путь назначения; `--final-out` пока доступен только в
-  `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`,
-  а устаревшие алиасы `--out` сохраняются для совместимости и теперь
-  сопровождаются предупреждением),
-  `--log-level`, `--sep`, `--encoding`, `--column`, а также `--config` и
-  `--print-config` для управления загрузкой настроек. Размер пакетной
-  выборки задаётся параметрами `--chunk-size` или `--batch-size` в зависимости
-  от конкретного пайплайна. Новые переключатели `--raw-out`, `--raw-format`,
-  `--id-cols`, `--no-reindex-raw`, а также пара `--normalize-at-export` /
-  `--no-normalize-at-export` уже доступны в пайплайне таргетов; остальные
-  команды получат их после расширения общего CLI.
+## Console entry points
 
-* Потоковая обработка больших CSV через чанки, детерминированный вывод.
-* Отдельный «сырой» снимок (`--raw-out`) доступен для пайплайна таргетов;
-  поддержка остальных конвейеров запланирована и будет объявлена отдельно.
-  По умолчанию «сырой» дамп переупорядочивает столбцы для стабильности
-  (`--no-reindex-raw` отключает это), а итоговая таблица нормализуется перед
-  записью (`--no-normalize-at-export` сохраняет исходное состояние данных).
-* Валидаторы схем (`library/schemas/`) и словари (`dictionary/`) для проверки
-  типов, диапазонов и справочников.
-* Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
-* Логирование через стандартный модуль `logging` с настраиваемым уровнем.
-* Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование
-  `black`, проверка типов `mypy`, юнит‑тесты `pytest`.
+Installing the package (`pip install .` or the published wheel) registers the
+following scripts. They mirror the modules in `scripts/` or
+`library/cli/commands/`.
 
-## Console entry points / Консольные точки входа
+| Script | Module | Purpose |
+|--------|--------|---------|
+| `get-data` | `scripts.get_data:main` | Run all pipelines sequentially. |
+| `get-document-data` | `library.cli.commands.get_document_data:main` | Document acquisition and enrichment. |
+| `get-target-data` | `library.cli.commands.get_target_data:main` | Target aggregation (ChEMBL, UniProt, IUPHAR). |
+| `get-assay-data` | `library.cli.commands.get_assay_data:main` | Assay metadata export. |
+| `get-activity-data` | `library.cli.commands.get_activity_data:main` | Activity export with normalisation. |
+| `get-testitem-data` | `library.cli.commands.get_testitem_data:main` | Molecule enrichment with PubChem. |
+| `get-document-type` | `library.cli.commands.get_document_type:main` | Publication classification helper. |
+| `csv-utils` | `library.cli.commands.csv_utils:main` | Deterministic CSV utilities. |
+| `mapper` | `library.cli.commands.mapper:main` | UniProt/ChEMBL mapping tool. |
+| `table-quality` | `library.cli.commands.table_quality:main` | Column-level quality reports. |
+| `chunk-io` | `library.cli.commands.chunk_io:main` | Chunked CSV IO harness. |
+| `get-input-initialisation` | `library.cli.commands.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
+| `get-activities` | `library.cli.commands.get_activities:main` | Synthetic activity generator for smoke tests. |
+| `check-determinism` | `library.cli.commands.check_determinism:main` | Compare CSV hashes across runs. |
 
-**EN.** Installing the project via `pip install .` registers dedicated
-console scripts for each pipeline. Use them interchangeably with the
-`python -m …` invocations shown throughout the documentation.
+Helper utilities under `library.utils.cli_tools` are documented in
+[`docs/CLI_TOOLS_EN.md`](./docs/CLI_TOOLS_EN.md) /
+[`docs/CLI_TOOLS_RU.md`](./docs/CLI_TOOLS_RU.md).
 
-**RU.** После установки `pip install .` для каждого пайплайна становятся
-доступны консольные команды. Их можно использовать вместо вызовов
-`python -m …`, приведённых в примерах ниже.
+## Requirements
 
-| Console script | Module equivalent | Назначение |
-| -------------- | ----------------- | ---------- |
-| `get-data` | `python -m scripts.get_data` | Orchestrates the full export / Оркестратор всех этапов |
-| `get-activity-data` | `python -m scripts.get_activity_data` | Activity data export / Выгрузка активностей |
-| `get-assay-data` | `python -m scripts.get_assay_data` | Assay metadata / Метаданные ассайев |
-| `get-document-data` | `python -m scripts.get_document_data` | Document metadata / Метаданные документов |
-| `get-document-type` | `python -m library.utils.cli_tools.get_document_type` | Document type classification / Классификация документов по типам публикаций |
-| `get-target-data` | `python -m scripts.get_target_data` | Target aggregation / Агрегация таргетов |
-| `get-testitem-data` | `python -m scripts.get_testitem_data` | Test item enrichment / Обогащение тест-объектов |
-| `csv-utils` | `python -m library.utils.cli_tools.csv_utils_main` | CSV helpers / Утилиты работы с CSV |
-| `mapper` | `python -m library.utils.cli_tools.mapper_main` | Identifier mapping / Маппинг идентификаторов |
-| `table-quality` | `python -m library.utils.cli_tools.table_quality_main` | Quality reports / Отчёты качества |
-| `chunk-io` | `python -m library.utils.cli_tools.chunk_io_main` | Chunked IO harness / Обвязка чтения чанков |
-| `get-input-initialisation` | `python -m library.utils.cli_tools.get_input_initialisation` | Combine init workbooks into pair/entity tables / Объединение Excel инициализации в пары и сущности |
-| `get-activities` | `python -m library.utils.cli_tools.get_activities` | Smoke logger / Демонстрация логов |
-| `check-determinism` | `python -m library.utils.cli_tools.check_determinism` | Determinism checks / Проверка детерминизма |
+| Component | Minimum | Latest tested |
+|-----------|---------|---------------|
+| Python | 3.11 | 3.12 |
+| numpy | 1.26 | 2.3.3 |
+| pandas | 2.0 | 2.3.3 |
+| requests | 2.31 | 2.32.5 |
+| PyYAML | 6.0 | 6.0.3 |
 
-## Требования
+Follow the installation, configuration, and QA guidance in the dedicated docs:
 
-| Компонент     | Минимальная версия | Последняя протестированная |
-|---------------|--------------------|-----------------------------|
-| Python        | ≥3.11              | 3.12                        |
-| numpy         | ≥1.26              | 2.3.3                       |
-| pandas        | ≥2.0               | 2.3.3                       |
-| requests      | ≥2.31              | 2.32.5                      |
-| PyYAML        | ≥6.0               | 6.0.3                       |
+- [`docs/README_EN.md`](./docs/README_EN.md) / [`docs/README_RU.md`](./docs/README_RU.md) – project overview.
+- [`docs/USAGE_EN.md`](./docs/USAGE_EN.md) / [`docs/USAGE_RU.md`](./docs/USAGE_RU.md) – CLI reference and examples.
+- [`docs/CONFIG_EN.md`](./docs/CONFIG_EN.md) / [`docs/CONFIG_RU.md`](./docs/CONFIG_RU.md) – configuration matrix.
+- [`docs/OUTPUT_EN.md`](./docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./docs/OUTPUT_RU.md) – exported artefacts.
+- [`docs/QA_PROCESS_EN.md`](./docs/QA_PROCESS_EN.md) / [`docs/QA_PROCESS_RU.md`](./docs/QA_PROCESS_RU.md) – QA playbook.
 
-**EN.** `requirements-lock.txt` is the single source of truth for pinned
-dependencies; `pyproject.toml` documents the declared dependency ranges.
-**RU.** Файл `requirements-lock.txt` — единый источник истины с фиксированными
-версиями, а `pyproject.toml` описывает поддерживаемые диапазоны зависимостей.
-
-### Среда выполнения
-
-* ОС Linux или macOS с доступом к bash/PowerShell. На Windows рекомендуется устанавливать через WSL2.
-* Актуальные версии `pip`, `setuptools` и `wheel`, см. шаги в разделе [Installation / Установка](#installation--установка).
-* Разрешение на сетевые запросы к API ChEMBL/PubChem/UniProt (порт 443).
-
-## Installation / Установка
-
-### Runtime environment / Среда выполнения
-
-* Linux or macOS shell with Bash or PowerShell support (Windows users should rely on WSL2). / ОС Linux или macOS с доступом к bash/PowerShell (на Windows используйте WSL2).
-* Upgrade packaging tools before installing the project. / Перед установкой обновите инструменты распространения пакетов.
-
-  ```bash
-  python -m pip install --upgrade pip setuptools wheel
-  ```
-
-* Create an isolated virtual environment to keep dependencies local. / Создайте изолированное виртуальное окружение, чтобы зависимости не конфликтовали.
-
-  ```bash
-  python -m venv .venv
-  source .venv/bin/activate  # Windows: .venv\Scripts\activate
-  ```
-
-### Steps / Шаги
-
-**EN.** Clone the repository, switch into it and install the package with development extras. Afterwards enable the pre-commit hooks so formatting, linting, type checking and unit tests run automatically.
-
-**RU.** Клонируйте репозиторий, перейдите в каталог и установите пакет с dev-зависимостями. Затем активируйте pre-commit-хуки для автоматического форматирования, линтинга, проверки типов и тестов.
+## Development quick start
 
 ```bash
-git clone https://github.com/<org>/ChEMBL_data_acquisition.git
-cd ChEMBL_data_acquisition
+python -m pip install --upgrade pip setuptools wheel
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements-lock.txt
 pre-commit install
+
 ```
 
 **EN.** Installing from the lock file guarantees that local development and
@@ -1026,30 +991,10 @@ lightweight and makes only a handful of requests per dataset.
 ruff check scripts library library/utils/cli_tools
 black scripts library library/utils/cli_tools
 mypy scripts library
+
 pytest
 ```
 
-Test datasets live in ``tests/data``; ``library.utils.cli_tools.check_determinism`` validates repeatable CSV output. / Тестовые наборы лежат в ``tests/data``; ``library.utils.cli_tools.check_determinism`` проверяет повторяемость CSV-вывода.
-
-## FAQ
-
-<a id="faq-wheel-vs-source"></a>
-### Wheel vs. source installation / Установка wheel против исходников
-
-**EN.** Install the published wheel (`pip install chembl-data-acquisition`) when you only need the pipelines: the package ships with the default configuration, dictionary resources and schema validators, and now places writable artefacts under platform-specific user directories (see the table above). Keep long-term tweaks in a sibling `config.local.yaml` or point CLI commands at a cloned copy via `--config`.
-
-**RU.** Используйте опубликованный wheel (`pip install chembl-data-acquisition`), если достаточно готовых пайплайнов: пакет включает конфигурацию по умолчанию, словари и схемы, а артефакты записывает в пользовательские каталоги (см. таблицу выше). Долгосрочные правки сохраняйте в `config.local.yaml` рядом с файлом или передавайте путь к собственной копии через `--config`.
-
-**EN.** Clone the repository when developing new features or debugging: editable installs keep tests, documentation sources and tooling such as `pre-commit` at hand, and you can pin dependencies via `requirements-lock.txt`.
-
-**RU.** Клонируйте репозиторий для разработки и отладки: так остаются доступны тесты, исходники документации и инструменты (`pre-commit` и др.), а зависимости фиксируются через `requirements-lock.txt`.
-
-## Лицензия
-
-MIT License. См. файл `LICENSE` (если присутствует).
-
-
-При обновлении справочных материалов добавляйте их непосредственно в папку `docs`.
- 
-Additional reference materials live in the [docs/](./docs/) directory.
- 
+`requirements-lock.txt` pins the dependency set used in CI. Regenerate it after
+changing `pyproject.toml` by installing the project in a fresh virtual
+environment and running `pip freeze > requirements-lock.txt`.

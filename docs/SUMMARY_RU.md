@@ -51,9 +51,9 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Конфигурация
 
-* Базовые значения задаются в [`config/config.yaml`](../../config/config.yaml) и валидируются
+* Базовые значения задаются в [`config/config.yaml`](../config/config.yaml) и валидируются
   `library.config.load_config` через `Config.model_validate` из Pydantic. Сгенерированный
-  [`config.schema.json`](../../config.schema.json) отражает структуру для IDE и инструментов.
+  [`config.schema.json`](../config.schema.json) отражает структуру для IDE и инструментов.
 * Ключевые разделы:
   * `sources.*` — базовые URL, политика ретраев, лимиты и настройки пайплайнов
     для ChEMBL, UniProt, IUPHAR, PubMed, Semantic Scholar, OpenAlex, CrossRef и
@@ -68,7 +68,7 @@ add_pipeline_metadata → write_csv_deterministic →
     публикаций.
 * Приоритет переопределений: `config/config.yaml` < переменные окружения < аргументы
   CLI. Доступны короткие алиасы (например, `CHEMBL_DA_RPS` и `CHEMBL_DA_OUTDIR`).
-  Полный список приведён в `docs/reference/ru/CONFIG.md`.
+  Полный список приведён в `docs/CONFIG_RU.md`.
 
 ## Внешние сервисы
 
@@ -89,7 +89,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Создайте и активируйте виртуальное окружение Python ≥ 3.11.
 2. Установите зависимости из lock-файла: `pip install -r requirements-lock.txt`.
 3. Включите контроль качества: `pre-commit install`.
-4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](../../processes/en/QA_PROCESS.md) / [Русский](../../processes/ru/QA_PROCESS.md)):
+4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](./QA_PROCESS_EN.md) / [Русский](./QA_PROCESS_RU.md)):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -107,8 +107,8 @@ add_pipeline_metadata → write_csv_deterministic →
 * Логи в формате JSON содержат `run_id`, `event`, `stage` и счётчики по стадиям,
   что упрощает фильтрацию через `jq` и системы сбора логов.
 
-Детальное руководство по запуску приведено в `docs/guides/en/USAGE.md` и
-`docs/guides/ru/USAGE.md`.
+Детальное руководство по запуску приведено в `docs/USAGE_EN.md` и
+`docs/USAGE_RU.md`.
 
 ## Результаты выгрузки
 
@@ -120,7 +120,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * Для документов дополнительно создаётся JSON с качеством, а таргет-пайплайн в
   режиме `all` пишет промежуточные файлы по каждому источнику.
 
-Подробнее см. `docs/reference/en/OUTPUT.md` и `docs/reference/ru/OUTPUT.md`.
+Подробнее см. `docs/OUTPUT_EN.md` и `docs/OUTPUT_RU.md`.
 
 ## Тестирование и детерминизм
 

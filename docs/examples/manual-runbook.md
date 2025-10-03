@@ -5,41 +5,41 @@ This example collects the one-off command-line invocations used to generate CSV 
 ## Activity export
 
 ```bash
-python scripts/get_activity_data.py \
-  --output data/output/activity/output.activity_20250928.csv \
-  --input data/input/full/activity3.csv
+get-activity-data \
+  --input data/input/full/activity3.csv \
+  --final-out data/output/activity/output.activity_20250928.csv
 ```
 
 ## Assay export
 
 ```bash
-python scripts/get_assay_data.py \
-  --output data/output/assay/output.assay_20250928.csv \
-  --input data/input/full/assay.csv
+get-assay-data \
+  --input data/input/full/assay.csv \
+  --final-out data/output/assay/output.assay_20250928.csv
 ```
 
 ## Document export
 
 ```bash
-python scripts/get_document_data.py \
-  --output data/output/document/output.document_20250928.csv \
-  --input data/input/full/document.csv
+get-document-data all \
+  --input data/input/full/document.csv \
+  --final-out data/output/document/output.document_20250928.csv
 ```
 
 ## Target export
 
 ```bash
-python scripts/get_target_data.py \
-  --output data/output/target/output.target_20250928.csv \
-  --input data/input/full/target.csv
+get-target-data all \
+  --input data/input/full/target.csv \
+  --final-out data/output/target/output.target_20250928.csv
 ```
 
 ## Test item export
 
 ```bash
-python scripts/get_testitem_data.py \
-  --output data/output/testitem/output.testitem_20250928-3.csv \
+get-testitem-data \
   --input data/input/full/testitem.csv \
+  --final-out data/output/testitem/output.testitem_20250928-3.csv \
   --limit 1000 \
   --offset 1000
 ```
