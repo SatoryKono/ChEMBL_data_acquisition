@@ -27,7 +27,7 @@ When developing additional scenarios, keep the guardrails documented in `tests/c
 
 ## End-to-end scenario checklist
 
-`tests/e2e/test_get_data_end_to_end.py` drives the `scripts.get_data` orchestrator against the miniature fixtures in `tests/data`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The assertions cover the full QA checklist:
+`tests/e2e/test_get_data_end_to_end.py` drives the `scripts.get_data` orchestrator against the miniature fixtures in `tests/data`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The scenario also re-runs the workflow after intentionally corrupting `document.csv` (column removed) to verify schema validation, error logging and cleanup behaviour. The assertions cover the full QA checklist:
 
 - [x] Загрузка входных CSV и валидация схемы/типов/обязательных колонок
 - [x] Нормализация и предобработка (включая кодировки, разделители)
