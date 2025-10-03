@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import sys
 from importlib import import_module, resources
+from importlib.machinery import SourcelessFileLoader
 from importlib.util import (
     find_spec,
     module_from_spec,
     spec_from_file_location,
+    spec_from_loader,
 )
 from types import ModuleType
 from typing import Any, Iterator
@@ -91,7 +93,11 @@ def _load_local_module(module_name: str) -> ModuleType:
     suffixes = (".py", ".pyc")
 
     def _load_from_path(module_path: pathlib.Path) -> ModuleType:
-        spec = spec_from_file_location(qualified_name, module_path)
+        if module_path.suffix == ".pyc":
+            loader = SourcelessFileLoader(qualified_name, str(module_path))
+            spec = spec_from_loader(qualified_name, loader)
+        else:
+            spec = spec_from_file_location(qualified_name, str(module_path))
         if spec is None or spec.loader is None:
             raise ModuleNotFoundError(qualified_name)
         module = module_from_spec(spec)
