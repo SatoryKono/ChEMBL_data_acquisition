@@ -14,7 +14,7 @@ from typing import Any, Iterable, cast
 import numpy as np
 import pandas as pd
 
-from ... import validation
+from ...validation import validate_columns
 from ...config import IoCfg
 from ...common.csv_utils import write_csv_deterministic
 from ...common.text_utils import to_text
@@ -447,7 +447,7 @@ def postprocess_documents(
     """
 
     if required_columns is not None:
-        validation.validate_columns(df, required_columns)
+        validate_columns(df, required_columns)
 
     if df.empty:
         return pd.DataFrame(columns=FINAL_COLUMN_ORDER)
