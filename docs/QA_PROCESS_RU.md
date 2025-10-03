@@ -72,11 +72,8 @@ mypy --strict
    ```bash
    python -m library.qa.check_document_postprocessing \
        --base-path data \
-
        --ref input\\full\\document.csv \
-       --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv
-
+       --actual output\\document\\preprocessed_output.document_YYYYMMDD.csv \
        --out output\\document\\output.document_YYYYMMDD.csv
-
    ```
 4. Рассматривайте ненулевой код возврата как блокирующую ошибку; для устранения смотрите Markdown-резюме и CSV с диффами.
