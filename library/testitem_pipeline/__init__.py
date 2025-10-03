@@ -342,9 +342,11 @@ __all__ = [
     "write_meta_yaml",
 ]
 
+_COLLECTED_EXTRAS = globals().get("_EXTRA_EXPORTS", ())
+
 __all__ = _collect_exports(
     _CATALOG_EXPORTS,
     _CLI_EXPORTS,
     _PUBCHEM_EXPORTS,
-    extras=_EXTRA_EXPORTS,
+    extras=_COLLECTED_EXTRAS,
 )
