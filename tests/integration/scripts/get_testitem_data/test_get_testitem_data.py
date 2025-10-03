@@ -3235,6 +3235,66 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
+def test_attach_parent_lookup_emits_skip_event_with_cached_parent_filter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL_NEEDS_PARENT"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.cache_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+    catalog_cfg.sqlite_path.touch()
+
+    attach_module = pipeline
+    if not hasattr(attach_module, "attach_parent_molecule_ids"):
+        attach_module = gtd
+
+    def unexpected_full_sync(**_: object) -> dict[str, str]:
+        raise AssertionError("full sync should be skipped when cache exists")
+
+    monkeypatch.setattr(attach_module, "load_parent_catalog", unexpected_full_sync)
+    monkeypatch.setattr(attach_module, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+    )
+
+    logger_target = getattr(attach_module, "logger", gtd.logger)
+
+    captured_info: list[tuple[str, dict[str, object]]] = []
+
+    def fake_info(event: str, *args: object, **kwargs: object) -> None:
+        captured_info.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(logger_target, "info", fake_info)
+
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
+    result, stats = attach_module.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        precomputed=precomputed,
+    )
+
+    assert result[catalog_cfg.parent_field].tolist() == [pd.NA]
+    assert stats.missing == 1
+    assert stats.source == getattr(
+        attach_module, "PARENT_LOOKUP_SOURCE_CACHE", pipeline.PARENT_LOOKUP_SOURCE_CACHE
+    )
+    info_events = {event: payload for event, payload in captured_info}
+    assert "parent_lookup_skip_full_sync" in info_events
+    assert info_events["parent_lookup_skip_full_sync"]["missing"] == 1
+
+
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_updates_cache_for_reuse(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -10,27 +10,11 @@ that still include the misspelled parent identifier column.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from collections import ChainMap
-from dataclasses import dataclass
-from functools import lru_cache
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    Mapping,
-    MutableMapping,
-    NamedTuple,
-    Sequence,
-    Hashable,
-    cast,
-)
+from typing import Hashable, MutableMapping, Sequence, cast
 
 import pandas as pd
-import requests
 
 
 # ===== Parameters =====
@@ -97,388 +81,21 @@ from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_SKIPPED,
     PARENT_LOOKUP_SOURCE_SYNC,
 )
+from library.testitem_pipeline import catalog as pipeline_catalog
+from library.testitem_pipeline import pubchem as pipeline_pubchem
 
-_NO_PARENT_MARKERS = {"", "NULL", "NO PARENT"}
+LoadMoleculeHierarchyLookup = pipeline.LoadMoleculeHierarchyLookup
+load_molecule_hierarchy_lookup = pipeline.load_molecule_hierarchy_lookup
+attach_parent_molecule_ids = pipeline.attach_parent_molecule_ids
 
-def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
-    """Return ``value`` normalised for PubChem lookup."""
-
-    if value is None:
-        return None
-    if isinstance(value, str):
-        normalised = value.strip()
-    else:
-        if pd.isna(value):
-            return None
-        normalised = str(value).strip()
-    if not normalised:
-        return None
-    return normalised.upper() if uppercase else normalised
+_normalise_identifier = pipeline_pubchem._normalise_identifier
+_pubchem_identifiers = pipeline_pubchem._pubchem_identifiers
+_pubchem_resolution_key = pipeline_pubchem._pubchem_resolution_key
+_load_pubchem_cid_cache = pipeline_pubchem._load_pubchem_cid_cache
+resolve_pubchem_cid = pipeline_pubchem.resolve_pubchem_cid
 
 
-def _normalise_parent_identifier(value: object, *, child_id: str) -> str | None:
-    """Return normalised parent identifier or ``None`` for missing markers."""
-
-    if value is None or pd.isna(value):
-        return None
-
-    normalised_parent = str(value).strip().upper()
-    if not normalised_parent:
-        return None
-    if normalised_parent in _NO_PARENT_MARKERS:
-        return None
-    if normalised_parent == child_id:
-        return None
-    return normalised_parent
-
-
-@lru_cache(maxsize=None)
-def _load_molecule_hierarchy_mapping(
-    path: str,
-    encoding: str,
-    delimiter: str,
-) -> dict[str, str | None]:
-    """Return cached child → parent mapping with normalised identifiers."""
-
-    csv_path = Path(path)
-    if not csv_path.exists():
-        raise FileNotFoundError(f"Molecule hierarchy dictionary not found: {csv_path}")
-
-    try:
-        frame = pd.read_csv(
-            csv_path,
-            sep=delimiter,
-            encoding=encoding,
-            dtype="string",
-        )
-    except ValueError as exc:  # pragma: no cover - pandas raises on missing columns
-        raise ValueError(
-            "Unable to read molecule hierarchy dictionary; verify the CSV format."
-        ) from exc
-
-    child_column, parent_column = _MOLECULE_HIERARCHY_COLUMNS
-    child_missing = child_column not in frame.columns
-    parent_missing = parent_column not in frame.columns
-
-    if child_missing:
-        raise ValueError(
-            "Molecule hierarchy dictionary missing required columns: "
-            + child_column
-        )
-
-    if parent_missing:
-        logger.warning(
-            "molecule_hierarchy_missing_parent_column",
-            column=parent_column,
-            path=str(csv_path),
-        )
-
-    subset = frame.loc[:, [child_column]].copy()
-    if parent_missing:
-        subset[parent_column] = pd.Series(pd.NA, index=subset.index, dtype="string")
-    else:
-        subset[parent_column] = frame[parent_column].copy()
-
-    for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = subset[column].astype("string").str.strip().str.upper()
-
-    subset = subset[subset["molecule_chembl_id"].notna()]
-    subset = subset[subset["molecule_chembl_id"] != ""]
-    subset = subset.drop_duplicates(
-        subset=["molecule_chembl_id"],
-        keep="first",
-    )
-
-    lookup: dict[str, str | None] = {}
-    for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = _normalise_parent_identifier(parent_id, child_id=molecule_id)
-        lookup[molecule_id] = parent
-
-    return lookup
-
-
-def LoadMoleculeHierarchyLookup(
-    path: Path | str | None = None,
-    *,
-    encoding: str | None = None,
-    delimiter: str | None = None,
-    catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, dict[str, str | None]]:
-    """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
-
-    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
-    resolved_path_value = path or cfg_source.hierarchy_lookup_path
-    if resolved_path_value is None:
-        raise ValueError("hierarchy lookup path must be provided")
-    resolved_path = Path(resolved_path_value)
-    resolved_encoding = encoding or cfg_source.hierarchy_lookup_encoding
-    resolved_delimiter = delimiter or cfg_source.hierarchy_lookup_delimiter
-
-    cached = _load_molecule_hierarchy_mapping(
-        str(resolved_path),
-        resolved_encoding,
-        resolved_delimiter,
-    )
-    return {
-        key: {
-            "molecule_chembl_id": key,
-            "parent_molecule_chembl_id": _normalise_parent_identifier(
-                value,
-                child_id=key,
-            ),
-        }
-        for key, value in cached.items()
-    }
-
-
-def _load_pubchem_cid_cache(
-    path: Path | None, *, ttl_hours: float | None = None
-) -> dict[str, str | None]:
-    """Load CID cache mapping from disk."""
-
-    if path is None:
-        return {}
-    try:
-        with path.open("r", encoding=PUBCHEM_CID_CACHE_ENCODING) as handle:
-            data = json.load(handle)
-    except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - I/O errors
-        logger.warning("pubchem_cache_load_failed", path=str(path), error=str(exc))
-        return {}
-    metadata: Mapping[str, Any] | None = None
-    values_source: Mapping[str, Any] | None = None
-    if isinstance(data, Mapping) and "values" in data:
-        values_candidate = data.get("values")
-        if isinstance(values_candidate, Mapping):
-            values_source = values_candidate
-            metadata_candidate = data.get("metadata")
-            if isinstance(metadata_candidate, Mapping):
-                metadata = metadata_candidate
-    elif isinstance(data, Mapping):
-        values_source = data
-    else:
-        logger.warning("pubchem_cache_invalid", path=str(path))
-        return {}
-
-    if ttl_hours and ttl_hours > 0 and metadata is not None:
-        updated_raw = metadata.get("updated_at")
-        if isinstance(updated_raw, str):
-            try:
-                updated_at = datetime.fromisoformat(updated_raw)
-            except ValueError:
-                updated_at = None
-            if updated_at is not None and updated_at.tzinfo is None:
-                updated_at = updated_at.replace(tzinfo=UTC)
-            if updated_at is not None:
-                expires_at = updated_at + timedelta(hours=ttl_hours)
-                if expires_at <= datetime.now(UTC):
-                    logger.info("pubchem_cache_expired", path=str(path))
-                    return {}
-
-    cache: dict[str, str | None] = {}
-    for raw_key, raw_value in (values_source or {}).items():
-        key = _normalise_identifier(raw_key, uppercase=True)
-        if not key:
-            continue
-        if raw_value is None:
-            cache[key] = None
-            continue
-        value = _normalise_identifier(raw_value)
-        if not value:
-            continue
-        primary = pl.select_primary_cid(
-            value,
-            identifier="cache_file",
-            value=value,
-            context_id=key,
-        )
-        if primary is not None:
-            cache[key] = primary
-    return cache
-
-
-def _pubchem_identifiers(row: pd.Series) -> dict[str, str | None]:
-    """Return mapping of identifier names to normalised values."""
-
-    return {
-        "pubchem_cid": _normalise_identifier(row.get("pubchem_cid")),
-        "canonical_smiles": _normalise_identifier(row.get("canonical_smiles")),
-        "pubchem_canonical_smiles": _normalise_identifier(
-            row.get("pubchem_canonical_smiles")
-        ),
-        "isomeric_smiles": _normalise_identifier(row.get("isomeric_smiles")),
-        "pubchem_isomeric_smiles": _normalise_identifier(
-            row.get("pubchem_isomeric_smiles")
-        ),
-        "standard_inchi_key": _normalise_identifier(
-            row.get("standard_inchi_key"), uppercase=True
-        ),
-        "pubchem_inchikey": _normalise_identifier(
-            row.get("pubchem_inchikey"), uppercase=True
-        ),
-        "standard_inchi": _normalise_identifier(row.get("standard_inchi")),
-        "pubchem_inchi": _normalise_identifier(row.get("pubchem_inchi")),
-        "pref_name": _normalise_identifier(row.get("pref_name")),
-    }
-
-
-def _pubchem_resolution_key(row: pd.Series) -> Hashable:
-    """Return a hashable key describing identifiers used for PubChem lookup."""
-
-    identifiers = _pubchem_identifiers(row)
-    return (
-        identifiers.get("canonical_smiles"),
-        identifiers.get("pubchem_canonical_smiles"),
-        identifiers.get("isomeric_smiles"),
-        identifiers.get("pubchem_isomeric_smiles"),
-        identifiers.get("standard_inchi_key"),
-        identifiers.get("pubchem_inchikey"),
-        identifiers.get("standard_inchi"),
-        identifiers.get("pubchem_inchi"),
-        identifiers.get("pref_name"),
-    )
-
-
-def resolve_pubchem_cid(
-    row: pd.Series,
-    cache: MutableMapping[str, str | None],
-    cfg: PubChemCfg,
-    *,
-    parent_loader: Callable[[str], pd.Series | None] | None = None,
-    resolution_cache: MutableMapping[Hashable, pl.PubChemResolution] | None = None,
-    visited: set[str] | None = None,
-) -> str | None:
-    """Resolve PubChem CID for a ChEMBL record."""
-
-    chembl_id = _normalise_identifier(row.get("molecule_chembl_id"), uppercase=True)
-    identifiers = _pubchem_identifiers(row)
-    resolution_key = _pubchem_resolution_key(row)
-
-    if visited is None:
-        visited = set()
-
-    if chembl_id:
-        if chembl_id in visited:
-            logger.info(
-                "pubchem_parent_structure_missing",
-                child=chembl_id,
-                parent=chembl_id,
-                reason="parent_cycle_detected",
-            )
-            if chembl_id not in cache:
-                cache[chembl_id] = None
-            return None
-        visited.add(chembl_id)
-
-    resolution = pl.resolve_pubchem_record(
-        identifiers,
-        cfg,
-        cid_cache=cache,
-        cache_key=chembl_id,
-        resolution_cache=resolution_cache,
-        resolution_key=resolution_key,
-    )
-    cid = resolution.cid
-    if cid is not None:
-        return cid
-
-    if not cfg.use_parent_for_salts:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_raw = None
-    if isinstance(row, pd.Series) and "parent_molecule_chembl_id" in row.index:
-        parent_raw = row.get("parent_molecule_chembl_id")
-    parent_id = _normalise_identifier(parent_raw, uppercase=True)
-    if not parent_id:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    if parent_loader is None:
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    if parent_id in visited:
-        logger.info(
-            "pubchem_parent_structure_missing",
-            child=chembl_id,
-            parent=parent_id,
-            reason="parent_cycle_detected",
-        )
-        if parent_id not in cache:
-            cache[parent_id] = None
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_row = parent_loader(parent_id)
-    if parent_row is None:
-        logger.info(
-            "pubchem_parent_structure_missing",
-            child=chembl_id,
-            parent=parent_id,
-            reason="parent_unavailable",
-        )
-        if chembl_id and chembl_id not in cache:
-            cache[chembl_id] = None
-        return None
-
-    parent_cid = resolve_pubchem_cid(
-        parent_row,
-        cache,
-        cfg,
-        parent_loader=parent_loader,
-        resolution_cache=resolution_cache,
-        visited=visited,
-    )
-    if parent_cid:
-        cache[parent_id] = parent_cid
-        if chembl_id:
-            cache[chembl_id] = parent_cid
-        return parent_cid
-
-    logger.info(
-        "pubchem_parent_structure_missing",
-        child=chembl_id,
-        parent=parent_id,
-        reason="structure_unresolved",
-    )
-    if parent_id and parent_id not in cache:
-        cache[parent_id] = None
-    if chembl_id and chembl_id not in cache:
-        cache[chembl_id] = None
-    return None
-
-
-@dataclass(frozen=True)
-class ParentLookupStats:
-    """Summary information about parent molecule enrichment."""
-
-    source: str
-    missing: int
-    unique: int
-    attached: int
-    uncovered: int
-    failed_ids: tuple[str, ...] = ()
-    hierarchy_attached: int = 0
-    fallback_attached: int = 0
-    no_parent: int = 0
-
-
-def _cache_state(path: Path) -> tuple[bool, float | None]:
-    """Return cache file presence and modification time."""
-
-    try:
-        stat = path.stat()
-    except FileNotFoundError:
-        return False, None
-    return True, stat.st_mtime
-
-
+ 
 def _resolve_catalog_load_source(
     before: tuple[bool, float | None], after: tuple[bool, float | None]
 ) -> str:
@@ -871,6 +488,10 @@ def attach_parent_molecule_ids(
     )
 
     return result, stats
+ 
+_normalise_parent_identifier = pipeline_catalog._normalise_parent_identifier
+_load_molecule_hierarchy_mapping = pipeline_catalog._load_molecule_hierarchy_mapping
+ 
 
 def add_pubchem_data(
     df: pd.DataFrame,
