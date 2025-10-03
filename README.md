@@ -2,12 +2,11 @@
 
 | Language | Overview |
 |----------|----------|
-| English  | [`docs/README_EN.md`](./docs/README_EN.md) |
-| Русский  | [`docs/README_RU.md`](./docs/README_RU.md) |
+| English  | [`docs/en/user/README.md`](./docs/en/user/README.md) |
+| Русский  | [`docs/ru/user/README.md`](./docs/ru/user/README.md) |
 
 Use the [documentation index](./docs/index.md) to navigate the full manual set.
-All content is maintained in synchronised English (`*_EN.md`) and Russian
-(`*_RU.md`) variants.
+All content is maintained in synchronised English and Russian variants.
 
 ## Feature highlights
 
@@ -49,8 +48,8 @@ following scripts. They mirror the modules in `scripts/`,
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |
 
 Helper utilities under `library.utils.cli_tools` are documented in
-[`docs/CLI_TOOLS_EN.md`](./docs/CLI_TOOLS_EN.md) /
-[`docs/CLI_TOOLS_RU.md`](./docs/CLI_TOOLS_RU.md).
+[`docs/en/devel/CLI_TOOLS.md`](./docs/en/devel/CLI_TOOLS.md) /
+[`docs/ru/devel/CLI_TOOLS.md`](./docs/ru/devel/CLI_TOOLS.md).
 
 ## Requirements
 
@@ -69,11 +68,11 @@ Helper utilities under `library.utils.cli_tools` are documented in
 
 Follow the installation, configuration, and QA guidance in the dedicated docs:
 
-- [`docs/README_EN.md`](./docs/README_EN.md) / [`docs/README_RU.md`](./docs/README_RU.md) – project overview.
-- [`docs/USAGE_EN.md`](./docs/USAGE_EN.md) / [`docs/USAGE_RU.md`](./docs/USAGE_RU.md) – CLI reference and examples.
-- [`docs/CONFIG_EN.md`](./docs/CONFIG_EN.md) / [`docs/CONFIG_RU.md`](./docs/CONFIG_RU.md) – configuration matrix.
-- [`docs/OUTPUT_EN.md`](./docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./docs/OUTPUT_RU.md) – exported artefacts.
-- [QA process (EN)](./docs/QA_PROCESS_EN.md) / [Процесс QA (RU)](./docs/QA_PROCESS_RU.md) – QA playbook.
+- [`docs/en/user/README.md`](./docs/en/user/README.md) / [`docs/ru/user/README.md`](./docs/ru/user/README.md) – project overview.
+- [`docs/en/user/USAGE.md`](./docs/en/user/USAGE.md) / [`docs/ru/user/USAGE.md`](./docs/ru/user/USAGE.md) – CLI reference and examples.
+- [`docs/en/devel/CONFIG.md`](./docs/en/devel/CONFIG.md) / [`docs/ru/devel/CONFIG.md`](./docs/ru/devel/CONFIG.md) – configuration matrix.
+- [`docs/en/user/OUTPUT.md`](./docs/en/user/OUTPUT.md) / [`docs/ru/user/OUTPUT.md`](./docs/ru/user/OUTPUT.md) – exported artefacts.
+- [QA process (EN)](./docs/en/qa/QA_PROCESS.md) / [Процесс QA (RU)](./docs/ru/qa/QA_PROCESS.md) – QA playbook.
 
 ## Development quick start
 
@@ -282,8 +281,8 @@ and `--out` as compatibility shims that log warnings when used.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English / Английский | [QA process](./docs/QA_PROCESS_EN.md) |
-| Русский / Russian    | [Процесс QA](./docs/QA_PROCESS_RU.md) |
+| English / Английский | [QA process](./docs/en/qa/QA_PROCESS.md) |
+| Русский / Russian    | [Процесс QA](./docs/ru/qa/QA_PROCESS.md) |
 
 
 ```bash

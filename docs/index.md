@@ -1,29 +1,49 @@
 # Documentation Index
 
-Use the shortcuts below to navigate the bilingual manuals. English entries point
-to `*_EN.md`, Russian entries to `*_RU.md`.
+Documentation is now grouped by language and audience segment. Pick your
+language and jump straight to the relevant manuals.
 
-## Users
+## English
 
-- [Project overview](./README_EN.md) / [Обзор проекта](./README_RU.md)
-- [Quickstart checklist](./QUICKSTART_EN.md) / [Чек-лист быстрого старта](./QUICKSTART_RU.md)
-- [Usage guide](./USAGE_EN.md) / [Руководство по использованию](./USAGE_RU.md)
-- [Component summary](./SUMMARY_EN.md) / [Сводка компонентов](./SUMMARY_RU.md)
-- [Output artefacts](./OUTPUT_EN.md) / [Структура выходных данных](./OUTPUT_RU.md)
+### User Guides
+- [Project overview](./en/user/README.md)
+- [Quickstart checklist](./en/user/QUICKSTART.md)
+- [Usage guide](./en/user/USAGE.md)
+- [Component summary](./en/user/SUMMARY.md)
+- [Output artefacts](./en/user/OUTPUT.md)
 
-## Configuration & Reference
+### Developer Reference
+- [Configuration matrix](./en/devel/CONFIG.md)
+- [CLI helper reference](./en/devel/CLI_TOOLS.md)
+- [Data schema](./en/devel/DATA_SCHEMA.md)
+- [Architecture overview](./en/devel/ARCHITECTURE.md)
+- [Contribution guide](./en/devel/CONTRIBUTING.md)
 
-- [Configuration matrix](./CONFIG_EN.md) / [Матрица настроек](./CONFIG_RU.md)
-- [CLI helper reference](./CLI_TOOLS_EN.md) / [Справочник по CLI](./CLI_TOOLS_RU.md)
-- [Data schema](./DATA_SCHEMA_EN.md) / [Схема данных](./DATA_SCHEMA_RU.md)
-- [Architecture overview](./ARCHITECTURE_EN.md) / [Обзор архитектуры](./ARCHITECTURE_RU.md)
+### QA & Processes
+- [ETL process report](./en/qa/ETL_PROCESS.md)
+- [ETL data flow](./en/qa/ETL_DATA_FLOW.md)
+- [QA process](./en/qa/QA_PROCESS.md)
 
-## Processes & QA
+## Русский
 
-- [ETL process report](./ETL_PROCESS_EN.md) / [Описание ETL-процесса](./ETL_PROCESS_RU.md)
-- [ETL data flow](./ETL_DATA_FLOW_EN.md) / [Поток данных ETL](./ETL_DATA_FLOW_RU.md)
-- [QA process](./QA_PROCESS_EN.md) / [QA-процесс](./QA_PROCESS_RU.md)
-- [Contribution guide](./CONTRIBUTING_EN.md) / [Гид по контрибуции](./CONTRIBUTING_RU.md)
+### Руководства пользователя
+- [Обзор проекта](./ru/user/README.md)
+- [Чек-лист быстрого старта](./ru/user/QUICKSTART.md)
+- [Руководство по использованию](./ru/user/USAGE.md)
+- [Сводка компонентов](./ru/user/SUMMARY.md)
+- [Структура выходных данных](./ru/user/OUTPUT.md)
+
+### Справочники для разработчиков
+- [Матрица настроек](./ru/devel/CONFIG.md)
+- [Справочник по CLI](./ru/devel/CLI_TOOLS.md)
+- [Схема данных](./ru/devel/DATA_SCHEMA.md)
+- [Обзор архитектуры](./ru/devel/ARCHITECTURE.md)
+- [Руководство по контрибуции](./ru/devel/CONTRIBUTING.md)
+
+### QA и процессы
+- [Описание ETL-процесса](./ru/qa/ETL_PROCESS.md)
+- [Поток данных ETL](./ru/qa/ETL_DATA_FLOW.md)
+- [QA-процесс](./ru/qa/QA_PROCESS.md)
 
 ## Additional resources
 
