@@ -15,7 +15,7 @@ flowchart TD
   Normalizers["Normalization & validation\n(library/schemas/*)"]
   PostProcessors["Entity post-processing\n(library/*_processing.py)"]
   Exporters["Writers & metadata\n(library/io/*)"]
-  Artefacts["Deterministic exports\n(output/, logs/)"]
+  Artefacts["Deterministic exports\n(output/)"]
 
   Inputs --> Orchestrators
   Orchestrators --> Clients
@@ -24,7 +24,7 @@ flowchart TD
   PostProcessors --> Exporters
   Exporters --> Artefacts
 
-  Orchestrators -. telemetry .-> Logs["Structured logging"]
+  Orchestrators -. telemetry .-> Logs["Structured logging\n(runtime-only logs/)"]
   Exporters -. sidecars .-> Metadata["YAML & quality reports"]
 ```
 
@@ -85,6 +85,6 @@ flowchart LR
 | Normalization & schemas | `library/schemas/*`, `library/normalization/*` | Harmonise datatypes and operators, apply Pandera schemas, and route validation errors to sidecars. |
 | Post-processing | `library/document_processing.py`, `library/assay_processing.py`, `library/activity_processing.py`, `library/target_processing.py`, `library/testitem_processing.py` | Derive calculated fields, align column layouts, and prepare deterministic exports per entity. |
 | Export | `library/io/*`, `library/utils/quality.py` | Write CSV and Parquet outputs, generate YAML metadata, compute checksums, and produce quality diagnostics. |
-| Observability | `logs/`, `library/utils/logging.py`, `library/utils/cli_tools/table_quality_main.py` | Capture structured logs, provide table-quality summaries, and surface validation issues for stakeholders. |
+| Observability | `logs/` (generated), `library/utils/logging.py`, `library/utils/cli_tools/table_quality_main.py` | Capture structured logs, provide table-quality summaries, and surface validation issues for stakeholders. |
 
 The architecture diagrams and cross-reference table align onboarding conversations and technical reviews, making it clear how data enters the system, how each component transforms it, and which modules to extend when introducing new entities.
