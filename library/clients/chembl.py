@@ -48,6 +48,7 @@ class ChemblClient:
     _sessions_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _session_factory: Callable[[], Session] = field(init=False)
     _global_limiter: RateLimiter | None = field(default=None, init=False)
+    _provided_session: Session | None = field(default=None, init=False)
 
     def __init__(
         self,
@@ -60,11 +61,13 @@ class ChemblClient:
     ) -> None:
         api = api or ApiCfg()
         retry = retry or RetryCfg()
+        provided_session: Session | None = None
         if session is not None:
             def _session_from_argument(provided: Session = session) -> Session:
                 return provided
 
             self._session_factory = _session_from_argument
+            provided_session = session
         else:
             api_cfg_default: ApiCfg = api
             retry_cfg_default: RetryCfg = retry
@@ -86,8 +89,11 @@ class ChemblClient:
         self._cache_lock = threading.Lock()
         self._session_local = threading.local()
         self._sessions = set()
+        if provided_session is not None:
+            self._sessions.add(provided_session)
         self._sessions_lock = threading.Lock()
         self._global_limiter = global_limiter
+        self._provided_session = provided_session
 
     def close(self) -> None:
         """Close the underlying HTTP session.
@@ -104,6 +110,7 @@ class ChemblClient:
             if callable(close):
                 close()
         self._session_local = threading.local()
+        self._provided_session = None
 
     def __enter__(self) -> ChemblClient:
         """Return ``self`` when entering a context manager."""

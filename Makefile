@@ -33,16 +33,16 @@ test: $(PYTHON_BIN)
 	$(PYTHON_BIN) scripts/run_tests.py
 
 smoke: $(PYTHON_BIN)
-        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
+	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
 
 test-report: $(PYTHON_BIN)
-        PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
-        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
-        $(PYTHON_BIN) -m scripts.run_test_suite --suite full --report-dir $(PWD)/reports
+	PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
+	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
+	$(PYTHON_BIN) -m scripts.run_test_suite --suite full --report-dir $(PWD)/reports
 
 build: $(PYTHON_BIN)
-        rm -rf dist
-        $(PYTHON_BIN) -m build
+	rm -rf dist
+	$(PYTHON_BIN) -m build
 
 release: build
 	$(PYTHON_BIN) -m twine check dist/*
