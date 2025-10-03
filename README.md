@@ -145,6 +145,21 @@ request. Пересобирайте `requirements-lock.txt`, когда меня
 
 Sensitive configuration such as API tokens belongs in a local ``.env`` file – see [`Конфигурация через .env`](#конфигурация-через-env) for usage guidelines.
 
+### Running tests / Запуск тестов
+
+**EN.** Execute `make test` to launch `scripts/run_tests.py`. The helper wraps
+`pytest` with the JSON report plugin and writes three artefacts to the
+`reports/` directory: the raw log (`test_run.log`), the machine-readable report
+(`test_report.json`), and a condensed Markdown overview (`test_summary.md`). The
+Markdown summary lists aggregate counts, success rate, and the first few
+failures for quick triage.
+
+**RU.** Команда `make test` вызывает `scripts/run_tests.py`, который запускает
+`pytest` с JSON-плагином и сохраняет три артефакта в каталоге `reports/`:
+журнал (`test_run.log`), машинный отчёт (`test_report.json`) и консолидированный
+обзор в формате Markdown (`test_summary.md`). Резюме содержит агрегированные
+показатели, процент успешности и первые ошибки для оперативного анализа.
+
 ## Quick Start / Быстрый старт
 
 1. **Install dependencies / Установите зависимости** – follow the steps in [Installation / Установка](#installation--установка).

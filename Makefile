@@ -30,7 +30,7 @@ lint: $(PYTHON_BIN)
 	$(VENV)/bin/mypy
 
 test: $(PYTHON_BIN)
-	$(VENV)/bin/pytest
+	$(PYTHON_BIN) scripts/run_tests.py
 
 smoke: $(PYTHON_BIN)
 	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
