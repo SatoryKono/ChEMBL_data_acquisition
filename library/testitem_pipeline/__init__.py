@@ -63,40 +63,6 @@ class _LazyModuleProxy:
 testitem_enrichment = _LazyModuleProxy("library.pipelines.testitem.enrichment")
 
 
-from .cli import (
-    ReadInputIdsResult,
-    TestitemFetchError,
-    TestitemPipelineOptions,
-    TestitemPipelineStageError,
-    _FETCH_ERROR_SAMPLE_SIZE,
-    _log_missing_identifier_summary,
-    _prepare_pubchem_api_cfg,
-    apply_testitem_enrichment,
-    fetch_testitems,
-    finalize_output,
-    integrate_missing_identifiers,
-    read_input_ids,
-    run_testitem_pipeline,
-)
-from .pubchem import (
-    PUBCHEM_CID_CACHE_ENCODING,
-    PUBCHEM_COLUMNS,
-    _CID_CACHE_MISSING,
-    _PUBCHEM_CACHE_SCHEMA_VERSION,
-    _PUBCHEM_SESSION_LOCK,
-    _PUBCHEM_SESSION_SIGNATURE,
-    _load_pubchem_cid_cache,
-    _merge_pubchem_properties,
-    _prepare_pubchem_caches,
-    _prefetch_parents,
-    _pubchem_session_signature,
-    _resolve_pubchem_cids,
-    _write_pubchem_cid_cache,
-    add_pubchem_data,
-    augment_pubchem,
-    resolve_pubchem_cid,
-)
-from library.integration import pubchem_library as pl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.common.csv_utils import write_csv_chunks_deterministic as write_csv_deterministic
@@ -104,6 +70,52 @@ from library.common.log import logger
 from library.metadata import file_sha256, write_meta_yaml
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
+
+_LAZY_EXPORTS: dict[str, str] = {
+    "ReadInputIdsResult": "library.testitem_pipeline.cli:ReadInputIdsResult",
+    "TestitemFetchError": "library.testitem_pipeline.cli:TestitemFetchError",
+    "TestitemPipelineOptions": "library.testitem_pipeline.cli:TestitemPipelineOptions",
+    "TestitemPipelineStageError": "library.testitem_pipeline.cli:TestitemPipelineStageError",
+    "_FETCH_ERROR_SAMPLE_SIZE": "library.testitem_pipeline.cli:_FETCH_ERROR_SAMPLE_SIZE",
+    "_log_missing_identifier_summary": "library.testitem_pipeline.cli:_log_missing_identifier_summary",
+    "_prepare_pubchem_api_cfg": "library.testitem_pipeline.cli:_prepare_pubchem_api_cfg",
+    "apply_testitem_enrichment": "library.testitem_pipeline.cli:apply_testitem_enrichment",
+    "fetch_testitems": "library.testitem_pipeline.cli:fetch_testitems",
+    "finalize_output": "library.testitem_pipeline.cli:finalize_output",
+    "integrate_missing_identifiers": "library.testitem_pipeline.cli:integrate_missing_identifiers",
+    "read_input_ids": "library.testitem_pipeline.cli:read_input_ids",
+    "run_testitem_pipeline": "library.testitem_pipeline.cli:run_testitem_pipeline",
+    "PUBCHEM_CID_CACHE_ENCODING": "library.testitem_pipeline.pubchem:PUBCHEM_CID_CACHE_ENCODING",
+    "PUBCHEM_COLUMNS": "library.testitem_pipeline.pubchem:PUBCHEM_COLUMNS",
+    "_CID_CACHE_MISSING": "library.testitem_pipeline.pubchem:_CID_CACHE_MISSING",
+    "_PUBCHEM_CACHE_SCHEMA_VERSION": "library.testitem_pipeline.pubchem:_PUBCHEM_CACHE_SCHEMA_VERSION",
+    "_PUBCHEM_SESSION_LOCK": "library.testitem_pipeline.pubchem:_PUBCHEM_SESSION_LOCK",
+    "_PUBCHEM_SESSION_SIGNATURE": "library.testitem_pipeline.pubchem:_PUBCHEM_SESSION_SIGNATURE",
+    "_load_pubchem_cid_cache": "library.testitem_pipeline.pubchem:_load_pubchem_cid_cache",
+    "_merge_pubchem_properties": "library.testitem_pipeline.pubchem:_merge_pubchem_properties",
+    "_prepare_pubchem_caches": "library.testitem_pipeline.pubchem:_prepare_pubchem_caches",
+    "_prefetch_parents": "library.testitem_pipeline.pubchem:_prefetch_parents",
+    "_pubchem_session_signature": "library.testitem_pipeline.pubchem:_pubchem_session_signature",
+    "_resolve_pubchem_cids": "library.testitem_pipeline.pubchem:_resolve_pubchem_cids",
+    "_write_pubchem_cid_cache": "library.testitem_pipeline.pubchem:_write_pubchem_cid_cache",
+    "add_pubchem_data": "library.testitem_pipeline.pubchem:add_pubchem_data",
+    "augment_pubchem": "library.testitem_pipeline.pubchem:augment_pubchem",
+    "resolve_pubchem_cid": "library.testitem_pipeline.pubchem:resolve_pubchem_cid",
+    "pl": "library.integration.pubchem_library",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Dynamically import CLI and PubChem helpers on first access."""
+
+    if name in _LAZY_EXPORTS:
+        module_name, _, attribute = _LAZY_EXPORTS[name].partition(":")
+        module = import_module(module_name)
+        value = getattr(module, attribute) if attribute else module
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 
 __all__ = [
     "ChemblClient",
@@ -172,3 +184,9 @@ __all__ = [
     "write_csv_deterministic",
     "write_parent_catalog_cache",
 ]
+
+
+def __dir__() -> list[str]:
+    """Return available attributes including lazily loaded helpers."""
+
+    return sorted({*globals(), *__all__, *_LAZY_EXPORTS})

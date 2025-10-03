@@ -7,24 +7,34 @@ import threading
 from collections.abc import Collection, Hashable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, MutableMapping, Sequence, TypeAlias, cast
 
 import pandas as pd
 import requests
 
-from library.integration import chembl_library as cl
-from library.integration import pubchem_library as pl
-from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 from library.integration.chembl_client import ChemblClient
 from library.config import ApiCfg, PubChemCfg, RetryCfg
 from library.common.log import logger
 from library.utils.atomic import open_atomic
 
+if TYPE_CHECKING:
+    from library.integration.pubchem_library import Properties, PubChemResolution
+
 UTC = timezone.utc  # noqa: UP017
 ENCODING_UTF8 = "utf-8"
 PUBCHEM_CID_CACHE_ENCODING = ENCODING_UTF8
-PUBCHEM_COLUMNS = list(TESTITEM_PUBCHEM_COLUMNS)
+_TESTITEM_PUBCHEM_COLUMNS = (
+    "pubchem_cid",
+    "pubchem_iupac_name",
+    "pubchem_molecular_formula",
+    "pubchem_isomeric_smiles",
+    "pubchem_canonical_smiles",
+    "pubchem_inchi",
+    "pubchem_inchikey",
+)
+PUBCHEM_COLUMNS = list(_TESTITEM_PUBCHEM_COLUMNS)
 
 _CID_CACHE_MISSING = object()
 _PUBCHEM_CACHE_SCHEMA_VERSION = 1
@@ -32,8 +42,26 @@ _PUBCHEM_CACHE_SCHEMA_VERSION = 1
 _PUBCHEM_SESSION_SIGNATURE: str | None = None
 
 
-ResolutionCache: TypeAlias = MutableMapping[Hashable, pl.PubChemResolution]
+ResolutionCache: TypeAlias = MutableMapping[Hashable, "PubChemResolution"]
 _PUBCHEM_SESSION_LOCK = threading.Lock()
+
+
+@lru_cache(maxsize=1)
+def _load_chembl_library():
+    """Return the ChemBL integration module without triggering circular imports."""
+
+    from library.integration import chembl_library as chembl_lib
+
+    return chembl_lib
+
+
+@lru_cache(maxsize=1)
+def _load_pubchem_library():
+    """Return the PubChem integration module without triggering circular imports."""
+
+    from library.integration import pubchem_library as pubchem_lib
+
+    return pubchem_lib
 
 
 def _pubchem_session_signature(api_cfg: ApiCfg, retry_cfg: RetryCfg) -> str:
@@ -260,7 +288,9 @@ def resolve_pubchem_cid(
             return None
         visited.add(chembl_id)
 
-    resolution = pl.resolve_pubchem_record(
+    pubchem_lib = _load_pubchem_library()
+
+    resolution = pubchem_lib.resolve_pubchem_record(
         identifiers,
         cfg,
         cid_cache=cache,
@@ -444,8 +474,10 @@ def _prefetch_parents(
         count=len(parent_ids),
         batch_size=getattr(cfg, "batch_size", 0),
     )
+    chembl_lib = _load_chembl_library()
+
     try:
-        fetched = cl.get_testitem(
+        fetched = chembl_lib.get_testitem(
             parent_ids,
             cfg=api_cfg,
             client=client,
@@ -572,8 +604,10 @@ def _merge_pubchem_properties(
         max_workers = max(1, min(configured_batch_size, rps_limit))
         batch_size = configured_batch_size
 
-        def _fetch_properties(cid: str) -> pl.Properties:
-            return pl.get_properties(cid, cfg)
+        pubchem_lib = _load_pubchem_library()
+
+        def _fetch_properties(cid: str) -> Properties:
+            return pubchem_lib.get_properties(cid, cfg)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for start in range(0, len(lookup_order), batch_size):
@@ -588,7 +622,7 @@ def _merge_pubchem_properties(
                         logger.warning(
                             "pubchem_properties_failed", cid=cid, error=str(exc)
                         )
-                        props = pl.Properties(None, None, None, None, None, None)
+                        props = pubchem_lib.Properties(None, None, None, None, None, None)
                     properties_records[cid] = {
                         "pubchem_iupac_name": _value_or_na(props.IUPACName),
                         "pubchem_molecular_formula": _value_or_na(
@@ -803,7 +837,7 @@ def augment_pubchem(
         session_signature = _pubchem_session_signature(api_cfg, retry_cfg)
         with _PUBCHEM_SESSION_LOCK:
             if session_signature != _PUBCHEM_SESSION_SIGNATURE:
-                pl.init_session(api_cfg, retry_cfg)
+                _load_pubchem_library().init_session(api_cfg, retry_cfg)
                 _PUBCHEM_SESSION_SIGNATURE = session_signature
         pubchem_cid_cache = _load_pubchem_cid_cache(
             getattr(pubchem_cfg, "cid_cache_path", None),

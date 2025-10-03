@@ -6,6 +6,7 @@ import sys
 import traceback
 from collections import OrderedDict, deque
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Sequence
@@ -15,7 +16,6 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import io
-from library.integration import chembl_library as cl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.config import (
@@ -35,12 +35,10 @@ from library.metadata import (
     write_meta_yaml,
     record_quality_failure,
 )
-from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
-from library.schemas import TestitemsSchema, normalize_testitems
 
 from .catalog import (
     PARENT_LOOKUP_SOURCE_CACHE,
@@ -56,7 +54,6 @@ from .catalog import (
     run_parent_enrichment,
 )
 from . import testitem_enrichment
-from .pubchem import PUBCHEM_COLUMNS, add_pubchem_data, augment_pubchem
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
@@ -237,6 +234,42 @@ class TestitemPipelineStageError(RuntimeError):
         self.code = code
 
 
+@lru_cache(maxsize=1)
+def _load_chembl_library():
+    """Return the ChemBL integration module without creating import cycles."""
+
+    from library.integration import chembl_library as chembl_lib
+
+    return chembl_lib
+
+
+@lru_cache(maxsize=1)
+def _load_pipeline_metadata_adder():
+    """Return the pipeline metadata helper lazily to avoid circular imports."""
+
+    from library.pipelines.common import add_pipeline_metadata as add_metadata
+
+    return add_metadata
+
+
+@lru_cache(maxsize=1)
+def _load_testitem_schema():
+    """Return the schema model and normalizer lazily to avoid circular imports."""
+
+    from library.schemas import TestitemsSchema, normalize_testitems
+
+    return TestitemsSchema, normalize_testitems
+
+
+@lru_cache(maxsize=1)
+def _load_pubchem_augmenter():
+    """Return the PubChem augmentation helper lazily to avoid circular imports."""
+
+    from .pubchem import augment_pubchem as _augment
+
+    return _augment
+
+
 def _batched(iterable: Iterable[str], size: int) -> Iterator[list[str]]:
     """Yield lists of at most ``size`` elements from ``iterable``."""
 
@@ -265,6 +298,7 @@ def fetch_testitems(
     """Retrieve ChEMBL test item records for ``ids_iter`` in chunks."""
 
     logger.info("chembl_fetch_start", batch_size=batch_size)
+    chembl_lib = _load_chembl_library()
     requested_ids_original: list[str] = []
 
     for identifier in ids_iter:
@@ -293,7 +327,7 @@ def fetch_testitems(
 
     def _load_chunk(batch: Sequence[str], chunk_size: int) -> pd.DataFrame:
         try:
-            frame = cl.get_testitem(
+            frame = chembl_lib.get_testitem(
                 batch,
                 cfg=api_cfg,
                 client=client,
@@ -582,7 +616,7 @@ def run_testitem_pipeline(
                     )
 
                     if pubchem_enabled:
-                        current = augment_pubchem(
+                        current = _load_pubchem_augmenter()(
                             current,
                             pubchem_cfg=cfg.pubchem,
                             api_cfg=pubchem_api_cfg,
@@ -665,11 +699,12 @@ def finalize_output(
 ) -> int:
     """Normalise, validate, and persist the final dataset from ``chunks``."""
 
-    schema_cols = list(TestitemsSchema.columns)
+    schema_model, normalizer = _load_testitem_schema()
+    schema_cols = list(schema_model.columns)
     required_cols = {
-        name for name, col in TestitemsSchema.columns.items() if col.required
+        name for name, col in schema_model.columns.items() if col.required
     }
-    optional_cols = set(TestitemsSchema.columns) - required_cols
+    optional_cols = set(schema_model.columns) - required_cols
     col_order = schema_cols
     key_cols = ["molecule_chembl_id"]
     csv_chunksize = cfg.io.csv_chunksize
@@ -687,10 +722,10 @@ def finalize_output(
         nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
 
         rows_total += len(raw)
-        current = normalize_testitems(raw)
+        current = normalizer(raw)
         if "pubchem_cid" in current.columns:
             current["pubchem_cid"] = current["pubchem_cid"].astype(object)
-        current = add_pipeline_metadata(current)
+        current = _load_pipeline_metadata_adder()(current)
         columns_seen.update(current.columns)
 
         chunk_missing_required = required_cols - set(current.columns)
