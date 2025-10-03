@@ -14,7 +14,7 @@ from importlib.util import (
     spec_from_loader,
 )
 from types import ModuleType
-from typing import Any, Iterator
+from typing import Any
 
 import pathlib
 
@@ -23,6 +23,7 @@ import requests
 # ===== changelog =====
 # 2024-05-21: Enhance optional module loader to support compiled-only installs.
 # 2024-05-22: Build exports list programmatically to avoid merge artifacts.
+# 2025-03-09: Keep resource handles open while loading optional modules.
 
 _CATALOG_EXPORTS = (
     "LoadMoleculeHierarchyLookup",
@@ -115,37 +116,44 @@ def _load_local_module(module_name: str) -> ModuleType:
             raise ModuleNotFoundError(msg) from exc
         return module
 
-    def _iter_candidate_paths() -> Iterator[pathlib.Path]:
-        try:
-            package_files = resources.files(package_name)
-        except ModuleNotFoundError:
-            package_files = None
+    def _load_from_resource(resource: Any) -> ModuleType | None:
+        with resources.as_file(resource) as module_path:
+            try:
+                return _load_from_path(pathlib.Path(module_path))
+            except ModuleNotFoundError:
+                return None
 
-        if package_files is not None:
-            for suffix in suffixes:
-                resource_name = f"{module_name}{suffix}"
-                module_resource = package_files.joinpath(resource_name)
-                if module_resource.is_file():
-                    with resources.as_file(module_resource) as module_path:
-                        yield pathlib.Path(module_path)
+    try:
+        package_files = resources.files(package_name)
+    except ModuleNotFoundError:
+        package_files = None
 
-        base_path = pathlib.Path(__file__).resolve().parent
+    if package_files is not None:
         for suffix in suffixes:
-            candidate = base_path / f"{module_name}{suffix}"
-            if candidate.is_file():
-                yield candidate
+            resource_name = f"{module_name}{suffix}"
+            module_resource = package_files.joinpath(resource_name)
+            if module_resource.is_file():
+                module = _load_from_resource(module_resource)
+                if module is not None:
+                    return module
 
-        pycache = base_path / "__pycache__"
-        if pycache.is_dir():
-            pattern = f"{module_name}.*.pyc"
-            for compiled in pycache.glob(pattern):
-                yield compiled
+    base_path = pathlib.Path(__file__).resolve().parent
+    for suffix in suffixes:
+        candidate = base_path / f"{module_name}{suffix}"
+        if candidate.is_file():
+            try:
+                return _load_from_path(candidate)
+            except ModuleNotFoundError:
+                continue
 
-    for module_path in _iter_candidate_paths():
-        try:
-            return _load_from_path(module_path)
-        except ModuleNotFoundError:
-            continue
+    pycache = base_path / "__pycache__"
+    if pycache.is_dir():
+        pattern = f"{module_name}.*.pyc"
+        for compiled in pycache.glob(pattern):
+            try:
+                return _load_from_path(compiled)
+            except ModuleNotFoundError:
+                continue
 
     resource_list = ", ".join(f"{module_name}{suffix}" for suffix in suffixes)
     msg = (
