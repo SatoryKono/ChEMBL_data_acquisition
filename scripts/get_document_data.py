@@ -215,7 +215,11 @@ def _build_missing_input_context(path: Path) -> dict[str, object]:
     names = [p.name for p in entries]
     matches = difflib.get_close_matches(path.name, names, n=5, cutoff=0.55)
     if matches:
-        info["suggestions"] = [str(parent / name) for name in matches]
+        suggestions = [parent / name for name in matches]
+        info["suggestions"] = [str(path) for path in suggestions]
+        best_match = suggestions[0]
+        info["did_you_mean"] = str(best_match)
+        info["cli_hint"] = f"--input \"{best_match}\""
         return info
 
     same_suffix = [str(p) for p in entries if p.suffix == path.suffix and p.suffix]
