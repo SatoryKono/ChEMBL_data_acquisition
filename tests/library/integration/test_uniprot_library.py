@@ -360,10 +360,11 @@ def test_fetch_gtop_endpoint_handles_empty_body(
 
     monkeypatch.setattr(ul, "get_uniprot_session", lambda: DummySession())
 
-    ul._fetch_gtop_endpoint("1234", "function", cfg=cfg)
+    result = ul._fetch_gtop_endpoint("1234", "function", cfg=cfg)
 
     captured = capsys.readouterr()
     assert '"event": "gtop_json_decode_failed"' in captured.out
+    assert result is None
 
 
 def test_collect_info_uses_canonical_fallback(
