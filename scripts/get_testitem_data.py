@@ -15,7 +15,7 @@ import sys
 from collections import ChainMap
 from dataclasses import dataclass
 from functools import lru_cache
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import (
     Any,
@@ -38,6 +38,8 @@ import requests
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
+DEFAULT_LOG_DIR = Path("data") / "logs"
+LOG_FILE_PREFIX = "get_testitem_data"
 
 
 if str(PROJECT_ROOT) not in sys.path:
@@ -62,6 +64,7 @@ from library.config import (
     IoCfg,
     MoleculeCatalogCfg,
     PubChemCfg,
+    _serialize_paths,
 )
 from library.common.log import logger
 from library.clients import pubchem as pc  # noqa: F401 - patched in tests
@@ -97,6 +100,7 @@ from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_SKIPPED,
     PARENT_LOOKUP_SOURCE_SYNC,
 )
+from scripts._cli_logging import build_log_path, configure_log_file
 
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     """Return ``value`` normalised for PubChem lookup."""
@@ -898,6 +902,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return parser, log_cfg
 
 
+def _serialise_cli_args(args: argparse.Namespace) -> dict[str, object]:
+    """Return CLI arguments as a serialisable mapping for logging."""
+
+    filtered = {k: v for k, v in vars(args).items() if not k.startswith("_")}
+    return _serialize_paths(filtered)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults.
 
@@ -927,30 +938,52 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_stem=DEFAULT_OUTPUT_STEM,
     )
 
-    if args.limit == 0:
-        logger.info("pipeline_skip_limit", limit=args.limit)
-        return 0
-
-    if args.limit is not None and args.limit < 0:
-        parser.error("--limit must be zero or a positive integer")
-    if args.offset < 0:
-        parser.error("--offset must be zero or a positive integer")
-
-    mapping = {
-        "timeout": "testitem.timeout",
-        "column": "testitem.column",
-        "batch_size": "testitem.batch_size",
-        "limit": "testitem.limit",
-        "offset": "testitem.offset",
-    }
-    return run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping=mapping,
-        run=run,
-        logger=logger,
+    log_path = build_log_path(
+        LOG_FILE_PREFIX,
+        directory=DEFAULT_LOG_DIR,
+        timestamp=datetime.now(timezone.utc),
     )
+
+    exit_code = 0
+    with configure_log_file(log_cfg, log_path):
+        logger.info("script_start", script=LOG_FILE_PREFIX, run_id=log_cfg.run_id)
+        logger.info(
+            "script_parameters",
+            script=LOG_FILE_PREFIX,
+            parameters=_serialise_cli_args(args),
+        )
+
+        if args.limit == 0:
+            logger.info("pipeline_skip_limit", limit=args.limit)
+            exit_code = 0
+        else:
+            if args.limit is not None and args.limit < 0:
+                parser.error("--limit must be zero or a positive integer")
+            if args.offset < 0:
+                parser.error("--offset must be zero or a positive integer")
+
+            mapping = {
+                "timeout": "testitem.timeout",
+                "column": "testitem.column",
+                "batch_size": "testitem.batch_size",
+                "limit": "testitem.limit",
+                "offset": "testitem.offset",
+            }
+            exit_code = run_cli_command(
+                args=args,
+                parser=parser,
+                log_cfg=log_cfg,
+                mapping=mapping,
+                run=run,
+                logger=logger,
+            )
+
+        if exit_code == 0:
+            logger.info("script_done", script=LOG_FILE_PREFIX, exit_code=exit_code)
+        else:
+            logger.error("script_fail", script=LOG_FILE_PREFIX, exit_code=exit_code)
+
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

@@ -16,6 +16,7 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 from time import sleep
+from datetime import datetime, timezone
 
 try:
     from library.utils.bootstrap import ensure_project_root
@@ -102,10 +103,13 @@ from library.table_quality import analyze_table_quality
 from library.validation import validate_activities
 from library.schemas import ActivitiesSchema, configure_activity_schema, normalize_activities
 from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from scripts._cli_logging import build_log_path, configure_log_file
 
 DEFAULT_INPUT_NAME = "activity.csv"
 DEFAULT_OUTPUT_STEM = "activities"
 PROGRAM_NAME = Path(__file__).with_suffix("").name
+DEFAULT_LOG_DIR = Path("data") / "logs"
+LOG_FILE_PREFIX = "get_activity_data"
 
 
 def _args_invocation(args: argparse.Namespace) -> tuple[str, ...]:
@@ -500,6 +504,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return parser, log_cfg
 
 
+def _serialise_cli_args(args: argparse.Namespace) -> dict[str, object]:
+    """Return CLI arguments as a serialisable mapping for logging."""
+
+    filtered = {k: v for k, v in vars(args).items() if not k.startswith("_")}
+    return _serialize_paths(filtered)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute the activity pipeline with optional argument overrides.
 
@@ -528,30 +539,48 @@ def main(argv: Sequence[str] | None = None) -> int:
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
-    if args.limit == 0:
-        logger.info("pipeline_skip_limit", limit=args.limit)
-        return 0
-    if args.limit is not None and args.limit < 0:
-        # Reject negative limits early to provide clear CLI feedback.
-        parser.error("--limit must be zero or a positive integer")
-    if args.offset < 0:
-        parser.error("--offset must be zero or a positive integer")
-    return run_cli_command(
-        args=args,
-        parser=parser,
-        log_cfg=log_cfg,
-        mapping={
-            "timeout": "activity.timeout",
-            "column": "activity.column",
-            "batch_size": "activity.batch_size",
-            "limit": "activity.limit",
-            "offset": "activity.offset",
-            "dry_run": "activity.dry_run",
-            "workers": "activity.workers",
-        },
-        run=run,
-        logger=logger,
+    log_path = build_log_path(
+        LOG_FILE_PREFIX,
+        directory=DEFAULT_LOG_DIR,
+        timestamp=datetime.now(timezone.utc),
     )
+    exit_code = 0
+    with configure_log_file(log_cfg, log_path):
+        logger.info("script_start", script=LOG_FILE_PREFIX, run_id=log_cfg.run_id)
+        logger.info(
+            "script_parameters",
+            script=LOG_FILE_PREFIX,
+            parameters=_serialise_cli_args(args),
+        )
+        if args.limit == 0:
+            logger.info("pipeline_skip_limit", limit=args.limit)
+            exit_code = 0
+        else:
+            if args.limit is not None and args.limit < 0:
+                parser.error("--limit must be zero or a positive integer")
+            if args.offset < 0:
+                parser.error("--offset must be zero or a positive integer")
+            exit_code = run_cli_command(
+                args=args,
+                parser=parser,
+                log_cfg=log_cfg,
+                mapping={
+                    "timeout": "activity.timeout",
+                    "column": "activity.column",
+                    "batch_size": "activity.batch_size",
+                    "limit": "activity.limit",
+                    "offset": "activity.offset",
+                    "dry_run": "activity.dry_run",
+                    "workers": "activity.workers",
+                },
+                run=run,
+                logger=logger,
+            )
+        if exit_code == 0:
+            logger.info("script_done", script=LOG_FILE_PREFIX, exit_code=exit_code)
+        else:
+            logger.error("script_fail", script=LOG_FILE_PREFIX, exit_code=exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

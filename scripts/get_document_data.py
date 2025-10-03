@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import sys
+from datetime import datetime, timezone
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
@@ -129,10 +130,13 @@ from library.common.rate_limiter import RateLimiter, get_global_limiter, get_lim
 from library.common.sidecar import SidecarErrors
 from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
 from library.schemas import DocumentsSchema, normalize_documents
+from scripts._cli_logging import build_log_path, configure_log_file
 
 
 DEFAULT_INPUT_NAME = "document.csv"
 DEFAULT_OUTPUT_STEM = "documents"
+DEFAULT_LOG_DIR = Path("data") / "logs"
+LOG_FILE_PREFIX = "get_document_data"
 DOCUMENT_PROGRESS_INFO_INTERVAL = 100
 DOCUMENT_FRAME_CONCAT_STRIDE = 16
 
@@ -2284,6 +2288,13 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
     return parser, log_cfg
 
 
+def _serialise_cli_args(args: argparse.Namespace) -> dict[str, object]:
+    """Return CLI arguments as a serialisable mapping for logging."""
+
+    filtered = {k: v for k, v in vars(args).items() if not k.startswith("_")}
+    return _serialize_paths(filtered)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point using :class:`Config` for defaults.
 
@@ -2312,59 +2323,78 @@ def main(argv: Sequence[str] | None = None) -> int:
         input_default=DEFAULT_INPUT_NAME,
         output_stem=DEFAULT_OUTPUT_STEM,
     )
-    limit_value = getattr(args, "limit", None)
-    if limit_value == 0:
-        logger.info("pipeline_skip_limit", limit=limit_value)
-        return 0
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
-    if limit_value is not None and limit_value < 0:
-        subparser.error("--limit must be zero or a positive integer")
-    offset_value = getattr(args, "offset", 0)
-    if offset_value < 0:
-        subparser.error("--offset must be zero or a positive integer")
-    mapping = {
-        "column": f"document.{args.command}.column",
-        "limit": f"document.{args.command}.limit",
-    }
-    if args.command == "pubmed":
-        mapping.update(
-            {
-                "sleep": "document.pubmed.sleep",
-                "workers": "document.pubmed.workers",
-                "batch_size": "document.pubmed.batch_size",
-            }
-        )
-    elif args.command == "chembl":
-        mapping.update(
-            {
-                "chunk_size": "document.chembl.chunk_size",
-                "timeout": "document.chembl.timeout",
-            }
-        )
-    elif args.command == "all":
-        mapping.update(
-            {
-                "chunk_size": "document.all.chunk_size",
-                "sleep": "document.all.sleep",
-                "workers": "document.all.workers",
-                "batch_size": "document.all.batch_size",
-                "timeout": "document.all.timeout",
-            }
-        )
-    mapping |= {
-        "openalex_rps": "openalex.rps",
-        "crossref_rps": "crossref.rps",
-    }
-    return run_cli_command(
-        args=args,
-        parser=subparser,
-        base_parser=parser,
-        log_cfg=log_cfg,
-        mapping=mapping,
-        run=run,
-        logger=logger,
+    log_path = build_log_path(
+        LOG_FILE_PREFIX,
+        directory=DEFAULT_LOG_DIR,
+        timestamp=datetime.now(timezone.utc),
     )
+    exit_code = 0
+    with configure_log_file(log_cfg, log_path):
+        logger.info("script_start", script=LOG_FILE_PREFIX, run_id=log_cfg.run_id)
+        logger.info(
+            "script_parameters",
+            script=LOG_FILE_PREFIX,
+            parameters=_serialise_cli_args(args),
+        )
+        limit_value = getattr(args, "limit", None)
+        if limit_value == 0:
+            logger.info("pipeline_skip_limit", limit=limit_value)
+            exit_code = 0
+        else:
+            subparser_map = getattr(parser, "subparsers_map", {})
+            subparser = subparser_map.get(args.command, parser)
+            if limit_value is not None and limit_value < 0:
+                subparser.error("--limit must be zero or a positive integer")
+            offset_value = getattr(args, "offset", 0)
+            if offset_value < 0:
+                subparser.error("--offset must be zero or a positive integer")
+            mapping = {
+                "column": f"document.{args.command}.column",
+                "limit": f"document.{args.command}.limit",
+            }
+            if args.command == "pubmed":
+                mapping.update(
+                    {
+                        "sleep": "document.pubmed.sleep",
+                        "workers": "document.pubmed.workers",
+                        "batch_size": "document.pubmed.batch_size",
+                    }
+                )
+            elif args.command == "chembl":
+                mapping.update(
+                    {
+                        "chunk_size": "document.chembl.chunk_size",
+                        "timeout": "document.chembl.timeout",
+                    }
+                )
+            elif args.command == "all":
+                mapping.update(
+                    {
+                        "chunk_size": "document.all.chunk_size",
+                        "sleep": "document.all.sleep",
+                        "workers": "document.all.workers",
+                        "batch_size": "document.all.batch_size",
+                        "timeout": "document.all.timeout",
+                    }
+                )
+            mapping |= {
+                "openalex_rps": "openalex.rps",
+                "crossref_rps": "crossref.rps",
+            }
+            exit_code = run_cli_command(
+                args=args,
+                parser=subparser,
+                base_parser=parser,
+                log_cfg=log_cfg,
+                mapping=mapping,
+                run=run,
+                logger=logger,
+            )
+        if exit_code == 0:
+            logger.info("script_done", script=LOG_FILE_PREFIX, exit_code=exit_code)
+        else:
+            logger.error("script_fail", script=LOG_FILE_PREFIX, exit_code=exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
