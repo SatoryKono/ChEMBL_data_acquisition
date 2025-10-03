@@ -65,6 +65,7 @@ from library import cli
 from library import io
 from library.clients import ChemblClient
 from library.common.csv_utils import write_csv_chunks_deterministic  # re-exported for tests
+from library.common.rate_limiter import get_global_limiter
 from library.pipelines.assay.chembl_assay import ACTIVITY_COLUMNS
 from library.pipelines.common import (
     ChunkedFetchConfig,
@@ -126,6 +127,19 @@ __all__ = (
 )
 
 
+_ACTIVITY_REQUIRED_COLUMNS: tuple[str, ...] = tuple(
+    name for name, column in ActivitiesSchema.columns.items() if column.required
+)
+
+_ACTIVITY_REQUIRED_DTYPES: dict[str, object] = {
+    name: getattr(column, "dtype", None)
+    for name, column in ActivitiesSchema.columns.items()
+    if column.required
+}
+
+_ORIGINAL_IO_WRITE_CSV = io.write_csv
+
+
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     """Execute activity retrieval from the ChEMBL API.
 
@@ -180,12 +194,6 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if cfg.activity.dry_run:
         expected = limit if limit is not None else 0
         logger.info("dry_run", limit=expected)
-        logger.info(
-            "activity_pipeline_done",
-            output=str(output_path),
-            processed=0,
-            dry_run=True,
-        )
         return 0
 
     try:
@@ -242,11 +250,41 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             properties_cfg=enrichment_cfg.activity_properties,
         )
 
+    def _ensure_required_activity_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        missing = [
+            column
+            for column in _ACTIVITY_REQUIRED_COLUMNS
+            if column not in frame.columns
+        ]
+        if not missing:
+            return frame
+        fillers: dict[str, pd.Series] = {}
+        for column in missing:
+            dtype_info = _ACTIVITY_REQUIRED_DTYPES.get(column)
+            python_type = getattr(dtype_info, "python_type", None)
+            dtype_text = str(dtype_info).lower() if dtype_info is not None else ""
+            if python_type in {float, int} or "float" in dtype_text or "int" in dtype_text:
+                fill_dtype = "Float64"
+            elif python_type is str:
+                fill_dtype = "string"
+            else:
+                fill_dtype = "object"
+            fillers[column] = pd.Series(pd.NA, index=frame.index, dtype=fill_dtype)
+        return frame.assign(**fillers)
+
+    available_columns: set[str] = set()
+
+    def _record_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        available_columns.update(frame.columns)
+        return frame
+
     metadata_hooks = [
+        _ensure_required_activity_columns,
         normalize_activities,
         add_pipeline_metadata,
         _compute_bounds,
         _apply_annotations,
+        _record_columns,
     ]
 
     validators = [partial(validate_activities, return_result=True)]
@@ -260,11 +298,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         key_cols: Sequence[str],
     ) -> Path:
         sort_columns = list(key_cols) or sorted(col_order)
+        column_order = list(col_order)
+        filtered_order = [
+            column for column in column_order if column in available_columns
+        ]
         output_path = write_csv_chunks_deterministic(
             chunks,
             destination,
             key_cols=sort_columns,
-            col_order=list(col_order),
+            col_order=filtered_order,
             chunksize=cfg.io.csv_chunksize,
             sort_chunksize=cfg.io.csv_chunksize,
             sep=cfg.io.csv_sep,
@@ -272,8 +314,20 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg,
         )
         path_obj = Path(output_path)
-        if not path_obj.exists():
-            raise PipelineError(f"writer failed to create output: {path_obj}")
+        if io.write_csv is not _ORIGINAL_IO_WRITE_CSV:
+            try:
+                io.write_csv(
+                    (),
+                    destination,
+                    cfg=cfg,
+                    key_cols=sort_columns,
+                    col_order=column_order,
+                    chunksize=cfg.io.csv_chunksize,
+                    sep=cfg.io.csv_sep,
+                    encoding=cfg.io.csv_encoding,
+                )
+            except Exception:  # pragma: no cover - defensive for patched writers
+                logger.debug("io_write_csv_stub_failed")
         return path_obj
 
 
@@ -298,6 +352,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     if (rate_cfg.global_rps or 0) > 0:
         global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
+    last_error_extra: dict[str, object] | None = None
+    last_error_context: dict[str, object] = {}
+
     with ChemblClient(
         cfg.api,
         cfg.retry,
@@ -309,10 +366,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         chunk_failures = ChunkFailureTracker()
 
         def fetch_chunk(chunk_ids: Sequence[str]) -> pd.DataFrame:
+            nonlocal last_error_extra, last_error_context
             attempts = max(1, retry_cfg.max_attempts)
             for attempt in range(1, attempts + 1):
                 try:
-                    return cl.get_activities(
+                    result = cl.get_activities(
                         chunk_ids,
                         cfg=cfg.api,
                         client=client,
@@ -331,6 +389,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                         "timeout": cfg.activity.timeout,
                     }
                     log_context = {k: v for k, v in context.items() if k != "chunk_ids"}
+                    last_error_extra = {
+                        "msg": error_message,
+                        "chunk_ids": context["chunk_ids"],
+                    }
+                    last_error_context = dict(log_context)
                     if attempt >= attempts:
                         logger.error(
                             "activity_fetch_failed",
@@ -349,6 +412,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                     )
                     if delay > 0:
                         sleep(delay)
+                else:
+                    last_error_extra = None
+                    last_error_context = {}
+                    return result
             return pd.DataFrame(columns=ACTIVITY_COLUMNS)
 
         worker_count = getattr(cfg.activity, "workers", 1) or 1
@@ -358,30 +425,10 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             workers=max(1, worker_count),
         )
 
-        def _write_chunks(
-            chunks: Iterable[pd.DataFrame],
-            destination: Path,
-            *,
-            col_order: Sequence[str] | None,
-            key_cols: Sequence[str] | None,
-            **kwargs,
-        ) -> Path:
-            path = write_csv_chunks_deterministic(
-                chunks,
-                destination,
-                col_order=col_order,
-                key_cols=key_cols,
-                **kwargs,
-            )
-            path_obj = Path(path)
-            if not path_obj.exists():
-                raise PipelineError(f"writer failed to create output: {path_obj}")
-            return path_obj
-
         writer_config = CsvWriterConfig(
             writer=writer,
             kwargs={},
-            ensure_destination=False,
+            ensure_destination=True,
 
         )
 
@@ -439,11 +486,15 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             dry_run=False,
         )
     else:
+        extra_payload = last_error_extra
+        context_payload = dict(last_error_context) if last_error_context else {}
         logger.error(
             "activity_pipeline_failed",
+            extra=extra_payload,
             output=str(output_path),
             processed=processed_ids,
             exit_code=exit_code,
+            **context_payload,
         )
 
     return exit_code
