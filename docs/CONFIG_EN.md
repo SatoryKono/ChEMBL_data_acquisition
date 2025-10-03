@@ -370,7 +370,7 @@ Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke
 
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
-| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/common/logging_setup.py`](../library/common/logging_setup.py), so message and timestamp formatting are not configurable here. |
+| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/common/log.py`](../library/common/log.py) and [`library/common/logging_setup.py`](../library/common/logging_setup.py), so message and timestamp formatting are not configurable here. |
 | `rate` | `global_rps` | `100` | Global requests-per-second budget shared across clients. |
 |  | `global_burst` | `100` | Global token bucket burst capacity. |
 |  | `limiter_cache_maxsize` | `128` | Maximum cached limiter instances. |
