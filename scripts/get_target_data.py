@@ -312,6 +312,37 @@ def _collect_uniprot_candidate_columns(df: pd.DataFrame, cfg: Config) -> list[st
     return ordered
 
 
+def _ensure_merge_column_present(
+    df: pd.DataFrame, merge_column: str, cfg: Config
+) -> pd.DataFrame:
+    """Return ``df`` ensuring that ``merge_column`` exists or fall back to aliases."""
+
+    if merge_column in df.columns:
+        return df
+
+    candidate_columns = [
+        column
+        for column in _collect_uniprot_candidate_columns(df, cfg)
+        if column != merge_column and column in df.columns
+    ]
+
+    for source in candidate_columns:
+        series = df[source]
+        cleaned = series.fillna("").astype(str).map(str.strip)
+        if cleaned.replace("", pd.NA).dropna().empty:
+            continue
+        logger.warning(
+            "uniprot_merge_column_alias",
+            configured=merge_column,
+            alias=source,
+        )
+        aliased = df.copy()
+        aliased[merge_column] = cleaned.astype(object)
+        return aliased
+
+    return df
+
+
 def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPlan:
     """Create a deterministic plan for querying UniProt based on ``df``."""
 
@@ -2026,6 +2057,7 @@ def fetch_iuphar(
 
     logger.info("fetch_iuphar_start", output=str(output_csv))
     merge_column = cfg.target.all.uniprot_column
+    chembl_df = _ensure_merge_column_present(chembl_df, merge_column, cfg)
     if merge_column not in chembl_df.columns:
         logger.error(
             "invalid_uniprot_column",
