@@ -25,6 +25,7 @@ The input file must contain a ``PMID`` column.
 from __future__ import annotations
 
 import argparse
+import difflib
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -186,6 +187,44 @@ def _read_csv_chunks(
         yield from reader
     finally:
         reader.close()
+
+
+def _build_missing_input_context(path: Path) -> dict[str, object]:
+    """Return structured hints describing how to resolve a missing input file."""
+
+    info: dict[str, object] = {}
+    parent = path.parent if path.parent != Path("") else Path(".")
+    info["hint"] = (
+        "Populate the expected input file or update --input to point to an "
+        "existing CSV"
+    )
+
+    if not parent.exists():
+        info["missing_parent"] = str(parent)
+        return info
+
+    try:
+        entries = sorted(p for p in parent.iterdir() if p.is_file())
+    except OSError:
+        entries = []
+
+    if not entries:
+        info["available_files"] = []
+        return info
+
+    names = [p.name for p in entries]
+    matches = difflib.get_close_matches(path.name, names, n=5, cutoff=0.55)
+    if matches:
+        info["suggestions"] = [str(parent / name) for name in matches]
+        return info
+
+    same_suffix = [str(p) for p in entries if p.suffix == path.suffix and p.suffix]
+    if same_suffix:
+        info["available_with_same_suffix"] = same_suffix[:5]
+        return info
+
+    info["available_files"] = [str(p) for p in entries[:5]]
+    return info
 
 
 def _build_fallback_doi_map(
@@ -1615,10 +1654,12 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg.io,
         )
     except (FileNotFoundError, ValueError) as exc:
+        context = _build_missing_input_context(Path(args.input_csv))
         logger.error(
             "input_read_failed",
             error=str(exc),
             path=str(args.input_csv),
+            **context,
         )
         return 1
     if offset:
@@ -1755,10 +1796,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg.io,
             )
         except (FileNotFoundError, ValueError) as exc:
+            context = _build_missing_input_context(Path(args.input_csv))
             logger.error(
                 "input_read_failed",
                 error=str(exc),
                 path=str(args.input_csv),
+                **context,
             )
             return 1
 
@@ -1851,10 +1894,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg=cfg.io,
         )
     except (FileNotFoundError, ValueError) as exc:
+        context = _build_missing_input_context(Path(args.input_csv))
         logger.error(
             "input_read_failed",
             error=str(exc),
             path=str(args.input_csv),
+            **context,
         )
         return 1
 
