@@ -881,6 +881,15 @@ def _fetch_gtop_endpoint(
         session = get_uniprot_session()
         with session.get(url, timeout=timeout) as response:
             response.raise_for_status()
+            body = response.content or b""
+            if response.headers.get("Content-Length") == "0" or not body.strip():
+                logger.warning(
+                    "gtop_json_decode_failed",
+                    gtop_id=gtop_id,
+                    endpoint=endpoint,
+                    error="empty response body",
+                )
+                return None
             return response.json()
     except (json.JSONDecodeError, ValueError) as exc:
         logger.warning(
