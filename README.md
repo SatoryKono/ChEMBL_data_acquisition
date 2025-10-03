@@ -85,6 +85,18 @@ pre-commit install
 
 ```
 
+### Testing and quality gates
+
+The project uses `pytest` for automated verification. A convenience wrapper is available to execute the suite and emit machine-readable artefacts:
+
+```bash
+python tools/run_tests.py
+```
+
+The command writes the detailed protocol to `reports/test_report.json` and a human-readable summary to `reports/test_summary.md`. Both files include Git metadata, execution duration, aggregated statistics, and per-test diagnostics. The run exits with a non-zero code when any test fails. To satisfy the QA gate, ensure the reported success rate is at least 95%.
+
+To run a subset of tests, append extra arguments after `--pytest-args`, for example `python tools/run_tests.py --pytest-args -m unit`.
+
 **EN.** Installing from the lock file guarantees that local development and
 continuous integration use the exact same dependency set. Regenerate the lock
 after modifying `pyproject.toml` by creating a fresh virtual environment,
