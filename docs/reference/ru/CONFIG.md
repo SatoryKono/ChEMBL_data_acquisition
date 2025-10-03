@@ -2,8 +2,8 @@
 
 ## Обзор
 
-* Все CLI-инструменты читают настройки из [`config/config.yaml`](../config/config.yaml) в корне проекта.
-* Значения валидируются в `library.config.load_config`, который вызывает `Config.model_validate` из Pydantic. [`config.schema.json`](../config.schema.json) служит справочной схемой для инструментов и не исполняется при запуске.
+* Все CLI-инструменты читают настройки из [`config/config.yaml`](../../config/config.yaml) в корне проекта.
+* Значения валидируются в `library.config.load_config`, который вызывает `Config.model_validate` из Pydantic. [`config.schema.json`](../../config.schema.json) служит справочной схемой для инструментов и не исполняется при запуске.
 * Переопределения применяются в порядке: `config/config.yaml` < переменные окружения < аргументы командной строки.
 
 ## Структура `config/config.yaml`
@@ -58,7 +58,7 @@
 | `force_refresh_existing` | `false` | При `true` пересобирает связи родитель→потомок даже для записей с уже заполненным родителем, заставляя использовать данные из кэша/ChEMBL. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | Список полей, которые запрашиваются у ChEMBL при построении или обновлении каталога; расширяйте его для дополнительных атрибутов. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Набор фильтров, добавляемых ко всем запросам; по умолчанию выбирает только записи с заполненным родителем в ChEMBL. |
-| `hierarchy_lookup_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
+| `hierarchy_lookup_path` | `../../dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Кодировка, применяемая при чтении CSV иерархии; меняйте, если файл сохранён в другом наборе символов (например, Latin-1 из старых выгрузок). |
 | `hierarchy_lookup_delimiter` | `,` | Разделитель столбцов, ожидаемый загрузчиком иерархии; укажите `;` или табуляцию для файлов, подготовленных региональными командами. |
 | `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
@@ -190,8 +190,8 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
-| `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
-| `sources.molecule_hierarchy_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `sources.molecule_catalog_path` | `../../dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
+| `sources.molecule_hierarchy_path` | `../../dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
 | `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
 | `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
 | `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |
@@ -224,18 +224,18 @@ CLI-параметры имеют приоритет над YAML и окруже
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Колонка с UniProt ID. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
+|  | `data_dir` | `../../dictionary/_target/_uniprot` | Каталог с кэшированными JSON UniProt. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
 | `chembl` | `column` | `target_chembl_id` | Колонка с таргетами ChEMBL. |
 |  | `chunk_size` | `5` | Размер батча запросов. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `iuphar` | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `iuphar` | `target_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Справочник таргетов IUPHAR. |
+|  | `family_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
 |  | `limit` | `null` | Ограничение на число идентификаторов. |
-| `all` | `data_dir` | `../dictionary/_target/_uniprot` | Каталог с данными UniProt. |
-|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
+| `all` | `data_dir` | `../../dictionary/_target/_uniprot` | Каталог с данными UniProt. |
+|  | `target_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Таблица таргетов IUPHAR. |
+|  | `family_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Таблица семейств IUPHAR. |
 |  | `chunk_size` | `5` | Размер батча при объединении источников. |
 |  | `timeout` | `30.0` | Таймаут запроса (сек.). |
 
@@ -264,7 +264,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 ### PubChem (`sources.pubchem`)
 
-Параметры PubChem применяются прежде всего в пайплайне `testitem`. Каждый ключ отражает содержимое [`config/config.yaml`](../config/config.yaml)
+Параметры PubChem применяются прежде всего в пайплайне `testitem`. Каждый ключ отражает содержимое [`config/config.yaml`](../../config/config.yaml)
 и может быть переопределён переменными окружения (см. [Переменные окружения](#переменные-окружения)). В таблице указаны и
 автогенерируемые алиасы `CHEMBL_DA_SOURCES_PUBCHEM_*`, и универсальный формат `CHEMBL_DA__SOURCES__PUBCHEM__*`. Для базового URL
 доступен короткий алиас из таблицы в разделе «Переменные окружения».
@@ -301,11 +301,11 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Ключ | Значение по умолчанию | Описание |
 | --- | --- | --- |
-| `dictionary_dir` | `../dictionary` | Корневая папка словарей. |
-| `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
-| `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
-| `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
-| `targets_type_csv` | `../dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
+| `dictionary_dir` | `../../dictionary` | Корневая папка словарей. |
+| `iuphar_target_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Соответствия таргетов IUPHAR. |
+| `iuphar_family_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Справочник семейств IUPHAR. |
+| `uniprot_data_dir` | `../../dictionary/_target/_uniprot` | Кэшированные ответы UniProt. |
+| `targets_type_csv` | `../../dictionary/_target/targets_type.csv` | Классификация типов таргетов. |
 
 
 Каталог `dictionary/_target` отражает текущую структуру репозитория; в нём по умолчанию лежат справочники IUPHAR и выгрузки UniProt.
@@ -322,7 +322,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `csv_sep` | `,` | Разделитель CSV по умолчанию. |
 | `csv_fallback_separators` | `["\t", ";"]` | Дополнительные разделители, которые пробуются, если основной не раскрывает требуемый столбец. |
 | `csv_encoding` | `utf-8-sig` | Кодировка экспорта CSV. |
-| `csv_chunksize` | `10000` | Размер чанка (строк) при детерминированной записи CSV; значение задано в [`config/config.yaml`](../config/config.yaml). |
+| `csv_chunksize` | `10000` | Размер чанка (строк) при детерминированной записи CSV; значение задано в [`config/config.yaml`](../../config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Дополнительные маркеры пропусков при чтении CSV. |
 | `keep_na_markers` | `false` | Сохранять идентификаторы, совпадающие с `na_markers`, вместо их фильтрации. |
 | `exist_ok` | `true` | Создавать каталоги автоматически. |
@@ -335,13 +335,13 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `all_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"` | Источник пар «разные документы». |
 | `output_dir` | `"$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"` | Каталог для подготовленных файлов. |
 
-Пути вида `data/input/ChEMBL/*.xlsx` являются заглушками для локальных проверок. Перед запуском процедур инициализации замените их на книги, подготовленные вашей организацией (или разместите вручную выданные файлы в нужном каталоге). Подробности подготовки входных данных приведены в [docs/ru/USAGE.md](./USAGE.md).
+Пути вида `data/input/ChEMBL/*.xlsx` являются заглушками для локальных проверок. Перед запуском процедур инициализации замените их на книги, подготовленные вашей организацией (или разместите вручную выданные файлы в нужном каталоге). Подробности подготовки входных данных приведены в [docs/guides/ru/USAGE.md](../../guides/ru/USAGE.md).
 
 ## Системные настройки (`system`)
 
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
-| `log` | `level` | `INFO` | Уровень логирования по умолчанию. Структурированный JSON-вывод использует фиксированную схему из [`library/logging_setup.py`](../library/logging_setup.py), поэтому формат сообщения и таймстемпа через конфигурацию не меняется. |
+| `log` | `level` | `INFO` | Уровень логирования по умолчанию. Структурированный JSON-вывод использует фиксированную схему из [`library/logging_setup.py`](../../library/logging_setup.py), поэтому формат сообщения и таймстемпа через конфигурацию не меняется. |
 | `rate` | `global_rps` | `100` | Глобальный лимит запросов в секунду. |
 |  | `global_burst` | `100` | Ёмкость глобального токен-бакета. |
 |  | `limiter_cache_maxsize` | `128` | Максимум кэшированных лимитеров. |
@@ -408,7 +408,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 
 Любой другой ключ можно задать в длинной форме `CHEMBL_DA__...`.
 
-> Детали JSON-формата описаны в [`library/log.py`](../library/log.py) и [`library/logging_setup.py`](../library/logging_setup.py); из-за этого `config.yaml` не позволяет переопределить формат сообщений и дату.
+> Детали JSON-формата описаны в [`library/log.py`](../../library/log.py) и [`library/logging_setup.py`](../../library/logging_setup.py); из-за этого `config.yaml` не позволяет переопределить формат сообщений и дату.
 
 ## CLI-переопределения
 
