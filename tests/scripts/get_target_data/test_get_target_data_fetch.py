@@ -513,6 +513,46 @@ def test_fetch_iuphar_invalid_uniprot_column(
     assert "invalid_uniprot_column" in error_events
 
 
+def test_fetch_iuphar_aliases_missing_uniprot_column(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+    cfg: Config,
+) -> None:
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["C1"],
+            "target_uniprot_id": ["P12345"],
+        }
+    )
+    uniprot_df = pd.DataFrame(
+        {"uniprot_id": ["P12345"], "original_id": ["P12345"], "names": ["Protein"]}
+    )
+    out = tmp_path / "iuphar.csv"
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame({"uniprot_id": ["P12345"], "IUPHAR_class": ["Enzyme"]}).to_csv(
+            args.output_csv, index=False
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+
+    warning_events: list[str] = []
+    original_warning = gtd.logger.warning
+
+    def tracking_warning(event: str, *args: object, **kwargs: object) -> object:
+        warning_events.append(event)
+        return original_warning(event, *args, **kwargs)
+
+    monkeypatch.setattr(gtd.logger, "warning", tracking_warning)
+
+    combined_df, iuphar_df = gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    assert "uniprot_merge_column_alias" in warning_events
+    assert combined_df.loc[0, "uniprot_id"] == "P12345"
+    assert iuphar_df.loc[0, "IUPHAR_class"] == "Enzyme"
+
+
 def test_fetch_iuphar_uses_mapping_when_uniprot_empty(
     monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
 ) -> None:
