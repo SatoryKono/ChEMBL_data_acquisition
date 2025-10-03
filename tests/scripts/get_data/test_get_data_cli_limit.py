@@ -37,3 +37,13 @@ def test_zero_limit_allowed(tmp_path: Path) -> None:
     args = _args(tmp_path, limit=0)
     cfg = get_data._prepare_config(args)
     assert cfg.limit == 0
+
+
+def test_dry_run_skips_output_dir_creation(tmp_path: Path) -> None:
+    args = _args(tmp_path, limit=None)
+    args.dry_run = True
+
+    cfg = get_data._prepare_config(args)
+
+    assert cfg.dry_run is True
+    assert not (tmp_path / "output").exists()
