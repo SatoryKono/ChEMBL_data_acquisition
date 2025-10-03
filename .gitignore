@@ -29,8 +29,8 @@ config/*.secrets.yaml
 config/*.override.yaml
 config/**/secrets*.yaml
  
-logs/get_target_data_20251002.log
-logs/get_target_data_20251002.log
+logs/*
+!logs/.gitkeep
  
 dictionary/_activity/pairs.csv
 /logs

@@ -13,6 +13,7 @@ from __future__ import annotations
 from importlib import import_module
 from importlib.util import find_spec
 
+from . import enrichment as testitem_enrichment
 from .enrichment import enrich
 from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
 
@@ -112,3 +113,5 @@ __all__ = [
     "write_meta_yaml",
     "write_parent_catalog_cache",
 ]
+
+__all__.append("testitem_enrichment")
