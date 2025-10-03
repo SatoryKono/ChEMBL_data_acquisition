@@ -412,7 +412,12 @@ def attach_parent_molecule_ids(
     partial_fetch_used = False
     full_sync_used = False
     uncovered_children = 0
-    parentless_filtered = molecule_catalog._filters_exclude_parentless(catalog_cfg)
+    filters_exclude_parentless = getattr(
+        molecule_catalog,
+        "_filters_exclude_parentless",
+        lambda cfg: False,
+    )
+    parentless_filtered = bool(filters_exclude_parentless(catalog_cfg))
     json_cache_exists = catalog_cfg.cache_path.is_file()
     sqlite_exists = catalog_cfg.sqlite_path.is_file()
 
@@ -479,13 +484,7 @@ def attach_parent_molecule_ids(
     needs_full_sync = catalog is None and uncovered_children > 0
 
     # Определяем, нужно ли фильтровать parentless элементы
-    parentless_filtered = False
     if catalog is None:
-        filters_exclude_parentless = getattr(
-            molecule_catalog,
-            "_filters_exclude_parentless",
-            lambda cfg: False,
-        )
         parentless_filtered = bool(filters_exclude_parentless(catalog_cfg))
 
     skip_full_sync = (
@@ -502,6 +501,7 @@ def attach_parent_molecule_ids(
             count=len(missing_ids),
             identifiers=missing_ids,
         )
+        needs_full_sync = False
         source_resolved = PARENT_LOOKUP_SOURCE_SKIPPED
     elif needs_full_sync and parentless_filtered:
         needs_full_sync = False
