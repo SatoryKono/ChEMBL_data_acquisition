@@ -915,3 +915,19 @@ def finalize_output(
             return 1
 
     return exit_code
+
+__all__ = [
+    "ReadInputIdsResult",
+    "TestitemFetchError",
+    "TestitemPipelineOptions",
+    "TestitemPipelineStageError",
+    "_FETCH_ERROR_SAMPLE_SIZE",
+    "_log_missing_identifier_summary",
+    "_prepare_pubchem_api_cfg",
+    "apply_testitem_enrichment",
+    "fetch_testitems",
+    "finalize_output",
+    "integrate_missing_identifiers",
+    "read_input_ids",
+    "run_testitem_pipeline",
+]

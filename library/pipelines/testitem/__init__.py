@@ -2,86 +2,74 @@
 
 Changelog
 ========
-* Add compatibility re-exports for the modern test item pipeline API.
-* Re-export public helpers from :mod:`library.testitem_pipeline` for legacy
-  imports.
+* Consolidate the public API under :mod:`library.pipelines.testitem` and
+  deprecate legacy mirrors in :mod:`library.testitem_pipeline`.
 """
 
 from __future__ import annotations
 
 # ===== Modules =====
-from importlib import import_module
-from importlib.util import find_spec
-
 from . import enrichment as testitem_enrichment
+from .catalog import (
+    LoadMoleculeHierarchyLookup,
+    PARENT_LOOKUP_SOURCE_CACHE,
+    PARENT_LOOKUP_SOURCE_LOOKUP,
+    PARENT_LOOKUP_SOURCE_PARTIAL,
+    PARENT_LOOKUP_SOURCE_SKIPPED,
+    PARENT_LOOKUP_SOURCE_SYNC,
+    ParentEnrichmentPreparation,
+    ParentEnrichmentResult,
+    ParentLookupPreparedData,
+    ParentLookupStats,
+    _DEFAULT_CATALOG_CFG,
+    _MOLECULE_HIERARCHY_COLUMNS,
+    _TYPO_PARENT_COLUMN,
+    _merge_parent_stats,
+    attach_parent_molecule_ids,
+    ensure_no_parant_column,
+    load_molecule_hierarchy_lookup,
+    load_parent_catalog,
+    molecule_catalog,
+    prepare_parent_enrichment,
+    query_parent_catalog,
+    run_parent_enrichment,
+    update_parent_catalog_cache,
+    write_parent_catalog_cache,
+)
+from .cli import (
+    ReadInputIdsResult,
+    TestitemFetchError,
+    TestitemPipelineOptions,
+    TestitemPipelineStageError,
+    _FETCH_ERROR_SAMPLE_SIZE,
+    _log_missing_identifier_summary,
+    _prepare_pubchem_api_cfg,
+    apply_testitem_enrichment,
+    fetch_testitems,
+    finalize_output,
+    integrate_missing_identifiers,
+    read_input_ids,
+    run_testitem_pipeline,
+)
 from .enrichment import enrich
-from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
-
-try:
-    from library.testitem_pipeline import (
-        PARENT_LOOKUP_SOURCE_CACHE,
-        PARENT_LOOKUP_SOURCE_LOOKUP,
-        PARENT_LOOKUP_SOURCE_PARTIAL,
-        PARENT_LOOKUP_SOURCE_SKIPPED,
-        PARENT_LOOKUP_SOURCE_SYNC,
-        ReadInputIdsResult,
-        TestitemPipelineOptions,
-        _DEFAULT_CATALOG_CFG,
-        _FETCH_ERROR_SAMPLE_SIZE,
-        _MOLECULE_HIERARCHY_COLUMNS,
-        _PUBCHEM_CACHE_SCHEMA_VERSION,
-        _TYPO_PARENT_COLUMN,
-        analyze_table_quality,
-        ensure_no_parant_column,
-        file_sha256,
-        fetch_testitems,
-        integrate_missing_identifiers,
-        load_molecule_hierarchy_lookup,
-        load_parent_catalog,
-        query_parent_catalog,
-        read_input_ids,
-        run_testitem_pipeline,
-        update_parent_catalog_cache,
-        write_meta_yaml,
-        write_parent_catalog_cache,
-        _prepare_pubchem_api_cfg,
-        _write_pubchem_cid_cache,
-        PUBCHEM_CID_CACHE_ENCODING as _PIPELINE_PUBCHEM_CID_CACHE_ENCODING,
-        PUBCHEM_COLUMNS as _PIPELINE_PUBCHEM_COLUMNS,
-    )
-except ModuleNotFoundError as exc:  # pragma: no cover - environment specific
-    _PIPELINE_IMPORT_ERROR = exc
-else:
-    _PIPELINE_IMPORT_ERROR = None
-
-if _PIPELINE_IMPORT_ERROR is not None:  # pragma: no cover - environment specific
-    missing_detail = str(_PIPELINE_IMPORT_ERROR)
-    msg = (
-        "library.pipelines.testitem requires optional modules from "
-        "library.testitem_pipeline. Ensure your installation includes "
-        "'library.testitem_pipeline.cli' and related files. "
-        f"Original error: {missing_detail}"
-    )
-    raise ModuleNotFoundError(msg) from _PIPELINE_IMPORT_ERROR
-
-
-# ===== Compatibility Exports =====
-_PUBCHEM_COMPAT_MODULE = "library.testitem_pipeline.pubchem"
-
-try:
-    if find_spec(_PUBCHEM_COMPAT_MODULE) is None:
-        raise ModuleNotFoundError(_PUBCHEM_COMPAT_MODULE)
-    pubchem_module = import_module(_PUBCHEM_COMPAT_MODULE)
-
-    PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
-    PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
-
-except ModuleNotFoundError:
-    PUBCHEM_CID_CACHE_ENCODING = _PIPELINE_PUBCHEM_CID_CACHE_ENCODING
-    PUBCHEM_COLUMNS = list(_PIPELINE_PUBCHEM_COLUMNS)
-else:
-    PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
-    PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
+from .pubchem import (
+    PUBCHEM_CID_CACHE_ENCODING,
+    PUBCHEM_COLUMNS,
+    _CID_CACHE_MISSING,
+    _PUBCHEM_CACHE_SCHEMA_VERSION,
+    _PUBCHEM_SESSION_LOCK,
+    _PUBCHEM_SESSION_SIGNATURE,
+    _load_pubchem_cid_cache,
+    _merge_pubchem_properties,
+    _prepare_pubchem_caches,
+    _prefetch_parents,
+    _pubchem_session_signature,
+    _resolve_pubchem_cids,
+    _write_pubchem_cid_cache,
+    add_pubchem_data,
+    augment_pubchem,
+    resolve_pubchem_cid,
+)
 
 __all__ = [
     "enrich",
@@ -93,26 +81,45 @@ __all__ = [
     "PARENT_LOOKUP_SOURCE_SKIPPED",
     "PARENT_LOOKUP_SOURCE_SYNC",
     "ReadInputIdsResult",
+    "TestitemFetchError",
     "TestitemPipelineOptions",
+    "TestitemPipelineStageError",
+    "_CID_CACHE_MISSING",
     "_DEFAULT_CATALOG_CFG",
     "_FETCH_ERROR_SAMPLE_SIZE",
     "_MOLECULE_HIERARCHY_COLUMNS",
     "_PUBCHEM_CACHE_SCHEMA_VERSION",
+    "_PUBCHEM_SESSION_LOCK",
+    "_PUBCHEM_SESSION_SIGNATURE",
     "_TYPO_PARENT_COLUMN",
+    "_load_pubchem_cid_cache",
+    "_log_missing_identifier_summary",
+    "_merge_parent_stats",
+    "_merge_pubchem_properties",
     "_prepare_pubchem_api_cfg",
+    "_prepare_pubchem_caches",
+    "_prefetch_parents",
+    "_pubchem_session_signature",
+    "_resolve_pubchem_cids",
     "_write_pubchem_cid_cache",
-    "analyze_table_quality",
+    "add_pubchem_data",
+    "apply_testitem_enrichment",
+    "attach_parent_molecule_ids",
+    "augment_pubchem",
     "ensure_no_parant_column",
-    "file_sha256",
     "fetch_testitems",
+    "finalize_output",
     "integrate_missing_identifiers",
     "load_molecule_hierarchy_lookup",
     "load_parent_catalog",
+    "molecule_catalog",
+    "prepare_parent_enrichment",
     "query_parent_catalog",
     "read_input_ids",
+    "resolve_pubchem_cid",
+    "run_parent_enrichment",
     "run_testitem_pipeline",
     "update_parent_catalog_cache",
-    "write_meta_yaml",
     "write_parent_catalog_cache",
 ]
 
