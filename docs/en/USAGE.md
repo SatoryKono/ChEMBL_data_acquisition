@@ -42,7 +42,7 @@ directly.
 | `--sep` | CSV delimiter forwarded to `cfg.io.csv_sep`. |
 | `--encoding` | File encoding forwarded to `cfg.io.csv_encoding`. |
 | `--column` | Name of the identifier column. Defaults are populated from the configuration during start-up. |
-| `--id-cols` | Comma-separated list of identifier columns to preserve in the raw snapshot before cleanup. Currently surfaced by the target pipeline helpers. |
+| `--id-cols` | Space-separated list of identifier columns to preserve in the raw snapshot before cleanup. Pass each column as an individual argument (for example, `--id-cols target_chembl_id pref_name`). Values merge back into the configuration when supplied as a YAML sequence. Currently surfaced by the target pipeline helpers. |
 | `--normalize-at-export` / `--no-normalize-at-export` | Boolean pair controlling whether the final CSV is normalised immediately before writing (default: normalise). Disabling the flag keeps the final artefact byte-identical to the raw snapshot while validation still runs against the normalised view. |
 | `--batch-size` / `--chunk-size` | Maximum number of identifiers per API request (option name depends on the pipeline). |
 | `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
@@ -68,7 +68,14 @@ flowchart LR
   Fetch --> Raw["Raw CSV / Parquet"] --> Cleanup["Cleanup IDs"] --> Normalize --> Validate --> Final["Final export"]
 ```
 
-In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out` writes the cleaned table after normalisation and validation. Raw dumps reindex columns alphabetically unless `--no-reindex-raw` preserves the API order for forensic comparisons. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether the final CSV is normalised immediately before writing (default) or copied byte-for-byte from the raw snapshot—validation still inspects the normalised view even when the export stays raw. The legacy `--output`/`--out` switches remain wired in for compatibility but emit deprecation warnings. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines will add the staged switches once the shared parser is extended.
+In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out` writes the cleaned table after normalisation and validation. Provide the columns after the flag as separate arguments (for example, `--id-cols target_chembl_id pref_name`) so deterministic ordering can rely on the full set of keys. Raw dumps reindex columns alphabetically unless `--no-reindex-raw` preserves the API order for forensic comparisons. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether the final CSV is normalised immediately before writing (default) or copied byte-for-byte from the raw snapshot—validation still inspects the normalised view even when the export stays raw. The legacy `--output`/`--out` switches remain wired in for compatibility but emit deprecation warnings. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines will add the staged switches once the shared parser is extended.
+
+```bash
+get-target-data all --input ids.csv --id-cols target_chembl_id pref_name \
+  --raw-out out/targets.raw.csv --final-out out/targets.final.csv
+```
+
+The same column list can be embedded in configuration files (for example, `id_cols: [target_chembl_id, pref_name]`), and CLI overrides continue to synchronise with those settings through `apply_config_overrides`.
 
 > **Note.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
 
