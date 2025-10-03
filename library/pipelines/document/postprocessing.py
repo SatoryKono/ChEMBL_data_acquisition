@@ -332,9 +332,12 @@ def _normalise_reference_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 def _load_reference_document(path: Path) -> pd.DataFrame:
     if not path.exists():
-        empty = pd.DataFrame({col: pd.Series(dtype="boolean") for col in REFERENCE_REQUIRED_COLUMNS})
-        empty["document_chembl_id"] = pd.Series(dtype="string")
-        return empty.loc[:, REFERENCE_REQUIRED_COLUMNS]
+        msg = (
+            "Reference document CSV not found. "
+            "Set 'ref_document_path' to the location of the ETL export or "
+            "materialise 'data/input/full/document.csv'."
+        )
+        raise FileNotFoundError(msg)
 
     frame = pd.read_csv(
         path,

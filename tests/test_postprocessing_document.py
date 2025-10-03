@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
+from library.pipelines.document import postprocessing as stage_dp
 from library.postprocessing import document as doc
 
 
@@ -112,6 +113,7 @@ def test_preprocess_documents_csv_integration(tmp_path: Path) -> None:
         base_path=str(base_dir),
         ref_document_rel="input\\full\\document.csv",
         out_document_rel="output\\document\\output.document_20230101.csv",
+        qa_reference_rel=None,
     )
 
     result = Path(result_path)
@@ -135,11 +137,28 @@ def test_preprocess_documents_csv_integration(tmp_path: Path) -> None:
     qa_md = result.parent / "qa_document_postprocessing_report_20230101.md"
     qa_diff = result.parent / "qa_document_postprocessing_diff_20230101.csv"
 
-    assert qa_json.exists()
-    assert qa_md.exists()
+    assert not qa_json.exists()
+    assert not qa_md.exists()
     assert not qa_diff.exists()
 
-    with qa_json.open("r", encoding="utf-8") as handle:
-        metrics = json.load(handle)
 
-    assert metrics["status"] == "passed"
+def test_stage_postprocess_documents_missing_reference(tmp_path: Path) -> None:
+    out_frame = pd.read_csv(
+        FIXTURE_DIR / "output.document_20230101.csv",
+        dtype=str,
+    )
+    missing_path = tmp_path / "missing.csv"
+
+    with pytest.raises(FileNotFoundError, match="Reference document CSV not found"):
+        stage_dp.postprocess_documents(out_frame, ref_document_path=missing_path)
+
+
+def test_preprocess_document_export_missing_reference(tmp_path: Path) -> None:
+    out_frame = pd.read_csv(
+        FIXTURE_DIR / "output.document_20230101.csv",
+        dtype=str,
+    )
+    missing_path = tmp_path / "missing.csv"
+
+    with pytest.raises(FileNotFoundError, match="Reference document CSV not found"):
+        doc.preprocess_document_export(out_frame, ref_document_path=missing_path)
