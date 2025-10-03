@@ -41,5 +41,7 @@ def test_postprocess_export_file_strips_tmp_suffix(monkeypatch, tmp_path: Path) 
         cfg=cfg,
     )
 
-    assert destination.name == "preprocessed_output.documents_test.csv"
+    expected_path = tmp_path / "preprocessed_output.documents_test.csv"
+
+    assert destination == expected_path
     assert destination.exists()
