@@ -347,7 +347,7 @@ IUPHAR and UniProt lookups are stored there by default.
 | `all_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"` | Workbook with cross-document pairs for initialisation. |
 | `output_dir` | `"$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"` | Destination for pre-processed initialisation files. |
 
-Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke tests. Replace them with the workbooks prepared by your organisation (or copy the manually supplied files into the desired location) before starting the initialisation routines. Refer to [docs/guides/en/USAGE.md](../../guides/en/USAGE.md) for guidance on preparing the input templates.
+Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke tests. Replace them with the workbooks prepared by your organisation (or copy the manually supplied files into the desired location) before starting the initialisation routines. Refer to [docs/en/guides/USAGE.md](../guides/USAGE.md) for guidance on preparing the input templates.
 
 ## System settings (`system`)
 

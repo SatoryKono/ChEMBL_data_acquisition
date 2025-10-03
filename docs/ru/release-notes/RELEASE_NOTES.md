@@ -1,6 +1,6 @@
 # Примечания к релизу
 
-> **Языки:** [English](../en/RELEASE_NOTES.md) · [Русский](./RELEASE_NOTES.md)
+> **Языки:** [English](../../en/release-notes/RELEASE_NOTES.md) · [Русский](./RELEASE_NOTES.md)
 
 ## Не выпущено
 

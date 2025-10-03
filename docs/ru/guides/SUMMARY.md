@@ -68,7 +68,7 @@ add_pipeline_metadata → write_csv_deterministic →
     публикаций.
 * Приоритет переопределений: `config/config.yaml` < переменные окружения < аргументы
   CLI. Доступны короткие алиасы (например, `CHEMBL_DA_RPS` и `CHEMBL_DA_OUTDIR`).
-  Полный список приведён в `docs/reference/ru/CONFIG.md`.
+  Полный список приведён в `docs/ru/reference/CONFIG.md`.
 
 ## Внешние сервисы
 
@@ -89,7 +89,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Создайте и активируйте виртуальное окружение Python ≥ 3.11.
 2. Установите зависимости из lock-файла: `pip install -r requirements-lock.txt`.
 3. Включите контроль качества: `pre-commit install`.
-4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](../../processes/en/QA_PROCESS.md) / [Русский](../../processes/ru/QA_PROCESS.md)):
+4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](../../en/processes/QA_PROCESS.md) / [Русский](../processes/QA_PROCESS.md)):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -107,8 +107,8 @@ add_pipeline_metadata → write_csv_deterministic →
 * Логи в формате JSON содержат `run_id`, `event`, `stage` и счётчики по стадиям,
   что упрощает фильтрацию через `jq` и системы сбора логов.
 
-Детальное руководство по запуску приведено в `docs/guides/en/USAGE.md` и
-`docs/guides/ru/USAGE.md`.
+Детальное руководство по запуску приведено в `docs/en/guides/USAGE.md` и
+`docs/ru/guides/USAGE.md`.
 
 ## Результаты выгрузки
 
@@ -120,7 +120,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * Для документов дополнительно создаётся JSON с качеством, а таргет-пайплайн в
   режиме `all` пишет промежуточные файлы по каждому источнику.
 
-Подробнее см. `docs/reference/en/OUTPUT.md` и `docs/reference/ru/OUTPUT.md`.
+Подробнее см. `docs/en/reference/OUTPUT.md` и `docs/ru/reference/OUTPUT.md`.
 
 ## Тестирование и детерминизм
 

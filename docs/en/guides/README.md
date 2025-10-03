@@ -147,8 +147,8 @@ process documents listed below.
 
 | Language | Checklist |
 |----------|-----------|
-| English  | [docs/processes/en/QA_PROCESS.md](../../processes/en/QA_PROCESS.md) |
-| Русский  | [docs/processes/ru/QA_PROCESS.md](../../processes/ru/QA_PROCESS.md) |
+| English  | [docs/en/processes/QA_PROCESS.md](../processes/QA_PROCESS.md) |
+| Русский  | [docs/ru/processes/QA_PROCESS.md](../../ru/processes/QA_PROCESS.md) |
 
 ```bash
 pre-commit run --all-files
@@ -202,7 +202,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 The command reads data from the ChEMBL API, writes the CSV table and the accompanying `*.meta.yaml`. Development utilities are in
 `library/utils/cli_tools/`; for instance, the `get_activities` module focuses on demo logging and performs no file operations. See
-[`docs/CLI_TOOLS.md`](../../reference/en/CLI_TOOLS.md) for descriptions and command patterns. The output directory is ignored by Git and exposed
+[`docs/en/reference/CLI_TOOLS.md`](../../en/reference/CLI_TOOLS.md) for descriptions and command patterns. The output directory is ignored by Git and exposed
 as a CI artifact.
 
 > **Note.** The legacy `activity_extraction_main.py` entry point has been superseded by the modular
@@ -528,9 +528,9 @@ python -m library.utils.cli_tools.table_quality_main --input data.csv --table-na
 `--out` alias continues to map to the same path but now emits deprecation warnings. Target pipeline invocations additionally
 accept `--final-out`, which reuses the same default while enabling distinct destinations once raw snapshots are enabled. Combine
 it with `--raw-out` (and optional `--raw-format parquet`) to persist the unprocessed payload. For additional examples see
-[`docs/guides/en/USAGE.md`](./USAGE.md) (Russian version:
+[`docs/en/guides/USAGE.md`](./USAGE.md) (Russian version:
 
-[`docs/guides/ru/USAGE.md`](../ru/USAGE.md)).
+[`docs/ru/guides/USAGE.md`](../ru/USAGE.md)).
 
 ## Project structure
 
@@ -570,7 +570,7 @@ ChEMBL_data_acquisition/
 ## Configuration
 
 Parameters are read from `config/config.yaml`, environment variables (`CHEMBL_DA__...`) and CLI flags. Details are documented in
-[`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md) (Russian version: [`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md)).
+[`docs/en/reference/CONFIG.md`](../../en/reference/CONFIG.md) (Russian version: [`docs/ru/reference/CONFIG.md`](../../ru/reference/CONFIG.md)).
 
 ### Environment variables
 
@@ -628,8 +628,8 @@ source:
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-See [`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md) for a complete overview of all configuration options (Russian version —
-[`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md)).
+See [`docs/en/reference/CONFIG.md`](../../en/reference/CONFIG.md) for a complete overview of all configuration options (Russian version —
+[`docs/ru/reference/CONFIG.md`](../../ru/reference/CONFIG.md)).
 
 ### Schema validation
 
@@ -666,16 +666,16 @@ aliases `--output`/`--out` continue to resolve to the same path but issue a depr
 use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. Raw dumps reindex
 columns alphabetically for deterministic layouts unless `--no-reindex-raw` keeps the API order. The final CSV is normalised by
 default; toggle the boolean pair `--normalize-at-export` / `--no-normalize-at-export` when the export should either undergo the
-clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/guides/en/USAGE.md`](./USAGE.md)
+clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/en/guides/USAGE.md`](./USAGE.md)
 (Russian version:
-[`docs/guides/ru/USAGE.md`](../ru/USAGE.md)).
+[`docs/ru/guides/USAGE.md`](../ru/USAGE.md)).
 
 
 ## Output and metadata
 
 Pipelines persist deterministic CSV tables via `library.io.write_csv` and store accompanying `*.meta.yaml` sidecars in
 `~/.local/share/chembl-da/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
-[`docs/reference/en/OUTPUT.md`](../../reference/en/OUTPUT.md) / [`docs/reference/ru/OUTPUT.md`](../../reference/ru/OUTPUT.md) for layout details.
+[`docs/en/reference/OUTPUT.md`](../../en/reference/OUTPUT.md) / [`docs/ru/reference/OUTPUT.md`](../../ru/reference/OUTPUT.md) for layout details.
 
 ## Dtype Inspector
 

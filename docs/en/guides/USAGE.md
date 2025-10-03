@@ -346,7 +346,7 @@ row count stays constant.
 Test item exports must be reconciled with the ChEMBL parent catalogue to expose `parent_molecule_chembl_id`
 used by downstream aggregations. The cache path is configured via
 
-[`sources.chembl.molecule_catalog.cache_path`](../../reference/en/CONFIG.md#sources-chembl-molecule-catalog);
+[`sources.chembl.molecule_catalog.cache_path`](../../en/reference/CONFIG.md#sources-chembl-molecule-catalog);
 keep the JSON file accessible to the runner or adjust the location by setting
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
 `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing
@@ -433,7 +433,7 @@ Adjust verbosity on demand with `--log-level` or environment overrides without t
 ## Environment variables
 
 Environment variables follow the `CHEMBL_DA__SECTION__...__KEY` pattern. For frequently used paths, short aliases such as
-`CHEMBL_DA_OUTDIR` (maps to `local.io.output_dir`) are available. See `docs/reference/en/CONFIG.md` for the full list.
+`CHEMBL_DA_OUTDIR` (maps to `local.io.output_dir`) are available. See `docs/en/reference/CONFIG.md` for the full list.
 
 ## Running tests
 

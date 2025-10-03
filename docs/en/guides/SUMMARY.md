@@ -68,7 +68,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * Overrides follow the precedence `config/config.yaml` < environment variables < CLI
   arguments. Short aliases such as `CHEMBL_DA_RPS` (`sources.chembl.api.rps`)
   and `CHEMBL_DA_OUTDIR` (`local.io.output_dir`) are exposed for convenience.
-  The full matrix is documented in `docs/reference/en/CONFIG.md`.
+  The full matrix is documented in `docs/en/reference/CONFIG.md`.
 
 ## External services
 
@@ -88,7 +88,7 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Create and activate a Python ≥3.11 virtual environment.
 2. Install dependencies from the lock file: `pip install -r requirements-lock.txt`.
 3. Enable the quality gate: `pre-commit install`.
-4. Recommended ad-hoc checks (see Quality Assurance Process — [English](../../processes/en/QA_PROCESS.md) / [Русский](../../processes/ru/QA_PROCESS.md) — for the living checklist):
+4. Recommended ad-hoc checks (see Quality Assurance Process — [English](../processes/QA_PROCESS.md) / [Русский](../../ru/processes/QA_PROCESS.md) — for the living checklist):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -108,8 +108,8 @@ mirrored in `requirements-lock.txt` for reproducible environments.
 * Deterministic logging uses JSON lines with `run_id`, `event`, `stage` and
   per-pipeline counters, allowing easy monitoring with `jq` or log collectors.
 
-Detailed command walkthroughs live in `docs/guides/en/USAGE.md` and
-`docs/guides/ru/USAGE.md`.
+Detailed command walkthroughs live in `docs/en/guides/USAGE.md` and
+`docs/ru/guides/USAGE.md`.
 
 ## Outputs
 
@@ -121,7 +121,7 @@ Detailed command walkthroughs live in `docs/guides/en/USAGE.md` and
 * Pipeline-specific extras include document quality JSON files and intermediate
   target exports for the `all` workflow.
 
-Refer to `docs/reference/en/OUTPUT.md` / `docs/reference/ru/OUTPUT.md` for field-level details and
+Refer to `docs/en/reference/OUTPUT.md` / `docs/ru/reference/OUTPUT.md` for field-level details and
 examples.
 
 ## Testing and determinism
