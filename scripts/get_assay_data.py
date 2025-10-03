@@ -12,7 +12,7 @@ from pathlib import Path
 from time import sleep
 
 import argparse
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import islice
 
@@ -236,6 +236,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             csv_writer=writer_config,
         )
 
+        pipeline_stats: dict[str, object] | None = None
+
+        def _capture_stats(stats: Mapping[str, object]) -> None:
+            nonlocal pipeline_stats
+            pipeline_stats = dict(stats)
+
         try:
             exit_code = run_pipeline(
                 fetcher=fetcher,
@@ -254,6 +260,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 cfg=cfg,
                 stats_extra=chunk_failures.stats,
                 logger=logger,
+                stats_callback=_capture_stats,
             )
         finally:
             chunk_failures.save(fetch_failure_path, cfg=cfg)
@@ -262,6 +269,14 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.info("process_limit", limit=processed_ids)
     else:
         logger.info("processed_count", count=processed_ids)
+
+    if pipeline_stats is not None:
+        logger.info(
+            "records_dropped",
+            rows_total=int(pipeline_stats.get("rows_total", processed_ids)),
+            rows_kept=int(pipeline_stats.get("rows_kept", 0)),
+            rows_dropped=int(pipeline_stats.get("rows_dropped", 0)),
+        )
 
     if exit_code == 0:
         logger.info(
