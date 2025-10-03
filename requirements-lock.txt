@@ -8,8 +8,6 @@ certifi==2025.8.3
 cffi==2.0.0
 cfgv==3.4.0
 charset-normalizer==3.4.3
-# Editable Git install with no remote (chembl-data-acquisition==0.1.1)
--e /workspace/ChEMBL_data_acquisition
 click==8.3.0
 coverage==7.10.7
 cryptography==46.0.2
