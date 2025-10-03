@@ -260,7 +260,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Run pipelines without writing outputs or performing side effects",
+        help=(
+            "Run pipelines without writing outputs or performing side effects, "
+            "including output directory creation"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -273,6 +276,7 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
     output_dir = _resolve_path(base_path, args.output_dir)
     config_candidate = args.config or DEFAULT_CONFIG_PATH
     config_path = Path(config_candidate).expanduser().resolve()
+    dry_run = bool(getattr(args, "dry_run", False))
 
     if args.limit is not None and args.limit < 0:
         raise ValueError("--limit must be zero or a positive integer")
@@ -281,7 +285,8 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         raise FileNotFoundError(f"input directory not found: {input_dir}")
     if not config_path.exists():
         raise FileNotFoundError(f"configuration file not found: {config_path}")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     return PipelineRunConfig(
         base_path=base_path,
@@ -293,7 +298,7 @@ def _prepare_config(args: argparse.Namespace) -> PipelineRunConfig:
         limit=args.limit,
         force=args.force,
         skip_existing=args.skip_existing,
-        dry_run=bool(getattr(args, "dry_run", False)),
+        dry_run=dry_run,
     )
 
 
