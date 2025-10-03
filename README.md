@@ -73,9 +73,15 @@ console scripts for each pipeline. Use them interchangeably with the
 | PyYAML        | ≥6.0               | 6.0.3                       |
 
 **EN.** `requirements-lock.txt` is the single source of truth for pinned
-dependencies; `pyproject.toml` documents the declared dependency ranges.
+dependencies. `pyproject.toml` now records compatible release ranges: runtime
+packages use `~=` so patch updates within the tested minor version remain
+supported, while development extras keep explicit upper bounds (`<`) to avoid
+accidental major upgrades.
 **RU.** Файл `requirements-lock.txt` — единый источник истины с фиксированными
-версиями, а `pyproject.toml` описывает поддерживаемые диапазоны зависимостей.
+версиями. В `pyproject.toml` заданы совместимые диапазоны: рабочие зависимости
+используют `~=` (обновления исправлений внутри протестированной минорной
+версии поддержаны), а dev-набор ограничен верхними границами (`<`), чтобы
+предотвратить случайные мажорные обновления.
 
 ### Среда выполнения
 

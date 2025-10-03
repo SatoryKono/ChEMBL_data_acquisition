@@ -30,10 +30,11 @@ The primary documentation and reference material live in this directory.
 | PyYAML    | ≥6.0              | 6.0.3         |
 
 `requirements-lock.txt` is the single source of truth for pinned dependency
-versions; `pyproject.toml` documents the supported version ranges. Runtime
-dependencies follow compatible release ranges so patch updates within each
-minor version remain supported. Continuous integration validates both the
-minimum and latest rows above.
+versions. `pyproject.toml` records the supported ranges: runtime dependencies
+use compatible release specifiers (`~=`) so patch updates within the tested
+minor versions stay supported, and development tooling keeps explicit upper
+bounds (`<`) to prevent surprise major upgrades. Continuous integration
+validates both the minimum and latest rows above.
 
 ### Runtime environment
 
