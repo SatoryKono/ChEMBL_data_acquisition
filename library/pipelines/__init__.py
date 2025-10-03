@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import activity, assay, common, document, target
+from . import activity, assay, common, document, target, testitem
 
-__all__ = ["activity", "assay", "common", "document", "target"]
+__all__ = ["activity", "assay", "common", "document", "target", "testitem"]

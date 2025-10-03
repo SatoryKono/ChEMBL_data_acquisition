@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import io
-from .config import IoCfg, TestitemMoleculeEnrichmentCfg
-from .common.log import logger
+from ... import io
+from ...common.log import logger
+from ...config import IoCfg, TestitemMoleculeEnrichmentCfg
 
 _FLAG_COLUMNS: tuple[str, ...] = ("natural_product", "prodrug", "polymer_flag")
 _TRUE_VALUES: frozenset[str] = frozenset({"1", "true", "t", "yes", "y"})

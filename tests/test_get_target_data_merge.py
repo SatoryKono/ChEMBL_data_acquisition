@@ -9,7 +9,7 @@ import pandas as pd
 from pytest import MonkeyPatch
 
 import library.pipelines.target.postprocessing as tp
-from library import protein_classification as pc
+from library.pipelines.target import protein_classification as pc
 from library.config import Config
 from scripts import get_target_data as gtd
 

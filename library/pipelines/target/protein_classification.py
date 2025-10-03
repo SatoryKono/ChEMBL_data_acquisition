@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .config import Config
-from .integration.iuphar_library import (
+from ...config import Config
+from ...integration.iuphar_library import (
     ClassificationRecord,
     IUPHARClassifier,
     IUPHARData,

@@ -65,7 +65,7 @@ from .pubchem import (
     resolve_pubchem_cid,
 )
 from library.integration import pubchem_library as pl
-from library import testitem_enrichment
+from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.common.csv_utils import write_csv_chunks_deterministic as write_csv_deterministic

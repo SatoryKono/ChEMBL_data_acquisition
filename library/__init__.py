@@ -25,7 +25,8 @@ from .pipelines.document.type_terms import (
     UNKNOWN_TERMS,
     parse_terms,
 )
-from .organism_classification import (
+from .pipelines.target import organism_classification, protein_classification
+from .pipelines.target.organism_classification import (
     TYPE_MULTICELLULAR,
     TYPE_UNICELLULAR,
     TYPE_VIRAL,
@@ -36,6 +37,7 @@ from .organism_classification import (
     classify_record,
     normalize,
 )
+from .pipelines.testitem import enrichment as testitem_enrichment
 from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors
 
@@ -61,6 +63,9 @@ __all__ = [
     "configure_logger",
     "CSVExportArgs",
     "log_duration",
+    "organism_classification",
+    "protein_classification",
+    "testitem_enrichment",
     "OrganismClassificationRules",
     "add_cellularity",
     "add_cellularity_smart",

@@ -11,7 +11,7 @@ import pandas as pd
 import yaml
 from pytest import MonkeyPatch
 
-from library import protein_classification as pc
+from library.pipelines.target import protein_classification as pc
 from library.config import Config
 from library.schemas import TargetsSchema
 from library.schemas.targets import TARGETS_COLUMN_ORDER
