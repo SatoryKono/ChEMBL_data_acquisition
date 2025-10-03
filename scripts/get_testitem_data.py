@@ -94,8 +94,406 @@ _pubchem_resolution_key = pipeline_pubchem._pubchem_resolution_key
 _load_pubchem_cid_cache = pipeline_pubchem._load_pubchem_cid_cache
 resolve_pubchem_cid = pipeline_pubchem.resolve_pubchem_cid
 
+ 
+
+ 
+def _resolve_catalog_load_source(
+    before: tuple[bool, float | None], after: tuple[bool, float | None]
+) -> str:
+    """Determine the lookup source after invoking ``load_parent_catalog``."""
+
+    before_exists, before_mtime = before
+    after_exists, after_mtime = after
+
+    if after_exists and before_exists and after_mtime == before_mtime:
+        return PARENT_LOOKUP_SOURCE_CACHE
+    if after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    if before_exists and not after_exists:
+        return PARENT_LOOKUP_SOURCE_SYNC
+    return PARENT_LOOKUP_SOURCE_SYNC
+
+
+def _normalise_chembl_ids(series: pd.Series) -> pd.Series:
+    """Return ``series`` normalised to upper-case ChEMBL identifiers."""
+
+    normalised = series.astype("string").fillna("").str.strip().str.upper()
+    return normalised
+
+
+def load_molecule_hierarchy_lookup(
+    path: Path | None,
+    *,
+    io_cfg: IoCfg,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    catalog_cfg: MoleculeCatalogCfg | None = None,
+) -> dict[str, str | None]:
+    """Return child → parent mapping loaded from a local hierarchy file.
+
+    The returned mapping mirrors
+    :func:`library.testitem_pipeline.load_molecule_hierarchy_lookup` where
+    values may be ``None`` when no parent is listed in the hierarchy.
+    """
+
+    cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
+    resolved_path_value = path or cfg_source.hierarchy_lookup_path
+    if resolved_path_value is None:
+        return {}
+
+    resolved_path = Path(resolved_path_value)
+    resolved_encoding = (
+        encoding
+        or getattr(cfg_source, "hierarchy_lookup_encoding", None)
+        or io_cfg.csv_encoding
+    )
+    resolved_delimiter = (
+        delimiter
+        or getattr(cfg_source, "hierarchy_lookup_delimiter", None)
+        or io_cfg.csv_sep
+    )
+
+    try:
+        raw_lookup = _load_molecule_hierarchy_mapping(
+            str(resolved_path),
+            resolved_encoding,
+            resolved_delimiter,
+        )
+    except FileNotFoundError:
+        logger.info("molecule_hierarchy_lookup_missing", path=str(resolved_path))
+        return {}
+    except ValueError as exc:
+        raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
+
+    lookup = {
+        child_id: _normalise_parent_identifier(parent_id, child_id=child_id)
+        for child_id, parent_id in raw_lookup.items()
+    }
+    if not lookup:
+        return {}
+
+    attached_rows = sum(1 for value in lookup.values() if value is not None)
+
+    logger.info(
+        "molecule_hierarchy_lookup_loaded",
+        path=str(resolved_path),
+        rows=attached_rows,
+    )
+    return lookup
+
+
+class ParentLookupPreparedData(NamedTuple):
+    """Container for precomputed parent lookup data."""
+
+    child_ids: pd.Series
+    existing_parent_ids: pd.Series
+    need_lookup: set[str]
+
+
+def attach_parent_molecule_ids(
+    df: pd.DataFrame,
+    *,
+    client: ChemblClient,
+    api_cfg: ApiCfg,
+    catalog_cfg: MoleculeCatalogCfg,
+    timeout: float | None,
+    catalog: Mapping[str, str] | None = None,
+    source: str | None = None,
+    precomputed: ParentLookupPreparedData | None = None,
+) -> tuple[pd.DataFrame, ParentLookupStats]:
+    """Attach parent molecule identifiers using the ChEMBL catalogue."""
+
+    if "parant_molecule_id" in df.columns:
+        raise ValueError("Input frame contains unexpected column 'parant_molecule_id'.")
+
+    result = df.copy()
+
+    if result.empty:
+        if catalog_cfg.parent_field not in result.columns:
+            result[catalog_cfg.parent_field] = pd.Series(
+                pd.NA, index=result.index, dtype="string"
+            )
+        stats = ParentLookupStats(
+            source=PARENT_LOOKUP_SOURCE_SKIPPED,
+            missing=0,
+            unique=0,
+            attached=0,
+            uncovered=0,
+        )
+        return result, stats
+
+    child_column = catalog_cfg.child_field
+    parent_column = catalog_cfg.parent_field
+
+    if child_column not in result.columns:
+        logger.warning("parent_lookup_missing_child_column", column=child_column)
+        result[parent_column] = pd.Series(pd.NA, index=result.index, dtype="string")
+        stats = ParentLookupStats(
+            source=PARENT_LOOKUP_SOURCE_SKIPPED,
+            missing=len(result),
+            unique=0,
+            attached=0,
+            uncovered=len(result),
+        )
+        return result, stats
+
+    source_resolved = source
+    if precomputed is not None:
+        normalised_child = (
+            precomputed.child_ids.reindex(result.index, fill_value="")
+            .astype("string")
+            .copy()
+        )
+        existing_parent = (
+            precomputed.existing_parent_ids.reindex(result.index)
+            .astype("string")
+            .copy()
+        )
+        lookup_mask = normalised_child.isin(precomputed.need_lookup)
+    else:
+        normalised_child = _normalise_chembl_ids(result[child_column])
+        if parent_column in result.columns:
+            existing_parent = result[parent_column].astype("string").copy()
+        else:
+            existing_parent = pd.Series(pd.NA, index=result.index, dtype="string")
+        lookup_mask = (normalised_child != "") & (
+            existing_parent.isna() | existing_parent.eq("")
+        )
+
+    existing_parent_before = existing_parent.copy()
+
+    raw_unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
+    unique_children = tuple(
+        value for value in raw_unique_children if not pd.isna(value)
+    )
+    catalog_data: MutableMapping[str, str]
+    used_partial_cache = False
+    needs_full_sync = False
+    partial_fetch_used = False
+    full_sync_used = False
+    uncovered_children = 0
+    filters_exclude_parentless = getattr(
+        molecule_catalog,
+        "_filters_exclude_parentless",
+        lambda cfg: False,
+    )
+    parentless_filtered = bool(filters_exclude_parentless(catalog_cfg))
+    json_cache_exists = catalog_cfg.cache_path.is_file()
+    sqlite_exists = catalog_cfg.sqlite_path.is_file()
+
+    from library import testitem_pipeline as pipeline_module
+
+    load_catalog_fn = getattr(pipeline_module, "load_parent_catalog", load_parent_catalog)
+    query_catalog_fn = getattr(pipeline_module, "query_parent_catalog", query_parent_catalog)
+    update_cache_fn = getattr(
+        pipeline_module, "update_parent_catalog_cache", update_parent_catalog_cache
+    )
+    write_cache_fn = getattr(
+        pipeline_module, "write_parent_catalog_cache", write_parent_catalog_cache
+    )
+
+    if catalog is not None:
+        base_view = {key: catalog[key] for key in unique_children if key in catalog}
+        catalog_data = ChainMap({}, base_view)
+    else:
+        catalog_data = {}
+        if unique_children:
+            queried = query_catalog_fn(unique_children, catalog_cfg)
+            if queried:
+                catalog_data.update(queried)
+                used_partial_cache = True
+                if source_resolved is None:
+                    source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+            else:
+                used_partial_cache = sqlite_exists
+                if sqlite_exists:
+                    if source_resolved is None:
+                        source_resolved = PARENT_LOOKUP_SOURCE_CACHE
+
+    parent_map = {
+        key: catalog_data[key] for key in unique_children if key in catalog_data
+    }
+    missing_ids = [key for key in unique_children if key not in parent_map]
+    uncovered_children = len(missing_ids)
+
+    fetched: dict[str, str] = {}
+    if missing_ids and catalog is None:
+        if parentless_filtered:
+            logger.info(
+                "parent_lookup_partial_fetch_skipped_parentless",
+                missing=len(missing_ids),
+                identifiers=missing_ids,
+            )
+        else:
+            try:
+                fetched = molecule_catalog.fetch_parent_catalog_for(
+                    missing_ids,
+                    client=client,
+                    api_cfg=api_cfg,
+                    timeout=timeout,
+                    catalog_cfg=catalog_cfg,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
+                fetched = {}
+            if fetched:
+                partial_fetch_used = True
+                catalog_data.update(fetched)
+                parent_map.update(fetched)
+                missing_ids = [key for key in unique_children if key not in parent_map]
+                uncovered_children = len(missing_ids)
+                if used_partial_cache:
+                    update_cache_fn(fetched, catalog_cfg)
+                else:
+                    write_cache_fn(catalog_data, catalog_cfg)
+                    used_partial_cache = True
+
+    needs_full_sync = catalog is None and uncovered_children > 0
+
+    # Определяем, нужно ли фильтровать parentless элементы
+    if catalog is None:
+        parentless_filtered = bool(filters_exclude_parentless(catalog_cfg))
+
+    skip_full_sync = (
+        missing_ids
+        and catalog is None
+        and needs_full_sync
+        and parentless_filtered
+        and not (json_cache_exists or sqlite_exists)
+    )
+
+    if skip_full_sync:
+        logger.warning(
+            "parent_lookup_full_sync_skipped_parentless",
+            count=len(missing_ids),
+            identifiers=missing_ids,
+        )
+        needs_full_sync = False
+        source_resolved = PARENT_LOOKUP_SOURCE_SKIPPED
+    elif needs_full_sync and parentless_filtered:
+        needs_full_sync = False
+        logger.info(
+            "parent_lookup_skip_full_sync",
+            missing=len(missing_ids),
+            parentless_filtered=True,
+        )
+        if source_resolved is None and not partial_fetch_used:
+            source_resolved = (
+                PARENT_LOOKUP_SOURCE_CACHE if used_partial_cache else PARENT_LOOKUP_SOURCE_SKIPPED
+            )
+
+    if missing_ids and catalog is None and needs_full_sync:
+        cache_before_load = _cache_state(catalog_cfg.cache_path)
+        cache_after_load = cache_before_load
+        try:
+            loaded_catalog = load_catalog_fn(
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("parent_catalog_full_sync_failed", error=str(exc))
+        else:
+            catalog_data = loaded_catalog
+            cache_after_load = _cache_state(catalog_cfg.cache_path)
+            full_sync_used = True
+            source_resolved = _resolve_catalog_load_source(
+                cache_before_load, cache_after_load
+            )
+            if partial_fetch_used:
+                catalog_data.update(fetched)
+            parent_map = {
+                key: catalog_data.get(key, parent_map.get(key, ""))
+                for key in unique_children
+                if key in catalog_data or key in parent_map
+            }
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
+
+    if missing_ids:
+        logger.warning(
+            "parent_lookup_missing_parents",
+            count=len(missing_ids),
+            identifiers=missing_ids,
+        )
+
+    refreshed_parent = normalised_child.map(parent_map).astype("string")
+    refreshed_normalised = refreshed_parent.fillna("").astype("string")
+
+    combined_parent = existing_parent.astype("string").copy()
+
+    update_mask = combined_parent.isna() | combined_parent.eq("")
+    combined_parent.loc[update_mask] = refreshed_parent.loc[update_mask]
+
+    if getattr(catalog_cfg, "force_refresh_existing", False):
+        existing_normalised = combined_parent.fillna("").astype("string")
+        mismatch_mask = existing_normalised != refreshed_normalised
+        if mismatch_mask.any():
+            combined_parent.loc[mismatch_mask] = refreshed_parent.loc[mismatch_mask]
+        existing_normalised = combined_parent.fillna("").astype("string")
+
+    result[parent_column] = combined_parent.astype("string")
+
+    final_normalised = combined_parent.fillna("").astype("string")
+    previous_normalised = existing_parent_before.fillna("").astype("string")
+
+    fallback_mask = (final_normalised != "") & (
+        (previous_normalised == "") | (previous_normalised != final_normalised)
+    )
+    fallback_attached = int(fallback_mask.sum())
+    no_parent_count = int((final_normalised == "").sum())
+    attached = int((final_normalised != "").sum())
+    missing = no_parent_count
+
+    final_source = source_resolved
+    if catalog is not None and not missing_ids:
+        if final_source in (
+            None,
+            PARENT_LOOKUP_SOURCE_CACHE,
+            PARENT_LOOKUP_SOURCE_SKIPPED,
+        ):
+            final_source = PARENT_LOOKUP_SOURCE_LOOKUP
+    if full_sync_used:
+        final_source = PARENT_LOOKUP_SOURCE_SYNC
+    elif partial_fetch_used:
+        final_source = PARENT_LOOKUP_SOURCE_PARTIAL
+    elif final_source is None:
+        final_source = (
+            PARENT_LOOKUP_SOURCE_CACHE
+            if used_partial_cache or catalog is not None
+            else PARENT_LOOKUP_SOURCE_SYNC
+        )
+
+    stats = ParentLookupStats(
+        source=final_source,
+        missing=int(missing),
+        unique=int(len(unique_children)),
+        attached=int(attached),
+        uncovered=int(uncovered_children),
+        failed_ids=tuple(missing_ids),
+        fallback_attached=int(fallback_attached),
+        no_parent=int(no_parent_count),
+    )
+
+    logger.info(
+        "parent_lookup_progress",
+        source=stats.source,
+        unique=stats.unique,
+        attached=stats.attached,
+        missing=stats.missing,
+        uncovered=stats.uncovered,
+        hierarchy_attached=stats.hierarchy_attached,
+        fallback_attached=stats.fallback_attached,
+        no_parent=stats.no_parent,
+    )
+
+    return result, stats
+ 
+ 
 _normalise_parent_identifier = pipeline_catalog._normalise_parent_identifier
 _load_molecule_hierarchy_mapping = pipeline_catalog._load_molecule_hierarchy_mapping
+ 
 
 def add_pubchem_data(
     df: pd.DataFrame,
