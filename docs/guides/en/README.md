@@ -701,7 +701,16 @@ mypy scripts library
 pytest
 ```
 
-Test datasets live in `tests/data`; `library.utils.cli_tools.check_determinism` verifies repeatable CSV output.
+Test datasets live in `tests/data`; `library.utils.cli_tools.check_determinism` verifies repeatable CSV output. The test suite
+is split into thematic layers so contributors can quickly locate relevant coverage:
+
+* `tests/cli/` exercises command-line entry points and argument wiring.
+* `tests/pipelines/` holds end-to-end and post-processing checks for ETL pipelines.
+* `tests/clients/` contains HTTP/API client resilience and retry scenarios.
+* `tests/utils/` captures reusable helpers (CSV writers, rate limiters, logging, etc.).
+
+When adding new tests pick the closest match above; fall back to the repository root only for domain modules (e.g. molecule or
+assay enrichment) that do not yet have a dedicated subpackage.
 
 ## Licence
 
