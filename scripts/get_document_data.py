@@ -1932,6 +1932,18 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    logger.info(
+        "document_all_start",
+        input=str(args.input_csv),
+        output=str(output_path),
+        limit=limit,
+        offset=offset,
+        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+        workers=getattr(args, "workers", all_defaults.workers),
+        batch_size=getattr(args, "batch_size", all_defaults.batch_size),
+        sleep=getattr(args, "sleep", all_defaults.sleep),
+        timeout=getattr(args, "timeout", all_defaults.timeout),
+    )
 
     try:
         with ChemblClient(
