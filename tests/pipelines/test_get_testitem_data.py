@@ -3171,6 +3171,57 @@ def test_attach_parent_molecule_ids_handles_partial_remote_success(
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
+def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
+) -> None:
+    child_field = cfg.sources.chembl.molecule_catalog.child_field
+    df = pd.DataFrame({child_field: ["CHEMBL_NO_PARENT"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    def unexpected_load_parent_catalog(**_: object) -> dict[str, str]:
+        raise AssertionError("load_parent_catalog should not be called")
+
+    monkeypatch.setattr(pipeline, "load_parent_catalog", unexpected_load_parent_catalog)
+    monkeypatch.setattr(pipeline, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        pipeline.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+    )
+
+    captured_warnings: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured_warnings.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(pipeline.logger, "warning", fake_warning)
+
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
+    result, stats = pipeline.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        precomputed=precomputed,
+    )
+
+    assert result[catalog_cfg.parent_field].tolist() == [pd.NA]
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_SKIPPED
+    assert stats.missing == 1
+    assert stats.uncovered == 1
+    skip_events = [event for event, _ in captured_warnings]
+    assert "parent_lookup_full_sync_skipped_parentless" in skip_events
+    assert "parent_lookup_missing_parents" in skip_events
+
+
+@pytest.mark.parametrize("use_precomputed", [False, True])
 def test_attach_parent_molecule_ids_updates_cache_for_reuse(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

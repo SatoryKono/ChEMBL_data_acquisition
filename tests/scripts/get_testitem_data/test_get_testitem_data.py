@@ -71,7 +71,11 @@ def prepare_parent_lookup_data(
     need_lookup_mask = (normalised_child != "") & (existing_parent == "")
     need_lookup = set(normalised_child[need_lookup_mask])
 
-    return pipeline.ParentLookupPreparedData(
+    parent_lookup_cls = getattr(
+        pipeline, "ParentLookupPreparedData", gtd.ParentLookupPreparedData
+    )
+
+    return parent_lookup_cls(
         child_ids=normalised_child,
         existing_parent_ids=existing_parent,
         need_lookup=need_lookup,
@@ -463,7 +467,7 @@ def test_prepare_parent_enrichment_uses_lookup_path(
     monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", fake_lookup)
     monkeypatch.setattr(pipeline, "query_parent_catalog", lambda *_, **__: {})
     monkeypatch.setattr(
-        pipeline.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+        molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
     )
     monkeypatch.setattr(pipeline, "load_parent_catalog", lambda *_, **__: {})
 
@@ -3044,6 +3048,65 @@ def test_attach_parent_molecule_ids_handles_partial_remote_success(
     assert stats.attached == 1
     assert stats.missing == 1
     assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_SYNC
+
+
+@pytest.mark.parametrize("use_precomputed", [False, True])
+def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
+) -> None:
+    child_field = cfg.sources.chembl.molecule_catalog.child_field
+    df = pd.DataFrame({child_field: ["CHEMBL_NO_PARENT"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    attach_module = pipeline
+    if not hasattr(attach_module, "attach_parent_molecule_ids"):
+        attach_module = gtd
+
+    def unexpected_load_parent_catalog(**_: object) -> dict[str, str]:
+        raise AssertionError("load_parent_catalog should not be called")
+
+    monkeypatch.setattr(attach_module, "load_parent_catalog", unexpected_load_parent_catalog)
+    monkeypatch.setattr(attach_module, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+    )
+
+    logger_target = getattr(attach_module, "logger", gtd.logger)
+
+    captured_warnings: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, *args: object, **kwargs: object) -> None:
+        captured_warnings.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(logger_target, "warning", fake_warning)
+
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
+    result, stats = attach_module.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        precomputed=precomputed,
+    )
+
+    assert result[catalog_cfg.parent_field].tolist() == [pd.NA]
+    assert stats.source == getattr(
+        attach_module, "PARENT_LOOKUP_SOURCE_SKIPPED", pipeline.PARENT_LOOKUP_SOURCE_SKIPPED
+    )
+    assert stats.missing == 1
+    assert stats.uncovered == 1
+    skip_events = [event for event, _ in captured_warnings]
+    assert "parent_lookup_full_sync_skipped_parentless" in skip_events
+    assert "parent_lookup_missing_parents" in skip_events
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])

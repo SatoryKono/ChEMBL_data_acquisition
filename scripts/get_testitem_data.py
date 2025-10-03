@@ -645,6 +645,9 @@ def attach_parent_molecule_ids(
     partial_fetch_used = False
     full_sync_used = False
     uncovered_children = 0
+    parentless_filtered = molecule_catalog._filters_exclude_parentless(catalog_cfg)
+    json_cache_exists = catalog_cfg.cache_path.is_file()
+    sqlite_exists = catalog_cfg.sqlite_path.is_file()
 
     if catalog is not None:
         base_view = {key: catalog[key] for key in unique_children if key in catalog}
@@ -659,7 +662,6 @@ def attach_parent_molecule_ids(
                 if source_resolved is None:
                     source_resolved = PARENT_LOOKUP_SOURCE_CACHE
             else:
-                sqlite_exists = catalog_cfg.sqlite_path.is_file()
                 used_partial_cache = sqlite_exists
                 if sqlite_exists:
                     if source_resolved is None:
@@ -698,7 +700,22 @@ def attach_parent_molecule_ids(
 
     needs_full_sync = catalog is None and uncovered_children > 0
 
-    if missing_ids and catalog is None and needs_full_sync:
+    skip_full_sync = (
+        missing_ids
+        and catalog is None
+        and needs_full_sync
+        and parentless_filtered
+        and not (json_cache_exists or sqlite_exists)
+    )
+
+    if skip_full_sync:
+        logger.warning(
+            "parent_lookup_full_sync_skipped_parentless",
+            count=len(missing_ids),
+            identifiers=missing_ids,
+        )
+        source_resolved = PARENT_LOOKUP_SOURCE_SKIPPED
+    elif missing_ids and catalog is None and needs_full_sync:
         cache_before_load = _cache_state(catalog_cfg.cache_path)
         catalog_data = load_parent_catalog(
             client=client,
@@ -720,6 +737,13 @@ def attach_parent_molecule_ids(
         }
         missing_ids = [key for key in unique_children if key not in parent_map]
         uncovered_children = len(missing_ids)
+
+    if missing_ids:
+        logger.warning(
+            "parent_lookup_missing_parents",
+            count=len(missing_ids),
+            identifiers=missing_ids,
+        )
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")
     refreshed_normalised = refreshed_parent.fillna("").astype("string")
