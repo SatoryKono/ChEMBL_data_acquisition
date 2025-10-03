@@ -2,6 +2,8 @@
 
 Changelog
 ~~~~~~~~
+- 2025-02-??: Relaxed reference classification parsing to tolerate non-numeric
+  values introduced in recent exports.
 - 2024-04-??: Initial Python port of the Power Query pipeline used to derive
   analytics-friendly document summaries.
 
@@ -806,7 +808,7 @@ REF_DTYPE = {
     "document_chembl_id": "string",
     "abstract": "string",
     "authors": "string",
-    "classification": "Int64",
+    "classification": "string",
     "document_contains_external_links": "boolean",
     "DOI": "string",
     "first_page": "Int64",
@@ -905,9 +907,11 @@ def _load_reference_document(path: Path) -> pd.DataFrame:
         keep_default_na=True,
     )
 
-    frame["classification"] = frame["classification"].fillna(0)
-    frame["classification"] = frame["classification"].astype("Int64")
-    frame["classification"] = frame["classification"].astype(bool)
+    classification_numeric = pd.to_numeric(
+        frame["classification"],
+        errors="coerce",
+    ).fillna(0)
+    frame["classification"] = classification_numeric.astype("Int64").astype(bool)
     frame = frame.rename(columns={"classification": "doctype_review"})
 
     drop_columns = [

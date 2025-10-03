@@ -318,7 +318,7 @@ def _load_reference_document(path: Path) -> pd.DataFrame:
         path,
         dtype={
             "document_chembl_id": "string",
-            "classification": "Int64",
+            "classification": "string",
             "document_contains_external_links": "boolean",
             "is_experimental_doc": "boolean",
         },
