@@ -4,6 +4,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2025-10-16
+- Refined hierarchy resolution to favour curated relationships and introduce safe fallbacks when source data is incomplete.
+- Extended structured INFO-level logging to cover fallback decisions so hierarchy handling remains auditable.
+
 ## [0.1.2] - 2025-10-09
 - Added consistent INFO-level logging across `get_document_data`, `get_assay_data`, `get_testitem_data`, and `get_activity_data` to make ETL progress traceable.
 
