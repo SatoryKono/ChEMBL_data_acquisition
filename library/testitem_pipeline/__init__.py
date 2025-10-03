@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+from importlib import import_module
+from types import ModuleType
+from typing import Any
+
 import requests
 
 from .catalog import (
@@ -31,6 +35,34 @@ from .catalog import (
     update_parent_catalog_cache,
     write_parent_catalog_cache,
 )
+
+
+class _LazyModuleProxy:
+    """Lazily import *module_name* on first attribute access."""
+
+    __slots__ = ("_module", "_module_name")
+
+    def __init__(self, module_name: str) -> None:
+        self._module_name = module_name
+        self._module: ModuleType | None = None
+
+    def _ensure_loaded(self) -> ModuleType:
+        if self._module is None:
+            self._module = import_module(self._module_name)
+        return self._module
+
+    def __getattr__(self, name: str) -> Any:  # noqa: D401 - behave like the target module
+        module = self._ensure_loaded()
+        return getattr(module, name)
+
+    def __dir__(self) -> list[str]:
+        module = self._ensure_loaded()
+        return sorted(set(dir(module)))
+
+
+testitem_enrichment = _LazyModuleProxy("library.pipelines.testitem.enrichment")
+
+
 from .cli import (
     ReadInputIdsResult,
     TestitemFetchError,
@@ -65,7 +97,6 @@ from .pubchem import (
     resolve_pubchem_cid,
 )
 from library.integration import pubchem_library as pl
-from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.common.csv_utils import write_csv_chunks_deterministic as write_csv_deterministic

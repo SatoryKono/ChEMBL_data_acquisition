@@ -15,7 +15,6 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import io
-from library.pipelines.testitem import enrichment as testitem_enrichment
 from library.integration import chembl_library as cl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
@@ -56,6 +55,7 @@ from .catalog import (
     prepare_parent_enrichment,
     run_parent_enrichment,
 )
+from . import testitem_enrichment
 from .pubchem import PUBCHEM_COLUMNS, add_pubchem_data, augment_pubchem
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
