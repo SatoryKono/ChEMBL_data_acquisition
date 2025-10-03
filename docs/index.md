@@ -5,10 +5,12 @@ Use the sections below to browse manuals, reference sheets, operational processe
 ## Guides
 
 - English
+  - [Quickstart checklist](guides/en/QUICKSTART.md)
   - [Project overview](guides/en/README.md)
   - [Usage walkthrough](guides/en/USAGE.md)
   - [Component summary](guides/en/SUMMARY.md)
 - Русский
+  - [Чек-лист быстрого старта](guides/ru/QUICKSTART.md)
   - [Обзор проекта](guides/ru/README.md)
   - [Руководство по использованию](guides/ru/USAGE.md)
   - [Сводка компонентов](guides/ru/SUMMARY.md)
