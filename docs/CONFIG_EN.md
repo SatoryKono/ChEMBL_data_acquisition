@@ -6,6 +6,23 @@
 * Values are validated by `library.config.load_config`, which calls `Config.model_validate` from Pydantic. [`config.schema.json`](../config.schema.json) documents the same structure for tooling but is not executed during start-up.
 * Settings can be overridden via a `config.local.yaml` placed next to the primary configuration (including custom paths supplied via `--config`), environment variables and CLI flags. Precedence is: `config/config.yaml` < `config.local.yaml` < environment variables < CLI arguments.
 
+### Runtime compatibility
+
+The validated configuration assumes the dependency ranges declared in `pyproject.toml`:
+
+| Component | Supported range |
+| --- | --- |
+| Python | 3.11.x |
+| numpy | >=2.3.3,<3.0 |
+| pandas | >=2.3.3,<3.0 |
+| requests | >=2.32.5,<3.0 |
+| PyYAML | >=6.0.3,<7.0 |
+| openpyxl | >=3.1.5,<4.0 |
+| pyarrow | >=17.0.0,<18.0 |
+| jsonschema | >=4.25.1,<5.0 |
+| pandera | >=0.26.1,<0.27 |
+| pydantic | >=2.11.9,<3.0 |
+
 ## Layout of `config/config.yaml`
 
 | Section | Purpose |

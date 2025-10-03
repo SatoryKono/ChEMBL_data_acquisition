@@ -54,13 +54,18 @@ Helper utilities under `library.utils.cli_tools` are documented in
 
 ## Requirements
 
-| Component | Minimum | Latest tested |
-|-----------|---------|---------------|
-| Python | 3.11 | 3.12 |
-| numpy | 1.26 | 2.3.3 |
-| pandas | 2.0 | 2.3.3 |
-| requests | 2.31 | 2.32.5 |
-| PyYAML | 6.0 | 6.0.3 |
+| Component | Supported range | Latest tested |
+|-----------|-----------------|---------------|
+| Python | 3.11.x | 3.12 |
+| numpy | >=2.3.3,<3.0 | 2.3.3 |
+| pandas | >=2.3.3,<3.0 | 2.3.3 |
+| requests | >=2.32.5,<3.0 | 2.32.5 |
+| PyYAML | >=6.0.3,<7.0 | 6.0.3 |
+| openpyxl | >=3.1.5,<4.0 | 3.1.5 |
+| pyarrow | >=17.0.0,<18.0 | 17.0.0 |
+| jsonschema | >=4.25.1,<5.0 | 4.25.1 |
+| pandera | >=0.26.1,<0.27 | 0.26.1 |
+| pydantic | >=2.11.9,<3.0 | 2.11.9 |
 
 Follow the installation, configuration, and QA guidance in the dedicated docs:
 
