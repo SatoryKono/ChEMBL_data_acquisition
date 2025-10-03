@@ -965,6 +965,21 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
     assert payload.get("column") == "parent_molecule_chembl_id"
 
 
+def test_load_molecule_hierarchy_lookup_normalises_no_parent(
+    tmp_path: Path, cfg: Config
+) -> None:
+    path = tmp_path / "hierarchy.csv"
+    path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\n"
+        "CHEMBL1,NO PARENT\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+
+    assert result == {"CHEMBL1": None}
+
+
 def test_prepare_pubchem_caches_primes_local_parent_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
