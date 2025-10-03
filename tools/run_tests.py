@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 import time
@@ -14,9 +15,13 @@ from typing import Any
 
 import pytest
 
+from scripts.run_test_suite import SUCCESS_RATE_THRESHOLD
+
 
 REPO_NAME = "SatoryKono/ChEMBL_data_acquisition"
 
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TestRecord:
@@ -256,13 +261,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.pytest_args:
         pytest_args.extend(args.pytest_args)
 
-    exit_code = pytest.main(pytest_args, plugins=[collector])
+    pytest_exit_code = pytest.main(pytest_args, plugins=[collector])
+    exit_code = int(pytest_exit_code)
 
     data = _build_json(collector, report_path=args.json)
     _write_markdown(args.markdown, data)
+
+    success_rate_percent = data["summary"]["success_rate"]
+    success_rate_ratio = success_rate_percent / 100.0
+    if success_rate_ratio < SUCCESS_RATE_THRESHOLD:
+        logger.error(
+            "Success rate %.2f%% is below the required threshold of %.2f%%",
+            success_rate_percent,
+            SUCCESS_RATE_THRESHOLD * 100,
+        )
+        if exit_code == 0:
+            exit_code = 1
 
     return exit_code
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

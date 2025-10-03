@@ -14,7 +14,7 @@ from typing import Any, Sequence
 import pytest
 
 
-SUCCESS_RATE_THRESHOLD = 0.75
+SUCCESS_RATE_THRESHOLD = 0.80
 
 
 logger = logging.getLogger(__name__)
