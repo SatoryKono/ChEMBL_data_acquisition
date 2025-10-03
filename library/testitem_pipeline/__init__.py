@@ -43,6 +43,41 @@ _CATALOG_EXPORTS = (
     "write_parent_catalog_cache",
 )
 
+_CLI_EXPORTS = (
+    "ReadInputIdsResult",
+    "TestitemFetchError",
+    "TestitemPipelineOptions",
+    "TestitemPipelineStageError",
+    "_FETCH_ERROR_SAMPLE_SIZE",
+    "_log_missing_identifier_summary",
+    "_prepare_pubchem_api_cfg",
+    "apply_testitem_enrichment",
+    "fetch_testitems",
+    "finalize_output",
+    "integrate_missing_identifiers",
+    "read_input_ids",
+    "run_testitem_pipeline",
+)
+
+_PUBCHEM_EXPORTS = (
+    "PUBCHEM_CID_CACHE_ENCODING",
+    "PUBCHEM_COLUMNS",
+    "_CID_CACHE_MISSING",
+    "_PUBCHEM_CACHE_SCHEMA_VERSION",
+    "_PUBCHEM_SESSION_LOCK",
+    "_PUBCHEM_SESSION_SIGNATURE",
+    "_load_pubchem_cid_cache",
+    "_merge_pubchem_properties",
+    "_prepare_pubchem_caches",
+    "_prefetch_parents",
+    "_pubchem_session_signature",
+    "_resolve_pubchem_cids",
+    "_write_pubchem_cid_cache",
+    "add_pubchem_data",
+    "augment_pubchem",
+    "resolve_pubchem_cid",
+)
+
 
 def _load_local_module(module_name: str) -> ModuleType:
     """Load a sibling module directly from disk as a fallback."""
@@ -78,6 +113,20 @@ def _export_from_module(module: ModuleType, names: tuple[str, ...]) -> None:
 
     for name in names:
         globals()[name] = getattr(module, name)
+
+
+def _import_optional(submodule: str) -> ModuleType:
+    """Import ``submodule`` from this package with a local fallback."""
+
+    qualified_name = f"{__name__}.{submodule}"
+    try:
+        return import_module(qualified_name)
+    except ModuleNotFoundError as exc:
+        if exc.name != qualified_name:
+            raise
+    return _load_local_module(submodule)
+
+
 catalog_module_name = f"{__name__}.catalog"
 catalog_spec = find_spec(catalog_module_name)
 
@@ -114,40 +163,11 @@ class _LazyModuleProxy:
 
 testitem_enrichment = _LazyModuleProxy("library.pipelines.testitem.enrichment")
 
+cli_module = _import_optional("cli")
+_export_from_module(cli_module, _CLI_EXPORTS)
 
-from .cli import (
-    ReadInputIdsResult,
-    TestitemFetchError,
-    TestitemPipelineOptions,
-    TestitemPipelineStageError,
-    _FETCH_ERROR_SAMPLE_SIZE,
-    _log_missing_identifier_summary,
-    _prepare_pubchem_api_cfg,
-    apply_testitem_enrichment,
-    fetch_testitems,
-    finalize_output,
-    integrate_missing_identifiers,
-    read_input_ids,
-    run_testitem_pipeline,
-)
-from .pubchem import (
-    PUBCHEM_CID_CACHE_ENCODING,
-    PUBCHEM_COLUMNS,
-    _CID_CACHE_MISSING,
-    _PUBCHEM_CACHE_SCHEMA_VERSION,
-    _PUBCHEM_SESSION_LOCK,
-    _PUBCHEM_SESSION_SIGNATURE,
-    _load_pubchem_cid_cache,
-    _merge_pubchem_properties,
-    _prepare_pubchem_caches,
-    _prefetch_parents,
-    _pubchem_session_signature,
-    _resolve_pubchem_cids,
-    _write_pubchem_cid_cache,
-    add_pubchem_data,
-    augment_pubchem,
-    resolve_pubchem_cid,
-)
+pubchem_module = _import_optional("pubchem")
+_export_from_module(pubchem_module, _PUBCHEM_EXPORTS)
 from library.integration import pubchem_library as pl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
