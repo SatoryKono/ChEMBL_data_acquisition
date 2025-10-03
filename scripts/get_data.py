@@ -732,10 +732,23 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     cache_path = catalog_cfg.cache_path
     sqlite_path = catalog_cfg.sqlite_path
 
-    if cache_path.exists() and sqlite_path.exists():
+    cache_ready = cache_path.is_file()
+    sqlite_ready = sqlite_path.is_file()
+
+    if cache_ready and sqlite_ready:
+        _LOGGER.info(
+            "parent_catalog_warm_skip",
+            cache=str(cache_path),
+            sqlite=str(sqlite_path),
+        )
         return
 
     testitem_cfg = chembl_sources.pipelines.testitem
+    _LOGGER.info(
+        "parent_catalog_warm_start",
+        cache=str(cache_path),
+        sqlite=str(sqlite_path),
+    )
     with ChemblClient(
         api=chembl_sources.api,
         retry=config.system.retry,
@@ -747,6 +760,11 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
             catalog_cfg=catalog_cfg,
             timeout=testitem_cfg.timeout,
         )
+    _LOGGER.info(
+        "parent_catalog_warm_done",
+        cache=str(cache_path),
+        sqlite=str(sqlite_path),
+    )
 
 
 def run_pipeline(cfg: PipelineRunConfig) -> int:
