@@ -2026,6 +2026,16 @@ def fetch_iuphar(
 
     logger.info("fetch_iuphar_start", output=str(output_csv))
     merge_column = cfg.target.all.uniprot_column
+    if merge_column not in chembl_df.columns:
+        logger.error(
+            "invalid_uniprot_column",
+            configured=merge_column,
+            available=sorted(chembl_df.columns.tolist()),
+        )
+        raise PipelineError(
+            f"Configured UniProt column '{merge_column}' is not present in the ChEMBL target data."
+        )
+
     plan = _build_uniprot_query_plan(chembl_df, cfg)
     lookup_series = _resolve_uniprot_matches(plan, uniprot_df)
     if lookup_series.empty and len(chembl_df.index):
@@ -2044,15 +2054,6 @@ def fetch_iuphar(
         chembl_for_merge = chembl_df.drop(columns=["uniprot_id"], errors="ignore")
     else:
         chembl_for_merge = chembl_df.copy()
-
-    if merge_column not in chembl_for_merge.columns:
-        logger.warning("missing_uniprot_column", column=merge_column)
-        placeholder = pd.Series(
-            UNIPROT_MISSING_VALUE,
-            index=chembl_for_merge.index,
-            dtype=object,
-        )
-        chembl_for_merge = chembl_for_merge.assign(**{merge_column: placeholder})
 
     mapping_series = chembl_for_merge.get("mapping_uniprot_id")
     if mapping_series is not None:
