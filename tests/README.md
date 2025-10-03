@@ -9,6 +9,10 @@ The test suite is organised around the key scenarios of the ChEMBL data acquisit
 
 Shared fixtures live in `tests/conftest.py`. They configure a deterministic environment, disable outbound HTTP calls and expose helpers such as `sample_input_csv` and `snapshot_resource`.
 
+## Integration enrichment checklist
+
+- [x] PubChem augmentation: cache hits/misses, polymer handling and TTL expiry (`tests/integration/test_pubchem_augmentation.py`).
+
 ## Running tests and generating reports
 
 Install dependencies (see the repository `README.md`) and run the suite via the reporting wrapper:
