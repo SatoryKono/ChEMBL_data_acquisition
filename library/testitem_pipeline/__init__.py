@@ -11,11 +11,14 @@ from importlib.util import (
     spec_from_file_location,
 )
 from types import ModuleType
-from typing import Any
+from typing import Any, Iterator
 
 import pathlib
 
 import requests
+
+# ===== changelog =====
+# 2024-05-21: Enhance optional module loader to support compiled-only installs.
 
 _CATALOG_EXPORTS = (
     "LoadMoleculeHierarchyLookup",
@@ -85,7 +88,7 @@ def _load_local_module(module_name: str) -> ModuleType:
 
     package_name = __name__
     qualified_name = f"{package_name}.{module_name}"
-    resource_name = f"{module_name}.py"
+    suffixes = (".py", ".pyc")
 
     def _load_from_path(module_path: pathlib.Path) -> ModuleType:
         spec = spec_from_file_location(qualified_name, module_path)
@@ -104,22 +107,42 @@ def _load_local_module(module_name: str) -> ModuleType:
             raise ModuleNotFoundError(msg) from exc
         return module
 
-    try:
-        module_resource = resources.files(package_name).joinpath(resource_name)
-    except ModuleNotFoundError:
-        module_resource = None
+    def _iter_candidate_paths() -> Iterator[pathlib.Path]:
+        try:
+            package_files = resources.files(package_name)
+        except ModuleNotFoundError:
+            package_files = None
 
-    if module_resource is not None and module_resource.is_file():
-        with resources.as_file(module_resource) as module_path:
-            return _load_from_path(pathlib.Path(module_path))
+        if package_files is not None:
+            for suffix in suffixes:
+                resource_name = f"{module_name}{suffix}"
+                module_resource = package_files.joinpath(resource_name)
+                if module_resource.is_file():
+                    with resources.as_file(module_resource) as module_path:
+                        yield pathlib.Path(module_path)
 
-    local_path = pathlib.Path(__file__).resolve().with_name(resource_name)
-    if local_path.is_file():
-        return _load_from_path(local_path)
+        base_path = pathlib.Path(__file__).resolve().parent
+        for suffix in suffixes:
+            candidate = base_path / f"{module_name}{suffix}"
+            if candidate.is_file():
+                yield candidate
 
+        pycache = base_path / "__pycache__"
+        if pycache.is_dir():
+            pattern = f"{module_name}.*.pyc"
+            for compiled in pycache.glob(pattern):
+                yield compiled
+
+    for module_path in _iter_candidate_paths():
+        try:
+            return _load_from_path(module_path)
+        except ModuleNotFoundError:
+            continue
+
+    resource_list = ", ".join(f"{module_name}{suffix}" for suffix in suffixes)
     msg = (
         f"Optional module '{qualified_name}' is not available. "
-        f"Expected file '{resource_name}' is missing from this installation."
+        f"Expected one of ({resource_list}) to be present in this installation."
     )
     raise ModuleNotFoundError(msg)
 
