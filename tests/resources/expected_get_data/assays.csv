@@ -1,0 +1,3 @@
+assay_chembl_id,target_chembl_id,document_chembl_id,description,description_length
+CHEMBLA1,CHEMBLT1,CHEMBL123,Binding assay,13
+CHEMBLA2,CHEMBLT2,CHEMBL456,Functional assay,16

@@ -24,3 +24,18 @@ To focus on a subset, pass extra arguments after `--pytest-args`, for example `p
 Individual modules can be targeted by pointing pytest at a directory, for example `pytest tests/unit` or `pytest tests/integration -k enrich` to filter by test name.
 
 When developing additional scenarios, keep the guardrails documented in `tests/conftest.py` (seed fixing, network ban, temporary directories) to preserve reproducibility. All new tests should emit deterministic output so that `tools/run_tests.py` can regenerate the reports without spurious diffs.
+
+## End-to-end scenario checklist
+
+`tests/e2e/test_get_data_end_to_end.py` drives the `scripts.get_data` orchestrator against the miniature fixtures in `tests/data`. The stubbed pipelines validate inputs, perform deterministic normalisation/post-processing and emit the canonical filenames in a temporary directory. The assertions cover the full QA checklist:
+
+- [x] Загрузка входных CSV и валидация схемы/типов/обязательных колонок
+- [x] Нормализация и предобработка (включая кодировки, разделители)
+- [x] Обогащение данными из словарей/справочников (в т.ч. отсутствие соответствий)
+- [x] Правила трансформации и расчета флагов/категорий
+- [x] Обработка пропусков, дублей, конфликтных значений
+- [x] Детализация логирования и уровни WARN/ERROR при аномалиях
+- [x] Итоговая сборка результатов: структура, сортировка, инварианты
+- [x] Постобработка и экспорт: корректность форматов/имён/путей
+- [x] Деградационные кейсы: частичные данные, пустые файлы, неверный заголовок
+- [x] Идемпотентность: повторный запуск на тех же входах даёт тот же результат
