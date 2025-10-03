@@ -28,7 +28,9 @@ from library import io
 from library.integration import molecule_catalog
 from library.integration import pubchem_library as pl
 import library.pipelines.testitem as pipeline
+import library.pipelines.testitem.catalog as legacy_catalog_module
 import library.pipelines.testitem.cli as pipeline_cli
+import library.testitem_pipeline.catalog as modern_catalog_module
 import library.testitem_pipeline.cli as modern_pipeline_cli
 
 from library.config import ApiCfg, Config, IoCfg
@@ -71,7 +73,13 @@ def prepare_parent_lookup_data(
     need_lookup_mask = (normalised_child != "") & (existing_parent == "")
     need_lookup = set(normalised_child[need_lookup_mask])
 
-    return pipeline.ParentLookupPreparedData(
+    parent_lookup_cls = getattr(
+        pipeline,
+        "ParentLookupPreparedData",
+        modern_catalog_module.ParentLookupPreparedData,
+    )
+
+    return parent_lookup_cls(
         child_ids=normalised_child,
         existing_parent_ids=existing_parent,
         need_lookup=need_lookup,
@@ -3226,6 +3234,53 @@ def test_attach_parent_molecule_ids_fetch_failure(
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
     )
     result, stats = pipeline.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        precomputed=precomputed,
+    )
+
+    parent_values = result[catalog_cfg.parent_field].tolist()
+    assert parent_values == [pd.NA]
+    assert stats.unique == 1
+    assert stats.attached == 0
+    assert stats.missing == 1
+    assert stats.source == pipeline.PARENT_LOOKUP_SOURCE_SYNC
+
+
+@pytest.mark.parametrize("use_precomputed", [False, True])
+def test_attach_parent_molecule_ids_full_sync_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cfg: Config,
+    use_precomputed: bool,
+) -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+
+    catalog_cfg = cfg.sources.chembl.molecule_catalog.model_copy(deep=True)
+    catalog_cfg.cache_path = tmp_path / "catalog.json"
+    catalog_cfg.sqlite_path = tmp_path / "catalog.sqlite"
+
+    def failing_load_parent_catalog(**_: object) -> dict[str, str]:
+        raise requests.RequestException("boom")
+
+    monkeypatch.setattr(pipeline, "load_parent_catalog", failing_load_parent_catalog)
+
+    monkeypatch.setattr(
+        legacy_catalog_module.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+
+    precomputed = (
+        prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
+    )
+
+    attach_fn = legacy_catalog_module.attach_parent_molecule_ids
+
+    result, stats = attach_fn(
         df,
         client=object(),
         api_cfg=cfg.sources.chembl.api,
