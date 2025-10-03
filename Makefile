@@ -12,7 +12,7 @@ ifneq ($(ENV_FILES),)
   export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILES))
 endif
 
-.PHONY: init lint test smoke build release clean
+.PHONY: init lint test smoke test-report build release clean
 
 init: $(PYTHON_BIN)
 
@@ -33,11 +33,16 @@ test: $(PYTHON_BIN)
 	$(VENV)/bin/pytest
 
 smoke: $(PYTHON_BIN)
-	CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
+        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data $(VENV)/bin/pytest tests/smoke -k "not testitem"
+
+test-report: $(PYTHON_BIN)
+        PYTHONHASHSEED=$${PYTHONHASHSEED:-0} \
+        CHEMBL_DA_BASE_PATH=$(PWD)/tests/data \
+        $(PYTHON_BIN) -m scripts.run_test_suite --suite full --report-dir $(PWD)/reports
 
 build: $(PYTHON_BIN)
-	rm -rf dist
-	$(PYTHON_BIN) -m build
+        rm -rf dist
+        $(PYTHON_BIN) -m build
 
 release: build
 	$(PYTHON_BIN) -m twine check dist/*
