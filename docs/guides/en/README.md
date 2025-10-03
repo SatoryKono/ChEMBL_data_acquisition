@@ -23,7 +23,7 @@ The primary documentation and reference material live in this directory.
 
 | Component | Minimum supported | Latest tested |
 |-----------|-------------------|---------------|
-| Python    | ≥3.11             | 3.12          |
+| Python    | ≥3.11,<3.13       | 3.12          |
 | numpy     | ≥1.26             | 2.3.3         |
 | pandas    | ≥2.0              | 2.3.3         |
 | requests  | ≥2.31             | 2.32.5        |
