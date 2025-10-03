@@ -75,7 +75,7 @@
 | `force_refresh_existing` | `false` | При `true` пересобирает связи родитель→потомок даже для записей с уже заполненным родителем, заставляя использовать данные из кэша/ChEMBL. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | Список полей, которые запрашиваются у ChEMBL при построении или обновлении каталога; расширяйте его для дополнительных атрибутов. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Набор фильтров, добавляемых ко всем запросам; по умолчанию выбирает только записи с заполненным родителем в ChEMBL. |
-| `hierarchy_lookup_path` | `../dictionary/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
+| `hierarchy_lookup_path` | `dictionary/_testitem/molecule_hierarchy.csv` | Необязательный CSV с готовыми связями родитель→потомок, который используется офлайн до обращения к ChEMBL; переопределяйте при распространении собственной витрины или переносе каталога. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Кодировка, применяемая при чтении CSV иерархии; меняйте, если файл сохранён в другом наборе символов (например, Latin-1 из старых выгрузок). |
 | `hierarchy_lookup_delimiter` | `,` | Разделитель столбцов, ожидаемый загрузчиком иерархии; укажите `;` или табуляцию для файлов, подготовленных региональными командами. |
 | `page_size` | `500` | Количество записей в одном запросе при перепостроении каталога. |
@@ -208,7 +208,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | --- | --- | --- |
 | `enable` | `true` | Включает стадию расчёта `salt_chembl_id` и флагов из каталога молекул. |
 | `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV со столбцами `molecule_chembl_id`, `natural_product`, `prodrug`, `polymer_flag`. |
-| `sources.molecule_hierarchy_path` | `../dictionary/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
+| `sources.molecule_hierarchy_path` | `dictionary/_testitem/molecule_hierarchy.csv` | CSV с соответствиями дочерней и родительской молекулы. |
 | `output.salt_as_null_when_absent` | `true` | При `true` несолевые соединения дают `null`, при `false` — символ `-`. |
 | `flags.coerce_to_bool` | `true` | Нормализует значения вида `Y/N`, `1/0`, `yes/no` в булев тип pandas. |
 | `flags.parent_fallback` | `true` | Подтягивает флаги из родителя, если у дочерней записи они пусты. |

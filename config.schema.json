@@ -477,7 +477,7 @@
               "type": "null"
             }
           ],
-          "default": "../dictionary/molecule_hierarchy.csv",
+          "default": "dictionary/_testitem/molecule_hierarchy.csv",
           "title": "Hierarchy Lookup Path"
         },
         "hierarchy_lookup_encoding": {
@@ -1970,7 +1970,7 @@
           "type": "string"
         },
         "molecule_hierarchy_path": {
-          "default": "../dictionary/molecule_hierarchy.csv",
+          "default": "dictionary/_testitem/molecule_hierarchy.csv",
           "format": "path",
           "title": "Molecule Hierarchy Path",
           "type": "string"
