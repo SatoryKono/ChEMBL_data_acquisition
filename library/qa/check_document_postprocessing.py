@@ -21,7 +21,7 @@ import pandas as pd
 import yaml
 
 from library.common.csv_utils import write_csv_deterministic
-from library.pipelines.document.postprocessing import to_text
+from library.common.text_utils import to_text
 
 
 # ===== Parameters ============================================================
