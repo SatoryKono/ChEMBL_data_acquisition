@@ -9,7 +9,7 @@
 - выгрузки IUPHAR (`_IUPHAR/*.csv`) для обогащения таргетов семействами и идентификаторами Guide to PHARMACOLOGY;
 - кешированные ответы UniProt (`_uniprot/*.json`), задействованные при работе офлайн-режимов `get_target_data` и `pipeline_targets_main`.
 
-Пути к файлам зашиты в конфигурацию (см. [docs/reference/en/CONFIG.md](../../docs/reference/en/CONFIG.md#target-data)).
+Пути к файлам зашиты в конфигурацию (см. [docs/en/reference/CONFIG.md](../../docs/en/reference/CONFIG.md#target-data)).
 
 ## Структура
 | Путь | Назначение |
@@ -20,10 +20,10 @@
 | `_uniprot/*.json` | Кеш ответов UniProt REST API; каждая запись соответствует UniProt accession и содержит аннотации по последовательности, таксономии и синонимам. |
 
 ## Обновление
-1. Сформируйте входной CSV с `target_chembl_id` (см. [DATA_SCHEMA.md](../../docs/reference/en/DATA_SCHEMA.md#input-tables)).
+1. Сформируйте входной CSV с `target_chembl_id` (см. [DATA_SCHEMA.md](../../docs/en/reference/DATA_SCHEMA.md#input-tables)).
 2. Для онлайнового обновления запустите `python -m scripts.get_target_data all --input <path>/targets.csv --output <path>/targets.csv --raw-out <path>/raw.csv`.
 3. Для проверки офлайн-режимов используйте `python -m library.utils.cli_tools.pipeline_targets_main --input <path>/targets.csv --output-dir <path>/cache`.
-4. При изменении классификатора типов обновите `targets_type.csv` и протестируйте `finalise_targets` (см. [docs/processes/en/ETL_PROCESS.md](../../docs/processes/en/ETL_PROCESS.md#finalisation)).
+4. При изменении классификатора типов обновите `targets_type.csv` и протестируйте `finalise_targets` (см. [docs/en/processes/ETL_PROCESS.md](../../docs/en/processes/ETL_PROCESS.md#finalisation)).
 5. Обязательно задокументируйте источник данных (ссылка на выгрузку UniProt/IUPHAR) и дату в этом README.
 
 ## Проверка качества

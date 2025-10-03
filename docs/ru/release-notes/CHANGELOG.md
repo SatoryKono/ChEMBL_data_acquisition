@@ -1,6 +1,6 @@
 # Журнал изменений
 
-> **Языки:** [English](../en/CHANGELOG.md) · [Русский](./CHANGELOG.md)
+> **Языки:** [English](../../en/release-notes/CHANGELOG.md) · [Русский](./CHANGELOG.md)
 
 Все значимые изменения проекта фиксируются в этом файле.
 

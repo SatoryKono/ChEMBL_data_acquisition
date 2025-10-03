@@ -1,7 +1,7 @@
 # Руководство по использованию
 
 Документ описывает стандартные аргументы CLI, типовые сценарии запуска и
-вспомогательные утилиты. Для английской версии обратитесь к `docs/guides/en/USAGE.md`.
+вспомогательные утилиты. Для английской версии обратитесь к `docs/en/guides/USAGE.md`.
 
 ## Общие параметры CLI
 
@@ -341,7 +341,7 @@ PubChem-дополнение добавляет детерминированны
 
 Чтобы получить `parent_molecule_chembl_id` для агрегаций, выгрузку необходимо объединить с каталогом
 родителей ChEMBL. Путь к локальному JSON задаётся через
-[`sources.chembl.molecule_catalog.cache_path`](../../reference/ru/CONFIG.md#sources-chembl-molecule-catalog); убедитесь,
+[`sources.chembl.molecule_catalog.cache_path`](../../ru/reference/CONFIG.md#sources-chembl-molecule-catalog); убедитесь,
 что файл доступен исполнителю, либо задайте новое расположение переменной окружения
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
 
@@ -426,7 +426,7 @@ get-activity-data
 ## Переменные окружения
 
 Формат `CHEMBL_DA__РАЗДЕЛ__...__КЛЮЧ`. Для популярных путей доступны короткие алиасы (например, `CHEMBL_DA_OUTDIR` →
-`local.io.output_dir`). Полный список приведён в `docs/reference/ru/CONFIG.md`.
+`local.io.output_dir`). Полный список приведён в `docs/ru/reference/CONFIG.md`.
 
 ## Запуск тестов
 

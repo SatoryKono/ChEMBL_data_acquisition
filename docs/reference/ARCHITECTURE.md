@@ -1,6 +1,6 @@
 # Architecture overview
 
-This reference maps the shared architecture behind the ChEMBL data acquisition utilities. It complements the per-pipeline walkthroughs documented in [ETL data flow](../processes/en/ETL_DATA_FLOW.md).
+This reference maps the shared architecture behind the ChEMBL data acquisition utilities. It complements the per-pipeline walkthroughs documented in [ETL data flow](../en/processes/ETL_DATA_FLOW.md).
 
 ## System context
 
@@ -117,7 +117,7 @@ graph TD
 
 ## How pipelines collaborate
 
-For a cross-pipeline view of identifiers and downstream consumers, refer to the [Cross-pipeline relationships](../processes/en/ETL_DATA_FLOW.md#cross-pipeline-relationships) section. That narrative explains how assay, activity, document, target, and test item exports reinforce each other via shared IDs.
+For a cross-pipeline view of identifiers and downstream consumers, refer to the [Cross-pipeline relationships](../en/processes/ETL_DATA_FLOW.md#cross-pipeline-relationships) section. That narrative explains how assay, activity, document, target, and test item exports reinforce each other via shared IDs.
 
 ## Design implications for contributors
 
