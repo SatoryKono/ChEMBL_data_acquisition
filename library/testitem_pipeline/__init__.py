@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import sys
 from importlib import import_module, resources
@@ -19,6 +20,7 @@ import requests
 
 # ===== changelog =====
 # 2024-05-21: Enhance optional module loader to support compiled-only installs.
+# 2024-05-22: Build exports list programmatically to avoid merge artifacts.
 
 _CATALOG_EXPORTS = (
     "LoadMoleculeHierarchyLookup",
@@ -166,6 +168,22 @@ def _import_optional(submodule: str) -> ModuleType:
     return _load_local_module(submodule)
 
 
+def _collect_exports(
+    *groups: tuple[str, ...], extras: tuple[str, ...] = (),
+) -> list[str]:
+    """Collect export names from *groups* while preserving order and uniqueness."""
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    for name in itertools.chain.from_iterable(groups + (extras,)):
+        if name not in seen:
+            seen.add(name)
+            ordered.append(name)
+
+    return ordered
+
+
 catalog_module_name = f"{__name__}.catalog"
 catalog_spec = find_spec(catalog_module_name)
 
@@ -216,70 +234,24 @@ from library.metadata import file_sha256, write_meta_yaml
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 
-__all__ = [
+_EXTRA_EXPORTS = (
     "ChemblClient",
-    "LoadMoleculeHierarchyLookup",
-    "PARENT_LOOKUP_SOURCE_CACHE",
-    "PARENT_LOOKUP_SOURCE_LOOKUP",
-    "PARENT_LOOKUP_SOURCE_PARTIAL",
-    "PARENT_LOOKUP_SOURCE_SKIPPED",
-    "PARENT_LOOKUP_SOURCE_SYNC",
-    "PUBCHEM_CID_CACHE_ENCODING",
-    "PUBCHEM_COLUMNS",
-    "ParentEnrichmentPreparation",
-    "ParentEnrichmentResult",
-    "ParentLookupPreparedData",
-    "ParentLookupStats",
-    "ReadInputIdsResult",
-    "TestitemFetchError",
-    "TestitemPipelineOptions",
-    "TestitemPipelineStageError",
-    "_CID_CACHE_MISSING",
-    "_DEFAULT_CATALOG_CFG",
-    "_FETCH_ERROR_SAMPLE_SIZE",
-    "_MOLECULE_HIERARCHY_COLUMNS",
-    "_PUBCHEM_CACHE_SCHEMA_VERSION",
-    "_PUBCHEM_SESSION_LOCK",
-    "_PUBCHEM_SESSION_SIGNATURE",
-    "_TYPO_PARENT_COLUMN",
-    "_load_pubchem_cid_cache",
-    "_log_missing_identifier_summary",
-    "_merge_parent_stats",
-    "_merge_pubchem_properties",
-    "_prepare_pubchem_api_cfg",
-    "_prepare_pubchem_caches",
-    "_prefetch_parents",
-    "_pubchem_session_signature",
-    "_resolve_pubchem_cids",
-    "_write_pubchem_cid_cache",
-    "add_pubchem_data",
     "analyze_table_quality",
-    "apply_testitem_enrichment",
-    "attach_parent_molecule_ids",
-    "augment_pubchem",
-    "ensure_no_parant_column",
-    "fetch_testitems",
     "file_sha256",
-    "finalize_output",
-    "integrate_missing_identifiers",
     "json",
-    "load_molecule_hierarchy_lookup",
-    "load_parent_catalog",
     "logger",
-    "molecule_catalog",
     "pc",
     "pl",
-    "prepare_parent_enrichment",
-    "query_parent_catalog",
-    "read_input_ids",
     "requests",
-    "resolve_pubchem_cid",
-    "run_parent_enrichment",
-    "run_testitem_pipeline",
     "testitem_enrichment",
-    "update_parent_catalog_cache",
     "validate_testitems",
-    "write_meta_yaml",
     "write_csv_deterministic",
-    "write_parent_catalog_cache",
-]
+    "write_meta_yaml",
+)
+
+__all__ = _collect_exports(
+    _CATALOG_EXPORTS,
+    _CLI_EXPORTS,
+    _PUBCHEM_EXPORTS,
+    extras=_EXTRA_EXPORTS,
+)
