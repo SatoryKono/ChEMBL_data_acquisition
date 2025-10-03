@@ -162,10 +162,9 @@ def _load_molecule_hierarchy_mapping(
         subset[parent_column] = frame[parent_column].copy()
 
     for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = (
-            subset[column].fillna("").astype("string").str.strip().str.upper()
-        )
+        subset[column] = subset[column].astype("string").str.strip().str.upper()
 
+    subset = subset[subset["molecule_chembl_id"].notna()]
     subset = subset[subset["molecule_chembl_id"] != ""]
     subset = subset.drop_duplicates(
         subset=["molecule_chembl_id"],
@@ -174,9 +173,12 @@ def _load_molecule_hierarchy_mapping(
 
     lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = parent_id or None
-        if parent is not None and parent == molecule_id:
+        if pd.isna(molecule_id) or molecule_id == "":
+            continue
+        if pd.isna(parent_id) or parent_id == "" or parent_id == molecule_id:
             parent = None
+        else:
+            parent = parent_id
         lookup[molecule_id] = parent
 
     return lookup

@@ -183,7 +183,8 @@ def _load_molecule_hierarchy_mapping(
 
     lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent: str | None
+        if pd.isna(molecule_id) or molecule_id == "":
+            continue
         if pd.isna(parent_id) or parent_id == "" or parent_id == molecule_id:
             parent = None
         else:
@@ -263,11 +264,21 @@ def load_molecule_hierarchy_lookup(
     except ValueError as exc:
         raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
 
-    lookup = dict(raw_lookup)
+    lookup: dict[str, str | None] = {}
+    for key, value in raw_lookup.items():
+        if value is None:
+            lookup[key] = None
+            continue
+        if isinstance(value, str):
+            trimmed = value.strip()
+            lookup[key] = trimmed or None
+            continue
+        lookup[key] = None
+
     if not lookup:
         return {}
 
-    attached_rows = sum(1 for value in lookup.values() if value is not None and value != "")
+    attached_rows = sum(1 for value in lookup.values() if value is not None)
 
     logger.info(
         "molecule_hierarchy_lookup_loaded",
@@ -635,20 +646,22 @@ def prepare_parent_enrichment(
                 df[parent_column] = df[parent_column].astype("string")
             else:
                 df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
-            df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
-            existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
+            resolved_strings = resolved_values.astype("string")
+            df.loc[resolved_strings.index, parent_column] = resolved_strings
+            existing_parent.loc[resolved_strings.index] = resolved_strings
             hierarchy_attached = int(hierarchy_mask.sum())
 
-            has_parent_mask = resolved_values.notna()
+            has_parent_mask = resolved_strings.notna()
             if has_parent_mask.any():
-                parent_updates = resolved_values[has_parent_mask].astype("string")
+                parent_updates = resolved_strings[has_parent_mask]
                 df.loc[parent_updates.index, parent_column] = parent_updates
-                existing_parent.loc[parent_updates.index] = parent_updates.astype("string")
+                existing_parent.loc[parent_updates.index] = parent_updates
 
     if getattr(catalog_cfg, "force_refresh_existing", False):
         need_lookup_mask = normalised_ids != ""
     else:
-        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
+        empty_parent_mask = existing_parent.isna() | existing_parent.eq("")
+        need_lookup_mask = (normalised_ids != "") & empty_parent_mask
     initial_need_lookup = set(normalised_ids[need_lookup_mask])
     if dictionary_resolved_children:
         need_lookup = initial_need_lookup - dictionary_resolved_children

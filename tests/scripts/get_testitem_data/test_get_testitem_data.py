@@ -930,6 +930,22 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
     }
 
 
+def test_load_molecule_hierarchy_mapping_preserves_null(
+    tmp_path: Path, cfg: Config
+) -> None:
+    path = tmp_path / "hierarchy.csv"
+    path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL1,\nCHEMBL2,CHEMBL3\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    mapping = gtd._load_molecule_hierarchy_mapping(
+        str(path), cfg.io.csv_encoding, cfg.io.csv_sep
+    )
+
+    assert mapping == {"CHEMBL1": None, "CHEMBL2": "CHEMBL3"}
+
+
 def test_load_molecule_hierarchy_lookup_missing_columns(
     tmp_path: Path, cfg: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:

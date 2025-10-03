@@ -523,6 +523,7 @@ def test_prepare_parent_enrichment_dictionary_sets_parent(
     assert prep.parent_stats.missing == 0
     assert prep.parent_stats.attached == 1
     assert prep.df[parent_field].tolist() == ["CHEMBL999"]
+    assert prep.lookup_data.existing_parent_ids.iloc[0] == "CHEMBL999"
 
 
 def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
@@ -563,6 +564,7 @@ def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
     assert prep.parent_stats.missing == 0
     assert prep.parent_stats.attached == 1
     assert pd.isna(prep.df[parent_field].iloc[0])
+    assert pd.isna(prep.lookup_data.existing_parent_ids.iloc[0])
 
 
 def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
@@ -606,6 +608,7 @@ def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
     assert captured["need"] == {"CHEMBL1"}
     assert prep.parent_stats.missing == 1
     assert prep.parent_stats.attached == 0
+    assert prep.lookup_data.existing_parent_ids.iloc[0] == ""
 
 
 def test_run_parent_enrichment_failure(
