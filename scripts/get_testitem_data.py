@@ -700,28 +700,35 @@ def attach_parent_molecule_ids(
 
     fetched: dict[str, str] = {}
     if missing_ids and catalog is None:
-        try:
-            fetched = molecule_catalog.fetch_parent_catalog_for(
-                missing_ids,
-                client=client,
-                api_cfg=api_cfg,
-                timeout=timeout,
-                catalog_cfg=catalog_cfg,
+        if parentless_filtered:
+            logger.info(
+                "parent_lookup_partial_fetch_skipped_parentless",
+                missing=len(missing_ids),
+                identifiers=missing_ids,
             )
-        except (requests.RequestException, ValueError) as exc:
-            logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
-            fetched = {}
-        if fetched:
-            partial_fetch_used = True
-            catalog_data.update(fetched)
-            parent_map.update(fetched)
-            missing_ids = [key for key in unique_children if key not in parent_map]
-            uncovered_children = len(missing_ids)
-            if used_partial_cache:
-                update_cache_fn(fetched, catalog_cfg)
-            else:
-                write_cache_fn(catalog_data, catalog_cfg)
-                used_partial_cache = True
+        else:
+            try:
+                fetched = molecule_catalog.fetch_parent_catalog_for(
+                    missing_ids,
+                    client=client,
+                    api_cfg=api_cfg,
+                    timeout=timeout,
+                    catalog_cfg=catalog_cfg,
+                )
+            except (requests.RequestException, ValueError) as exc:
+                logger.warning("parent_lookup_partial_fetch_failed", error=str(exc))
+                fetched = {}
+            if fetched:
+                partial_fetch_used = True
+                catalog_data.update(fetched)
+                parent_map.update(fetched)
+                missing_ids = [key for key in unique_children if key not in parent_map]
+                uncovered_children = len(missing_ids)
+                if used_partial_cache:
+                    update_cache_fn(fetched, catalog_cfg)
+                else:
+                    write_cache_fn(catalog_data, catalog_cfg)
+                    used_partial_cache = True
 
     needs_full_sync = catalog is None and uncovered_children > 0
 
