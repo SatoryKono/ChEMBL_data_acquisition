@@ -1850,6 +1850,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     sample_size = getattr(args, "chunk_size", all_defaults.chunk_size)
     sample_ids = list(islice(iterator, sample_size))
     ids_for_fetch = chain(sample_ids, iterator)
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+
     try:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
@@ -1866,14 +1870,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             "chembl_documents_fetch_failed",
             ids=sample_ids,
             error=str(exc),
+            output=str(output_path),
             chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
         )
         return 1
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
-    output_path = Path(
-        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
-    )
     output = output_path
     if "doi" in doc_df.columns:
         doc_df["doi"] = doc_df["doi"].map(normalise_doi)
