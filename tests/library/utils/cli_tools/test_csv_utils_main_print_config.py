@@ -43,7 +43,7 @@ def test_csv_utils_cli_print_config_exits_without_writing(
             str(config_path),
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "DEBUG",

@@ -105,27 +105,27 @@ pre-commit install
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-      --output out/activities.csv \
+      --final-out out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --output out/documents.csv \
+      --final-out out/documents.csv \
       --limit 5 --log-level INFO
   ```
 
   Таргет-пайплайн остаётся единственным, кто понимает `--raw-out`, `--raw-format` и `--final-out`. Остальные команды
-  используют `--output` (или устаревший алиас `--out`) до расширения общего парсера.
+  используют `--final-out` (или устаревший алиас `--out`) до расширения общего парсера.
 
    Консольные утилиты принимают те же аргументы, поэтому привычные сценарии `python -m …` продолжают работать:
 
   ```bash
   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --output out/quality --table-name chembl_targets --log-level INFO
+      --final-out out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  В примере с отчётностью путь задаёт `--output`. Флаг `--final-out` сейчас реализован только в
+  В примере с отчётностью путь задаёт `--final-out`. Флаг `--final-out` сейчас реализован только в
   `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`. Алиас `--out`
   сохранён для совместимости, но сопровождается предупреждением об удалении.
 
@@ -147,7 +147,7 @@ pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --output out/mapped.csv --log-level INFO
+    --final-out out/mapped.csv --log-level INFO
 ```
 
 Перед запуском smoke-команды создайте `chembl_ids.csv` с заголовком `chembl_id` и нужными идентификаторами.
@@ -171,7 +171,7 @@ python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --output data/output/activities.csv --limit 10 --log-level INFO
+    --final-out data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 Команда обращается к API ChEMBL, сохраняет таблицу и сопровождающий `*.meta.yaml`. Утилиты разработки находятся в `library/utils/cli_tools/`; например, модуль `get_activities` предназначен лишь для демонстрационного логирования и не выполняет файловых операций. См. [`docs/CLI_TOOLS.md`](../../reference/ru/CLI_TOOLS.md) для кратких описаний и типовых команд. Каталог результатов игнорируется Git и публикуется как артефакт CI.
@@ -205,7 +205,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -217,7 +217,7 @@ python -m scripts.get_document_data pubmed \
 ```bash
 python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --log-level INFO
 ```
 
@@ -333,7 +333,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.csv
+    --final-out out/assays.csv
 ```
 
 Файл `assay_ids.csv` должен содержать столбец `assay_chembl_id` с нужными идентификаторами, например:
@@ -422,7 +422,7 @@ CLI-хелперы настраивают структурированное JSO
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.final.csv
+    --final-out out/assays.final.csv
 ```
 
 Пример строки лога:
@@ -474,8 +474,8 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
     --table-name activity
 ```
 
-По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
-Устаревший алиас `--out` продолжает работать, но сопровождается предупреждениями. Таргет-пайплайн также принимает
+По умолчанию `--final-out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге, указанном в `local.io.output_dir`.
+Устаревшие алиасы `--output`/`--out` продолжают работать, но сопровождаются предупреждениями. Таргет-пайплайн также принимает
 `--final-out`, чтобы разделять директории при наличии «сырого» снимка. Флаг `--raw-out` (с `--raw-format`) управляет
 сохранением необработанных данных, при этом столбцы переупорядочиваются по алфавиту для детерминированности —
 `--no-reindex-raw` сохраняет исходный порядок из API. Финальный CSV нормализуется по умолчанию; переключайте пару
@@ -600,7 +600,7 @@ python -m library.utils.cli_tools.table_quality_main \
     --table-name activity
 ```
 
-По умолчанию `--output` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Устаревший алиас
+По умолчанию `--final-out` формируется как `output.<имя_входа>_YYYYMMDD.csv` в каталоге `local.io.output_dir`. Устаревший алиас
 `--out` сохраняется для совместимости и предупреждает о грядущем удалении. Таргет-пайплайн дополнительно принимает `--final-out`,
 который использует тот же шаблон пути и позволяет разделять директории после добавления «сырого» снимка. Комбинируйте его с
 `--raw-out` (и опциональным `--raw-format parquet`), чтобы сохранять необработанный ответ. Дополнительные примеры см. в

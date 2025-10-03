@@ -31,8 +31,8 @@ directly.
 | `--input-dir` | Directory containing input artefacts; resolved against `--base-path` when relative. |
 | `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
-| `--final-out` | Primary destination for the cleaned export in `scripts.get_target_data` and `library.utils.cli_tools.pipeline_targets_main`. Defaults to `output.<input-stem>_<YYYYMMDD>.csv` under `--output-dir` or `--base-path`. Other commands currently rely on `--output`, which maps to the same default path. |
-| `--output` / `--out` | Destination flag for commands that have not yet adopted `--final-out`. `--out` remains as a deprecated alias and emits a warning on each invocation. |
+| `--final-out` | Primary destination for the cleaned export. Defaults to `output.<input-stem>_<YYYYMMDD>.csv` under `--output-dir` or `--base-path`. |
+| `--output` / `--out` | Deprecated destination aliases that resolve to the same path as `--final-out` and emit a warning on each invocation. |
 | `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`; other commands will surface it once the shared parser is extended. Skipped when omitted. |
 | `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. Available in the same entry points as `--raw-out`. |
 | `--no-reindex-raw` | Preserve the API column order in the raw snapshot instead of reindexing alphabetically for deterministic layouts. Exposed alongside `--raw-out`. |
@@ -163,7 +163,7 @@ Console form:
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -173,7 +173,7 @@ Module form:
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -200,7 +200,7 @@ Console form:
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -214,7 +214,7 @@ Module form:
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \

@@ -98,7 +98,7 @@ def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
             parser.add_argument("--config")
             parser.add_argument("--input")
             parser.add_argument("--final-out")
-            parser.add_argument("--output")
+            parser.add_argument("--final-out")
             parser.add_argument("--log-level")
             ns = parser.parse_args(args)
             input_path = Path(ns.input)
@@ -200,7 +200,7 @@ def test_get_data_limit_zero_skips_steps(
                 args = args[1:]
             parser = argparse.ArgumentParser(add_help=False)
             parser.add_argument("--final-out")
-            parser.add_argument("--output")
+            parser.add_argument("--final-out")
             parser.add_argument("--limit")
             ns, _ = parser.parse_known_args(args)
             assert ns.limit == "0"
@@ -303,7 +303,7 @@ def test_get_data_forwards_skip_existing_flag(
             parser.add_argument("--config")
             parser.add_argument("--input")
             parser.add_argument("--final-out")
-            parser.add_argument("--output")
+            parser.add_argument("--final-out")
             parser.add_argument("--log-level")
             parser.add_argument("--limit")
             parser.add_argument("--force", action="store_true")
@@ -403,7 +403,7 @@ def test_get_data_pipeline_events_include_run_id(
             parser.add_argument("--config")
             parser.add_argument("--input")
             parser.add_argument("--final-out")
-            parser.add_argument("--output")
+            parser.add_argument("--final-out")
             parser.add_argument("--log-level")
             ns = parser.parse_args(args)
             _extract_output_path(ns).write_text(f"{name} output\n")
@@ -1156,7 +1156,7 @@ def test_run_pipeline_failure_removes_outputs(
     def failing_main(argv: list[str] | None) -> int:
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--final-out")
-        parser.add_argument("--output")
+        parser.add_argument("--final-out")
         parser.add_argument("--input")
         parser.add_argument("--config")
         parser.add_argument("--log-level")
@@ -1242,7 +1242,7 @@ def test_run_pipeline_system_exit_cleans_up(
     def aborting_main(argv: list[str] | None) -> int:
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--final-out")
-        parser.add_argument("--output")
+        parser.add_argument("--final-out")
         parser.add_argument("--input")
         parser.add_argument("--config")
         parser.add_argument("--log-level")
@@ -1326,7 +1326,7 @@ def test_run_pipeline_success_promotes_sidecars(
     def successful_main(argv: list[str] | None) -> int:
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--final-out")
-        parser.add_argument("--output")
+        parser.add_argument("--final-out")
         parser.add_argument("--input")
         parser.add_argument("--config")
         parser.add_argument("--log-level")

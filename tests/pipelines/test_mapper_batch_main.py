@@ -72,7 +72,7 @@ def test_main_invokes_run_without_print_config(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--column",
             "chembl_id",

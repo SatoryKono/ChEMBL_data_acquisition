@@ -108,10 +108,10 @@ for usage guidelines.
 
   ```bash
   get-activity-data --input tests/data/activity_ids_small.csv \
-      --output out/activities.csv \
+      --final-out out/activities.csv \
       --limit 10 --log-level INFO
   get-document-data pubmed --input tests/data/pmids.csv \
-      --output out/documents.csv \
+      --final-out out/documents.csv \
       --limit 5 --log-level INFO
 
   ```
@@ -127,14 +127,14 @@ for usage guidelines.
   ```bash
   python -m library.utils.cli_tools.get_activities --limit 10 --log-level INFO
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --output out/quality --table-name chembl_targets --log-level INFO
+      --final-out out/quality --table-name chembl_targets --log-level INFO
   ```
 
-  In the reporting example above `--output` sets the destination. `--final-out` is currently exclusive to
-  `scripts.get_target_data` and `library.utils.cli_tools.pipeline_targets_main`. The legacy `--out` alias remains
-  available for compatibility but now raises a deprecation warning when invoked.
+  In the reporting example above `--final-out` sets the destination. The legacy
+  `--output`/`--out` aliases remain available for compatibility but now raise a
+  deprecation warning when invoked.
 
 4. **Run the tests** – see [Tests](#tests).
 
@@ -157,7 +157,7 @@ pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing --cov-report=xml
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --output out/mapped.csv --log-level INFO
+    --final-out out/mapped.csv --log-level INFO
 ```
 
 Before running the smoke command, create a `chembl_ids.csv` file with a `chembl_id` header and the required identifiers.
@@ -197,7 +197,7 @@ Example full pipeline execution:
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --output data/output/activities.csv --limit 10 --log-level INFO
+    --final-out data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 The command reads data from the ChEMBL API, writes the CSV table and the accompanying `*.meta.yaml`. Development utilities are in
@@ -240,7 +240,7 @@ Retrieve document metadata for a list of PubMed IDs using the bundled sample fil
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -252,7 +252,7 @@ You can also run the PubMed pipeline directly via the library module:
 ```bash
 python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --log-level INFO
 ```
 
@@ -323,7 +323,7 @@ flowchart LR
 * **Normalize** – harmonise text, relations and datatypes so validation is deterministic. Controlled via
   `--normalize-at-export` / `--no-normalize-at-export` in the target pipeline.
 * **Validate** – run `pandera` schemas, routing failures to the sidecar files recorded in the metadata YAML.
-* **Final export** – write the cleaned table to `--final-out` (target pipeline) or `--output` for commands that
+* **Final export** – write the cleaned table to `--final-out` (target pipeline) or `--final-out` for commands that
   have not yet adopted the staged switches. The deprecated `--out` alias continues to function but emits warnings
   during the migration period.
 
@@ -377,7 +377,7 @@ Run a script with automatic configuration loading:
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.csv
+    --final-out out/assays.csv
 ```
 
 The `assay_ids.csv` file must contain an `assay_chembl_id` column with the required identifiers, for example:
@@ -469,7 +469,7 @@ Set the log level via the `--log-level` flag or the `CHEMBL_DA_LOG_LEVEL` enviro
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.final.csv
+    --final-out out/assays.final.csv
 ```
 
 Sample log entry:
@@ -524,7 +524,7 @@ All CLI scripts share a common set of flags:
 python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 ```
 
-`--output` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. The deprecated
+`--final-out` defaults to `output.<input_name>_YYYYMMDD.csv` in the directory defined by `local.io.output_dir`. The deprecated
 `--out` alias continues to map to the same path but now emits deprecation warnings. Target pipeline invocations additionally
 accept `--final-out`, which reuses the same default while enabling distinct destinations once raw snapshots are enabled. Combine
 it with `--raw-out` (and optional `--raw-format parquet`) to persist the unprocessed payload. For additional examples see

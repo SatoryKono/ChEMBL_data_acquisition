@@ -95,7 +95,7 @@ def test_cli_success(
             str(config_file),
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
         ]
     )
@@ -150,7 +150,7 @@ def test_cli_validation_failure(
             str(config_file),
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
         ]
     )

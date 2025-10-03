@@ -25,7 +25,7 @@ def test_cli_utils_flags_and_help() -> None:
         "--log-level",
         "--input",
         "--final-out",
-        "--output",
+        "--final-out",
         "--out",
         "--config",
         "--sep",

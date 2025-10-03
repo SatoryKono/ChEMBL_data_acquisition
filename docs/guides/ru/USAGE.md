@@ -34,8 +34,8 @@ CLI без вложенных подкоманд.
 | `--input-dir` | Каталог с входными артефактами; относительный путь сочетается с `--base-path`. |
 | `--output-dir` | Каталог для сохранения артефактов; относительный путь сочетается с `--base-path`. |
 | `--input` | Входной CSV с идентификаторами (по умолчанию `input.csv`). |
-| `--final-out` | Основной путь финального экспорта для `scripts.get_target_data` и `library.utils.cli_tools.pipeline_targets_main`. По умолчанию формируется `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. Остальные команды используют `--output`, который указывает на тот же путь. |
-| `--output` / `--out` | Флаг назначения для команд, где `--final-out` ещё не внедрён. Алиас `--out` сохраняется для совместимости, но сопровождается предупреждением при каждом запуске. |
+| `--final-out` | Основной путь финального экспорта. По умолчанию формируется `output.<stem>_<YYYYMMDD>.csv` в `--output-dir` или `--base-path`. |
+| `--output` / `--out` | Устаревшие флаги назначения, которые указывают на тот же путь, что и `--final-out`, и выводят предупреждение при каждом запуске. |
 | `--raw-out` | Путь для «сырого» снимка до очистки и нормализации. Сейчас флаг доступен в `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`; остальные команды получат его после расширения парсера. Если флаг опущен, этап пропускается. |
 | `--raw-format` | Формат снимка: `csv` (по умолчанию) или `parquet`. Поддерживается теми же точками входа, что и `--raw-out`. |
 | `--no-reindex-raw` | Сохраняет порядок колонок, полученный от API, вместо алфавитного переупорядочивания «сырого» снимка. Доступен вместе с `--raw-out`. |
@@ -160,7 +160,7 @@ python -m scripts.get_assay_data \
 ```bash
 get-document-data all --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -170,7 +170,7 @@ get-document-data all --input path/to/documents.csv \
 python -m scripts.get_document_data all \
   --input path/to/documents.csv \
   --column document_chembl_id \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --batch-size 20
 ```
 
@@ -198,7 +198,7 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
 ```bash
 get-document-data pubmed --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \
@@ -212,7 +212,7 @@ get-document-data pubmed --input path/to/documents.csv \
 python -m scripts.get_document_data pubmed \
   --input path/to/documents.csv \
   --column PMID \
-  --output out/documents.csv \
+  --final-out out/documents.csv \
   --openalex-rps 2.5 \
   --crossref-rps 1.5 \
   --fallback-doi-csv path/to/doi_overrides.csv \

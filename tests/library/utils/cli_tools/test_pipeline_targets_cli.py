@@ -111,7 +111,7 @@ def test_cli_forwards_batch_size(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--batch-size",
         "25",
@@ -188,7 +188,7 @@ def test_cli_limit_restricts_rows(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--limit",
         "2",
@@ -256,7 +256,7 @@ def test_cli_limit_allows_zero(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
 
         "--limit",
@@ -294,7 +294,7 @@ def test_cli_parses_output_arguments(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--raw-format",
         "parquet",
@@ -362,7 +362,7 @@ def test_cli_does_not_print_config_when_flag_missing(
     args = [
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
     ]
     exit_code = cli.main(args)

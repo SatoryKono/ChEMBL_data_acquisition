@@ -49,7 +49,7 @@ mypy --strict
 2. Exercise at least one pipeline CLI in dry-run mode to ensure argument wiring stays intact. For example:
    ```bash
    PYTHONHASHSEED=0 PYTHONPATH=. python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
-       --output /tmp/activities.csv --limit 10 --dry-run --log-level INFO
+       --final-out /tmp/activities.csv --limit 10 --dry-run --log-level INFO
    ```
    Replace the script with other pipelines as needed to cover recent changes.
 

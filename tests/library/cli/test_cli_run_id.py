@@ -20,7 +20,7 @@ def test_cli_run_id(capfd: pytest.CaptureFixture[str], tmp_path: Path) -> None:
             [
                 "--input",
                 str(input_csv),
-                "--output",
+                "--final-out",
                 str(output_csv),
                 "--key-cols",
                 "a",

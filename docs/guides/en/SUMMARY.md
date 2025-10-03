@@ -99,7 +99,7 @@ mirrored in `requirements-lock.txt` for reproducible environments.
 ## Usage highlights
 
 * Every `scripts/get_*_data.py` command accepts standard flags such as
-  `--config`, `--print-config`, `--input`, `--output`, `--log-level`, `--sep`,
+  `--config`, `--print-config`, `--input`, `--final-out`, `--log-level`, `--sep`,
   `--encoding`, `--column` and either `--batch-size` or `--chunk-size`.
 * Pipelines expose additional switches (for example, `--timeout`, `--limit`,
   `--dry-run`, sub-commands for documents and targets). CLI options are merged

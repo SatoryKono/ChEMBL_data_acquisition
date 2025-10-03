@@ -6,7 +6,7 @@ This example collects the one-off command-line invocations used to generate CSV 
 
 ```bash
 python scripts/get_activity_data.py \
-  --output data/output/activity/output.activity_20250928.csv \
+  --final-out data/output/activity/output.activity_20250928.csv \
   --input data/input/full/activity3.csv
 ```
 
@@ -14,7 +14,7 @@ python scripts/get_activity_data.py \
 
 ```bash
 python scripts/get_assay_data.py \
-  --output data/output/assay/output.assay_20250928.csv \
+  --final-out data/output/assay/output.assay_20250928.csv \
   --input data/input/full/assay.csv
 ```
 
@@ -22,7 +22,7 @@ python scripts/get_assay_data.py \
 
 ```bash
 python scripts/get_document_data.py \
-  --output data/output/document/output.document_20250928.csv \
+  --final-out data/output/document/output.document_20250928.csv \
   --input data/input/full/document.csv
 ```
 
@@ -30,7 +30,7 @@ python scripts/get_document_data.py \
 
 ```bash
 python scripts/get_target_data.py \
-  --output data/output/target/output.target_20250928.csv \
+  --final-out data/output/target/output.target_20250928.csv \
   --input data/input/full/target.csv
 ```
 
@@ -38,7 +38,7 @@ python scripts/get_target_data.py \
 
 ```bash
 python scripts/get_testitem_data.py \
-  --output data/output/testitem/output.testitem_20250928-3.csv \
+  --final-out data/output/testitem/output.testitem_20250928-3.csv \
   --input data/input/full/testitem.csv \
   --limit 1000 \
   --offset 1000

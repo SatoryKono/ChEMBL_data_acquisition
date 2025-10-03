@@ -49,7 +49,7 @@ mypy --strict
 2. Прогоните хотя бы один конвейерный CLI в режиме dry-run, чтобы убедиться в целостности аргументов. Например:
    ```bash
    PYTHONHASHSEED=0 PYTHONPATH=. python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
-       --output /tmp/activities.csv --limit 10 --dry-run --log-level INFO
+       --final-out /tmp/activities.csv --limit 10 --dry-run --log-level INFO
    ```
    При необходимости замените сценарий на другие конвейеры, чтобы покрыть недавние изменения.
 

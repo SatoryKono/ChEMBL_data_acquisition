@@ -71,7 +71,7 @@ def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:
             str(config_path),
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
         ]
     )

@@ -130,7 +130,7 @@ def test_get_testitem_parent_catalog(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",
@@ -246,7 +246,7 @@ def test_get_testitem_skips_parent_lookup_when_present(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",
@@ -359,7 +359,7 @@ def test_get_testitem_refreshes_outdated_parents(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",

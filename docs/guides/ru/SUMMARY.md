@@ -99,7 +99,7 @@ add_pipeline_metadata → write_csv_deterministic →
 ## Использование
 
 * Все `scripts/get_*_data.py` принимают стандартные флаги `--config`,
-  `--print-config`, `--input`, `--output`, `--log-level`, `--sep`, `--encoding`,
+  `--print-config`, `--input`, `--final-out`, `--log-level`, `--sep`, `--encoding`,
   `--column` и `--batch-size` или `--chunk-size`.
 * Дополнительные аргументы (`--timeout`, `--limit`, `--dry-run`, подкоманды для
   документов и таргетов) также прокидываются в конфигурацию через
