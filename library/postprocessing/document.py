@@ -503,8 +503,12 @@ def postprocess_export_file(
         ref_document=ref_document,
         ref_document_path=ref_document_path,
     )
-    destination = Path(output_path) if output_path else Path(input_path).with_name(
-        f"{DEFAULT_OUTPUT_PREFIX}{Path(input_path).name}"
+    destination = (
+        Path(output_path)
+        if output_path
+        else Path(input_path).with_name(
+            f"{DEFAULT_OUTPUT_PREFIX}{_derive_output_basename(Path(input_path).name)}"
+        )
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     col_order = [
@@ -522,6 +526,13 @@ def postprocess_export_file(
         cfg=None,
     )
     return destination
+
+
+def _derive_output_basename(source_name: str) -> str:
+    """Normalise ``source_name`` for the generated artefact."""
+
+    normalised = source_name.lstrip(".")
+    return normalised[:-4] if normalised.endswith(".tmp") else normalised
 
 
 
