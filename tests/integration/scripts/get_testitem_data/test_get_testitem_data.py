@@ -3140,8 +3140,15 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
 
     monkeypatch.setattr(attach_module, "load_parent_catalog", tracking_load_parent_catalog)
     monkeypatch.setattr(attach_module, "query_parent_catalog", lambda *_, **__: {})
+
+    fetch_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def tracking_fetch(*args: object, **kwargs: object) -> dict[str, str]:
+        fetch_calls.append((args, dict(kwargs)))
+        return {}
+
     monkeypatch.setattr(
-        molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
+        molecule_catalog, "fetch_parent_catalog_for", tracking_fetch
     )
 
     logger_target = getattr(attach_module, "logger", gtd.logger)
@@ -3177,6 +3184,7 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
     )
     assert stats.missing == 1
     assert stats.uncovered == 1
+    assert not fetch_calls
     assert not load_calls
     skip_events = [event for event, _ in captured_warnings]
     assert "parent_lookup_full_sync_skipped_parentless" in skip_events
@@ -3220,8 +3228,10 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
     )
     assert stats.missing == 1
     assert stats.uncovered == 1
+    assert not fetch_calls
     info_events = [event for event, _ in captured_infos]
     assert "parent_lookup_skip_full_sync" in info_events
+    assert "parent_lookup_partial_fetch_skipped_parentless" in info_events
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
