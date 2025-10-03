@@ -61,6 +61,10 @@ class PipelineConfig(BaseModel):
     encoding: str | None = None
     na_markers: list[str] | None = None
     limit: int | None = Field(default=None, ge=0)
+    raw_format: str = Field("csv")
+    id_cols: list[str] | None = None
+    no_reindex_raw: bool = False
+    normalize_at_export: bool = True
 
 
 def _non_negative_int(value: str) -> int:
@@ -132,6 +136,38 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Optional CSV capturing the raw concatenated payload",
     )
     parser.add_argument(
+        "--raw-format",
+        dest="raw_format",
+        choices=("csv", "parquet"),
+        default="csv",
+        help="Format used when writing raw payload exports",
+    )
+    parser.add_argument(
+        "--id-cols",
+        dest="id_cols",
+        nargs="+",
+        default=None,
+        help="Identifier columns used for deterministic ordering",
+    )
+    parser.add_argument(
+        "--no-reindex-raw",
+        dest="no_reindex_raw",
+        action="store_true",
+        default=False,
+        help="Skip column reindexing when exporting the raw dataset",
+    )
+    parser.add_argument(
+        "--normalize-at-export",
+        "--no-normalize-at-export",
+        dest="normalize_at_export",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Apply schema alignment before writing the final output. "
+            "Use --no-normalize-at-export to persist the raw payload."
+        ),
+    )
+    parser.add_argument(
         "--final-out",
         dest="final_out",
         type=path_argument,
@@ -188,39 +224,31 @@ _PLACEHOLDER = "-"
 
 
 def _raw_dump(
-    frames: Iterable[pd.DataFrame],
+    frames: Iterable[pd.DataFrame] | pd.DataFrame,
     path: Path,
     *,
     cfg: Config,
     sep: str | None = None,
     encoding: str | None = None,
+    raw_format: str = "csv",
+    reindex_columns: bool = True,
 ) -> Path:
     """Persist ``frames`` to ``path`` preserving columns and row order."""
 
-    sep = sep or cfg.io.csv_sep
-    encoding = encoding or cfg.io.csv_encoding
-    path.parent.mkdir(parents=True, exist_ok=True)
-    iterator = iter(frames)
-    try:
-        first = next(iterator)
-    except StopIteration:
-        first = pd.DataFrame()
-    columns = list(first.columns)
-    first.to_csv(path, index=False, sep=sep, encoding=encoding)
-    for chunk in iterator:
-        if columns:
-            chunk = chunk.reindex(columns=columns)
-        else:
-            columns = list(chunk.columns)
-        chunk.to_csv(
-            path,
-            index=False,
-            sep=sep,
-            encoding=encoding,
-            mode="a",
-            header=False,
+    writer = _RawStreamWriter(
+        path,
+        cfg=cfg,
+        sep=sep,
+        encoding=encoding,
+        raw_format=raw_format,
+        reindex_columns=reindex_columns,
     )
-    return path
+    if isinstance(frames, pd.DataFrame):
+        writer.write(frames)
+    else:
+        for chunk in frames:
+            writer.write(chunk)
+    return writer.close()
 
 
 class _RawStreamWriter:
@@ -233,49 +261,91 @@ class _RawStreamWriter:
         cfg: Config,
         sep: str | None = None,
         encoding: str | None = None,
+        raw_format: str = "csv",
+        reindex_columns: bool = True,
     ) -> None:
         self.path = path
         self.sep = sep or cfg.io.csv_sep
         self.encoding = encoding or cfg.io.csv_encoding
+        normalized_format = (raw_format or "csv").lower()
+        if normalized_format not in {"csv", "parquet"}:
+            logger.warning(
+                "unsupported_raw_format",
+                format=raw_format,
+                fallback="csv",
+            )
+            normalized_format = "csv"
+        self.raw_format = normalized_format
+        self._reindex = reindex_columns
         self._columns: list[str] | None = None
-        self._written = False
+        self._rows_written = 0
+        self._frames: list[pd.DataFrame] | None = [] if self.raw_format == "parquet" else None
+        self._destination_opened = False
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, chunk: pd.DataFrame) -> None:
+        if chunk.empty and self._rows_written == 0 and self._columns is None:
+            if self._reindex:
+                self._columns = []
+            else:
+                self._columns = list(chunk.columns)
+            return
+
         if self._columns is None:
             self._columns = list(chunk.columns)
-            chunk.to_csv(
+        else:
+            new_columns = [c for c in chunk.columns if c not in self._columns]
+            if new_columns:
+                if self.raw_format == "parquet" or self._rows_written == 0:
+                    merged = list(self._columns)
+                    merged.extend(col for col in new_columns if col not in merged)
+                    self._columns = merged
+                else:
+                    raise OSError("raw_dump_inconsistent_columns")
+
+        working = chunk
+        if self._columns is not None and not working.empty:
+            working = working.reindex(columns=self._columns)
+
+        if self.raw_format == "parquet":
+            if self._frames is None:
+                self._frames = []
+            self._frames.append(working.copy())
+        else:
+            mode = "w" if self._rows_written == 0 else "a"
+            header = self._rows_written == 0
+            working.to_csv(
                 self.path,
                 index=False,
                 sep=self.sep,
                 encoding=self.encoding,
+                mode=mode,
+                header=header,
             )
-            self._written = True
-            return
-        if self._columns:
-            chunk = chunk.reindex(columns=self._columns)
-        else:
-            self._columns = list(chunk.columns)
-        chunk.to_csv(
-            self.path,
-            index=False,
-            sep=self.sep,
-            encoding=self.encoding,
-            mode="a",
-            header=False,
-        )
-        self._written = True
+            self._destination_opened = True
+
+        self._rows_written += len(working)
 
     def close(self) -> Path:
-        if not self._written:
-            empty = pd.DataFrame(columns=self._columns or None)
-            empty.to_csv(
-                self.path,
-                index=False,
-                sep=self.sep,
-                encoding=self.encoding,
-            )
-            self._written = True
+        if self.raw_format == "parquet":
+            frames = self._frames or []
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
+            else:
+                combined = pd.DataFrame(columns=self._columns or [])
+            try:
+                combined.to_parquet(self.path, index=False)
+            except (ImportError, ValueError) as exc:
+                raise OSError(f"failed_to_write_parquet: {exc}") from exc
+        else:
+            if not self._destination_opened:
+                empty = pd.DataFrame(columns=self._columns or None)
+                empty.to_csv(
+                    self.path,
+                    index=False,
+                    sep=self.sep,
+                    encoding=self.encoding,
+                )
         return self.path
 
 
@@ -318,8 +388,21 @@ def _validate_and_write(
     cfg: Config,
     sep: str | None = None,
     encoding: str | None = None,
+    id_cols: Sequence[str] | None = None,
+    normalize: bool = True,
 ) -> Path:
     """Validate ``df`` against :data:`TargetsSchema` and serialise to CSV."""
+
+    resolved_key_cols = list(id_cols) if id_cols else ["target_chembl_id"]
+
+    def _ensure_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
+        if not resolved_key_cols:
+            return frame
+        missing = [col for col in resolved_key_cols if col not in frame.columns]
+        if not missing:
+            return frame
+        ordered = list(frame.columns) + missing
+        return frame.reindex(columns=ordered)
 
     def _validated_stream() -> Iterator[pd.DataFrame]:
         if not isinstance(frames, pd.DataFrame):
@@ -327,25 +410,36 @@ def _validate_and_write(
             yielded = False
             for chunk in iterator:
                 yielded = True
-                prepared = _prepare_final_frame(chunk)
-                yield TargetsSchema.validate(prepared, lazy=True)
+                if normalize:
+                    prepared = _prepare_final_frame(chunk)
+                    yield TargetsSchema.validate(prepared, lazy=True)
+                else:
+                    yield _ensure_key_columns(chunk)
             if not yielded:
-                prepared = _prepare_final_frame(pd.DataFrame())
-                yield TargetsSchema.validate(prepared, lazy=True)
+                if normalize:
+                    prepared = _prepare_final_frame(pd.DataFrame())
+                    yield TargetsSchema.validate(prepared, lazy=True)
+                else:
+                    yield pd.DataFrame(columns=resolved_key_cols)
             return
 
-        prepared = _prepare_final_frame(frames)
-        yield TargetsSchema.validate(prepared, lazy=True)
+        if normalize:
+            prepared = _prepare_final_frame(frames)
+            yield TargetsSchema.validate(prepared, lazy=True)
+        else:
+            yield _ensure_key_columns(frames)
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    key_cols = resolved_key_cols
+    col_order: Sequence[str] | None = TARGETS_COLUMN_ORDER if normalize else None
     write_csv(
         _validated_stream(),
         path,
         cfg=cfg,
         sep=sep,
         encoding=encoding,
-        key_cols=["target_chembl_id"],
-        col_order=TARGETS_COLUMN_ORDER,
+        key_cols=key_cols,
+        col_order=col_order,
     )
     return path
 
@@ -404,6 +498,13 @@ def _cached_chembl_fetch(
 def run(cfg: Config, options: PipelineConfig) -> int:
     chunk_factory = lambda: _chunk_iterator(cfg, options)
     batch_size = options.batch_size if options.batch_size is not None else 100
+    raw_format = (options.raw_format or "csv").lower()
+    if raw_format not in {"csv", "parquet"}:
+        logger.warning("unsupported_raw_format", format=raw_format, fallback="csv")
+        raw_format = "csv"
+    reindex_raw = not options.no_reindex_raw
+    id_cols = list(options.id_cols) if options.id_cols is not None else None
+    normalize = options.normalize_at_export
     result = run_pipeline(
         chunk_factory,
         cfg,
@@ -424,28 +525,42 @@ def run(cfg: Config, options: PipelineConfig) -> int:
             cfg=cfg,
             sep=options.sep,
             encoding=options.encoding,
+            raw_format=raw_format,
+            reindex_columns=reindex_raw,
         )
 
     def _final_stream() -> Iterator[pd.DataFrame]:
         try:
+            metadata_columns = list(_PIPELINE_METADATA_COLUMNS)
             for chunk in frame_iter:
+                raw_chunk = chunk.drop(columns=metadata_columns, errors="ignore")
                 if raw_writer is not None:
-                    raw_chunk = chunk.drop(
-                        columns=_PIPELINE_METADATA_COLUMNS, errors="ignore"
-                    )
                     raw_writer.write(raw_chunk)
-                yield chunk
+                yield chunk if normalize else raw_chunk
         finally:
             if raw_writer is not None:
                 raw_writer.close()
 
-    _validate_and_write(
-        _final_stream(),
-        final_path,
-        cfg=cfg,
-        sep=options.sep,
-        encoding=options.encoding,
+    stream = _final_stream()
+    skip_final_write = (
+        not normalize
+        and options.raw_out is not None
+        and final_path == options.raw_out
+        and raw_format == "parquet"
     )
+    if skip_final_write:
+        for _ in stream:
+            pass
+    else:
+        _validate_and_write(
+            stream,
+            final_path,
+            cfg=cfg,
+            sep=options.sep,
+            encoding=options.encoding,
+            id_cols=id_cols,
+            normalize=normalize,
+        )
     logger.info("write_done", extra={"path": str(final_path)})
     return 0
 
@@ -509,6 +624,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "encoding": args.encoding,
                 "na_markers": args.na_markers,
                 "limit": args.limit,
+                "raw_format": args.raw_format,
+                "id_cols": args.id_cols,
+                "no_reindex_raw": args.no_reindex_raw,
+                "normalize_at_export": args.normalize_at_export,
             }
         )
     except (ValueError, TypeError) as exc:

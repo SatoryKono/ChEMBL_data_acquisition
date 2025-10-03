@@ -260,6 +260,51 @@ def test_cli_limit_allows_zero(
     assert captured["written_df"].empty
 
 
+def test_cli_parses_output_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_csv = tmp_path / "targets.csv"
+    input_csv.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf8")
+    output_csv = tmp_path / "out.csv"
+
+    captured: dict[str, cli.PipelineConfig] = {}
+
+    dummy_logger = _DummyLogger()
+    monkeypatch.setattr(cli, "configure_logger", lambda cfg: dummy_logger)
+    monkeypatch.setattr(cli.cli, "apply_config_overrides", lambda *a: Config())
+    monkeypatch.setattr(cli, "ensure_dirs", lambda cfg: None)
+    monkeypatch.setattr(cli, "print_config", lambda cfg: None)
+
+    def fake_run(cfg: Config, options: cli.PipelineConfig) -> int:
+        captured["options"] = options
+        return 0
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    args = [
+        "--input",
+        str(input_csv),
+        "--output",
+        str(output_csv),
+        "--raw-format",
+        "parquet",
+        "--id-cols",
+        "target_chembl_id",
+        "pref_name",
+        "--no-reindex-raw",
+        "--no-normalize-at-export",
+    ]
+    exit_code = cli.main(args)
+
+    assert exit_code == 0
+    assert "options" in captured
+    options = captured["options"]
+    assert options.raw_format == "parquet"
+    assert options.id_cols == ["target_chembl_id", "pref_name"]
+    assert options.no_reindex_raw is True
+    assert options.normalize_at_export is False
+
+
 
 def test_cli_does_not_print_config_when_flag_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -469,6 +514,141 @@ def test_end_to_end_cli_raw_and_final_outputs(
     final_df = pd.read_csv(final_out, dtype=str, keep_default_na=False)
     TargetsSchema.validate(final_df)
     assert final_df.loc[0, "uniprot_id_primary"] == ""
+
+
+def test_run_threads_output_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    raw_out = tmp_path / "raw.csv"
+    final_out = tmp_path / "final.csv"
+
+    base_columns = ["target_chembl_id", "pref_name"]
+    metadata_columns = list(cli._PIPELINE_METADATA_COLUMNS)
+    payload = {
+        "target_chembl_id": ["CHEMBL1"],
+        "pref_name": ["Name"],
+    }
+    for column in metadata_columns:
+        payload[column] = [f"meta_{column}"]
+    frame = pd.DataFrame(payload)
+
+    def fake_run_pipeline(*_: Any, **__: Any) -> PipelineResult:
+        return PipelineResult(chembl=[frame.copy()])
+
+    captured: dict[str, Any] = {"raw_chunks": []}
+
+    class DummyWriter:
+        def __init__(
+            self,
+            path: Path,
+            *,
+            raw_format: str,
+            reindex_columns: bool,
+            **kwargs: Any,
+        ) -> None:
+            captured["writer_args"] = {
+                "path": path,
+                "raw_format": raw_format,
+                "reindex": reindex_columns,
+            }
+            self.path = path
+
+        def write(self, chunk: pd.DataFrame) -> None:
+            captured["raw_chunks"].append(chunk.copy())
+
+        def close(self) -> Path:
+            captured["writer_closed"] = True
+            return self.path
+
+    def fake_validate(
+        data: pd.DataFrame | Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        id_cols: Iterable[str] | None,
+        normalize: bool,
+        **kwargs: Any,
+    ) -> Path:
+        captured["validate_path"] = path
+        captured["validate_id_cols"] = list(id_cols or [])
+        captured["validate_normalize"] = normalize
+        chunks: list[pd.DataFrame]
+        if isinstance(data, pd.DataFrame):
+            chunks = [data.copy()]
+        else:
+            chunks = [chunk.copy() for chunk in data]
+        captured["final_chunks"] = chunks
+        return path
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(cli, "_RawStreamWriter", DummyWriter)
+    monkeypatch.setattr(cli, "_validate_and_write", fake_validate)
+
+    options = cli.PipelineConfig(
+        input_csv=tmp_path / "targets.csv",
+        final_out=final_out,
+        raw_out=raw_out,
+        column="target_chembl_id",
+        raw_format="csv",
+        id_cols=["target_chembl_id", "pref_name"],
+        no_reindex_raw=True,
+        normalize_at_export=False,
+    )
+
+    exit_code = cli.run(cfg, options)
+    assert exit_code == 0
+    assert captured["writer_args"]["raw_format"] == "csv"
+    assert captured["writer_args"]["reindex"] is False
+    assert captured["writer_closed"] is True
+    assert captured["validate_path"] == final_out
+    assert captured["validate_id_cols"] == ["target_chembl_id", "pref_name"]
+    assert captured["validate_normalize"] is False
+    assert captured["raw_chunks"]
+    raw_columns = [list(chunk.columns) for chunk in captured["raw_chunks"]]
+    assert raw_columns == [base_columns for _ in raw_columns]
+    assert captured["final_chunks"]
+    final_columns = [list(chunk.columns) for chunk in captured["final_chunks"]]
+    assert final_columns == [base_columns for _ in final_columns]
+
+
+def test_run_skips_validate_for_parquet_raw_final_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    destination = tmp_path / "targets.parquet"
+    frame = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    def fake_run_pipeline(*_: Any, **__: Any) -> PipelineResult:
+        return PipelineResult(chembl=[frame.copy()])
+
+    class DummyWriter:
+        def __init__(self, path: Path, **_: Any) -> None:
+            self.path = path
+            self.written: list[pd.DataFrame] = []
+
+        def write(self, chunk: pd.DataFrame) -> None:
+            self.written.append(chunk.copy())
+
+        def close(self) -> Path:
+            return self.path
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(cli, "_RawStreamWriter", DummyWriter)
+
+    def fail_validate(*_: Any, **__: Any) -> Path:
+        raise AssertionError("_validate_and_write should not be invoked")
+
+    monkeypatch.setattr(cli, "_validate_and_write", fail_validate)
+
+    options = cli.PipelineConfig(
+        input_csv=tmp_path / "targets.csv",
+        final_out=destination,
+        raw_out=destination,
+        column="target_chembl_id",
+        raw_format="parquet",
+        normalize_at_export=False,
+    )
+
+    exit_code = cli.run(cfg, options)
+    assert exit_code == 0
 
 
 def test_streaming_pipeline_keeps_chunk_bound(
