@@ -889,6 +889,14 @@ OUTPUT_DTYPE = {
 
 
 def _load_reference_document(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        msg = (
+            "Reference document CSV not found. "
+            "Set 'ref_document_path' to the location of the ETL export or "
+            "materialise 'data/input/full/document.csv'."
+        )
+        raise FileNotFoundError(msg)
+
     frame = pd.read_csv(
         path,
         dtype=REF_DTYPE,
@@ -1209,19 +1217,31 @@ def preprocess_documents_csv(
     if qa_reference_rel:
         qa_reference_path = _resolve_relative(base_dir, qa_reference_rel)
         if qa_reference_path.exists():
+            qa_module = None
             try:
                 qa_module = importlib.import_module(
                     "qa.check_document_postprocessing"
                 )
-                run_document_postprocessing_check = getattr(
-                    qa_module, "run_document_postprocessing_check", None
-                )
+            except ModuleNotFoundError:
+                try:
+                    qa_module = importlib.import_module(
+                        "library.qa.check_document_postprocessing"
+                    )
+                except Exception:
+                    logger.exception(
+                        "document_postprocess_qa_import_failed",
+                        reference=str(qa_reference_path),
+                    )
             except Exception:
                 logger.exception(
                     "document_postprocess_qa_import_failed",
                     reference=str(qa_reference_path),
                 )
-            else:
+
+            if qa_module is not None:
+                run_document_postprocessing_check = getattr(
+                    qa_module, "run_document_postprocessing_check", None
+                )
                 if callable(run_document_postprocessing_check):
                     qa_result = run_document_postprocessing_check(
                         base_path=base_dir,
