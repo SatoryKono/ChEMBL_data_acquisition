@@ -73,7 +73,7 @@ Follow the installation, configuration, and QA guidance in the dedicated docs:
 - [`docs/USAGE_EN.md`](./docs/USAGE_EN.md) / [`docs/USAGE_RU.md`](./docs/USAGE_RU.md) – CLI reference and examples.
 - [`docs/CONFIG_EN.md`](./docs/CONFIG_EN.md) / [`docs/CONFIG_RU.md`](./docs/CONFIG_RU.md) – configuration matrix.
 - [`docs/OUTPUT_EN.md`](./docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./docs/OUTPUT_RU.md) – exported artefacts.
-- [`docs/QA_PROCESS_EN.md`](./docs/QA_PROCESS_EN.md) / [`docs/QA_PROCESS_RU.md`](./docs/QA_PROCESS_RU.md) – QA playbook.
+- [QA process (EN)](./docs/QA_PROCESS_EN.md) / [Процесс QA (RU)](./docs/QA_PROCESS_RU.md) – QA playbook.
 
 ## Development quick start
 
@@ -282,8 +282,8 @@ and `--out` as compatibility shims that log warnings when used.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English         | [docs/QA_PROCESS_EN.md](./docs/QA_PROCESS_EN.md) |
-| Русский         | [docs/QA_PROCESS_RU.md](./docs/QA_PROCESS_RU.md) |
+| English / Английский | [QA process](./docs/QA_PROCESS_EN.md) |
+| Русский / Russian    | [Процесс QA](./docs/QA_PROCESS_RU.md) |
 
 
 ```bash
