@@ -78,3 +78,48 @@ def test_build_json__uses_full_success_for_empty_suite(
     summary_text = summary_path.read_text(encoding="utf-8")
 
     assert "Success rate: 100.00%" in summary_text
+
+
+@pytest.mark.unit
+def test_main__downgrades_exit_code_when_threshold_not_met(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(run_tests, "_git_output", _stub_git_output)
+
+    def _fake_pytest_main(pytest_args: list[str], plugins: list[object]) -> int:
+        assert plugins, "Collector plugin must be provided"
+        collector = plugins[0]
+        assert isinstance(collector, run_tests.ReportCollector)
+
+        collector.start_time = 0.0
+        collector.end_time = 0.5
+        collector.tests = {
+            "tests/test_demo.py::test_pass": _make_record(
+                "tests/test_demo.py::test_pass", "passed"
+            ),
+            "tests/test_demo.py::test_fail": _make_record(
+                "tests/test_demo.py::test_fail", "failed"
+            ),
+        }
+        collector.tests["tests/test_demo.py::test_fail"].error = "boom"
+        return 0
+
+    monkeypatch.setattr(run_tests.pytest, "main", _fake_pytest_main)
+
+    json_path = tmp_path / "report.json"
+    markdown_path = tmp_path / "summary.md"
+
+    exit_code = run_tests.main([
+        "--json",
+        str(json_path),
+        "--markdown",
+        str(markdown_path),
+    ])
+
+    assert exit_code == 1
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["success_rate"] == pytest.approx(0.5)
+
+    markdown_text = markdown_path.read_text(encoding="utf-8")
+    assert "Success rate: 50.00%" in markdown_text

@@ -17,7 +17,8 @@ Install dependencies (see the repository `README.md`) and run the suite via the 
 python tools/run_tests.py
 ```
 
-The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and `success_rate = passed/total`), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success.
+The command executes `pytest` with the default configuration, writes the full protocol to `reports/test_report.json` and produces a human readable summary in `reports/test_summary.md`. Both artefacts contain Git metadata, timing information, a per-test breakdown and the overall success rate. The JSON payload exposes a `summary` section (totals and a `success_rate` ratio computed as `passed / total`, ranging from 0.0 to 1.0), while the Markdown file includes a `Success rate: NN.NN%` bullet for quick inspection. The wrapper enforces the ≥95% success-rate policy: if the computed ratio drops below the threshold, it emits an error log and returns a non-zero exit code even when pytest itself reports success.
+
 
 To focus on a subset, pass extra arguments after `--pytest-args`, for example `python tools/run_tests.py --pytest-args -m unit`.
 
