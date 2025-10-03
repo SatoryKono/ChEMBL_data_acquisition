@@ -32,3 +32,5 @@ config/**/secrets*.yaml
 logs/get_target_data_20251002.log
 logs/get_target_data_20251002.log
  
+logs/get_target_data_20251003.log
+dictionary/_activity/pairs.csv
