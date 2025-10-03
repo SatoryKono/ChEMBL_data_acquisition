@@ -22,7 +22,7 @@
 ## Обновление
 1. Сформируйте входной CSV с `target_chembl_id` (см. [docs/DATA_SCHEMA_EN.md](../../docs/DATA_SCHEMA_EN.md#input-tables)).
 2. Для онлайнового обновления запустите `get-target-data all` согласно [docs/USAGE_EN.md](../../docs/USAGE_EN.md#target-pipeline-get-target-data), при необходимости указав `--raw-out` и `--raw-format`.
-3. Для проверки офлайн-режимов используйте `python -m library.utils.cli_tools.pipeline_targets_main --input <path>/targets.csv --output-dir <path>/cache`.
+3. Для проверки офлайн-режимов используйте `python -m library.utils.cli_tools.pipeline_targets_main --input <path>/targets.csv --final-out <path>/cache/targets.final.csv --output-dir <path>/cache`.
 4. При изменении классификатора типов обновите `targets_type.csv` и протестируйте `finalise_targets` (см. [docs/ETL_PROCESS_EN.md](../../docs/ETL_PROCESS_EN.md#finalisation)).
 5. Обязательно задокументируйте источник данных (ссылка на выгрузку UniProt/IUPHAR) и дату в этом README.
 
