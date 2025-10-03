@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from types import SimpleNamespace
 
-from library.config import ApiCfg, PubChemCfg, RetryCfg
+from library.config import ApiCfg, Config, PubChemCfg, RetryCfg
 import library.testitem_pipeline as pipeline
 
 
@@ -273,6 +275,95 @@ def test_run_pipeline_streams_missing(monkeypatch, tmp_path, cfg) -> None:
         ["CHEMBL2"],
     ]
 
+
+def test_run_pipeline_parentless_skips_full_sync(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    """Disabling parentless full sync prevents catalogue loading."""
+
+    cfg.molecule_catalog.enable_full_sync_for_parentless = False
+    cfg.molecule_catalog.hierarchy_lookup_path = None
+    cfg.molecule_catalog.cache_path = tmp_path / "catalog.json"
+    cfg.molecule_catalog.sqlite_path = tmp_path / "catalog.sqlite"
+    cfg.pubchem.enable = False
+
+    chunk = pd.DataFrame(
+        {
+            "molecule_chembl_id": ["CHEMBL1", "CHEMBL2"],
+            cfg.molecule_catalog.parent_field: [pd.NA, pd.NA],
+        }
+    )
+
+    def fake_read_ids(*_args, **_kwargs):
+        return 0, pipeline.ReadInputIdsResult(
+            ids_iter=iter(["CHEMBL1", "CHEMBL2"]),
+            sample_ids=("CHEMBL1",),
+        )
+
+    def fake_fetch(*_args, **_kwargs):
+        return 0, iter([chunk]), ("CHEMBL1", "CHEMBL2")
+
+    captured_stats: dict[str, pipeline.ParentLookupStats] = {}
+
+    def fake_finalize(chunks, **kwargs):
+        for _chunk in chunks:
+            pass
+        captured_stats["parent"] = kwargs["parent_stats_supplier"]()
+        return 0
+
+    def fail_full_sync(*_args, **_kwargs):
+        raise AssertionError("full sync should be disabled for parentless identifiers")
+
+    class DummyClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.client = SimpleNamespace()
+
+        def __enter__(self) -> SimpleNamespace:
+            return self.client
+
+        def __exit__(self, *_args) -> bool:
+            return False
+
+    monkeypatch.setattr("library.testitem_pipeline.cli.read_input_ids", fake_read_ids)
+    monkeypatch.setattr("library.testitem_pipeline.cli.fetch_testitems", fake_fetch)
+    monkeypatch.setattr("library.testitem_pipeline.cli.finalize_output", fake_finalize)
+    monkeypatch.setattr("library.testitem_pipeline.cli.augment_pubchem", lambda df, **_: df)
+    monkeypatch.setattr(
+        "library.testitem_pipeline.cli.apply_testitem_enrichment", lambda df, **_: (0, df)
+    )
+    monkeypatch.setattr("library.testitem_pipeline.cli.ChemblClient", DummyClient)
+    monkeypatch.setattr(
+        "library.testitem_pipeline.catalog.molecule_catalog.fetch_parent_catalog_for",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        "library.testitem_pipeline.catalog.load_parent_catalog",
+        fail_full_sync,
+    )
+    monkeypatch.setattr(
+        "library.testitem_pipeline.catalog.query_parent_catalog", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(
+        "library.testitem_pipeline.catalog.update_parent_catalog_cache",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "library.testitem_pipeline.catalog.write_parent_catalog_cache",
+        lambda *_args, **_kwargs: None,
+    )
+
+    options = pipeline.TestitemPipelineOptions(
+        input_csv=tmp_path / "input.csv",
+        output_csv=tmp_path / "output.csv",
+    )
+
+    result = pipeline.run_testitem_pipeline(cfg, options)
+
+    assert result == 0
+    parent_stats = captured_stats.get("parent")
+    assert isinstance(parent_stats, pipeline.ParentLookupStats)
+    assert parent_stats.full_sync_duration_seconds == 0.0
+    assert parent_stats.remaining_before_full_sync == 0
 
 def test_run_pipeline_skips_pubchem_when_disabled(monkeypatch, tmp_path, cfg) -> None:
     """Ensure PubChem augmentation is bypassed when disabled in configuration."""

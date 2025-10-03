@@ -840,6 +840,8 @@ def finalize_output(
         "parent_lookup_hierarchy_attached": parent_stats.hierarchy_attached,
         "parent_lookup_fallback_attached": parent_stats.fallback_attached,
         "parent_lookup_no_parent": parent_stats.no_parent,
+        "parent_lookup_remaining_before_full_sync": parent_stats.remaining_before_full_sync,
+        "parent_lookup_full_sync_seconds": parent_stats.full_sync_duration_seconds,
     }
     if missing_ids_tuple:
         stats["missing_molecule_ids"] = list(missing_ids_tuple)

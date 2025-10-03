@@ -561,6 +561,9 @@ def fetch_parent_catalog(
     next_url: str | None = url
     result: dict[str, str] = {}
     effective_timeout = timeout if timeout is not None else api_cfg.timeout_read
+    start_time = perf_counter()
+    page_count = 0
+    progress_interval = getattr(catalog_cfg, "full_sync_progress_page_interval", 0)
 
     while next_url:
         logger.debug("parent_catalog_page", url=next_url, collected=len(result))
@@ -591,6 +594,15 @@ def fetch_parent_catalog(
         page_meta = data.get("page_meta") or {}
         next_token = page_meta.get("next")
         next_url = urljoin(api_cfg.chembl_base, next_token) if next_token else None
+        page_count += 1
+        if progress_interval and page_count % progress_interval == 0:
+            elapsed = perf_counter() - start_time
+            logger.info(
+                "parent_catalog_progress",
+                pages=page_count,
+                entries=len(result),
+                elapsed_seconds=elapsed,
+            )
 
     return result
 

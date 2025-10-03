@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import ChainMap
 from dataclasses import dataclass
 from functools import lru_cache
+from time import perf_counter
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, NamedTuple, Sequence
 
@@ -15,6 +16,7 @@ from library.integration import molecule_catalog
 from library.integration.chembl_client import ChemblClient
 from library.config import ApiCfg, IoCfg, MoleculeCatalogCfg
 from library.common.log import logger
+from library.common.watchdog import StageWatchdog
 from library.integration.molecule_catalog import (
     load_parent_catalog,
     query_parent_catalog,
@@ -78,6 +80,8 @@ class ParentLookupStats:
     hierarchy_attached: int = 0
     fallback_attached: int = 0
     no_parent: int = 0
+    remaining_before_full_sync: int = 0
+    full_sync_duration_seconds: float = 0.0
 
 
 class ParentLookupPreparedData(NamedTuple):
@@ -113,6 +117,10 @@ def _merge_parent_stats(base: ParentLookupStats, update: ParentLookupStats) -> P
         hierarchy_attached=base.hierarchy_attached + update.hierarchy_attached,
         fallback_attached=base.fallback_attached + update.fallback_attached,
         no_parent=base.no_parent + update.no_parent,
+        remaining_before_full_sync=
+            base.remaining_before_full_sync + update.remaining_before_full_sync,
+        full_sync_duration_seconds=
+            base.full_sync_duration_seconds + update.full_sync_duration_seconds,
     )
 
 
@@ -464,29 +472,52 @@ def attach_parent_molecule_ids(
                 used_partial_cache = True
 
     needs_full_sync = catalog is None and uncovered_children > 0
+    full_sync_remaining_before = 0
+    full_sync_duration = 0.0
+    full_sync_enabled = getattr(catalog_cfg, "enable_full_sync_for_parentless", True)
 
     if missing_ids and catalog is None and needs_full_sync:
-        cache_before_load = _cache_state(catalog_cfg.cache_path)
-        catalog_data = load_catalog_fn(
-            client=client,
-            api_cfg=api_cfg,
-            catalog_cfg=catalog_cfg,
-            timeout=timeout,
-        )
-        cache_after_load = _cache_state(catalog_cfg.cache_path)
-        full_sync_used = True
-        source_resolved = _resolve_catalog_load_source(
-            cache_before_load, cache_after_load
-        )
-        if partial_fetch_used:
-            catalog_data.update(fetched)
-        parent_map = {
-            key: catalog_data.get(key, parent_map.get(key, ""))
-            for key in unique_children
-            if key in catalog_data or key in parent_map
-        }
-        missing_ids = [key for key in unique_children if key not in parent_map]
-        uncovered_children = len(missing_ids)
+        if not full_sync_enabled:
+            logger.info(
+                "parent_lookup_full_sync_skipped",
+                missing=len(missing_ids),
+                reason="disabled_for_parentless",
+            )
+        else:
+            cache_before_load = _cache_state(catalog_cfg.cache_path)
+            logger.info(
+                "parent_lookup_full_sync_start",
+                remaining=uncovered_children,
+            )
+            sync_start = perf_counter()
+            catalog_data = load_catalog_fn(
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+            )
+            full_sync_duration = perf_counter() - sync_start
+            cache_after_load = _cache_state(catalog_cfg.cache_path)
+            full_sync_used = True
+            full_sync_remaining_before = uncovered_children
+            source_resolved = _resolve_catalog_load_source(
+                cache_before_load, cache_after_load
+            )
+            if partial_fetch_used:
+                catalog_data.update(fetched)
+            parent_map = {
+                key: catalog_data.get(key, parent_map.get(key, ""))
+                for key in unique_children
+                if key in catalog_data or key in parent_map
+            }
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
+            logger.info(
+                "parent_lookup_full_sync_done",
+                remaining_before=full_sync_remaining_before,
+                elapsed_seconds=full_sync_duration,
+                catalog_size=len(catalog_data),
+            )
 
     if missing_ids:
         logger.warning(
@@ -552,6 +583,8 @@ def attach_parent_molecule_ids(
         failed_ids=tuple(missing_ids),
         fallback_attached=int(fallback_attached),
         no_parent=int(no_parent_count),
+        remaining_before_full_sync=int(full_sync_remaining_before),
+        full_sync_duration_seconds=float(full_sync_duration),
     )
 
     logger.info(
@@ -564,6 +597,8 @@ def attach_parent_molecule_ids(
         hierarchy_attached=stats.hierarchy_attached,
         fallback_attached=stats.fallback_attached,
         no_parent=stats.no_parent,
+        full_sync_duration_seconds=stats.full_sync_duration_seconds,
+        remaining_before_full_sync=stats.remaining_before_full_sync,
     )
 
     return result, stats
@@ -739,20 +774,28 @@ def run_parent_enrichment(
     """Attach parent molecule identifiers using the prepared context."""
 
     logger.info("parent_lookup_start")
-    try:
-        df, attach_stats = attach_parent_molecule_ids(
-            prep.df,
-            client=client,
-            api_cfg=api_cfg,
-            catalog_cfg=catalog_cfg,
-            timeout=timeout,
-            catalog=prep.parent_catalog,
-            source=prep.parent_catalog_source,
-            precomputed=prep.lookup_data,
-        )
-    except (requests.RequestException, ValueError) as exc:
-        logger.error("parent_lookup_failed", error=str(exc))
-        return 1, None
+    sla_seconds = getattr(catalog_cfg, "parent_lookup_sla_seconds", 0.0)
+    with StageWatchdog(
+        stage="parent_lookup",
+        event="parent_lookup_sla_breached",
+        sla_seconds=float(sla_seconds),
+        context={"rows": int(len(prep.df))},
+    ) as watchdog:
+        try:
+            df, attach_stats = attach_parent_molecule_ids(
+                prep.df,
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+                catalog=prep.parent_catalog,
+                source=prep.parent_catalog_source,
+                precomputed=prep.lookup_data,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.error("parent_lookup_failed", error=str(exc))
+            return 1, None
+    elapsed_seconds = watchdog.elapsed
 
     combined_stats = _merge_parent_stats(prep.parent_stats, attach_stats)
 
@@ -766,6 +809,11 @@ def run_parent_enrichment(
         hierarchy_attached=combined_stats.hierarchy_attached,
         fallback_attached=combined_stats.fallback_attached,
         no_parent=combined_stats.no_parent,
+        elapsed_seconds=elapsed_seconds,
+        sla_seconds=sla_seconds,
+        sla_breached=watchdog.breached,
+        full_sync_duration_seconds=combined_stats.full_sync_duration_seconds,
+        remaining_before_full_sync=combined_stats.remaining_before_full_sync,
     )
 
     return 0, ParentEnrichmentResult(df=df, parent_stats=combined_stats)

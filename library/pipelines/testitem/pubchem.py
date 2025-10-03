@@ -17,6 +17,7 @@ import requests
 from library.integration.chembl_client import ChemblClient
 from library.config import ApiCfg, PubChemCfg, RetryCfg
 from library.common.log import logger
+from library.common.watchdog import StageWatchdog
 from library.utils.atomic import open_atomic
 
 if TYPE_CHECKING:
@@ -846,20 +847,33 @@ def augment_pubchem(
         pubchem_resolution_cache = cast(ResolutionCache, {})
         pubchem_parent_record_cache = {}
 
-    logger.info("pubchem_augment_start")
-    result = add_pubchem_data(
-        df,
-        pubchem_cfg,
-        client=client,
-        api_cfg=api_cfg,
-        timeout=timeout,
-        cid_cache=pubchem_cid_cache,
-        resolution_cache=pubchem_resolution_cache,
-        parent_record_cache=pubchem_parent_record_cache,
-        testitem_fields=fields,
-        request_limit=request_limit,
+    logger.info("pubchem_augment_start", rows=int(len(df)))
+    sla_seconds = getattr(pubchem_cfg, "augment_sla_seconds", 0.0)
+    with StageWatchdog(
+        stage="pubchem",
+        event="pubchem_sla_breached",
+        sla_seconds=float(sla_seconds),
+        context={"rows": int(len(df))},
+    ) as watchdog:
+        result = add_pubchem_data(
+            df,
+            pubchem_cfg,
+            client=client,
+            api_cfg=api_cfg,
+            timeout=timeout,
+            cid_cache=pubchem_cid_cache,
+            resolution_cache=pubchem_resolution_cache,
+            parent_record_cache=pubchem_parent_record_cache,
+            testitem_fields=fields,
+            request_limit=request_limit,
+        )
+    logger.info(
+        "pubchem_augment_done",
+        elapsed_seconds=watchdog.elapsed,
+        sla_seconds=sla_seconds,
+        sla_breached=watchdog.breached,
+        rows=int(len(result)),
     )
-    logger.info("pubchem_augment_done")
     return result
 
 

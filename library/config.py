@@ -393,6 +393,20 @@ class MoleculeCatalogCfg(_BaseModel):
     )
     page_size: int = Field(500, ge=1)
     fallback_single_limit: int | None = Field(default=None, ge=1)
+    enable_full_sync_for_parentless: bool = Field(
+        True,
+        description="Allow loading the full parent catalogue when parent lookups fail",
+    )
+    parent_lookup_sla_seconds: float = Field(
+        300.0,
+        ge=0,
+        description="SLA threshold for parent lookup enrichment in seconds",
+    )
+    full_sync_progress_page_interval: int = Field(
+        25,
+        ge=1,
+        description="Emit informational progress logs every N pages during full sync",
+    )
 
 
 class OpenAlexCfg(_BaseModel):
@@ -557,6 +571,11 @@ class PubChemCfg(_BaseModel):
         None,
         ge=0,
         description="Optional TTL for the persisted CID cache in hours",
+    )
+    augment_sla_seconds: float = Field(
+        300.0,
+        ge=0,
+        description="SLA threshold for augmenting PubChem data in seconds",
     )
     cid_cache_path: Path | None = Field(
         default_factory=lambda: _default_base_path()
