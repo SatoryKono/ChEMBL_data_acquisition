@@ -1,15 +1,21 @@
 # Developer Documentation Index
 
-The unified [documentation index](index.md) now lists the developer resources
-alongside user and QA manuals.
+Developer resources are now grouped under `docs/en/devel` (English) and
+`docs/ru/devel` (Russian). Bookmark the folders or use the curated links below.
 
-For convenience, the most relevant entries are:
+## English
+- [Contribution guide](./en/devel/CONTRIBUTING.md)
+- [Configuration matrix](./en/devel/CONFIG.md)
+- [CLI helper reference](./en/devel/CLI_TOOLS.md)
+- [Data schema](./en/devel/DATA_SCHEMA.md)
+- [Architecture overview](./en/devel/ARCHITECTURE.md)
 
-- [Contribution guide (EN)](./CONTRIBUTING_EN.md) / [Руководство по контрибуции (RU)](./CONTRIBUTING_RU.md)
-- [Configuration matrix (EN)](./CONFIG_EN.md) / [Матрица настроек (RU)](./CONFIG_RU.md)
-- [CLI helper reference (EN)](./CLI_TOOLS_EN.md) / [Справочник по CLI (RU)](./CLI_TOOLS_RU.md)
-- [QA process (EN)](./QA_PROCESS_EN.md) / [QA-процесс (RU)](./QA_PROCESS_RU.md)
-- [Architecture overview (EN)](./ARCHITECTURE_EN.md) / [Обзор архитектуры (RU)](./ARCHITECTURE_RU.md)
+## Русский
+- [Руководство по контрибуции](./ru/devel/CONTRIBUTING.md)
+- [Матрица настроек](./ru/devel/CONFIG.md)
+- [Справочник по CLI](./ru/devel/CLI_TOOLS.md)
+- [Схема данных](./ru/devel/DATA_SCHEMA.md)
+- [Обзор архитектуры](./ru/devel/ARCHITECTURE.md)
 
-Bookmark the index for updates; all documents are maintained as synchronised
-English/Russian pairs.
+The unified [documentation index](index.md) lists user and QA materials
+alongside these developer references.
