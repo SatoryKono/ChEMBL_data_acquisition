@@ -13,6 +13,8 @@ from importlib.util import (
 from types import ModuleType
 from typing import Any
 
+from pathlib import Path
+
 import requests
 
 _CATALOG_EXPORTS = (
@@ -84,34 +86,42 @@ def _load_local_module(module_name: str) -> ModuleType:
     package_name = __name__
     qualified_name = f"{package_name}.{module_name}"
     resource_name = f"{module_name}.py"
+
+    def _load_from_path(module_path: Path) -> ModuleType:
+        spec = spec_from_file_location(qualified_name, module_path)
+        if spec is None or spec.loader is None:
+            raise ModuleNotFoundError(qualified_name)
+        module = module_from_spec(spec)
+        try:
+            sys.modules[qualified_name] = module
+            spec.loader.exec_module(module)
+        except FileNotFoundError as exc:
+            sys.modules.pop(qualified_name, None)
+            msg = (
+                f"Optional module '{qualified_name}' could not be loaded. "
+                f"Ensure '{module_path}' is included in your environment."
+            )
+            raise ModuleNotFoundError(msg) from exc
+        return module
+
     try:
         module_resource = resources.files(package_name).joinpath(resource_name)
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(qualified_name) from exc
+    except ModuleNotFoundError:
+        module_resource = None
 
-    if not module_resource.is_file():
-        msg = (
-            f"Optional module '{qualified_name}' is not available. "
-            f"Expected file '{module_resource}' is missing from this installation."
-        )
-        raise ModuleNotFoundError(msg)
+    if module_resource is not None and module_resource.is_file():
+        with resources.as_file(module_resource) as module_path:
+            return _load_from_path(Path(module_path))
 
-    with resources.as_file(module_resource) as module_path:
-        spec = spec_from_file_location(qualified_name, module_path)
-    if spec is None or spec.loader is None:
-        raise ModuleNotFoundError(qualified_name)
-    module = module_from_spec(spec)
-    try:
-        sys.modules[qualified_name] = module
-        spec.loader.exec_module(module)
-    except FileNotFoundError as exc:
-        sys.modules.pop(qualified_name, None)
-        msg = (
-            f"Optional module '{qualified_name}' could not be loaded. "
-            f"Ensure '{module_path}' is included in your environment."
-        )
-        raise ModuleNotFoundError(msg) from exc
-    return module
+    local_path = Path(__file__).resolve().with_name(resource_name)
+    if local_path.is_file():
+        return _load_from_path(local_path)
+
+    msg = (
+        f"Optional module '{qualified_name}' is not available. "
+        f"Expected file '{resource_name}' is missing from this installation."
+    )
+    raise ModuleNotFoundError(msg)
 
 
 def _export_from_module(module: ModuleType, names: tuple[str, ...]) -> None:
