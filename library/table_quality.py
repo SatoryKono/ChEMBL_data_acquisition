@@ -606,7 +606,11 @@ class TableQualityProfiler:
         if destination_dir is not None:
             destination.mkdir(parents=True, exist_ok=True)
 
-        quality_path = destination / f"{table_name}_quality_report_table.csv"
+        table_label = Path(str(table_name)).name
+        if not table_label:
+            raise ValueError("table_name must contain at least one non-separator character")
+
+        quality_path = destination / f"{table_label}_quality_report_table.csv"
         quality_report.to_csv(quality_path, index=False, encoding="utf-8-sig")
 
         if numeric_candidates:
@@ -614,7 +618,7 @@ class TableQualityProfiler:
         else:
             corr_report = pd.DataFrame()
 
-        corr_path = destination / f"{table_name}_data_correlation_report_table.csv"
+        corr_path = destination / f"{table_label}_data_correlation_report_table.csv"
         corr_report.reset_index().to_csv(corr_path, index=False, encoding="utf-8-sig")
 
         return quality_report, corr_report

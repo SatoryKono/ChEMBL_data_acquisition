@@ -33,6 +33,20 @@ def test_analyze_table_quality(tmp_path: Path) -> None:
     assert corr.shape == (2, 2)
 
 
+def test_profiler_build_sanitizes_table_name(tmp_path: Path) -> None:
+    profiler = TableQualityProfiler()
+    profiler.consume(pd.DataFrame({"value": [1, 2]}))
+
+    nested_name = "nested/dir/output.csv"
+    profiler.build(table_name=nested_name, destination_dir=tmp_path)
+
+    expected_quality = tmp_path / "output.csv_quality_report_table.csv"
+    expected_corr = tmp_path / "output.csv_data_correlation_report_table.csv"
+
+    assert expected_quality.exists()
+    assert expected_corr.exists()
+
+
 def test_analyze_table_quality_supports_relative_destination(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
