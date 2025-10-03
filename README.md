@@ -952,21 +952,20 @@ ChEMBL_data_acquisition/
 ├── tests/
 │   └── data/
 └── docs/
-    ├── CHANGELOG.md
-    ├── CONTRIBUTING.md
-    ├── RELEASE_NOTES.md
     ├── en/
-    │   ├── CONFIG.md
-    │   ├── OUTPUT.md
+    │   ├── CHANGELOG.md
+    │   ├── CONTRIBUTING.md
+    │   ├── RELEASE_NOTES.md
     │   ├── README.md
-    │   ├── SUMMARY.md
-    │   └── USAGE.md
+    │   ├── USAGE.md
+    │   └── ...
     └── ru/
-        ├── CONFIG.md
-        ├── OUTPUT.md
+        ├── CHANGELOG.md
+        ├── CONTRIBUTING.md
+        ├── RELEASE_NOTES.md
         ├── README.md
-        ├── SUMMARY.md
-        └── USAGE.md
+        ├── USAGE.md
+        └── ...
 ```
 
 ## Конфигурация

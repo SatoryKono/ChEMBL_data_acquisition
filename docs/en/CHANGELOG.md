@@ -1,5 +1,7 @@
 # Changelog
 
+> **Languages:** [English](./CHANGELOG.md) · [Русский](../ru/CHANGELOG.md)
+
 All notable changes to this project will be documented in this file.
 
 ## [0.1.1] - 2025-10-02
