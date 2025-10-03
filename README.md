@@ -91,6 +91,16 @@ running `pip install .[dev]` and freezing the result with
 новое виртуальное окружение, выполните `pip install .[dev]`, а затем
 `pip freeze > requirements-lock.txt`.
 
+### Pre-commit dependency alignment / Согласование зависимостей pre-commit
+
+**EN.** Keep the `mypy` hook `additional_dependencies` in `.pre-commit-config.yaml` aligned with the versions declared in
+`pyproject.toml` and `requirements-lock.txt`. When updating a tool, adjust the constraints in `pyproject.toml`, regenerate
+`requirements-lock.txt`, and only then update the hook pins so local machines and CI run the same stack. /
+**RU.** Список `additional_dependencies` для хука `mypy` в `.pre-commit-config.yaml` должен совпадать с версиями из
+`pyproject.toml` и `requirements-lock.txt`. При обновлении инструмента сначала измените ограничения в `pyproject.toml`, затем
+пересоберите `requirements-lock.txt`, и только после этого обновляйте пины в конфигурации pre-commit, чтобы локальные окружения
+и CI использовали единый стек.
+
 ### Contributor notes / Заметки для контрибьюторов
 
 **EN.** Update `pyproject.toml` only after confirming the project supports the
