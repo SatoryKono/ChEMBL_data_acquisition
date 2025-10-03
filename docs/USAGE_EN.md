@@ -79,6 +79,12 @@ and `<name>.quality.json` with DOI coverage statistics.
 Sub-commands accept aliases in both Latin and Cyrillic layouts (to ease Windows
 keyboard switching): `chembl`, `uniprot`, `iuphar`, `all`.
 
+> **UniProt identifier requirement**: the input CSV must contain a column with
+> UniProt accessions. By default the pipeline expects `uniprot_id`. Alternative
+> headers can be supplied through `target.all.uniprot_column`, or detected
+> automatically when the column name includes keywords like `uniprot` or
+> `accession`.
+
 ### Staging switches
 
 Only the target pipeline currently honours the staging flags:
