@@ -32,20 +32,30 @@
 Любая команда возвращает ненулевой код при ошибках валидации, проблемах с IO или
 неудачных запросах к внешним сервисам.
 
+### Шаблоны входных файлов
+
+В репозитории лежат минимальные CSV-шаблоны в `data/input` (по одному на каждый
+пайплайн: `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
+`testitem.csv`) и расширенные примеры в `data/input/full`. Скопируйте нужный
+файл, заполните идентификаторы и передайте путь через `--input`. Если вы
+используете собственные списки, разместите их в любом доступном каталоге и
+убедитесь, что заголовки соответствуют [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md).
+
 ## Оркестратор (`get-data`)
 
 ```
 get-data --base-path /data/chembl \
-    --input-dir seeds --output-dir exports \
+    --input-dir input --output-dir exports \
     --config /data/chembl/config.yaml \
     --date 20250101 --limit 100 --log-level INFO
 ```
 
 Оркестратор готовит аргументы и запускает пайплайны в порядке: документы (`all`),
-таргеты (`all`), ассайи, тест-объекты, активности. Каждая команда получает
-параметр `--final-out`, поэтому выгрузки создаются в целевых каталогах без
-устаревших алиасов. Значение `--limit 0` пропускает выполнение, а `--dry-run`
-выводит план без записи файлов.
+таргеты (`all`), ассайи, тест-объекты, активности. В примере выше входные CSV
+читаются из каталога `/data/chembl/input` — скопируйте туда шаблоны или укажите
+собственный путь. Каждая команда получает параметр `--final-out`, поэтому
+выгрузки создаются в целевых каталогах без устаревших алиасов. Значение
+`--limit 0` пропускает выполнение, а `--dry-run` выводит план без записи файлов.
 
 ## Пайплайн документов (`get-document-data`)
 
@@ -61,7 +71,7 @@ get-data --base-path /data/chembl \
 
 ```
 get-document-data all \
-    --input seeds/document_ids.csv \
+    --input data/input/document.csv \
     --final-out output/documents_$(date +%Y%m%d).csv \
     --config config/config.yaml \
     --limit 500 --log-level INFO
@@ -105,7 +115,7 @@ get-document-data all \
 
 ```
 get-target-data all \
-    --input seeds/target_ids.csv \
+    --input data/input/target.csv \
     --final-out output/targets_$(date +%Y%m%d).csv \
     --raw-out output/targets_raw_$(date +%Y%m%d).parquet \
     --raw-format parquet --id-cols target_chembl_id uniprot_id \
@@ -118,7 +128,7 @@ get-target-data all \
 ## Пайплайн ассайев (`get-assay-data`)
 
 ```
-get-assay-data --input seeds/assay_ids.csv \
+get-assay-data --input data/input/assay.csv \
     --final-out output/assays_$(date +%Y%m%d).csv \
     --batch-size 100 --timeout 60 --limit 200
 ```
@@ -129,7 +139,7 @@ get-assay-data --input seeds/assay_ids.csv \
 ## Пайплайн активностей (`get-activity-data`)
 
 ```
-get-activity-data --input seeds/activity_ids.csv \
+get-activity-data --input data/input/activity.csv \
     --final-out output/activities_$(date +%Y%m%d).csv \
     --batch-size 50 --workers 4 --timeout 60 --limit 500
 ```
@@ -141,7 +151,7 @@ get-activity-data --input seeds/activity_ids.csv \
 ## Пайплайн тест-объектов (`get-testitem-data`)
 
 ```
-get-testitem-data --input seeds/molecule_ids.csv \
+get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
     --batch-size 1000 --timeout 60 --limit 400
 ```
