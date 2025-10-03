@@ -7,7 +7,7 @@ name = "chembl-data-acquisition"
 version = "0.1.1"
 description = "Utilities for downloading and processing biological data from public APIs."
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = "==3.11.*"
 license = {text = "MIT"}
 authors = [
   {name = "ChEMBL Team"}
@@ -15,7 +15,6 @@ authors = [
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
   "numpy==2.3.3",

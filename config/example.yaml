@@ -1,16 +1,36 @@
 # Example configuration overrides for local development.
 # Copy this file to config/config.local.yaml and adjust values as needed.
-runtime:
-  base_path: "./data"
 
 sources:
   chembl:
     api:
-      user_agent: "chembl-da/1.0 (mailto:you@example.com)"
+      chembl_base: "https://www.ebi.ac.uk/chembl/api/data"
+      user_agent: "chembl-da/1.0 (mailto:team@example.org)"
+      rps: 10
+      burst: 10
     cache:
       cache_ttl: 900
-      cache_maxsize: 128
+      cache_maxsize: 256
+  pubchem:
+    enable: false
   openalex:
-    mailto: "you@example.com"
+    mailto: "team@example.org"
   crossref:
-    mailto: "you@example.com"
+    mailto: "team@example.org"
+
+local:
+  io:
+    output_dir: "./data/output"
+    cache_dir: "./data/cache"
+  resources:
+    dictionary_dir: "./dictionary"
+    uniprot_data_dir: "./uniprot"
+
+system:
+  log:
+    level: "DEBUG"
+  rate:
+    global_rps: 20
+    global_burst: 20
+    limiter_cache_ttl: 600
+    limiter_cache_maxsize: 64
