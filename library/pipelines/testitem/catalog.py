@@ -467,26 +467,32 @@ def attach_parent_molecule_ids(
 
     if missing_ids and catalog is None and needs_full_sync:
         cache_before_load = _cache_state(catalog_cfg.cache_path)
-        catalog_data = load_catalog_fn(
-            client=client,
-            api_cfg=api_cfg,
-            catalog_cfg=catalog_cfg,
-            timeout=timeout,
-        )
-        cache_after_load = _cache_state(catalog_cfg.cache_path)
-        full_sync_used = True
-        source_resolved = _resolve_catalog_load_source(
-            cache_before_load, cache_after_load
-        )
-        if partial_fetch_used:
-            catalog_data.update(fetched)
-        parent_map = {
-            key: catalog_data.get(key, parent_map.get(key, ""))
-            for key in unique_children
-            if key in catalog_data or key in parent_map
-        }
-        missing_ids = [key for key in unique_children if key not in parent_map]
-        uncovered_children = len(missing_ids)
+        cache_after_load = cache_before_load
+        try:
+            loaded_catalog = load_catalog_fn(
+                client=client,
+                api_cfg=api_cfg,
+                catalog_cfg=catalog_cfg,
+                timeout=timeout,
+            )
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("parent_catalog_full_sync_failed", error=str(exc))
+        else:
+            catalog_data = loaded_catalog
+            cache_after_load = _cache_state(catalog_cfg.cache_path)
+            full_sync_used = True
+            source_resolved = _resolve_catalog_load_source(
+                cache_before_load, cache_after_load
+            )
+            if partial_fetch_used:
+                catalog_data.update(fetched)
+            parent_map = {
+                key: catalog_data.get(key, parent_map.get(key, ""))
+                for key in unique_children
+                if key in catalog_data or key in parent_map
+            }
+            missing_ids = [key for key in unique_children if key not in parent_map]
+            uncovered_children = len(missing_ids)
 
     if missing_ids:
         logger.warning(
