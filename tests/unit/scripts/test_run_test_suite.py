@@ -86,9 +86,67 @@ def test_main__returns_error_when_success_rate_below_threshold(
     caplog.set_level(logging.ERROR)
     exit_code = run_test_suite.main(["--report-dir", str(tmp_path), "--suite", "demo"])
 
-    assert run_test_suite.SUCCESS_RATE_THRESHOLD == pytest.approx(0.75)
+    assert run_test_suite.SUCCESS_RATE_THRESHOLD == pytest.approx(0.80)
     assert exit_code == 1
     assert "below the required threshold" in caplog.text
 
     report_payload = json.loads((tmp_path / "test_report.json").read_text(encoding="utf-8"))
     assert report_payload["summary"]["success_rate"] < run_test_suite.SUCCESS_RATE_THRESHOLD
+
+
+@pytest.mark.unit
+def test_main__passes_when_success_rate_meets_threshold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    def fake_pytest_main(pytest_args, plugins):  # type: ignore[override]
+        plugin: run_test_suite.JsonReportPlugin = plugins[0]
+        log_path = str(plugin._log_path)
+        plugin._results = {
+            "tests::pass": run_test_suite.TestResult(
+                name="tests::pass",
+                status="passed",
+                duration=0.1,
+                message="",
+                log_path=log_path,
+            ),
+            "tests::also_pass": run_test_suite.TestResult(
+                name="tests::also_pass",
+                status="passed",
+                duration=0.1,
+                message="",
+                log_path=log_path,
+            ),
+            "tests::third_pass": run_test_suite.TestResult(
+                name="tests::third_pass",
+                status="passed",
+                duration=0.1,
+                message="",
+                log_path=log_path,
+            ),
+            "tests::fourth_pass": run_test_suite.TestResult(
+                name="tests::fourth_pass",
+                status="passed",
+                duration=0.1,
+                message="",
+                log_path=log_path,
+            ),
+            "tests::skip": run_test_suite.TestResult(
+                name="tests::skip",
+                status="skipped",
+                duration=0.1,
+                message="not run",
+                log_path=log_path,
+            ),
+        }
+        return 0
+
+    monkeypatch.setattr(run_test_suite.pytest, "main", fake_pytest_main)
+
+    caplog.set_level(logging.ERROR)
+    exit_code = run_test_suite.main(["--report-dir", str(tmp_path), "--suite", "demo"])
+
+    assert exit_code == 0
+    assert "below the required threshold" not in caplog.text
+
+    report_payload = json.loads((tmp_path / "test_report.json").read_text(encoding="utf-8"))
+    assert report_payload["summary"]["success_rate"] >= run_test_suite.SUCCESS_RATE_THRESHOLD
