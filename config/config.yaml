@@ -120,7 +120,7 @@ sources:
           family_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           chunk_size: 5
           timeout: 30.0
-          uniprot_column: uniprot_id  # Column containing primary UniProt accession used for merges
+          uniprot_column: mapping_uniprot_id  # Column containing primary UniProt accession used for merges
           chembl_out: null
           uniprot_out: null
           iuphar_out: null
