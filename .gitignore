@@ -1,34 +1,34 @@
+# Generated datasets and caches
 *.xlsx
-data/input/pairs.csv
-data/input/pairs_independent.csv
-data/input/pairs_non_independent.csv
-data/input/pairs_same_document.csv
-data/output/ChEMBL/processed/pairs_independent.csv
-data/output/ChEMBL/processed/pairs_non_independent.csv
-data/output/ChEMBL/processed/pairs_same_document.csv
-.env
-*.env
-.env.local
-.env.*.local
-.cache/
+data/input/pairs*.csv
 data/output/
 data/output-smoke/
 data/cache/pubchem_cid_cache.json
 uniprot/
+
+# Environment and virtual environments
+.env
+*.env
+.env.local
+.env.*.local
+.venv/
+
+# Python caches and tooling state
 **/__pycache__/
 .hypothesis/
+.cache/
 
-# Local development files
+# Local development scratch files
 python
 exists.csv
- 
-.venv/
+
+# Configuration overrides
 config/config.local.yaml
 config/*.local.yaml
 config/*.secrets.yaml
 config/*.override.yaml
 config/**/secrets*.yaml
- 
-logs/get_target_data_20251002.log
-logs/get_target_data_20251002.log
- 
+
+# Ephemeral runtime artefacts
+var/**
+!var/.gitkeep
