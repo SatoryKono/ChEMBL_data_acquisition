@@ -31,8 +31,8 @@ directly.
 | `--input-dir` | Directory containing input artefacts; resolved against `--base-path` when relative. |
 | `--output-dir` | Directory receiving generated artefacts; resolved against `--base-path` when relative. |
 | `--input` | Input CSV with identifiers (default: `input.csv`). |
-| `--final-out` | Primary destination for the cleaned export in `scripts.get_target_data` and `library.utils.cli_tools.pipeline_targets_main`. Defaults to `output.<input-stem>_<YYYYMMDD>.csv` under `--output-dir` or `--base-path`. Other commands currently rely on `--output`, which maps to the same default path. |
-| `--output` / `--out` | Destination flag for commands that have not yet adopted `--final-out`. `--out` remains as a deprecated alias and emits a warning on each invocation. |
+| `--final-out` | Primary destination for the cleaned export across all pipelines. Defaults to `output.<input-stem>_<YYYYMMDD>.csv` under `--output-dir` or `--base-path`. |
+| `--output` / `--out` | Compatibility aliases that resolve to `--final-out` and emit a deprecation warning on each invocation. |
 | `--raw-out` | Path for the raw snapshot written before cleanup and normalisation. Currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`; other commands will surface it once the shared parser is extended. Skipped when omitted. |
 | `--raw-format` | Format of the raw snapshot. Accepts `csv` (default) or `parquet`. Available in the same entry points as `--raw-out`. |
 | `--no-reindex-raw` | Preserve the API column order in the raw snapshot instead of reindexing alphabetically for deterministic layouts. Exposed alongside `--raw-out`. |
@@ -70,7 +70,7 @@ flowchart LR
 
 In the target pipeline `--raw-out` (with optional `--raw-format parquet`) captures the untouched payload, `--id-cols` keeps composite identifiers in that snapshot, and `--final-out` writes the cleaned table after normalisation and validation. Raw dumps reindex columns alphabetically unless `--no-reindex-raw` preserves the API order for forensic comparisons. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether the final CSV is normalised immediately before writing (default) or copied byte-for-byte from the raw snapshot—validation still inspects the normalised view even when the export stays raw. The legacy `--output`/`--out` switches remain wired in for compatibility but emit deprecation warnings. If `--raw-out` is omitted the raw dump stage is skipped for backward compatibility, while other pipelines will add the staged switches once the shared parser is extended.
 
-> **Note.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
+> **Note.** `--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export` are currently exposed by `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other entry points will adopt them once the shared CLI grows the staging switches.
 
 
 During cleanup placeholder identifiers (for example `CHEMBL_PENDING`) are preserved in the raw snapshot and counted in the metadata under `error_placeholder_counts` while being removed from the final export.

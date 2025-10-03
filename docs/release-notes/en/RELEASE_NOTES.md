@@ -12,4 +12,6 @@
   trace identifier coverage through the target merge pipeline.
 - Normalised CLI path overrides so `--base-path`, `--input-dir`, `--output-dir`, and `--cache-dir` propagate into
   `local.io` configuration fields.
+- Refreshed CLI documentation and helper scripts to use `--final-out` as the primary destination flag, avoiding
+  deprecated `--output` warnings in determinism checks and example commands.
 
