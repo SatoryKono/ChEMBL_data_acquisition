@@ -56,6 +56,9 @@ class Stats(_StatsRequired, total=False):
 
     parent_lookup_source: str
     parent_lookup_missing: int
+    parent_lookup_hierarchy_attached: int
+    parent_lookup_fallback_attached: int
+    parent_lookup_no_parent: int
     missing_molecule_ids: list[str]
     missing_molecule_ids_count: int
     chunk_fetch_failure_chunks: int

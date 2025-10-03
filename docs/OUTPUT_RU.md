@@ -45,7 +45,9 @@ Acquisition, а также вспомогательные модули, отве
 * `stats` — `rows_total`, `rows_kept`, `rows_dropped`, контрольную сумму
   `output_sha256`, показатели по родительскому каталогу
   (`parent_lookup_source`, `parent_lookup_missing`,
-  `parent_lookup_failed_ids`, `parent_lookup_failed_count`) и при наличии
+  `parent_lookup_hierarchy_attached`, `parent_lookup_fallback_attached`,
+  `parent_lookup_no_parent`, `parent_lookup_failed_ids`,
+  `parent_lookup_failed_count`) и при наличии
   массив `missing_molecule_ids` с пропущенными идентификаторами. Повторно
   обработать не найденные родительские идентификаторы можно, передав их в
   основной конвейер через стандартный CSV.

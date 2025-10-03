@@ -49,8 +49,9 @@ captures the following keys:
 * `inputs` – descriptions of source files and parameters.
 * `stats` – `rows_total`, `rows_kept`, `rows_dropped`, the `output_sha256`
   digest, parent lookup diagnostics (`parent_lookup_source`,
-  `parent_lookup_missing`, `parent_lookup_failed_ids`,
-  `parent_lookup_failed_count`) and, when present,
+  `parent_lookup_missing`, `parent_lookup_hierarchy_attached`,
+  `parent_lookup_fallback_attached`, `parent_lookup_no_parent`,
+  `parent_lookup_failed_ids`, `parent_lookup_failed_count`) and, when present,
   `missing_molecule_ids` for raw identifier gaps. Operators can re-run failed
   parent lookups by feeding the recorded identifiers back into the pipeline via
   the regular CSV input flow.

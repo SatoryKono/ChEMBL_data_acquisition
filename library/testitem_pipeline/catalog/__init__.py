@@ -635,8 +635,12 @@ def prepare_parent_enrichment(
                 df[parent_column] = df[parent_column].astype("string")
             else:
                 df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
-            df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
-            existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
+            df.loc[resolved_values.index, parent_column] = resolved_values.astype(
+                "object"
+            )
+            existing_parent.loc[resolved_values.index] = (
+                resolved_values.fillna("").astype("string")
+            )
             hierarchy_attached = int(hierarchy_mask.sum())
 
             has_parent_mask = resolved_values.notna()
