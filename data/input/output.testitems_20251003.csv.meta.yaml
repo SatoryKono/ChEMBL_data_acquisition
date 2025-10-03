@@ -1,7 +1,7 @@
-generated_at: '2025-10-03T15:38:38.251734+00:00'
+generated_at: '2025-10-03T15:57:24.183858+00:00'
 git_sha: UNKNOWN
 command: scripts\get_testitem_data.py --config config.yaml --input data\input\testitem.csv
-  --limit 7
+  --limit 10
 columns:
 - molecule_chembl_id
 - parent_molecule_chembl_id
@@ -114,7 +114,7 @@ config:
           column: molecule_chembl_id
           batch_size: 1000
           timeout: 30.0
-          limit: 7
+          limit: 10
           offset: 0
           fields:
           - molecule_chembl_id
@@ -415,13 +415,16 @@ platform: Windows-10-10.0.19045-SP0
 inputs:
   input_csv: data\input\testitem.csv
 stats:
-  rows_total: 7
-  rows_kept: 7
+  rows_total: 10
+  rows_kept: 10
   rows_dropped: 0
-  output_sha256: d1f542c3e3d6d9cb8159424889f05631ae03b8c8cb704210ee577e65b42ddf6b
+  output_sha256: ff149546bfd0670bc2f7ba07b0ab812d422c7a953a2de0e944853fe71ffa1adf
   parent_lookup_source: skipped
-  parent_lookup_missing: 7
-  parent_lookup_hierarchy_attached: 7
+  parent_lookup_missing: 11
+  parent_lookup_hierarchy_attached: 9
   parent_lookup_fallback_attached: 0
-  parent_lookup_no_parent: 7
+  parent_lookup_no_parent: 10
+  parent_lookup_failed_ids:
+  - CHEMBL2021616
+  parent_lookup_failed_count: 1
 schema: TestitemsSchema
