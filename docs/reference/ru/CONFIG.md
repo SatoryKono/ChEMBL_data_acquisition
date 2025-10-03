@@ -2,11 +2,11 @@
 
 ## Обзор
 
-* Все CLI-инструменты читают настройки из [`config/config.yaml`](../../config/config.yaml) в корне проекта.
+* Все CLI-инструменты читают настройки из [`resources/config/config.yaml`](../../resources/config/config.yaml) в корне проекта.
 * Значения валидируются в `library.config.load_config`, который вызывает `Config.model_validate` из Pydantic. [`config.schema.json`](../../config.schema.json) служит справочной схемой для инструментов и не исполняется при запуске.
-* Переопределения применяются в порядке: `config/config.yaml` < переменные окружения < аргументы командной строки.
+* Переопределения применяются в порядке: `resources/config/config.yaml` < переменные окружения < аргументы командной строки.
 
-## Структура `config/config.yaml`
+## Структура `resources/config/config.yaml`
 
 | Раздел | Назначение |
 | --- | --- |
@@ -264,7 +264,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 ### PubChem (`sources.pubchem`)
 
-Параметры PubChem применяются прежде всего в пайплайне `testitem`. Каждый ключ отражает содержимое [`config/config.yaml`](../../config/config.yaml)
+Параметры PubChem применяются прежде всего в пайплайне `testitem`. Каждый ключ отражает содержимое [`resources/config/config.yaml`](../../resources/config/config.yaml)
 и может быть переопределён переменными окружения (см. [Переменные окружения](#переменные-окружения)). В таблице указаны и
 автогенерируемые алиасы `CHEMBL_DA_SOURCES_PUBCHEM_*`, и универсальный формат `CHEMBL_DA__SOURCES__PUBCHEM__*`. Для базового URL
 доступен короткий алиас из таблицы в разделе «Переменные окружения».
@@ -322,7 +322,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 | `csv_sep` | `,` | Разделитель CSV по умолчанию. |
 | `csv_fallback_separators` | `["\t", ";"]` | Дополнительные разделители, которые пробуются, если основной не раскрывает требуемый столбец. |
 | `csv_encoding` | `utf-8-sig` | Кодировка экспорта CSV. |
-| `csv_chunksize` | `10000` | Размер чанка (строк) при детерминированной записи CSV; значение задано в [`config/config.yaml`](../../config/config.yaml). |
+| `csv_chunksize` | `10000` | Размер чанка (строк) при детерминированной записи CSV; значение задано в [`resources/config/config.yaml`](../../resources/config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Дополнительные маркеры пропусков при чтении CSV. |
 | `keep_na_markers` | `false` | Сохранять идентификаторы, совпадающие с `na_markers`, вместо их фильтрации. |
 | `exist_ok` | `true` | Создавать каталоги автоматически. |
@@ -412,14 +412,14 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 
 ## CLI-переопределения
 
-* Флаг `--config` позволяет указать альтернативный YAML (по умолчанию `config/config.yaml`).
+* Флаг `--config` позволяет указать альтернативный YAML (по умолчанию `resources/config/config.yaml`).
 * `--print-config` выводит итоговую конфигурацию (с учётом окружения и CLI) и завершает работу.
 * Аргументы, прокинутые через `apply_config_overrides`, обновляют конфигурацию. Например, `--batch-size 25` задаёт `sources.chembl.pipelines.activity.batch_size` на время запуска.
-* Вложенные параметры правятся через `config/config.yaml` или переменные окружения (например, `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`). Флаги вида `--sources.…` парсер не поддерживает.
+* Вложенные параметры правятся через `resources/config/config.yaml` или переменные окружения (например, `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`). Флаги вида `--sources.…` парсер не поддерживает.
 
 ## Процесс валидации
 
-1. Загружается `config/config.yaml`.
+1. Загружается `resources/config/config.yaml`.
 2. Применяются переменные окружения и CLI-переопределения.
 3. Валидируются значения через `Config.model_validate`: неизвестные ключи и ошибки типов приводят к отказу загрузки.
 4. Убеждаемся в наличии каталогов `output_dir` и `cache_dir` (создаются автоматически, если `local.io.exist_ok=true`).

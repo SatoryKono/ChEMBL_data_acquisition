@@ -39,7 +39,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * `io.read_ids` построчно считывает идентификаторы, отбрасывает пустые значения
   и проверяет наличие нужной колонки.
 * Доступ к API централизован в `ChemblClient` и смежных клиентах, которые
-  учитывают лимиты, ретраи и таймауты из `config/config.yaml`.
+  учитывают лимиты, ретраи и таймауты из `resources/config/config.yaml`.
 * Нормализация и обогащение выполняются в скриптах с использованием модулей
   `document_pipeline`, `target_postprocessing`, `testitem_enrichment`,
   `activity_bounds`. Ошибочные строки собирает `SidecarErrors` и записывает
@@ -51,7 +51,7 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Конфигурация
 
-* Базовые значения задаются в [`config/config.yaml`](../../config/config.yaml) и валидируются
+* Базовые значения задаются в [`resources/config/config.yaml`](../../resources/config/config.yaml) и валидируются
   `library.config.load_config` через `Config.model_validate` из Pydantic. Сгенерированный
   [`config.schema.json`](../../config.schema.json) отражает структуру для IDE и инструментов.
 * Ключевые разделы:
@@ -66,7 +66,7 @@ add_pipeline_metadata → write_csv_deterministic →
     каталога тест-объектов.
   * `system.*` — логирование, глобальные лимиты, ретраи и веса классификатора
     публикаций.
-* Приоритет переопределений: `config/config.yaml` < переменные окружения < аргументы
+* Приоритет переопределений: `resources/config/config.yaml` < переменные окружения < аргументы
   CLI. Доступны короткие алиасы (например, `CHEMBL_DA_RPS` и `CHEMBL_DA_OUTDIR`).
   Полный список приведён в `docs/reference/ru/CONFIG.md`.
 

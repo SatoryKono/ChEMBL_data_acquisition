@@ -35,7 +35,7 @@ from .config import Config, ConfigError, ensure_dirs, print_config
 from .common.log import logger as default_logger
 from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
 from .sidecar import SidecarErrors
-from .utils.config import DEFAULT_CONFIG_PATH
+from .utils.config import DEFAULT_CONFIG_PATH, DEFAULT_CONFIG_RELATIVE
 
 SchemaT = TypeVar("SchemaT")
 
@@ -688,7 +688,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="config",
         type=path_argument,
         default=DEFAULT_CONFIG_PATH,
-        help=f"YAML configuration file (default: {DEFAULT_CONFIG_PATH})",
+        help=f"YAML configuration file (default: {DEFAULT_CONFIG_RELATIVE})",
     )
     parser.add_argument(
         "--print-config",

@@ -8,7 +8,7 @@ pipelines.
 
 | Aspect | Details |
 | --- | --- |
-| **Input sources & format** | CSV containing an identifier column (default `activity_chembl_id`, inherited from the `activity.column` setting in `config/config.yaml` unless `--column` overrides it) read lazily via `io.read_ids`. Optional `--limit` and `--dry-run` flags gate processing. |
+| **Input sources & format** | CSV containing an identifier column (default `activity_chembl_id`, inherited from the `activity.column` setting in `resources/config/config.yaml` unless `--column` overrides it) read lazily via `io.read_ids`. Optional `--limit` and `--dry-run` flags gate processing. |
 | **External services / files** | ChEMBL API accessed through `ChemblClient` with configurable chunking and timeouts. |
 | **Key transformations** | Normalise API payloads, append pipeline metadata, enforce schema column ordering, validate against `ActivitiesSchema`, and log per-row validation failures to sidecar CSVs. |
 | **Outputs & storage** | Primary CSV written to the requested or default output path, metadata YAML containing run statistics, and table-quality diagnostics. |

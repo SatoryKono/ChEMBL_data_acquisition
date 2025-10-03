@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
+import atexit
+from contextlib import ExitStack
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 _DEFAULT_CONFIG_NAME = "config.yaml"
-_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_DIR = _PACKAGE_ROOT / "config"
-DEFAULT_CONFIG_RELATIVE = Path("config") / _DEFAULT_CONFIG_NAME
-DEFAULT_CONFIG_PATH = CONFIG_DIR / _DEFAULT_CONFIG_NAME
+_CONFIG_RESOURCE_PACKAGE = "resources.config"
+_RESOURCE_STACK = ExitStack()
+atexit.register(_RESOURCE_STACK.close)
+
+
+def _resource_path(*parts: str) -> Path:
+    """Return a filesystem path for the packaged config *parts*."""
+
+    traversable = resources.files(_CONFIG_RESOURCE_PACKAGE)
+    for part in parts:
+        traversable = traversable.joinpath(part)
+    return Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
+
+
+DEFAULT_CONFIG_RELATIVE = Path("resources") / "config" / _DEFAULT_CONFIG_NAME
+DEFAULT_CONFIG_PATH = _resource_path(_DEFAULT_CONFIG_NAME)
+CONFIG_DIR = DEFAULT_CONFIG_PATH.parent
 
 
 class ConfigLoaderError(RuntimeError):

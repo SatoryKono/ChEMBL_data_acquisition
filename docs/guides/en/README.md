@@ -15,7 +15,7 @@ The primary documentation and reference material live in this directory.
 * Streaming CSV handling with deterministic output for large datasets.
 * Schema validators in [`library/schemas/`](../../library/schemas/) and dictionaries in [`dictionary/`](../../dictionary/) that enforce types,
   ranges and reference data.
-* Configuration driven by `config/config.yaml`, environment variables and CLI overrides.
+* Configuration driven by `resources/config/config.yaml`, environment variables and CLI overrides.
 * Logging based on the standard `logging` module with configurable verbosity.
 * Full static typing (PEP 484), linting with `ruff`, formatting with `black`, type checking via `mypy` and tests with `pytest`.
 
@@ -400,7 +400,7 @@ api:
   user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 ```
 
-Override the parameter in `config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. Replace the
+Override the parameter in `resources/config/config.yaml` or via the environment variable `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. Replace the
 `chembl-data@ebi.ac.uk` contact with your own mailbox before production use—the bundled address is provided only as a documented default.
 The validator still rejects the legacy placeholder `contact@example.org`, so any occurrence prevents the tools from starting. There is
 no dedicated CLI flag (see `library/cli/parser.py`), so configuration is limited to files or environment variables.
@@ -408,7 +408,7 @@ no dedicated CLI flag (see `library/cli/parser.py`), so configuration is limited
 
 ## Configuration validation
 
-`library.config.load_config` checks the values inside `config/config.yaml`. An invalid URL raises `ValueError` during loading:
+`library.config.load_config` checks the values inside `resources/config/config.yaml`. An invalid URL raises `ValueError` during loading:
 
 ```yaml
 api:
@@ -428,7 +428,7 @@ api:
 
 ## Configuration errors
 
-Invalid values in `config/config.yaml` raise `ValidationError`. Example:
+Invalid values in `resources/config/config.yaml` raise `ValidationError`. Example:
 
 ```yaml
 api:
@@ -437,7 +437,7 @@ api:
 
 ```python
 from library.config import load_config
-load_config("config/config.yaml")
+load_config("resources/config/config.yaml")
 ```
 
 Output:
@@ -536,7 +536,7 @@ it with `--raw-out` (and optional `--raw-format parquet`) to persist the unproce
 
 ```
 ChEMBL_data_acquisition/
-├── config/config.yaml
+├── resources/config/config.yaml
 ├── dictionary/
 ├── library/
 │   ├── __init__.py
@@ -569,7 +569,7 @@ ChEMBL_data_acquisition/
 
 ## Configuration
 
-Parameters are read from `config/config.yaml`, environment variables (`CHEMBL_DA__...`) and CLI flags. Details are documented in
+Parameters are read from `resources/config/config.yaml`, environment variables (`CHEMBL_DA__...`) and CLI flags. Details are documented in
 [`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md) (Russian version: [`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md)).
 
 ### Environment variables
@@ -653,7 +653,7 @@ configuration. Scripts that need these paths can call `library.config.ensure_dir
 missing and `local.io.exist_ok` permits it.
 
 Path values such as `local.io.output_dir`, `local.io.cache_dir` and the `local.init` workbook paths are exposed as `pathlib.Path`
-objects. String values in `config/config.yaml` or overrides from the environment and command line are automatically converted.
+objects. String values in `resources/config/config.yaml` or overrides from the environment and command line are automatically converted.
 
 ```bash
 python -m library.utils.cli_tools.table_quality_main \

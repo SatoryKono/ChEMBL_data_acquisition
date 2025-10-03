@@ -477,7 +477,7 @@
               "type": "null"
             }
           ],
-          "default": "../dictionary/_testitem/molecule_hierarchy.csv",
+          "default": "../resources/dictionary/_testitem/molecule_hierarchy.csv",
           "title": "Hierarchy Lookup Path"
         },
         "hierarchy_lookup_encoding": {
@@ -1441,31 +1441,31 @@
       "additionalProperties": false,
       "properties": {
         "dictionary_dir": {
-          "default": "../dictionary",
+          "default": "../resources/dictionary",
           "format": "path",
           "title": "Dictionary Dir",
           "type": "string"
         },
         "iuphar_target_csv": {
-          "default": "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
+          "default": "../resources/dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
           "title": "Iuphar Target Csv",
           "type": "string"
         },
         "iuphar_family_csv": {
-          "default": "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
+          "default": "../resources/dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
           "format": "path",
           "title": "Iuphar Family Csv",
           "type": "string"
         },
         "uniprot_data_dir": {
-          "default": "../dictionary/_target/_uniprot",
+          "default": "../resources/dictionary/_target/_uniprot",
           "format": "path",
           "title": "Uniprot Data Dir",
           "type": "string"
         },
         "targets_type_csv": {
-          "default": "../dictionary/_target/targets_type.csv",
+          "default": "../resources/dictionary/_target/targets_type.csv",
           "format": "path",
           "title": "Targets Type Csv",
           "type": "string"
@@ -1622,19 +1622,19 @@
       "additionalProperties": false,
       "properties": {
         "data_dir": {
-          "default": "../dictionary/_target/_uniprot",
+          "default": "../resources/dictionary/_target/_uniprot",
           "format": "path",
           "title": "Data Dir",
           "type": "string"
         },
         "target_csv": {
-          "default": "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
+          "default": "../resources/dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
           "title": "Target Csv",
           "type": "string"
         },
         "family_csv": {
-          "default": "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
+          "default": "../resources/dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
           "format": "path",
           "title": "Family Csv",
           "type": "string"
@@ -1773,13 +1773,13 @@
       "additionalProperties": false,
       "properties": {
         "target_csv": {
-          "default": "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
+          "default": "../resources/dictionary/_target/_IUPHAR/_IUPHAR_target.csv",
           "format": "path",
           "title": "Target Csv",
           "type": "string"
         },
         "family_csv": {
-          "default": "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
+          "default": "../resources/dictionary/_target/_IUPHAR/_IUPHAR_family.csv",
           "format": "path",
           "title": "Family Csv",
           "type": "string"
@@ -1810,7 +1810,7 @@
           "type": "string"
         },
         "data_dir": {
-          "default": "../dictionary/_target/_uniprot",
+          "default": "../resources/dictionary/_target/_uniprot",
           "format": "path",
           "title": "Data Dir",
           "type": "string"
@@ -1964,13 +1964,13 @@
       "additionalProperties": false,
       "properties": {
         "molecule_catalog_path": {
-          "default": "../dictionary/molecule_catalog.csv",
+          "default": "../resources/dictionary/molecule_catalog.csv",
           "format": "path",
           "title": "Molecule Catalog Path",
           "type": "string"
         },
         "molecule_hierarchy_path": {
-          "default": "../dictionary/molecule_hierarchy.csv",
+          "default": "../resources/dictionary/molecule_hierarchy.csv",
           "format": "path",
           "title": "Molecule Hierarchy Path",
           "type": "string"

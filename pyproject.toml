@@ -76,15 +76,14 @@ include-package-data = true
 include = [
   "library",
   "library.*",
-  "config",
-  "dictionary",
+  "resources",
+  "resources.*",
   "scripts",
   "scripts.*",
 ]
 
 [tool.setuptools.package-data]
-"config" = ["config.yaml"]
-"dictionary" = ["**/*"]
+"resources" = ["**/*"]
 "library" = ["py.typed"]
 "library.qa" = ["document_schema_crosswalk.yaml"]
 

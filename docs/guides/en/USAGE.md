@@ -24,7 +24,7 @@ directly.
 
 | Option | Description |
 | --- | --- |
-| `--config` | Path to the YAML configuration file (default: `config/config.yaml`). |
+| `--config` | Path to the YAML configuration file (default: `resources/config/config.yaml`). |
 | `--print-config` | Print the effective configuration after overrides and exit. |
 | `--log-level` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 | `--base-path` | Base directory applied before resolving input and output paths. |
@@ -48,7 +48,7 @@ directly.
 | `--offset` | Number of identifiers to skip before processing, useful for resuming interrupted runs. |
 
 Each parser may add domain-specific switches such as `--timeout`, `--limit` or rate-limit knobs like `--openalex-rps`. After parsing, `apply_config_overrides`
-loads `config/config.yaml`, applies environment variables, merges CLI overrides back into the configuration, and updates missing CLI
+loads `resources/config/config.yaml`, applies environment variables, merges CLI overrides back into the configuration, and updates missing CLI
 arguments with the final values.
 
 Before any network calls the utilities invoke `library.config.ensure_dirs`, ensuring that `local.io.output_dir` and
@@ -56,7 +56,7 @@ Before any network calls the utilities invoke `library.config.ensure_dirs`, ensu
 
 ### Sample inputs
 
-The repository includes a few compact fixtures under `tests/data/` for smoke-level experimentation (for example, `tests/data/activity_ids_small.csv` and `tests/data/input-smoke/testitem.csv`). Pipelines without bundled samples require user-provided CSVs that expose the identifier column referenced in `config/config.yaml` or overridden via `--column`.
+The repository includes a few compact fixtures under `tests/data/` for smoke-level experimentation (for example, `tests/data/activity_ids_small.csv` and `tests/data/input-smoke/testitem.csv`). Pipelines without bundled samples require user-provided CSVs that expose the identifier column referenced in `resources/config/config.yaml` or overridden via `--column`.
 
 ### Staged pipeline flow
 
@@ -186,7 +186,7 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
     --column document_chembl_id
 ```
 
-The same effect can be achieved by editing `sources.chembl.pipelines.document.pubmed.batch_size` in `config/config.yaml`.
+The same effect can be achieved by editing `sources.chembl.pipelines.document.pubmed.batch_size` in `resources/config/config.yaml`.
 Choose the `pubmed`, `chembl`, or `all` sub-command depending on the desired sources.
 Consult `get-document-data --help` for a summary and
 `get-document-data <sub-command> --help` for the
@@ -315,7 +315,7 @@ Run a configuration-backed export with the tuned settings:
 Console form:
 
 ```bash
-get-testitem-data --config config/config.yaml \
+get-testitem-data --config resources/config/config.yaml \
   --input data/input/testitem_ids.csv \
   --batch-size 750 \
   --offset 500
@@ -325,7 +325,7 @@ Module form:
 
 ```bash
 python -m scripts.get_testitem_data \
-  --config config/config.yaml \
+  --config resources/config/config.yaml \
   --input data/input/testitem_ids.csv \
   --batch-size 750 \
   --offset 500
@@ -350,7 +350,7 @@ used by downstream aggregations. The cache path is configured via
 keep the JSON file accessible to the runner or adjust the location by setting
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (alias for
 `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) or editing
-`config/config.yaml`.
+`resources/config/config.yaml`.
 
  
 
@@ -413,7 +413,7 @@ CLI flags cover the documented arguments for each script. For example, the activ
 get-activity-data --batch-size 25 --timeout 45
 ```
 
-Nested configuration values are adjusted via `config/config.yaml` or environment variables. To temporarily raise the
+Nested configuration values are adjusted via `resources/config/config.yaml` or environment variables. To temporarily raise the
 ChEMBL API rate limit without editing the file, export an override and execute the command in the same shell:
 
 ```bash
@@ -428,7 +428,7 @@ Inspect the effective configuration with `--print-config` before running the pip
 All CLIs emit JSON logs via `library.common.logging_setup`. Each record contains a timestamp (`ts`), severity (`level`), event name
 (`event`) and the `run_id` inherited from CLI options; additional key/value pairs are merged after secret redaction. Use tools
 such as `jq` to filter by `event`, `stage` or warning codes (`activity_bounds_*`, `parent_lookup_*`, etc.) when triaging runs.
-Adjust verbosity on demand with `--log-level` or environment overrides without touching `config/config.yaml`.
+Adjust verbosity on demand with `--log-level` or environment overrides without touching `resources/config/config.yaml`.
 
 ## Environment variables
 

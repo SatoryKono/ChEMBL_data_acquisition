@@ -1,2 +1,3 @@
 include library/py.typed
 include library/qa/document_schema_crosswalk.yaml
+recursive-include resources *

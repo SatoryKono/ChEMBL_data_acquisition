@@ -51,10 +51,10 @@ def test_malformed_config_exits(
         "local:\n"
         "  resources:\n"
         "    dictionary_dir: dictionary\n"
-        "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
-        "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "    iuphar_target_csv: resources/dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "    iuphar_family_csv: resources/dictionary/_IUPHAR/_IUPHAR_family.csv\n"
         "    uniprot_data_dir: uniprot\n"
-        "    targets_type_csv: dictionary/targets_type.csv\n"
+        "    targets_type_csv: resources/dictionary/targets_type.csv\n"
     )
     argv = [*extra, "--config", str(cfg)]
     buf = io.StringIO()
@@ -94,10 +94,10 @@ def test_unknown_key_config_exits(
         "local:\n"
         "  resources:\n"
         "    dictionary_dir: dictionary\n"
-        "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
-        "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "    iuphar_target_csv: resources/dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "    iuphar_family_csv: resources/dictionary/_IUPHAR/_IUPHAR_family.csv\n"
         "    uniprot_data_dir: uniprot\n"
-        "    targets_type_csv: dictionary/targets_type.csv\n"
+        "    targets_type_csv: resources/dictionary/targets_type.csv\n"
         "unknown: 1\n"
     )
     argv = [*extra, "--config", str(cfg)]
@@ -137,10 +137,10 @@ def test_negative_limit_in_config_exits(
         "local:\n"
         "  resources:\n"
         "    dictionary_dir: dictionary\n"
-        "    iuphar_target_csv: dictionary/_IUPHAR/_IUPHAR_target.csv\n"
-        "    iuphar_family_csv: dictionary/_IUPHAR/_IUPHAR_family.csv\n"
+        "    iuphar_target_csv: resources/dictionary/_IUPHAR/_IUPHAR_target.csv\n"
+        "    iuphar_family_csv: resources/dictionary/_IUPHAR/_IUPHAR_family.csv\n"
         "    uniprot_data_dir: uniprot\n"
-        "    targets_type_csv: dictionary/targets_type.csv\n"
+        "    targets_type_csv: resources/dictionary/targets_type.csv\n"
     )
     buf = io.StringIO()
     orig = configure_logger

@@ -1,5 +1,5 @@
 # Example configuration overrides for local development.
-# Copy this file to config/config.local.yaml and adjust values as needed.
+# Copy this file to resources/config/config.local.yaml and adjust values as needed.
 
 sources:
   chembl:

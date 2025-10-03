@@ -2,11 +2,11 @@
 
 ## Overview
 
-* All command-line tools load their defaults from [`config/config.yaml`](../../config/config.yaml) in the project root.
+* All command-line tools load their defaults from [`resources/config/config.yaml`](../../resources/config/config.yaml) in the project root.
 * Values are validated by `library.config.load_config`, which calls `Config.model_validate` from Pydantic. [`config.schema.json`](../../config.schema.json) documents the same structure for tooling but is not executed during start-up.
-* Settings can be overridden via a `config.local.yaml` placed next to the primary configuration (including custom paths supplied via `--config`), environment variables and CLI flags. Precedence is: `config/config.yaml` < `config.local.yaml` < environment variables < CLI arguments.
+* Settings can be overridden via a `config.local.yaml` placed next to the primary configuration (including custom paths supplied via `--config`), environment variables and CLI flags. Precedence is: `resources/config/config.yaml` < `config.local.yaml` < environment variables < CLI arguments.
 
-## Layout of `config/config.yaml`
+## Layout of `resources/config/config.yaml`
 
 | Section | Purpose |
 | --- | --- |
@@ -276,7 +276,7 @@ All URLs must comply with the respective service usage policies, including rate 
 
 ### PubChem lookups (`sources.pubchem`)
 
-PubChem augmentation is primarily used by the test item pipeline. Every key below mirrors [`config/config.yaml`](../../config/config.yaml) and
+PubChem augmentation is primarily used by the test item pipeline. Every key below mirrors [`resources/config/config.yaml`](../../resources/config/config.yaml) and
 can be overridden through environment variables (see [Environment variables](#environment-variables)). The table lists both the
 auto-generated `CHEMBL_DA_SOURCES_PUBCHEM_*` aliases and the generic `CHEMBL_DA__SOURCES__PUBCHEM__*` form. The base URL also
 supports the short alias documented in the [Environment variable aliases](#environment-variables) table.
@@ -334,7 +334,7 @@ IUPHAR and UniProt lookups are stored there by default.
 | `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
 | `csv_fallback_separators` | `["\t", ";"]` | Additional delimiters tried when the primary separator does not expose the requested column. |
 | `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
-| `csv_chunksize` | `10000` | Rows processed per batch by deterministic CSV writers; see [`config/config.yaml`](../../config/config.yaml). |
+| `csv_chunksize` | `10000` | Rows processed per batch by deterministic CSV writers; see [`resources/config/config.yaml`](../../resources/config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Extra values treated as missing identifiers when reading CSV files. |
 | `keep_na_markers` | `false` | Preserve identifiers matching `na_markers` instead of filtering them out. |
 | `exist_ok` | `true` | Create directories automatically when `true`. |
@@ -429,16 +429,16 @@ Any other key can be targeted using the long `CHEMBL_DA__...` form.
 
 ## CLI overrides
 
-* Supply `--config` to point at an alternative YAML file; defaults to `config/config.yaml`.
+* Supply `--config` to point at an alternative YAML file; defaults to `resources/config/config.yaml`.
 * Pass `--print-config` to print the effective configuration (after environment and CLI overrides) and exit.
 * Any CLI argument mapped via `apply_config_overrides` updates the configuration. For example `--batch-size 25` sets `sources.chembl.pipelines.activity.batch_size` for the current run.
-* Nested parameters are changed via `config/config.yaml` or environment variables such as `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`. Flags like `--sources.…` are not defined by the parsers.
+* Nested parameters are changed via `resources/config/config.yaml` or environment variables such as `CHEMBL_DA__SOURCES__CHEMBL__API__RPS=10`. Flags like `--sources.…` are not defined by the parsers.
 
 ## Validation workflow
 
 At start-up the configuration loader:
 
-1. Reads `config/config.yaml`.
+1. Reads `resources/config/config.yaml`.
 2. Applies environment overrides and CLI-derived overrides.
 3. Validates values via `Config.model_validate`, rejecting unknown keys and type mismatches.
 4. Ensures `output_dir` and `cache_dir` exist (creating them when `local.io.exist_ok` is `true`).

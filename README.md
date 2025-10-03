@@ -32,7 +32,7 @@ Browse the reorganised knowledge base via the consolidated [documentation index]
   записью (`--no-normalize-at-export` сохраняет исходное состояние данных).
 * Валидаторы схем (`library/schemas/`) и словари (`dictionary/`) для проверки
   типов, диапазонов и справочников.
-* Конфигурация через `config/config.yaml`, переменные окружения и ключи CLI.
+* Конфигурация через `resources/config/config.yaml`, переменные окружения и ключи CLI.
 * Логирование через стандартный модуль `logging` с настраиваемым уровнем.
 * Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование
   `black`, проверка типов `mypy`, юнит‑тесты `pytest`.
@@ -180,11 +180,11 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
    каталоги.
 
    EN: Without ``--config`` the orchestrator now falls back to the packaged
-   ``config/config.yaml`` via ``library.utils.config.DEFAULT_CONFIG_PATH``. Pass
+   ``resources/config/config.yaml`` via ``library.utils.config.DEFAULT_CONFIG_PATH``. Pass
    an explicit path whenever you maintain a local override.
 
    RU: При запуске без ``--config`` оркестратор использует встроенный
-   ``config/config.yaml`` через ``library.utils.config.DEFAULT_CONFIG_PATH``.
+   ``resources/config/config.yaml`` через ``library.utils.config.DEFAULT_CONFIG_PATH``.
    Собственный YAML укажите явным путём.
 
    For lightweight smoke checks you can still call individual helpers, for
@@ -209,7 +209,7 @@ from pathlib import Path
 
 target = Path.home() / ".config" / "chembl-data-acquisition"
 target.mkdir(parents=True, exist_ok=True)
-source = resources.files("chembl_data_acquisition.config") / "config.yaml"
+source = resources.files("resources.config") / "config.yaml"
 target_cfg = target / "config.yaml"
 target_cfg.write_bytes(source.read_bytes())
 PY
@@ -361,7 +361,7 @@ python -m scripts.get_data \
     --base-path data \
     --input-dir input \
     --output-dir output \
-    --config config/config.yaml \
+    --config resources/config/config.yaml \
     --date 20240101 \
     --log-level INFO
 ```
@@ -562,7 +562,7 @@ api:
   user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 ```
 
-Параметр можно переопределить в `config/config.yaml` или через переменную
+Параметр можно переопределить в `resources/config/config.yaml` или через переменную
 окружения `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`. Перед выводом решения в
 продакшен замените `chembl-data@ebi.ac.uk` на собственный рабочий адрес — это
 лишь документированное значение по умолчанию. Валидатор по-прежнему отвергает
@@ -574,7 +574,7 @@ api:
 
 ## Валидация конфигурации
 
-`library.config.load_config` проверяет корректность значений в `config/config.yaml`.
+`library.config.load_config` проверяет корректность значений в `resources/config/config.yaml`.
 Некорректный URL приводит к `ValueError` при загрузке:
 
 ```yaml
@@ -595,7 +595,7 @@ api:
 
 ## Ошибки конфигурации
 
-Некорректные значения в `config/config.yaml` вызывают `ValidationError`. Пример:
+Некорректные значения в `resources/config/config.yaml` вызывают `ValidationError`. Пример:
 
 ```yaml
 api:
@@ -606,7 +606,7 @@ api:
 
 ```python
 from library.config import load_config
-load_config("config/config.yaml")
+load_config("resources/config/config.yaml")
 ```
 
 Вывод:
@@ -786,7 +786,7 @@ All scripts share a common set of flags:
 ## Configuration
 
 
-Default settings live in ``config/config.yaml`` and are grouped into three top-level
+Default settings live in ``resources/config/config.yaml`` and are grouped into three top-level
 sections:
 
 * ``sources`` – external services such as ChEMBL, OpenAlex, Crossref, UniProt,
@@ -796,7 +796,7 @@ sections:
 * ``system`` – shared concerns such as logging, retry strategy, rate limiting
   and document-type normalisation.
 
-Because the wheel bundles ``config/config.yaml``, any custom configuration file
+Because the wheel bundles ``resources/config/config.yaml``, any custom configuration file
 can simply extend it by overriding the keys you need while omitting the rest.
 Create a lightweight YAML such as:
 
@@ -917,7 +917,7 @@ permits it.
 
 Path values such as ``local.io.output_dir``, ``local.io.cache_dir`` and the ``local.init``
 workbook paths are exposed as :class:`pathlib.Path` objects. String values in
-``config/config.yaml`` or overrides from the environment and command line are
+``resources/config/config.yaml`` or overrides from the environment and command line are
 automatically converted.
  
 ```bash
@@ -939,7 +939,7 @@ python -m library.utils.cli_tools.table_quality_main \
 
 ```
 ChEMBL_data_acquisition/
-├── config/config.yaml
+├── resources/config/config.yaml
 ├── dictionary/
 ├── library/
 │   ├── __init__.py
@@ -972,7 +972,7 @@ ChEMBL_data_acquisition/
 
 ## Конфигурация
 
-Параметры читаются из `config/config.yaml`, переменных окружения
+Параметры читаются из `resources/config/config.yaml`, переменных окружения
 (`CHEMBL_DA__...`) и ключей CLI.
 Подробности в [`docs/reference/ru/CONFIG.md`](./docs/reference/ru/CONFIG.md) и английской версии [`docs/reference/en/CONFIG.md`](./docs/reference/en/CONFIG.md).
 

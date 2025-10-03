@@ -27,7 +27,7 @@ CLI без вложенных подкоманд.
 
 | Опция | Назначение |
 | --- | --- |
-| `--config` | Путь к YAML-файлу конфигурации (по умолчанию `config/config.yaml`). |
+| `--config` | Путь к YAML-файлу конфигурации (по умолчанию `resources/config/config.yaml`). |
 | `--print-config` | Вывести итоговую конфигурацию после переопределений и завершить работу. |
 | `--log-level` | Уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 | `--base-path` | Базовый каталог, применяемый при разрешении путей ввода и вывода. |
@@ -51,7 +51,7 @@ CLI без вложенных подкоманд.
 | `--offset` | Сколько идентификаторов пропустить перед обработкой — полезно для возобновления прерванных запусков. |
 
 Конкретные скрипты добавляют дополнительные ключи (`--timeout`, `--limit`, `--openalex-rps` и т.п.). После разбора аргументов
-`apply_config_overrides` загружает `config/config.yaml`, применяет переменные окружения, переносит CLI-переопределения в конфигурацию и
+`apply_config_overrides` загружает `resources/config/config.yaml`, применяет переменные окружения, переносит CLI-переопределения в конфигурацию и
 возвращает актуальные значения аргументов.
 
 Перед сетевыми вызовами выполняется `library.config.ensure_dirs`, чтобы `local.io.output_dir` и `local.io.cache_dir` существовали
@@ -59,7 +59,7 @@ CLI без вложенных подкоманд.
 
 ### Примерные входные файлы
 
-В репозитории есть несколько компактных наборов в `tests/data/` для быстрой проверки пайплайнов (например, `tests/data/activity_ids_small.csv` и `tests/data/input-smoke/testitem.csv`). Пайплайны без готовых примеров требуют пользовательских CSV с колонкой идентификатора из `config/config.yaml` или переданной через `--column`.
+В репозитории есть несколько компактных наборов в `tests/data/` для быстрой проверки пайплайнов (например, `tests/data/activity_ids_small.csv` и `tests/data/input-smoke/testitem.csv`). Пайплайны без готовых примеров требуют пользовательских CSV с колонкой идентификатора из `resources/config/config.yaml` или переданной через `--column`.
 
 ### Стадии пайплайна
 
@@ -184,7 +184,7 @@ CHEMBL_DA__SOURCES__CHEMBL__PIPELINES__DOCUMENT__PUBMED__BATCH_SIZE=20 \
     --column document_chembl_id
 ```
 
-Альтернативно обновите значение в `config/config.yaml`.
+Альтернативно обновите значение в `resources/config/config.yaml`.
 
 Выберите подкоманду `pubmed`, `chembl` или `all` в зависимости от требуемых источников.
 Сводку и список ключей смотрите в справке: `get-document-data --help`
@@ -314,7 +314,7 @@ sources:
 Вариант консольного скрипта:
 
 ```bash
-get-testitem-data --config config/config.yaml \
+get-testitem-data --config resources/config/config.yaml \
   --input data/input/testitem_ids.csv \
   --batch-size 750 \
   --offset 500
@@ -324,7 +324,7 @@ get-testitem-data --config config/config.yaml \
 
 ```bash
 python -m scripts.get_testitem_data \
-  --config config/config.yaml \
+  --config resources/config/config.yaml \
   --input data/input/testitem_ids.csv \
   --batch-size 750 \
   --offset 500
@@ -345,7 +345,7 @@ PubChem-дополнение добавляет детерминированны
 что файл доступен исполнителю, либо задайте новое расположение переменной окружения
 `CHEMBL_DA_MOLECULE_CATALOG_CACHE` (алиас для `CHEMBL_DA__SOURCES__CHEMBL__MOLECULE_CATALOG__CACHE_PATH`) или правкой
 
-`config/config.yaml`.
+`resources/config/config.yaml`.
 
 
 Для первичного создания либо обновления файла выполните небольшой Python-скрипт с вызовом
@@ -405,7 +405,7 @@ CLI-флаги покрывают задокументированные арг�
 get-activity-data --batch-size 25 --timeout 45
 ```
 
-Вложенные параметры меняются через `config/config.yaml` или переменные окружения. Чтобы временно увеличить лимит запросов
+Вложенные параметры меняются через `resources/config/config.yaml` или переменные окружения. Чтобы временно увеличить лимит запросов
 к ChEMBL без правки файла, экспортируйте переменную и запустите команду в том же сеансе:
 
 ```bash
@@ -421,7 +421,7 @@ get-activity-data
 (`event`) и `run_id`, унаследованный от параметров CLI; дополнительные поля добавляются после автоматической маскировки
 секретов. Применяйте `jq` или подобные инструменты, чтобы фильтровать события по `event`, `stage` или кодам предупреждений
 (`activity_bounds_*`, `parent_lookup_*` и т.д.). Меняйте уровень детализации флагом `--log-level` или переменными окружения без
-правок `config/config.yaml`.
+правок `resources/config/config.yaml`.
 
 ## Переменные окружения
 

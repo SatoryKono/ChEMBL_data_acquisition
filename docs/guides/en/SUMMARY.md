@@ -39,7 +39,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * `io.read_ids` streams identifiers while filtering empty values and enforcing
   the required column names.
 * API access is centralised in `ChemblClient` and companion clients that obey
-  rate limits, retries and timeouts declared in `config/config.yaml`.
+  rate limits, retries and timeouts declared in `resources/config/config.yaml`.
 * Normalisation and enrichment happen inside the scripts, relying on helper
   modules such as `document_pipeline`, `target_postprocessing`,
   `testitem_enrichment` and `activity_bounds`. Validation failures are captured
@@ -50,7 +50,7 @@ add_pipeline_metadata → write_csv_deterministic →
 
 ## Configuration
 
-* Defaults live in [`config/config.yaml`](../../config/config.yaml) and are validated by
+* Defaults live in [`resources/config/config.yaml`](../../resources/config/config.yaml) and are validated by
   `library.config.load_config` via Pydantic's `Config.model_validate`. The generated
   [`config.schema.json`](../../config.schema.json) mirrors the structure for IDEs and tooling.
 * Key sections:
@@ -65,7 +65,7 @@ add_pipeline_metadata → write_csv_deterministic →
     test-item exports.
   * `system.*` – logging, global rate limiting, retry configuration and document
     classification weights.
-* Overrides follow the precedence `config/config.yaml` < environment variables < CLI
+* Overrides follow the precedence `resources/config/config.yaml` < environment variables < CLI
   arguments. Short aliases such as `CHEMBL_DA_RPS` (`sources.chembl.api.rps`)
   and `CHEMBL_DA_OUTDIR` (`local.io.output_dir`) are exposed for convenience.
   The full matrix is documented in `docs/reference/en/CONFIG.md`.

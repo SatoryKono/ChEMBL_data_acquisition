@@ -4,7 +4,7 @@ Example
 -------
 Fetch ChEMBL target information for identifiers in ``targets.csv``::
 
-    python scripts/get_target_data.py chembl --config config/config.yaml --input targets.csv
+    python scripts/get_target_data.py chembl --config resources/config/config.yaml --input targets.csv
 """
 
 # Changelog:

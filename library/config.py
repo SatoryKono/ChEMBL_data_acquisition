@@ -1,6 +1,6 @@
 """Application configuration using Pydantic models.
 
-This module provides a typed wrapper around ``config/config.yaml``. Configuration
+This module provides a typed wrapper around ``resources/config/config.yaml``. Configuration
 values are loaded from a YAML file and can be overridden by environment
 variables or command line options. The order of precedence is::
 
@@ -24,6 +24,7 @@ from pathlib import Path
 from types import UnionType
 from typing import Any, Mapping, Union, get_args, get_origin
 from urllib.parse import urlparse
+from tempfile import TemporaryDirectory
 
 import yaml
 from pydantic import (
@@ -193,15 +194,41 @@ def _resolve_placeholder_base_path(base_path: Path | str | None) -> Path:
 
 _RESOURCE_STACK = ExitStack()
 atexit.register(_RESOURCE_STACK.close)
+_DICTIONARY_CACHE: dict[tuple[str, ...], Path] = {}
+
+
+def _copy_traversable(source: resources.abc.Traversable, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    for entry in source.iterdir():
+        target = destination / entry.name
+        if entry.is_dir():
+            _copy_traversable(entry, target)
+        else:
+            with entry.open("rb") as src, target.open("wb") as dst:
+                dst.write(src.read())
 
 
 def _dictionary_resource(*parts: str) -> Path:
     """Return a filesystem path for a bundled dictionary resource."""
 
-    traversable = resources.files("dictionary")
+    key = tuple(parts)
+    cached = _DICTIONARY_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    traversable = resources.files("resources.dictionary")
     for part in parts:
         traversable = traversable.joinpath(part)
-    return Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
+    if traversable.is_dir():
+        temp_dir = Path(
+            _RESOURCE_STACK.enter_context(TemporaryDirectory(prefix="chembl-da-dict-"))
+        )
+        _copy_traversable(traversable, temp_dir)
+        _DICTIONARY_CACHE[key] = temp_dir
+        return temp_dir
+    path = Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
+    _DICTIONARY_CACHE[key] = path
+    return path
 
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
@@ -379,7 +406,7 @@ class MoleculeCatalogCfg(_BaseModel):
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
     hierarchy_lookup_path: Path | None = Path(
-        "dictionary/_testitem/molecule_hierarchy.csv"
+        "resources/dictionary/_testitem/molecule_hierarchy.csv"
     )
     hierarchy_lookup_encoding: str = "utf-8-sig"
     hierarchy_lookup_delimiter: str = ","
@@ -1021,8 +1048,12 @@ class TestitemCfg(_BaseModel):
 
 
 class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):
-    molecule_catalog_path: Path = Path("dictionary/molecule_catalog.csv")
-    molecule_hierarchy_path: Path = Path("dictionary/molecule_hierarchy.csv")
+    molecule_catalog_path: Path = Path(
+        "resources/dictionary/molecule_catalog.csv"
+    )
+    molecule_hierarchy_path: Path = Path(
+        "resources/dictionary/molecule_hierarchy.csv"
+    )
 
 
 class TestitemMoleculeEnrichmentOutputCfg(_BoolModel):
@@ -1108,7 +1139,7 @@ class DocumentCfg(_BaseModel):
 
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
-    data_dir: Path = Path("dictionary/_target/_uniprot")
+    data_dir: Path = Path("resources/dictionary/_target/_uniprot")
     limit: int | None = Field(default=None, ge=0)
 
 
@@ -1127,15 +1158,23 @@ class TargetChemblCfg(_BaseModel):
 
 
 class TargetIupharCfg(_BaseModel):
-    target_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_target.csv")
-    family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
+    target_csv: Path = Path(
+        "resources/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+    )
+    family_csv: Path = Path(
+        "resources/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
+    )
     limit: int | None = Field(default=None, ge=0)
 
 
 class TargetAllCfg(_BaseModel):
-    data_dir: Path = Path("dictionary/_target/_uniprot")
-    target_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_target.csv")
-    family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
+    data_dir: Path = Path("resources/dictionary/_target/_uniprot")
+    target_csv: Path = Path(
+        "resources/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+    )
+    family_csv: Path = Path(
+        "resources/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
+    )
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, ge=0)
     uniprot_column: str = "uniprot_id"
@@ -1614,7 +1653,7 @@ def load_config(
     if "$defs" in data:
         raise ConfigError(
             f"{resolved_path} appears to be a configuration schema; "
-            "provide an application config file such as config/config.yaml."
+            "provide an application config file such as resources/config/config.yaml."
         )
 
     env_overrides = _apply_env_overrides(data)

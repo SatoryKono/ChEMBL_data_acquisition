@@ -15,7 +15,7 @@
 
 * Потоковая обработка крупных CSV-файлов с детерминированным выводом.
 * Валидаторы схем в [`library/schemas/`](../../library/schemas/) и словари в [`dictionary/`](../../dictionary/) для проверки типов, диапазонов и справочных данных.
-* Конфигурация через `config/config.yaml`, переменные окружения и CLI-переопределения.
+* Конфигурация через `resources/config/config.yaml`, переменные окружения и CLI-переопределения.
 * Логирование на базе стандартного модуля `logging` с настраиваемой детализацией.
 * Полная статическая типизация (PEP 484), линтинг `ruff`, форматирование `black`, проверка типов `mypy` и тесты `pytest`.
 
@@ -356,12 +356,12 @@ api:
   user_agent: "chembl-da/1.0 (mailto:chembl-data@ebi.ac.uk)"
 ```
 
-Переопределите параметр в `config/config.yaml` или переменной окружения `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`, которая
+Переопределите параметр в `resources/config/config.yaml` или переменной окружения `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT`, которая
 соответствует пути `sources.chembl.api.user_agent`. Перед выводом решения в продакшен замените `chembl-data@ebi.ac.uk` на свой рабочий адрес — встроенное значение служит лишь документированным дефолтом. Валидатор по-прежнему проверяет наличие шаблона `contact@example.org` и блокирует запуск, если он встречается. Отдельного CLI-флага нет (см. `library/cli/parser.py`), поэтому используются только конфигурационные файлы или окружение.
 
 ## Валидация конфигурации
 
-`library.config.load_config` проверяет значения в `config/config.yaml`. Некорректный URL вызовет `ValueError` при загрузке:
+`library.config.load_config` проверяет значения в `resources/config/config.yaml`. Некорректный URL вызовет `ValueError` при загрузке:
 
 ```yaml
 api:
@@ -381,7 +381,7 @@ api:
 
 ## Ошибки конфигурации
 
-Некорректные значения в `config/config.yaml` приводят к `ValidationError`. Пример:
+Некорректные значения в `resources/config/config.yaml` приводят к `ValidationError`. Пример:
 
 ```yaml
 api:
@@ -390,7 +390,7 @@ api:
 
 ```python
 from library.config import load_config
-load_config("config/config.yaml")
+load_config("resources/config/config.yaml")
 ```
 
 Результат:
@@ -488,7 +488,7 @@ python -m library.utils.cli_tools.table_quality_main --input tests/data/activity
 
 ```
 ChEMBL_data_acquisition/
-├── config/config.yaml
+├── resources/config/config.yaml
 ├── dictionary/
 ├── library/
 │   ├── __init__.py
@@ -521,7 +521,7 @@ ChEMBL_data_acquisition/
 
 ## Конфигурация
 
-Параметры читаются из `config/config.yaml`, переменных окружения (`CHEMBL_DA__...`) и CLI-флагов. Подробности смотрите в [`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md) (английская версия — [`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md)).
+Параметры читаются из `resources/config/config.yaml`, переменных окружения (`CHEMBL_DA__...`) и CLI-флагов. Подробности смотрите в [`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md) (английская версия — [`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md)).
 
 ### Переменные окружения
 
@@ -592,7 +592,7 @@ YAML < переменные окружения < CLI-флаги
 
 Каталоги, указанные в `local.io.output_dir` и `local.io.cache_dir`, проверяются, но не создаются при загрузке конфигурации. Скрипты, которым нужны эти пути, могут вызвать `library.config.ensure_dirs` после `load_config`, чтобы создать каталоги, если они отсутствуют и флаг `local.io.exist_ok` это разрешает.
 
-Пути вроде `local.io.output_dir`, `local.io.cache_dir` и рабочие книги `local.init` возвращаются как объекты `pathlib.Path`. Строки из `config/config.yaml` или переопределения из окружения и CLI автоматически преобразуются.
+Пути вроде `local.io.output_dir`, `local.io.cache_dir` и рабочие книги `local.init` возвращаются как объекты `pathlib.Path`. Строки из `resources/config/config.yaml` или переопределения из окружения и CLI автоматически преобразуются.
 
 ```bash
 python -m library.utils.cli_tools.table_quality_main \

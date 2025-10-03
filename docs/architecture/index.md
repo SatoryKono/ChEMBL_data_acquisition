@@ -7,7 +7,7 @@ This section gives newcomers a high-level view of how the ChEMBL data acquisitio
 ```mermaid
 flowchart TD
   subgraph Inputs
-    Config["Configuration\n(config/config.yaml)"]
+    Config["Configuration\n(resources/config/config.yaml)"]
     IdSeeds["Identifier seeds\n(dictionary/, data/)"]
   end
   Orchestrators["CLI orchestrators\n(scripts/*.py)"]
@@ -79,7 +79,7 @@ flowchart LR
 
 | Layer | Modules | Responsibilities |
 | ----- | ------- | ---------------- |
-| Configuration | `config/config.yaml`, `config.schema.json` | Central definitions for hosts, rate limits, defaults, staging toggles, and validation switches. |
+| Configuration | `resources/config/config.yaml`, `config.schema.json` | Central definitions for hosts, rate limits, defaults, staging toggles, and validation switches. |
 | Entry points | `scripts/*.py`, console wrappers | Parse CLI options, load configuration, coordinate staging directories, and orchestrate entity-specific modules. |
 | Clients & providers | `library/clients/*`, `library/utils/http.py` | Maintain shared sessions, enforce retries, respect rate limits, and expose batched fetch helpers. |
 | Normalization & schemas | `library/schemas/*`, `library/normalization/*` | Harmonise datatypes and operators, apply Pandera schemas, and route validation errors to sidecars. |
