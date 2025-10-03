@@ -70,7 +70,7 @@ mypy --strict
    * `qa_document_postprocessing_diff_YYYYMMDD.csv` (только при наличии расхождений)
 3. Либо выполните QA-скрипт напрямую:
    ```bash
-   python -m qa.check_document_postprocessing \
+   python -m library.qa.check_document_postprocessing \
        --base-path data \
 
        --ref input\\full\\document.csv \
