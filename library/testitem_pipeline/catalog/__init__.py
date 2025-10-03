@@ -516,6 +516,11 @@ def attach_parent_molecule_ids(
             )
 
     if missing_ids and catalog is None and needs_full_sync:
+        logger.info(
+            "parent_lookup_full_sync_started",
+            missing=len(missing_ids),
+            cache_path=str(catalog_cfg.cache_path),
+        )
         cache_before_load = _cache_state(catalog_cfg.cache_path)
         cache_after_load = cache_before_load
         try:
