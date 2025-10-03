@@ -524,6 +524,10 @@ def test_prepare_parent_enrichment_dictionary_sets_parent(
     assert prep.parent_stats.missing == 0
     assert prep.parent_stats.attached == 1
     assert prep.df[parent_field].tolist() == ["CHEMBL999"]
+    assert (
+        prep.lookup_data.existing_parent_ids.iloc[0]
+        == "CHEMBL999"
+    )
 
 
 def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
@@ -565,6 +569,7 @@ def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
     assert prep.parent_stats.missing == 0
     assert prep.parent_stats.attached == 1
     assert pd.isna(prep.df[parent_field].iloc[0])
+    assert prep.lookup_data.existing_parent_ids.isna().iloc[0]
 
 
 def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
@@ -613,6 +618,7 @@ def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
     assert captured["need"] == {"CHEMBL1"}
     assert prep.parent_stats.missing == 1
     assert prep.parent_stats.attached == 0
+    assert prep.lookup_data.existing_parent_ids.iloc[0] == ""
 
 
 def test_run_parent_enrichment_failure(
@@ -1079,6 +1085,21 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
     event, payload = captured[-1]
     assert event == "molecule_hierarchy_missing_parent_column"
     assert payload.get("column") == "parent_molecule_chembl_id"
+
+
+def test_load_molecule_hierarchy_lookup_normalises_no_parent(
+    tmp_path: Path, cfg: Config
+) -> None:
+    path = tmp_path / "hierarchy.csv"
+    path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\n"
+        "CHEMBL1,NO PARENT\n",
+        encoding=cfg.io.csv_encoding,
+    )
+
+    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+
+    assert result == {"CHEMBL1": None}
 
 
 def test_prepare_pubchem_caches_primes_local_parent_cache(

@@ -98,7 +98,7 @@ from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_SYNC,
 )
 
-_NO_PARENT_MARKERS = {"", "NULL"}
+_NO_PARENT_MARKERS = {"", "NULL", "NO PARENT"}
 
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     """Return ``value`` normalised for PubChem lookup."""
@@ -114,6 +114,22 @@ def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     if not normalised:
         return None
     return normalised.upper() if uppercase else normalised
+
+
+def _normalise_parent_identifier(value: object, *, child_id: str) -> str | None:
+    """Return normalised parent identifier or ``None`` for missing markers."""
+
+    if value is None or pd.isna(value):
+        return None
+
+    normalised_parent = str(value).strip().upper()
+    if not normalised_parent:
+        return None
+    if normalised_parent in _NO_PARENT_MARKERS:
+        return None
+    if normalised_parent == child_id:
+        return None
+    return normalised_parent
 
 
 @lru_cache(maxsize=None)
@@ -175,18 +191,7 @@ def _load_molecule_hierarchy_mapping(
 
     lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent: str | None
-        if pd.isna(parent_id):
-            parent = None
-        else:
-            normalised_parent = str(parent_id)
-            if (
-                normalised_parent in _NO_PARENT_MARKERS
-                or normalised_parent == molecule_id
-            ):
-                parent = None
-            else:
-                parent = normalised_parent
+        parent = _normalise_parent_identifier(parent_id, child_id=molecule_id)
         lookup[molecule_id] = parent
 
     return lookup
@@ -217,7 +222,10 @@ def LoadMoleculeHierarchyLookup(
     return {
         key: {
             "molecule_chembl_id": key,
-            "parent_molecule_chembl_id": value,
+            "parent_molecule_chembl_id": _normalise_parent_identifier(
+                value,
+                child_id=key,
+            ),
         }
         for key, value in cached.items()
     }
@@ -539,7 +547,10 @@ def load_molecule_hierarchy_lookup(
     except ValueError as exc:
         raise ValueError(f"invalid hierarchy lookup: {exc}") from exc
 
-    lookup = dict(raw_lookup)
+    lookup = {
+        child_id: _normalise_parent_identifier(parent_id, child_id=child_id)
+        for child_id, parent_id in raw_lookup.items()
+    }
     if not lookup:
         return {}
 
