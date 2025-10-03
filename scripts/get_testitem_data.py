@@ -94,6 +94,7 @@ _pubchem_resolution_key = pipeline_pubchem._pubchem_resolution_key
 _load_pubchem_cid_cache = pipeline_pubchem._load_pubchem_cid_cache
 resolve_pubchem_cid = pipeline_pubchem.resolve_pubchem_cid
 
+
 _normalise_parent_identifier = pipeline_catalog._normalise_parent_identifier
 _load_molecule_hierarchy_mapping = pipeline_catalog._load_molecule_hierarchy_mapping
 
