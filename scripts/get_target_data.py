@@ -7,6 +7,9 @@ Fetch ChEMBL target information for identifiers in ``targets.csv``::
     python scripts/get_target_data.py chembl --config config/config.yaml --input targets.csv
 """
 
+# Changelog:
+# - Batch column assignments in merge logic to avoid pandas fragmentation warnings.
+
 from __future__ import annotations
 
 # ruff: noqa: E402
@@ -2070,6 +2073,8 @@ def fetch_iuphar(
                 return column[: -len(suffix)]
         return None
 
+    coalesced_updates: dict[str, pd.Series] = {}
+
     def _coalesce_column(df: pd.DataFrame, column: str) -> None:
         preferred: pd.Series | None = None
         for suffix in merge_suffix_priority:
@@ -2082,7 +2087,7 @@ def fetch_iuphar(
             else:
                 preferred = _prefer_primary(preferred, candidate)
         if preferred is not None:
-            df[column] = preferred
+            coalesced_updates[column] = preferred.reindex(df.index)
 
     critical_columns = set(TARGETS_COLUMN_ORDER)
     critical_columns.update(
@@ -2113,6 +2118,10 @@ def fetch_iuphar(
     for column in sorted(base_columns - critical_columns):
         _coalesce_column(combined_df, column)
 
+    if coalesced_updates:
+        combined_df = combined_df.assign(**coalesced_updates)
+        coalesced_updates.clear()
+
     remaining_suffixes = [
         column
         for column in combined_df.columns
@@ -2136,6 +2145,8 @@ def fetch_iuphar(
         set(chembl_for_merge.columns)
         & (set(uniprot_df.columns) - {"original_id"})
     )
+    overlap_updates: dict[str, pd.Series] = {}
+
     for column in overlap_columns:
         chembl_col = f"{column}_chembl"
         uniprot_col = f"{column}_uniprot"
@@ -2162,7 +2173,7 @@ def fetch_iuphar(
                 if uniprot_series is not None
                 else pd.Series(index=combined_df.index, dtype=object)
             )
-            combined_df[column] = pd.Series(
+            overlap_updates[column] = pd.Series(
                 [
                     normalize_reaction_ec_numbers([u, c])
                     for u, c in zip(uniprot_values, chembl_values)
@@ -2171,7 +2182,12 @@ def fetch_iuphar(
                 dtype=object,
             )
         else:
-            combined_df[column] = _prefer_primary(uniprot_series, chembl_series)
+            overlap_updates[column] = _prefer_primary(uniprot_series, chembl_series).reindex(
+                combined_df.index
+            )
+
+    if overlap_updates:
+        combined_df = combined_df.assign(**overlap_updates)
 
     column_updates: dict[str, pd.Series] = {}
     index = combined_df.index
