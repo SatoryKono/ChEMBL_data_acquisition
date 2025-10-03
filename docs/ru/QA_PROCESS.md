@@ -37,10 +37,18 @@ mypy --strict
    ```
 2. Для сертификационных прогонов формируйте агрегированные отчёты (JSON + Markdown + логи):
    ```bash
-   make test-report
+   python scripts/run_tests.py
    ```
-   Команда оборачивает `python -m scripts.run_test_suite`, прогоняет весь набор и складывает артефакты в `reports/`.
-3. При локальной отладке допускается запускать «чистый» `pytest` с нужной детализацией (`-q` или `-vv`).
+   Скрипт сам вызывает `pytest` (эквивалентен `make test`), фиксирует stdout/stderr в `reports/test_run.log`,
+   сохраняет исходный отчёт плагина в `reports/pytest_raw_report.json` и публикует нормализованные артефакты
+   `reports/test_report.json` и `reports/test_summary.md`.
+3. Если требуется жёстко задать детерминированные параметры запуска, предварительно экспортируйте переменные окружения:
+   ```bash
+   PYTHONHASHSEED=${PYTHONHASHSEED:-0} \
+   CHEMBL_DA_BASE_PATH=$(pwd)/tests/data \
+   python scripts/run_tests.py
+   ```
+4. При локальной отладке допускается запускать «чистый» `pytest` с нужной детализацией (`-q` или `-vv`).
 
 ## 4. Проверка детерминизма и smoke-тесты CLI
 
@@ -60,9 +68,10 @@ mypy --strict
 
 Раннер по умолчанию создаёт три артефакта:
 
-- `reports/test_report.json` — машиночитаемый список тестов. Для каждого указаны идентификатор, итоговый статус, суммарная длительность, сообщение об ошибке/skip и путь до общего лог-файла.
+- `reports/test_report.json` — машиночитаемый список тестов. Для каждого указаны идентификатор, итоговый статус, суммарная длительность, агрегированные stdout/stderr, логи шага и текст ошибки (если был).
 - `reports/test_summary.md` — Markdown-дайджест с агрегированными счётчиками и перечнем проваленных/пропущенных тестов.
-- `reports/logs/<suite>.log` — совмещённый лог pytest-сеанса.
+- `reports/test_run.log` — совмещённый лог pytest-сеанса (stdout+stderr).
+- `reports/pytest_raw_report.json` — необработанный отчёт `pytest-json-report` (оставлен для пост-анализа и отладки) и по умолчанию добавлен в `.gitignore`.
 
 Подробная схема и пример Markdown приведены в `tests/README.md`.
 

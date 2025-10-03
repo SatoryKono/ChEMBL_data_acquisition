@@ -1,5 +1,4 @@
 import pandas as pd
-import pandas as pd
 import pytest
 
 from library.pipelines.testitem import cli
@@ -43,3 +42,27 @@ def test_integrate_missing_identifiers__restores_requested_order() -> None:
     )
 
     assert list(result["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL3"]
+
+
+@pytest.mark.unit
+def test_integrate_missing_identifiers__ignores_blank_requested_ids() -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL1"]})
+    result = cli.integrate_missing_identifiers(
+        df,
+        missing_ids=["CHEMBL2"],
+        requested_ids=["", None, "CHEMBL1", "CHEMBL2"],
+    )
+
+    assert list(result["molecule_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+
+
+@pytest.mark.unit
+def test_integrate_missing_identifiers__missing_ids_appended_at_end() -> None:
+    df = pd.DataFrame({"molecule_chembl_id": ["CHEMBL3"]})
+    result = cli.integrate_missing_identifiers(
+        df,
+        missing_ids=["CHEMBL1"],
+        requested_ids=["CHEMBL3"],
+    )
+
+    assert list(result["molecule_chembl_id"]) == ["CHEMBL3", "CHEMBL1"]

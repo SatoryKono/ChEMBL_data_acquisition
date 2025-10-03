@@ -1,15 +1,15 @@
 # Test Summary
 
 - Repo: `SatoryKono/ChEMBL_data_acquisition`
-- Commit: b5a97fc2541b9eda41c3689a4721444bab9ccbc7
+- Commit: ebcbf5a8b0e0f6afe2823985d3c1df51a0726423
 - Branch: work
-- Timestamp (UTC): 2025-10-03T23:33:35.418868+00:00
-- Duration: 1.17 s
+- Timestamp (UTC): 2025-10-03T23:56:02.430565+00:00
+- Duration: 1.70 s
 - Success rate: 100.00%
 
 | total | passed | failed | skipped | xfailed | xpassed | error |
 |------:|-------:|-------:|--------:|--------:|--------:|------:|
-|    33 |    33 |     0 |      0 |      0 |      0 |     0 |
+|    75 |    75 |     0 |      0 |      0 |      0 |     0 |
 
 ## Failed / Error details
-- none
+- None
