@@ -1,5 +1,7 @@
 # Release Notes
 
+> **Languages:** [English](./RELEASE_NOTES.md) · [Русский](../ru/RELEASE_NOTES.md)
+
 ## Unreleased
 
 - Clarified the minimum supported Python version as 3.11 across documentation and runtime checks.

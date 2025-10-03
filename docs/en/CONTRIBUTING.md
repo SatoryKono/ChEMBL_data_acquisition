@@ -1,5 +1,7 @@
 # Contributing
 
+> **Languages:** [English](./CONTRIBUTING.md) · [Русский](../ru/CONTRIBUTING.md)
+
 ## Dependency pinning policy
 
 - Runtime dependencies (`[project.dependencies]`) should use compatible release specifiers (e.g. `~=`, `==`) that refer only to versions published on PyPI.
