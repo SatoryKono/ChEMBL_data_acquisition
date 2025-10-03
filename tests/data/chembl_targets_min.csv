@@ -1,2 +1,0 @@
-target_chembl_id,uniprot_id,pref_name,component_description,gene,chembl_alternative_name,names,secondaryAccessionNames,ec_numbers,reaction_ec_numbers,genus
-CHEMBL1,P12345,Alpha,Alpha component,GENE1,Alt,Name1|Name2,Sec1,1.1.1.1,2.2.2.2,Homo
