@@ -72,6 +72,11 @@ def _normalise_token(value: object) -> str | None:
 def _normalise_output(value: object) -> str | None:
     if value is None:
         return None
+    try:
+        if pd.isna(value):
+            return None
+    except TypeError:
+        pass
     text = str(value).strip()
     return text or None
 

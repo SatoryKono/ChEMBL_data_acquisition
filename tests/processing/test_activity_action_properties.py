@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 
 import pandas as pd
 import pytest
@@ -183,3 +184,44 @@ def test_annotate_action_properties_streams_rows(
     assert annotated.shape[0] == len(large_frame)
     assert "activity_properties" in annotated
     assert "action_type" in annotated
+
+
+def test_pd_na_values_are_ignored_in_annotations() -> None:
+    action_cfg = ActivityActionTypeCfg()
+    properties_cfg = ActivityPropertiesCfg()
+    record = _record(
+        activity_comment=pd.NA,
+        data_validity_comment=pd.NA,
+        data_validity_description=pd.NA,
+    )
+
+    json_text, hash_value = build_activity_properties(
+        record,
+        properties_cfg,
+        features=extract_effect_features(record),
+        metrics_map=normalise_mapping(ActivityActionTypeCfg().metrics),
+        triage_map=normalise_mapping(action_cfg.triages),
+        triage_fields=action_cfg.triage_fields,
+        functionality_fields=action_cfg.functionality_fields,
+        mechanism_fields=action_cfg.mechanism_fields,
+        triage_unmapped=set(),
+    )
+
+    assert json_text is not None
+    assert "<NA>" not in json_text
+    payload = json.loads(json_text)
+    assert "comments" not in payload
+    if hash_value is not None:
+        assert hash_value == sha256(json_text.encode("utf-8")).hexdigest()
+
+    frame = pd.DataFrame([record])
+    annotated = apply_activity_annotations(frame, action_cfg, properties_cfg)
+
+    properties_column = annotated.loc[0, properties_cfg.column]
+    assert isinstance(properties_column, str)
+    assert "<NA>" not in properties_column
+    applied_payload = json.loads(properties_column)
+    assert "comments" not in applied_payload
+    if properties_cfg.hash_column:
+        expected_hash = sha256(properties_column.encode("utf-8")).hexdigest()
+        assert annotated.loc[0, properties_cfg.hash_column] == expected_hash
