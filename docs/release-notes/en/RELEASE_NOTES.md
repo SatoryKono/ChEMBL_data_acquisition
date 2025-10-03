@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Added matching INFO-level logging hooks to `get_document_data`, `get_assay_data`, `get_testitem_data`, and `get_activity_data` so long-running harvests expose progress markers.
 - Clarified the minimum supported Python version as 3.11 across documentation and runtime checks.
 - Documented the requirement to configure `api.user_agent` with a real contact, including validation behaviour and the
   `CHEMBL_DA__SOURCES__CHEMBL__API__USER_AGENT` environment override.
