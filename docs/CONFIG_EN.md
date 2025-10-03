@@ -76,7 +76,7 @@ relative paths are resolved against the configuration file.
 | `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
-| `hierarchy_lookup_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
+| `hierarchy_lookup_path` | `../dictionary/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Text encoding applied when reading the hierarchy lookup CSV; change when the snapshot is saved with a different charset (for example Latin-1 from legacy exports). |
 | `hierarchy_lookup_delimiter` | `,` | Delimiter expected by the hierarchy lookup loader; override for semicolon- or tab-separated snapshots produced by regional data teams. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
@@ -217,7 +217,7 @@ applies exponential backoff between attempts before surfacing the error.
 | --- | --- | --- |
 | `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
 | `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
-| `sources.molecule_hierarchy_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `sources.molecule_hierarchy_path` | `../dictionary/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
 | `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
 | `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
 | `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
@@ -370,7 +370,7 @@ Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke
 
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
-| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/logging_setup.py`](../library/logging_setup.py), so message and timestamp formatting are not configurable here. |
+| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/common/logging_setup.py`](../library/common/logging_setup.py), so message and timestamp formatting are not configurable here. |
 | `rate` | `global_rps` | `100` | Global requests-per-second budget shared across clients. |
 |  | `global_burst` | `100` | Global token bucket burst capacity. |
 |  | `limiter_cache_maxsize` | `128` | Maximum cached limiter instances. |
@@ -442,7 +442,7 @@ Common short aliases:
 
 Any other key can be targeted using the long `CHEMBL_DA__...` form.
 
-> Structured logging details live in [`library/log.py`](../library/log.py) and [`library/logging_setup.py`](../library/logging_setup.py), explaining why the JSON layout (including date formatting) cannot be overridden via `config.yaml`.
+> Structured logging details live in [`library/common/log.py`](../library/common/log.py) and [`library/common/logging_setup.py`](../library/common/logging_setup.py), explaining why the JSON layout (including date formatting) cannot be overridden via `config.yaml`.
 
 ## CLI overrides
 

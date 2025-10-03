@@ -18,6 +18,13 @@ from library.clients import uniprot as uniprot_client  # noqa: E402
 from library.config import ApiCfg, IupharCfg, RetryCfg, UniprotCfg  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def clear_gtop_json_failure_cache() -> None:
+    ul._GTOP_JSON_FAILURE_CACHE.clear()
+    yield
+    ul._GTOP_JSON_FAILURE_CACHE.clear()
+
+
 def test_extract_names() -> None:
     sample = {
         "proteinDescription": {
@@ -313,6 +320,65 @@ def test_collect_info_enriches_gtop(tmp_path: Path) -> None:
     )
     assert len(responses.calls) == 3
 
+
+@responses.activate
+def test_fetch_gtop_endpoint_logs_non_json_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gtop_cfg = IupharCfg(base="https://gtop.example.org/services", rps=10, burst=10)
+    recorded: list[tuple[str, dict[str, object]]] = []
+
+    def capture(event: str, **payload: object) -> None:
+        recorded.append((event, dict(payload)))
+
+    monkeypatch.setattr(ul.logger, "warning", capture)
+
+    responses.add(
+        responses.GET,
+        "https://gtop.example.org/services/targets/1234/function",
+        body="<html></html>",
+        status=200,
+        content_type="text/html",
+    )
+
+    result = ul._fetch_gtop_endpoint("1234", "function", cfg=gtop_cfg)
+
+    assert result is None
+    events = [event for event, _payload in recorded]
+    assert "gtop_non_json_response" in events
+    non_json_records = [payload for event, payload in recorded if event == "gtop_non_json_response"]
+    assert non_json_records and non_json_records[0]["content_type"] == "text/html"
+    assert "gtop_json_decode_failed" not in events
+
+
+@responses.activate
+def test_fetch_gtop_endpoint_caches_json_decode_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gtop_cfg = IupharCfg(base="https://gtop.example.org/services", rps=10, burst=10)
+    recorded: list[tuple[str, dict[str, object]]] = []
+
+    def capture(event: str, **payload: object) -> None:
+        recorded.append((event, dict(payload)))
+
+    monkeypatch.setattr(ul.logger, "warning", capture)
+
+    responses.add(
+        responses.GET,
+        "https://gtop.example.org/services/targets/1234/interactions",
+        body="not json",
+        status=200,
+        content_type="application/json",
+    )
+
+    first = ul._fetch_gtop_endpoint("1234", "interactions", cfg=gtop_cfg)
+    second = ul._fetch_gtop_endpoint("1234", "interactions", cfg=gtop_cfg)
+
+    assert first is None
+    assert second is None
+    events = [event for event, _payload in recorded]
+    assert events.count("gtop_json_decode_failed") == 1
+    assert len(responses.calls) == 1
 
 def test_collect_info_uses_canonical_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -175,7 +175,11 @@ def test_run_all_uses_local_inputs(
     # ------------------------------------------------------------------
     # Validate final output
     # ------------------------------------------------------------------
-    result = pd.read_csv(output_csv, dtype=str)
+    normalized_csv = output_csv.with_name(
+        f"{output_csv.stem}_normalized{output_csv.suffix}"
+    )
+    assert normalized_csv.exists()
+    result = pd.read_csv(normalized_csv, dtype=str)
     assert result.columns.tolist() == TARGETS_COLUMN_ORDER
     row = result.loc[0]
     assert row["target_chembl_id"] == "CHEMBL1"

@@ -129,7 +129,7 @@ def _load_molecule_hierarchy_mapping(
     path: str,
     encoding: str,
     delimiter: str,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """Return cached child → parent mapping with normalised identifiers."""
 
     csv_path = Path(path)
@@ -172,21 +172,22 @@ def _load_molecule_hierarchy_mapping(
         subset[parent_column] = frame[parent_column].copy()
 
     for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = (
-            subset[column].fillna("").astype("string").str.strip().str.upper()
-        )
+        subset[column] = subset[column].astype("string").str.strip().str.upper()
 
+    subset = subset[subset["molecule_chembl_id"].notna()]
     subset = subset[subset["molecule_chembl_id"] != ""]
     subset = subset.drop_duplicates(
         subset=["molecule_chembl_id"],
         keep="first",
     )
 
-    lookup: dict[str, str] = {}
+    lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = parent_id or ""
-        if parent == molecule_id:
-            parent = ""
+        parent: str | None
+        if pd.isna(parent_id) or parent_id == "" or parent_id == molecule_id:
+            parent = None
+        else:
+            parent = parent_id
         lookup[molecule_id] = parent
 
     return lookup
@@ -198,7 +199,7 @@ def LoadMoleculeHierarchyLookup(
     encoding: str | None = None,
     delimiter: str | None = None,
     catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, str | None]]:
     """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
 
     cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
@@ -230,7 +231,7 @@ def load_molecule_hierarchy_lookup(
     encoding: str | None = None,
     delimiter: str | None = None,
     catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """Return child → parent mapping loaded from a local hierarchy file."""
 
     cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
@@ -266,7 +267,7 @@ def load_molecule_hierarchy_lookup(
     if not lookup:
         return {}
 
-    attached_rows = sum(1 for value in lookup.values() if value)
+    attached_rows = sum(1 for value in lookup.values() if value is not None and value != "")
 
     logger.info(
         "molecule_hierarchy_lookup_loaded",
@@ -615,20 +616,21 @@ def prepare_parent_enrichment(
 
     hierarchy_attached = 0
 
+    dictionary_resolved_children: set[str] = set()
     if hierarchy_lookup:
-        hierarchy_values = {
-            key: value for key, value in hierarchy_lookup.items() if value is not None
-        }
-    else:
-        hierarchy_values = {}
-
-    if hierarchy_values:
+        missing_sentinel = object()
         hierarchy_series = normalised_ids.map(
-            lambda value: hierarchy_values.get(value) if value else None
+            lambda value: hierarchy_lookup.get(value, missing_sentinel)
+            if value
+            else missing_sentinel
         )
-        hierarchy_mask = hierarchy_series.notna()
+        hierarchy_series = pd.Series(hierarchy_series, index=df.index, dtype="object")
+        hierarchy_mask = hierarchy_series.ne(missing_sentinel)
         if hierarchy_mask.any():
-            resolved = hierarchy_series[hierarchy_mask].astype("string")
+            resolved_values = hierarchy_series[hierarchy_mask]
+            dictionary_resolved_children = set(
+                normalised_ids.loc[hierarchy_mask & normalised_ids.ne("")].tolist()
+            )
             if parent_column in df.columns:
                 df[parent_column] = df[parent_column].astype("string")
             else:
@@ -637,12 +639,21 @@ def prepare_parent_enrichment(
             existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
             hierarchy_attached = int(hierarchy_mask.sum())
 
+            has_parent_mask = resolved_values.notna()
+            if has_parent_mask.any():
+                parent_updates = resolved_values[has_parent_mask].astype("string")
+                df.loc[parent_updates.index, parent_column] = parent_updates
+                existing_parent.loc[parent_updates.index] = parent_updates.astype("string")
+
     if getattr(catalog_cfg, "force_refresh_existing", False):
         need_lookup_mask = normalised_ids != ""
     else:
         need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
     initial_need_lookup = set(normalised_ids[need_lookup_mask])
-    need_lookup = set(initial_need_lookup)
+    if dictionary_resolved_children:
+        need_lookup = initial_need_lookup - dictionary_resolved_children
+    else:
+        need_lookup = set(initial_need_lookup)
 
     cache_before = _cache_state(catalog_cfg.cache_path)
     cache_after = cache_before

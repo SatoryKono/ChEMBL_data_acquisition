@@ -379,7 +379,7 @@ class MoleculeCatalogCfg(_BaseModel):
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
     hierarchy_lookup_path: Path | None = Path(
-        "dictionary/_testitem/molecule_hierarchy.csv"
+        "dictionary/molecule_hierarchy.csv"
     )
     hierarchy_lookup_encoding: str = "utf-8-sig"
     hierarchy_lookup_delimiter: str = ","

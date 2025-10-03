@@ -71,7 +71,7 @@ The document export now includes an automated regression check against the legac
    * `qa_document_postprocessing_diff_YYYYMMDD.csv` (only when mismatches are present)
 3. Alternatively execute the QA script directly:
    ```bash
-   python -m qa.check_document_postprocessing \
+   python -m library.qa.check_document_postprocessing \
        --base-path data \
 
        --ref input\\full\\document.csv \

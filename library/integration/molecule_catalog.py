@@ -563,6 +563,7 @@ def fetch_parent_catalog(
     effective_timeout = timeout if timeout is not None else api_cfg.timeout_read
 
     while next_url:
+        logger.debug("parent_catalog_page", url=next_url, collected=len(result))
         data = client.request_json(next_url, cfg=api_cfg, timeout=effective_timeout)
         items = (
             data.get("molecules")
