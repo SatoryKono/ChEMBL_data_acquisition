@@ -7,7 +7,7 @@ import pandas as pd
 import yaml
 
 from library.config import Config
-from tests.pipelines.test_activity_extraction import DummyChemblClient  # type: ignore
+from tests.integration.pipelines.test_activity_extraction import DummyChemblClient  # type: ignore
 
 
 def test_activity_action_properties_cli(tmp_path: Path, monkeypatch) -> None:

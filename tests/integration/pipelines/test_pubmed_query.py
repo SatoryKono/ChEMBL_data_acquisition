@@ -19,7 +19,7 @@ from library.clients import semantic_scholar as ss_client
 
 from library.pubmed import query as pq
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path("tests/data")
 
 
 def test_read_pmids() -> None:

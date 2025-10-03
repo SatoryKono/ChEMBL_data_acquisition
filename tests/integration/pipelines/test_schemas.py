@@ -27,6 +27,9 @@ from library.schemas import (
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
+DATA_DIR = Path("tests/data")
+
+
 DEFAULT_ACTION_TYPE_METRICS = {
     "ic50": "inhibition",
     "ec50": "activation",
@@ -375,7 +378,7 @@ def test_documents_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
 
 def test_activities_from_files() -> None:
     """Validate activities data from CSV/JSON files and capture failures."""
-    data_dir = Path(__file__).parent / "data"
+    data_dir = DATA_DIR
 
     # Positive case: CSV data passes validation after normalisation
     valid = pd.read_csv(data_dir / "activities_valid.csv", dtype=str).assign(

@@ -22,6 +22,9 @@ from library.config import Config
 from library.common.csv_utils import sha256_file, write_csv_deterministic
 
 
+DATA_DIR = Path("tests/data")
+
+
 def test_write_csv_deterministic(tmp_path: Path) -> None:
     df = pd.DataFrame(
         {
@@ -94,9 +97,9 @@ def test_write_csv_deterministic_empty_dataframe_golden(tmp_path: Path) -> None:
     path = tmp_path / "empty.csv"
     write_csv_deterministic(df, path, key_cols=sorted(df.columns))
 
-    expected = (
-        Path(__file__).parent / "data" / "golden" / "empty_with_header.csv"
-    ).read_text(encoding="utf-8-sig")
+    expected = (DATA_DIR / "golden" / "empty_with_header.csv").read_text(
+        encoding="utf-8-sig"
+    )
     assert path.read_text(encoding="utf-8-sig") == expected
 
 
@@ -107,9 +110,9 @@ def test_write_csv_deterministic_empty_no_columns(tmp_path: Path) -> None:
     path = tmp_path / "empty.csv"
     write_csv_deterministic(df, path, key_cols=[])
 
-    expected = (
-        Path(__file__).parent / "data" / "golden" / "empty_no_columns.csv"
-    ).read_text(encoding="utf-8-sig")
+    expected = (DATA_DIR / "golden" / "empty_no_columns.csv").read_text(
+        encoding="utf-8-sig"
+    )
     assert path.read_text(encoding="utf-8-sig") == expected
 
 
@@ -160,7 +163,7 @@ def test_write_csv_deterministic_missing_sort_columns(
 def test_deterministic_writes_identical_bytes(tmp_path: Path) -> None:
     """Ensure deterministic writes produce identical files."""
 
-    data_path = Path(__file__).parent / "data" / "csv_utils_input.csv"
+    data_path = DATA_DIR / "csv_utils_input.csv"
     df = pd.read_csv(data_path, parse_dates=["d"])
     df1 = df.sample(frac=1, random_state=1).reset_index(drop=True)
     df2 = df.sample(frac=1, random_state=2).reset_index(drop=True)

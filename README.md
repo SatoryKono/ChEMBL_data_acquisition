@@ -686,7 +686,7 @@ Typical log entries look like:
 {"ts":"2024-05-01T12:00:03Z","level":"INFO","event":"pipeline_done","run_id":"abc123","stage":"pipeline","elapsed":3.2}
 ```
 
-Smoke fixtures for full orchestration live in ``tests/data/input-smoke/``. The expected JSON structure (including stage names and placeholder counters) is validated by ``tests/test_logging.py``, ``tests/test_logging_setup.py`` and the smoke harness ``tests/smoke/test_get_data_scripts.py``.
+Smoke fixtures for full orchestration live in ``tests/data/input-smoke/``. The expected JSON structure (including stage names and placeholder counters) is validated by ``tests/unit/utils/test_logging.py``, ``tests/unit/utils/test_logging_setup.py`` and the smoke harness ``tests/smoke/test_get_data_scripts.py``.
 
 ## Reproducibility / Воспроизводимость
 
@@ -955,7 +955,11 @@ ChEMBL_data_acquisition/
 │   ├── get_assay_data.py
 │   ├── ...
 ├── tests/
-│   └── data/
+│   ├── data/
+│   ├── fixtures/
+│   ├── integration/
+│   ├── smoke/
+│   └── unit/
 └── docs/
     ├── en/
     │   ├── CHANGELOG.md

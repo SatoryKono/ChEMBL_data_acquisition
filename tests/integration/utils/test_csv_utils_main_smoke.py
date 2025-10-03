@@ -8,9 +8,12 @@ import sys
 from pathlib import Path
 
 
+DATA_DIR = Path("tests/data")
+
+
 def test_csv_utils_main_logs_runtime(tmp_path: Path) -> None:
     """The CLI should log its execution duration."""
-    input_csv = Path(__file__).parent / "data" / "csv_utils_input.csv"
+    input_csv = DATA_DIR / "csv_utils_input.csv"
     output_csv = tmp_path / "out.csv"
     proc = subprocess.run(
         [
