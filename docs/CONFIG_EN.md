@@ -78,7 +78,7 @@ Each sub-section below defines defaults for the respective CLI utility. CLI argu
 | `timeout` | `30.0` | Request timeout in seconds. |
 | `workers` | `1` | Number of parallel worker processes handling API batches. |
 | `limit` | `null` | Optional cap on identifiers processed. |
-| `dry_run` | `false` | Skip network calls and file generation when `true`. |
+| `dry_run` | `false` | Skip network calls and file generation, logging `step_skip_dry_run` and leaving temporary/sentinel files untouched. |
 
 #### Activity bounds (`activity_bounds`)
 

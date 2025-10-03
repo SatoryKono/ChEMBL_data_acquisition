@@ -779,6 +779,9 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
     _LOGGER.info("pipeline_start", stage="pipeline")
     for step in _PIPELINE_STEPS:
         _LOGGER.info("step_start", step=step.name)
+        if cfg.dry_run:
+            _LOGGER.info("step_skip_dry_run", step=step.name)
+            continue
         final_output = step.expected_output(cfg)
         working_output = _temporary_output_path(final_output)
         sentinel_path = _failure_sentinel_path(final_output)
