@@ -17,6 +17,7 @@ flowchart TD
   Exporters["Writers & metadata\n(library/io/*)"]
   Artefacts["Deterministic exports\n(output/, data/logs/)"]
 
+
   Inputs --> Orchestrators
   Orchestrators --> Clients
   Clients --> Normalizers
@@ -24,7 +25,7 @@ flowchart TD
   PostProcessors --> Exporters
   Exporters --> Artefacts
 
-  Orchestrators -. telemetry .-> Logs["Structured logging"]
+  Orchestrators -. telemetry .-> Logs["Structured logging\n(runtime-only logs/)"]
   Exporters -. sidecars .-> Metadata["YAML & quality reports"]
 ```
 
