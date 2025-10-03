@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
+
+
+SUCCESS_RATE_THRESHOLD = 0.95
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,22 +72,46 @@ def _format_longrepr(longrepr: Any) -> str:
     return str(longrepr)
 
 
-def _write_json(report_path: Path, plugin: JsonReportPlugin, exit_code: int) -> None:
-    payload = {
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "exit_code": exit_code,
-        "tests": [asdict(result) for result in plugin.results],
-    }
-    report_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
-
-def _write_summary(summary_path: Path, plugin: JsonReportPlugin, exit_code: int) -> None:
-    results = plugin.results
+def summarize_results(results: Sequence[TestResult]) -> dict[str, Any]:
     total = len(results)
     passed = sum(1 for item in results if item.status == "passed")
     failed = sum(1 for item in results if item.status == "failed")
     skipped = sum(1 for item in results if item.status == "skipped")
     duration = sum(item.duration for item in results)
+    success_rate = 1.0 if total == 0 else passed / total
+
+    return {
+        "total": total,
+        "passed": passed,
+        "failed": failed,
+        "skipped": skipped,
+        "duration": duration,
+        "success_rate": success_rate,
+    }
+
+
+def _write_json(report_path: Path, results: Sequence[TestResult], exit_code: int, summary: dict[str, Any]) -> None:
+    payload = {
+        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "exit_code": exit_code,
+        "summary": summary,
+        "tests": [asdict(result) for result in results],
+    }
+    report_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _write_summary(
+    summary_path: Path,
+    results: Sequence[TestResult],
+    exit_code: int,
+    summary: dict[str, Any],
+) -> None:
+    total = summary["total"]
+    passed = summary["passed"]
+    failed = summary["failed"]
+    skipped = summary["skipped"]
+    duration = summary["duration"]
+    success_rate = summary["success_rate"] * 100
 
     lines = [
         "# Test suite summary",
@@ -92,6 +123,7 @@ def _write_summary(summary_path: Path, plugin: JsonReportPlugin, exit_code: int)
         f"* Failed: {failed}",
         f"* Skipped: {skipped}",
         f"* Cumulative duration: {duration:.2f}s",
+        f"* Success rate: {success_rate:.2f}%",
         "",
         "## Failing tests" if failed else "## Failing tests",
     ]
@@ -168,12 +200,25 @@ def main(argv: list[str] | None = None) -> int:
         pytest_args.extend(args.pytest_args)
 
     plugin = JsonReportPlugin(log_path)
-    exit_code = pytest.main(pytest_args, plugins=[plugin])
+    pytest_exit_code = pytest.main(pytest_args, plugins=[plugin])
+    exit_code = int(pytest_exit_code)
+
+    results = plugin.results
+    summary = summarize_results(results)
+
+    if summary["success_rate"] < SUCCESS_RATE_THRESHOLD:
+        logger.error(
+            "Success rate %.2f%% is below the required threshold of %.2f%%",
+            summary["success_rate"] * 100,
+            SUCCESS_RATE_THRESHOLD * 100,
+        )
+        if exit_code == 0:
+            exit_code = 1
 
     json_path = report_dir / "test_report.json"
     summary_path = report_dir / "test_summary.md"
-    _write_json(json_path, plugin, exit_code)
-    _write_summary(summary_path, plugin, exit_code)
+    _write_json(json_path, results, exit_code, summary)
+    _write_summary(summary_path, results, exit_code, summary)
 
     return int(exit_code)
 
