@@ -494,13 +494,14 @@ def test_prepare_parent_enrichment_dictionary_sets_parent(
     cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
     cfg.molecule_catalog.cache_path.write_text("{}")
     cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
-
-    for target in (pipeline, pipeline.catalog):
-        monkeypatch.setattr(
-            target,
-            "load_molecule_hierarchy_lookup",
-            lambda *_, **__: {"CHEMBL1": "CHEMBL999"},
-        )
+    hierarchy_path = tmp_path / "hierarchy.csv"
+    hierarchy_path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL1,CHEMBL999\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    cfg.molecule_catalog.hierarchy_lookup_path = hierarchy_path
+    cfg.molecule_catalog.hierarchy_lookup_encoding = cfg.io.csv_encoding
+    cfg.molecule_catalog.hierarchy_lookup_delimiter = cfg.io.csv_sep
     for target in (pipeline, pipeline.catalog):
         monkeypatch.setattr(target, "query_parent_catalog", lambda *_, **__: pytest.fail("no fallback"))
         monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
@@ -534,13 +535,14 @@ def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
     cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
     cfg.molecule_catalog.cache_path.write_text("{}")
     cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
-
-    for target in (pipeline, pipeline.catalog):
-        monkeypatch.setattr(
-            target,
-            "load_molecule_hierarchy_lookup",
-            lambda *_, **__: {"CHEMBL1": None},
-        )
+    hierarchy_path = tmp_path / "hierarchy.csv"
+    hierarchy_path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL1,NULL\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    cfg.molecule_catalog.hierarchy_lookup_path = hierarchy_path
+    cfg.molecule_catalog.hierarchy_lookup_encoding = cfg.io.csv_encoding
+    cfg.molecule_catalog.hierarchy_lookup_delimiter = cfg.io.csv_sep
     for target in (pipeline, pipeline.catalog):
         monkeypatch.setattr(target, "query_parent_catalog", lambda *_, **__: pytest.fail("no fallback"))
         monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
@@ -574,9 +576,14 @@ def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
     cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
     cfg.molecule_catalog.cache_path.write_text("{}")
     cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
-
-    for target in (pipeline, pipeline.catalog):
-        monkeypatch.setattr(target, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    hierarchy_path = tmp_path / "hierarchy.csv"
+    hierarchy_path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL2,CHEMBL3\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    cfg.molecule_catalog.hierarchy_lookup_path = hierarchy_path
+    cfg.molecule_catalog.hierarchy_lookup_encoding = cfg.io.csv_encoding
+    cfg.molecule_catalog.hierarchy_lookup_delimiter = cfg.io.csv_sep
 
     captured: dict[str, set[str]] = {"need": set()}
 
@@ -1030,6 +1037,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
                 "molecule_chembl_id,parent_molecule_chembl_id",
                 "CHEMBL1,CHEMBL2",
                 "CHEMBL3,",
+                "CHEMBL4,NULL",
                 ",CHEMBL4",
                 " chembl5 , chembl6 ",
                 "CHEMBL1,CHEMBL7",
@@ -1043,6 +1051,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
     assert result == {
         "CHEMBL1": "CHEMBL2",
         "CHEMBL3": None,
+        "CHEMBL4": None,
         "CHEMBL5": "CHEMBL6",
     }
 
