@@ -66,16 +66,18 @@ console scripts for each pipeline. Use them interchangeably with the
 
 | Компонент     | Минимальная версия | Последняя протестированная |
 |---------------|--------------------|-----------------------------|
-| Python        | ≥3.11              | 3.12                        |
+| Python        | 3.11–3.12          | 3.12                        |
 | numpy         | ≥1.26              | 2.3.3                       |
 | pandas        | ≥2.0               | 2.3.3                       |
 | requests      | ≥2.31              | 2.32.5                      |
 | PyYAML        | ≥6.0               | 6.0.3                       |
 
 **EN.** `requirements-lock.txt` is the single source of truth for pinned
-dependencies; `pyproject.toml` documents the declared dependency ranges.
+dependencies; `pyproject.toml` documents the declared dependency ranges. The
+package is tested on CPython 3.11 and 3.12 and does not yet support 3.13.
 **RU.** Файл `requirements-lock.txt` — единый источник истины с фиксированными
 версиями, а `pyproject.toml` описывает поддерживаемые диапазоны зависимостей.
+Пакет тестируется на CPython 3.11 и 3.12; поддержка 3.13 пока отсутствует.
 
 ### Среда выполнения
 
