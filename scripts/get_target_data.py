@@ -1145,9 +1145,10 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
     doc_quality_cfg = cfg.system.doc_quality
     try:
         if doc_quality_cfg.enable:
+            quality_table_name = output.stem
             analyze_table_quality(
                 out_df,
-                table_name=str(output.with_suffix("")),
+                table_name=quality_table_name,
                 destination_dir=output.parent,
                 sample_rows=doc_quality_cfg.sample_rows,
                 include_columns=doc_quality_cfg.include_columns,
