@@ -3,38 +3,76 @@
 from __future__ import annotations
 
 import json
+import sys
 from importlib import import_module
+from importlib.util import (
+    find_spec,
+    module_from_spec,
+    spec_from_file_location,
+)
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import requests
 
-from .catalog import (
-    LoadMoleculeHierarchyLookup,
-    PARENT_LOOKUP_SOURCE_CACHE,
-    PARENT_LOOKUP_SOURCE_LOOKUP,
-    PARENT_LOOKUP_SOURCE_PARTIAL,
-    PARENT_LOOKUP_SOURCE_SKIPPED,
-    PARENT_LOOKUP_SOURCE_SYNC,
-    ParentEnrichmentPreparation,
-    ParentEnrichmentResult,
-    ParentLookupPreparedData,
-    ParentLookupStats,
-    _DEFAULT_CATALOG_CFG,
-    _MOLECULE_HIERARCHY_COLUMNS,
-    _TYPO_PARENT_COLUMN,
-    _merge_parent_stats,
-    attach_parent_molecule_ids,
-    ensure_no_parant_column,
-    load_molecule_hierarchy_lookup,
-    load_parent_catalog,
-    molecule_catalog,
-    prepare_parent_enrichment,
-    query_parent_catalog,
-    run_parent_enrichment,
-    update_parent_catalog_cache,
-    write_parent_catalog_cache,
+_CATALOG_EXPORTS = (
+    "LoadMoleculeHierarchyLookup",
+    "PARENT_LOOKUP_SOURCE_CACHE",
+    "PARENT_LOOKUP_SOURCE_LOOKUP",
+    "PARENT_LOOKUP_SOURCE_PARTIAL",
+    "PARENT_LOOKUP_SOURCE_SKIPPED",
+    "PARENT_LOOKUP_SOURCE_SYNC",
+    "ParentEnrichmentPreparation",
+    "ParentEnrichmentResult",
+    "ParentLookupPreparedData",
+    "ParentLookupStats",
+    "_DEFAULT_CATALOG_CFG",
+    "_MOLECULE_HIERARCHY_COLUMNS",
+    "_TYPO_PARENT_COLUMN",
+    "_merge_parent_stats",
+    "attach_parent_molecule_ids",
+    "ensure_no_parant_column",
+    "load_molecule_hierarchy_lookup",
+    "load_parent_catalog",
+    "molecule_catalog",
+    "prepare_parent_enrichment",
+    "query_parent_catalog",
+    "run_parent_enrichment",
+    "update_parent_catalog_cache",
+    "write_parent_catalog_cache",
 )
+
+
+def _load_local_module(module_name: str) -> ModuleType:
+    """Load a sibling module directly from disk as a fallback."""
+
+    package_name = __name__
+    qualified_name = f"{package_name}.{module_name}"
+    module_path = Path(__file__).with_name(f"{module_name}.py")
+    spec = spec_from_file_location(qualified_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(qualified_name)
+    module = module_from_spec(spec)
+    sys.modules[qualified_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _export_from_module(module: ModuleType, names: tuple[str, ...]) -> None:
+    """Populate the module globals with the selected attributes."""
+
+    for name in names:
+        globals()[name] = getattr(module, name)
+catalog_module_name = f"{__name__}.catalog"
+catalog_spec = find_spec(catalog_module_name)
+
+if catalog_spec is not None:
+    catalog_module = import_module(catalog_module_name)
+else:  # pragma: no cover - environment-specific fallback
+    catalog_module = _load_local_module("catalog")
+
+_export_from_module(catalog_module, _CATALOG_EXPORTS)
 
 
 class _LazyModuleProxy:
