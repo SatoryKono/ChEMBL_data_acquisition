@@ -370,7 +370,7 @@ Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke
 
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
-| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/logging_setup.py`](../library/logging_setup.py), so message and timestamp formatting are not configurable here. |
+| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/common/logging_setup.py`](../library/common/logging_setup.py), so message and timestamp formatting are not configurable here. |
 | `rate` | `global_rps` | `100` | Global requests-per-second budget shared across clients. |
 |  | `global_burst` | `100` | Global token bucket burst capacity. |
 |  | `limiter_cache_maxsize` | `128` | Maximum cached limiter instances. |
@@ -442,7 +442,7 @@ Common short aliases:
 
 Any other key can be targeted using the long `CHEMBL_DA__...` form.
 
-> Structured logging details live in [`library/log.py`](../library/log.py) and [`library/logging_setup.py`](../library/logging_setup.py), explaining why the JSON layout (including date formatting) cannot be overridden via `config.yaml`.
+> Structured logging details live in [`library/common/log.py`](../library/common/log.py) and [`library/common/logging_setup.py`](../library/common/logging_setup.py), explaining why the JSON layout (including date formatting) cannot be overridden via `config.yaml`.
 
 ## CLI overrides
 

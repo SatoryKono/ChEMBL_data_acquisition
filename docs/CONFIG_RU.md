@@ -358,7 +358,7 @@ CLI-параметры имеют приоритет над YAML и окруже
 
 | Подсекция | Ключ | Значение | Описание |
 | --- | --- | --- | --- |
-| `log` | `level` | `INFO` | Уровень логирования по умолчанию. Структурированный JSON-вывод использует фиксированную схему из [`library/logging_setup.py`](../library/logging_setup.py), поэтому формат сообщения и таймстемпа через конфигурацию не меняется. |
+| `log` | `level` | `INFO` | Уровень логирования по умолчанию. Структурированный JSON-вывод использует фиксированную схему из [`library/common/logging_setup.py`](../library/common/logging_setup.py), поэтому формат сообщения и таймстемпа через конфигурацию не меняется. |
 | `rate` | `global_rps` | `100` | Глобальный лимит запросов в секунду. |
 |  | `global_burst` | `100` | Ёмкость глобального токен-бакета. |
 |  | `limiter_cache_maxsize` | `128` | Максимум кэшированных лимитеров. |
@@ -425,7 +425,7 @@ export CHEMBL_DA__LOCAL__IO__OUTPUT_DIR=/mnt/datasets
 
 Любой другой ключ можно задать в длинной форме `CHEMBL_DA__...`.
 
-> Детали JSON-формата описаны в [`library/log.py`](../library/log.py) и [`library/logging_setup.py`](../library/logging_setup.py); из-за этого `config.yaml` не позволяет переопределить формат сообщений и дату.
+> Детали JSON-формата описаны в [`library/common/log.py`](../library/common/log.py) и [`library/common/logging_setup.py`](../library/common/logging_setup.py); из-за этого `config.yaml` не позволяет переопределить формат сообщений и дату.
 
 ## CLI-переопределения
 
