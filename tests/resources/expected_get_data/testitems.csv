@@ -1,0 +1,3 @@
+molecule_chembl_id,relation,units,parent_molecule_chembl_id,natural_product
+CHEMBL1,<=,1 uM,CHEMBL10,yes
+CHEMBL999,,,,

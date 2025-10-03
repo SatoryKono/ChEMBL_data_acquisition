@@ -1,0 +1,3 @@
+target_chembl_id,target_pref_name,organism,tax_id
+CHEMBL1,Alpha receptor,Human,9606
+CHEMBL2,Unknown Target,Mouse,

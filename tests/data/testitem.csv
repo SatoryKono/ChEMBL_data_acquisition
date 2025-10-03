@@ -1,0 +1,4 @@
+molecule_chembl_id,relation,units
+CHEMBL1,<,1 μM
+CHEMBL999,,
+CHEMBL1,<,1 μM

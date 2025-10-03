@@ -24,3 +24,23 @@ To focus on a subset, pass extra arguments after `--pytest-args`, for example `p
 Individual modules can be targeted by pointing pytest at a directory, for example `pytest tests/unit` or `pytest tests/integration -k enrich` to filter by test name.
 
 When developing additional scenarios, keep the guardrails documented in `tests/conftest.py` (seed fixing, network ban, temporary directories) to preserve reproducibility. All new tests should emit deterministic output so that `tools/run_tests.py` can regenerate the reports without spurious diffs.
+
+## End-to-end orchestration scenario
+
+`tests/e2e/test_get_data_end_to_end.py` exercises the `scripts.get_data` CLI on a
+compact fixture set stored in `tests/data/`. The stubbed pipelines validate the
+input schemas, apply the normalisation helpers from `library.schemas.normalize`
+and emulate enrichment/post-processing rules such as target taxonomy lookups and
+molecule hierarchy joins. Expected CSV artefacts live under
+`tests/resources/expected_get_data/` and capture the deterministic outputs for
+all five pipeline stages. The test asserts that
+
+- intermediate warnings are emitted for missing values, enrichment gaps and
+  deduplicated rows,
+- normalised CSVs match the golden files (including the `output.<stem>_<date>.csv`
+  naming convention),
+- rerunning the orchestration on the same data set is idempotent (bitwise-identical
+  exports and identical warning stream).
+
+This scenario provides quick coverage for the critical pipeline checklist items
+listed in the repository guidelines without hitting external network services.

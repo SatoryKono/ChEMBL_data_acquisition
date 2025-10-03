@@ -1,0 +1,4 @@
+assay_chembl_id,description,relation,units
+CHEMBL_A1," Desc ",<,10 μM
+CHEMBL_A2,,>=,20 μM
+CHEMBL_A1," Desc ",<,10 μM

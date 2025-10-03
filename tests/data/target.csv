@@ -1,0 +1,4 @@
+target_chembl_id,target_pref_name,organism
+CHEMBL1," Alpha receptor ",Human
+CHEMBL2,,Mouse
+CHEMBL1," Alpha receptor ",Human
