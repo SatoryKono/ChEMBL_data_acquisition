@@ -17,6 +17,7 @@ import pandas as pd
 from ... import validation
 from ...config import IoCfg
 from ...common.csv_utils import write_csv_deterministic
+from ...common.text_utils import to_text
 
 
 # ===== Parameters ===========================================================
@@ -156,30 +157,6 @@ REFERENCE_REQUIRED_COLUMNS: tuple[str, ...] = (
 
 
 # ===== Helper utilities =====================================================
-
-
-def to_text(value: Any) -> str:
-    """Return *value* converted to text, mapping nulls to ``""``."""
-
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, bytes):
-        return value.decode(UTF8_ENCODING, errors="ignore")
-    if isinstance(value, (np.bool_, bool)):
-        return "true" if bool(value) else "false"
-    if isinstance(value, (np.integer, int)):
-        return str(int(value))
-    if isinstance(value, (np.floating, float)):
-        if float(value) != float(value):  # NaN check
-            return ""
-        if float(value).is_integer():
-            return str(int(value))
-        return str(float(value))
-    if pd.isna(cast(object, value)):
-        return ""
-    return str(value)
 
 
 def safe_lower(value: Any) -> str:
