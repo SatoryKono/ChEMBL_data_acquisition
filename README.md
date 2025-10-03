@@ -155,13 +155,16 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
    exposes common flags for configuration paths, input/output directories and
    logging. Reviewing the help output confirms that the CLI entry point is
    installed correctly. Once comfortable with the options you can launch a full
-   export by providing real directories.
+   export by providing real directories. Each delegated CLI receives
+   ``--final-out`` so smoke-test scenarios cover the canonical destination flag
+   instead of deprecated aliases.
 
    RU: Консольная команда ``get-data`` объединяет все конвейеры и предоставляет
    общие параметры для путей конфигурации, входных/выходных каталогов и
    логирования. Просмотр справки подтверждает корректную установку CLI. После
    ознакомления с опциями можно запускать полный экспорт, указав реальные
-   каталоги.
+   каталоги. Все шаги получают флаг ``--final-out``, поэтому смоук-тесты
+   проверяют основную опцию вместо устаревших алиасов.
 
    EN: Without ``--config`` the orchestrator now falls back to the packaged
    ``config/config.yaml`` via ``library.utils.config.DEFAULT_CONFIG_PATH``. Pass

@@ -45,8 +45,10 @@ get-data --base-path /data/chembl \
 
 The orchestrator resolves shared directories, prepares arguments, and invokes the
 pipelines in the following order: documents (`all` sub-command), targets (`all`),
-assays, test items, activities. `--limit 0` skips execution, `--dry-run` prints
-scheduled steps without touching the filesystem.
+assays, test items, activities. Each delegated CLI receives `--final-out` so the
+individual pipelines write to the canonical destination without relying on
+deprecated aliases. `--limit 0` skips execution, `--dry-run` prints scheduled
+steps without touching the filesystem.
 
 ## Document pipeline (`get-document-data`)
 
