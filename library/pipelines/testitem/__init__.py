@@ -11,57 +11,11 @@ from __future__ import annotations
 
 # ===== Modules =====
 from importlib import import_module
-from importlib.util import find_spec
+from typing import Any
 
 from .enrichment import enrich
-from library.pipelines.assay.chembl_assay import TESTITEM_PUBCHEM_COLUMNS
-from library.testitem_pipeline import (
-    PARENT_LOOKUP_SOURCE_CACHE,
-    PARENT_LOOKUP_SOURCE_LOOKUP,
-    PARENT_LOOKUP_SOURCE_PARTIAL,
-    PARENT_LOOKUP_SOURCE_SKIPPED,
-    PARENT_LOOKUP_SOURCE_SYNC,
-    ReadInputIdsResult,
-    TestitemPipelineOptions,
-    _DEFAULT_CATALOG_CFG,
-    _FETCH_ERROR_SAMPLE_SIZE,
-    _MOLECULE_HIERARCHY_COLUMNS,
-    _PUBCHEM_CACHE_SCHEMA_VERSION,
-    _TYPO_PARENT_COLUMN,
-    analyze_table_quality,
-    ensure_no_parant_column,
-    file_sha256,
-    fetch_testitems,
-    integrate_missing_identifiers,
-    load_parent_catalog,
-    query_parent_catalog,
-    read_input_ids,
-    run_testitem_pipeline,
-    update_parent_catalog_cache,
-    write_meta_yaml,
-    write_parent_catalog_cache,
-    _prepare_pubchem_api_cfg,
-    _write_pubchem_cid_cache,
-    PUBCHEM_CID_CACHE_ENCODING as _PIPELINE_PUBCHEM_CID_CACHE_ENCODING,
-    PUBCHEM_COLUMNS as _PIPELINE_PUBCHEM_COLUMNS,
-)
 
-
-# ===== Compatibility Exports =====
-_PUBCHEM_COMPAT_MODULE = "library.testitem_pipeline.pubchem"
-
-if find_spec(_PUBCHEM_COMPAT_MODULE) is not None:
-    pubchem_module = import_module(_PUBCHEM_COMPAT_MODULE)
-    PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
-    PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
-else:
-    PUBCHEM_CID_CACHE_ENCODING = _PIPELINE_PUBCHEM_CID_CACHE_ENCODING
-    PUBCHEM_COLUMNS = list(_PIPELINE_PUBCHEM_COLUMNS)
-
-__all__ = [
-    "enrich",
-    "PUBCHEM_CID_CACHE_ENCODING",
-    "PUBCHEM_COLUMNS",
+_PIPELINE_EXPORTS = {
     "PARENT_LOOKUP_SOURCE_CACHE",
     "PARENT_LOOKUP_SOURCE_LOOKUP",
     "PARENT_LOOKUP_SOURCE_PARTIAL",
@@ -88,4 +42,40 @@ __all__ = [
     "update_parent_catalog_cache",
     "write_meta_yaml",
     "write_parent_catalog_cache",
+}
+
+_PUBCHEM_EXPORTS = {
+    "PUBCHEM_CID_CACHE_ENCODING": "PUBCHEM_CID_CACHE_ENCODING",
+    "PUBCHEM_COLUMNS": "PUBCHEM_COLUMNS",
+}
+
+__all__ = [
+    "enrich",
+    "PUBCHEM_CID_CACHE_ENCODING",
+    "PUBCHEM_COLUMNS",
+    *sorted(_PIPELINE_EXPORTS),
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Proxy access to the modern test item pipeline helpers."""
+
+    if name in _PIPELINE_EXPORTS:
+        module = import_module("library.testitem_pipeline")
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    if name in _PUBCHEM_EXPORTS:
+        module = import_module("library.testitem_pipeline.pubchem")
+        value = getattr(module, _PUBCHEM_EXPORTS[name])
+        if name == "PUBCHEM_COLUMNS":
+            value = list(value)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __dir__() -> list[str]:
+    """Expose lazily loaded pipeline exports for introspection."""
+
+    return sorted({*globals(), *__all__, *_PIPELINE_EXPORTS, *_PUBCHEM_EXPORTS})

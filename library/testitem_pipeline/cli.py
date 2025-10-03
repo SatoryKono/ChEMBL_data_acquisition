@@ -35,7 +35,6 @@ from library.metadata import (
     write_meta_yaml,
     record_quality_failure,
 )
-from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
 from library import SidecarErrors
 from library.table_quality import analyze_table_quality
@@ -148,6 +147,14 @@ def read_input_ids(
         ids_iter=ids_iter,
         sample_ids=sample_ids,
     )
+
+
+def _add_pipeline_metadata(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach acquisition metadata using the legacy pipeline helper."""
+
+    from library.pipelines.common import add_pipeline_metadata as _add_pipeline_metadata
+
+    return _add_pipeline_metadata(df)
 
 
 def _log_missing_identifier_summary(identifiers: Sequence[str]) -> None:
@@ -690,7 +697,7 @@ def finalize_output(
         current = normalize_testitems(raw)
         if "pubchem_cid" in current.columns:
             current["pubchem_cid"] = current["pubchem_cid"].astype(object)
-        current = add_pipeline_metadata(current)
+        current = _add_pipeline_metadata(current)
         columns_seen.update(current.columns)
 
         chunk_missing_required = required_cols - set(current.columns)

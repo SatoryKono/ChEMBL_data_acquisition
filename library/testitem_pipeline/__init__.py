@@ -63,21 +63,6 @@ class _LazyModuleProxy:
 testitem_enrichment = _LazyModuleProxy("library.pipelines.testitem.enrichment")
 
 
-from .cli import (
-    ReadInputIdsResult,
-    TestitemFetchError,
-    TestitemPipelineOptions,
-    TestitemPipelineStageError,
-    _FETCH_ERROR_SAMPLE_SIZE,
-    _log_missing_identifier_summary,
-    _prepare_pubchem_api_cfg,
-    apply_testitem_enrichment,
-    fetch_testitems,
-    finalize_output,
-    integrate_missing_identifiers,
-    read_input_ids,
-    run_testitem_pipeline,
-)
 from .pubchem import (
     PUBCHEM_CID_CACHE_ENCODING,
     PUBCHEM_COLUMNS,
@@ -172,3 +157,37 @@ __all__ = [
     "write_csv_deterministic",
     "write_parent_catalog_cache",
 ]
+
+
+_CLI_EXPORTS = {
+    "ReadInputIdsResult",
+    "TestitemFetchError",
+    "TestitemPipelineOptions",
+    "TestitemPipelineStageError",
+    "_FETCH_ERROR_SAMPLE_SIZE",
+    "_log_missing_identifier_summary",
+    "_prepare_pubchem_api_cfg",
+    "apply_testitem_enrichment",
+    "fetch_testitems",
+    "finalize_output",
+    "integrate_missing_identifiers",
+    "read_input_ids",
+    "run_testitem_pipeline",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily import CLI helpers to avoid circular dependencies."""
+
+    if name in _CLI_EXPORTS:
+        module = import_module("library.testitem_pipeline.cli")
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __dir__() -> list[str]:
+    """Expose lazily loaded CLI symbols for introspection."""
+
+    return sorted({*globals(), *__all__, *_CLI_EXPORTS})
