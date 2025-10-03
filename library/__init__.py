@@ -9,7 +9,8 @@ directory.
 
 from __future__ import annotations
 
-from . import io, qa, schemas, validation
+from importlib import import_module
+from typing import Any
 from .config import Config, load_config
 from .common.csv_utils import (
     sha256_file,
@@ -40,6 +41,24 @@ from .pipelines.target.organism_classification import (
 from .pipelines.testitem import enrichment as testitem_enrichment
 from .parser_schema import CSVExportArgs
 from .sidecar import SidecarErrors
+
+_LAZY_SUBMODULES = {
+    "io",
+    "qa",
+    "schemas",
+    "validation",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Dynamically import heavy submodules on first access."""
+
+    if name in _LAZY_SUBMODULES:
+        module = import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 
 __all__ = [
     "parse_terms",
@@ -76,3 +95,9 @@ __all__ = [
     "TYPE_UNICELLULAR",
     "TYPE_VIRAL",
 ]
+
+
+def __dir__() -> list[str]:
+    """Return available attributes including lazily loaded submodules."""
+
+    return sorted({*globals(), *__all__, *_LAZY_SUBMODULES})
