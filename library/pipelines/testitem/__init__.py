@@ -54,11 +54,16 @@ try:
     if find_spec(_PUBCHEM_COMPAT_MODULE) is None:
         raise ModuleNotFoundError(_PUBCHEM_COMPAT_MODULE)
     pubchem_module = import_module(_PUBCHEM_COMPAT_MODULE)
+
     PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
     PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
+
 except ModuleNotFoundError:
     PUBCHEM_CID_CACHE_ENCODING = _PIPELINE_PUBCHEM_CID_CACHE_ENCODING
     PUBCHEM_COLUMNS = list(_PIPELINE_PUBCHEM_COLUMNS)
+else:
+    PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
+    PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
 
 __all__ = [
     "enrich",
