@@ -288,6 +288,53 @@ def test_fetch_testitems_passes_fields_and_limit(
     assert requested_ids == ("CHEMBL1", "CHEMBL2")
 
 
+def test_fetch_testitems_adds_missing_columns(
+    monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    def fake_get_testitem(
+        ids: Iterable[str],
+        *,
+        cfg: ApiCfg,
+        client: object,
+        chunk_size: int,
+        timeout: float | None,
+        fields: Sequence[str] | None = None,
+        page_limit: int = 0,
+    ) -> pd.DataFrame:
+        _ = (cfg, client, chunk_size, timeout, fields, page_limit)
+        return pd.DataFrame({"molecule_chembl_id": list(ids)})
+
+    monkeypatch.setattr(cl, "get_testitem", fake_get_testitem)
+
+    fields = (
+        "molecule_chembl_id",
+        "parent_molecule_chembl_id",
+        "pubchem_cid",
+    )
+
+    status, chunks, _ = gtd.fetch_testitems(
+        iter(["CHEMBL1", "CHEMBL2"]),
+        api_cfg=cfg.api,
+        batch_size=2,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        sample_ids=("CHEMBL1",),
+        fields=fields,
+        page_limit=cfg.testitem.request_limit,
+        retry_cfg=cfg.testitem.batch_retry,
+    )
+
+    assert status == 0
+    assert chunks is not None
+    frames = list(chunks)
+    assert len(frames) == 1
+    frame = frames[0]
+    for column in fields:
+        assert column in frame.columns
+    assert frame["parent_molecule_chembl_id"].isna().all()
+    assert frame["pubchem_cid"].isna().all()
+
+
 def test_fetch_testitems_logs_missing_summary(
     monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:

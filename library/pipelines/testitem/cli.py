@@ -386,6 +386,17 @@ def fetch_testitems(
             )
             return _load_chunk(batch, next_chunk_size)
 
+        if fields:
+            missing_fields = [
+                column
+                for column in fields
+                if isinstance(column, str) and column not in frame.columns
+            ]
+            if missing_fields:
+                na_series = pd.Series(pd.NA, index=frame.index, dtype="object")
+                for column in missing_fields:
+                    frame[column] = na_series.copy()
+
         if "molecule_chembl_id" not in frame.columns:
             frame["molecule_chembl_id"] = pd.Series(dtype="string")
         frame["molecule_chembl_id"] = (
