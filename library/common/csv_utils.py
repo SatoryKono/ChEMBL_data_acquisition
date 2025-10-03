@@ -22,10 +22,22 @@ import numpy as np
 import pandas as pd
 from pandas.api import types as ptypes
 
+from typing import TYPE_CHECKING
+
 from ..config import Config
-from ..io.metadata import write_meta_yaml
 from .log import logger
 from ..utils.atomic import open_atomic
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from ..io.metadata import write_meta_yaml as _write_meta_yaml_type
+
+
+def _write_meta_yaml(*args: Any, **kwargs: Any) -> Path:
+    """Import :func:`write_meta_yaml` lazily to avoid circular imports."""
+
+    from ..io.metadata import write_meta_yaml as _write_meta_yaml_impl
+
+    return _write_meta_yaml_impl(*args, **kwargs)
 
 
 def _normalise_bool(series: pd.Series) -> pd.Series:
@@ -545,7 +557,7 @@ def write_csv_deterministic(
 
         os.replace(tmp_path, out_path)
 
-    write_meta_yaml(
+    _write_meta_yaml(
         out_path,
         cfg,
         columns=list(work.columns),
@@ -738,7 +750,7 @@ def write_csv_chunks_deterministic(
         if meta_columns is None:
             meta_columns = list(columns)
 
-    write_meta_yaml(
+    _write_meta_yaml(
         out_path,
         cfg,
         columns=meta_columns or columns,
