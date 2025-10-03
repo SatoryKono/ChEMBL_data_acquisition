@@ -86,7 +86,7 @@ def test_cli_arguments_passed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--sep",
             "|",
@@ -126,7 +126,7 @@ def test_cli_writes_with_custom_separator_and_encoding(tmp_path: Path) -> None:
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--sep",
             ";",
@@ -385,7 +385,7 @@ def test_cli_does_not_leak_file_descriptors(tmp_path: Path) -> None:
 
     for run in range(3):
         output = tmp_path / f"out_{run}.csv"
-        rc = cli.main([*base_args, "--output", str(output)])
+        rc = cli.main([*base_args, "--final-out", str(output)])
         assert rc == 0
         assert output.exists()
 

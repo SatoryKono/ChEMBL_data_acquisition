@@ -4,7 +4,7 @@ This script reads an input CSV file and re-serialises it deterministically
 using :func:`library.common.csv_utils.write_csv_deterministic`.
 
 The command understands ``--base-path``, ``--input-dir`` and ``--output-dir``
-for resolving relative paths. When ``--output`` is omitted, a file named
+for resolving relative paths. When ``--final-out`` is omitted, a file named
 ``output.<input-stem>_<YYYYMMDD>.csv`` is created next to the resolved input or
 inside the selected output directory.
 """

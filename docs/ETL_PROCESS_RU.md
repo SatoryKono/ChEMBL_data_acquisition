@@ -33,7 +33,7 @@ flowchart LR
 * **Validate** — запуск схем `pandera` с выводом некорректных строк в sidecar CSV, ссылка на который попадает в YAML метаданных.
 * **Финальный экспорт** — запись очищенной таблицы в `--final-out`/`--out`, добавление метаданных и отчётов качества. Пара `--normalize-at-export` / `--no-normalize-at-export` регулирует, выполняется ли нормализация на этом этапе (по умолчанию включена) или финальный CSV копируется байт-в-байт из «сырого» снимка.
 
-> **Примечание.** Флаги `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, а также пара `--normalize-at-export` / `--no-normalize-at-export` доступны в `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`. Остальные пайплайны получат их после расширения общего CLI.
+> **Примечание.** Флаги `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, а также пара `--normalize-at-export` / `--no-normalize-at-export` по-прежнему уникальны для `get-target-data` и `library.utils.cli_tools.pipeline_targets_main`, но сам `--final-out` уже доступен во всех CLI. Алиасы `--output` и `--out` оставлены лишь для обратной совместимости и сопровождаются предупреждением.
 
 Такие заглушки, как временные ID ChEMBL или PubMed, на этапе очистки превращаются в явные строки с подсчётом в метаданных (`error_placeholder_counts`). «Сырой» экспорт сохраняет их для аудита, а финальная таблица содержит только проверенные значения.
 

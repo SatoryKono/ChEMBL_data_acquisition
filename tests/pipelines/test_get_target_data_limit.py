@@ -67,7 +67,7 @@ def test_main_limit_zero_skips_pipeline(
 
     output_csv = tmp_path / "targets.csv"
 
-    exit_code = gtd.main(["chembl", "--limit", "0", "--output", str(output_csv)])
+    exit_code = gtd.main(["chembl", "--limit", "0", "--final-out", str(output_csv)])
 
     assert exit_code == 0
     assert recorded == [("pipeline_skip_limit", {"limit": 0})]

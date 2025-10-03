@@ -81,7 +81,7 @@ def test_pubmed_library_main_smoke(
         [
             "--input-csv",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "INFO",
@@ -121,7 +121,7 @@ def test_pubmed_library_main_smoke(
         [
             "--input-csv",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(verbose_output_csv),
             "--log-level",
             "INFO",
@@ -137,7 +137,7 @@ def test_pubmed_library_main_smoke(
         [
             "--input-csv",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(second_output),
             "--log-level",
             "INFO",

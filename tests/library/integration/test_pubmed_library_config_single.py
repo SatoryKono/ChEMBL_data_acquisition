@@ -74,7 +74,7 @@ def test_pubmed_library_single_config(
         [
             "--input-csv",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",
@@ -158,7 +158,7 @@ def test_pubmed_library_rate_override(
         [
             "--input-csv",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",

@@ -176,9 +176,9 @@ Sensitive configuration such as API tokens belongs in a local ``.env`` file – 
 
   ```bash
   python -m library.utils.cli_tools.mapper_main --input tests/data/chembl_targets_min.csv \
-      --column target_chembl_id --output out/targets_mapped.csv --log-level DEBUG
+      --column target_chembl_id --final-out out/targets_mapped.csv --log-level DEBUG
   python -m library.utils.cli_tools.table_quality_main --input tests/data/chembl_targets_min.csv \
-      --output out/quality --table-name chembl_targets --log-level INFO
+      --final-out out/quality --table-name chembl_targets --log-level INFO
   ```
 
    EN: Maintain a custom configuration by copying the packaged YAML into the
@@ -209,15 +209,13 @@ PY
    использовать и в Linux/macOS; в PowerShell путь будет
    `%APPDATA%\chembl-data-acquisition\config.yaml`.
 
-  EN: In the reporting example above `--output` sets the destination. `--final-out`
-  currently exists only in `scripts.get_target_data` and
-  `library.utils.cli_tools.pipeline_targets_main`. The legacy `--out` alias remains
-  available but now raises a deprecation warning.
+  EN: In the reporting example above `--final-out` sets the destination. All CLI
+  entry points understand the flag. The legacy `--output`/`--out` aliases remain
+  available for the time being but emit deprecation warnings.
 
-  RU: В примере с отчётностью каталог задаёт `--output`. Флаг `--final-out`
-  реализован лишь в `scripts.get_target_data` и
-  `library.utils.cli_tools.pipeline_targets_main`. Устаревший алиас `--out`
-  сохраняется, но сопровождается предупреждением об удалении.
+  RU: В примере с отчётностью каталог задаёт `--final-out`. Все CLI поддерживают
+  этот флаг. Устаревшие алиасы `--output`/`--out` пока доступны, но сопровождаются
+  предупреждениями об удалении.
 
 4. **Run the tests / Запустите тесты** – refer to [Tests / Тесты](#tests--тесты).
 
@@ -236,8 +234,8 @@ the cleaned export to `--final-out`. Raw dumps reindex columns alphabetically fo
 `--no-reindex-raw` keeps the API order. The final CSV is normalized by default; flip the boolean pair
 `--normalize-at-export` / `--no-normalize-at-export` when you need the final artefact to mirror the raw payload byte-for-byte.
 Placeholder identifiers remain in the raw snapshot and are counted in the metadata (`error_placeholder_counts`), while the
-normalized export includes only validated values. Other pipelines will surface `--final-out` once their shared CLI is extended;
-until then the deprecated aliases remain available with matching warnings.
+normalized export includes only validated values. The shared parser now exposes `--final-out` everywhere, keeping `--output`
+and `--out` as compatibility shims that log warnings when used.
 
 **RU.** Пайплайн таргетов уже использует поэтапный контракт с разделением «сырого» и нормализованного вывода. Флаг `--raw-out`
 (при необходимости с `--raw-format parquet`) сохраняет исходный ответ, `--id-cols` перечисляет составные ключи, а чистый экспорт
@@ -245,16 +243,16 @@ until then the deprecated aliases remain available with matching warnings.
 `--no-reindex-raw` сохраняет исходную раскладку. Финальный CSV нормализуется автоматически; переключение пары
 `--normalize-at-export` / `--no-normalize-at-export` позволяет либо выполнить нормализацию непосредственно перед записью, либо
 сохранить артефакт идентичным «сырому» снимку. Временные идентификаторы остаются в «сыром» файле и учитываются в метаданных
-(`error_placeholder_counts`), тогда как нормализованный экспорт содержит только прошедшие валидацию значения. Прочие пайплайны
-получат `--final-out` после расширения общего CLI; до тех пор устаревшие алиасы остаются доступными и сопровождаются теми же
-предупреждениями.
+(`error_placeholder_counts`), тогда как нормализованный экспорт содержит только прошедшие валидацию значения. Общий парсер уже
+поддерживает `--final-out` во всех CLI, а `--output`/`--out` оставлены лишь как совместимые алиасы с предупреждениями.
 
 > **EN.** `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair
-> `--normalize-at-export` / `--no-normalize-at-export` are currently exposed via `get-target-data` and
-> `library.utils.cli_tools.pipeline_targets_main`. Other commands will adopt these switches once the shared parser lands.
+> `--normalize-at-export` / `--no-normalize-at-export` remain specific to the target pipeline, but `--final-out` itself is now
+> common across all entry points. `--output`/`--out` stay as deprecated aliases that log guidance.
 > **RU.** Флаги `--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, а также пара
-> `--normalize-at-export` / `--no-normalize-at-export` уже доступны в `get-target-data` и
-> `library.utils.cli_tools.pipeline_targets_main`. Остальные команды получат их после доработки общего парсера.
+> `--normalize-at-export` / `--no-normalize-at-export` по-прежнему уникальны для таргет-пайплайна, но сам `--final-out`
+> поддерживается всеми утилитами. Алиасы `--output`/`--out` оставлены только для обратной совместимости и сопровождаются
+> предупреждением.
 
 
 
@@ -280,7 +278,7 @@ tmp_dir=$(mktemp -d) && python -m library.utils.cli_tools.pipeline_targets_main 
     --final-out "${tmp_dir}/targets.csv" --log-level INFO --limit 2
 python -m library.utils.cli_tools.check_determinism --log-level DEBUG
 python -m library.utils.cli_tools.mapper_batch_main --input chembl_ids.csv \
-    --output out/mapped.csv --log-level INFO
+    --final-out out/mapped.csv --log-level INFO
 ```
 
 Before running the smoke command, create a `chembl_ids.csv` file with a header `chembl_id` and the required identifiers. / Перед запуском smoke-команды создайте `chembl_ids.csv` со столбцом `chembl_id` и нужными идентификаторами.
@@ -368,7 +366,7 @@ solely with local files and prepared identifier batches. / **RU.**
 
 ```bash
 python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
-    --output data/output/activities.csv --limit 10 --log-level INFO
+    --final-out data/output/activities.csv --limit 10 --log-level INFO
 ```
 
 Команда извлекает данные из API ChEMBL, сохраняет таблицу и сопутствующий
@@ -388,11 +386,9 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 ## Usage
 
 The examples below illustrate how to run the main CLI tools with common
-options like ``--input``, ``--output`` (primary destination flag for most
-commands; ``--final-out`` is currently restricted to ``scripts.get_target_data``
-and ``library.utils.cli_tools.pipeline_targets_main``) and ``--limit``. The
-compatibility alias ``--out`` stays available for now but triggers explicit
-deprecation warnings. Passing ``--limit 0`` short-circuits processing before any
+options like ``--input``, ``--final-out`` (primary destination flag for every
+command) and ``--limit``. The compatibility aliases ``--output``/``--out`` stay
+available for now but trigger explicit deprecation warnings. Passing ``--limit 0`` short-circuits processing before any
 network or filesystem access, which is handy for configuration smoke tests. The
 target pipeline already exposes ``--raw-out``, ``--final-out``, ``--raw-format``
 and ``--id-cols``; other commands will gain the staging switches once the shared
@@ -406,7 +402,7 @@ sample file:
 ```bash
 python -m scripts.get_document_data pubmed \
     --input tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --limit 5 \
     --log-level INFO
 ```
@@ -419,7 +415,7 @@ You can also run the PubMed pipeline directly using the library module:
 ```bash
 python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
-    --output out/documents.csv \
+    --final-out out/documents.csv \
     --log-level INFO
 ```
 
@@ -519,7 +515,7 @@ Refer to the [alias table](library/config.py#L1531-L1634) in
 
 ```bash
 python -m dotenv run -- python -m scripts.get_assay_data --input assay_ids.csv \\
-    --output out/assays.csv
+    --final-out out/assays.csv
 ```
 
 Файл `assay_ids.csv` должен содержать столбец `assay_chembl_id` с нужными
@@ -623,7 +619,7 @@ api:
 
 ```bash
 CHEMBL_DA_LOG_LEVEL=DEBUG python -m scripts.get_assay_data --input assay_ids.csv \
-    --output out/assays.final.csv
+    --final-out out/assays.final.csv
 ```
 
 Пример строки лога:
@@ -757,7 +753,7 @@ Running the CLI saves ``data_quality_report_table.csv`` and
 
     python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data
 
-Use ``--output`` to redirect these artefacts to another directory. The value must be a directory path
+Use ``--final-out`` to redirect these artefacts to another directory. The value must be a directory path
 (do not include the final file name). The compatibility alias ``--out`` remains wired in but now raises a
 deprecation warning whenever it is invoked. ``--final-out`` is currently exclusive to
 ``scripts.get_target_data`` and ``library.utils.cli_tools.pipeline_targets_main`` until the shared CLI is
@@ -913,7 +909,7 @@ python -m library.utils.cli_tools.table_quality_main \
 
 `--final-out` по умолчанию формируется как `output.<имя_входа>_YYYYMMDD.csv`
 в каталоге, заданном `local.io.output_dir`. Устаревшие алиасы
-`--output`/`--out` по-прежнему работают, но сопровождаются предупреждением и будут
+`--final-out`/`--out` по-прежнему работают, но сопровождаются предупреждением и будут
 удалены после миграции всех пайплайнов. Пайплайн таргетов может использовать
 `--raw-out` и `--final-out` (с `--raw-format`) для разведения «сырого» снимка и
 финального экспорта. Для дополнительных примеров см. [`docs/guides/ru/USAGE.md`](./docs/guides/ru/USAGE.md)

@@ -33,7 +33,7 @@ flowchart LR
 * **Validate** — run the Pandera schemas, routing violations to sidecar CSVs referenced in the metadata YAML.
 * **Final export** — write the cleaned table to `--final-out`/`--out`, append metadata and table-quality diagnostics. The boolean pair `--normalize-at-export` / `--no-normalize-at-export` governs whether normalisation occurs at this stage (default: enabled) or the final CSV mirrors the raw snapshot byte-for-byte.
 
-> **Note.** The new staging switches (`--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export`) are currently available via `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`. Other pipelines will adopt them once the shared CLI is extended.
+> **Note.** The staging switches (`--raw-out`, `--final-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, and the boolean pair `--normalize-at-export` / `--no-normalize-at-export`) remain specific to `get-target-data` and `library.utils.cli_tools.pipeline_targets_main`, but `--final-out` itself is now shared across all entry points. The legacy aliases (`--output`, `--out`) emit deprecation warnings when used.
 
 Placeholder identifiers such as temporary ChEMBL or PubMed IDs are converted into explicit placeholder rows during the cleanup
 stage. The raw export retains them for auditing, while the final output omits them and surfaces aggregate counts via

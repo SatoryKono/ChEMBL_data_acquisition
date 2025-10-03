@@ -23,7 +23,7 @@ def test_print_config_cli(tmp_path: Path, monkeypatch, capsys) -> None:
             "demo",
             "--log-level",
             "DEBUG",
-            "--output",
+            "--final-out",
             str(tmp_path / "out"),
             "--print-config",
         ]
