@@ -48,8 +48,8 @@ mypy --strict
    ```
 2. Exercise at least one pipeline CLI in dry-run mode to ensure argument wiring stays intact. For example:
    ```bash
-   PYTHONHASHSEED=0 PYTHONPATH=. python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
-       --output /tmp/activities.csv --limit 10 --dry-run --log-level INFO
+   PYTHONHASHSEED=0 get-activity-data --input tests/data/activity_ids_small.csv \
+       --final-out /tmp/activities.csv --limit 10 --dry-run --log-level INFO
    ```
    Replace the script with other pipelines as needed to cover recent changes.
 
@@ -64,7 +64,7 @@ checklist.
 The document export now includes an automated regression check against the legacy Power Query workbook.
 
 1. Populate `data/input/full/document.csv` with the authoritative export.
-2. Run the document pipeline (`python -m scripts.get_document_data ...`) and confirm it produces:
+2. Run the document pipeline (`get-document-data all ...`) and confirm it produces:
    * `output.document_YYYYMMDD.csv`
    * `qa_document_postprocessing_report_YYYYMMDD.json`
    * `qa_document_postprocessing_report_YYYYMMDD.md`
