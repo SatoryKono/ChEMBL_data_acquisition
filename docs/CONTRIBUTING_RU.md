@@ -1,6 +1,6 @@
 # Руководство по вкладу
 
-> **Языки:** [English](../en/CONTRIBUTING.md) · [Русский](./CONTRIBUTING.md)
+> **Языки:** [English](./CONTRIBUTING_EN.md) · Русский
 
 ## Политика закрепления зависимостей
 

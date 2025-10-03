@@ -48,8 +48,8 @@ mypy --strict
    ```
 2. Прогоните хотя бы один конвейерный CLI в режиме dry-run, чтобы убедиться в целостности аргументов. Например:
    ```bash
-   PYTHONHASHSEED=0 PYTHONPATH=. python scripts/get_activity_data.py --input tests/data/activity_ids_small.csv \
-       --output /tmp/activities.csv --limit 10 --dry-run --log-level INFO
+   PYTHONHASHSEED=0 get-activity-data --input tests/data/activity_ids_small.csv \
+       --final-out /tmp/activities.csv --limit 10 --dry-run --log-level INFO
    ```
    При необходимости замените сценарий на другие конвейеры, чтобы покрыть недавние изменения.
 
@@ -63,7 +63,7 @@ mypy --strict
 Экспорт документов теперь сопровождается автоматической регрессионной проверкой относительно легаси-книги Power Query.
 
 1. Заполните `data/input/full/document.csv` эталонной выгрузкой.
-2. Запустите конвейер документов (`python -m scripts.get_document_data ...`) и убедитесь, что он создаёт:
+2. Запустите конвейер документов (`get-document-data all ...`) и убедитесь, что он создаёт:
    * `output.document_YYYYMMDD.csv`
    * `qa_document_postprocessing_report_YYYYMMDD.json`
    * `qa_document_postprocessing_report_YYYYMMDD.md`
