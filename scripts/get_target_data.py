@@ -340,7 +340,18 @@ def _ensure_merge_column_present(
         aliased[merge_column] = cleaned.astype(object)
         return aliased
 
-    return df
+    logger.error(
+        "missing_uniprot_column",
+        configured=merge_column,
+        aliases=candidate_columns,
+        available=sorted(df.columns.tolist()),
+    )
+    raise PipelineError(
+        "Unable to locate a UniProt column. Provide 'uniprot_id' in the input file "
+        "or set target.all.uniprot_column to an existing alias such as a column "
+        "containing 'uniprot' or 'accession'."
+        f" Missing configured column '{merge_column}'."
+    )
 
 
 def _build_uniprot_query_plan(df: pd.DataFrame, cfg: Config) -> _UniprotQueryPlan:
@@ -2991,7 +3002,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     run=run,
                     logger=logger,
                 )
-
+        except PipelineError as exc:
+            exit_code = 2
+            logger.error("pipeline_error", error=str(exc))
+            print(f"[ERROR] {exc}", file=console_stream, flush=True)
         finally:
             log_cfg.stream = original_stream
             configure_logger(log_cfg)

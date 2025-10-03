@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from library.cli_utils import PipelineError
 from library.config import Config
 from scripts import get_target_data as gtd
 
@@ -74,6 +75,47 @@ def test_main_limit_zero_skips_pipeline(
     assert not output_csv.exists()
     assert not Path(f"{output_csv}.meta.yaml").exists()
 
+
+def test_main_reports_pipeline_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """CLI surfaces :class:`PipelineError` with exit code 2 and user-friendly text."""
+
+    def raise_pipeline_error(*_: object, **__: object) -> int:
+        raise PipelineError("Unable to locate UniProt column 'uniprot_id'.")
+
+    monkeypatch.setattr(gtd, "run_cli_command", raise_pipeline_error)
+
+    recorded: list[tuple[str, dict[str, object]]] = []
+
+    def capture_error(event: str, **kwargs: object) -> None:
+        recorded.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(gtd.logger, "error", capture_error)
+
+    output_csv = tmp_path / "targets.csv"
+
+    printed: list[str] = []
+    original_print = print
+
+    def capture_print(*args: object, **kwargs: object) -> None:
+        message = " ".join(str(arg) for arg in args)
+        printed.append(message)
+        original_print(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.print", capture_print)
+
+    exit_code = gtd.main(["chembl", "--final-out", str(output_csv)])
+    captured = capfd.readouterr()
+    combined_output = captured.out + captured.err
+
+    assert exit_code == 2
+    assert any(event == "pipeline_error" for event, _ in recorded)
+    assert "[ERROR] Unable to locate UniProt column" in (
+        combined_output or " ".join(printed)
+    )
 
 def test_run_chembl_limit_uses_generator(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cfg: Config

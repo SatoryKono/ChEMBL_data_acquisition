@@ -288,6 +288,80 @@ def test_run_pipeline_applies_hooks_and_writes(tmp_path: Path, cfg: Config) -> N
     assert meta_path.exists()
 
 
+def test_run_pipeline_adds_missing_optional_columns(
+    tmp_path: Path, cfg: Config
+) -> None:
+    output = tmp_path / "assays.csv"
+    failure_path = tmp_path / "assays_failure_cases.csv"
+
+    frame = pd.DataFrame({"assay_chembl_id": [1, 2]})
+
+    def fetcher() -> list[pd.DataFrame]:
+        return [frame]
+
+    observed_chunks: list[pd.DataFrame] = []
+
+    def writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        col_order: list[str] | None,
+        key_cols: list[str],
+    ) -> Path:
+        frames: list[pd.DataFrame] = []
+        for chunk in chunks:
+            observed_chunks.append(chunk.copy())
+            if col_order is not None:
+                chunk = chunk.reindex(columns=col_order)
+            frames.append(chunk)
+        if frames:
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = pd.DataFrame(columns=col_order or [])
+        combined.to_csv(destination, index=False)
+        return destination
+
+    buf = io.StringIO()
+    logger = setup_logger(LoggerConfig(stream=buf), replace_root=False)
+
+    exit_code = run_pipeline(
+        fetcher=fetcher,
+        schema=AssaysSchema,
+        schema_name="AssaysSchema",
+        validators=[],
+        metadata_hooks=None,
+        writer=writer,
+        output_path=output,
+        failure_path=failure_path,
+        command="pytest",
+        config_snapshot={},
+        inputs={},
+        key_columns=["assay_chembl_id"],
+        table_quality=lambda path: None,
+        cfg=cfg,
+        logger=logger,
+    )
+
+    assert exit_code == 0
+    assert observed_chunks
+    chunk = observed_chunks[0]
+    assert "document_chembl_id" in chunk.columns
+    assert chunk["document_chembl_id"].tolist() == ["", ""]
+    assert chunk["assay_chembl_id"].map(type).eq(str).all()
+
+    written = pd.read_csv(output)
+    assert "document_chembl_id" in written.columns
+    assert written["assay_chembl_id"].astype(str).tolist() == ["1", "2"]
+
+    records = [
+        json.loads(line)
+        for line in buf.getvalue().splitlines()
+        if line.strip()
+    ]
+    assert not any(record.get("event") == "optional_columns_missing" for record in records)
+
+    assert not failure_path.exists()
+
+
 def test_run_pipeline_records_invocation(tmp_path: Path, cfg: Config) -> None:
     output = tmp_path / "assays.csv"
     failure_path = tmp_path / "assays_failure_cases.csv"

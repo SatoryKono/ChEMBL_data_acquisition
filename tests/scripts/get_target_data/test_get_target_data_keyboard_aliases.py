@@ -51,6 +51,7 @@ def test_target_subcommand_keyboard_alias(
         return 0
 
     monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply)
+    monkeypatch.setattr("library.cli_utils.apply_config_overrides", fake_apply)
     monkeypatch.setattr(cli_utils, "ensure_dirs", lambda cfg: None)
     monkeypatch.setattr(gtd, "run", fake_run)
 

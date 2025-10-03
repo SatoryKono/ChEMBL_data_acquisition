@@ -56,7 +56,7 @@ Helper utilities under `library.utils.cli_tools` are documented in
 
 | Component | Supported range | Latest tested |
 |-----------|-----------------|---------------|
-| Python | 3.11.x | 3.12 |
+| Python | 3.11.x | 3.11.12 |
 | numpy | >=2.3.3,<3.0 | 2.3.3 |
 | pandas | >=2.3.3,<3.0 | 2.3.3 |
 | requests | >=2.32.5,<3.0 | 2.32.5 |
@@ -282,8 +282,8 @@ and `--out` as compatibility shims that log warnings when used.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English         | [docs/processes/en/QA_PROCESS.md](./docs/processes/en/QA_PROCESS.md) |
-| Русский         | [docs/processes/ru/QA_PROCESS.md](./docs/processes/ru/QA_PROCESS.md) |
+| English         | [docs/QA_PROCESS_EN.md](./docs/QA_PROCESS_EN.md) |
+| Русский         | [docs/QA_PROCESS_RU.md](./docs/QA_PROCESS_RU.md) |
 
 
 ```bash

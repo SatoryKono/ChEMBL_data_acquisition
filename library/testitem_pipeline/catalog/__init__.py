@@ -74,6 +74,9 @@ class ParentLookupStats:
     attached: int
     uncovered: int
     failed_ids: tuple[str, ...] = ()
+    hierarchy_attached: int = 0
+    fallback_attached: int = 0
+    no_parent: int = 0
 
 
 class ParentLookupPreparedData(NamedTuple):
@@ -106,6 +109,9 @@ def _merge_parent_stats(base: ParentLookupStats, update: ParentLookupStats) -> P
         attached=base.attached + update.attached,
         uncovered=base.uncovered + update.uncovered,
         failed_ids=combined_failed,
+        hierarchy_attached=base.hierarchy_attached + update.hierarchy_attached,
+        fallback_attached=base.fallback_attached + update.fallback_attached,
+        no_parent=base.no_parent + update.no_parent,
     )
 
 
@@ -123,7 +129,7 @@ def _load_molecule_hierarchy_mapping(
     path: str,
     encoding: str,
     delimiter: str,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """Return cached child → parent mapping with normalised identifiers."""
 
     csv_path = Path(path)
@@ -166,21 +172,22 @@ def _load_molecule_hierarchy_mapping(
         subset[parent_column] = frame[parent_column].copy()
 
     for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = (
-            subset[column].fillna("").astype("string").str.strip().str.upper()
-        )
+        subset[column] = subset[column].astype("string").str.strip().str.upper()
 
+    subset = subset[subset["molecule_chembl_id"].notna()]
     subset = subset[subset["molecule_chembl_id"] != ""]
     subset = subset.drop_duplicates(
         subset=["molecule_chembl_id"],
         keep="first",
     )
 
-    lookup: dict[str, str] = {}
+    lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = parent_id or ""
-        if parent == molecule_id:
-            parent = ""
+        parent: str | None
+        if pd.isna(parent_id) or parent_id == "" or parent_id == molecule_id:
+            parent = None
+        else:
+            parent = parent_id
         lookup[molecule_id] = parent
 
     return lookup
@@ -192,7 +199,7 @@ def LoadMoleculeHierarchyLookup(
     encoding: str | None = None,
     delimiter: str | None = None,
     catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, str | None]]:
     """Return cached molecule hierarchy lookup keyed by ``molecule_chembl_id``."""
 
     cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
@@ -224,7 +231,7 @@ def load_molecule_hierarchy_lookup(
     encoding: str | None = None,
     delimiter: str | None = None,
     catalog_cfg: MoleculeCatalogCfg | None = None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """Return child → parent mapping loaded from a local hierarchy file."""
 
     cfg_source = catalog_cfg or _DEFAULT_CATALOG_CFG
@@ -260,7 +267,7 @@ def load_molecule_hierarchy_lookup(
     if not lookup:
         return {}
 
-    attached_rows = sum(1 for value in lookup.values() if value)
+    attached_rows = sum(1 for value in lookup.values() if value is not None and value != "")
 
     logger.info(
         "molecule_hierarchy_lookup_loaded",
@@ -374,6 +381,8 @@ def attach_parent_molecule_ids(
             existing_parent.isna() | existing_parent.eq("")
         )
 
+    existing_parent_before = existing_parent.copy()
+
     raw_unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
     unique_children = tuple(
         value for value in raw_unique_children if not pd.isna(value)
@@ -479,6 +488,7 @@ def attach_parent_molecule_ids(
         )
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")
+    refreshed_normalised = refreshed_parent.fillna("").astype("string")
 
     combined_parent = existing_parent.astype("string").copy()
 
@@ -487,15 +497,24 @@ def attach_parent_molecule_ids(
 
     if getattr(catalog_cfg, "force_refresh_existing", False):
         existing_normalised = combined_parent.fillna("").astype("string")
-        refreshed_normalised = refreshed_parent.fillna("").astype("string")
         mismatch_mask = existing_normalised != refreshed_normalised
         if mismatch_mask.any():
             combined_parent.loc[mismatch_mask] = refreshed_parent.loc[mismatch_mask]
 
+        existing_normalised = combined_parent.fillna("").astype("string")
+
     result[parent_column] = combined_parent.astype("string")
 
-    missing = int(combined_parent.isna().sum())
-    attached = int(combined_parent.notna().sum())
+    final_normalised = combined_parent.fillna("").astype("string")
+    previous_normalised = existing_parent_before.fillna("").astype("string")
+
+    fallback_mask = (final_normalised != "") & (
+        (previous_normalised == "") | (previous_normalised != final_normalised)
+    )
+    fallback_attached = int(fallback_mask.sum())
+    no_parent_count = int((final_normalised == "").sum())
+    attached = int((final_normalised != "").sum())
+    missing = no_parent_count
 
     final_source = source_resolved
     if catalog is not None and not missing_ids:
@@ -523,6 +542,8 @@ def attach_parent_molecule_ids(
         attached=int(attached),
         uncovered=int(uncovered_children),
         failed_ids=tuple(missing_ids),
+        fallback_attached=int(fallback_attached),
+        no_parent=int(no_parent_count),
     )
 
     logger.info(
@@ -532,6 +553,9 @@ def attach_parent_molecule_ids(
         attached=stats.attached,
         missing=stats.missing,
         uncovered=stats.uncovered,
+        hierarchy_attached=stats.hierarchy_attached,
+        fallback_attached=stats.fallback_attached,
+        no_parent=stats.no_parent,
     )
 
     return result, stats
@@ -590,33 +614,46 @@ def prepare_parent_enrichment(
     else:
         hierarchy_lookup = {}
 
-    if hierarchy_lookup:
-        hierarchy_values = {
-            key: value for key, value in hierarchy_lookup.items() if value is not None
-        }
-    else:
-        hierarchy_values = {}
+    hierarchy_attached = 0
 
-    if hierarchy_values:
+    dictionary_resolved_children: set[str] = set()
+    if hierarchy_lookup:
+        missing_sentinel = object()
         hierarchy_series = normalised_ids.map(
-            lambda value: hierarchy_values.get(value) if value else None
+            lambda value: hierarchy_lookup.get(value, missing_sentinel)
+            if value
+            else missing_sentinel
         )
-        hierarchy_mask = hierarchy_series.notna()
+        hierarchy_series = pd.Series(hierarchy_series, index=df.index, dtype="object")
+        hierarchy_mask = hierarchy_series.ne(missing_sentinel)
         if hierarchy_mask.any():
-            resolved = hierarchy_series[hierarchy_mask].astype("string")
+            resolved_values = hierarchy_series[hierarchy_mask]
+            dictionary_resolved_children = set(
+                normalised_ids.loc[hierarchy_mask & normalised_ids.ne("")].tolist()
+            )
             if parent_column in df.columns:
                 df[parent_column] = df[parent_column].astype("string")
             else:
                 df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
             df.loc[hierarchy_mask, parent_column] = resolved.astype(object)
             existing_parent.loc[hierarchy_mask] = resolved.fillna("").astype("string")
+            hierarchy_attached = int(hierarchy_mask.sum())
+
+            has_parent_mask = resolved_values.notna()
+            if has_parent_mask.any():
+                parent_updates = resolved_values[has_parent_mask].astype("string")
+                df.loc[parent_updates.index, parent_column] = parent_updates
+                existing_parent.loc[parent_updates.index] = parent_updates.astype("string")
 
     if getattr(catalog_cfg, "force_refresh_existing", False):
         need_lookup_mask = normalised_ids != ""
     else:
         need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
     initial_need_lookup = set(normalised_ids[need_lookup_mask])
-    need_lookup = set(initial_need_lookup)
+    if dictionary_resolved_children:
+        need_lookup = initial_need_lookup - dictionary_resolved_children
+    else:
+        need_lookup = set(initial_need_lookup)
 
     cache_before = _cache_state(catalog_cfg.cache_path)
     cache_after = cache_before
@@ -657,6 +694,7 @@ def prepare_parent_enrichment(
         unique=len(initial_need_lookup),
         attached=len(df) - len(need_lookup),
         uncovered=len(need_lookup),
+        hierarchy_attached=int(hierarchy_attached),
     )
 
     try:
@@ -693,7 +731,7 @@ def run_parent_enrichment(
 
     logger.info("parent_lookup_start")
     try:
-        df, parent_stats = attach_parent_molecule_ids(
+        df, attach_stats = attach_parent_molecule_ids(
             prep.df,
             client=client,
             api_cfg=api_cfg,
@@ -707,16 +745,21 @@ def run_parent_enrichment(
         logger.error("parent_lookup_failed", error=str(exc))
         return 1, None
 
+    combined_stats = _merge_parent_stats(prep.parent_stats, attach_stats)
+
     logger.info(
         "parent_lookup_done",
-        source=parent_stats.source,
-        unique=parent_stats.unique,
-        attached=parent_stats.attached,
-        missing=parent_stats.missing,
-        uncovered=parent_stats.uncovered,
+        source=combined_stats.source,
+        unique=combined_stats.unique,
+        attached=combined_stats.attached,
+        missing=combined_stats.missing,
+        uncovered=combined_stats.uncovered,
+        hierarchy_attached=combined_stats.hierarchy_attached,
+        fallback_attached=combined_stats.fallback_attached,
+        no_parent=combined_stats.no_parent,
     )
 
-    return 0, ParentEnrichmentResult(df=df, parent_stats=parent_stats)
+    return 0, ParentEnrichmentResult(df=df, parent_stats=combined_stats)
 
 
 __all__ = [
