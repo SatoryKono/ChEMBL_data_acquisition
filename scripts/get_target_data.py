@@ -2333,10 +2333,15 @@ def fetch_iuphar(
     if merge_column in combined_df.columns:
         existing_merge = combined_df[merge_column].astype(object)
     else:
-        existing_merge = pd.Series(
-            UNIPROT_MISSING_VALUE, index=combined_df.index, dtype=object
+        logger.error(
+            "missing_configured_uniprot_column",
+            configured=merge_column,
+            available=sorted(combined_df.columns.tolist()),
         )
-        combined_df[merge_column] = existing_merge
+        raise PipelineError(
+            "Configured UniProt column "
+            f"'{merge_column}' is not present in the merged target data."
+        )
 
     if merge_column == "uniprot_id":
         if "mapping_uniprot_id" in combined_df.columns:
