@@ -913,6 +913,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
                 "molecule_chembl_id,parent_molecule_chembl_id",
                 "CHEMBL1,CHEMBL2",
                 "CHEMBL3,",
+                "CHEMBL4,NULL",
                 ",CHEMBL4",
                 " chembl5 , chembl6 ",
                 "CHEMBL1,CHEMBL7",
@@ -926,6 +927,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
     assert result == {
         "CHEMBL1": "CHEMBL2",
         "CHEMBL3": None,
+        "CHEMBL4": None,
         "CHEMBL5": "CHEMBL6",
     }
 

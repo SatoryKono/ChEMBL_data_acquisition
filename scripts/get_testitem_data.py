@@ -98,6 +98,8 @@ from library.testitem_pipeline import (
     PARENT_LOOKUP_SOURCE_SYNC,
 )
 
+_NO_PARENT_MARKERS = {"", "NULL"}
+
 def _normalise_identifier(value: Any, *, uppercase: bool = False) -> str | None:
     """Return ``value`` normalised for PubChem lookup."""
 
@@ -162,10 +164,9 @@ def _load_molecule_hierarchy_mapping(
         subset[parent_column] = frame[parent_column].copy()
 
     for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = (
-            subset[column].fillna("").astype("string").str.strip().str.upper()
-        )
+        subset[column] = subset[column].astype("string").str.strip().str.upper()
 
+    subset = subset[subset["molecule_chembl_id"].notna()]
     subset = subset[subset["molecule_chembl_id"] != ""]
     subset = subset.drop_duplicates(
         subset=["molecule_chembl_id"],
@@ -174,9 +175,18 @@ def _load_molecule_hierarchy_mapping(
 
     lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = parent_id or None
-        if parent is not None and parent == molecule_id:
+        parent: str | None
+        if pd.isna(parent_id):
             parent = None
+        else:
+            normalised_parent = str(parent_id)
+            if (
+                normalised_parent in _NO_PARENT_MARKERS
+                or normalised_parent == molecule_id
+            ):
+                parent = None
+            else:
+                parent = normalised_parent
         lookup[molecule_id] = parent
 
     return lookup
