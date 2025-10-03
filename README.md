@@ -56,7 +56,7 @@ Helper utilities under `library.utils.cli_tools` are documented in
 
 | Component | Supported range | Latest tested |
 |-----------|-----------------|---------------|
-| Python | 3.11.x | 3.12 |
+| Python | 3.11.x | 3.11.12 |
 | numpy | >=2.3.3,<3.0 | 2.3.3 |
 | pandas | >=2.3.3,<3.0 | 2.3.3 |
 | requests | >=2.32.5,<3.0 | 2.32.5 |
