@@ -811,17 +811,17 @@ REF_DTYPE = {
     "classification": "string",
     "document_contains_external_links": "boolean",
     "DOI": "string",
-    "first_page": "Int64",
+    "first_page": "string",
     "is_experimental_doc": "boolean",
-    "issue": "Int64",
+    "issue": "string",
     "journal": "string",
-    "last_page": "Int64",
-    "month": "Int64",
+    "last_page": "string",
+    "month": "string",
     "postcodes": "string",
     "pubmed_id": "Int64",
     "title": "string",
-    "volume": "Int64",
-    "year": "Int64",
+    "volume": "string",
+    "year": "string",
 }
 
 
