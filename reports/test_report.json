@@ -1,28 +1,29 @@
 {
   "meta": {
     "repo": "SatoryKono/ChEMBL_data_acquisition",
-    "commit": "b5a97fc2541b9eda41c3689a4721444bab9ccbc7",
+    "commit": "ebcbf5a8b0e0f6afe2823985d3c1df51a0726423",
     "branch": "work",
-    "ts_utc": "2025-10-03T23:33:35.418868+00:00",
-    "duration_sec": 1.17,
+    "ts_utc": "2025-10-03T23:56:02.430565+00:00",
+    "duration_sec": 1.7036499977111816,
     "python": "3.11.12",
-    "pytest": "8.4.1"
+    "pytest": "8.4.2",
+    "exit_code": 0
   },
   "summary": {
-    "total": 33,
-    "passed": 33,
+    "total": 75,
+    "passed": 75,
     "failed": 0,
     "skipped": 0,
     "xfailed": 0,
     "xpassed": 0,
     "error": 0,
-    "success_rate": 1.0
+    "success_rate": 100.0
   },
   "tests": [
     {
       "nodeid": "tests/e2e/test_get_data_end_to_end.py::test_get_data_end_to_end__miniature_pipeline",
       "status": "passed",
-      "duration_ms": 121.971,
+      "duration_ms": 83.711,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -31,21 +32,25 @@
     {
       "nodeid": "tests/e2e/test_testitem_pipeline.py::test_testitem_pipeline_e2e__deterministic_output",
       "status": "passed",
-      "duration_ms": 73.258,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:34.852378+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_missing_child_flags\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"count\": 1}\n{\"ts\": \"2025-10-03T23:33:34.852575+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_missing_parent_flags\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"count\": 1}\n{\"ts\": \"2025-10-03T23:33:34.856578+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_inconsistent_flag\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"column\": \"prodrug\", \"count\": 1}\n",
+      "duration_ms": 51.219,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:00.929632+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_missing_child_flags\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"count\": 1}\n{\"ts\": \"2025-10-03T23:56:00.929772+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_missing_parent_flags\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"count\": 1}\n{\"ts\": \"2025-10-03T23:56:00.932369+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_inconsistent_flag\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"column\": \"prodrug\", \"count\": 1}",
       "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:34.852378+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_missing_child_flags\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"count\": 1}\n{\"ts\": \"2025-10-03T23:33:34.852575+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_missing_parent_flags\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"count\": 1}\n{\"ts\": \"2025-10-03T23:33:34.856578+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_inconsistent_flag\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"column\": \"prodrug\", \"count\": 1}\n"
-        }
-      ],
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/e2e/test_testitem_pipeline.py::test_testitem_pipeline_e2e__finalize_stage_idempotent",
+      "status": "passed",
+      "duration_ms": 176.507,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:00.971043+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2}\n{\"ts\": \"2025-10-03T23:56:01.015200+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.015396+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"oral\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.036235+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 2, \"path\": \"/tmp/pytest-of-root/pytest-12/test_testitem_pipeline_e2e__fi0/finalized.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.060817+00:00\", \"level\": \"WARN\", \"event\": \"git_directory_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/workspace/ChEMBL_data_acquisition/library\"}\n{\"ts\": \"2025-10-03T23:56:01.073613+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_testitem_pipeline_e2e__fi0/finalized.csv.meta.yaml\"}\n{\"ts\": \"2025-10-03T23:56:01.076127+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2}\n{\"ts\": \"2025-10-03T23:56:01.084811+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.084964+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"oral\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.105311+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 2, \"path\": \"/tmp/pytest-of-root/pytest-12/test_testitem_pipeline_e2e__fi0/finalized.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.138652+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_testitem_pipeline_e2e__fi0/finalized.csv.meta.yaml\"}",
+      "stderr": "",
+      "log": [],
       "error": null
     },
     {
       "nodeid": "tests/integration/test_enrichment.py::test_enrich__attaches_flags_and_parent",
       "status": "passed",
-      "duration_ms": 25.972,
+      "duration_ms": 19.448,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -54,31 +59,89 @@
     {
       "nodeid": "tests/integration/test_enrichment.py::test_enrich__handles_unknown_flag_values",
       "status": "passed",
-      "duration_ms": 25.417,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:34.959456+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_inconsistent_flag\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"column\": \"prodrug\", \"count\": 1}\n",
+      "duration_ms": 18.06,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.176869+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_inconsistent_flag\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"column\": \"prodrug\", \"count\": 1}",
       "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:34.959456+00:00\", \"level\": \"WARN\", \"event\": \"testitem_enrichment_inconsistent_flag\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"column\": \"prodrug\", \"count\": 1}\n"
-        }
-      ],
+      "log": [],
       "error": null
     },
     {
       "nodeid": "tests/integration/test_enrichment.py::test_enrich__missing_sources_gracefully_fills_columns",
       "status": "passed",
-      "duration_ms": 6.172,
+      "duration_ms": 6.065,
       "stdout": "",
       "stderr": "",
       "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/integration/test_io_readers.py::test_read_ids__empty_file_returns_no_values",
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__writes_csv_and_metadata",
       "status": "passed",
-      "duration_ms": 0.36,
+      "duration_ms": 88.825,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.191437+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2}\n{\"ts\": \"2025-10-03T23:56:01.199912+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.200051+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"oral\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.218620+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 2, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__writes_c0/final.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.252242+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__writes_c0/final.csv.meta.yaml\"}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__missing_required_columns_fails",
+      "status": "passed",
+      "duration_ms": 3.326,
       "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__optional_columns_missing_warns",
+      "status": "passed",
+      "duration_ms": 58.456,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.282912+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1}\n{\"ts\": \"2025-10-03T23:56:01.288293+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.305644+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 1, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__optional0/optional.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.337962+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__optional0/optional.csv.meta.yaml\"}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__writes_failure_cases",
+      "status": "passed",
+      "duration_ms": 25.177,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.342649+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1}\n{\"ts\": \"2025-10-03T23:56:01.349482+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_error\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1, \"failures\": 1}\n{\"ts\": \"2025-10-03T23:56:01.350653+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"oral\", \"parent_molecule_chembl_id\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"salt_chembl_id\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.362845+00:00\", \"level\": \"ERROR\", \"event\": \"validation_failed\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"failures\": 1, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__writes_f0/failures_failure_cases.csv\"}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__quality_report_failure_non_fatal",
+      "status": "passed",
+      "duration_ms": 107.147,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.368061+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1}\n{\"ts\": \"2025-10-03T23:56:01.372844+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.372965+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"natural_product\", \"oral\", \"parent_molecule_chembl_id\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"salt_chembl_id\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.437764+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 1, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_0/quality.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.470938+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_0/quality.csv.meta.yaml\"}\n{\"ts\": \"2025-10-03T23:56:01.471862+00:00\", \"level\": \"WARN\", \"event\": \"quality_report_failed\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"quality failed\", \"error_type\": \"RuntimeError\", \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_0/quality.csv\", \"traceback\": \"Traceback (most recent call last):\\n  File \\\"/workspace/ChEMBL_data_acquisition/library/pipelines/testitem/cli.py\\\", line 899, in finalize_output\\n    analyze_table_quality(\\n  File \\\"/workspace/ChEMBL_data_acquisition/tests/integration/test_finalize_output.py\\\", line 187, in fake_analyze\\n    raise RuntimeError(\\\"quality failed\\\")\\nRuntimeError: quality failed\\n\"}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__quality_report_failure_fatal",
+      "status": "passed",
+      "duration_ms": 91.695,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.475899+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1}\n{\"ts\": \"2025-10-03T23:56:01.480895+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 1, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.481008+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"natural_product\", \"oral\", \"parent_molecule_chembl_id\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"salt_chembl_id\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.497860+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 1, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_1/quality_fatal.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.530387+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_1/quality_fatal.csv.meta.yaml\"}\n{\"ts\": \"2025-10-03T23:56:01.563822+00:00\", \"level\": \"INFO\", \"event\": \"metadata_quality_status\", \"run_id\": \"\", \"status\": \"failed\", \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_1/quality_fatal.csv.meta.yaml\"}\n{\"ts\": \"2025-10-03T23:56:01.564190+00:00\", \"level\": \"WARN\", \"event\": \"quality_report_failed\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"quality failed\", \"error_type\": \"RuntimeError\", \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__quality_1/quality_fatal.csv\", \"traceback\": \"Traceback (most recent call last):\\n  File \\\"/workspace/ChEMBL_data_acquisition/library/pipelines/testitem/cli.py\\\", line 899, in finalize_output\\n    analyze_table_quality(\\n  File \\\"/workspace/ChEMBL_data_acquisition/tests/integration/test_finalize_output.py\\\", line 222, in fake_analyze\\n    raise RuntimeError(\\\"quality failed\\\")\\nRuntimeError: quality failed\\n\", \"fatal\": true}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__empty_input_produces_placeholder",
+      "status": "passed",
+      "duration_ms": 58.403,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.568650+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 0}\n{\"ts\": \"2025-10-03T23:56:01.573229+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 0, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.573342+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"natural_product\", \"oral\", \"parent_molecule_chembl_id\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"salt_chembl_id\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.589105+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 0, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__empty_in0/empty.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.621787+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__empty_in0/empty.csv.meta.yaml\"}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_finalize_output.py::test_finalize_output__idempotent_results",
+      "status": "passed",
+      "duration_ms": 113.543,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.627229+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2}\n{\"ts\": \"2025-10-03T23:56:01.632229+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.632343+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"natural_product\", \"oral\", \"parent_molecule_chembl_id\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"salt_chembl_id\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.648713+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 2, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__idempote0/stable.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.681011+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__idempote0/stable.csv.meta.yaml\"}\n{\"ts\": \"2025-10-03T23:56:01.682562+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_start\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2}\n{\"ts\": \"2025-10-03T23:56:01.687635+00:00\", \"level\": \"INFO\", \"event\": \"schema_validate_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"schema\": \"TestitemsSchema\", \"rows\": 2, \"dropped\": 0, \"failures\": 0}\n{\"ts\": \"2025-10-03T23:56:01.687768+00:00\", \"level\": \"WARN\", \"event\": \"optional_columns_missing\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"columns\": [\"black_box_warning\", \"canonical_smiles\", \"first_approval\", \"max_phase\", \"molecule_type\", \"natural_product\", \"oral\", \"parent_molecule_chembl_id\", \"parenteral\", \"polymer_flag\", \"pref_name\", \"prodrug\", \"pubchem_canonical_smiles\", \"pubchem_cid\", \"pubchem_inchi\", \"pubchem_inchikey\", \"pubchem_isomeric_smiles\", \"pubchem_iupac_name\", \"pubchem_molecular_formula\", \"salt_chembl_id\", \"standard_inchi\", \"standard_inchi_key\", \"structure_type\", \"topical\"]}\n{\"ts\": \"2025-10-03T23:56:01.704253+00:00\", \"level\": \"INFO\", \"event\": \"write_done\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"rows\": 2, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__idempote0/stable.csv\"}\n{\"ts\": \"2025-10-03T23:56:01.736981+00:00\", \"level\": \"INFO\", \"event\": \"metadata_written\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"path\": \"/tmp/pytest-of-root/pytest-12/test_finalize_output__idempote0/stable.csv.meta.yaml\"}",
       "stderr": "",
       "log": [],
       "error": null
@@ -86,7 +149,7 @@
     {
       "nodeid": "tests/integration/test_io_readers.py::test_read_ids__fallback_encoding_recovers_values",
       "status": "passed",
-      "duration_ms": 1.245,
+      "duration_ms": 2.559,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -95,52 +158,25 @@
     {
       "nodeid": "tests/integration/test_io_readers.py::test_read_ids__fallback_separator_emits_info",
       "status": "passed",
-      "duration_ms": 0.604,
+      "duration_ms": 1.818,
       "stdout": "",
       "stderr": "",
       "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/integration/test_pubchem_augmentation.py::test_add_pubchem_data__disabled_mode_passthrough",
+      "nodeid": "tests/integration/test_io_readers.py::test_read_ids__empty_file_returns_no_values",
       "status": "passed",
-      "duration_ms": 0.72,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.041694+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_disabled\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}\n",
+      "duration_ms": 1.804,
+      "stdout": "",
       "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.041694+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_disabled\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}\n"
-        },
-        {
-          "section": "Captured log call",
-          "content": "\u001b[32mINFO    \u001b[0m pubchem-test:test_pubchem_augmentation.py:357 pubchem_disabled"
-        }
-      ],
-      "error": null
-    },
-    {
-      "nodeid": "tests/integration/test_pubchem_augmentation.py::test_add_pubchem_data__expires_stale_cache",
-      "status": "passed",
-      "duration_ms": 6.596,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.032748+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_cache_expired\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}\n",
-      "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.032748+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_cache_expired\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}\n"
-        },
-        {
-          "section": "Captured log call",
-          "content": "\u001b[32mINFO    \u001b[0m pubchem-test:test_pubchem_augmentation.py:329 pubchem_cache_expired"
-        }
-      ],
+      "log": [],
       "error": null
     },
     {
       "nodeid": "tests/integration/test_pubchem_augmentation.py::test_add_pubchem_data__normal_flow_populates_cache",
       "status": "passed",
-      "duration_ms": 9.657,
+      "duration_ms": 8.23,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -149,57 +185,67 @@
     {
       "nodeid": "tests/integration/test_pubchem_augmentation.py::test_add_pubchem_data__skips_polymers_when_disallowed",
       "status": "passed",
-      "duration_ms": 9.697,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.004628+00:00\", \"level\": \"WARNING\", \"event\": \"pubchem_skip_polymers\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}\n",
+      "duration_ms": 7.64,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.757770+00:00\", \"level\": \"WARNING\", \"event\": \"pubchem_skip_polymers\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}",
       "stderr": "",
       "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.004628+00:00\", \"level\": \"WARNING\", \"event\": \"pubchem_skip_polymers\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}\n"
-        },
-        {
-          "section": "Captured log call",
-          "content": "\u001b[33mWARNING \u001b[0m pubchem-test:test_pubchem_augmentation.py:148 pubchem_skip_polymers"
-        }
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess"
       ],
       "error": null
     },
     {
       "nodeid": "tests/integration/test_pubchem_augmentation.py::test_augment_pubchem__initialises_session_and_reuses_cache",
       "status": "passed",
-      "duration_ms": 13.717,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.015239+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_start\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:33:35.021423+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_done\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:33:35.021920+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_start\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:33:35.027445+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_done\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n",
+      "duration_ms": 9.918,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.764626+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_start\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:56:01.768510+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_done\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:56:01.768781+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_start\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:56:01.772166+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_done\", \"run_id\": \"\", \"status\": null, \"rps\": null}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/integration/test_pubchem_augmentation.py::test_add_pubchem_data__expires_stale_cache",
+      "status": "passed",
+      "duration_ms": 5.855,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.775409+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_cache_expired\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}",
       "stderr": "",
       "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.015239+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_start\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:33:35.021423+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_done\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:33:35.021920+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_start\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n{\"ts\": \"2025-10-03T23:33:35.027445+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_augment_done\", \"run_id\": \"\", \"status\": null, \"rps\": null}\n"
-        }
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess"
       ],
       "error": null
     },
     {
-      "nodeid": "tests/integration/test_schema_validation.py::test_testitems_schema__missing_required_column_raises",
+      "nodeid": "tests/integration/test_pubchem_augmentation.py::test_add_pubchem_data__disabled_mode_passthrough",
       "status": "passed",
-      "duration_ms": 1.293,
-      "stdout": "",
+      "duration_ms": 1.987,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.781061+00:00\", \"level\": \"INFO\", \"event\": \"pubchem_disabled\", \"run_id\": \"\", \"logger\": \"pubchem-test\"}",
       "stderr": "",
-      "log": [],
+      "log": [
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess"
+      ],
       "error": null
     },
     {
       "nodeid": "tests/integration/test_schema_validation.py::test_testitems_schema__valid_frame",
       "status": "passed",
-      "duration_ms": 22.256,
+      "duration_ms": 4.665,
       "stdout": "",
       "stderr": "",
       "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/unit/scripts/test_run_test_suite.py::test_main__passes_when_success_rate_meets_threshold",
+      "nodeid": "tests/integration/test_schema_validation.py::test_testitems_schema__missing_required_column_raises",
       "status": "passed",
-      "duration_ms": 1.697,
+      "duration_ms": 1.52,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/scripts/test_run_test_suite.py::test_write_reports__includes_success_rate",
+      "status": "passed",
+      "duration_ms": 1.5,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -208,25 +254,99 @@
     {
       "nodeid": "tests/unit/scripts/test_run_test_suite.py::test_main__returns_error_when_success_rate_below_threshold",
       "status": "passed",
-      "duration_ms": 2.105,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.075712+00:00\", \"level\": \"ERROR\", \"event\": \"Success rate 94.74% is below the required threshold of 95.00%\", \"run_id\": \"\", \"logger\": \"scripts.run_test_suite\"}\n",
+      "duration_ms": 2.038,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.791925+00:00\", \"level\": \"ERROR\", \"event\": \"Success rate 94.74% is below the required threshold of 95.00%\", \"run_id\": \"\", \"logger\": \"scripts.run_test_suite\"}",
       "stderr": "",
       "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.075712+00:00\", \"level\": \"ERROR\", \"event\": \"Success rate 94.74% is below the required threshold of 95.00%\", \"run_id\": \"\", \"logger\": \"scripts.run_test_suite\"}\n"
-        },
-        {
-          "section": "Captured log call",
-          "content": "\u001b[1m\u001b[31mERROR   \u001b[0m scripts.run_test_suite:run_test_suite.py:210 Success rate 94.74% is below the required threshold of 95.00%"
-        }
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess"
       ],
       "error": null
     },
     {
-      "nodeid": "tests/unit/scripts/test_run_test_suite.py::test_write_reports__includes_success_rate",
+      "nodeid": "tests/unit/scripts/test_run_test_suite.py::test_main__passes_when_success_rate_meets_threshold",
       "status": "passed",
-      "duration_ms": 0.83,
+      "duration_ms": 1.769,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_ensure_no_parant_column__raises",
+      "status": "passed",
+      "duration_ms": 0.913,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_normalise_parent_identifier__cases[None-CHEMBL1-None]",
+      "status": "passed",
+      "duration_ms": 0.851,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_normalise_parent_identifier__cases[-CHEMBL1-None]",
+      "status": "passed",
+      "duration_ms": 0.861,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_normalise_parent_identifier__cases[NULL-CHEMBL1-None]",
+      "status": "passed",
+      "duration_ms": 0.857,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_normalise_parent_identifier__cases[CHEMBL1-CHEMBL1-None]",
+      "status": "passed",
+      "duration_ms": 0.909,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_normalise_parent_identifier__cases[NO PARENT-CHEMBL2-None]",
+      "status": "passed",
+      "duration_ms": 0.912,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_normalise_parent_identifier__cases[ chembl2 -CHEMBL1-CHEMBL2]",
+      "status": "passed",
+      "duration_ms": 1.008,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_merge_parent_stats__accumulates_counts",
+      "status": "passed",
+      "duration_ms": 0.826,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_catalog_utils.py::test_merge_parent_stats__keeps_higher_priority_source",
+      "status": "passed",
+      "duration_ms": 0.817,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -235,7 +355,7 @@
     {
       "nodeid": "tests/unit/test_cli_integrate_missing.py::test_integrate_missing_identifiers__appends_placeholders_in_order",
       "status": "passed",
-      "duration_ms": 3.106,
+      "duration_ms": 2.769,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -244,16 +364,25 @@
     {
       "nodeid": "tests/unit/test_cli_integrate_missing.py::test_integrate_missing_identifiers__restores_requested_order",
       "status": "passed",
-      "duration_ms": 1.971,
+      "duration_ms": 1.975,
       "stdout": "",
       "stderr": "",
       "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/unit/test_cli_pubchem_cfg.py::test_prepare_pubchem_api_cfg__raises_for_placeholder",
+      "nodeid": "tests/unit/test_cli_integrate_missing.py::test_integrate_missing_identifiers__ignores_blank_requested_ids",
       "status": "passed",
-      "duration_ms": 1.487,
+      "duration_ms": 1.895,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_integrate_missing.py::test_integrate_missing_identifiers__missing_ids_appended_at_end",
+      "status": "passed",
+      "duration_ms": 1.942,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -262,44 +391,25 @@
     {
       "nodeid": "tests/unit/test_cli_pubchem_cfg.py::test_prepare_pubchem_api_cfg__uses_pubchem_contact",
       "status": "passed",
-      "duration_ms": 0.167,
+      "duration_ms": 1.78,
       "stdout": "",
       "stderr": "",
       "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/unit/test_cli_read_input.py::test_read_input_ids__invalid_column",
+      "nodeid": "tests/unit/test_cli_pubchem_cfg.py::test_prepare_pubchem_api_cfg__raises_for_placeholder",
       "status": "passed",
-      "duration_ms": 1.347,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.114172+00:00\", \"level\": \"ERROR\", \"event\": \"read_fail\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"column 'molecule_chembl_id' not found in /tmp/pytest-of-root/pytest-3/test_read_input_ids__invalid_c0/input.csv; available columns: ['other_column']\", \"path\": \"/tmp/pytest-of-root/pytest-3/test_read_input_ids__invalid_c0/input.csv\"}\n",
+      "duration_ms": 1.792,
+      "stdout": "",
       "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.114172+00:00\", \"level\": \"ERROR\", \"event\": \"read_fail\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"column 'molecule_chembl_id' not found in /tmp/pytest-of-root/pytest-3/test_read_input_ids__invalid_c0/input.csv; available columns: ['other_column']\", \"path\": \"/tmp/pytest-of-root/pytest-3/test_read_input_ids__invalid_c0/input.csv\"}\n"
-        }
-      ],
-      "error": null
-    },
-    {
-      "nodeid": "tests/unit/test_cli_read_input.py::test_read_input_ids__limit_and_offset",
-      "status": "passed",
-      "duration_ms": 1.902,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.109646+00:00\", \"level\": \"INFO\", \"event\": \"process_offset\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"offset\": 3}\n",
-      "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.109646+00:00\", \"level\": \"INFO\", \"event\": \"process_offset\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"offset\": 3}\n"
-        }
-      ],
+      "log": [],
       "error": null
     },
     {
       "nodeid": "tests/unit/test_cli_read_input.py::test_read_input_ids__load_and_validate",
       "status": "passed",
-      "duration_ms": 3.051,
+      "duration_ms": 3.771,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -308,21 +418,142 @@
     {
       "nodeid": "tests/unit/test_cli_read_input.py::test_read_input_ids__missing_file",
       "status": "passed",
-      "duration_ms": 0.462,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.104475+00:00\", \"level\": \"ERROR\", \"event\": \"read_fail\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"[Errno 2] No such file or directory: 'does-not-exist.csv'\", \"path\": \"does-not-exist.csv\"}\n",
+      "duration_ms": 1.793,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.826834+00:00\", \"level\": \"ERROR\", \"event\": \"read_fail\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"[Errno 2] No such file or directory: 'does-not-exist.csv'\", \"path\": \"does-not-exist.csv\"}",
       "stderr": "",
-      "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.104475+00:00\", \"level\": \"ERROR\", \"event\": \"read_fail\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"[Errno 2] No such file or directory: 'does-not-exist.csv'\", \"path\": \"does-not-exist.csv\"}\n"
-        }
-      ],
+      "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/unit/test_csv_utils.py::test_write_csv_deterministic__drops_unexpected_columns",
+      "nodeid": "tests/unit/test_cli_read_input.py::test_read_input_ids__limit_and_offset",
       "status": "passed",
-      "duration_ms": 4.034,
+      "duration_ms": 2.572,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.829722+00:00\", \"level\": \"INFO\", \"event\": \"process_offset\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"offset\": 3}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_read_input.py::test_read_input_ids__invalid_column",
+      "status": "passed",
+      "duration_ms": 2.607,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.832811+00:00\", \"level\": \"ERROR\", \"event\": \"read_fail\", \"run_id\": \"\", \"status\": null, \"rps\": null, \"error\": \"column 'molecule_chembl_id' not found in /tmp/pytest-of-root/pytest-12/test_read_input_ids__invalid_c0/input.csv; available columns: ['other_column']\", \"path\": \"/tmp/pytest-of-root/pytest-12/test_read_input_ids__invalid_c0/input.csv\"}",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_execution_budget__start_logs_budget",
+      "status": "passed",
+      "duration_ms": 0.909,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_execution_budget__enforce_within_budget",
+      "status": "passed",
+      "duration_ms": 0.88,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_execution_budget__enforce_after_budget_raises",
+      "status": "passed",
+      "duration_ms": 0.974,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_watchdog__start_without_timeout",
+      "status": "passed",
+      "duration_ms": 0.839,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_watchdog__ping_logs_progress",
+      "status": "passed",
+      "duration_ms": 0.864,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_watchdog__raise_if_timed_out",
+      "status": "passed",
+      "duration_ms": 0.886,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_stage_watchdog__monitor_emits_timeout",
+      "status": "passed",
+      "duration_ms": 0.869,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_batched__yields_expected_groups[items0-3-expected0]",
+      "status": "passed",
+      "duration_ms": 0.924,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_batched__yields_expected_groups[items1-2-expected1]",
+      "status": "passed",
+      "duration_ms": 0.964,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_batched__yields_expected_groups[items2-2-expected2]",
+      "status": "passed",
+      "duration_ms": 0.887,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_batched__yields_expected_groups[items3-5-expected3]",
+      "status": "passed",
+      "duration_ms": 1.087,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_log_missing_identifier_summary__emits_warning",
+      "status": "passed",
+      "duration_ms": 0.883,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_cli_stage_controls.py::test_log_missing_identifier_summary__skips_empty",
+      "status": "passed",
+      "duration_ms": 0.913,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -331,16 +562,97 @@
     {
       "nodeid": "tests/unit/test_csv_utils.py::test_write_csv_deterministic__orders_columns_and_rows",
       "status": "passed",
-      "duration_ms": 9.625,
+      "duration_ms": 6.882,
       "stdout": "",
       "stderr": "",
       "log": [],
       "error": null
     },
     {
-      "nodeid": "tests/unit/test_normalize_testitems.py::test_normalize_testitems__preserves_non_string_values",
+      "nodeid": "tests/unit/test_csv_utils.py::test_write_csv_deterministic__drops_unexpected_columns",
       "status": "passed",
-      "duration_ms": 1.501,
+      "duration_ms": 3.387,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__relation_mapping[<-<=]",
+      "status": "passed",
+      "duration_ms": 1.348,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__relation_mapping[>->=]",
+      "status": "passed",
+      "duration_ms": 1.301,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__relation_mapping[<=-<=]",
+      "status": "passed",
+      "duration_ms": 1.578,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__relation_mapping[invalid-invalid]",
+      "status": "passed",
+      "duration_ms": 1.398,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__identifier_columns_trimmed",
+      "status": "passed",
+      "duration_ms": 1.843,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__micro_sign_replaced",
+      "status": "passed",
+      "duration_ms": 1.337,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__preserves_boolean_dtype",
+      "status": "passed",
+      "duration_ms": 1.376,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__retains_missing_values",
+      "status": "passed",
+      "duration_ms": 1.475,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_rules.py::test_normalize_testitems__does_not_mutate_original",
+      "status": "passed",
+      "duration_ms": 1.351,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -349,7 +661,16 @@
     {
       "nodeid": "tests/unit/test_normalize_testitems.py::test_normalize_testitems__standardises_relations_and_units",
       "status": "passed",
-      "duration_ms": 1.72,
+      "duration_ms": 1.85,
+      "stdout": "",
+      "stderr": "",
+      "log": [],
+      "error": null
+    },
+    {
+      "nodeid": "tests/unit/test_normalize_testitems.py::test_normalize_testitems__preserves_non_string_values",
+      "status": "passed",
+      "duration_ms": 1.927,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -358,7 +679,7 @@
     {
       "nodeid": "tests/unit/tools/test_run_tests.py::test_build_json__stores_fractional_success_rate",
       "status": "passed",
-      "duration_ms": 0.737,
+      "duration_ms": 1.361,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -367,7 +688,7 @@
     {
       "nodeid": "tests/unit/tools/test_run_tests.py::test_build_json__uses_full_success_for_empty_suite",
       "status": "passed",
-      "duration_ms": 0.553,
+      "duration_ms": 1.124,
       "stdout": "",
       "stderr": "",
       "log": [],
@@ -376,18 +697,11 @@
     {
       "nodeid": "tests/unit/tools/test_run_tests.py::test_main__downgrades_exit_code_when_threshold_not_met",
       "status": "passed",
-      "duration_ms": 1.787,
-      "stdout": "{\"ts\": \"2025-10-03T23:33:35.146242+00:00\", \"level\": \"ERROR\", \"event\": \"Success rate 50.00% is below the required threshold of 95.00%\", \"run_id\": \"\", \"logger\": \"tools.run_tests\"}\n",
+      "duration_ms": 2.303,
+      "stdout": "{\"ts\": \"2025-10-03T23:56:01.887651+00:00\", \"level\": \"ERROR\", \"event\": \"Success rate 50.00% is below the required threshold of 95.00%\", \"run_id\": \"\", \"logger\": \"tools.run_tests\"}",
       "stderr": "",
       "log": [
-        {
-          "section": "Captured stdout call",
-          "content": "{\"ts\": \"2025-10-03T23:33:35.146242+00:00\", \"level\": \"ERROR\", \"event\": \"Success rate 50.00% is below the required threshold of 95.00%\", \"run_id\": \"\", \"logger\": \"tools.run_tests\"}\n"
-        },
-        {
-          "section": "Captured log call",
-          "content": "\u001b[1m\u001b[31mERROR   \u001b[0m tools.run_tests:run_tests.py:273 Success rate 50.00% is below the required threshold of 95.00%"
-        }
+        "name\nmsg\nargs\nlevelname\nlevelno\npathname\nfilename\nmodule\nexc_info\nexc_text\nstack_info\nlineno\nfuncName\ncreated\nmsecs\nrelativeCreated\nthread\nthreadName\nprocessName\nprocess"
       ],
       "error": null
     }
