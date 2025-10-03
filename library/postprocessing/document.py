@@ -19,10 +19,10 @@ from typing import Any, Mapping, cast
 import numpy as np
 import pandas as pd
 
-from .. import document_postprocessing as stage_document_postprocessing
+from ..pipelines.document import postprocessing as stage_document_postprocessing
 from ..config import IoCfg
-from ..csv_utils import write_csv_deterministic
-from ..log import logger
+from ..common.csv_utils import write_csv_deterministic
+from ..common.log import logger
 
 # ===== Parameters ===========================================================
 UTF8_ENCODING = "utf-8"
@@ -448,7 +448,7 @@ def preprocess_document_export(
 ) -> pd.DataFrame:
     """Return the Stage-aligned projection of ``df``.
 
-    This is a thin wrapper around :func:`library.document_postprocessing.postprocess_documents`
+    This is a thin wrapper around :func:`library.pipelines.document.postprocessing.postprocess_documents`
     that preserves the legacy entry point used by :mod:`scripts.get_document_data`.
     The resulting frame strictly follows :data:`FINAL_COLUMN_ORDER` defined in the
     Stage port and omits analytics-only helper columns (``preferred_*``,

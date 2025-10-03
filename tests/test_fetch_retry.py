@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from library.config import RetryCfg
-from library.fetch_retry import ChunkFailureTracker, compute_backoff_delay
+from library.common.fetch_retry import ChunkFailureTracker, compute_backoff_delay
 
 
 def test_compute_backoff_delay_respects_cap() -> None:

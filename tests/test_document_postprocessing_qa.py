@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 
-from library import document_postprocessing as dp
+from library.pipelines.document import postprocessing as dp
 from library.config import IoCfg
 
 import library.qa.check_document_postprocessing as qa_module

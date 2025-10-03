@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from library import chembl_library as cl
+from library.integration import chembl_library as cl
 from library import cli as base_cli
-from library import pubchem_library as pl
+from library.integration import pubchem_library as pl
 from library.clients import pubchem as pc
 from library.utils.config import DEFAULT_CONFIG_RELATIVE
 

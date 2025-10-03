@@ -4,8 +4,8 @@ The README is available in multiple languages:
 
 | Language | Link |
 |----------|------|
-| English  | [README_EN.md](./docs/README_EN.md) |
-| Русский  | [README_RU.md](./docs/README_RU.md) |
+| English  | [README.md](./docs/en/README.md) |
+| Русский  | [README.md](./docs/ru/README.md) |
 
  
 * Командные скрипты с унифицированными флагами `--input`, `--output`
@@ -280,8 +280,8 @@ until then the deprecated aliases remain available with matching warnings.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English         | [docs/QA_PROCESS_EN.md](./docs/QA_PROCESS_EN.md) |
-| Русский         | [docs/QA_PROCESS_RU.md](./docs/QA_PROCESS_RU.md) |
+| English         | [docs/en/QA_PROCESS.md](./docs/en/QA_PROCESS.md) |
+| Русский         | [docs/ru/QA_PROCESS.md](./docs/ru/QA_PROCESS.md) |
 
 
 ```bash
@@ -390,7 +390,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 `library/utils/cli_tools/`, например модуль `get_activities` предназначен
 только для демонстрационного логирования и не выполняет файловых операций.
 См. [docs/CLI_TOOLS.md](./docs/CLI_TOOLS.md) (English) и
-[docs/CLI_TOOLS_RU.md](./docs/CLI_TOOLS_RU.md) (Русский) для кратких описаний и
+[docs/ru/CLI_TOOLS.md](./docs/ru/CLI_TOOLS.md) (Русский) для кратких описаний и
 типовых команд. Каталог с результатами игнорируется Git и автоматически публикуется
 как артефакт CI.
 
@@ -431,7 +431,7 @@ experimentation.
 You can also run the PubMed pipeline directly using the library module:
 
 ```bash
-python -m library.pubmed_library \
+python -m library.integration.pubmed_library \
     --input-csv tests/data/pmids.csv \
     --output out/documents.csv \
     --log-level INFO
@@ -471,7 +471,7 @@ python -m library.utils.cli_tools.pipeline_targets_main \
 
 The command reads target identifiers from the CSV, chunks them according
 to ``--chunk-size`` and ``--limit``, forwards the batch size to
-``library.pipeline_targets.run_pipeline`` and writes the cached ChemBL
+``library.pipelines.target.pipeline.run_pipeline`` and writes the cached ChemBL
 table with pipeline metadata via ``write_csv``. Use it to verify CLI
 overrides, logging and deterministic output before launching the network
 backed ``get_target_data`` pipeline.
@@ -627,9 +627,9 @@ api:
 
 ## Logging / Логирование
 
-**EN.** CLI helpers configure structured JSON logging via ``library.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity. The JSON layout is fixed and now stamps the staging phase (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
+**EN.** CLI helpers configure structured JSON logging via ``library.common.logging_setup.configure_logger``. Use environment variables or CLI flags to adjust verbosity. The JSON layout is fixed and now stamps the staging phase (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
 
-**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.logging_setup.configure_logger``. Управляйте уровнем логов переменными окружения или ключами CLI. Формат JSON фиксирован и теперь дополнительно фиксирует стадию (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
+**RU.** CLI-хелперы настраивают структурированное JSON-логирование через ``library.common.logging_setup.configure_logger``. Управляйте уровнем логов переменными окружения или ключами CLI. Формат JSON фиксирован и теперь дополнительно фиксирует стадию (`fetch`, `raw`, `cleanup`, `normalize`, `validate`, `final_export`).
 
 
 Уровень логов можно задать флагом `--log-level` или переменной
@@ -689,7 +689,7 @@ Smoke fixtures for full orchestration live in ``tests/data/input-smoke/``. The e
 
 **RU.** Детерминированные CSV-выгрузки из ``library.io`` обеспечивают повторяемость данных и метаданных между запусками.
 
-The function ``library.csv_utils.write_csv_deterministic`` normalises column
+The function ``library.common.csv_utils.write_csv_deterministic`` normalises column
 order, row sorting and value serialisation so repeated runs produce identical
 files. Every CSV must be stored alongside a ``<name>.meta.yaml`` file capturing
 the Git commit, command-line arguments and relevant configuration to allow
@@ -713,7 +713,7 @@ For very large tables, ``write_csv_deterministic`` accepts a ``chunksize``
 argument which streams the CSV in smaller pieces to reduce memory usage:
 
 ```python
-from library.csv_utils import write_csv_deterministic
+from library.common.csv_utils import write_csv_deterministic
 import pandas as pd
 
 df = pd.read_csv("large.csv")
@@ -749,9 +749,9 @@ All commands emit the structured JSON logs described above. Adjust verbosity
 with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
 
 Detailed command line examples using the bundled smoke datasets can be found in
-``docs/USAGE_EN.md`` (русская версия — ``docs/USAGE_RU.md``).
+``docs/en/USAGE.md`` (русская версия — ``docs/ru/USAGE.md``).
 An overview of the output directory layout and metadata sidecars is available in
-``docs/OUTPUT_EN.md`` (русская версия — ``docs/OUTPUT_RU.md``).
+``docs/en/OUTPUT.md`` (русская версия — ``docs/ru/OUTPUT.md``).
 
 ### Table quality analysis
 
@@ -883,8 +883,8 @@ lists every supported alias and the canonical key it maps to. See
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-See ``docs/CONFIG_EN.md`` for a complete overview of all configuration options
-(русская версия — ``docs/CONFIG_RU.md``).
+See ``docs/en/CONFIG.md`` for a complete overview of all configuration options
+(русская версия — ``docs/ru/CONFIG.md``).
 
 ### Schema validation
 
@@ -930,8 +930,8 @@ python -m library.utils.cli_tools.table_quality_main \
 `--output`/`--out` по-прежнему работают, но сопровождаются предупреждением и будут
 удалены после миграции всех пайплайнов. Пайплайн таргетов может использовать
 `--raw-out` и `--final-out` (с `--raw-format`) для разведения «сырого» снимка и
-финального экспорта. Для дополнительных примеров см. [`docs/USAGE_RU.md`](./docs/USAGE_RU.md)
-и английскую версию [`docs/USAGE_EN.md`](./docs/USAGE_EN.md).
+финального экспорта. Для дополнительных примеров см. [`docs/ru/USAGE.md`](./docs/ru/USAGE.md)
+и английскую версию [`docs/en/USAGE.md`](./docs/en/USAGE.md).
 
 ## Структура проекта
 
@@ -952,16 +952,28 @@ ChEMBL_data_acquisition/
 ├── tests/
 │   └── data/
 └── docs/
-    ├── CONFIG_EN.md / CONFIG_RU.md
-    ├── OUTPUT_EN.md / OUTPUT_RU.md
-    └── USAGE_EN.md / USAGE_RU.md
+    ├── CHANGELOG.md
+    ├── CONTRIBUTING.md
+    ├── RELEASE_NOTES.md
+    ├── en/
+    │   ├── CONFIG.md
+    │   ├── OUTPUT.md
+    │   ├── README.md
+    │   ├── SUMMARY.md
+    │   └── USAGE.md
+    └── ru/
+        ├── CONFIG.md
+        ├── OUTPUT.md
+        ├── README.md
+        ├── SUMMARY.md
+        └── USAGE.md
 ```
 
 ## Конфигурация
 
 Параметры читаются из `config/config.yaml`, переменных окружения
 (`CHEMBL_DA__...`) и ключей CLI.
-Подробности в [`docs/CONFIG_RU.md`](./docs/CONFIG_RU.md) и английской версии [`docs/CONFIG_EN.md`](./docs/CONFIG_EN.md).
+Подробности в [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md) и английской версии [`docs/en/CONFIG.md`](./docs/en/CONFIG.md).
 
 ## Output and metadata / Вывод и метаданные
 
@@ -969,7 +981,7 @@ ChEMBL_data_acquisition/
 
 **RU.** Пайплайны сохраняют детерминированные CSV с помощью ``library.io.write_csv`` и добавляют рядом файлы ``*.meta.yaml`` в каталоге ``~/.local/share/chembl-da/output``.
 
-Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/OUTPUT_EN.md`](./docs/OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./docs/OUTPUT_RU.md) for layout details.
+Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/en/OUTPUT.md`](./docs/en/OUTPUT.md) / [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md) for layout details.
 
 ## Dtype Inspector
 

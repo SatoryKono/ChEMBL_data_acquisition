@@ -1,4 +1,4 @@
-"""CLI wrapper for :mod:`library.pipeline_targets`.
+"""CLI wrapper for :mod:`library.pipelines.target.pipeline`.
 
 The interface honours ``--base-path``, ``--input-dir`` and ``--output-dir`` when
 resolving file locations.
@@ -38,9 +38,9 @@ from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
 from library.io.writers import write_csv
-from library.log import logger
-from library.pipeline_metadata import pipeline_metadata
-from library.pipeline_targets import run_pipeline
+from library.common.log import logger
+from library.pipelines.common import pipeline_metadata
+from library.pipelines.target.pipeline import run_pipeline
 from library.schemas import TargetsSchema
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 

@@ -21,9 +21,14 @@ uniprot/
 # Local development files
 python
 exists.csv
+ 
 .venv/
 config/config.local.yaml
 config/*.local.yaml
 config/*.secrets.yaml
 config/*.override.yaml
 config/**/secrets*.yaml
+ 
+logs/get_target_data_20251002.log
+logs/get_target_data_20251002.log
+ 

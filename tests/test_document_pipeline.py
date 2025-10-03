@@ -15,7 +15,7 @@ from pandera.errors import SchemaErrors
 from library.config import Config
 import scripts.get_document_data as document_script
 
-from library.document_pipeline import (
+from library.pipelines.document.pipeline import (
     DOCUMENT_SCHEMA_COLUMNS,
     DocumentQualityAccumulator,
     build_dataframe,

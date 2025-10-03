@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.pipeline_targets`."""
+"""Tests for :mod:`library.pipelines.target.pipeline`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from library.pipeline_targets import PipelineResult, run_pipeline
+from library.pipelines.target.pipeline import PipelineResult, run_pipeline
 
 
 def _iterator() -> Iterator[Iterable[str]]:

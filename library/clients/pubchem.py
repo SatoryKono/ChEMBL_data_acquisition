@@ -18,8 +18,8 @@ from cachetools import TTLCache
 from requests import Session
 
 from ..config import ApiCfg, PubChemCfg, RetryCfg, session_with_retry
-from ..log import logger
-from ..rate_limiter import get_limiter, sleep
+from ..common.log import logger
+from ..common.rate_limiter import get_limiter, sleep
 
 __all__ = [
     "Properties",

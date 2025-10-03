@@ -11,10 +11,10 @@ import pytest
 
 from cachetools import TTLCache
 
-from library import pubchem_library as pl
+from library.integration import pubchem_library as pl
 from library.clients import pubchem as pc
 from library.config import ApiCfg, RetryCfg, session_with_retry
-from library.logging_setup import LoggerConfig, configure_logger
+from library.common.logging_setup import LoggerConfig, configure_logger
 
 
 class DummyResponse:

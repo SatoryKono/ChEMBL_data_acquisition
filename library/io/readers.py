@@ -13,7 +13,7 @@ import pandas as pd
 
 from .. import validation
 from ..config import IoCfg
-from ..log import logger
+from ..common.log import logger
 
 
 class _EncodingDecodeError(Exception):

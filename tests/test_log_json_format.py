@@ -1,4 +1,4 @@
-"""Tests for the shared logger instance in :mod:`library.log`."""
+"""Tests for the shared logger instance in :mod:`library.common.log`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import io
 import json
 import sys
 
-from library import log
+from library.common import log
 from library.cli import LoggerConfig, configure_logger
 
 

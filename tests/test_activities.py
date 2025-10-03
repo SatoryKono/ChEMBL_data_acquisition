@@ -1,4 +1,4 @@
-from library.activities import get_activities
+from library.pipelines.activity import get_activities
 
 
 def test_get_activities_limit() -> None:

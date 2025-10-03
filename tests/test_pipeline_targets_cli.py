@@ -12,7 +12,7 @@ import pytest
 from pandera.errors import SchemaErrors
 
 from library.config import Config
-from library.pipeline_targets import PipelineResult
+from library.pipelines.target.pipeline import PipelineResult
 from library.utils.cli_tools import pipeline_targets_main as cli
 from library.schemas import TargetsSchema
 

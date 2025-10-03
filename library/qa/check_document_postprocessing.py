@@ -20,8 +20,8 @@ from typing import Any, Iterable, Mapping, Sequence
 import pandas as pd
 import yaml
 
-from library.csv_utils import write_csv_deterministic
-from library.document_postprocessing import to_text
+from library.common.csv_utils import write_csv_deterministic
+from library.pipelines.document.postprocessing import to_text
 
 
 # ===== Parameters ============================================================

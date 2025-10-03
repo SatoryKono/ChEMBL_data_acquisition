@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-import library.rate_limiter as rl
+import library.common.rate_limiter as rl
 from library.clients import ChemblClient
 from library.config import ApiCfg, RetryCfg
 from library.clients import chembl as chembl_module

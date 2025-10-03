@@ -19,7 +19,7 @@ import yaml
 
 from .config import _mask_secrets
 from .git_utils import _git_sha
-from .log import logger
+from .common.log import logger
 from .utils.atomic import open_atomic
 
 

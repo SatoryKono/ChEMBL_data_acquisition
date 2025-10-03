@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 
-from library.csv_utils import write_csv_deterministic
+from library.common.csv_utils import write_csv_deterministic
 from library.utils.cli_tools import csv_utils_main as cli
 
 

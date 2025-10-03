@@ -1,7 +1,7 @@
 """Utilities for document type classification.
 
 Provides :func:`classify_dataframe` mirroring the behaviour expected by the
-unit tests. It leverages :mod:`library.document_type_classifier` for the actual
+unit tests. It leverages :mod:`library.pipelines.document.type_classifier` for the actual
 scoring logic.
 """
 
@@ -21,8 +21,8 @@ from library.cli import (
     build_parser as base_parser,
 )
 from library.config import Config, ConfigError, ensure_dirs, print_config
-from library.document_type_classifier import compute_scores, decide_label
-from library.log import logger
+from library.pipelines.document.type_classifier import compute_scores, decide_label
+from library.common.log import logger
 
 
 def _split_terms(value: object) -> Iterable[str]:

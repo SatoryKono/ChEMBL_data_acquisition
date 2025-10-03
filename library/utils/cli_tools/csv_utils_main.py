@@ -1,7 +1,7 @@
 """CLI wrapper for :func:`write_csv_deterministic`.
 
 This script reads an input CSV file and re-serialises it deterministically
-using :func:`library.csv_utils.write_csv_deterministic`.
+using :func:`library.common.csv_utils.write_csv_deterministic`.
 
 The command understands ``--base-path``, ``--input-dir`` and ``--output-dir``
 for resolving relative paths. When ``--output`` is omitted, a file named
@@ -23,9 +23,9 @@ import pandas as pd
 from library import cli
 from library.cli import LoggerConfig, configure_logger, create_logger_config
 from library.cli_utils import build_parser
-from library.csv_utils import write_csv_chunks_deterministic
+from library.common.csv_utils import write_csv_chunks_deterministic
 from library.config import ConfigError, ensure_dirs, print_config
-from library.log import logger
+from library.common.log import logger
 from library.parser_schema import CSVExportArgs
 
 

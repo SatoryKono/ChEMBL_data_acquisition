@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from library.csv_utils import write_csv_chunks_deterministic, write_csv_deterministic
+from library.common.csv_utils import write_csv_chunks_deterministic, write_csv_deterministic
 
 
 def test_write_csv_chunks_deterministic(tmp_path: Path) -> None:

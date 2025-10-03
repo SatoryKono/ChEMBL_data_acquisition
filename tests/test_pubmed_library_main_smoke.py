@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from library import pubmed_library as pl
+from library.integration import pubmed_library as pl
 from library.clients import pubmed as pubmed_client
 from library.config import RetryCfg
 

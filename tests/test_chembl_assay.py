@@ -1,4 +1,4 @@
-"""Tests for :mod:`library.chembl_assay`."""
+"""Tests for :mod:`library.pipelines.assay.chembl_assay`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import pandas as pd
 from requests import HTTPError, Response
 
-from library.chembl_assay import (
+from library.pipelines.assay.chembl_assay import (
     MAX_TESTITEM_URL_LENGTH,
     TESTITEM_QUERY_FIELDS,
     _split_chunk_for_url,
