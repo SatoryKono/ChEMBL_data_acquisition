@@ -31,6 +31,8 @@ FROZEN_NAIVE = FROZEN_UTC.replace(tzinfo=None)
 def _fix_seed(
     seed: int = 42, *, monkeypatch: pytest.MonkeyPatch | None = None
 ) -> None:
+    """Reset the pseudo-random generators to a deterministic state."""
+
     if monkeypatch is None:
         os.environ["PYTHONHASHSEED"] = str(seed)
     else:
@@ -62,9 +64,17 @@ def deterministic_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         def today(cls) -> dt.datetime:
             return cls.now()
 
+    class FrozenDate(dt.date):
+        @classmethod
+        def today(cls) -> dt.date:
+            return FROZEN_NAIVE.date()
+
     monkeypatch.setattr(time, "time", lambda: FROZEN_TIMESTAMP)
+    monkeypatch.setattr(time, "time_ns", lambda: int(FROZEN_TIMESTAMP * 1_000_000_000))
     monkeypatch.setattr(dt, "datetime", FrozenDateTime)
     monkeypatch.setattr("datetime.datetime", FrozenDateTime)
+    monkeypatch.setattr(dt, "date", FrozenDate)
+    monkeypatch.setattr("datetime.date", FrozenDate)
 
 
 @pytest.fixture(autouse=True)
