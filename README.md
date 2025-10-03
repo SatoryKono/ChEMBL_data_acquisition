@@ -282,8 +282,8 @@ and `--out` as compatibility shims that log warnings when used.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English         | [docs/processes/en/QA_PROCESS.md](./docs/processes/en/QA_PROCESS.md) |
-| Русский         | [docs/processes/ru/QA_PROCESS.md](./docs/processes/ru/QA_PROCESS.md) |
+| English         | [docs/QA_PROCESS_EN.md](./docs/QA_PROCESS_EN.md) |
+| Русский         | [docs/QA_PROCESS_RU.md](./docs/QA_PROCESS_RU.md) |
 
 
 ```bash
