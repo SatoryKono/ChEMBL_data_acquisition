@@ -98,3 +98,35 @@ def test_optional_stages_receive_dataframe() -> None:
     # Mapping interface exposes the stored frames.
     assert result["chembl"].equals(result.chembl)
     assert result.as_dict()["uniprot"].equals(result.uniprot)
+
+
+def test_strict_optional_stage_filters_batch_size() -> None:
+    """Strict optional fetchers succeed when ``batch_size`` is auto-injected."""
+
+    def chembl_fetcher(
+        chunks: Iterator[Iterable[str]],
+        cfg: object,
+        *,
+        batch_size: int,
+    ) -> pd.DataFrame:
+        assert batch_size == 100
+        ids = [item for chunk in chunks for item in chunk]
+        return pd.DataFrame({"target_chembl_id": ids})
+
+    sentinel: dict[str, Any] = {"called": False}
+
+    def strict_uniprot_fetcher(df: pd.DataFrame) -> pd.DataFrame:
+        sentinel["called"] = True
+        assert list(df["target_chembl_id"]) == ["CHEMBL1", "CHEMBL2"]
+        return pd.DataFrame({"uniprot_id": ["P1", "P2"]})
+
+    result = run_pipeline(
+        _iterator,
+        chembl_cfg=object(),
+        chembl_fetcher=chembl_fetcher,
+        uniprot_fetcher=strict_uniprot_fetcher,
+    )
+
+    assert sentinel["called"] is True
+    assert result.uniprot is not None
+    assert list(result.uniprot["uniprot_id"]) == ["P1", "P2"]
