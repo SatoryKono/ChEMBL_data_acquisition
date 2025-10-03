@@ -3144,11 +3144,17 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
     logger_target = getattr(attach_module, "logger", gtd.logger)
 
     captured_warnings: list[tuple[str, dict[str, object]]] = []
+    captured_infos: list[tuple[str, dict[str, object]]] = []
 
     def fake_warning(event: str, *args: object, **kwargs: object) -> None:
         captured_warnings.append((event, dict(kwargs)))
 
     monkeypatch.setattr(logger_target, "warning", fake_warning)
+
+    def fake_info(event: str, *args: object, **kwargs: object) -> None:
+        captured_infos.append((event, dict(kwargs)))
+
+    monkeypatch.setattr(logger_target, "info", fake_info)
 
     precomputed = (
         prepare_parent_lookup_data(df, catalog_cfg) if use_precomputed else None
@@ -3171,6 +3177,29 @@ def test_attach_parent_molecule_ids_skips_full_sync_when_parentless_filtered(
     skip_events = [event for event, _ in captured_warnings]
     assert "parent_lookup_full_sync_skipped_parentless" in skip_events
     assert "parent_lookup_missing_parents" in skip_events
+
+    captured_warnings.clear()
+    captured_infos.clear()
+    catalog_cfg.cache_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_cfg.cache_path.write_text("{}", encoding="utf-8")
+
+    result, stats = attach_module.attach_parent_molecule_ids(
+        df,
+        client=object(),
+        api_cfg=cfg.sources.chembl.api,
+        catalog_cfg=catalog_cfg,
+        timeout=None,
+        precomputed=precomputed,
+    )
+
+    assert result[catalog_cfg.parent_field].tolist() == [pd.NA]
+    assert stats.source == getattr(
+        attach_module, "PARENT_LOOKUP_SOURCE_SKIPPED", pipeline.PARENT_LOOKUP_SOURCE_SKIPPED
+    )
+    assert stats.missing == 1
+    assert stats.uncovered == 1
+    info_events = [event for event, _ in captured_infos]
+    assert "parent_lookup_skip_full_sync" in info_events
 
 
 @pytest.mark.parametrize("use_precomputed", [False, True])
