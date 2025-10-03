@@ -133,8 +133,7 @@ pre-commit run --all-files
 pip check
 pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing
-python -m library.utils.cli_tools.check_determinism --log-level DEBUG \
-    --input out/latest.csv --previous out/previous.csv
+check-determinism --log-level DEBUG
 ```
 
 QA-плейбук (`docs/QA_PROCESS_RU.md` / `docs/QA_PROCESS_EN.md`) описывает ворота

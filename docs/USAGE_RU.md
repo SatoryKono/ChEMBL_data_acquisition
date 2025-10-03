@@ -156,7 +156,7 @@ get-testitem-data --input seeds/molecule_ids.csv \
 
 | Модуль | Команда | Назначение |
 |--------|---------|------------|
-| `library.utils.cli_tools.check_determinism` | `check-determinism --input a.csv --previous b.csv` | Сравнение SHA-256 и метаданных разных запусков. |
+| `library.utils.cli_tools.check_determinism` | `check-determinism --log-level INFO` | Проверка детерминированности CSV через сравнение хэшей тестовых файлов. |
 | `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Потоковое чтение/запись CSV с сохранением порядка. |
 | `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Нормализация разделителей, кавычек и порядка колонок. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Диагностика типов pandas-таблиц. |
