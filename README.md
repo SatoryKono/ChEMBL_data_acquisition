@@ -2,10 +2,10 @@
 
 | Language | Overview |
 |----------|----------|
-| English  | [`docs/en/README.md`](./docs/en/README.md) |
-| Русский  | [`docs/ru/README.md`](./docs/ru/README.md) |
+| English  | [`docs/en/user/README.md`](./docs/en/user/README.md) |
+| Русский  | [`docs/ru/user/README.md`](./docs/ru/user/README.md) |
 
-Use the [English documentation index](./docs/en/README.md) or the [Russian documentation index](./docs/ru/README.md) to navigate the full manual set.
+Use the [documentation index](./docs/index.md) to navigate the full manual set.
 All content is maintained in synchronised English and Russian variants.
 
 ## Feature highlights
@@ -48,8 +48,8 @@ following scripts. They mirror the modules in `scripts/`,
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |
 
 Helper utilities under `library.utils.cli_tools` are documented in
-[`docs/en/CLI_TOOLS.md`](./docs/en/CLI_TOOLS.md) /
-[`docs/ru/CLI_TOOLS.md`](./docs/ru/CLI_TOOLS.md).
+[`docs/en/devel/CLI_TOOLS.md`](./docs/en/devel/CLI_TOOLS.md) /
+[`docs/ru/devel/CLI_TOOLS.md`](./docs/ru/devel/CLI_TOOLS.md).
 
 ## Requirements
 
@@ -68,11 +68,11 @@ Helper utilities under `library.utils.cli_tools` are documented in
 
 Follow the installation, configuration, and QA guidance in the dedicated docs:
 
-- [`docs/en/README.md`](./docs/en/README.md) / [`docs/ru/README.md`](./docs/ru/README.md) – project overview.
-- [`docs/en/USAGE.md`](./docs/en/USAGE.md) / [`docs/ru/USAGE.md`](./docs/ru/USAGE.md) – CLI reference and examples.
-- [`docs/en/CONFIG.md`](./docs/en/CONFIG.md) / [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md) – configuration matrix.
-- [`docs/en/OUTPUT.md`](./docs/en/OUTPUT.md) / [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md) – exported artefacts.
-- [QA process (EN)](./docs/en/QA_PROCESS.md) / [Процесс QA (RU)](./docs/ru/QA_PROCESS.md) – QA playbook.
+- [`docs/en/user/README.md`](./docs/en/user/README.md) / [`docs/ru/user/README.md`](./docs/ru/user/README.md) – project overview.
+- [`docs/en/user/USAGE.md`](./docs/en/user/USAGE.md) / [`docs/ru/user/USAGE.md`](./docs/ru/user/USAGE.md) – CLI reference and examples.
+- [`docs/en/devel/CONFIG.md`](./docs/en/devel/CONFIG.md) / [`docs/ru/devel/CONFIG.md`](./docs/ru/devel/CONFIG.md) – configuration matrix.
+- [`docs/en/user/OUTPUT.md`](./docs/en/user/OUTPUT.md) / [`docs/ru/user/OUTPUT.md`](./docs/ru/user/OUTPUT.md) – exported artefacts.
+- [QA process (EN)](./docs/en/qa/QA_PROCESS.md) / [Процесс QA (RU)](./docs/ru/qa/QA_PROCESS.md) – QA playbook.
 
 ## Development quick start
 
@@ -281,8 +281,8 @@ and `--out` as compatibility shims that log warnings when used.
 
 | Language / Язык | Checklist / Чек-лист |
 |-----------------|----------------------|
-| English / Английский | [QA process](./docs/en/QA_PROCESS.md) |
-| Русский / Russian    | [Процесс QA](./docs/ru/QA_PROCESS.md) |
+| English / Английский | [QA process](./docs/en/qa/QA_PROCESS.md) |
+| Русский / Russian    | [Процесс QA](./docs/ru/qa/QA_PROCESS.md) |
 
 
 ```bash
@@ -390,8 +390,8 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 `*.meta.yaml`. Утилиты разработки и отладки перенесены в
 `library/utils/cli_tools/`, например модуль `get_activities` предназначен
 только для демонстрационного логирования и не выполняет файловых операций.
-См. [docs/en/CLI_TOOLS.md](./docs/en/CLI_TOOLS.md) (English) и
-[docs/ru/CLI_TOOLS.md](./docs/ru/CLI_TOOLS.md) (Русский) для кратких описаний и
+См. [docs/CLI_TOOLS.md](./docs/reference/en/CLI_TOOLS.md) (English) и
+[docs/reference/ru/CLI_TOOLS.md](./docs/reference/ru/CLI_TOOLS.md) (Русский) для кратких описаний и
 типовых команд. Каталог с результатами игнорируется Git и автоматически публикуется
 как артефакт CI.
 
@@ -753,9 +753,9 @@ All commands emit the structured JSON logs described above. Adjust verbosity
 with ``--log-level`` or ``CHEMBL_DA_LOG_LEVEL``.
 
 Detailed command line examples using the bundled smoke datasets can be found in
-``docs/en/USAGE.md`` (русская версия — ``docs/ru/USAGE.md``).
+``docs/guides/en/USAGE.md`` (русская версия — ``docs/guides/ru/USAGE.md``).
 An overview of the output directory layout and metadata sidecars is available in
-``docs/en/OUTPUT.md`` (русская версия — ``docs/ru/OUTPUT.md``).
+``docs/reference/en/OUTPUT.md`` (русская версия — ``docs/reference/ru/OUTPUT.md``).
 
 ### Table quality analysis
 
@@ -887,8 +887,8 @@ lists every supported alias and the canonical key it maps to. See
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-See ``docs/en/CONFIG.md`` for a complete overview of all configuration options
-(русская версия — ``docs/ru/CONFIG.md``).
+See ``docs/reference/en/CONFIG.md`` for a complete overview of all configuration options
+(русская версия — ``docs/reference/ru/CONFIG.md``).
 
 ### Schema validation
 
@@ -934,8 +934,8 @@ python -m library.utils.cli_tools.table_quality_main \
 `--final-out`/`--out` по-прежнему работают, но сопровождаются предупреждением и будут
 удалены после миграции всех пайплайнов. Пайплайн таргетов может использовать
 `--raw-out` и `--final-out` (с `--raw-format`) для разведения «сырого» снимка и
-финального экспорта. Для дополнительных примеров см. [`docs/en/USAGE.md`](./docs/en/USAGE.md)
-и английскую версию [`docs/ru/USAGE.md`](./docs/ru/USAGE.md).
+финального экспорта. Для дополнительных примеров см. [`docs/guides/ru/USAGE.md`](./docs/guides/ru/USAGE.md)
+и английскую версию [`docs/guides/en/USAGE.md`](./docs/guides/en/USAGE.md).
 
 ## Структура проекта
 
@@ -976,7 +976,7 @@ ChEMBL_data_acquisition/
 
 Параметры читаются из `config/config.yaml`, переменных окружения
 (`CHEMBL_DA__...`) и ключей CLI.
-Подробности в [`docs/ru/CONFIG.md`](./docs/ru/CONFIG.md) и английской версии [`docs/en/CONFIG.md`](./docs/en/CONFIG.md).
+Подробности в [`docs/reference/ru/CONFIG.md`](./docs/reference/ru/CONFIG.md) и английской версии [`docs/reference/en/CONFIG.md`](./docs/reference/en/CONFIG.md).
 
 ## Output and metadata / Вывод и метаданные
 
@@ -984,7 +984,7 @@ ChEMBL_data_acquisition/
 
 **RU.** Пайплайны сохраняют детерминированные CSV с помощью ``library.io.write_csv`` и добавляют рядом файлы ``*.meta.yaml`` в каталоге ``~/.local/share/chembl-da/output``.
 
-Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/en/OUTPUT.md`](./docs/en/OUTPUT.md) / [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md) for layout details.
+Each sidecar stores the Git commit, launch parameters, SHA‑256 checksum and row/column statistics. See [`docs/reference/en/OUTPUT.md`](./docs/reference/en/OUTPUT.md) / [`docs/reference/ru/OUTPUT.md`](./docs/reference/ru/OUTPUT.md) for layout details.
 
 ## Dtype Inspector
 

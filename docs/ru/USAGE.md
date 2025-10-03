@@ -1,163 +1,180 @@
 # Руководство по использованию
 
-В этом руководстве объясняется, как запускать конвейеры сбора данных ChEMBL и их вспомогательные утилиты.
+Русская версия описывает запуск пайплайнов ChEMBL и вспомогательных утилит. За
+английским вариантом обращайтесь к [`docs/en/user/USAGE.md`](../../en/user/USAGE.md).
 
 ## Общий шаблон CLI
 
-Каждый конвейер для сущностей доступен как консольный скрипт (например, `get-document-data`), а также может быть запущен как модуль Python (например, `python -m scripts.get_document_data`).
+Каждый пайплайн доступен как консольная команда (после установки пакета) и как
+вызов `python -m scripts.<name>` в режиме разработки. Параметры делятся на три
+группы:
 
-### Общие аргументы
+1. **Общие флаги** из `library.cli.parser.add_common_arguments`:
+   - `--input / --final-out` — путь к входному CSV и результирующему файлу.
+     Алиасы `--output` и `--out` оставлены для совместимости, но сопровождаются
+     предупреждением; используйте `--final-out`.
+   - `--log-level` — уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
+   - `--sep`, `--encoding` — разделитель и кодировка CSV (`utf-8-sig` по умолчанию).
+   - `--base-path`, `--input-dir`, `--output-dir`, `--date` — удобные шорткаты,
+     которые оркестратор применяет для построения путей и имён файлов.
+   - `--force`, `--skip-existing` — перезаписать существующий файл или пропустить
+     этап, если выгрузка уже создана.
+   - `--config` — альтернативный YAML-конфиг (по умолчанию `config/config.yaml`).
+   - `--print-config` — вывести эффективную конфигурацию (с учётом CLI и
+     переменных окружения) и завершить работу.
+2. **Общие опции пагинации**, задаваемые в конкретных пайплайнах:
+   `--column`, `--batch-size` / `--chunk-size`, `--timeout`, `--limit`,
+   `--offset`, `--workers` (для параллельных запросов), `--dry-run`
+   (только для активностей).
+3. **Специфические параметры**, управляющие поведением отдельных пайплайнов:
+   стадийные флаги таргет-пайплайна, настройки DOI-фолбэков для документов и т.п.
 
-Большинство скриптов конвейеров принимают общий набор аргументов для единообразия:
-
-*   `--input`: Путь к входному CSV-файлу, содержащему идентификаторы.
-*   `--final-out`: Путь назначения для итогового, обработанного экспорта в формате CSV. Устаревшие псевдонимы `--output` и `--out` все еще доступны, но будут удалены в будущей версии.
-*   `--config`: Путь к файлу конфигурации YAML. По умолчанию используется встроенный `config/config.yaml`.
-*   `--log-level`: Устанавливает уровень детализации логирования (например, `DEBUG`, `INFO`, `ERROR`).
-*   `--limit`: Ограничивает обработку первыми N идентификаторами.
-*   `--offset`: Пропускает первые N идентификаторов перед началом обработки.
-*   `--force`: Перезаписывает выходной файл, если он уже существует.
-*   `--skip-existing`: Пропускает запуск конвейера, если выходной файл уже существует.
-*   `--print-config`: Выводит итоговую, действующую конфигурацию (после всех переопределений) и завершает работу.
-
-### Специфичные для конвейера аргументы
-
-Отдельные конвейеры могут иметь дополнительные аргументы для управления их специфической логикой, такие как `--batch-size`, `--workers` или подкоманды для разных источников данных. Они подробно описаны в разделах ниже.
+Любая команда возвращает ненулевой код при ошибках валидации, проблемах с IO или
+неудачных запросах к внешним сервисам.
 
 ## Оркестратор (`get-data`)
 
-Скрипт `get-data` является основной точкой входа для последовательного запуска всех конвейеров. Он предоставляет удобный способ выполнения полного обновления данных одной командой.
-
-```bash
-get-data --base-path ./data \
-    --input-dir input --output-dir output \
-    --config config/config.yaml \
-    --date 20240101 --limit 100 --log-level INFO
+```
+get-data --base-path /data/chembl \
+    --input-dir seeds --output-dir exports \
+    --config /data/chembl/config.yaml \
+    --date 20250101 --limit 100 --log-level INFO
 ```
 
-Оркестратор запускает конвейеры в следующем порядке: `documents`, `targets`, `assays`, `testitems` и `activities`. Он формирует необходимые пути `--input` и `--final-out` для каждого шага на основе общих аргументов для каталогов.
+Оркестратор готовит аргументы и запускает пайплайны в порядке: документы (`all`),
+таргеты (`all`), ассайи, тест-объекты, активности. Каждая команда получает
+параметр `--final-out`, поэтому выгрузки создаются в целевых каталогах без
+устаревших алиасов. Значение `--limit 0` пропускает выполнение, а `--dry-run`
+выводит план без записи файлов.
 
-## Конвейер документов (`get-document-data`)
+## Пайплайн документов (`get-document-data`)
 
-Этот конвейер извлекает и обогащает метаданные публикаций. У него есть три подкоманды: `chembl`, `pubmed` и `all`.
+Подкоманды:
 
-| Подкоманда | Описание | Ключевые аргументы |
-| :--- | :--- | :--- |
-| `chembl` | Извлекает метаданные документов из ChEMBL API. | `--chunk-size`, `--timeout`, `--offset` |
-| `pubmed` | Обогащает данными из PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--sleep`, `--workers`, `--batch-size`, `--offset`, `--fallback-doi-csv` |
-| `all` | Запускает конвейеры `chembl` и `pubmed`, объединяя результаты. | Все аргументы из `pubmed` и `chembl`. |
+| Режим | Описание | Основные параметры |
+|-------|----------|--------------------|
+| `chembl` | Выгружает метаданные документов из ChEMBL. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
+| `pubmed` | Обогащает данными PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--column`, `--sleep`, `--workers`, `--batch-size`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
+| `all` | Запускает `chembl`, объединяет внешние источники и формирует итоговую таблицу. | Параметры режима `pubmed` плюс `--fallback-doi-*` для CSV с ручными DOI. |
 
-**Пример:**
+Пример:
 
-```bash
+```
 get-document-data all \
-    --input data/input/document.csv \
-    --final-out output/documents.csv \
-    --limit 100 --offset 10 \
-    --fallback-doi-csv data/input/doi_overrides.csv
+    --input seeds/document_ids.csv \
+    --final-out output/documents_$(date +%Y%m%d).csv \
+    --config config/config.yaml \
+    --limit 500 --log-level INFO
 ```
 
-## Конвейер мишеней (`get-target-data`)
+На выходе — детерминированный CSV, файл `<имя>.meta.yaml`, отчёты
+`<имя>_quality_report_table.csv`, `<имя>_data_correlation_report_table.csv` и
+`<имя>.quality.json` с покрытием DOI.
 
-Этот конвейер собирает и объединяет информацию о мишенях из ChEMBL, UniProt и IUPHAR. Он поддерживает псевдонимы для подкоманд с русской раскладки клавиатуры (например, `uniprot` можно набрать как `унипрот`).
+## Пайплайн таргетов (`get-target-data`)
 
-### Аргументы для промежуточных стадий
+Поддерживаются латинские и кириллические алиасы (`chembl`/`сруьид`, `uniprot`/`гтшзкще`, `iuphar`/`шгзрфк`, `all`/`фдд`).
 
-Конвейер мишеней поддерживает промежуточные экспорты для разделения "сырых" данных от итоговых нормализованных:
+> **Требование по UniProt**: во входном CSV обязательно должна быть колонка с
+> UniProt-идентификаторами. По умолчанию ожидается `uniprot_id`. Можно указать
+> альтернативное имя через `target.all.uniprot_column`, либо положиться на
+> автоматический поиск по ключевым словам вроде `uniprot` или `accession`.
 
-*   `--raw-out`: Путь назначения для "сырого", объединенного набора данных перед нормализацией.
-*   `--raw-format`: Формат для "сырых" данных (`csv` или `parquet`).
-*   `--id-cols`: Столбцы-идентификаторы для детерминированной сортировки "сырого" вывода.
-*   `--no-reindex-raw`: Отключает алфавитную переиндексацию столбцов в "сыром" выводе.
-*   `--normalize-at-export` / `--no-normalize-at-export`: Управляет применением шага финальной нормализации.
+### Стадийные флаги
 
-### Подкоманды
+Только таргет-пайплайн реализует следующие опции:
 
-| Подкоманда | Описание | Ключевые аргументы |
-| :--- | :--- | :--- |
-| `chembl` | Получает данные о мишенях из ChEMBL API. | `--chunk-size`, `--timeout`, `--offset` |
-| `uniprot` | Разрешает идентификаторы UniProt через локальные кеши или REST API. | `--data-dir`, `--offset` |
-| `iuphar` | Сопоставляет ID UniProt с семействами IUPHAR, используя локальные словари. | `--target-csv`, `--family-csv`, `--offset` |
-| `all` | Запускает все три конвейера и объединяет результаты. | `--chembl-out`, `--uniprot-out`, `--iuphar-out`, аргументы для стадий. |
+- `--raw-out` — путь к объединённому набору до финальной нормализации.
+- `--raw-format` — формат «сырого» снимка (`csv` или `parquet`).
+- `--id-cols` — колонки, используемые для детерминированной сортировки при
+  записи «сырого» файла.
+- `--no-reindex-raw` — сохранить порядок колонок, полученный от внешних API.
+- `--normalize-at-export / --no-normalize-at-export` — применять ли нормализацию
+  перед записью финального CSV (`--no-normalize-at-export` оставляет сырые данные).
 
-**Пример:**
+### Режимы
 
-```bash
+| Режим | Описание | Основные параметры |
+|-------|----------|--------------------|
+| `chembl` | Получает таргеты из ChEMBL, нормализует, валидирует и экспортирует. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
+| `uniprot` | Разрешает UniProt-идентификаторы через локальный кеш или REST API. | `--column`, `--limit`. |
+| `iuphar` | Сопоставляет UniProt с семействами IUPHAR по встроенным словарям. | `--limit`. |
+| `all` | Последовательно запускает `chembl`, `uniprot`, `iuphar`, объединяет и экспортирует результат. | Все параметры выше плюс стадийные флаги. |
+
+Пример со «сбором сырья»:
+
+```
 get-target-data all \
-    --input data/input/target.csv \
-    --final-out output/targets_final.csv \
-    --raw-out output/targets_raw.parquet \
-    --raw-format parquet \
-    --id-cols target_chembl_id uniprot_id
+    --input seeds/target_ids.csv \
+    --final-out output/targets_$(date +%Y%m%d).csv \
+    --raw-out output/targets_raw_$(date +%Y%m%d).parquet \
+    --raw-format parquet --id-cols target_chembl_id uniprot_id \
+    --config config/config.yaml --log-level INFO
 ```
 
-## Конвейер анализов (`get-assay-data`)
+Для офлайн-проверок используйте `python -m library.utils.cli_tools.pipeline_targets_main` —
+он повторяет боевую логику, читая кешированные ответы.
 
-Загружает метаданные анализов из ChEMBL.
+## Пайплайн ассайев (`get-assay-data`)
 
-**Аргументы:**
-*   `--batch-size` (по умолчанию: 10)
-*   `--timeout` (по умолчанию: 30.0)
-*   `--offset`
-*   `--column`
-
-**Пример:**
-
-```bash
-get-assay-data --input data/input/assay.csv \
-    --final-out output/assays.csv \
-    --batch-size 20 --limit 100
+```
+get-assay-data --input seeds/assay_ids.csv \
+    --final-out output/assays_$(date +%Y%m%d).csv \
+    --batch-size 100 --timeout 60 --limit 200
 ```
 
-## Конвейер активностей (`get-activity-data`)
+Скрипт выгружает данные из ChEMBL, вычисляет счётчики по таргетам, нормализует и
+валидирует таблицу, затем формирует стандартный набор артефактов.
 
-Извлекает и обогащает данные об активностях из ChEMBL.
+## Пайплайн активностей (`get-activity-data`)
 
-**Аргументы:**
-*   `--batch-size` (по умолчанию: 5)
-*   `--workers` (по умолчанию: 1)
-*   `--timeout` (по умолчанию: 30.0)
-*   `--offset`
-*   `--column`
-*   `--dry-run`: Проверяет входные данные и завершает работу, не выполняя сетевых вызовов.
-
-**Пример:**
-
-```bash
-get-activity-data --input data/input/activity.csv \
-    --final-out output/activities.csv \
-    --workers 4 --limit 500
+```
+get-activity-data --input seeds/activity_ids.csv \
+    --final-out output/activities_$(date +%Y%m%d).csv \
+    --batch-size 50 --workers 4 --timeout 60 --limit 500
 ```
 
-## Конвейер тестовых образцов (`get-testitem-data`)
+Флаг `--dry-run` уникален для данного пайплайна: он проверяет аргументы и входной
+файл и завершает работу без сетевых запросов. Пост-обработка вычисляет
+`lower_value`/`upper_value` по алгоритму, описанному в [`docs/ru/user/OUTPUT.md`](./OUTPUT.md).
 
-Загружает и обогащает данные о соединениях из ChEMBL и PubChem.
+## Пайплайн тест-объектов (`get-testitem-data`)
 
-**Аргументы:**
-*   `--batch-size` (по умолчанию: 1000)
-*   `--timeout` (по умолчанию: 30.0)
-*   `--offset`
-*   `--column`
-
-**Пример:**
-
-```bash
-get-testitem-data --input data/input/testitem.csv \
-    --final-out output/testitems.csv \
-    --limit 400
 ```
+get-testitem-data --input seeds/molecule_ids.csv \
+    --final-out output/testitems_$(date +%Y%m%d).csv \
+    --batch-size 1000 --timeout 60 --limit 400
+```
+
+Пайплайн объединяет молекулы из ChEMBL с данными PubChem, нормализует результат и
+записывает стандартный комплект файлов.
 
 ## Вспомогательные утилиты
 
-Проект включает несколько вспомогательных утилит командной строки для диагностики, контроля качества и офлайн-процессов.
+Каждый модуль экспортирует функцию `main(argv)` и подходит для использования как
+через `python -m`, так и через зарегистрированные консольные команды.
 
-| Команда | Назначение |
-| :--- | :--- |
-| `check-determinism` | Проверяет, что детерминированные утилиты записи CSV создают стабильный вывод. |
-| `chunk-io` | Пере-сериализует CSV-файлы детерминированными чанками. |
-| `csv-utils` | Нормализует разделители, кавычки и порядок для произвольных CSV-файлов. |
-| `get-activities`| Генерирует синтетические данные об активностях для тестирования и валидации. |
-| `get-document-type`| Применяет эвристики для классификации типов публикаций к CSV-файлу с документами. |
-| `get-input-initialisation`| Объединяет рабочие книги Excel в канонические таблицы сущностей. |
-| `mapper`| Предоставляет интерактивный инструмент для сопоставления идентификаторов между ChEMBL и UniProt. |
-| `table-quality`| Генерирует отчет о качестве и корреляции на уровне столбцов для CSV-файла. |
+| Модуль | Команда | Назначение |
+|--------|---------|------------|
+| `library.utils.cli_tools.check_determinism` | `check-determinism --input a.csv --previous b.csv` | Сравнение SHA-256 и метаданных разных запусков. |
+| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Потоковое чтение/запись CSV с сохранением порядка. |
+| `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Нормализация разделителей, кавычек и порядка колонок. |
+| `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Диагностика типов pandas-таблиц. |
+| `library.utils.cli_tools.get_activities` | `get-activities --limit 10` | Генерация тестовых активностей для проверки логов и CLI. |
+| `library.utils.cli_tools.get_document_type` | `get-document-type --input docs.csv` | Применение встроенных правил классификации публикаций. |
+| `library.utils.cli_tools.get_input_initialisation` | `get-input-initialisation --same-doc init.xlsx --all-doc pairs.xlsx` | Объединение Excel-книг инициализации. |
+| `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --final-out mapped.csv --column target_chembl_id` | Интерактивный маппер UniProt/ChEMBL. |
+| `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv` | Пакетный маппер для автоматизации и QA. |
+| `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Повтор таргет-пайплайна на кешированных ответах с поддержкой стадийных флагов. |
+| `library.utils.cli_tools.table_quality_main` | `table-quality --input data.csv --table-name chembl_targets --final-out reports/` | Профилирование таблиц и отчёты качества. |
+
+## Советы для масштабных запусков
+
+- Явно задавайте пути `--final-out` и `--raw-out`, если в течение дня запускается
+  несколько выгрузок; дефолтное имя включает `output.<stem>` и дату из `--date`.
+- Для автоматизации задайте `CHEMBL_DA_BASE_PATH`, чтобы контролировать каталоги
+  вывода (см. секцию `local.io` в `config/config.yaml`).
+- Документный пайплайн поддерживает CSV с руками проставленными DOI через
+  `--fallback-doi-csv`, `--fallback-doi-pmid-column`, `--fallback-doi-value-column`.
+- Все команды читают `CHEMBL_DA_LOG_LEVEL`. При необходимости объединяйте его с
+  `--log-level DEBUG` для подробной диагностики без правки YAML.

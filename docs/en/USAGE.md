@@ -1,163 +1,188 @@
 # Usage Guide
 
-This manual explains how to run the ChEMBL data acquisition pipelines and their supporting utilities.
+This manual explains how to run the ChEMBL data acquisition pipelines and their
+supporting utilities. Every section has a Russian counterpart in
+[`docs/ru/user/USAGE.md`](../../ru/user/USAGE.md).
 
-## General CLI Pattern
+## General CLI pattern
 
-Each entity pipeline is exposed as a console script (e.g., `get-document-data`) and can also be run as a Python module (e.g., `python -m scripts.get_document_data`).
+Each entity pipeline exposes an installed console script and can also be executed
+via `python -m scripts.<name>` during development. Command line options fall into
+three tiers:
 
-### Common Arguments
+1. **Shared options** provided by `library.cli.parser.add_common_arguments`:
+   - `--input / --final-out` – input CSV and destination for the cleaned export.
+     `--output` and `--out` remain as deprecated aliases that trigger a
+     deprecation warning; prefer `--final-out`.
+   - `--log-level` – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
+   - `--sep`, `--encoding` – CSV delimiter and encoding (`utf-8-sig` by default).
+   - `--base-path`, `--input-dir`, `--output-dir`, `--date` – shortcuts used by
+     the orchestrator to build consistent folder layouts and default filenames.
+   - `--force`, `--skip-existing` – overwrite or skip when the destination file
+     is already present.
+   - `--config` – alternative YAML configuration file (defaults to
+     `config/config.yaml`).
+   - `--print-config` – output the effective configuration (after env/CLI
+     overrides) and exit.
+2. **Shared pagination options** exposed by the individual pipelines: `--column`
+   (identifier column name), `--batch-size` / `--chunk-size`, `--timeout`,
+   `--limit`, `--offset`, `--workers` (for concurrent fetchers), and `--dry-run`
+   (activity pipeline only).
+3. **Pipeline-specific switches** that tailor behaviour (for example staging
+   flags in the target pipeline or DOI fallbacks in the document pipeline).
 
-Most pipeline scripts accept a shared set of arguments for consistency:
-
-*   `--input`: Path to the input CSV file containing identifiers.
-*   `--final-out`: Destination path for the final, processed CSV export. The legacy aliases `--output` and `--out` are still available but will be removed in a future version.
-*   `--config`: Path to a YAML configuration file. Defaults to the packaged `config/config.yaml`.
-*   `--log-level`: Sets the logging verbosity (e.g., `DEBUG`, `INFO`, `ERROR`).
-*   `--limit`: Restricts processing to the first N identifiers.
-*   `--offset`: Skips the first N identifiers before starting to process.
-*   `--force`: Overwrites the output file if it already exists.
-*   `--skip-existing`: Skips the pipeline run if the output file already exists.
-*   `--print-config`: Prints the final, effective configuration (after all overrides) and exits.
-
-### Pipeline-Specific Arguments
-
-Individual pipelines may have additional arguments for controlling their specific logic, such as `--batch-size`, `--workers`, or sub-commands for different data sources. These are detailed in the sections below.
+All commands exit with a non-zero status on validation errors, IO issues, or
+upstream API failures.
 
 ## Orchestrator (`get-data`)
 
-The `get-data` script is the main entry point for running all pipelines in sequence. It provides a convenient way to perform a full data refresh with a single command.
-
-```bash
-get-data --base-path ./data \
-    --input-dir input --output-dir output \
-    --config config/config.yaml \
-    --date 20240101 --limit 100 --log-level INFO
+```
+get-data --base-path /data/chembl \
+    --input-dir seeds --output-dir exports \
+    --config /data/chembl/config.yaml \
+    --date 20250101 --limit 100 --log-level INFO
 ```
 
-The orchestrator invokes the pipelines in the following order: `documents`, `targets`, `assays`, `testitems`, and `activities`. It constructs the necessary `--input` and `--final-out` paths for each step based on the shared directory arguments.
+The orchestrator resolves shared directories, prepares arguments, and invokes the
+pipelines in the following order: documents (`all` sub-command), targets (`all`),
+assays, test items, activities. Each delegated CLI receives `--final-out` so the
+individual pipelines write to the canonical destination without relying on
+deprecated aliases. `--limit 0` skips execution, `--dry-run` prints scheduled
+steps without touching the filesystem.
 
-## Document Pipeline (`get-document-data`)
+## Document pipeline (`get-document-data`)
 
-This pipeline retrieves and enriches publication metadata. It has three sub-commands: `chembl`, `pubmed`, and `all`.
+Sub-commands:
 
-| Sub-command | Description | Key Arguments |
-| :--- | :--- | :--- |
-| `chembl` | Retrieves document metadata from the ChEMBL API. | `--chunk-size`, `--timeout`, `--offset` |
-| `pubmed` | Enriches with data from PubMed, Semantic Scholar, OpenAlex, and CrossRef. | `--sleep`, `--workers`, `--batch-size`, `--offset`, `--fallback-doi-csv` |
-| `all` | Runs the `chembl` and `pubmed` pipelines, merging the results. | All arguments from `pubmed` and `chembl`. |
+| Mode | Description | Key options |
+|------|-------------|-------------|
+| `chembl` | Retrieve metadata from the ChEMBL API. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
+| `pubmed` | Enrich with PubMed, Semantic Scholar, OpenAlex, and CrossRef. | `--column`, `--sleep`, `--workers`, `--batch-size`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
+| `all` | Run ChEMBL, merge external services, and export the consolidated table. | Same options as `pubmed` plus `--fallback-doi-*` for DOI overrides. |
 
-**Example:**
+Typical command:
 
-```bash
+```
 get-document-data all \
-    --input data/input/document.csv \
-    --final-out output/documents.csv \
-    --limit 100 --offset 10 \
-    --fallback-doi-csv data/input/doi_overrides.csv
+    --input seeds/document_ids.csv \
+    --final-out output/documents_$(date +%Y%m%d).csv \
+    --config config/config.yaml \
+    --limit 500 --log-level INFO
 ```
 
-## Target Pipeline (`get-target-data`)
+The pipeline writes a deterministic CSV, `<name>.meta.yaml`,
+`<name>_quality_report_table.csv`, `<name>_data_correlation_report_table.csv`,
+and `<name>.quality.json` with DOI coverage statistics.
 
-This pipeline collects and merges target information from ChEMBL, UniProt, and IUPHAR. It supports keyboard aliases for sub-commands (e.g., `uniprot` can be typed as `унипрот` on a Russian keyboard layout).
+## Target pipeline (`get-target-data`)
 
-### Staging Arguments
+Sub-commands accept aliases in both Latin and Cyrillic layouts (to ease Windows
+keyboard switching): `chembl`, `uniprot`, `iuphar`, `all`.
 
-The target pipeline supports staged exports to separate raw data from the final normalized output:
+> **UniProt identifier requirement**: the input CSV must contain a column with
+> UniProt accessions. By default the pipeline expects `uniprot_id`. Alternative
+> headers can be supplied through `target.all.uniprot_column`, or detected
+> automatically when the column name includes keywords like `uniprot` or
+> `accession`.
 
-*   `--raw-out`: Destination for the raw, combined dataset before normalization.
-*   `--raw-format`: Format for the raw data (`csv` or `parquet`).
-*   `--id-cols`: Identifier columns for deterministic sorting of the raw output.
-*   `--no-reindex-raw`: Disables alphabetical re-indexing of columns in the raw output.
-*   `--normalize-at-export` / `--no-normalize-at-export`: Controls whether the final normalization step is applied.
+### Staging switches
 
-### Sub-commands
+Only the target pipeline currently honours the staging flags:
 
-| Sub-command | Description | Key Arguments |
-| :--- | :--- | :--- |
-| `chembl` | Fetches target data from the ChEMBL API. | `--chunk-size`, `--timeout`, `--offset` |
-| `uniprot` | Resolves UniProt accessions from local caches or the REST API. | `--data-dir`, `--offset` |
-| `iuphar` | Maps UniProt IDs to IUPHAR families using local dictionaries. | `--target-csv`, `--family-csv`, `--offset` |
-| `all` | Runs all three pipelines and merges the results. | `--chembl-out`, `--uniprot-out`, `--iuphar-out`, staging arguments. |
+- `--raw-out` – destination for the combined dataset before final normalisation.
+- `--raw-format` – `csv` (default) or `parquet` for the raw snapshot.
+- `--id-cols` – identifier columns used for deterministic ordering when writing
+  raw snapshots.
+- `--no-reindex-raw` – preserve the column order emitted by upstream APIs.
+- `--normalize-at-export / --no-normalize-at-export` – control whether the final
+  CSV applies the normalisation layer (`--no-normalize-at-export` keeps the raw
+  payload byte-for-byte; useful when inspecting discrepancies).
 
-**Example:**
+### Modes
 
-```bash
+| Mode | Description | Key options |
+|------|-------------|-------------|
+| `chembl` | Fetch targets from ChEMBL, normalise, validate, export. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
+| `uniprot` | Resolve UniProt accessions via local caches or the REST API. | `--column`, `--limit`. |
+| `iuphar` | Map UniProt IDs to IUPHAR families using bundled dictionaries. | `--limit`. |
+| `all` | Run `chembl`, `uniprot`, and `iuphar` sequentially, merge the results, and export. | All options above plus `--id-cols` / staging switches. |
+
+Example with raw snapshot:
+
+```
 get-target-data all \
-    --input data/input/target.csv \
-    --final-out output/targets_final.csv \
-    --raw-out output/targets_raw.parquet \
-    --raw-format parquet \
-    --id-cols target_chembl_id uniprot_id
+    --input seeds/target_ids.csv \
+    --final-out output/targets_$(date +%Y%m%d).csv \
+    --raw-out output/targets_raw_$(date +%Y%m%d).parquet \
+    --raw-format parquet --id-cols target_chembl_id uniprot_id \
+    --config config/config.yaml --log-level INFO
 ```
 
-## Assay Pipeline (`get-assay-data`)
+Cached replay of the production pipeline is available through
+`library.utils.cli_tools.pipeline_targets_main` (see the helper table below).
 
-Downloads assay metadata from ChEMBL.
+## Assay pipeline (`get-assay-data`)
 
-**Arguments:**
-*   `--batch-size` (default: 10)
-*   `--timeout` (default: 30.0)
-*   `--offset`
-*   `--column`
-
-**Example:**
-
-```bash
-get-assay-data --input data/input/assay.csv \
-    --final-out output/assays.csv \
-    --batch-size 20 --limit 100
+```
+get-assay-data --input seeds/assay_ids.csv \
+    --final-out output/assays_$(date +%Y%m%d).csv \
+    --batch-size 100 --timeout 60 --limit 200
 ```
 
-## Activity Pipeline (`get-activity-data`)
+The script downloads assay metadata, computes per-target counters, normalises and
+validates the table, then emits the standard CSV + sidecar + quality reports.
 
-Extracts and enriches activity data from ChEMBL.
+## Activity pipeline (`get-activity-data`)
 
-**Arguments:**
-*   `--batch-size` (default: 5)
-*   `--workers` (default: 1)
-*   `--timeout` (default: 30.0)
-*   `--offset`
-*   `--column`
-*   `--dry-run`: Validates inputs and exits without making network calls.
-
-**Example:**
-
-```bash
-get-activity-data --input data/input/activity.csv \
-    --final-out output/activities.csv \
-    --workers 4 --limit 500
+```
+get-activity-data --input seeds/activity_ids.csv \
+    --final-out output/activities_$(date +%Y%m%d).csv \
+    --batch-size 50 --workers 4 --timeout 60 --limit 500
 ```
 
-## Test Item Pipeline (`get-testitem-data`)
+`--dry-run` is unique to this pipeline: it validates CLI arguments and input
+files, then exits without contacting remote services. Activity-specific
+post-processing derives `lower_value`/`upper_value` using the rules described in
+[`docs/en/user/OUTPUT.md`](./OUTPUT.md).
 
-Downloads and enriches compound data from ChEMBL and PubChem.
+## Test item pipeline (`get-testitem-data`)
 
-**Arguments:**
-*   `--batch-size` (default: 1000)
-*   `--timeout` (default: 30.0)
-*   `--offset`
-*   `--column`
-
-**Example:**
-
-```bash
-get-testitem-data --input data/input/testitem.csv \
-    --final-out output/testitems.csv \
-    --limit 400
+```
+get-testitem-data --input seeds/molecule_ids.csv \
+    --final-out output/testitems_$(date +%Y%m%d).csv \
+    --batch-size 1000 --timeout 60 --limit 400
 ```
 
-## Helper Utilities
+After downloading molecules from ChEMBL, the pipeline enriches unique SMILES with
+PubChem properties, merges the results, and exports the combined dataset.
 
-The project includes several command-line helper utilities for diagnostics, QA, and offline workflows.
+## Helper utilities
 
-| Command | Purpose |
-| :--- | :--- |
-| `check-determinism` | Verifies that the deterministic CSV writers produce stable output. |
-| `chunk-io` | Re-serializes CSV files in deterministic chunks. |
-| `csv-utils` | Normalizes delimiters, quoting, and ordering for arbitrary CSV files. |
-| `get-activities`| Generates synthetic activity data for testing and validation. |
-| `get-document-type`| Applies publication-type classification heuristics to a document CSV. |
-| `get-input-initialisation`| Combines Excel workbooks into canonical entity tables. |
-| `mapper`| Provides an interactive tool for mapping identifiers between ChEMBL and UniProt. |
-| `table-quality`| Generates a column-level quality and correlation report for a CSV file. |
+Use these modules for diagnostics, QA, or offline workflows. Each exposes a
+`main(argv: Sequence[str] | None = None) -> int` entry point.
+
+| Module | Console command | Purpose |
+|--------|-----------------|---------|
+| `library.utils.cli_tools.check_determinism` | `check-determinism --input a.csv --previous b.csv` | Compare SHA-256 hashes and metadata between two exports. |
+| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Re-serialise CSV files in deterministic chunks. |
+| `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Normalise delimiters, quoting, and ordering for arbitrary CSV files. |
+| `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Inspect pandas dtypes produced by the pipelines. |
+| `library.utils.cli_tools.get_activities` | `get-activities --limit 10` | Emit synthetic activity rows to verify logging and CLI wiring. |
+| `library.utils.cli_tools.get_document_type` | `get-document-type --input docs.csv` | Apply the bundled publication-type heuristics. |
+| `library.utils.cli_tools.get_input_initialisation` | `get-input-initialisation --same-doc init.xlsx --all-doc pairs.xlsx` | Combine Excel workbooks into canonical entity/relationship tables. |
+| `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --final-out mapped.csv --column target_chembl_id` | Interactive mapper for quick lookups. |
+| `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv` | Batch mapper suitable for scripts or QA jobs. |
+| `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Replay the target pipeline using cached API responses; honours the staging flags documented above. |
+| `library.utils.cli_tools.table_quality_main` | `table-quality --input data.csv --table-name chembl_targets --final-out reports/` | Produce table-quality summaries for arbitrary datasets. |
+
+## Tips for large runs
+
+- Prefer fully qualified output paths (`--final-out`, `--raw-out`) when running
+  multiple exports on the same day; default filenames include `output.<stem>`
+  plus the date prefix from `--date`.
+- When automating, set `CHEMBL_DA_BASE_PATH` to control where user-specific
+  directories are created (see `local.io` in `config/config.yaml`).
+- The document pipeline can honour DOI overrides via `--fallback-doi-csv` with
+  two extra flags: `--fallback-doi-pmid-column` and `--fallback-doi-value-column`.
+- All pipelines respect the `CHEMBL_DA_LOG_LEVEL` environment variable. Combine
+  it with `--log-level DEBUG` for verbose troubleshooting without editing YAML.

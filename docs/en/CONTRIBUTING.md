@@ -1,6 +1,6 @@
 # Contributing
 
-> **Languages:** English · [Русский](./CONTRIBUTING_RU.md)
+> **Languages:** English · [Русский](../../ru/devel/CONTRIBUTING.md)
 
 ## Dependency pinning policy
 
