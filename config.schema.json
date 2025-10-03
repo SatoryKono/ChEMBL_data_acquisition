@@ -477,7 +477,7 @@
               "type": "null"
             }
           ],
-          "default": "../dictionary/_testitem/molecule_hierarchy.csv",
+          "default": "../dictionary/molecule_hierarchy.csv",
           "title": "Hierarchy Lookup Path"
         },
         "hierarchy_lookup_encoding": {
