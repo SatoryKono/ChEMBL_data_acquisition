@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import shutil
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 
@@ -173,7 +174,7 @@ def test_get_data_end_to_end__miniature_pipeline(
     monkeypatch.setenv("CHEMBL_DA_BASE_PATH", str(base_path))
     monkeypatch.setattr(get_data, "_warm_parent_catalog", lambda _cfg: None)
 
-    log_streams: list[io.StringIO] = []
+    log_streams: deque[io.StringIO] = deque()
 
     def _configure_logger_stub(cfg: get_data.LoggerConfig) -> get_data.Logger:
         stream = io.StringIO()
@@ -257,6 +258,17 @@ def test_get_data_end_to_end__miniature_pipeline(
     monkeypatch.setattr(get_data, "_PIPELINE_STEPS", stub_steps, raising=False)
 
     date_prefix = "20240102"
+    def _invoke(argv: list[str]) -> tuple[int, list[dict[str, object]]]:
+        exit_code = get_data.main(argv)
+        assert log_streams, "expected logger stream to be captured"
+        stream = log_streams.popleft()
+        records = [
+            json.loads(line)
+            for line in stream.getvalue().splitlines()
+            if line.strip()
+        ]
+        return exit_code, records
+
     argv = [
         "--base-path",
         str(base_path),
@@ -273,12 +285,9 @@ def test_get_data_end_to_end__miniature_pipeline(
         "--force",
     ]
 
-    exit_code = get_data.main(argv)
+    exit_code, logs = _invoke(argv)
     assert exit_code == 0
 
-    assert log_streams, "expected logger stream to be captured"
-    first_stream = log_streams.pop(0)
-    logs = [json.loads(line) for line in first_stream.getvalue().splitlines() if line.strip()]
     events = {record.get("event"): record for record in logs if "event" in record}
     assert "document_duplicates_dropped" in events
     assert events["document_duplicates_dropped"].get("level") == "WARN"
@@ -305,15 +314,8 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     hashes_before = {name: sha256_file(path) for name, path in output_paths.items()}
 
-    repeat_exit_code = get_data.main(argv)
+    repeat_exit_code, repeat_logs = _invoke(argv)
     assert repeat_exit_code == 0
-    assert log_streams, "expected logger stream for second run"
-    repeat_stream = log_streams.pop(0)
-    repeat_logs = [
-        json.loads(line)
-        for line in repeat_stream.getvalue().splitlines()
-        if line.strip()
-    ]
     for step_name in key_columns:
         assert any(
             record["event"] == "step_done" and record.get("step") == step_name
@@ -322,3 +324,36 @@ def test_get_data_end_to_end__miniature_pipeline(
 
     hashes_after = {name: sha256_file(path) for name, path in output_paths.items()}
     assert hashes_before == hashes_after
+
+    degraded_input_dir = base_path / "degraded_input"
+    degraded_output_dir = base_path / "degraded_output"
+    shutil.copytree(input_dir, degraded_input_dir)
+    degraded_output_dir.mkdir()
+
+    degraded_document = degraded_input_dir / "document.csv"
+    broken_document = pd.read_csv(degraded_document).drop(columns=["pubmed_id"])
+    broken_document.to_csv(degraded_document, index=False)
+
+    degraded_argv = [
+        "--base-path",
+        str(base_path),
+        "--input-dir",
+        "degraded_input",
+        "--output-dir",
+        "degraded_output",
+        "--config",
+        str(config_path),
+        "--date",
+        date_prefix,
+        "--log-level",
+        "INFO",
+        "--force",
+    ]
+
+    degraded_exit_code, degraded_logs = _invoke(degraded_argv)
+    assert degraded_exit_code == 1
+    degraded_events = {record.get("event"): record for record in degraded_logs if "event" in record}
+    assert "document_schema_invalid" in degraded_events
+    assert degraded_events["document_schema_invalid"].get("level") == "ERROR"
+    assert "workflow_failed" in degraded_events
+    assert not any(degraded_output_dir.glob("*.csv"))
