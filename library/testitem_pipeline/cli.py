@@ -38,7 +38,7 @@ from library.metadata import (
 )
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import get_global_limiter
-from library.sidecar import SidecarErrors
+from library import SidecarErrors
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 from library.schemas import TestitemsSchema, normalize_testitems
