@@ -1,11 +1,11 @@
-"""Tests for :mod:`library.normalization`."""
+"""Tests for :mod:`library.pipelines.common.normalization`."""
 
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from library.normalization import (
+from library.pipelines.common.normalization import (
     normalize_activities,
     normalize_assays,
     normalize_documents,

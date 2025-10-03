@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .common.log import logger
+from .log import logger
 
 
 def _repo_root() -> Path:

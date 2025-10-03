@@ -22,7 +22,7 @@ from typing import Any, TypeVar
 
 import pandas as pd
 
-from ...cli_utils import PipelineError, run_pipeline
+from ...cli.utils import PipelineError, run_pipeline
 from ...clients import _chunked
 
 

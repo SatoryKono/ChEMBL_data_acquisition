@@ -23,7 +23,7 @@ from library.pipelines.document.pipeline import (
     merge_metadata,
     merge_with_chembl,
 )
-from library.table_quality import TableQualityProfiler
+from library.qa.table_quality import TableQualityProfiler
 from library.config import CrossRefCfg, OpenAlexCfg, PubMedCfg, SemanticScholarCfg
 import scripts.get_document_data as gdd
 

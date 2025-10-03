@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pandas as pd
 
-from .. import validation
+from ..qa import validation
 from ..config import IoCfg
 from ..common.log import logger
 

@@ -9,7 +9,7 @@ from typing import Any, Protocol
 import pandas as pd
 from pandera.errors import SchemaErrors
 
-from .common.log import logger
+from ..common.log import logger
 
 __all__ = [
     "ValidationResult",

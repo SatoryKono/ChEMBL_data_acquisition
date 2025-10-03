@@ -22,20 +22,26 @@ import shlex
 import pandas as pd
 from pandera.errors import SchemaErrors
 
-from . import cli
-from .cli import (
+from ..cli import (
     Logger,
     LoggerConfig,
     add_common_arguments,
     apply_config_overrides,
+    configure_logger,
     path_argument,
     positive_int,
+    prepare_io_paths,
 )
-from .config import Config, ConfigError, ensure_dirs, print_config
-from .common.log import logger as default_logger
-from .metadata import Stats, file_sha256, write_meta_yaml, record_quality_failure
-from .sidecar import SidecarErrors
-from .utils.config import DEFAULT_CONFIG_PATH
+from ..common.log import logger as default_logger
+from ..common.metadata import (
+    Stats,
+    file_sha256,
+    record_quality_failure,
+    write_meta_yaml,
+)
+from ..common.sidecar import SidecarErrors
+from ..config import Config, ConfigError, ensure_dirs, print_config
+from ..utils.config import DEFAULT_CONFIG_PATH
 
 SchemaT = TypeVar("SchemaT")
 
@@ -117,7 +123,7 @@ def run_cli_command(
     """Execute CLI boilerplate shared by data acquisition commands."""
 
     log_cfg.level = getattr(args, "log_level", log_cfg.level)
-    configured_logger = cli.configure_logger(log_cfg)
+    configured_logger = configure_logger(log_cfg)
     use_logger = logger or configured_logger
     use_logger.info("pipeline_start", run_id=log_cfg.run_id)
 
@@ -141,7 +147,7 @@ def run_cli_command(
         return 1
 
     try:
-        cli.prepare_io_paths(args)
+        prepare_io_paths(args)
 
         cfg: Config = apply_config_overrides(
             args,
@@ -162,11 +168,11 @@ def run_cli_command(
     try:
         if getattr(args, "print_config", False):
             print_config(cfg)
-            cli.configure_logger(log_cfg)
+            configure_logger(log_cfg)
             use_logger.info("pipeline_done", run_id=log_cfg.run_id)
             return 0
         ensure_dirs(cfg)
-        use_logger = cli.configure_logger(log_cfg)
+        use_logger = configure_logger(log_cfg)
     except (ValueError, TypeError) as exc:
         use_logger.error(
             "config_error",

@@ -15,7 +15,7 @@ from hypothesis import strategies as st
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 from pandera.errors import SchemaError, SchemaErrors
 
-from library.normalization import normalize_activities
+from library.pipelines.common.normalization import normalize_activities
 from library.schemas import (
     ActivitiesSchema,
     AssaysSchema,

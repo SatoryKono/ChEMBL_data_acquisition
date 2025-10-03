@@ -73,7 +73,7 @@ from library.cli import (
     positive_int,
     prepare_io_paths,
 )
-from library.cli_utils import run_cli_command
+from library.cli.utils import run_cli_command
 from library.config import (
     Config,
     CrossRefCfg,
@@ -97,12 +97,12 @@ from library.pipelines.document.pipeline import (
     save_quality_report,
 )
 from library.common.log import logger
-from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.common.metadata import Stats, file_sha256, write_meta_yaml
 from library.postprocessing.document import preprocess_documents_csv
 from library.pipelines.common import add_pipeline_metadata
 from library.common.rate_limiter import RateLimiter, get_global_limiter, get_limiter
-from library.sidecar import SidecarErrors
-from library.table_quality import TableQualityProfiler, analyze_table_quality
+from library.common.sidecar import SidecarErrors
+from library.qa.table_quality import TableQualityProfiler, analyze_table_quality
 from library.schemas import DocumentsSchema, normalize_documents
 
 

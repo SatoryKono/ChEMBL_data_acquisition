@@ -7,7 +7,8 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from library import cli_utils, io
+from library import io
+from library.cli import utils as cli_utils
 from library.config import Config
 from scripts import get_assay_data as gas
 

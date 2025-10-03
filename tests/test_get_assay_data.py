@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import library.cli_utils as cli_utils
+import library.cli.utils as cli_utils
 from library.integration import chembl_library as cl
 from library import io
 from library.config import Config

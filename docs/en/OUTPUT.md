@@ -37,7 +37,7 @@ arguments remain supported when a different layout (for example,
 ## Metadata sidecars (`*.csv.meta.yaml`)
 
 Each CSV export is accompanied by `<base>.csv.meta.yaml` created via
-`library.metadata.write_meta_yaml`, where `<base>` matches the CSV filename
+`library.common.metadata.write_meta_yaml`, where `<base>` matches the CSV filename
 without the extension (for example `output.activities_20240105`). The metadata
 captures the following keys:
 
@@ -64,7 +64,7 @@ are preserved.
 * Pandera validation errors are written to `<base>_failure_cases.csv` via
   `SidecarErrors`, keeping problematic rows available for inspection without
   interrupting the main export.
-* `library.table_quality.analyze_table_quality` generates
+* `library.qa.table_quality.analyze_table_quality` generates
   `<base>_quality_report_table.csv` and
 `<base>_data_correlation_report_table.csv`. CLI utilities write these reports
   next to the dataset, while `library.utils.cli_tools.get_input_initialisation`

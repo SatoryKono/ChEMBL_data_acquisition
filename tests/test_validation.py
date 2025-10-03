@@ -1,11 +1,11 @@
-"""Tests for :mod:`library.validation`."""
+"""Tests for :mod:`library.qa.validation`."""
 
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from library import validation
+from library.qa import validation
 from library.schemas import normalize_testitems
 
 

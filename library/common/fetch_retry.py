@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from ..config import Config, RetryCfg
-from ..sidecar import SidecarErrors
+from .sidecar import SidecarErrors
 
 
 @dataclass(slots=True)

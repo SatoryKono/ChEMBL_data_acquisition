@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from library import cli_utils
+from library.cli import utils as cli_utils
 
 
 def test_get_activity_data_cli_exposes_main() -> None:

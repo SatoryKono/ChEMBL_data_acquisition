@@ -1,6 +1,6 @@
 import pandas as pd
 
-from library.organism_classification import (
+from library.pipelines.target.organism_classification import (
     TYPE_MULTICELLULAR,
     TYPE_UNICELLULAR,
     TYPE_VIRAL,

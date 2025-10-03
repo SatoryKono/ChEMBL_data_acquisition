@@ -8,7 +8,7 @@ import yaml
 
 from library.config import Config
 from library.io.writers import write_csv
-from library.sidecar import SidecarErrors
+from library.common.sidecar import SidecarErrors
 from library.schemas import CsvMetaSchema
 
 

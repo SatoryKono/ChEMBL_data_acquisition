@@ -36,7 +36,7 @@ from ..config import (
     _serialize_paths,
 )
 from ..common.csv_utils import write_csv_chunks_deterministic
-from ..metadata import Stats, file_sha256, write_meta_yaml
+from ..common.metadata import Stats, file_sha256, write_meta_yaml
 from ..clients.pubmed import PubMedClient
 from ..pubmed import (
     EMPTY_PUBMED,
@@ -54,11 +54,11 @@ from ..pubmed import (
     text_or_none,
 )
 from ..common.rate_limiter import RateLimiter, get_limiter
-from ..cli_utils import MetadataHook, Validator, run_pipeline
-from ..table_quality import analyze_table_quality
+from ..cli.utils import MetadataHook, Validator, run_pipeline
+from ..qa.table_quality import analyze_table_quality
 from ..pipelines.common import add_pipeline_metadata
-from ..normalization import normalize_documents
-from ..validation import ValidationResult as SchemaValidationResult
+from ..pipelines.common.normalization import normalize_documents
+from ..qa.validation import ValidationResult as SchemaValidationResult
 from library.schemas import DocumentsSchema
 
 __all__ = [

@@ -1,10 +1,10 @@
-"""Tests for :mod:`library.protein_classification`."""
+"""Tests for :mod:`library.pipelines.target.protein_classification`."""
 
 from __future__ import annotations
 
 import pandas as pd
 
-from library import protein_classification as pc
+from library.pipelines.target import protein_classification as pc
 from library.integration.iuphar_library import ClassificationRecord
 
 

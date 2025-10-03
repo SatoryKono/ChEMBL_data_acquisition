@@ -385,7 +385,7 @@ def attach_parent_molecule_ids(
     full_sync_used = False
     uncovered_children = 0
 
-    from library import testitem_pipeline as pipeline_module
+    from library.pipelines import testitem as pipeline_module
 
     load_catalog_fn = getattr(pipeline_module, "load_parent_catalog", load_parent_catalog)
     query_catalog_fn = getattr(pipeline_module, "query_parent_catalog", query_parent_catalog)

@@ -39,6 +39,8 @@ from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .common.rate_limiter import configure_limiter_cache
+
 from .common.log import logger
 from .utils.config import ConfigLoaderError, load_yaml_config
 
@@ -1658,12 +1660,11 @@ def load_config(
             raise ConfigError(message) from exc
         raise
 
-    from .common.rate_limiter import configure_limiter_cache
-
     if not cfg.io.exist_ok:
         for p in (cfg.io.output_dir, cfg.io.cache_dir):
             if not p.exists():
                 raise FileNotFoundError(p)
+
     configure_limiter_cache(cfg.rate.limiter_cache_maxsize, cfg.rate.limiter_cache_ttl)
     return cfg
 

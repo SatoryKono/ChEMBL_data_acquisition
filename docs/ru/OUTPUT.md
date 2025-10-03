@@ -33,7 +33,7 @@ Acquisition, а также вспомогательные модули, отве
 ## Sidecar с метаданными (`*.csv.meta.yaml`)
 
 Каждый CSV сопровождается `<base>.csv.meta.yaml`, который создаёт
-`library.metadata.write_meta_yaml`, где `<base>` совпадает с именем файла без
+`library.common.metadata.write_meta_yaml`, где `<base>` совпадает с именем файла без
 расширения (например, `output.activities_20240105`). Файл содержит:
 
 * `generated_at` — отметку времени в формате ISO 8601 (UTC).
@@ -59,7 +59,7 @@ Acquisition, а также вспомогательные модули, отве
 * При ошибках Pandera строки попадают в `<base>_failure_cases.csv` через
   `SidecarErrors`, что позволяет изучить проблемы без остановки основного
   пайплайна.
-* `library.table_quality.analyze_table_quality` формирует
+* `library.qa.table_quality.analyze_table_quality` формирует
   `<base>_quality_report_table.csv` и
   `<base>_data_correlation_report_table.csv`. CLI-утилиты сохраняют отчёты рядом с
   выгрузкой, а `library.utils.cli_tools.get_input_initialisation` использует

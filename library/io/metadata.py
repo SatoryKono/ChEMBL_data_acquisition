@@ -10,7 +10,7 @@ from typing import Mapping, Sequence
 import yaml
 
 from ..config import Config, _mask_secrets, _serialize_paths
-from ..git_utils import _git_sha
+from ..common.git import _git_sha
 from ..utils.atomic import open_atomic
 
 

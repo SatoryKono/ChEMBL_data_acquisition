@@ -6,7 +6,7 @@ import yaml
 from library.config import Config
 from library.config import _mask_secrets, _serialize_paths
 
-from library.sidecar import SidecarErrors
+from library.common.sidecar import SidecarErrors
 
 
 def test_sidecar_writes_rows(
