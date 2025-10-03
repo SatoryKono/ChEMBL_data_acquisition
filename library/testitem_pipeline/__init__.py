@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import json
 import sys
-from importlib import import_module
+from importlib import import_module, resources
 from importlib.util import (
     find_spec,
     module_from_spec,
     spec_from_file_location,
 )
-from pathlib import Path
 from types import ModuleType
 from typing import Any
 
@@ -84,14 +83,21 @@ def _load_local_module(module_name: str) -> ModuleType:
 
     package_name = __name__
     qualified_name = f"{package_name}.{module_name}"
-    module_path = Path(__file__).with_name(f"{module_name}.py")
-    if not module_path.is_file():
+    resource_name = f"{module_name}.py"
+    try:
+        module_resource = resources.files(package_name).joinpath(resource_name)
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(qualified_name) from exc
+
+    if not module_resource.is_file():
         msg = (
             f"Optional module '{qualified_name}' is not available. "
-            f"Expected file '{module_path}' is missing from this installation."
+            f"Expected file '{module_resource}' is missing from this installation."
         )
         raise ModuleNotFoundError(msg)
-    spec = spec_from_file_location(qualified_name, module_path)
+
+    with resources.as_file(module_resource) as module_path:
+        spec = spec_from_file_location(qualified_name, module_path)
     if spec is None or spec.loader is None:
         raise ModuleNotFoundError(qualified_name)
     module = module_from_spec(spec)
