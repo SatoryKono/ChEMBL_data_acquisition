@@ -498,11 +498,11 @@ def test_fetch_iuphar_invalid_uniprot_column(
 
     monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
 
-    error_events: list[str] = []
+    error_events: list[tuple[str, dict[str, object]]] = []
     original_error = gtd.logger.error
 
     def tracking_error(event: str, *args: object, **kwargs: object) -> object:
-        error_events.append(event)
+        error_events.append((event, dict(kwargs)))
         return original_error(event, *args, **kwargs)
 
     monkeypatch.setattr(gtd.logger, "error", tracking_error)
@@ -510,7 +510,11 @@ def test_fetch_iuphar_invalid_uniprot_column(
     with pytest.raises(PipelineError, match="original_id"):
         gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
 
-    assert "invalid_uniprot_column" in error_events
+    assert any(event == "missing_uniprot_column" for event, _ in error_events)
+    assert any(
+        event == "missing_uniprot_column" and details.get("configured") == "original_id"
+        for event, details in error_events
+    )
 
 
 def test_fetch_iuphar_aliases_missing_uniprot_column(
