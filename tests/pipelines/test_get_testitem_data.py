@@ -30,7 +30,7 @@ from library.integration import pubchem_library as pl
 import library.testitem_pipeline as pipeline
 import library.testitem_pipeline.cli as pipeline_cli
 
-from library.config import ApiCfg, Config, IoCfg
+from library.config import ApiCfg, Config, IoCfg, MoleculeCatalogCfg
 
 from library.schemas import TestitemsSchema
 from scripts import get_testitem_data as gtd
@@ -459,7 +459,8 @@ def test_prepare_parent_enrichment_uses_lookup_path(
         captured_path = path
         return {"CHEMBL1": "CHEMBL999"}
 
-    monkeypatch.setattr(pipeline, "load_molecule_hierarchy_lookup", fake_lookup)
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(target, "load_molecule_hierarchy_lookup", fake_lookup)
     monkeypatch.setattr(pipeline, "query_parent_catalog", lambda *_, **__: {})
     monkeypatch.setattr(
         pipeline.molecule_catalog, "fetch_parent_catalog_for", lambda *_, **__: {}
@@ -480,6 +481,129 @@ def test_prepare_parent_enrichment_uses_lookup_path(
     assert prep is not None
     assert captured_path == hierarchy_path
     assert list(prep.lookup_data.child_ids) == ["CHEMBL1"]
+
+
+def test_prepare_parent_enrichment_dictionary_sets_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.cache_path.write_text("{}")
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(
+            target,
+            "load_molecule_hierarchy_lookup",
+            lambda *_, **__: {"CHEMBL1": "CHEMBL999"},
+        )
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(target, "query_parent_catalog", lambda *_, **__: pytest.fail("no fallback"))
+        monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
+        monkeypatch.setattr(target, "update_parent_catalog_cache", lambda *_, **__: None)
+        monkeypatch.setattr(target, "write_parent_catalog_cache", lambda *_, **__: None)
+
+    status, prep = pipeline.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        hierarchy_lookup_path=None,
+    )
+
+    assert status == 0
+    assert prep is not None
+    assert prep.lookup_data.need_lookup == set()
+    assert prep.parent_stats.missing == 0
+    assert prep.parent_stats.attached == 1
+    assert prep.df[parent_field].tolist() == ["CHEMBL999"]
+
+
+def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.cache_path.write_text("{}")
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(
+            target,
+            "load_molecule_hierarchy_lookup",
+            lambda *_, **__: {"CHEMBL1": None},
+        )
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(target, "query_parent_catalog", lambda *_, **__: pytest.fail("no fallback"))
+        monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
+        monkeypatch.setattr(target, "update_parent_catalog_cache", lambda *_, **__: None)
+        monkeypatch.setattr(target, "write_parent_catalog_cache", lambda *_, **__: None)
+
+    status, prep = pipeline.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        hierarchy_lookup_path=None,
+    )
+
+    assert status == 0
+    assert prep is not None
+    assert prep.lookup_data.need_lookup == set()
+    assert prep.parent_stats.missing == 0
+    assert prep.parent_stats.attached == 1
+    assert pd.isna(prep.df[parent_field].iloc[0])
+
+
+def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.cache_path.write_text("{}")
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(target, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+
+    captured: dict[str, set[str]] = {"need": set()}
+
+    def fake_query(values: set[str], *, catalog_cfg: MoleculeCatalogCfg) -> dict[str, str]:
+        captured["need"] = set(values)
+        return {}
+
+    for target in (pipeline, pipeline.catalog):
+        monkeypatch.setattr(target, "query_parent_catalog", fake_query)
+        monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
+        monkeypatch.setattr(target, "update_parent_catalog_cache", lambda *_, **__: None)
+        monkeypatch.setattr(target, "write_parent_catalog_cache", lambda *_, **__: None)
+
+    status, prep = pipeline.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=SimpleNamespace(),
+        hierarchy_lookup_path=None,
+    )
+
+    assert status == 0
+    assert prep is not None
+    assert prep.lookup_data.need_lookup == {"CHEMBL1"}
+    assert captured["need"] == {"CHEMBL1"}
+    assert prep.parent_stats.missing == 1
+    assert prep.parent_stats.attached == 0
 
 
 def test_run_parent_enrichment_failure(
