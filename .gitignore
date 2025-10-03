@@ -31,7 +31,9 @@ config/**/secrets*.yaml
  
 logs/*
 !logs/.gitkeep
-reports/
+reports/*
+!reports/test_report.json
+!reports/test_summary.md
 
 dictionary/_activity/pairs.csv
 /logs
