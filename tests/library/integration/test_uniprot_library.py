@@ -314,6 +314,58 @@ def test_collect_info_enriches_gtop(tmp_path: Path) -> None:
     assert len(responses.calls) == 3
 
 
+def test_fetch_gtop_endpoint_handles_empty_body(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cfg = IupharCfg(base="https://gtop.example.org/services", rps=10, burst=5)
+
+    class DummyLimiter:
+        def acquire(self) -> None:
+            return None
+
+    monkeypatch.setattr(ul, "get_limiter", lambda *_args, **_kwargs: DummyLimiter())
+
+    class DummyResponse:
+        def __init__(self) -> None:
+            self.headers: dict[str, str] = {"Content-Length": "0"}
+
+        def __enter__(self) -> DummyResponse:
+            return self
+
+        def __exit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            _exc: BaseException | None,
+            _tb: object,
+        ) -> bool:
+            return False
+
+        def raise_for_status(self) -> None:
+            return None
+
+        @property
+        def content(self) -> bytes:
+            return b""
+
+        def json(self) -> object:  # pragma: no cover - should not be called
+            raise AssertionError("response.json() should not be called")
+
+    class DummySession:
+        def get(
+            self, url: str, timeout: tuple[int, int]
+        ) -> DummyResponse:  # pragma: no cover - simple return
+            assert url == "https://gtop.example.org/services/targets/1234/function"
+            assert timeout == (cfg.timeout_connect, cfg.timeout_read)
+            return DummyResponse()
+
+    monkeypatch.setattr(ul, "get_uniprot_session", lambda: DummySession())
+
+    ul._fetch_gtop_endpoint("1234", "function", cfg=cfg)
+
+    captured = capsys.readouterr()
+    assert '"event": "gtop_json_decode_failed"' in captured.out
+
+
 def test_collect_info_uses_canonical_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
