@@ -55,6 +55,7 @@ from .catalog import (
     run_parent_enrichment,
 )
 from . import testitem_enrichment
+from .pubchem import augment_pubchem
 
 
 @lru_cache(maxsize=1)
