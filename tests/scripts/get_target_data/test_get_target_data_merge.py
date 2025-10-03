@@ -6,11 +6,13 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from pytest import MonkeyPatch
 
 import library.pipelines.target.postprocessing as tp
 from library.pipelines.target import protein_classification as pc
 from library.config import Config
+from library.cli_utils import PipelineError
 from scripts import get_target_data as gtd
 
 
@@ -171,3 +173,59 @@ def test_fetch_iuphar_prioritises_uniprot_columns(
         )
     ]
     assert not disallowed_processed
+
+
+def test_fetch_iuphar_missing_configured_uniprot_column(
+    monkeypatch: MonkeyPatch, tmp_path: Path, cfg: Config
+) -> None:
+    """Ensure fetch step aborts when the configured column disappears."""
+
+    cfg.target.all.uniprot_column = "unexpected_column"
+
+    chembl_df = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "uniprot_id": ["P12345"],
+            "unexpected_column": ["P12345"],
+        }
+    )
+    uniprot_df = pd.DataFrame(
+        {
+            "uniprot_id": ["P12345"],
+            "original_id": ["P12345"],
+        }
+    )
+    out = tmp_path / "iuphar.csv"
+
+    def fake_run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
+        pd.DataFrame({"uniprot_id": ["P12345"], "IUPHAR_class": ["Enzyme"]}).to_csv(
+            args.output_csv,
+            index=False,
+        )
+        return 0
+
+    monkeypatch.setattr(gtd, "run_iuphar", fake_run_iuphar)
+
+    original_merge = pd.merge
+
+    def dropping_merge(*args: object, **kwargs: object) -> pd.DataFrame:
+        result = original_merge(*args, **kwargs)
+        if "unexpected_column" in result.columns:
+            result = result.drop(columns=["unexpected_column"])
+        return result
+
+    monkeypatch.setattr(pd, "merge", dropping_merge)
+
+    error_events: list[str] = []
+    original_error = gtd.logger.error
+
+    def tracking_error(event: str, *args: object, **kwargs: object) -> object:
+        error_events.append(event)
+        return original_error(event, *args, **kwargs)
+
+    monkeypatch.setattr(gtd.logger, "error", tracking_error)
+
+    with pytest.raises(PipelineError, match="unexpected_column"):
+        gtd.fetch_iuphar(cfg, chembl_df, uniprot_df, out)
+
+    assert "missing_configured_uniprot_column" in error_events
