@@ -48,8 +48,32 @@ try:
     from library.utils.bootstrap import ensure_project_root
 except ModuleNotFoundError:  # pragma: no cover - environment bootstrap
     project_root = Path(__file__).resolve().parents[1]
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
+    existing = sys.modules.get("library")
+    if existing is not None:
+        module_paths: list[Path] = []
+        file_attr = getattr(existing, "__file__", None)
+        if file_attr:
+            module_paths.append(Path(file_attr).resolve())
+        package_paths = getattr(existing, "__path__", None)
+        if package_paths is not None:
+            module_paths.extend(Path(p).resolve() for p in package_paths)
+
+        def _is_within(path: Path) -> bool:
+            try:
+                path.relative_to(project_root)
+            except ValueError:
+                return False
+            return True
+
+        if not any(_is_within(path) for path in module_paths):
+            for name in list(sys.modules):
+                if name == "library" or name.startswith("library."):
+                    del sys.modules[name]
+
     from library.utils.bootstrap import ensure_project_root
 
 
