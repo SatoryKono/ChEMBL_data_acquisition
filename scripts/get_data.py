@@ -53,7 +53,10 @@ from scripts import (
     get_testitem_data,
 )
 
+from library.clients import ChemblClient
 from library.common.logging_setup import Logger, LoggerConfig, configure_logger
+from library.config import Config, load_config
+from library.integration.molecule_catalog import load_parent_catalog
 from library.utils.config import DEFAULT_CONFIG_PATH
 
 
@@ -720,6 +723,32 @@ def _cleanup_failed_step(
         )
 
 
+def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
+    """Ensure the molecule parent catalogue cache exists before test item runs."""
+
+    config: Config = load_config(cfg.config_path, base_path=cfg.base_path)
+    chembl_sources = config.sources.chembl
+    catalog_cfg = chembl_sources.molecule_catalog
+    cache_path = catalog_cfg.cache_path
+    sqlite_path = catalog_cfg.sqlite_path
+
+    if cache_path.exists() and sqlite_path.exists():
+        return
+
+    testitem_cfg = chembl_sources.pipelines.testitem
+    with ChemblClient(
+        api=chembl_sources.api,
+        retry=config.system.retry,
+        chembl=chembl_sources.cache,
+    ) as client:
+        load_parent_catalog(
+            client=client,
+            api_cfg=chembl_sources.api,
+            catalog_cfg=catalog_cfg,
+            timeout=testitem_cfg.timeout,
+        )
+
+
 def run_pipeline(cfg: PipelineRunConfig) -> int:
     """Execute all configured steps and return the resulting exit status."""
 
@@ -732,6 +761,8 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
         sentinel_path = _failure_sentinel_path(final_output)
         if working_output.exists():
             _remove_path(working_output)
+        if step.name == "testitem":
+            _warm_parent_catalog(cfg)
         try:
             result = _run_step(step, cfg, final_output, working_output)
         except SystemExit as exc:  # pragma: no cover - defensive guard
