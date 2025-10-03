@@ -477,6 +477,17 @@ def preprocess_document_export(
     return processed.loc[:, stage_document_postprocessing.FINAL_COLUMN_ORDER]
 
 
+def _normalise_export_basename(source: Path | str) -> str:
+    """Return the ``source`` basename without leading dot or ``.tmp`` suffix."""
+
+    name = Path(source).name
+    if name.startswith("."):
+        name = name[1:]
+    if name.endswith(".tmp"):
+        name = name[: -len(".tmp")]
+    return name
+
+
 def postprocess_export_file(
     input_path: Path | str,
     *,
@@ -503,8 +514,12 @@ def postprocess_export_file(
         ref_document=ref_document,
         ref_document_path=ref_document_path,
     )
-    destination = Path(output_path) if output_path else Path(input_path).with_name(
-        f"{DEFAULT_OUTPUT_PREFIX}{Path(input_path).name}"
+    destination = (
+        Path(output_path)
+        if output_path
+        else Path(input_path).with_name(
+            f"{DEFAULT_OUTPUT_PREFIX}{_normalise_export_basename(input_path)}"
+        )
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     col_order = [
