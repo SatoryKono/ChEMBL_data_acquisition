@@ -2812,7 +2812,7 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
         logger.warning(
             "deprecated_output_alias_used",
             alias="--out",
-            replacement="--output",
+            replacement="--final-out",
         )
     func = getattr(args, "func", None)
     if func is None:

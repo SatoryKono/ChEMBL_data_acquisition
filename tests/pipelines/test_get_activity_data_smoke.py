@@ -92,7 +92,7 @@ def test_get_activity_data_streaming_chunks(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",

@@ -13,7 +13,7 @@ default each CLI command derives the destination file as
 extension and `<date>` is the host-local calendar date in `YYYYMMDD` format.
 The writer creates parent directories automatically when `local.io.exist_ok`
 is `true`. If your automation requires UTC-based filenames, wrap the CLI with a
-custom `--output` value or set `local.io.output_dir` explicitly so you can
+custom `--final-out` value or set `local.io.output_dir` explicitly so you can
 inject an alternate timestamp.
 
 ```
@@ -30,7 +30,7 @@ Document-oriented pipelines (for example `scripts/get_document_data.py`) append
 errors. Activity, assay and target jobs do not generate this report.
 
 Intermediate artefacts produced by the target `all` pipeline (`*_chembl.csv`,
-`*_uniprot.csv`, `*_iuphar.csv`) follow the same pattern. Custom `--output`
+`*_uniprot.csv`, `*_iuphar.csv`) follow the same pattern. Custom `--final-out`
 arguments remain supported when a different layout (for example,
 `~/.local/share/chembl-da/output/ChEMBL/processed/activities.csv`) is required.
 

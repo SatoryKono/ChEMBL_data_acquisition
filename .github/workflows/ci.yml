@@ -52,7 +52,7 @@ jobs:
           tmp_output="$(mktemp -d)"
           python -m library.utils.cli_tools.pipeline_targets_main \
             --input tests/data/chembl_targets_min.csv \
-            --output "${tmp_output}/targets.csv" \
+            --final-out "${tmp_output}/targets.csv" \
             --log-level INFO \
             --limit 2
       - name: Upload output data

@@ -68,7 +68,7 @@ def test_cli_preserves_leading_zeroes(tmp_path: Path) -> None:
     rc = cli.main([
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--key-cols",
         "id",

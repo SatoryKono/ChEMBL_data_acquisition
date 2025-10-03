@@ -117,7 +117,7 @@ def test_testitem_salt_flags_smoke(
         [
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
             "--log-level",
             "ERROR",

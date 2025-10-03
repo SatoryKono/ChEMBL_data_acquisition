@@ -12,7 +12,7 @@ three tiers:
 
 1. **Shared options** provided by `library.cli.parser.add_common_arguments`:
    - `--input / --final-out` – input CSV and destination for the cleaned export.
-     `--output` (and the legacy alias `--out`) are accepted but trigger a
+     `--output` and `--out` remain as deprecated aliases that trigger a
      deprecation warning; prefer `--final-out`.
    - `--log-level` – logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
    - `--sep`, `--encoding` – CSV delimiter and encoding (`utf-8-sig` by default).
@@ -156,16 +156,16 @@ Use these modules for diagnostics, QA, or offline workflows. Each exposes a
 | Module | Console command | Purpose |
 |--------|-----------------|---------|
 | `library.utils.cli_tools.check_determinism` | `check-determinism --input a.csv --previous b.csv` | Compare SHA-256 hashes and metadata between two exports. |
-| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --output copy.csv` | Re-serialise CSV files in deterministic chunks. |
-| `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --output clean.csv --sep ,` | Normalise delimiters, quoting, and ordering for arbitrary CSV files. |
+| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Re-serialise CSV files in deterministic chunks. |
+| `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Normalise delimiters, quoting, and ordering for arbitrary CSV files. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Inspect pandas dtypes produced by the pipelines. |
 | `library.utils.cli_tools.get_activities` | `get-activities --limit 10` | Emit synthetic activity rows to verify logging and CLI wiring. |
 | `library.utils.cli_tools.get_document_type` | `get-document-type --input docs.csv` | Apply the bundled publication-type heuristics. |
 | `library.utils.cli_tools.get_input_initialisation` | `get-input-initialisation --same-doc init.xlsx --all-doc pairs.xlsx` | Combine Excel workbooks into canonical entity/relationship tables. |
-| `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --output mapped.csv --column target_chembl_id` | Interactive mapper for quick lookups. |
+| `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --final-out mapped.csv --column target_chembl_id` | Interactive mapper for quick lookups. |
 | `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv` | Batch mapper suitable for scripts or QA jobs. |
 | `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Replay the target pipeline using cached API responses; honours the staging flags documented above. |
-| `library.utils.cli_tools.table_quality_main` | `table-quality --input data.csv --table-name chembl_targets --output reports/` | Produce table-quality summaries for arbitrary datasets. |
+| `library.utils.cli_tools.table_quality_main` | `table-quality --input data.csv --table-name chembl_targets --final-out reports/` | Produce table-quality summaries for arbitrary datasets. |
 
 ## Tips for large runs
 

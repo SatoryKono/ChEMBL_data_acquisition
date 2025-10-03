@@ -22,7 +22,7 @@ def test_table_quality_cli_with_config(tmp_path: Path) -> None:
             str(csv_path),
             "--table-name",
             "demo",
-            "--output",
+            "--final-out",
             str(tmp_path),
         ]
     )
@@ -91,7 +91,7 @@ def test_chunk_io_default_config_outside_repo(tmp_path: Path, monkeypatch) -> No
     rc = chunk_io_main.main([
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--log-level",
         "ERROR",
@@ -148,7 +148,7 @@ def test_csv_utils_default_config_outside_repo(tmp_path: Path, monkeypatch) -> N
     rc = csv_utils_main.main([
         "--input",
         str(input_csv),
-        "--output",
+        "--final-out",
         str(output_csv),
         "--key-cols",
         "id",

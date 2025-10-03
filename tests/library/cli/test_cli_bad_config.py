@@ -28,7 +28,7 @@ CLIS = [
     (tqm.main, ["--table-name", "demo"], False),
     (gii.main, [], False),
     (gtd.main, ["chembl"], False),
-    (gdoctype.main, ["--input", "in.csv", "--output", "out.csv"], True),
+    (gdoctype.main, ["--input", "in.csv", "--final-out", "out.csv"], True),
 ]
 
 
@@ -193,7 +193,7 @@ def test_doc_type_negative_limit_in_config_exits(
             str(cfg),
             "--input",
             str(input_csv),
-            "--output",
+            "--final-out",
             str(output_csv),
         ]
     )

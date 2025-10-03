@@ -11,8 +11,8 @@
 
 1. **Общие флаги** из `library.cli.parser.add_common_arguments`:
    - `--input / --final-out` — путь к входному CSV и результирующему файлу.
-     Опции `--output` и устаревшая `--out` по-прежнему работают, но выводят
-     предупреждение; используйте `--final-out`.
+     Алиасы `--output` и `--out` оставлены для совместимости, но сопровождаются
+     предупреждением; используйте `--final-out`.
    - `--log-level` — уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
    - `--sep`, `--encoding` — разделитель и кодировка CSV (`utf-8-sig` по умолчанию).
    - `--base-path`, `--input-dir`, `--output-dir`, `--date` — удобные шорткаты,
@@ -150,16 +150,16 @@ get-testitem-data --input seeds/molecule_ids.csv \
 | Модуль | Команда | Назначение |
 |--------|---------|------------|
 | `library.utils.cli_tools.check_determinism` | `check-determinism --input a.csv --previous b.csv` | Сравнение SHA-256 и метаданных разных запусков. |
-| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --output copy.csv` | Потоковое чтение/запись CSV с сохранением порядка. |
-| `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --output clean.csv --sep ,` | Нормализация разделителей, кавычек и порядка колонок. |
+| `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Потоковое чтение/запись CSV с сохранением порядка. |
+| `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Нормализация разделителей, кавычек и порядка колонок. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Диагностика типов pandas-таблиц. |
 | `library.utils.cli_tools.get_activities` | `get-activities --limit 10` | Генерация тестовых активностей для проверки логов и CLI. |
 | `library.utils.cli_tools.get_document_type` | `get-document-type --input docs.csv` | Применение встроенных правил классификации публикаций. |
 | `library.utils.cli_tools.get_input_initialisation` | `get-input-initialisation --same-doc init.xlsx --all-doc pairs.xlsx` | Объединение Excel-книг инициализации. |
-| `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --output mapped.csv --column target_chembl_id` | Интерактивный маппер UniProt/ChEMBL. |
+| `library.utils.cli_tools.mapper_main` | `mapper --input ids.csv --final-out mapped.csv --column target_chembl_id` | Интерактивный маппер UniProt/ChEMBL. |
 | `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv` | Пакетный маппер для автоматизации и QA. |
 | `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Повтор таргет-пайплайна на кешированных ответах с поддержкой стадийных флагов. |
-| `library.utils.cli_tools.table_quality_main` | `table-quality --input data.csv --table-name chembl_targets --output reports/` | Профилирование таблиц и отчёты качества. |
+| `library.utils.cli_tools.table_quality_main` | `table-quality --input data.csv --table-name chembl_targets --final-out reports/` | Профилирование таблиц и отчёты качества. |
 
 ## Советы для масштабных запусков
 
