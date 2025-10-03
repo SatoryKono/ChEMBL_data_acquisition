@@ -23,17 +23,18 @@ The primary documentation and reference material live in this directory.
 
 | Component | Minimum supported | Latest tested |
 |-----------|-------------------|---------------|
-| Python    | ≥3.11             | 3.12          |
+| Python    | 3.11–3.12         | 3.12          |
 | numpy     | ≥1.26             | 2.3.3         |
 | pandas    | ≥2.0              | 2.3.3         |
 | requests  | ≥2.31             | 2.32.5        |
 | PyYAML    | ≥6.0              | 6.0.3         |
 
 `requirements-lock.txt` is the single source of truth for pinned dependency
-versions; `pyproject.toml` documents the supported version ranges. Runtime
-dependencies follow compatible release ranges so patch updates within each
-minor version remain supported. Continuous integration validates both the
-minimum and latest rows above.
+versions; `pyproject.toml` documents the supported version ranges. The package
+is validated on CPython 3.11 and 3.12 and intentionally excludes 3.13 until the
+upstream stack catches up. Runtime dependencies follow compatible release
+ranges so patch updates within each minor version remain supported. Continuous
+integration validates both the minimum and latest rows above.
 
 ### Runtime environment
 
