@@ -687,10 +687,16 @@ def finalize_output(
     rows_written = 0
     exit_code = 0
     columns_seen: set[str] = set()
+    columns_to_fill: set[str] = set()
     failure_cases = SidecarErrors()
     failure_count = 0
 
     chunk_iter = iter(chunks)
+
+    def _ensure_optional_columns(frame: pd.DataFrame) -> None:
+        for column in columns_to_fill:
+            if column not in frame.columns:
+                frame[column] = pd.Series(pd.NA, index=frame.index, dtype="string")
 
     def _process_chunk(raw: pd.DataFrame) -> pd.DataFrame:
         nonlocal rows_total, rows_written, exit_code, columns_seen, failure_count
@@ -700,6 +706,7 @@ def finalize_output(
         if "pubchem_cid" in current.columns:
             current["pubchem_cid"] = current["pubchem_cid"].astype(object)
         current = add_pipeline_metadata(current)
+        _ensure_optional_columns(current)
         columns_seen.update(current.columns)
 
         chunk_missing_required = required_cols - set(current.columns)
@@ -765,10 +772,22 @@ def finalize_output(
 
     missing_optional = optional_cols - columns_seen
     if missing_optional:
-        logger.warning(
-            "optional_columns_missing",
-            columns=sorted(missing_optional),
-        )
+        added_optional = sorted(missing_optional)
+        columns_to_fill.update(missing_optional)
+        for chunk in prepared_chunks:
+            _ensure_optional_columns(chunk)
+        columns_seen.update(columns_to_fill)
+        remaining_missing_optional = optional_cols - columns_seen
+        if remaining_missing_optional:
+            logger.warning(
+                "optional_columns_missing",
+                columns=sorted(remaining_missing_optional),
+            )
+        else:
+            logger.debug(
+                "optional_columns_filled",
+                columns=added_optional,
+            )
 
     if failure_count:
         failure_path = Path(output).with_name(f"{Path(output).stem}_failure_cases.csv")

@@ -29,6 +29,7 @@ from library.integration import molecule_catalog
 from library.integration import pubchem_library as pl
 import library.pipelines.testitem as pipeline
 import library.pipelines.testitem.cli as pipeline_cli
+import library.testitem_pipeline.cli as modern_pipeline_cli
 
 from library.config import ApiCfg, Config, IoCfg
 
@@ -684,15 +685,44 @@ def test_finalize_output_success(
 
     monkeypatch.setattr(pipeline, "write_meta_yaml", capture_meta)
     monkeypatch.setattr(pipeline_cli, "write_meta_yaml", capture_meta)
+    monkeypatch.setattr(modern_pipeline_cli, "write_meta_yaml", capture_meta)
     monkeypatch.setattr(pipeline, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(pipeline_cli, "file_sha256", lambda path: "hash")
+    monkeypatch.setattr(modern_pipeline_cli, "file_sha256", lambda path: "hash")
     monkeypatch.setattr(
         pipeline, "analyze_table_quality", lambda *_args, **_kwargs: None
     )
     monkeypatch.setattr(
+        pipeline_cli, "analyze_table_quality", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        modern_pipeline_cli,
+        "analyze_table_quality",
+        lambda *_args, **_kwargs: None,
+    )
+
+    written_chunks: list[pd.DataFrame] = []
+
+    def capture_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        **kwargs: object,
+    ) -> Path:
+        materialized = list(chunks)
+        written_chunks.extend(materialized)
+        return path
+
+    monkeypatch.setattr(
         pipeline,
         "write_csv_chunks_deterministic",
-        lambda chunks, path, **kwargs: path,
+        capture_chunks,
         raising=False,
+    )
+    monkeypatch.setattr(pipeline_cli, "write_csv_chunks_deterministic", capture_chunks)
+    monkeypatch.setattr(
+        modern_pipeline_cli,
+        "write_csv_chunks_deterministic",
+        capture_chunks,
     )
 
     exit_code = pipeline.finalize_output(
@@ -706,6 +736,12 @@ def test_finalize_output_success(
     assert exit_code == 0
     assert captured_stats.get("parent_lookup_failed_ids") == ["CHEMBL9"]
     assert captured_stats.get("parent_lookup_failed_count") == 1
+
+    written_columns: set[str] = set()
+    for chunk in written_chunks:
+        written_columns.update(chunk.columns)
+
+    assert written_columns == set(TestitemsSchema.columns)
 
 
 def test_finalize_output_missing_required_columns(
