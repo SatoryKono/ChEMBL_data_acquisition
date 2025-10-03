@@ -821,6 +821,12 @@ def finalize_output(
         return 1
 
     rows_dropped = rows_total - rows_written
+    logger.info(
+        "records_dropped",
+        rows_total=int(rows_total),
+        rows_kept=int(rows_written),
+        rows_dropped=int(rows_dropped),
+    )
     parent_stats = parent_stats_supplier()
     missing_ids_tuple = tuple(missing_ids or ())
 

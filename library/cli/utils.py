@@ -229,6 +229,7 @@ def run_pipeline(
         Mapping[str, object] | Callable[[], Mapping[str, object]] | None
     ) = None,
     logger: Logger | None = None,
+    stats_callback: Callable[[Stats], None] | None = None,
 ) -> int:
     """Execute a data pipeline and write deterministic CSV output.
 
@@ -280,6 +281,10 @@ def run_pipeline(
         pipeline-specific diagnostics such as fetch failures.
     logger:
         Optional logger.  Defaults to :data:`library.common.log.logger` when omitted.
+    stats_callback:
+        Optional callable invoked with the final ``stats`` mapping prior to
+        metadata serialisation. Use this to capture summary statistics for
+        external reporting without mutating the persisted metadata.
 
     Returns
     -------
@@ -610,7 +615,13 @@ def run_pipeline(
     extra_stats = stats_extra() if callable(stats_extra) else stats_extra
     for key, value in (extra_stats or {}).items():
         stats[key] = value
- 
+
+    if stats_callback is not None:
+        try:
+            stats_callback(dict(stats))
+        except Exception:  # pragma: no cover - defensive against user callbacks
+            use_logger.exception("stats_callback_failed")
+
     resolved_invocation = invocation_tuple
 
     extra_metadata: dict[str, object] = {}

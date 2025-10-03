@@ -1556,6 +1556,12 @@ def _finalise_export(
 
 
     rows_dropped = rows_total - rows_kept
+    logger.info(
+        "records_dropped",
+        rows_total=int(rows_total),
+        rows_kept=int(rows_kept),
+        rows_dropped=int(rows_dropped),
+    )
     if exit_code == 0:
         logger.info("write_done", rows=rows_kept, path=str(csv_path))
         if csv_path.name.startswith("output.document_"):
