@@ -495,12 +495,13 @@ def test_prepare_parent_enrichment_dictionary_sets_parent(
     cfg.molecule_catalog.cache_path.write_text("{}")
     cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
 
-    for target in (pipeline, pipeline.catalog):
-        monkeypatch.setattr(
-            target,
-            "load_molecule_hierarchy_lookup",
-            lambda *_, **__: {"CHEMBL1": "CHEMBL999"},
-        )
+    hierarchy_path = tmp_path / "hierarchy.csv"
+    hierarchy_path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL1,CHEMBL999\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    pipeline.catalog._load_molecule_hierarchy_mapping.cache_clear()
+
     for target in (pipeline, pipeline.catalog):
         monkeypatch.setattr(target, "query_parent_catalog", lambda *_, **__: pytest.fail("no fallback"))
         monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
@@ -514,7 +515,7 @@ def test_prepare_parent_enrichment_dictionary_sets_parent(
         api_cfg=cfg.api,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
-        hierarchy_lookup_path=None,
+        hierarchy_lookup_path=hierarchy_path,
     )
 
     assert status == 0
@@ -535,12 +536,13 @@ def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
     cfg.molecule_catalog.cache_path.write_text("{}")
     cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
 
-    for target in (pipeline, pipeline.catalog):
-        monkeypatch.setattr(
-            target,
-            "load_molecule_hierarchy_lookup",
-            lambda *_, **__: {"CHEMBL1": None},
-        )
+    hierarchy_path = tmp_path / "hierarchy_null.csv"
+    hierarchy_path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL1,NULL\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    pipeline.catalog._load_molecule_hierarchy_mapping.cache_clear()
+
     for target in (pipeline, pipeline.catalog):
         monkeypatch.setattr(target, "query_parent_catalog", lambda *_, **__: pytest.fail("no fallback"))
         monkeypatch.setattr(target, "load_parent_catalog", lambda *_, **__: {})
@@ -554,7 +556,7 @@ def test_prepare_parent_enrichment_dictionary_null_parent_skips_fallback(
         api_cfg=cfg.api,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
-        hierarchy_lookup_path=None,
+        hierarchy_lookup_path=hierarchy_path,
     )
 
     assert status == 0
@@ -575,8 +577,12 @@ def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
     cfg.molecule_catalog.cache_path.write_text("{}")
     cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
 
-    for target in (pipeline, pipeline.catalog):
-        monkeypatch.setattr(target, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    hierarchy_path = tmp_path / "hierarchy_missing.csv"
+    hierarchy_path.write_text(
+        "molecule_chembl_id,parent_molecule_chembl_id\nCHEMBL2,CHEMBL3\n",
+        encoding=cfg.io.csv_encoding,
+    )
+    pipeline.catalog._load_molecule_hierarchy_mapping.cache_clear()
 
     captured: dict[str, set[str]] = {"need": set()}
 
@@ -597,7 +603,7 @@ def test_prepare_parent_enrichment_falls_back_when_missing_from_dictionary(
         api_cfg=cfg.api,
         timeout=cfg.testitem.timeout,
         client=SimpleNamespace(),
-        hierarchy_lookup_path=None,
+        hierarchy_lookup_path=hierarchy_path,
     )
 
     assert status == 0
@@ -1024,6 +1030,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
     tmp_path: Path, cfg: Config
 ) -> None:
     path = tmp_path / "hierarchy.csv"
+    pipeline.catalog._load_molecule_hierarchy_mapping.cache_clear()
     path.write_text(
         "\n".join(
             [
@@ -1032,6 +1039,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
                 "CHEMBL3,",
                 ",CHEMBL4",
                 " chembl5 , chembl6 ",
+                "CHEMBL8,NULL",
                 "CHEMBL1,CHEMBL7",
             ]
         ),
@@ -1044,6 +1052,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
         "CHEMBL1": "CHEMBL2",
         "CHEMBL3": None,
         "CHEMBL5": "CHEMBL6",
+        "CHEMBL8": None,
     }
 
 

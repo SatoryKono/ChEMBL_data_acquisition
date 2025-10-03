@@ -30,6 +30,8 @@ _MOLECULE_HIERARCHY_COLUMNS = (
     "parent_molecule_chembl_id",
 )
 
+_MOLECULE_HIERARCHY_NULL_VALUES = frozenset({"NULL"})
+
 PARENT_LOOKUP_SOURCE_CACHE = "cache"
 PARENT_LOOKUP_SOURCE_LOOKUP = "lookup"
 PARENT_LOOKUP_SOURCE_PARTIAL = "partial"
@@ -169,12 +171,24 @@ def _load_molecule_hierarchy_mapping(
     if parent_missing:
         subset[parent_column] = pd.Series(pd.NA, index=subset.index, dtype="string")
     else:
-        subset[parent_column] = frame[parent_column].copy()
+        subset[parent_column] = frame[parent_column].astype("string")
 
-    for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = subset[column].astype("string").str.strip().str.upper()
+    child_series = (
+        subset[child_column].astype("string").fillna("").str.strip().str.upper()
+    )
+    parent_series = subset[parent_column].astype("string")
+    parent_series = parent_series.str.strip()
+    parent_upper = parent_series.str.upper()
+    null_mask = (
+        parent_series.isna()
+        | parent_series.eq("")
+        | parent_upper.isin(_MOLECULE_HIERARCHY_NULL_VALUES)
+    )
+    parent_series = parent_upper.mask(null_mask, pd.NA)
 
-    subset = subset[subset["molecule_chembl_id"].notna()]
+    subset[child_column] = child_series
+    subset[parent_column] = parent_series
+
     subset = subset[subset["molecule_chembl_id"] != ""]
     subset = subset.drop_duplicates(
         subset=["molecule_chembl_id"],
@@ -267,7 +281,7 @@ def load_molecule_hierarchy_lookup(
     if not lookup:
         return {}
 
-    attached_rows = sum(1 for value in lookup.values() if value is not None and value != "")
+    attached_rows = sum(1 for value in lookup.values() if value is not None)
 
     logger.info(
         "molecule_hierarchy_lookup_loaded",
@@ -628,6 +642,7 @@ def prepare_parent_enrichment(
         hierarchy_mask = hierarchy_series.ne(missing_sentinel)
         if hierarchy_mask.any():
             resolved_values = hierarchy_series[hierarchy_mask]
+            resolved_series = resolved_values.astype("string")
             dictionary_resolved_children = set(
                 normalised_ids.loc[hierarchy_mask & normalised_ids.ne("")].tolist()
             )
@@ -635,27 +650,22 @@ def prepare_parent_enrichment(
                 df[parent_column] = df[parent_column].astype("string")
             else:
                 df[parent_column] = pd.Series(pd.NA, index=df.index, dtype="string")
-            df.loc[hierarchy_mask, parent_column] = resolved_values.astype(object)
-            existing_parent.loc[hierarchy_mask] = (
-                resolved_values.fillna("").astype("string")
-            )
+            df.loc[resolved_series.index, parent_column] = resolved_series
+            existing_parent.loc[resolved_series.index] = resolved_series
             hierarchy_attached = int(hierarchy_mask.sum())
 
-            has_parent_mask = resolved_values.notna()
-            if has_parent_mask.any():
-                parent_updates = resolved_values[has_parent_mask].astype("string")
-                df.loc[parent_updates.index, parent_column] = parent_updates
-                existing_parent.loc[parent_updates.index] = parent_updates.astype("string")
-
     if getattr(catalog_cfg, "force_refresh_existing", False):
-        need_lookup_mask = normalised_ids != ""
+        lookup_candidates = normalised_ids[normalised_ids != ""]
     else:
-        need_lookup_mask = (normalised_ids != "") & (existing_parent == "")
-    initial_need_lookup = set(normalised_ids[need_lookup_mask])
+        lookup_mask = (normalised_ids != "") & (
+            existing_parent.isna() | existing_parent.eq("")
+        )
+        lookup_candidates = normalised_ids[lookup_mask]
+    initial_need_lookup = set(lookup_candidates.tolist())
     if dictionary_resolved_children:
-        need_lookup = initial_need_lookup - dictionary_resolved_children
-    else:
-        need_lookup = set(initial_need_lookup)
+        initial_need_lookup -= dictionary_resolved_children
+
+    need_lookup = set(initial_need_lookup)
 
     cache_before = _cache_state(catalog_cfg.cache_path)
     cache_after = cache_before

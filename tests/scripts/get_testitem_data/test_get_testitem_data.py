@@ -898,7 +898,7 @@ def test_finalize_output_streams_sorted_chunks(
 def test_load_molecule_hierarchy_lookup_missing(tmp_path: Path, cfg: Config) -> None:
     path = tmp_path / "missing.csv"
 
-    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
     assert result == {}
 
@@ -907,6 +907,7 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
     tmp_path: Path, cfg: Config
 ) -> None:
     path = tmp_path / "hierarchy.csv"
+    gtd._load_molecule_hierarchy_mapping.cache_clear()
     path.write_text(
         "\n".join(
             [
@@ -915,18 +916,20 @@ def test_load_molecule_hierarchy_lookup_filters_empty_rows(
                 "CHEMBL3,",
                 ",CHEMBL4",
                 " chembl5 , chembl6 ",
+                "CHEMBL8,NULL",
                 "CHEMBL1,CHEMBL7",
             ]
         ),
         encoding=cfg.io.csv_encoding,
     )
 
-    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
     assert result == {
         "CHEMBL1": "CHEMBL2",
         "CHEMBL3": None,
         "CHEMBL5": "CHEMBL6",
+        "CHEMBL8": None,
     }
 
 
@@ -946,7 +949,7 @@ def test_load_molecule_hierarchy_lookup_missing_columns(
 
     monkeypatch.setattr(pipeline.logger, "warning", fake_warning)
 
-    result = pipeline.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
+    result = gtd.load_molecule_hierarchy_lookup(path, io_cfg=cfg.io)
 
     assert result == {"CHEMBL1": None}
     assert captured

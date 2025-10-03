@@ -39,6 +39,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_NAME = "testitem.csv"
 DEFAULT_OUTPUT_STEM = "testitems"
 
+MOLECULE_HIERARCHY_NULL_VALUES = frozenset({"NULL"})
+
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -159,12 +161,23 @@ def _load_molecule_hierarchy_mapping(
     if parent_missing:
         subset[parent_column] = pd.Series(pd.NA, index=subset.index, dtype="string")
     else:
-        subset[parent_column] = frame[parent_column].copy()
+        subset[parent_column] = frame[parent_column].astype("string")
 
-    for column in _MOLECULE_HIERARCHY_COLUMNS:
-        subset[column] = (
-            subset[column].fillna("").astype("string").str.strip().str.upper()
-        )
+    child_series = (
+        subset[child_column].astype("string").fillna("").str.strip().str.upper()
+    )
+    parent_series = subset[parent_column].astype("string")
+    parent_series = parent_series.str.strip()
+    parent_upper = parent_series.str.upper()
+    null_mask = (
+        parent_series.isna()
+        | parent_series.eq("")
+        | parent_upper.isin(MOLECULE_HIERARCHY_NULL_VALUES)
+    )
+    parent_series = parent_upper.mask(null_mask, pd.NA)
+
+    subset[child_column] = child_series
+    subset[parent_column] = parent_series
 
     subset = subset[subset["molecule_chembl_id"] != ""]
     subset = subset.drop_duplicates(
@@ -174,7 +187,10 @@ def _load_molecule_hierarchy_mapping(
 
     lookup: dict[str, str | None] = {}
     for molecule_id, parent_id in subset.itertuples(index=False, name=None):
-        parent = parent_id or None
+        if pd.isna(parent_id) or parent_id == "":
+            parent: str | None = None
+        else:
+            parent = parent_id
         if parent is not None and parent == molecule_id:
             parent = None
         lookup[molecule_id] = parent
