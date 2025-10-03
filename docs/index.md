@@ -1,49 +1,53 @@
 # Documentation Index
 
-Documentation is now grouped by language and audience segment. Pick your
+Documentation is now grouped by language and topic. Pick your
 language and jump straight to the relevant manuals.
 
 ## English
 
-### User Guides
-- [Project overview](./en/user/README.md)
-- [Quickstart checklist](./en/user/QUICKSTART.md)
-- [Usage guide](./en/user/USAGE.md)
-- [Component summary](./en/user/SUMMARY.md)
-- [Output artefacts](./en/user/OUTPUT.md)
+### Guides
+- [Project overview](./en/README.md)
+- [Quickstart checklist](./en/guides/QUICKSTART.md)
+- [Usage guide](./en/guides/USAGE.md)
+- [Component summary](./en/SUMMARY.md)
 
-### Developer Reference
-- [Configuration matrix](./en/devel/CONFIG.md)
-- [CLI helper reference](./en/devel/CLI_TOOLS.md)
-- [Data schema](./en/devel/DATA_SCHEMA.md)
-- [Architecture overview](./en/devel/ARCHITECTURE.md)
-- [Contribution guide](./en/devel/CONTRIBUTING.md)
+### Reference
+- [Configuration matrix](./en/reference/CONFIG.md)
+- [CLI helper reference](./en/reference/CLI_TOOLS.md)
+- [Data schema](./en/reference/DATA_SCHEMA.md)
+- [Output artefacts](./en/reference/OUTPUT.md)
 
-### QA & Processes
-- [ETL process report](./en/qa/ETL_PROCESS.md)
-- [ETL data flow](./en/qa/ETL_DATA_FLOW.md)
-- [QA process](./en/qa/QA_PROCESS.md)
+### Development
+- [Contribution guide](./en/development/CONTRIBUTING.md)
+- [QA process](./en/development/QA_PROCESS.md)
+
+### Architecture
+- [Architecture overview](./en/architecture/ARCHITECTURE.md)
+- [ETL process report](./en/architecture/ETL_PROCESS.md)
+- [ETL data flow](./en/architecture/ETL_DATA_FLOW.md)
 
 ## Русский
 
-### Руководства пользователя
-- [Обзор проекта](./ru/user/README.md)
-- [Чек-лист быстрого старта](./ru/user/QUICKSTART.md)
-- [Руководство по использованию](./ru/user/USAGE.md)
-- [Сводка компонентов](./ru/user/SUMMARY.md)
-- [Структура выходных данных](./ru/user/OUTPUT.md)
+### Руководства
+- [Обзор проекта](./ru/README.md)
+- [Чек-лист быстрого старта](./ru/guides/QUICKSTART.md)
+- [Руководство по использованию](./ru/guides/USAGE.md)
+- [Сводка компонентов](./ru/SUMMARY.md)
 
-### Справочники для разработчиков
-- [Матрица настроек](./ru/devel/CONFIG.md)
-- [Справочник по CLI](./ru/devel/CLI_TOOLS.md)
-- [Схема данных](./ru/devel/DATA_SCHEMA.md)
-- [Обзор архитектуры](./ru/devel/ARCHITECTURE.md)
-- [Руководство по контрибуции](./ru/devel/CONTRIBUTING.md)
+### Справочники
+- [Матрица настроек](./ru/reference/CONFIG.md)
+- [Справочник по CLI](./ru/reference/CLI_TOOLS.md)
+- [Схема данных](./ru/reference/DATA_SCHEMA.md)
+- [Структура выходных данных](./ru/reference/OUTPUT.md)
 
-### QA и процессы
-- [Описание ETL-процесса](./ru/qa/ETL_PROCESS.md)
-- [Поток данных ETL](./ru/qa/ETL_DATA_FLOW.md)
-- [QA-процесс](./ru/qa/QA_PROCESS.md)
+### Разработка
+- [Руководство по контрибуции](./ru/development/CONTRIBUTING.md)
+- [QA-процесс](./ru/development/QA_PROCESS.md)
+
+### Архитектура
+- [Обзор архитектуры](./ru/architecture/ARCHITECTURE.md)
+- [Описание ETL-процесса](./ru/architecture/ETL_PROCESS.md)
+- [Поток данных ETL](./ru/architecture/ETL_DATA_FLOW.md)
 
 ## Additional resources
 
