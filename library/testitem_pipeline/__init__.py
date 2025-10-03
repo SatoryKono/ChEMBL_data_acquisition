@@ -138,6 +138,37 @@ else:  # pragma: no cover - environment-specific fallback
 _export_from_module(catalog_module, _CATALOG_EXPORTS)
 
 
+def _load_local_module(module_name: str) -> ModuleType:
+    """Load a sibling module directly from disk as a fallback."""
+
+    package_name = __name__
+    qualified_name = f"{package_name}.{module_name}"
+    module_path = Path(__file__).with_name(f"{module_name}.py")
+    spec = spec_from_file_location(qualified_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(qualified_name)
+    module = module_from_spec(spec)
+    sys.modules[qualified_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _export_from_module(module: ModuleType, names: tuple[str, ...]) -> None:
+    """Populate the module globals with the selected attributes."""
+
+    for name in names:
+        globals()[name] = getattr(module, name)
+catalog_module_name = f"{__name__}.catalog"
+catalog_spec = find_spec(catalog_module_name)
+
+if catalog_spec is not None:
+    catalog_module = import_module(catalog_module_name)
+else:  # pragma: no cover - environment-specific fallback
+    catalog_module = _load_local_module("catalog")
+
+_export_from_module(catalog_module, _CATALOG_EXPORTS)
+
+
 class _LazyModuleProxy:
     """Lazily import *module_name* on first attribute access."""
 
