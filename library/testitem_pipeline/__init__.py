@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import json
 import sys
-from importlib import import_module
-from importlib.util import (
-    find_spec,
-    module_from_spec,
-    spec_from_file_location,
-)
-from pathlib import Path
+from importlib import import_module, resources
+from importlib.util import find_spec, spec_from_loader
 from types import ModuleType
 from typing import Any
+
+import importlib.machinery as machinery
 
 import requests
 
@@ -80,29 +77,40 @@ _PUBCHEM_EXPORTS = (
 
 
 def _load_local_module(module_name: str) -> ModuleType:
-    """Load a sibling module directly from disk as a fallback."""
+    """Load a sibling module from package resources as a fallback."""
 
     package_name = __name__
     qualified_name = f"{package_name}.{module_name}"
-    module_path = Path(__file__).with_name(f"{module_name}.py")
-    if not module_path.is_file():
+
+    try:
+        resource = resources.files(package_name).joinpath(f"{module_name}.py")
+    except ModuleNotFoundError as exc:  # pragma: no cover - depends on packaging
+        raise ModuleNotFoundError(qualified_name) from exc
+
+    if not resource.is_file():
         msg = (
             f"Optional module '{qualified_name}' is not available. "
-            f"Expected file '{module_path}' is missing from this installation."
+            f"Expected file '{resource}' is missing from this installation."
         )
         raise ModuleNotFoundError(msg)
-    spec = spec_from_file_location(qualified_name, module_path)
-    if spec is None or spec.loader is None:
-        raise ModuleNotFoundError(qualified_name)
-    module = module_from_spec(spec)
+
+    source = resource.read_text(encoding="utf-8")
+    module = ModuleType(qualified_name)
+    module.__file__ = str(resource)
+    module.__package__ = package_name
+
+    loader = machinery.SourceFileLoader(qualified_name, module.__file__)
+    module.__loader__ = loader
+    module.__spec__ = spec_from_loader(qualified_name, loader, origin=module.__file__)
+
     try:
         sys.modules[qualified_name] = module
-        spec.loader.exec_module(module)
-    except FileNotFoundError as exc:
+        exec(compile(source, module.__file__, "exec"), module.__dict__)
+    except FileNotFoundError as exc:  # pragma: no cover - environment specific
         sys.modules.pop(qualified_name, None)
         msg = (
             f"Optional module '{qualified_name}' could not be loaded. "
-            f"Ensure '{module_path}' is included in your environment."
+            f"Ensure '{resource}' is included in your environment."
         )
         raise ModuleNotFoundError(msg) from exc
     return module
