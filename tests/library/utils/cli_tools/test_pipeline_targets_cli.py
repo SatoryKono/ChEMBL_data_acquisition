@@ -17,6 +17,16 @@ from library.utils.cli_tools import pipeline_targets_main as cli
 from library.schemas import TargetsSchema
 
 
+def _tests_dir() -> Path:
+    path = Path(__file__).resolve().parent
+    while path.name != "tests":
+        path = path.parent
+    return path
+
+
+FIXTURES_DIR = _tests_dir() / "fixtures"
+
+
 class _DummyLogger:
     def __init__(
         self,
@@ -475,9 +485,7 @@ def test_backward_compatibility_out_alias(
 def test_end_to_end_cli_raw_and_final_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
 ) -> None:
-    fixture_path = (
-        Path(__file__).resolve().parent / "fixtures" / "chembl_targets_response.json"
-    )
+    fixture_path = FIXTURES_DIR / "chembl_targets_response.json"
     records = json.loads(fixture_path.read_text(encoding="utf8"))
     columns = list(records[0].keys())
     fixture_df = pd.DataFrame(records)[columns]

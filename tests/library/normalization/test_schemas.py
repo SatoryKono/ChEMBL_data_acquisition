@@ -27,6 +27,16 @@ from library.schemas import (
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
+def _tests_dir() -> Path:
+    path = Path(__file__).resolve().parent
+    while path.name != "tests":
+        path = path.parent
+    return path
+
+
+DATA_DIR = _tests_dir() / "data"
+
+
 DEFAULT_ACTION_TYPE_METRICS = {
     "ic50": "inhibition",
     "ec50": "activation",
@@ -375,10 +385,8 @@ def test_documents_schema_hypothesis_invalid(df: pd.DataFrame) -> None:
 
 def test_activities_from_files() -> None:
     """Validate activities data from CSV/JSON files and capture failures."""
-    data_dir = Path(__file__).parent / "data"
-
     # Positive case: CSV data passes validation after normalisation
-    valid = pd.read_csv(data_dir / "activities_valid.csv", dtype=str).assign(
+    valid = pd.read_csv(DATA_DIR / "activities_valid.csv", dtype=str).assign(
         assay_chembl_id="CHEMBL0"
     )
     valid["standard_value"] = valid["standard_value"].astype(float)
@@ -388,7 +396,7 @@ def test_activities_from_files() -> None:
     ActivitiesSchema.validate(normalized)
 
     # Negative case: JSON data with invalid standard_value
-    invalid = pd.read_json(data_dir / "activities_invalid.json").assign(
+    invalid = pd.read_json(DATA_DIR / "activities_invalid.json").assign(
         assay_chembl_id="CHEMBL0"
     )
     invalid["standard_value"] = invalid["standard_value"].astype(float)

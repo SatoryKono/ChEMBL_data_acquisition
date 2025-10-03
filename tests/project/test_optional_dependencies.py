@@ -11,10 +11,17 @@ from collections import defaultdict
 from pathlib import Path
 
 
+def _project_root() -> Path:
+    path = Path(__file__).resolve().parent
+    while path.name != "tests":
+        path = path.parent
+    return path.parent
+
+
 def test_optional_dependencies_are_unique() -> None:
     """Verify that optional dependency groups contain unique entries."""
 
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = _project_root()
     pyproject_path = project_root / "pyproject.toml"
     data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 

@@ -12,8 +12,15 @@ import library.git_utils as git_utils
 from library.metadata import Stats, write_meta_yaml
 
 
+def _tests_dir() -> Path:
+    path = Path(__file__).resolve().parent
+    while path.name != "tests":
+        path = path.parent
+    return path
+
+
 def test_write_meta_yaml_creates_file(tmp_path: Path) -> None:
-    data_src = Path(__file__).parent / "data" / "meta_input.csv"
+    data_src = _tests_dir() / "data" / "meta_input.csv"
     csv_path = tmp_path / "output.csv"
     shutil.copy(data_src, csv_path)
 

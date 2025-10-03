@@ -8,10 +8,17 @@ from pathlib import Path
 from zipfile import ZipFile
 
 
+def _project_root() -> Path:
+    path = Path(__file__).resolve().parent
+    while path.name != "tests":
+        path = path.parent
+    return path.parent
+
+
 def test_wheel_exposes_resources(tmp_path: Path) -> None:
     """Build the wheel and ensure bundled resources resolve at runtime."""
 
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = _project_root()
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir()
 

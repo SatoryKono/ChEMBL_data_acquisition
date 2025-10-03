@@ -28,6 +28,13 @@ from library.utils.config import DEFAULT_CONFIG_PATH
 from scripts import get_target_data as target_cli
 
 
+def _project_root() -> Path:
+    path = Path(__file__).resolve().parent
+    while path.name != "tests":
+        path = path.parent
+    return path.parent
+
+
 @pytest.fixture(autouse=True)
 def _user_agent_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide a default user agent for configuration loading."""
@@ -501,7 +508,7 @@ def test_config_class_default_resources_exist() -> None:
 
     cfg = Config()
     resources = cfg.resources
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = _project_root()
     for field in (
         "dictionary_dir",
         "iuphar_target_csv",
