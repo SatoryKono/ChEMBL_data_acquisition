@@ -731,6 +731,7 @@ def _cleanup_failed_step(
 def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     """Ensure the molecule parent catalogue cache exists before test item runs."""
 
+    start_time = time.perf_counter()
     config: Config = load_config(cfg.config_path, base_path=cfg.base_path)
     chembl_sources = config.sources.chembl
     catalog_cfg = chembl_sources.molecule_catalog
@@ -740,36 +741,50 @@ def _warm_parent_catalog(cfg: PipelineRunConfig) -> None:
     cache_ready = cache_path.is_file()
     sqlite_ready = sqlite_path.is_file()
 
+    log_kwargs = {
+        "cache": str(cache_path),
+        "sqlite": str(sqlite_path),
+    }
+
     if cache_ready and sqlite_ready:
-        _LOGGER.info(
-            "parent_catalog_warm_skip",
-            cache=str(cache_path),
-            sqlite=str(sqlite_path),
-        )
+        elapsed = time.perf_counter() - start_time
+        _LOGGER.info("parent_catalog_warm_skip", elapsed=elapsed, **log_kwargs)
         return
 
     testitem_cfg = chembl_sources.pipelines.testitem
-    _LOGGER.info(
-        "parent_catalog_warm_start",
-        cache=str(cache_path),
-        sqlite=str(sqlite_path),
-    )
-    with ChemblClient(
-        api=chembl_sources.api,
-        retry=config.system.retry,
-        chembl=chembl_sources.cache,
-    ) as client:
-        load_parent_catalog(
-            client=client,
-            api_cfg=chembl_sources.api,
-            catalog_cfg=catalog_cfg,
-            timeout=testitem_cfg.timeout,
+    _LOGGER.info("parent_catalog_warm_start", **log_kwargs)
+    try:
+        with ChemblClient(
+            api=chembl_sources.api,
+            retry=config.system.retry,
+            chembl=chembl_sources.cache,
+        ) as client:
+            load_parent_catalog(
+                client=client,
+                api_cfg=chembl_sources.api,
+                catalog_cfg=catalog_cfg,
+                timeout=testitem_cfg.timeout,
+            )
+    except TimeoutError as exc:
+        elapsed = time.perf_counter() - start_time
+        _LOGGER.error(
+            "parent_catalog_warm_failed",
+            elapsed=elapsed,
+            error=str(exc),
+            **log_kwargs,
         )
-    _LOGGER.info(
-        "parent_catalog_warm_done",
-        cache=str(cache_path),
-        sqlite=str(sqlite_path),
-    )
+        raise
+    except Exception as exc:  # pragma: no cover - defensive guard
+        elapsed = time.perf_counter() - start_time
+        _LOGGER.exception(
+            "parent_catalog_warm_failed",
+            elapsed=elapsed,
+            error=str(exc),
+            **log_kwargs,
+        )
+        raise
+    elapsed = time.perf_counter() - start_time
+    _LOGGER.info("parent_catalog_warm_done", elapsed=elapsed, **log_kwargs)
 
 
 def run_pipeline(cfg: PipelineRunConfig) -> int:
@@ -788,7 +803,16 @@ def run_pipeline(cfg: PipelineRunConfig) -> int:
         if working_output.exists():
             _remove_path(working_output)
         if step.name == "testitem":
-            _warm_parent_catalog(cfg)
+            try:
+                _warm_parent_catalog(cfg)
+            except TimeoutError as exc:
+                overall_status = 1
+                _LOGGER.error("parent_catalog_warm_timeout", error=str(exc))
+                break
+            except Exception as exc:  # pragma: no cover - defensive guard
+                overall_status = 1
+                _LOGGER.error("parent_catalog_warm_error", error=str(exc))
+                break
         try:
             result = _run_step(step, cfg, final_output, working_output)
         except SystemExit as exc:  # pragma: no cover - defensive guard
