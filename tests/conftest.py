@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import csv
-import json
+import datetime as dt
 import os
 import random
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -22,8 +23,18 @@ import pytest
 from library.config import Config
 
 
-def _fix_seed(seed: int = 42) -> None:
-    os.environ["PYTHONHASHSEED"] = str(seed)
+FROZEN_UTC = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+FROZEN_TIMESTAMP = FROZEN_UTC.timestamp()
+FROZEN_NAIVE = FROZEN_UTC.replace(tzinfo=None)
+
+
+def _fix_seed(
+    seed: int = 42, *, monkeypatch: pytest.MonkeyPatch | None = None
+) -> None:
+    if monkeypatch is None:
+        os.environ["PYTHONHASHSEED"] = str(seed)
+    else:
+        monkeypatch.setenv("PYTHONHASHSEED", str(seed))
     random.seed(seed)
     np.random.seed(seed)
 
@@ -32,9 +43,28 @@ def _fix_seed(seed: int = 42) -> None:
 def deterministic_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Provide deterministic environment defaults for every test."""
 
-    _fix_seed()
+    _fix_seed(monkeypatch=monkeypatch)
     monkeypatch.setenv("TZ", "UTC")
     monkeypatch.setenv("HOME", str(tmp_path))
+
+    class FrozenDateTime(dt.datetime):
+        @classmethod
+        def now(cls, tz: dt.tzinfo | None = None) -> dt.datetime:
+            if tz is None:
+                return FROZEN_NAIVE
+            return FROZEN_UTC.astimezone(tz)
+
+        @classmethod
+        def utcnow(cls) -> dt.datetime:
+            return FROZEN_NAIVE
+
+        @classmethod
+        def today(cls) -> dt.datetime:
+            return cls.now()
+
+    monkeypatch.setattr(time, "time", lambda: FROZEN_TIMESTAMP)
+    monkeypatch.setattr(dt, "datetime", FrozenDateTime)
+    monkeypatch.setattr("datetime.datetime", FrozenDateTime)
 
 
 @pytest.fixture(autouse=True)
@@ -90,4 +120,4 @@ def make_dataframe() -> Iterable[pd.DataFrame]:
 
 @pytest.fixture()
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return FROZEN_UTC.isoformat()
