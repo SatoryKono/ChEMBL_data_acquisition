@@ -163,7 +163,7 @@ Use these modules for diagnostics, QA, or offline workflows. Each exposes a
 
 | Module | Console command | Purpose |
 |--------|-----------------|---------|
-| `library.utils.cli_tools.check_determinism` | `check-determinism --input a.csv --previous b.csv` | Compare SHA-256 hashes and metadata between two exports. |
+| `library.utils.cli_tools.check_determinism` | `check-determinism --log-level INFO` | Verify deterministic CSV writers by hashing sample outputs. |
 | `library.utils.cli_tools.chunk_io_main` | `chunk-io --input data.csv --final-out copy.csv` | Re-serialise CSV files in deterministic chunks. |
 | `library.utils.cli_tools.csv_utils_main` | `csv-utils --input data.csv --final-out clean.csv --sep ,` | Normalise delimiters, quoting, and ordering for arbitrary CSV files. |
 | `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main` | Inspect pandas dtypes produced by the pipelines. |
