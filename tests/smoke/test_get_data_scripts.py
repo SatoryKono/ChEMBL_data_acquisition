@@ -71,6 +71,89 @@ def _extract_output_path(namespace: argparse.Namespace) -> Path:
     return Path(candidate)
 
 
+def test_run_pipeline_dry_run_skips_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dry-run orchestrator skips step execution and avoids side effects."""
+
+    base_dir = tmp_path
+    input_dir = base_dir / "input"
+    output_dir = base_dir / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+    config_path = base_dir / "config.yaml"
+    config_path.write_text("pipeline: test\n", encoding="utf-8")
+
+    cfg = get_data.PipelineRunConfig(
+        base_path=base_dir,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+        date_prefix="20240101",
+        log_level="ERROR",
+        limit=None,
+        force=False,
+        skip_existing=False,
+        dry_run=True,
+    )
+
+    final_output = cfg.output_path("testitem")
+    working_output = final_output.with_name(f".{final_output.name}.tmp")
+    sentinel_path = final_output.with_name(f"{final_output.name}.failed")
+
+    executed_arguments: list[Sequence[str] | None] = []
+
+    def fake_main(argv: Sequence[str] | None) -> int:
+        executed_arguments.append(argv)
+        return 0
+
+    warmed = False
+
+    def fake_warm_parent_catalog(cfg: get_data.PipelineRunConfig) -> None:
+        nonlocal warmed
+        warmed = True
+
+    class CapturingLogger:
+        def __init__(self) -> None:
+            self.records: list[tuple[str, str, dict[str, object]]] = []
+
+        def info(self, event: str, **kwargs: object) -> None:
+            self.records.append(("info", event, dict(kwargs)))
+
+        def warning(self, event: str, **kwargs: object) -> None:  # pragma: no cover
+            self.records.append(("warning", event, dict(kwargs)))
+
+        def error(self, event: str, **kwargs: object) -> None:  # pragma: no cover
+            self.records.append(("error", event, dict(kwargs)))
+
+        def exception(self, event: str, **kwargs: object) -> None:  # pragma: no cover
+            self.records.append(("exception", event, dict(kwargs)))
+
+        def debug(self, event: str, **kwargs: object) -> None:  # pragma: no cover
+            self.records.append(("debug", event, dict(kwargs)))
+
+    monkeypatch.setattr(
+        get_data,
+        "_PIPELINE_STEPS",
+        (get_data.PipelineStep("testitem", fake_main, None),),
+    )
+    logger = CapturingLogger()
+    monkeypatch.setattr(get_data, "_LOGGER", logger)
+    monkeypatch.setattr(get_data, "_warm_parent_catalog", fake_warm_parent_catalog)
+
+    status = get_data.run_pipeline(cfg)
+
+    assert status == 0
+    assert executed_arguments == []
+    assert warmed is False
+    assert not final_output.exists()
+    assert not working_output.exists()
+    assert not sentinel_path.exists()
+
+    skip_logs = [record for record in logger.records if record[1] == "step_skip_dry_run"]
+    assert skip_logs == [("info", "step_skip_dry_run", {"step": "testitem"})]
+
+
 def test_get_data_main_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure ``scripts.get_data`` orchestrates all pipelines with mocked steps."""
 
