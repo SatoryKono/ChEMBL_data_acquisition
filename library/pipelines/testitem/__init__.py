@@ -50,7 +50,9 @@ from library.testitem_pipeline import (
 # ===== Compatibility Exports =====
 _PUBCHEM_COMPAT_MODULE = "library.testitem_pipeline.pubchem"
 
-if find_spec(_PUBCHEM_COMPAT_MODULE) is not None:
+try:
+    if find_spec(_PUBCHEM_COMPAT_MODULE) is None:
+        raise ModuleNotFoundError(_PUBCHEM_COMPAT_MODULE)
     pubchem_module = import_module(_PUBCHEM_COMPAT_MODULE)
     PUBCHEM_CID_CACHE_ENCODING = pubchem_module.PUBCHEM_CID_CACHE_ENCODING
     PUBCHEM_COLUMNS = list(pubchem_module.PUBCHEM_COLUMNS)
