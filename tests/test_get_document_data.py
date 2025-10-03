@@ -13,6 +13,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable
+from types import SimpleNamespace
 
 from contextlib import contextmanager
 
@@ -265,6 +266,133 @@ def test_cli_runs_document_postprocessing(
     assert output_path.exists()
     assert created == [output_dir / "preprocessed_output.document_20240101.csv"]
     assert created[0].exists()
+
+
+def test_finalise_export_uses_basename_for_quality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class DummyCfg:
+        def __init__(self) -> None:
+            self.io = SimpleNamespace(csv_sep=",", csv_encoding="utf-8")
+            self.system = SimpleNamespace(
+                doc_quality=SimpleNamespace(
+                    enable=True,
+                    sample_rows=None,
+                    include_columns=None,
+                    exclude_columns=None,
+                    fatal_on_error=False,
+                )
+            )
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "io": {
+                    "csv_sep": self.io.csv_sep,
+                    "csv_encoding": self.io.csv_encoding,
+                },
+                "system": {
+                    "doc_quality": {
+                        "enable": self.system.doc_quality.enable,
+                        "sample_rows": self.system.doc_quality.sample_rows,
+                        "include_columns": self.system.doc_quality.include_columns,
+                        "exclude_columns": self.system.doc_quality.exclude_columns,
+                        "fatal_on_error": self.system.doc_quality.fatal_on_error,
+                    }
+                },
+            }
+
+    cfg = DummyCfg()
+    output_dir = tmp_path / "nested" / "output"
+    output_dir.mkdir(parents=True)
+    output_path = output_dir / ".output.documents_test.csv.tmp"
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("document_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def fake_analyze_table_quality(
+        table: object,
+        table_name: str,
+        *,
+        destination_dir: Path | str | None = None,
+        **_: object,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        captured["table_name"] = table_name
+        captured["destination_dir"] = Path(destination_dir) if destination_dir else None
+        return pd.DataFrame(), pd.DataFrame()
+
+    class DummyProfiler:
+        def consume(self, _: pd.DataFrame) -> None:
+            return None
+
+        def build(
+            self,
+            table_name: str,
+            *,
+            destination_dir: Path | str | None = None,
+        ) -> tuple[pd.DataFrame, pd.DataFrame]:
+            return pd.DataFrame(), pd.DataFrame()
+
+    class DummyAccumulator:
+        def consume(self, _: pd.DataFrame) -> None:
+            return None
+
+    def fake_write_csv_chunks(
+        chunks: Iterable[pd.DataFrame],
+        path: Path,
+        *,
+        cfg: object,
+        **__: object,
+    ) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frames = list(chunks)
+        if frames:
+            pd.concat(frames, ignore_index=True).to_csv(path, index=False)
+        else:
+            pd.DataFrame().to_csv(path, index=False)
+        return path
+
+    monkeypatch.setattr(gdd, "add_pipeline_metadata", lambda df: df, raising=False)
+    monkeypatch.setattr(gdd, "build_dataframe", lambda df, **__: df, raising=False)
+    monkeypatch.setattr(gdd.DocumentsSchema, "validate", lambda df, **__: df)
+    monkeypatch.setattr(gdd, "_iter_export_chunks", lambda df, **__: [df], raising=False)
+    monkeypatch.setattr(gdd, "TableQualityProfiler", lambda: DummyProfiler(), raising=False)
+    monkeypatch.setattr(
+        gdd, "DocumentQualityAccumulator", lambda: DummyAccumulator(), raising=False
+    )
+    monkeypatch.setattr(gdd, "write_csv_chunks_deterministic", fake_write_csv_chunks)
+    monkeypatch.setattr(
+        gdd.document_export_postprocessing,
+        "postprocess_export_file",
+        lambda path, **__: path,
+    )
+    monkeypatch.setattr(gdd, "_maybe_run_document_postprocessing", lambda path: None)
+    monkeypatch.setattr(gdd, "file_sha256", lambda path: "deadbeef", raising=False)
+    monkeypatch.setattr(
+        gdd,
+        "write_meta_yaml",
+        lambda **__: output_path.with_suffix(".meta.yaml"),
+        raising=False,
+    )
+    monkeypatch.setattr(gdd, "build_quality_report", lambda *_: {}, raising=False)
+    monkeypatch.setattr(gdd, "save_quality_report", lambda report, path: path, raising=False)
+    monkeypatch.setattr(gdd, "analyze_table_quality", fake_analyze_table_quality)
+
+    df = pd.DataFrame({"document_chembl_id": ["CHEMBL1"], "title": ["example"]})
+
+    exit_code = gdd._finalise_export(
+        df,
+        output_path,
+        cfg,
+        input_csv=input_csv,
+        key_columns=["document_chembl_id"],
+        chunk_size=10,
+    )
+
+    assert exit_code == 0
+    assert captured["table_name"] == output_path.with_suffix("").name
+    assert captured["destination_dir"] == output_path.parent
+
 
 def test_run_all_logs_failing_ids(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

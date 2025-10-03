@@ -1526,7 +1526,7 @@ def _finalise_export(
         if doc_quality_cfg.enable:
             analyze_table_quality(
                 quality_profiler,
-                table_name=str(csv_path.with_suffix("")),
+                table_name=csv_path.with_suffix("").name,
                 destination_dir=csv_path.parent,
                 sample_rows=doc_quality_cfg.sample_rows,
                 include_columns=doc_quality_cfg.include_columns,
