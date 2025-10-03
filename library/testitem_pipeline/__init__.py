@@ -95,6 +95,31 @@ def _load_local_module(module_name: str) -> ModuleType:
     qualified_name = f"{package_name}.{module_name}"
     suffixes = (".py", ".pyc")
 
+    def _candidate_roots() -> tuple[pathlib.Path, ...]:
+        """Return directories that may contain the requested module."""
+
+        roots: list[pathlib.Path] = []
+
+        package = sys.modules.get(package_name)
+        if package is not None:
+            spec = getattr(package, "__spec__", None)
+            if spec and getattr(spec, "submodule_search_locations", None):
+                for location in spec.submodule_search_locations:
+                    try:
+                        roots.append(pathlib.Path(location))
+                    except TypeError:
+                        continue
+
+        roots.append(pathlib.Path(__file__).resolve().parent)
+        # Ensure deterministic order while removing duplicates.
+        seen: set[pathlib.Path] = set()
+        ordered: list[pathlib.Path] = []
+        for root in roots:
+            if root not in seen:
+                seen.add(root)
+                ordered.append(root)
+        return tuple(ordered)
+
     def _load_from_path(module_path: pathlib.Path) -> ModuleType:
         if module_path.suffix == ".pyc":
             loader = SourcelessFileLoader(qualified_name, str(module_path))
@@ -137,28 +162,41 @@ def _load_local_module(module_name: str) -> ModuleType:
                 if module is not None:
                     return module
 
-    base_path = pathlib.Path(__file__).resolve().parent
-    for suffix in suffixes:
-        candidate = base_path / f"{module_name}{suffix}"
-        if candidate.is_file():
-            try:
-                return _load_from_path(candidate)
-            except ModuleNotFoundError:
-                continue
+    candidate_roots = _candidate_roots()
+    for root in candidate_roots:
+        for suffix in suffixes:
+            candidate = root / f"{module_name}{suffix}"
+            if candidate.is_file():
+                try:
+                    return _load_from_path(candidate)
+                except ModuleNotFoundError:
+                    continue
 
-    pycache = base_path / "__pycache__"
-    if pycache.is_dir():
-        pattern = f"{module_name}.*.pyc"
-        for compiled in pycache.glob(pattern):
-            try:
-                return _load_from_path(compiled)
-            except ModuleNotFoundError:
-                continue
+        package_init_candidates = [
+            root / module_name / "__init__.py",
+            root / module_name / "__init__.pyc",
+        ]
+        for package_candidate in package_init_candidates:
+            if package_candidate.is_file():
+                try:
+                    return _load_from_path(package_candidate)
+                except ModuleNotFoundError:
+                    continue
+
+        pycache = root / "__pycache__"
+        if pycache.is_dir():
+            pattern = f"{module_name}.*.pyc"
+            for compiled in pycache.glob(pattern):
+                try:
+                    return _load_from_path(compiled)
+                except ModuleNotFoundError:
+                    continue
 
     resource_list = ", ".join(f"{module_name}{suffix}" for suffix in suffixes)
     msg = (
         f"Optional module '{qualified_name}' is not available. "
-        f"Expected one of ({resource_list}) to be present in this installation."
+        f"Expected one of ({resource_list}) to be present in this installation. "
+        f"Checked directories: {[str(root) for root in candidate_roots]}"
     )
     raise ModuleNotFoundError(msg)
 
