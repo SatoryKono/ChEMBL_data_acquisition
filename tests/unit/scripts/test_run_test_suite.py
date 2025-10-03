@@ -36,13 +36,14 @@ def test_write_reports__includes_success_rate(tmp_path: Path) -> None:
     run_test_suite._write_json(json_path, results, exit_code=0, summary=summary)
     payload = json.loads(json_path.read_text(encoding="utf-8"))
 
+    assert "success_rate" in payload["summary"]
     assert pytest.approx(payload["summary"]["success_rate"]) == 0.5
 
     md_path = tmp_path / "test_summary.md"
     run_test_suite._write_summary(md_path, results, exit_code=0, summary=summary)
     summary_text = md_path.read_text(encoding="utf-8")
 
-    assert "Success rate: 50.00%" in summary_text
+    assert "* Success rate: 50.00%" in summary_text
 
     empty_summary = run_test_suite.summarize_results([])
     assert empty_summary["success_rate"] == pytest.approx(1.0)
@@ -85,8 +86,9 @@ def test_main__returns_error_when_success_rate_below_threshold(
     caplog.set_level(logging.ERROR)
     exit_code = run_test_suite.main(["--report-dir", str(tmp_path), "--suite", "demo"])
 
+    assert run_test_suite.SUCCESS_RATE_THRESHOLD == pytest.approx(0.75)
     assert exit_code == 1
     assert "below the required threshold" in caplog.text
 
     report_payload = json.loads((tmp_path / "test_report.json").read_text(encoding="utf-8"))
-    assert report_payload["summary"]["success_rate"] < 0.75
+    assert report_payload["summary"]["success_rate"] < run_test_suite.SUCCESS_RATE_THRESHOLD
