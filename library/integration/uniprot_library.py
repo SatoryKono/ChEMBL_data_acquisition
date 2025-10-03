@@ -152,6 +152,9 @@ UNIPROT_OUTPUT_COLUMNS: list[str] = [
 ]
 
 
+_GTOP_JSON_FAILURE_CACHE: set[tuple[str, str]] = set()
+
+
 def _collect_name_fields(name_obj: dict[str, Any]) -> Iterable[str]:
     """Yield all full and short names from a UniProt name object."""
     if not isinstance(name_obj, dict):
@@ -871,6 +874,10 @@ def _fetch_gtop_endpoint(
 ) -> Any:
     """Return JSON payload for ``endpoint`` of a Guide-to-Pharmacology target."""
 
+    cache_key = (gtop_id, endpoint)
+    if cache_key in _GTOP_JSON_FAILURE_CACHE:
+        return None
+
     limiter = get_limiter("iuphar", cfg.rps, cfg.burst)
     base = cfg.base.rstrip("/")
     path = f"/{endpoint.lstrip('/')}" if endpoint else ""
@@ -881,6 +888,16 @@ def _fetch_gtop_endpoint(
         session = get_uniprot_session()
         with session.get(url, timeout=timeout) as response:
             response.raise_for_status()
+            raw_content_type = response.headers.get("Content-Type")
+            content_type = raw_content_type if isinstance(raw_content_type, str) else ""
+            if "json" not in content_type.lower():
+                logger.warning(
+                    "gtop_non_json_response",
+                    gtop_id=gtop_id,
+                    endpoint=endpoint,
+                    content_type=raw_content_type,
+                )
+                return None
             body = response.content
             if isinstance(body, (bytes, bytearray)):
                 body_is_empty = not body.strip()
@@ -895,6 +912,7 @@ def _fetch_gtop_endpoint(
                     endpoint=endpoint,
                     error="empty response body",
                 )
+                _GTOP_JSON_FAILURE_CACHE.add(cache_key)
                 return None
             return response.json()
     except (json.JSONDecodeError, ValueError) as exc:
@@ -904,6 +922,7 @@ def _fetch_gtop_endpoint(
             endpoint=endpoint,
             error=str(exc),
         )
+        _GTOP_JSON_FAILURE_CACHE.add(cache_key)
     except requests.RequestException as exc:  # pragma: no cover - network failures
         logger.warning(
             "gtop_request_failed", gtop_id=gtop_id, endpoint=endpoint, error=str(exc)
