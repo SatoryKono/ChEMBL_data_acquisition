@@ -57,25 +57,21 @@ def test_main__returns_error_when_success_rate_below_threshold(
         plugin: run_test_suite.JsonReportPlugin = plugins[0]
         log_path = str(plugin._log_path)
         plugin._results = {
-            "tests::pass": run_test_suite.TestResult(
-                name="tests::pass",
-                status="passed",
-                duration=0.1,
-                message="",
-                log_path=log_path,
-            ),
+            **{
+                f"tests::pass_{index}": run_test_suite.TestResult(
+                    name=f"tests::pass_{index}",
+                    status="passed",
+                    duration=0.1,
+                    message="",
+                    log_path=log_path,
+                )
+                for index in range(18)
+            },
             "tests::fail": run_test_suite.TestResult(
                 name="tests::fail",
                 status="failed",
                 duration=0.1,
                 message="boom",
-                log_path=log_path,
-            ),
-            "tests::skip": run_test_suite.TestResult(
-                name="tests::skip",
-                status="skipped",
-                duration=0.1,
-                message="not run",
                 log_path=log_path,
             ),
         }
@@ -86,7 +82,7 @@ def test_main__returns_error_when_success_rate_below_threshold(
     caplog.set_level(logging.ERROR)
     exit_code = run_test_suite.main(["--report-dir", str(tmp_path), "--suite", "demo"])
 
-    assert run_test_suite.SUCCESS_RATE_THRESHOLD == pytest.approx(0.80)
+    assert run_test_suite.SUCCESS_RATE_THRESHOLD == pytest.approx(0.95)
     assert exit_code == 1
     assert "below the required threshold" in caplog.text
 
@@ -102,34 +98,16 @@ def test_main__passes_when_success_rate_meets_threshold(
         plugin: run_test_suite.JsonReportPlugin = plugins[0]
         log_path = str(plugin._log_path)
         plugin._results = {
-            "tests::pass": run_test_suite.TestResult(
-                name="tests::pass",
-                status="passed",
-                duration=0.1,
-                message="",
-                log_path=log_path,
-            ),
-            "tests::also_pass": run_test_suite.TestResult(
-                name="tests::also_pass",
-                status="passed",
-                duration=0.1,
-                message="",
-                log_path=log_path,
-            ),
-            "tests::third_pass": run_test_suite.TestResult(
-                name="tests::third_pass",
-                status="passed",
-                duration=0.1,
-                message="",
-                log_path=log_path,
-            ),
-            "tests::fourth_pass": run_test_suite.TestResult(
-                name="tests::fourth_pass",
-                status="passed",
-                duration=0.1,
-                message="",
-                log_path=log_path,
-            ),
+            **{
+                f"tests::pass_{index}": run_test_suite.TestResult(
+                    name=f"tests::pass_{index}",
+                    status="passed",
+                    duration=0.1,
+                    message="",
+                    log_path=log_path,
+                )
+                for index in range(19)
+            },
             "tests::skip": run_test_suite.TestResult(
                 name="tests::skip",
                 status="skipped",
