@@ -1659,6 +1659,8 @@ def load_config(
             raise ConfigError(message) from exc
         raise
 
+    from .common.rate_limiter import configure_limiter_cache
+
     if not cfg.io.exist_ok:
         for p in (cfg.io.output_dir, cfg.io.cache_dir):
             if not p.exists():
