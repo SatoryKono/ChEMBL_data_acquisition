@@ -1871,7 +1871,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         return 1
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
-    output = Path(args.output_csv or io.default_output_path(args.input_csv, cfg.io))
+    output_path = Path(
+        args.output_csv or io.default_output_path(args.input_csv, cfg.io)
+    )
+    output = output_path
     if "doi" in doc_df.columns:
         doc_df["doi"] = doc_df["doi"].map(normalise_doi)
     if doc_df.empty or "pubmed_id" not in doc_df:
