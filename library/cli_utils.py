@@ -19,6 +19,7 @@ from typing import Protocol, TypeVar, overload
 
 import shlex
 
+import numpy as np
 import pandas as pd
 from pandera.errors import SchemaErrors
 
@@ -222,6 +223,7 @@ def run_pipeline(
     stats_extra: (
         Mapping[str, object] | Callable[[], Mapping[str, object]] | None
     ) = None,
+    strict_mode: bool = False,
     logger: Logger | None = None,
     stats_callback: Callable[[Stats], None] | None = None,
 ) -> int:
@@ -279,6 +281,9 @@ def run_pipeline(
         Optional callable invoked with the final ``stats`` mapping prior to
         metadata serialisation. Use this to capture summary statistics for
         external reporting without mutating the persisted metadata.
+    strict_mode:
+        When ``True``, metadata hook failures abort processing instead of
+        logging a warning and continuing.
 
     Returns
     -------
@@ -331,15 +336,22 @@ def run_pipeline(
     validators = list(validators or [])
 
     if schema is not None:
+        schema_columns_dict = getattr(schema, "columns", {})
         required_cols = {
             name
-            for name, column in getattr(schema, "columns", {}).items()
+            for name, column in schema_columns_dict.items()
             if column.required
         }
-        optional_cols = set(getattr(schema, "columns", {})) - required_cols
+        optional_cols = set(schema_columns_dict) - required_cols
+        schema_column_dtypes: dict[str, object | None] = {
+            name: getattr(column, "dtype", None)
+            for name, column in schema_columns_dict.items()
+        }
     else:
         required_cols = set()
         optional_cols = set()
+        schema_columns_dict = {}
+        schema_column_dtypes = {}
 
     errors = SidecarErrors()
     rows_total = 0
@@ -369,10 +381,15 @@ def run_pipeline(
             self.code = code
 
     schema_columns: list[str] | None
+    optional_column_order: list[str]
     if schema is not None:
-        schema_columns = list(getattr(schema, "columns", {}))
+        schema_columns = list(schema_columns_dict)
+        optional_column_order = [
+            column for column in schema_columns if column in optional_cols
+        ]
     else:
         schema_columns = None
+        optional_column_order = []
 
     col_order: list[str] = list(schema_columns or [])
     resolved_keys: list[str] = []
@@ -381,6 +398,9 @@ def run_pipeline(
         chunk_columns = set(frame.columns)
         present_columns.update(chunk_columns)
         all_columns.update(chunk_columns)
+
+        if optional_column_order:
+            all_columns.update(optional_column_order)
 
         if schema_columns is not None:
             head = [column for column in schema_columns if column in all_columns]
@@ -483,10 +503,13 @@ def run_pipeline(
                     raise _AbortPipeline(exit_code)
 
                 chunks_emitted = True
+                source_columns = list(validated_chunk.columns)
                 if col_order:
-                    yield validated_chunk.reindex(columns=col_order)
+                    emitted_chunk = validated_chunk.reindex(columns=col_order)
                 else:
-                    yield validated_chunk
+                    emitted_chunk = validated_chunk
+                emitted_chunk.attrs["_source_columns"] = source_columns
+                yield emitted_chunk
         except _AbortPipeline:
             aborted = True
             raise
@@ -519,7 +542,75 @@ def run_pipeline(
                         if strict_mode:
                             raise _AbortPipeline(1) from exc
                 _refresh_column_tracking(empty)
-                yield empty.reindex(columns=col_order) if col_order else empty
+                emitted_empty = empty.reindex(columns=col_order) if col_order else empty
+                emitted_empty.attrs["_source_columns"] = list(empty.columns)
+                yield emitted_empty
+
+    optional_cols_added: set[str] = set()
+
+    def _resolve_dtype(dtype: object | None) -> object | None:
+        if dtype is None:
+            return None
+        dtype_type = getattr(dtype, "type", None)
+        if dtype_type is not None:
+            try:
+                return np.dtype(dtype_type)
+            except (TypeError, ValueError):
+                pass
+        python_type = getattr(dtype, "python_type", None)
+        if isinstance(python_type, type):
+            return python_type
+        if isinstance(dtype, type) or isinstance(dtype, str):
+            return dtype
+        return dtype
+
+    def _prepare_chunk(frame: pd.DataFrame) -> pd.DataFrame:
+        nonlocal optional_cols_added
+
+        prepared = frame
+        original_columns = list(frame.attrs.get("_source_columns", frame.columns))
+        original_set = set(original_columns)
+        if optional_column_order:
+            missing = [
+                column
+                for column in optional_column_order
+                if column not in original_set
+            ]
+            if missing:
+                optional_cols_added.update(missing)
+                existing = list(prepared.columns)
+                missing_new = [
+                    column for column in missing if column not in prepared.columns
+                ]
+                if missing_new:
+                    prepared = prepared.reindex(
+                        columns=existing + missing_new, fill_value=""
+                    )
+                    existing = list(prepared.columns)
+                fill_columns = [
+                    column for column in missing if column in prepared.columns
+                ]
+                if fill_columns:
+                    fills = {
+                        column: prepared[column].fillna("") for column in fill_columns
+                    }
+                    prepared = prepared.assign(**fills)
+
+        if schema_column_dtypes:
+            conversions: dict[str, object] = {}
+            for column, dtype in schema_column_dtypes.items():
+                if column not in prepared.columns:
+                    continue
+                resolved_dtype = _resolve_dtype(dtype)
+                if resolved_dtype is None:
+                    continue
+                conversions[column] = resolved_dtype
+            if conversions:
+                prepared = prepared.astype(conversions)
+
+        prepared.attrs["_source_columns"] = original_columns
+
+        return prepared
 
     chunk_iterator = _validated_chunks()
 
@@ -547,10 +638,14 @@ def run_pipeline(
             Path(f"{failure_path}.meta.yaml").unlink(missing_ok=True)
         return 1
 
+    if first_chunk is not None:
+        first_chunk = _prepare_chunk(first_chunk)
+
     def _iter_chunks() -> Iterator[pd.DataFrame]:
         if first_chunk is not None:
             yield first_chunk
-        yield from chunk_iterator
+        for chunk in chunk_iterator:
+            yield _prepare_chunk(chunk)
 
     csv_path: Path | None = None
     try:
@@ -583,6 +678,9 @@ def run_pipeline(
             path=str(output_path),
         )
         return 1
+
+    if optional_column_order:
+        present_columns.update(optional_cols_added)
 
     if total_failures:
         errors.save(failure_path, cfg=cfg)
