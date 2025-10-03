@@ -1,0 +1,3 @@
+document_chembl_id,title,pubmed_id,has_pubmed
+CHEMBL123,Doc A,123,True
+CHEMBL456,Doc B,,False

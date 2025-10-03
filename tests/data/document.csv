@@ -1,0 +1,4 @@
+document_chembl_id,title,pubmed_id
+CHEMBL123," Doc A ",123
+CHEMBL123,"Doc A duplicate",123
+CHEMBL456,"Doc B",""
