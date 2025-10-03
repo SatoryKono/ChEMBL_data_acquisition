@@ -1,0 +1,22 @@
+{
+  "unit": {
+    "command": "pytest tests/unit --durations=0",
+    "summary": "33 failed, 216 passed in 101.85s",
+    "chunk_id": "fd85b4"
+  },
+  "integration": {
+    "command": "pytest tests/integration --durations=0 --maxfail=1",
+    "summary": "55 failed, 244 passed in 89.50s",
+    "chunk_id": "800b87"
+  },
+  "smoke": {
+    "command": "pytest tests/smoke --durations=0 --maxfail=1",
+    "summary": "1 failed, 12 passed in 1.83s",
+    "chunk_id": "5660a3"
+  },
+  "full": {
+    "command": "pytest --maxfail=1",
+    "summary": "1 failed, 27 passed in 3.23s",
+    "chunk_id": "b220cc"
+  }
+}

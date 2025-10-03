@@ -19,7 +19,20 @@ def disable_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
     import requests
 
-    def deny(*args: object, **kwargs: object) -> None:
+    original_request = requests.sessions.Session.request
+
+    def deny(self, method, url, *args, **kwargs):  # type: ignore[override]
+        try:
+            import responses  # type: ignore[import-not-found]
+        except ModuleNotFoundError:  # pragma: no cover - optional dependency
+            responses_active = False
+        else:
+            mock = getattr(responses, "_default_mock", None)
+            responses_active = bool(getattr(mock, "_is_mocked", False))
+
+        if responses_active:
+            return original_request(self, method, url, *args, **kwargs)
+
         raise AssertionError("External network access is disabled during tests")
 
     monkeypatch.setattr(requests.sessions.Session, "request", deny)
