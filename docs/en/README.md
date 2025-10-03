@@ -1,76 +1,58 @@
 # ChEMBL Data Acquisition Toolkit
 
-This guide gives a project-wide overview of the utilities that download,
-normalise, and export ChEMBL-derived datasets. Use it as the canonical landing
-page for engineers and analysts before diving into the detailed manuals.
+Данный документ предоставляет обзор утилит для загрузки, нормализации и экспорта данных, полученных из ChEMBL. Используйте его как основную точку входа для инженеров и аналитиков перед изучением подробных руководств.
 
-## Highlights
+## Основные возможности
 
-- **Entity pipelines** for documents, targets, assays, activities, and test
-  items. Each pipeline streams identifiers from CSV, calls external APIs, runs
-  deterministic validation, and writes audited exports.
-- **Orchestrator** (`get-data`) that chains all entity pipelines with shared
-  configuration and consistent logging.
-- **Unified CLI layer** with shared options (`--input`, `--final-out`,
-  `--log-level`, `--config`, etc.), optional raw snapshots
-  (`--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`) for the target
-  pipeline, and console entry points declared in `pyproject.toml`.
-- **Configuration triad** – values come from `config/config.yaml`,
-  environment variables (prefixed with `CHEMBL_DA__`) and command line flags.
-  Optional `.env` files can be sourced with `python-dotenv` during local runs.
-- **Deterministic outputs** – CSV writers fix row/column ordering, attach YAML
-  sidecars with provenance, compute SHA-256 hashes, and emit table-quality
-  reports for every run.
-- **Developer tooling** – strict typing (`mypy`), linting (`ruff`), formatting
-  (`black`), testing (`pytest`), coverage, and determinism checks in CI.
+- **Конвейеры сущностей** для документов, таргетов, ассайев, активностей и тестовых объектов. Каждый конвейер обрабатывает идентификаторы из CSV, обращается к внешним API, выполняет детерминированную валидацию и формирует аудируемые экспорты.
+- **Оркестратор** (`get-data`), объединяющий все конвейеры с общей конфигурацией и логированием.
+- **Унифицированный CLI-слой** с общими опциями (`--input`, `--final-out`, `--log-level`, `--config` и др.), поддержкой сырых снимков (`--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`) для таргет-конвейера и точками входа, объявленными в `pyproject.toml`.
+- **Триада конфигурации** — значения берутся из `config/config.yaml`, переменных окружения (с префиксом `CHEMBL_DA__`) и флагов командной строки. Локально можно использовать `.env` с помощью `python-dotenv`.
+- **Детерминированные выходные данные** — CSV-файлы с фиксированным порядком строк и столбцов, YAML-сайдкары с метаданными, SHA-256-хэши и отчёты о качестве таблиц для каждого запуска.
+- **Инструменты для разработчиков** — строгая типизация (`mypy`), линтинг (`ruff`), форматирование (`black`), тестирование (`pytest`), покрытие и проверки детерминизма в CI.
 
-## Repository layout
+## Структура репозитория
 
-| Path | Purpose |
-|------|---------|
-| `scripts/` | CLI wrappers for each entity pipeline and the `get-data` orchestrator. |
-| `library/` | Core modules: HTTP clients, pipeline orchestration, normalisation, validation, post-processing, IO, and metadata helpers. |
-| `library/cli/commands/` | Console-script entry points used by installed wheels. |
-| `library/utils/cli_tools/` | Lightweight utilities (table profiling, cached target harness, CSV helpers, mapping tools). |
-| `config/` | Default YAML configuration, schema definition, and bundled dictionaries. |
-| `dictionary/` | Reference datasets used by the pipelines (UniProt caches, target taxonomies, QA fixtures). |
-| `data/` | Smoke-test inputs and sample exports. |
-| `docs/` | Project documentation (English `_EN.md` and Russian `_RU.md` variants). |
-| `tests/` | Unit and integration tests covering pipelines and CLI helpers. |
-| `Makefile` | Convenience targets for formatting, tests, packaging, and linting. |
+| Путь | Назначение |
+|------|------------|
+| `scripts/` | CLI-обёртки для каждого конвейера и оркестратора `get-data`. |
+| `library/` | Основные модули: HTTP-клиенты, оркестрация, нормализация, валидация, постобработка, IO и вспомогательные функции. |
+| `library/cli/commands/` | Точки входа для консольных скриптов, используемых в собранных пакетах. |
+| `library/utils/cli_tools/` | Лёгкие утилиты (профилирование таблиц, кэширование таргетов, CSV-хелперы, инструменты сопоставления). |
+| `config/` | YAML-конфигурация по умолчанию, схемы и встроенные словари. |
+| `dictionary/` | Справочные датасеты для конвейеров (UniProt-кэши, таксономии таргетов, QA-фикстуры). |
+| `data/` | Входные данные для smoke-тестов и примеры экспортов. |
+| `docs/` | Документация проекта (английские `_EN.md` и русские `_RU.md` варианты). |
+| `tests/` | Юнит- и интеграционные тесты для конвейеров и CLI-хелперов. |
+| `Makefile` | Удобные цели для форматирования, тестов, сборки и линтинга. |
 
-## Supported entry points
+## Поддерживаемые точки входа
 
-Install the project (`pip install .` or `pip install dist/*.whl`) to register the
-following console scripts. They correspond to the modules inside
-`scripts/`, `library/cli/commands/`, or `library/utils/cli_tools/` and accept the
-same arguments as their `python -m …` equivalents.
+Установите проект (`pip install .` или `pip install dist/*.whl`), чтобы зарегистрировать следующие консольные скрипты. Они соответствуют модулям в `scripts/`, `library/cli/commands/` или `library/utils/cli_tools/` и принимают те же аргументы, что и их аналоги `python -m ...`.
 
-| Console script | Module | Description |
-|----------------|--------|-------------|
-| `get-data` | `scripts.get_data:main` | Run all pipelines sequentially with shared configuration. |
-| `get-document-data` | `library.cli.commands.get_document_data:main` | Acquire and enrich ChEMBL documents. |
-| `get-target-data` | `library.cli.commands.get_target_data:main` | Aggregate ChEMBL, UniProt, and IUPHAR targets. |
-| `get-assay-data` | `library.cli.commands.get_assay_data:main` | Export assay metadata. |
-| `get-activity-data` | `library.cli.commands.get_activity_data:main` | Export normalised activity records. |
-| `get-testitem-data` | `library.cli.commands.get_testitem_data:main` | Enrich molecule records with PubChem details. |
-| `get-document-type` | `library.utils.cli_tools.get_document_type:main` | Classify publication types for QA tasks. |
-| `csv-utils` | `library.utils.cli_tools.csv_utils_main:main` | Deterministic CSV re-serialisation helpers. |
-| `mapper` | `library.utils.cli_tools.mapper_main:main` | Interactive UniProt/ChEMBL mapper. |
-| `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Generate column-level quality profiles. |
-| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Stream CSV chunks while keeping ordering stable. |
-| `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Merge Excel initialisation workbooks. |
-| `get-activities` | `library.utils.cli_tools.get_activities:main` | Emit synthetic activity rows for smoke tests. |
-| `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |
+| Консольный скрипт | Модуль | Описание |
+|-------------------|--------|----------|
+| `get-data` | `scripts.get_data:main` | Запуск всех конвейеров последовательно с общей конфигурацией. |
+| `get-document-data` | `library.cli.commands.get_document_data:main` | Получение и обогащение документов ChEMBL. |
+| `get-target-data` | `library.cli.commands.get_target_data:main` | Агрегация таргетов ChEMBL, UniProt и IUPHAR. |
+| `get-assay-data` | `library.cli.commands.get_assay_data:main` | Экспорт метаданных ассайев. |
+| `get-activity-data` | `library.cli.commands.get_activity_data:main` | Экспорт нормализованных записей активностей. |
+| `get-testitem-data` | `library.cli.commands.get_testitem_data:main` | Обогащение молекул деталями из PubChem. |
+| `get-document-type` | `library.utils.cli_tools.get_document_type:main` | Классификация типов публикаций для QA-задач. |
+| `csv-utils` | `library.utils.cli_tools.csv_utils_main:main` | Детерминированные утилиты для работы с CSV. |
+| `mapper` | `library.utils.cli_tools.mapper_main:main` | Интерактивный сопоставитель UniProt/ChEMBL. |
+| `table-quality` | `library.utils.cli_tools.table_quality_main:main` | Генерация профилей качества по столбцам. |
+| `chunk-io` | `library.utils.cli_tools.chunk_io_main:main` | Потоковая обработка CSV с сохранением порядка. |
+| `get-input-initialisation` | `library.utils.cli_tools.get_input_initialisation:main` | Объединение Excel-файлов инициализации. |
+| `get-activities` | `library.utils.cli_tools.get_activities:main` | Генерация синтетических строк активностей для smoke-тестов. |
+| `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Сравнение хэшей CSV между запусками. |
 
-The dedicated reference [`docs/USAGE_EN.md`](./USAGE_EN.md) (and
-[`docs/USAGE_RU.md`](./USAGE_RU.md)) covers arguments, sub-commands, and advanced
-usage scenarios in depth.
+Подробное описание аргументов, подкоманд и расширенных сценариев использования смотрите в [`docs/USAGE_EN.md`](./USAGE_EN.md) и [`docs/USAGE_RU.md`](./USAGE_RU.md).
 
-## Requirements and installation
+## Требования и установка
 
-| Component | Supported range | Latest tested |
-|-----------|-----------------|---------------|
+| Компонент | Поддерживаемая версия | Последняя протестированная |
+|-----------|----------------------|---------------------------|
 | Python | 3.11.x | 3.11.12 |
 | numpy | >=2.3.3,<3.0 | 2.3.3 |
 | pandas | >=2.3.3,<3.0 | 2.3.3 |
@@ -82,84 +64,4 @@ usage scenarios in depth.
 | pandera | >=0.26.1,<0.27 | 0.26.1 |
 | pydantic | >=2.11.9,<3.0 | 2.11.9 |
 
-Pinned dependencies live in `requirements-lock.txt`. Regenerate the file only
-after editing `pyproject.toml` ranges, using a clean virtual environment and
-`pip freeze`.
-
-```bash
-python -m pip install --upgrade pip setuptools wheel
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-git clone https://github.com/SatoryKono/ChEMBL_data_acquisition.git
-cd ChEMBL_data_acquisition
-pip install -r requirements-lock.txt
-pre-commit install
-```
-
-Wheel users can install with `pip install chembl-data-acquisition` once a release
-is published; console scripts and the packaged configuration are placed in the
-platform-specific user directories listed in [`docs/CONFIG_EN.md`](./CONFIG_EN.md).
-
-## Quick start
-
-1. **Prepare identifier lists.** Use the templates in `data/input` (for
-   example `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
-   `testitem.csv`) or export fresh ID lists from your warehouse. A richer
-   showcase lives in `data/input/full`. Each pipeline expects one identifier per
-   row; see [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md) for column names and
-   required headers.
-2. **Review configuration.** Copy `config/config.yaml` if you need to override
-   API limits, output directories, or staging flags. Environment variable
-   overrides follow the `CHEMBL_DA__SECTION__KEY` pattern. Details live in
-   [`docs/CONFIG_EN.md`](./CONFIG_EN.md).
-3. **Run a pipeline.**
-
-   ```bash
-   get-document-data all \
-       --input data/input/document.csv \
-       --final-out output.documents_$(date +%Y%m%d).csv \
-       --config config/config.yaml \
-       --log-level INFO
-   ```
-
-   Add `--limit 10` for smoke tests. The target pipeline exposes staging
-   switches such as `--raw-out` and `--raw-format parquet` for raw snapshots.
-4. **Inspect artefacts.** Every CSV is accompanied by `<name>.meta.yaml`,
-   quality reports, and (for documents) JSON summaries. See
-   [`docs/OUTPUT_EN.md`](./OUTPUT_EN.md) for formats and retention guidance.
-
-## Testing and quality gates
-
-Run the following commands before committing changes or publishing artefacts:
-
-```bash
-pre-commit run --all-files
-pip check
-pytest
-pytest --cov=library --cov=scripts --cov-report=term-missing
-check-determinism --log-level DEBUG
-```
-
-The QA playbook (`docs/QA_PROCESS_EN.md` / `docs/QA_PROCESS_RU.md`) documents
-release gates, smoke checks, and acceptance criteria. Determinism checks rely on
-YAML sidecars, so keep them under version control when comparing runs.
-
-## Related documentation
-
-- [`docs/USAGE_EN.md`](./USAGE_EN.md) / [`docs/USAGE_RU.md`](./USAGE_RU.md) – CLI
-  options, sub-commands, and execution recipes.
-- [`docs/CONFIG_EN.md`](./CONFIG_EN.md) / [`docs/CONFIG_RU.md`](./CONFIG_RU.md) –
-  configuration sources, environment variables, and staged output locations.
-- [`docs/OUTPUT_EN.md`](./OUTPUT_EN.md) / [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md) –
-  artefact layout, metadata sidecars, and raw snapshot handling.
-- [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md) /
-  [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md) – column definitions and
-  validation schemas.
-- [`docs/ETL_PROCESS_EN.md`](./ETL_PROCESS_EN.md) /
-  [`docs/ETL_PROCESS_RU.md`](./ETL_PROCESS_RU.md) – end-to-end data flow.
-- [`docs/CLI_TOOLS_EN.md`](./CLI_TOOLS_EN.md) /
-  [`docs/CLI_TOOLS_RU.md`](./CLI_TOOLS_RU.md) – helper utilities for QA and
-  diagnostics.
-
-For architecture diagrams consult [`docs/ARCHITECTURE_EN.md`](./ARCHITECTURE_EN.md)
-and its Russian counterpart (`docs/ARCHITECTURE_RU.md`).
+Фиксированные зависимости указаны в `requirements-lock.txt`. Перегенерируйте этот файл только после изменения диапазонов в `pyproject.toml`, используя чистое виртуальное окружение и `pip freeze`.

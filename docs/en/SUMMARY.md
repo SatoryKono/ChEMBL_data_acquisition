@@ -68,7 +68,11 @@ add_pipeline_metadata → write_csv_deterministic →
 * Overrides follow the precedence `config/config.yaml` < environment variables < CLI
   arguments. Short aliases such as `CHEMBL_DA_RPS` (`sources.chembl.api.rps`)
   and `CHEMBL_DA_OUTDIR` (`local.io.output_dir`) are exposed for convenience.
+<<<<<<< HEAD
+  The full matrix is documented in `docs/en/devel/CONFIG.md`.
+=======
   The full matrix is documented in `docs/CONFIG_EN.md`.
+>>>>>>> origin/refactor-docs-and-file-structure
 
 ## External services
 
@@ -88,7 +92,11 @@ add_pipeline_metadata → write_csv_deterministic →
 1. Create and activate a Python ≥3.11 virtual environment.
 2. Install dependencies from the lock file: `pip install -r requirements-lock.txt`.
 3. Enable the quality gate: `pre-commit install`.
+<<<<<<< HEAD
+4. Recommended ad-hoc checks (see Quality Assurance Process — [English](../qa/QA_PROCESS.md) / [Русский](../../ru/qa/QA_PROCESS.md) — for the living checklist):
+=======
 4. Recommended ad-hoc checks (see Quality Assurance Process — [English](./QA_PROCESS_EN.md) / [Русский](./QA_PROCESS_RU.md) — for the living checklist):
+>>>>>>> origin/refactor-docs-and-file-structure
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -108,8 +116,13 @@ mirrored in `requirements-lock.txt` for reproducible environments.
 * Deterministic logging uses JSON lines with `run_id`, `event`, `stage` and
   per-pipeline counters, allowing easy monitoring with `jq` or log collectors.
 
+<<<<<<< HEAD
+Detailed command walkthroughs live in `docs/en/user/USAGE.md` and
+`docs/ru/user/USAGE.md`.
+=======
 Detailed command walkthroughs live in `docs/USAGE_EN.md` and
 `docs/USAGE_RU.md`.
+>>>>>>> origin/refactor-docs-and-file-structure
 
 ## Outputs
 
@@ -121,7 +134,11 @@ Detailed command walkthroughs live in `docs/USAGE_EN.md` and
 * Pipeline-specific extras include document quality JSON files and intermediate
   target exports for the `all` workflow.
 
+<<<<<<< HEAD
+Refer to `docs/en/user/OUTPUT.md` / `docs/ru/user/OUTPUT.md` for field-level details and
+=======
 Refer to `docs/OUTPUT_EN.md` / `docs/OUTPUT_RU.md` for field-level details and
+>>>>>>> origin/refactor-docs-and-file-structure
 examples.
 
 ## Testing and determinism

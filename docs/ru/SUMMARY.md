@@ -47,7 +47,7 @@ add_pipeline_metadata → write_csv_deterministic →
 * Детерминированная запись CSV, sidecar-метаданные и отчёты качества обеспечены
   функциями `write_csv_deterministic`, `write_meta_yaml`,
   `add_pipeline_metadata` и `analyze_table_quality`.
-  
+
 
 ## Конфигурация
 
@@ -59,7 +59,7 @@ add_pipeline_metadata → write_csv_deterministic →
     для ChEMBL, UniProt, IUPHAR, PubMed, Semantic Scholar, OpenAlex, CrossRef и
     PubChem.
   * `local.*` — структура каталогов, параметры CSV и входные рабочие книги.
-    
+
   * `activity_enrichment` / `activity_bounds` — параметры обогащения и расчёта
     границ значений в пайплайне активностей.
   * `testitem_molecule_enrichment` — опциональная логика для солей и флагов
@@ -68,7 +68,7 @@ add_pipeline_metadata → write_csv_deterministic →
     публикаций.
 * Приоритет переопределений: `config/config.yaml` < переменные окружения < аргументы
   CLI. Доступны короткие алиасы (например, `CHEMBL_DA_RPS` и `CHEMBL_DA_OUTDIR`).
-  Полный список приведён в `docs/CONFIG_RU.md`.
+  Полный список приведён в `docs/ru/devel/CONFIG.md`.
 
 ## Внешние сервисы
 
@@ -78,18 +78,18 @@ add_pipeline_metadata → write_csv_deterministic →
 * **PubMed, Semantic Scholar, OpenAlex, CrossRef** — источники библиографических
   данных и DOI для документов.
 * **UniProt** — аннотации белков и ID mapping для таргет-пайплайна.
-  
+
 * **IUPHAR** — классификации рецепторов из локальных CSV-словарей.
-  
+
 * **PubChem** — идентификаторы и свойства для обогащения тест-объектов.
-  
+
 
 ## Установка и инструменты
 
 1. Создайте и активируйте виртуальное окружение Python ≥ 3.11.
 2. Установите зависимости из lock-файла: `pip install -r requirements-lock.txt`.
 3. Включите контроль качества: `pre-commit install`.
-4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](./QA_PROCESS_EN.md) / [Русский](./QA_PROCESS_RU.md)):
+4. Рекомендуемые проверки (см. живой список в QA_PROCESS — [English](../../en/qa/QA_PROCESS.md) / [Русский](../qa/QA_PROCESS.md)):
    * `pre-commit run --all-files`
    * `pytest` / `pytest --cov=library --cov=scripts`
    * `ruff check`, `black --check .`, `mypy`
@@ -107,8 +107,8 @@ add_pipeline_metadata → write_csv_deterministic →
 * Логи в формате JSON содержат `run_id`, `event`, `stage` и счётчики по стадиям,
   что упрощает фильтрацию через `jq` и системы сбора логов.
 
-Детальное руководство по запуску приведено в `docs/USAGE_EN.md` и
-`docs/USAGE_RU.md`.
+Детальное руководство по запуску приведено в `docs/en/user/USAGE.md` и
+`docs/ru/user/USAGE.md`.
 
 ## Результаты выгрузки
 
@@ -116,17 +116,17 @@ add_pipeline_metadata → write_csv_deterministic →
 * Каждый запуск формирует `<name>.csv.meta.yaml` с конфигурацией, командой,
   статистикой строк и SHA-256 хэшем; ошибки валидации попадают в
   `<name>_failure_cases.csv`, а отчёты качества строятся автоматически.
-  
+
 * Для документов дополнительно создаётся JSON с качеством, а таргет-пайплайн в
   режиме `all` пишет промежуточные файлы по каждому источнику.
 
-Подробнее см. `docs/OUTPUT_EN.md` и `docs/OUTPUT_RU.md`.
+Подробнее см. `docs/en/user/OUTPUT.md` и `docs/ru/user/OUTPUT.md`.
 
 ## Тестирование и детерминизм
 
 * Детерминированная запись CSV и контроль хэшей проверяются юнит-тестами и
   утилитами вроде `library.utils.cli_tools.check_determinism`.
-  
+
 * В `tests/data/` хранится набор компактных CSV для smoke-проверок активностей,
   таргетов, документов и тест-объектов.
 * Утилита `python -m library.utils.cli_tools.table_quality_main` помогает

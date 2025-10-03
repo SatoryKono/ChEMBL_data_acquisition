@@ -36,7 +36,7 @@
 | `config/` | Базовый YAML-конфиг, схема и встроенные словари. |
 | `dictionary/` | Справочные наборы данных (кеши UniProt, классификаторы, QA-файксы). |
 | `data/` | Примеры входов и тестовые выгрузки. |
-| `docs/` | Документация проекта (варианты на английском и русском языках). |
+| `docs/` | Документация проекта (варианты `_EN.md` и `_RU.md`). |
 | `tests/` | Юнит- и интеграционные тесты пайплайнов и утилит. |
 | `Makefile` | Сценарии для форматирования, тестов, сборки и публикации. |
 
@@ -64,8 +64,8 @@
 | `get-activities` | `library.utils.cli_tools.get_activities:main` | Генерирует синтетические активности для смоук-тестов. |
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Сравнивает хэши CSV между запусками. |
 
-Подробные сценарии приведены в [`docs/ru/user/USAGE.md`](./USAGE.md) и английской
-версии [`docs/en/user/USAGE.md`](../../en/user/USAGE.md).
+Подробные сценарии приведены в [`docs/USAGE_RU.md`](./USAGE_RU.md) и английской
+версии [`docs/USAGE_EN.md`](./USAGE_EN.md).
 
 ## Требования и установка
 
@@ -97,23 +97,25 @@ pre-commit install
 ```
 
 При установке из wheel конфигурация копируется в пользовательские каталоги,
-перечисленные в [`docs/ru/devel/CONFIG.md`](../devel/CONFIG.md); консольные команды
+перечисленные в [`docs/CONFIG_RU.md`](./CONFIG_RU.md); консольные команды
 регистрируются автоматически.
 
 ## Быстрый старт
 
 1. **Подготовьте списки идентификаторов.** Используйте шаблоны из `data/input`
-   или выгрузите свежие списки из своей системы. Пайплайны ожидают по одному ID
-   в строке; имена колонок перечислены в [`docs/ru/devel/DATA_SCHEMA.md`](../devel/DATA_SCHEMA.md).
+   (например, `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
+   `testitem.csv`) или выгрузите свежие списки из своей системы. Расширенный
+   набор примеров лежит в `data/input/full`. Пайплайны ожидают по одному ID в
+   строке; имена колонок перечислены в [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md).
 2. **Проверьте конфигурацию.** Скопируйте `config/config.yaml`, если нужно
    переопределить лимиты API, каталоги вывода или стадийные флаги. Паттерн
    переменных окружения — `CHEMBL_DA__РАЗДЕЛ__КЛЮЧ`. Полное описание — в
-   [`docs/ru/devel/CONFIG.md`](../devel/CONFIG.md).
+   [`docs/CONFIG_RU.md`](./CONFIG_RU.md).
 3. **Запустите пайплайн.**
 
    ```bash
    get-document-data all \
-       --input data/input/document_ids.csv \
+       --input data/input/document.csv \
        --final-out output.documents_$(date +%Y%m%d).csv \
        --config config/config.yaml \
        --log-level INFO
@@ -122,7 +124,7 @@ pre-commit install
    Для смоук-теста добавьте `--limit 10`. Таргет-пайплайн поддерживает
    стадийные опции `--raw-out` и `--raw-format parquet` для «сырых» снимков.
 4. **Изучите артефакты.** Рядом с CSV появится `<имя>.meta.yaml`, отчёты качества
-   и (для документов) JSON-резюме. Форматы описаны в [`docs/ru/user/OUTPUT.md`](./OUTPUT.md).
+   и (для документов) JSON-резюме. Форматы описаны в [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md).
 
 ## Тестирование и контроль качества
 
@@ -133,30 +135,29 @@ pre-commit run --all-files
 pip check
 pytest
 pytest --cov=library --cov=scripts --cov-report=term-missing
-python -m library.utils.cli_tools.check_determinism --log-level DEBUG \
-    --input out/latest.csv --previous out/previous.csv
+check-determinism --log-level DEBUG
 ```
 
-QA-плейбук (`docs/ru/qa/QA_PROCESS.md` / `docs/en/qa/QA_PROCESS.md`) описывает ворота
+QA-плейбук (`docs/QA_PROCESS_RU.md` / `docs/QA_PROCESS_EN.md`) описывает ворота
 качества, смоук-проверки и критерии приёмки. Проверки детерминизма полагаются на
 YAML-метаданные, поэтому держите их в Git для удобного сравнения запусков.
 
 ## Дополнительные материалы
 
-- [`docs/ru/user/USAGE.md`](./USAGE.md) / [`docs/en/user/USAGE.md`](../../en/user/USAGE.md) —
+- [`docs/USAGE_RU.md`](./USAGE_RU.md) / [`docs/USAGE_EN.md`](./USAGE_EN.md) —
   флаги CLI, подкоманды и типовые сценарии.
-- [`docs/ru/devel/CONFIG.md`](../devel/CONFIG.md) / [`docs/en/devel/CONFIG.md`](../../en/devel/CONFIG.md) —
+- [`docs/CONFIG_RU.md`](./CONFIG_RU.md) / [`docs/CONFIG_EN.md`](./CONFIG_EN.md) —
   источники конфигурации и пути вывода.
-- [`docs/ru/user/OUTPUT.md`](./OUTPUT.md) / [`docs/en/user/OUTPUT.md`](../../en/user/OUTPUT.md) —
+- [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md) / [`docs/OUTPUT_EN.md`](./OUTPUT_EN.md) —
   структура артефактов и работа с «сырыми» снимками.
-- [`docs/ru/devel/DATA_SCHEMA.md`](../devel/DATA_SCHEMA.md) /
-  [`docs/en/devel/DATA_SCHEMA.md`](../../en/devel/DATA_SCHEMA.md) — описание колонок и схем
+- [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md) /
+  [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md) — описание колонок и схем
   валидации.
-- [`docs/ru/qa/ETL_PROCESS.md`](../qa/ETL_PROCESS.md) /
-  [`docs/en/qa/ETL_PROCESS.md`](../../en/qa/ETL_PROCESS.md) — поток данных end-to-end.
-- [`docs/ru/devel/CLI_TOOLS.md`](../devel/CLI_TOOLS.md) /
-  [`docs/en/devel/CLI_TOOLS.md`](../../en/devel/CLI_TOOLS.md) — справочник по вспомогательным
+- [`docs/ETL_PROCESS_RU.md`](./ETL_PROCESS_RU.md) /
+  [`docs/ETL_PROCESS_EN.md`](./ETL_PROCESS_EN.md) — поток данных end-to-end.
+- [`docs/CLI_TOOLS_RU.md`](./CLI_TOOLS_RU.md) /
+  [`docs/CLI_TOOLS_EN.md`](./CLI_TOOLS_EN.md) — справочник по вспомогательным
   утилитам.
 
-Диаграммы архитектуры смотрите в [`docs/ru/devel/ARCHITECTURE.md`](../devel/ARCHITECTURE.md)
-и английской версии [`docs/en/devel/ARCHITECTURE.md`](../../en/devel/ARCHITECTURE.md).
+Диаграммы архитектуры смотрите в [`docs/ARCHITECTURE_RU.md`](./ARCHITECTURE_RU.md)
+и английской версии [`docs/ARCHITECTURE_EN.md`](./ARCHITECTURE_EN.md).
