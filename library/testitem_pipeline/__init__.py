@@ -13,10 +13,11 @@ from importlib.util import (
     spec_from_file_location,
     spec_from_loader,
 )
+from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterator
 
-import pathlib
+import importlib.machinery as machinery
 
 import requests
 
@@ -88,7 +89,7 @@ _PUBCHEM_EXPORTS = (
 
 
 def _load_local_module(module_name: str) -> ModuleType:
-    """Load a sibling module directly from disk as a fallback."""
+    """Load a sibling module from package resources as a fallback."""
 
     package_name = __name__
     qualified_name = f"{package_name}.{module_name}"
@@ -201,6 +202,37 @@ else:  # pragma: no cover - environment-specific fallback
 _export_from_module(catalog_module, _CATALOG_EXPORTS)
 
 
+def _load_local_module(module_name: str) -> ModuleType:
+    """Load a sibling module directly from disk as a fallback."""
+
+    package_name = __name__
+    qualified_name = f"{package_name}.{module_name}"
+    module_path = Path(__file__).with_name(f"{module_name}.py")
+    spec = spec_from_file_location(qualified_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(qualified_name)
+    module = module_from_spec(spec)
+    sys.modules[qualified_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _export_from_module(module: ModuleType, names: tuple[str, ...]) -> None:
+    """Populate the module globals with the selected attributes."""
+
+    for name in names:
+        globals()[name] = getattr(module, name)
+catalog_module_name = f"{__name__}.catalog"
+catalog_spec = find_spec(catalog_module_name)
+
+if catalog_spec is not None:
+    catalog_module = import_module(catalog_module_name)
+else:  # pragma: no cover - environment-specific fallback
+    catalog_module = _load_local_module("catalog")
+
+_export_from_module(catalog_module, _CATALOG_EXPORTS)
+
+
 class _LazyModuleProxy:
     """Lazily import *module_name* on first attribute access."""
 
@@ -240,7 +272,53 @@ from library.metadata import file_sha256, write_meta_yaml
 from library.table_quality import analyze_table_quality
 from library.validation import validate_testitems
 
-_EXTRA_EXPORTS = (
+_LAZY_EXPORTS: dict[str, str] = {
+    "ReadInputIdsResult": "library.testitem_pipeline.cli:ReadInputIdsResult",
+    "TestitemFetchError": "library.testitem_pipeline.cli:TestitemFetchError",
+    "TestitemPipelineOptions": "library.testitem_pipeline.cli:TestitemPipelineOptions",
+    "TestitemPipelineStageError": "library.testitem_pipeline.cli:TestitemPipelineStageError",
+    "_FETCH_ERROR_SAMPLE_SIZE": "library.testitem_pipeline.cli:_FETCH_ERROR_SAMPLE_SIZE",
+    "_log_missing_identifier_summary": "library.testitem_pipeline.cli:_log_missing_identifier_summary",
+    "_prepare_pubchem_api_cfg": "library.testitem_pipeline.cli:_prepare_pubchem_api_cfg",
+    "apply_testitem_enrichment": "library.testitem_pipeline.cli:apply_testitem_enrichment",
+    "fetch_testitems": "library.testitem_pipeline.cli:fetch_testitems",
+    "finalize_output": "library.testitem_pipeline.cli:finalize_output",
+    "integrate_missing_identifiers": "library.testitem_pipeline.cli:integrate_missing_identifiers",
+    "read_input_ids": "library.testitem_pipeline.cli:read_input_ids",
+    "run_testitem_pipeline": "library.testitem_pipeline.cli:run_testitem_pipeline",
+    "PUBCHEM_CID_CACHE_ENCODING": "library.testitem_pipeline.pubchem:PUBCHEM_CID_CACHE_ENCODING",
+    "PUBCHEM_COLUMNS": "library.testitem_pipeline.pubchem:PUBCHEM_COLUMNS",
+    "_CID_CACHE_MISSING": "library.testitem_pipeline.pubchem:_CID_CACHE_MISSING",
+    "_PUBCHEM_CACHE_SCHEMA_VERSION": "library.testitem_pipeline.pubchem:_PUBCHEM_CACHE_SCHEMA_VERSION",
+    "_PUBCHEM_SESSION_LOCK": "library.testitem_pipeline.pubchem:_PUBCHEM_SESSION_LOCK",
+    "_PUBCHEM_SESSION_SIGNATURE": "library.testitem_pipeline.pubchem:_PUBCHEM_SESSION_SIGNATURE",
+    "_load_pubchem_cid_cache": "library.testitem_pipeline.pubchem:_load_pubchem_cid_cache",
+    "_merge_pubchem_properties": "library.testitem_pipeline.pubchem:_merge_pubchem_properties",
+    "_prepare_pubchem_caches": "library.testitem_pipeline.pubchem:_prepare_pubchem_caches",
+    "_prefetch_parents": "library.testitem_pipeline.pubchem:_prefetch_parents",
+    "_pubchem_session_signature": "library.testitem_pipeline.pubchem:_pubchem_session_signature",
+    "_resolve_pubchem_cids": "library.testitem_pipeline.pubchem:_resolve_pubchem_cids",
+    "_write_pubchem_cid_cache": "library.testitem_pipeline.pubchem:_write_pubchem_cid_cache",
+    "add_pubchem_data": "library.testitem_pipeline.pubchem:add_pubchem_data",
+    "augment_pubchem": "library.testitem_pipeline.pubchem:augment_pubchem",
+    "resolve_pubchem_cid": "library.testitem_pipeline.pubchem:resolve_pubchem_cid",
+    "pl": "library.integration.pubchem_library",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Динамически импортировать CLI и PubChem-хелперы при первом обращении."""
+
+    if name in _LAZY_EXPORTS:
+        module_name, _, attribute = _LAZY_EXPORTS[name].partition(":")
+        module = import_module(module_name)
+        value = getattr(module, attribute) if attribute else module
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module '{__name__}' не имеет атрибута '{name}'")
+
+
+__all__ = [
     "ChemblClient",
     "analyze_table_quality",
     "file_sha256",
@@ -252,8 +330,9 @@ _EXTRA_EXPORTS = (
     "testitem_enrichment",
     "validate_testitems",
     "write_csv_deterministic",
+    "write_parent_catalog_cache",
     "write_meta_yaml",
-)
+]
 
 __all__ = _collect_exports(
     _CATALOG_EXPORTS,
