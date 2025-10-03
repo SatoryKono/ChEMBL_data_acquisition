@@ -72,37 +72,50 @@ def _ordered_results(
         for future in list(pending):
             future.cancel()
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        try:
-            for index, chunk_ids in enumerate(chunk_iter):
-                future = executor.submit(fetch_chunk, list(chunk_ids))
-                pending[future] = index
-                if len(pending) < workers:
-                    continue
-                done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
-                for finished in done:
-                    chunk_index = pending.pop(finished)
-                    try:
-                        completed[chunk_index] = finished.result()
-                    except PipelineError:
-                        _cancel_pending()
-                        raise
-                while next_index in completed:
-                    yield completed.pop(next_index)
-                    next_index += 1
+    executor = ThreadPoolExecutor(max_workers=workers)
+    shutdown_called = False
 
-            for future in as_completed(list(pending)):
-                chunk_index = pending.pop(future)
+    def _shutdown_executor(*, wait: bool, cancel_futures: bool) -> None:
+        nonlocal shutdown_called
+        if shutdown_called:
+            return
+        shutdown_called = True
+        executor.shutdown(wait=wait, cancel_futures=cancel_futures)
+
+    try:
+        for index, chunk_ids in enumerate(chunk_iter):
+            future = executor.submit(fetch_chunk, list(chunk_ids))
+            pending[future] = index
+            if len(pending) < workers:
+                continue
+            done, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+            for finished in done:
+                chunk_index = pending.pop(finished)
                 try:
-                    completed[chunk_index] = future.result()
-                except PipelineError:
+                    completed[chunk_index] = finished.result()
+                except BaseException:
+                    _shutdown_executor(wait=False, cancel_futures=True)
                     _cancel_pending()
                     raise
-                while next_index in completed:
-                    yield completed.pop(next_index)
-                    next_index += 1
-        finally:
-            pending.clear()
+            while next_index in completed:
+                yield completed.pop(next_index)
+                next_index += 1
+
+        for future in as_completed(list(pending)):
+            chunk_index = pending.pop(future)
+            try:
+                completed[chunk_index] = future.result()
+            except BaseException:
+                _shutdown_executor(wait=False, cancel_futures=True)
+                _cancel_pending()
+                raise
+            while next_index in completed:
+                yield completed.pop(next_index)
+                next_index += 1
+    finally:
+        pending.clear()
+        completed.clear()
+        _shutdown_executor(wait=True, cancel_futures=False)
 
 
 def prepare_chunked_pipeline(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import threading
 import time
 from collections.abc import Iterable
 from pathlib import Path
@@ -16,6 +17,7 @@ from library import io
 from library.common import rate_limiter as rl
 from library.config import Config
 from library.schemas import ActivitiesSchema
+from library.pipelines.common import helpers
 from scripts import get_activity_data as gad
 
 
@@ -182,6 +184,35 @@ def test_run_chembl_column_order(
     expected_head = [c for c in schema_cols if c in available]
     expected_tail = sorted(available - set(schema_cols))
     assert captured["col_order"] == expected_head + expected_tail
+
+
+def test_ordered_results_shutdown_on_pipeline_error() -> None:
+    """Ensure chunk fetch failures stop outstanding workers promptly."""
+
+    sleep_duration = 1.5
+    started = threading.Event()
+
+    def fetch_chunk(ids: list[str]) -> pd.DataFrame:
+        if ids == ["error"]:
+            time.sleep(0.1)
+            raise cli_utils.PipelineError("boom")
+        started.set()
+        time.sleep(sleep_duration)
+        return pd.DataFrame()
+
+    start = time.perf_counter()
+    with pytest.raises(cli_utils.PipelineError):
+        list(
+            helpers._ordered_results(
+                chunk_iter=iter([["error"], ["slow"]]),
+                fetch_chunk=fetch_chunk,
+                workers=2,
+            )
+        )
+
+    elapsed = time.perf_counter() - start
+    assert started.is_set(), "Sleeping worker never started"
+    assert elapsed < sleep_duration / 2
 
 
 def test_run_chembl_streams_large_output(
