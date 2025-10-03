@@ -126,6 +126,25 @@ running `pip install .[dev]` and freezing the result with
 новое виртуальное окружение, выполните `pip install .[dev]`, а затем
 `pip freeze > requirements-lock.txt`.
 
+### Contributor notes / Заметки для контрибьюторов
+
+**EN.** Update `pyproject.toml` only after confirming the project supports the
+new minimum version of a dependency or when you intentionally raise the floor to
+use recently released features. Document the rationale in the changelog or pull
+request. Refresh `requirements-lock.txt` whenever the declared ranges change or
+when CI needs newer pinned versions (for example, security releases); rebuild it
+in a clean virtual environment with `pip install .[dev]` followed by
+`pip freeze > requirements-lock.txt`, then run the validation suite before
+committing both files. /
+**RU.** Обновляйте `pyproject.toml` только после проверки совместимости с
+новым минимальным релизом зависимости или при осознанном повышении минимальной
+версии ради новых возможностей. Зафиксируйте мотивацию в changelog или pull
+request. Пересобирайте `requirements-lock.txt`, когда меняются диапазоны в
+`pyproject.toml` или когда CI требуется свежая зафиксированная версия (например,
+из-за обновлений безопасности); создайте чистое окружение, выполните
+`pip install .[dev]`, затем `pip freeze > requirements-lock.txt`, и перед
+коммитом обоих файлов прогоните проверочный набор.
+
 > **EN.** Fresh wheel installs now rely on platform-specific user directories.
 > The packaged configuration is copied to the user config home, CSV exports go
 > to the user data directory and HTTP caches live in the user cache directory.
