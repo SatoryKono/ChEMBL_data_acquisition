@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Hashable, MutableMapping, Sequence, cast
+from typing import Hashable, MutableMapping, NamedTuple, Sequence, cast
 
 import pandas as pd
 
