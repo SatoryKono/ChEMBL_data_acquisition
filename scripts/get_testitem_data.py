@@ -446,6 +446,9 @@ class ParentLookupStats:
     attached: int
     uncovered: int
     failed_ids: tuple[str, ...] = ()
+    hierarchy_attached: int = 0
+    fallback_attached: int = 0
+    no_parent: int = 0
 
 
 def _cache_state(path: Path) -> tuple[bool, float | None]:
@@ -623,6 +626,8 @@ def attach_parent_molecule_ids(
             existing_parent.isna() | existing_parent.eq("")
         )
 
+    existing_parent_before = existing_parent.copy()
+
     unique_children = tuple(normalised_child[lookup_mask].unique().tolist())
     catalog_data: MutableMapping[str, str]
     used_partial_cache = False
@@ -707,6 +712,7 @@ def attach_parent_molecule_ids(
         uncovered_children = len(missing_ids)
 
     refreshed_parent = normalised_child.map(parent_map).astype("string")
+    refreshed_normalised = refreshed_parent.fillna("").astype("string")
 
     combined_parent = existing_parent.copy()
     update_mask = combined_parent.isna() | combined_parent.eq("")
@@ -714,14 +720,23 @@ def attach_parent_molecule_ids(
 
     if getattr(catalog_cfg, "force_refresh_existing", False):
         existing_normalised = combined_parent.fillna("").astype("string")
-        refreshed_normalised = refreshed_parent.fillna("").astype("string")
         mismatch_mask = existing_normalised != refreshed_normalised
         if mismatch_mask.any():
             combined_parent.loc[mismatch_mask] = refreshed_parent.loc[mismatch_mask]
+        existing_normalised = combined_parent.fillna("").astype("string")
+
     result[parent_column] = combined_parent.astype("string")
 
-    missing = int(combined_parent.isna().sum())
-    attached = int(combined_parent.notna().sum())
+    final_normalised = combined_parent.fillna("").astype("string")
+    previous_normalised = existing_parent_before.fillna("").astype("string")
+
+    fallback_mask = (final_normalised != "") & (
+        (previous_normalised == "") | (previous_normalised != final_normalised)
+    )
+    fallback_attached = int(fallback_mask.sum())
+    no_parent_count = int((final_normalised == "").sum())
+    attached = int((final_normalised != "").sum())
+    missing = no_parent_count
 
     final_source = source_resolved
     if catalog is not None and not missing_ids:
@@ -749,6 +764,8 @@ def attach_parent_molecule_ids(
         attached=int(attached),
         uncovered=int(uncovered_children),
         failed_ids=tuple(missing_ids),
+        fallback_attached=int(fallback_attached),
+        no_parent=int(no_parent_count),
     )
 
     logger.info(
@@ -758,6 +775,9 @@ def attach_parent_molecule_ids(
         attached=stats.attached,
         missing=stats.missing,
         uncovered=stats.uncovered,
+        hierarchy_attached=stats.hierarchy_attached,
+        fallback_attached=stats.fallback_attached,
+        no_parent=stats.no_parent,
     )
 
     return result, stats

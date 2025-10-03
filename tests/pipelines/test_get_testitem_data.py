@@ -29,6 +29,8 @@ from library.integration import molecule_catalog
 from library.integration import pubchem_library as pl
 import library.testitem_pipeline as pipeline
 import library.testitem_pipeline.cli as pipeline_cli
+import library.testitem_pipeline.catalog as modern_catalog_module
+import library.pipelines.testitem as legacy_pipeline
 
 from library.config import ApiCfg, Config, IoCfg
 
@@ -480,6 +482,248 @@ def test_prepare_parent_enrichment_uses_lookup_path(
     assert prep is not None
     assert captured_path == hierarchy_path
     assert list(prep.lookup_data.child_ids) == ["CHEMBL1"]
+
+
+class _RecordingLogger:
+    def __init__(self) -> None:
+        self.records: list[dict[str, Any]] = []
+
+    def info(self, event: str, *args: object, **kwargs: object) -> None:
+        self.records.append({"event": event, **kwargs})
+
+    def warning(self, event: str, *args: object, **kwargs: object) -> None:
+        self.records.append({"event": event, **kwargs})
+
+    def error(self, event: str, *args: object, **kwargs: object) -> None:
+        self.records.append({"event": event, **kwargs})
+
+    def bind(self, **_: object) -> "_RecordingLogger":  # pragma: no cover - convenience
+        return self
+
+
+def _noop(*args: object, **kwargs: object) -> None:
+    return None
+
+
+def _collect_event(records: list[dict[str, Any]], name: str) -> dict[str, Any]:
+    matched = [record for record in records if record.get("event") == name]
+    assert matched, f"No log record captured for event {name!r}"
+    return matched[-1]
+
+
+class _DummyClient:
+    def request_json(self, *args: object, **kwargs: object) -> dict[str, Any]:
+        return {"page_meta": {"next": None}, "molecules": []}
+
+
+def test_parent_lookup_stats_hierarchy_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+
+    def fake_lookup(*_: object, **__: object) -> dict[str, str]:
+        return {"CHEMBL1": "CHEMBL999"}
+
+    logger = _RecordingLogger()
+
+    monkeypatch.setattr(modern_catalog_module, "logger", logger)
+    monkeypatch.setattr(modern_catalog_module, "load_molecule_hierarchy_lookup", fake_lookup)
+    monkeypatch.setattr(modern_catalog_module, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        modern_catalog_module.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(modern_catalog_module, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(modern_catalog_module, "update_parent_catalog_cache", _noop)
+    monkeypatch.setattr(modern_catalog_module, "write_parent_catalog_cache", _noop)
+    monkeypatch.setattr(legacy_pipeline, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(legacy_pipeline, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(legacy_pipeline, "update_parent_catalog_cache", _noop)
+    monkeypatch.setattr(legacy_pipeline, "write_parent_catalog_cache", _noop)
+
+    client_stub = _DummyClient()
+
+    status, prep = pipeline.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=client_stub,
+        hierarchy_lookup_path=None,
+    )
+
+    assert status == 0
+    assert prep is not None
+
+    status, result = pipeline.run_parent_enrichment(
+        prep,
+        client=client_stub,
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=cfg.testitem.timeout,
+    )
+
+    assert status == 0
+    assert result is not None
+    assert result.parent_stats.hierarchy_attached == 1
+    assert result.parent_stats.fallback_attached == 0
+    assert result.parent_stats.no_parent == 0
+
+    progress = _collect_event(logger.records, "parent_lookup_progress")
+    assert progress["fallback_attached"] == 0
+    assert progress["no_parent"] == 0
+
+    done = _collect_event(logger.records, "parent_lookup_done")
+    assert done["hierarchy_attached"] == 1
+    assert done["fallback_attached"] == 0
+    assert done["no_parent"] == 0
+
+
+def test_parent_lookup_stats_fallback_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+
+    logger = _RecordingLogger()
+
+    monkeypatch.setattr(modern_catalog_module, "logger", logger)
+    monkeypatch.setattr(modern_catalog_module, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(modern_catalog_module, "query_parent_catalog", lambda *_, **__: {})
+
+    def fake_fetch(
+        ids: Sequence[str],
+        *,
+        client: object,
+        api_cfg: object,
+        timeout: object,
+        catalog_cfg: object,
+    ) -> dict[str, str]:
+        return {identifier: "CHEMBL999" for identifier in ids}
+
+    monkeypatch.setattr(
+        modern_catalog_module.molecule_catalog, "fetch_parent_catalog_for", fake_fetch
+    )
+    monkeypatch.setattr(modern_catalog_module, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(modern_catalog_module, "update_parent_catalog_cache", _noop)
+    monkeypatch.setattr(modern_catalog_module, "write_parent_catalog_cache", _noop)
+    monkeypatch.setattr(legacy_pipeline, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(legacy_pipeline, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(legacy_pipeline, "update_parent_catalog_cache", _noop)
+    monkeypatch.setattr(legacy_pipeline, "write_parent_catalog_cache", _noop)
+
+    client_stub = _DummyClient()
+
+    status, prep = pipeline.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=client_stub,
+        hierarchy_lookup_path=None,
+    )
+
+    assert status == 0
+    assert prep is not None
+
+    status, result = pipeline.run_parent_enrichment(
+        prep,
+        client=client_stub,
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=cfg.testitem.timeout,
+    )
+
+    assert status == 0
+    assert result is not None
+    assert result.parent_stats.hierarchy_attached == 0
+    assert result.parent_stats.fallback_attached == 1
+    assert result.parent_stats.no_parent == 0
+
+    progress = _collect_event(logger.records, "parent_lookup_progress")
+    assert progress["fallback_attached"] == 1
+    assert progress["no_parent"] == 0
+
+    done = _collect_event(logger.records, "parent_lookup_done")
+    assert done["hierarchy_attached"] == 0
+    assert done["fallback_attached"] == 1
+    assert done["no_parent"] == 0
+
+
+def test_parent_lookup_stats_unresolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cfg: Config
+) -> None:
+    child_field = cfg.molecule_catalog.child_field
+    parent_field = cfg.molecule_catalog.parent_field
+    df = pd.DataFrame({child_field: ["CHEMBL1"], parent_field: [pd.NA]})
+    cfg.molecule_catalog.cache_path = tmp_path / "cache.json"
+    cfg.molecule_catalog.sqlite_path = tmp_path / "cache.sqlite"
+
+    logger = _RecordingLogger()
+
+    monkeypatch.setattr(modern_catalog_module, "logger", logger)
+    monkeypatch.setattr(modern_catalog_module, "load_molecule_hierarchy_lookup", lambda *_, **__: {})
+    monkeypatch.setattr(modern_catalog_module, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(
+        modern_catalog_module.molecule_catalog,
+        "fetch_parent_catalog_for",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(modern_catalog_module, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(modern_catalog_module, "update_parent_catalog_cache", _noop)
+    monkeypatch.setattr(modern_catalog_module, "write_parent_catalog_cache", _noop)
+    monkeypatch.setattr(legacy_pipeline, "load_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(legacy_pipeline, "query_parent_catalog", lambda *_, **__: {})
+    monkeypatch.setattr(legacy_pipeline, "update_parent_catalog_cache", _noop)
+    monkeypatch.setattr(legacy_pipeline, "write_parent_catalog_cache", _noop)
+
+    client_stub = _DummyClient()
+
+    status, prep = pipeline.prepare_parent_enrichment(
+        df.copy(),
+        catalog_cfg=cfg.molecule_catalog,
+        io_cfg=cfg.io,
+        api_cfg=cfg.api,
+        timeout=cfg.testitem.timeout,
+        client=client_stub,
+        hierarchy_lookup_path=None,
+    )
+
+    assert status == 0
+    assert prep is not None
+
+    status, result = pipeline.run_parent_enrichment(
+        prep,
+        client=client_stub,
+        api_cfg=cfg.api,
+        catalog_cfg=cfg.molecule_catalog,
+        timeout=cfg.testitem.timeout,
+    )
+
+    assert status == 0
+    assert result is not None
+    assert result.parent_stats.hierarchy_attached == 0
+    assert result.parent_stats.fallback_attached == 0
+    assert result.parent_stats.no_parent == 1
+
+    progress = _collect_event(logger.records, "parent_lookup_progress")
+    assert progress["fallback_attached"] == 0
+    assert progress["no_parent"] == 1
+
+    done = _collect_event(logger.records, "parent_lookup_done")
+    assert done["hierarchy_attached"] == 0
+    assert done["fallback_attached"] == 0
+    assert done["no_parent"] == 1
 
 
 def test_run_parent_enrichment_failure(

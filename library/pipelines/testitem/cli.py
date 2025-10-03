@@ -856,6 +856,9 @@ def finalize_output(
         "output_sha256": file_sha256(csv_path),
         "parent_lookup_source": parent_stats.source,
         "parent_lookup_missing": parent_stats.missing,
+        "parent_lookup_hierarchy_attached": parent_stats.hierarchy_attached,
+        "parent_lookup_fallback_attached": parent_stats.fallback_attached,
+        "parent_lookup_no_parent": parent_stats.no_parent,
     }
     if missing_ids_tuple:
         stats["missing_molecule_ids"] = list(missing_ids_tuple)
