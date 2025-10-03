@@ -6,6 +6,7 @@ import sys
 import traceback
 from collections import OrderedDict, deque
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import chain, islice
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Sequence
@@ -15,7 +16,6 @@ import requests
 from pandera.errors import SchemaErrors
 
 from library import io
-from library.integration import chembl_library as cl
 from library.integration.chembl_client import ChemblClient
 from library.clients import pubchem as pc
 from library.config import (
@@ -57,6 +57,15 @@ from .catalog import (
 )
 from . import testitem_enrichment
 from .pubchem import PUBCHEM_COLUMNS, add_pubchem_data, augment_pubchem
+
+
+@lru_cache(maxsize=1)
+def _chembl_library() -> Any:
+    """Return the lazily imported ChEMBL integration module."""
+
+    from library.integration import chembl_library
+
+    return chembl_library
 
 _FETCH_ERROR_SAMPLE_SIZE = 10
 _MISSING_IDENTIFIER_LOG_SAMPLE_SIZE = 10
@@ -293,7 +302,7 @@ def fetch_testitems(
 
     def _load_chunk(batch: Sequence[str], chunk_size: int) -> pd.DataFrame:
         try:
-            frame = cl.get_testitem(
+            frame = _chembl_library().get_testitem(
                 batch,
                 cfg=api_cfg,
                 client=client,
