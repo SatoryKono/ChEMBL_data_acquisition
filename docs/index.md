@@ -13,6 +13,7 @@ Use the role-based sections below to locate manuals, policies, and process docum
   - [Project overview](guides/en/README.md)
   - [Usage walkthrough](guides/en/USAGE.md)
   - [Component summary](guides/en/SUMMARY.md)
+  - [Fixture-based execution scenarios](examples/fixture-recipes.md)
 - Русский
   - [Чек-лист быстрого старта](guides/ru/QUICKSTART.md)
   - [Обзор проекта](guides/ru/README.md)
