@@ -6,6 +6,7 @@ from collections.abc import Iterable, Iterator
 from typing import Any
 
 import pandas as pd
+import pytest
 
 from library.pipelines.target.pipeline import PipelineResult, run_pipeline
 
@@ -98,7 +99,6 @@ def test_optional_stages_receive_dataframe() -> None:
     # Mapping interface exposes the stored frames.
     assert result["chembl"].equals(result.chembl)
     assert result.as_dict()["uniprot"].equals(result.uniprot)
-
 
 def test_strict_optional_stage_filters_batch_size() -> None:
     """Strict optional fetchers succeed when ``batch_size`` is auto-injected."""
