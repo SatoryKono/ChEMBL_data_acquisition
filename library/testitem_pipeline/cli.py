@@ -353,7 +353,7 @@ class StageWatchdog:
         if event:
             self._logger.info(
                 f"{self.stage_name}_watchdog_progress",
-                event=event,
+                watchdog_event=event,
                 **payload,
             )
 
