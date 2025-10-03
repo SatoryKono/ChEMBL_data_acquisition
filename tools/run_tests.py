@@ -152,9 +152,9 @@ def _build_json(
     summary = collector.summary
     duration_sec = collector.duration()
     if summary["total"]:
-        success_rate = round(100.0 * summary["passed"] / summary["total"], 2)
+        success_rate = summary["passed"] / summary["total"]
     else:
-        success_rate = 100.0
+        success_rate = 1.0
 
     repo = _git_output(["config", "--get", "remote.origin.url"]) or REPO_NAME
     payload = {
@@ -201,7 +201,7 @@ def _write_markdown(summary_path: Path, data: dict[str, Any]) -> None:
         f"- Branch: {meta['branch']}",
         f"- Timestamp (UTC): {meta['ts_utc']}",
         f"- Duration: {meta['duration_sec']} s",
-        f"- Success rate: {summary['success_rate']}%",
+        f"- Success rate: {summary['success_rate'] * 100:.2f}%",
         "",
         "| total | passed | failed | skipped | xfailed | xpassed | error |",
         "|------:|-------:|-------:|--------:|--------:|--------:|------:|",
