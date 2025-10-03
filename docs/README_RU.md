@@ -103,8 +103,10 @@ pre-commit install
 ## Быстрый старт
 
 1. **Подготовьте списки идентификаторов.** Используйте шаблоны из `data/input`
-   или выгрузите свежие списки из своей системы. Пайплайны ожидают по одному ID
-   в строке; имена колонок перечислены в [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md).
+   (например, `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
+   `testitem.csv`) или выгрузите свежие списки из своей системы. Расширенный
+   набор примеров лежит в `data/input/full`. Пайплайны ожидают по одному ID в
+   строке; имена колонок перечислены в [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md).
 2. **Проверьте конфигурацию.** Скопируйте `config/config.yaml`, если нужно
    переопределить лимиты API, каталоги вывода или стадийные флаги. Паттерн
    переменных окружения — `CHEMBL_DA__РАЗДЕЛ__КЛЮЧ`. Полное описание — в
@@ -113,7 +115,7 @@ pre-commit install
 
    ```bash
    get-document-data all \
-       --input data/input/document_ids.csv \
+       --input data/input/document.csv \
        --final-out output.documents_$(date +%Y%m%d).csv \
        --config config/config.yaml \
        --log-level INFO

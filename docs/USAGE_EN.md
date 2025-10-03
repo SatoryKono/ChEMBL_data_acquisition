@@ -34,21 +34,32 @@ three tiers:
 All commands exit with a non-zero status on validation errors, IO issues, or
 upstream API failures.
 
+### Input templates
+
+The repository ships minimal CSV templates under `data/input` (one file per
+pipeline: `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
+`testitem.csv`) and extended samples under `data/input/full`. Copy the relevant
+file, fill in your identifiers, and point `--input` to the new location. If you
+maintain your own seed lists, place them anywhere accessible to the CLI and
+ensure the headers match [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md).
+
 ## Orchestrator (`get-data`)
 
 ```
 get-data --base-path /data/chembl \
-    --input-dir seeds --output-dir exports \
+    --input-dir input --output-dir exports \
     --config /data/chembl/config.yaml \
     --date 20250101 --limit 100 --log-level INFO
 ```
 
 The orchestrator resolves shared directories, prepares arguments, and invokes the
 pipelines in the following order: documents (`all` sub-command), targets (`all`),
-assays, test items, activities. Each delegated CLI receives `--final-out` so the
-individual pipelines write to the canonical destination without relying on
-deprecated aliases. `--limit 0` skips execution, `--dry-run` prints scheduled
-steps without touching the filesystem.
+assays, test items, activities. With the sample arguments above, inputs are
+loaded from `/data/chembl/input`—copy the templates there or provide your own
+directory. Each delegated CLI receives `--final-out` so the individual pipelines
+write to the canonical destination without relying on deprecated aliases.
+`--limit 0` skips execution, `--dry-run` prints scheduled steps without touching
+the filesystem.
 
 ## Document pipeline (`get-document-data`)
 
@@ -64,7 +75,7 @@ Typical command:
 
 ```
 get-document-data all \
-    --input seeds/document_ids.csv \
+    --input data/input/document.csv \
     --final-out output/documents_$(date +%Y%m%d).csv \
     --config config/config.yaml \
     --limit 500 --log-level INFO
@@ -111,7 +122,7 @@ Example with raw snapshot:
 
 ```
 get-target-data all \
-    --input seeds/target_ids.csv \
+    --input data/input/target.csv \
     --final-out output/targets_$(date +%Y%m%d).csv \
     --raw-out output/targets_raw_$(date +%Y%m%d).parquet \
     --raw-format parquet --id-cols target_chembl_id uniprot_id \
@@ -124,7 +135,7 @@ Cached replay of the production pipeline is available through
 ## Assay pipeline (`get-assay-data`)
 
 ```
-get-assay-data --input seeds/assay_ids.csv \
+get-assay-data --input data/input/assay.csv \
     --final-out output/assays_$(date +%Y%m%d).csv \
     --batch-size 100 --timeout 60 --limit 200
 ```
@@ -135,7 +146,7 @@ validates the table, then emits the standard CSV + sidecar + quality reports.
 ## Activity pipeline (`get-activity-data`)
 
 ```
-get-activity-data --input seeds/activity_ids.csv \
+get-activity-data --input data/input/activity.csv \
     --final-out output/activities_$(date +%Y%m%d).csv \
     --batch-size 50 --workers 4 --timeout 60 --limit 500
 ```
@@ -148,7 +159,7 @@ post-processing derives `lower_value`/`upper_value` using the rules described in
 ## Test item pipeline (`get-testitem-data`)
 
 ```
-get-testitem-data --input seeds/molecule_ids.csv \
+get-testitem-data --input data/input/testitem.csv \
     --final-out output/testitems_$(date +%Y%m%d).csv \
     --batch-size 1000 --timeout 60 --limit 400
 ```

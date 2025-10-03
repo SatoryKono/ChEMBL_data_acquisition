@@ -102,9 +102,12 @@ platform-specific user directories listed in [`docs/CONFIG_EN.md`](./CONFIG_EN.m
 
 ## Quick start
 
-1. **Prepare identifier lists.** Use the templates in `data/input` or export
-   fresh ID lists from your warehouse. Each pipeline expects one identifier per
-   row; see [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md) for column names.
+1. **Prepare identifier lists.** Use the templates in `data/input` (for
+   example `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
+   `testitem.csv`) or export fresh ID lists from your warehouse. A richer
+   showcase lives in `data/input/full`. Each pipeline expects one identifier per
+   row; see [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md) for column names and
+   required headers.
 2. **Review configuration.** Copy `config/config.yaml` if you need to override
    API limits, output directories, or staging flags. Environment variable
    overrides follow the `CHEMBL_DA__SECTION__KEY` pattern. Details live in
@@ -113,7 +116,7 @@ platform-specific user directories listed in [`docs/CONFIG_EN.md`](./CONFIG_EN.m
 
    ```bash
    get-document-data all \
-       --input data/input/document_ids.csv \
+       --input data/input/document.csv \
        --final-out output.documents_$(date +%Y%m%d).csv \
        --config config/config.yaml \
        --log-level INFO
