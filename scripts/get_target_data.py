@@ -148,6 +148,7 @@ DEFAULT_INPUT_NAME = "target.csv"
 DEFAULT_OUTPUT_STEM = "targets"
 RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
+DEFAULT_LOG_DIR = Path("data") / "logs"
 
 
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
@@ -2857,7 +2858,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not isinstance(date_value, str) or not date_value:
         date_value = datetime.now(timezone.utc).strftime("%Y%m%d")
         setattr(args, "date", date_value)
-    log_dir = Path("logs")
+    log_dir = DEFAULT_LOG_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"get_target_data_{date_value}.log"
     exit_code = 0
