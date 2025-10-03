@@ -2,8 +2,8 @@
 
 ## Overview
 
-* All command-line tools load their defaults from [`config/config.yaml`](../config/config.yaml) in the project root.
-* Values are validated by `library.config.load_config`, which calls `Config.model_validate` from Pydantic. [`config.schema.json`](../config.schema.json) documents the same structure for tooling but is not executed during start-up.
+* All command-line tools load their defaults from [`config/config.yaml`](../../config/config.yaml) in the project root.
+* Values are validated by `library.config.load_config`, which calls `Config.model_validate` from Pydantic. [`config.schema.json`](../../config.schema.json) documents the same structure for tooling but is not executed during start-up.
 * Settings can be overridden via a `config.local.yaml` placed next to the primary configuration (including custom paths supplied via `--config`), environment variables and CLI flags. Precedence is: `config/config.yaml` < `config.local.yaml` < environment variables < CLI arguments.
 
 ## Layout of `config/config.yaml`
@@ -59,7 +59,7 @@ relative paths are resolved against the configuration file.
 | `force_refresh_existing` | `false` | When `true`, rebuilds parent relationships even if the incoming dataset already contains parent identifiers, ensuring the cache wins over source columns. |
 | `fields` | `['molecule_chembl_id', 'parent_molecule_chembl_id']` | List of fields requested from the ChEMBL API when populating or refreshing the catalogue; extend to retrieve extra metadata alongside identifiers. |
 | `filters` | `{'parent_molecule_chembl_id__isnull': 'false'}` | Query parameters appended to every API call; defaults keep only rows that already have parent assignments in ChEMBL. |
-| `hierarchy_lookup_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
+| `hierarchy_lookup_path` | `../../dictionary/_testitem/molecule_hierarchy.csv` | Optional CSV used as an offline seed for parent-child relationships before querying ChEMBL; override when distributing a curated hierarchy snapshot or relocating the dictionary folder. |
 | `hierarchy_lookup_encoding` | `utf-8-sig` | Text encoding applied when reading the hierarchy lookup CSV; change when the snapshot is saved with a different charset (for example Latin-1 from legacy exports). |
 | `hierarchy_lookup_delimiter` | `,` | Delimiter expected by the hierarchy lookup loader; override for semicolon- or tab-separated snapshots produced by regional data teams. |
 | `page_size` | `500` | Number of records requested per API page while rebuilding the catalogue. |
@@ -199,8 +199,8 @@ applies exponential backoff between attempts before surfacing the error.
 | Key | Default | Description |
 | --- | --- | --- |
 | `enable` | `true` | Master switch for the enrichment stage that derives salt identifiers and catalogue flags. |
-| `sources.molecule_catalog_path` | `../dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
-| `sources.molecule_hierarchy_path` | `../dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
+| `sources.molecule_catalog_path` | `../../dictionary/_testitem/molecule_catalog.csv` | CSV with `molecule_chembl_id` and the `natural_product`/`prodrug`/`polymer_flag` columns. |
+| `sources.molecule_hierarchy_path` | `../../dictionary/_testitem/molecule_hierarchy.csv` | CSV that maps derivatives to their parent molecule (`molecule_chembl_id`, `parent_molecule_chembl_id`). |
 | `output.salt_as_null_when_absent` | `true` | Emit `null` (or `-` when set to `false`) when the compound is not a salt. |
 | `flags.coerce_to_bool` | `true` | Normalise catalogue values such as `Y/N`, `1/0`, `yes/no` to pandas nullable booleans. |
 | `flags.parent_fallback` | `true` | Reuse parent flag values when the child entry is missing. |
@@ -233,18 +233,18 @@ applies exponential backoff between attempts before surfacing the error.
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
 | `uniprot` | `column` | `uniprot_id` | Column with UniProt identifiers. |
-|  | `data_dir` | `../dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
+|  | `data_dir` | `../../dictionary/_target/_uniprot` | Directory holding cached UniProt JSON files. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
 | `chembl` | `column` | `target_chembl_id` | Column with ChEMBL target identifiers. |
 |  | `chunk_size` | `5` | Batch size for API requests. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `iuphar` | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
+| `iuphar` | `target_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | Lookup table with IUPHAR target metadata. |
+|  | `family_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | Lookup table with IUPHAR family metadata. |
 |  | `limit` | `null` | Optional cap on identifiers processed. |
-| `all` | `data_dir` | `../dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
-|  | `target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
-|  | `family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
+| `all` | `data_dir` | `../../dictionary/_target/_uniprot` | Directory containing cached UniProt data. |
+|  | `target_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target reference data. |
+|  | `family_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family reference data. |
 |  | `chunk_size` | `5` | Batch size when combining all sources. |
 |  | `timeout` | `30.0` | Request timeout in seconds. |
 
@@ -276,7 +276,7 @@ All URLs must comply with the respective service usage policies, including rate 
 
 ### PubChem lookups (`sources.pubchem`)
 
-PubChem augmentation is primarily used by the test item pipeline. Every key below mirrors [`config/config.yaml`](../config/config.yaml) and
+PubChem augmentation is primarily used by the test item pipeline. Every key below mirrors [`config/config.yaml`](../../config/config.yaml) and
 can be overridden through environment variables (see [Environment variables](#environment-variables)). The table lists both the
 auto-generated `CHEMBL_DA_SOURCES_PUBCHEM_*` aliases and the generic `CHEMBL_DA__SOURCES__PUBCHEM__*` form. The base URL also
 supports the short alias documented in the [Environment variable aliases](#environment-variables) table.
@@ -314,11 +314,11 @@ supports the short alias documented in the [Environment variable aliases](#envir
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `dictionary_dir` | `../dictionary` | Root directory with lookup tables. |
-| `iuphar_target_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
-| `iuphar_family_csv` | `../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
-| `uniprot_data_dir` | `../dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
-| `targets_type_csv` | `../dictionary/_target/targets_type.csv` | Target type classification table. |
+| `dictionary_dir` | `../../dictionary` | Root directory with lookup tables. |
+| `iuphar_target_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_target.csv` | IUPHAR target mapping table. |
+| `iuphar_family_csv` | `../../dictionary/_target/_IUPHAR/_IUPHAR_family.csv` | IUPHAR family mapping table. |
+| `uniprot_data_dir` | `../../dictionary/_target/_uniprot` | Cached UniProt JSON responses. |
+| `targets_type_csv` | `../../dictionary/_target/targets_type.csv` | Target type classification table. |
 
 
 The `dictionary/_target` folder mirrors the current repository layout; all
@@ -334,7 +334,7 @@ IUPHAR and UniProt lookups are stored there by default.
 | `csv_sep` | `,` | Default delimiter when reading and writing CSV files. |
 | `csv_fallback_separators` | `["\t", ";"]` | Additional delimiters tried when the primary separator does not expose the requested column. |
 | `csv_encoding` | `utf-8-sig` | Default encoding for CSV exports. |
-| `csv_chunksize` | `10000` | Rows processed per batch by deterministic CSV writers; see [`config/config.yaml`](../config/config.yaml). |
+| `csv_chunksize` | `10000` | Rows processed per batch by deterministic CSV writers; see [`config/config.yaml`](../../config/config.yaml). |
 | `na_markers` | `["#N/A"]` | Extra values treated as missing identifiers when reading CSV files. |
 | `keep_na_markers` | `false` | Preserve identifiers matching `na_markers` instead of filtering them out. |
 | `exist_ok` | `true` | Create directories automatically when `true`. |
@@ -347,13 +347,13 @@ IUPHAR and UniProt lookups are stored there by default.
 | `all_doc` | `"$CHEMBL_DA_BASE_PATH/input/ChEMBL/ChEMBL_all_10_05_step5.xlsx"` | Workbook with cross-document pairs for initialisation. |
 | `output_dir` | `"$CHEMBL_DA_BASE_PATH/output/ChEMBL/processed"` | Destination for pre-processed initialisation files. |
 
-Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke tests. Replace them with the workbooks prepared by your organisation (or copy the manually supplied files into the desired location) before starting the initialisation routines. Refer to [docs/en/USAGE.md](./USAGE.md) for guidance on preparing the input templates.
+Paths under `data/input/ChEMBL/*.xlsx` are placeholders included for local smoke tests. Replace them with the workbooks prepared by your organisation (or copy the manually supplied files into the desired location) before starting the initialisation routines. Refer to [docs/guides/en/USAGE.md](../../guides/en/USAGE.md) for guidance on preparing the input templates.
 
 ## System settings (`system`)
 
 | Sub-section | Key | Default | Description |
 | --- | --- | --- | --- |
-| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/logging_setup.py`](../library/logging_setup.py), so message and timestamp formatting are not configurable here. |
+| `log` | `level` | `INFO` | Default logging level. Structured JSON output keeps a fixed schema handled by [`library/logging_setup.py`](../../library/logging_setup.py), so message and timestamp formatting are not configurable here. |
 | `rate` | `global_rps` | `100` | Global requests-per-second budget shared across clients. |
 |  | `global_burst` | `100` | Global token bucket burst capacity. |
 |  | `limiter_cache_maxsize` | `128` | Maximum cached limiter instances. |
@@ -425,7 +425,7 @@ Common short aliases:
 
 Any other key can be targeted using the long `CHEMBL_DA__...` form.
 
-> Structured logging details live in [`library/log.py`](../library/log.py) and [`library/logging_setup.py`](../library/logging_setup.py), explaining why the JSON layout (including date formatting) cannot be overridden via `config.yaml`.
+> Structured logging details live in [`library/log.py`](../../library/log.py) and [`library/logging_setup.py`](../../library/logging_setup.py), explaining why the JSON layout (including date formatting) cannot be overridden via `config.yaml`.
 
 ## CLI overrides
 

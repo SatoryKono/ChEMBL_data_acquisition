@@ -13,7 +13,7 @@ The primary documentation and reference material live in this directory.
 
 
 * Streaming CSV handling with deterministic output for large datasets.
-* Schema validators in [`schemas/`](../schemas/) and dictionaries in [`dictionary/`](../dictionary/) that enforce types,
+* Schema validators in [`schemas/`](../../schemas/) and dictionaries in [`dictionary/`](../../dictionary/) that enforce types,
   ranges and reference data.
 * Configuration driven by `config/config.yaml`, environment variables and CLI overrides.
 * Logging based on the standard `logging` module with configurable verbosity.
@@ -147,8 +147,8 @@ process documents listed below.
 
 | Language | Checklist |
 |----------|-----------|
-| English  | [docs/en/QA_PROCESS.md](./QA_PROCESS.md) |
-| Русский  | [docs/ru/QA_PROCESS.md](../ru/QA_PROCESS.md) |
+| English  | [docs/processes/en/QA_PROCESS.md](../../processes/en/QA_PROCESS.md) |
+| Русский  | [docs/processes/ru/QA_PROCESS.md](../../processes/ru/QA_PROCESS.md) |
 
 ```bash
 pre-commit run --all-files
@@ -180,7 +180,7 @@ The command exits with status code `1` when mismatches occur and stores the diff
 
 ## Data generation
 
-Five production pipelines live in [`scripts/`](../scripts/) and write CSV outputs to `~/.local/share/chembl-da/output` by default:
+Five production pipelines live in [`scripts/`](../../scripts/) and write CSV outputs to `~/.local/share/chembl-da/output` by default:
 
 * `get_activity_data.py` — retrieves activity data from ChEMBL and enriches it with derived value ranges.
 * `get_assay_data.py` — exports assay descriptions.
@@ -189,7 +189,7 @@ Five production pipelines live in [`scripts/`](../scripts/) and write CSV output
 * `get_testitem_data.py` — enriches compounds with structural attributes and PubChem data.
 
 The cached harness `library.utils.cli_tools.pipeline_targets_main`, located under
-[`library/utils/cli_tools/`](../library/utils/cli_tools/), reuses the CLI contract of the
+[`library/utils/cli_tools/`](../../library/utils/cli_tools/), reuses the CLI contract of the
 production target pipeline while operating solely on local files and prepared identifier
 batches without network calls.
 
@@ -202,7 +202,7 @@ python -m scripts.get_activity_data --input tests/data/activity_ids_small.csv \
 
 The command reads data from the ChEMBL API, writes the CSV table and the accompanying `*.meta.yaml`. Development utilities are in
 `library/utils/cli_tools/`; for instance, the `get_activities` module focuses on demo logging and performs no file operations. See
-[`docs/CLI_TOOLS.md`](./CLI_TOOLS.md) for descriptions and command patterns. The output directory is ignored by Git and exposed
+[`docs/CLI_TOOLS.md`](../../reference/en/CLI_TOOLS.md) for descriptions and command patterns. The output directory is ignored by Git and exposed
 as a CI artifact.
 
 > **Note.** The legacy `activity_extraction_main.py` entry point has been superseded by the modular
@@ -368,7 +368,7 @@ CHEMBL_DA_BASE=https://www.ebi.ac.uk/chembl/api/data
 
 Use either the short alias `CHEMBL_DA_BASE` or the fully qualified
 `CHEMBL_DA__SOURCES__CHEMBL__API__CHEMBL_BASE`; both expand to the same setting.
-See the [alias table](../library/config.py#L1531-L1634) in `library/config.py` for
+See the [alias table](../../library/config.py#L1531-L1634) in `library/config.py` for
 the complete mapping list.
 
 See `.env.example` for typical contact e-mail variables.
@@ -456,7 +456,7 @@ api:
   rps: 5  # or any value >= 1
 ```
 
-Allowed ranges are documented in [`config.schema.json`](./config.schema.json), which is exported from the Pydantic models and serves
+Allowed ranges are documented in [`config.schema.json`](../../../config.schema.json), which is exported from the Pydantic models and serves
 as a reference artifact with the minimum `1` specified for `api.rps`.
 
 ## Logging
@@ -528,9 +528,9 @@ python -m library.utils.cli_tools.table_quality_main --input data.csv --table-na
 `--out` alias continues to map to the same path but now emits deprecation warnings. Target pipeline invocations additionally
 accept `--final-out`, which reuses the same default while enabling distinct destinations once raw snapshots are enabled. Combine
 it with `--raw-out` (and optional `--raw-format parquet`) to persist the unprocessed payload. For additional examples see
-[`docs/en/USAGE.md`](./USAGE.md) (Russian version:
+[`docs/guides/en/USAGE.md`](./USAGE.md) (Russian version:
 
-[`docs/ru/USAGE.md`](../ru/USAGE.md)).
+[`docs/guides/ru/USAGE.md`](../ru/USAGE.md)).
 
 ## Project structure
 
@@ -570,7 +570,7 @@ ChEMBL_data_acquisition/
 ## Configuration
 
 Parameters are read from `config/config.yaml`, environment variables (`CHEMBL_DA__...`) and CLI flags. Details are documented in
-[`docs/en/CONFIG.md`](./CONFIG.md) (Russian version: [`docs/ru/CONFIG.md`](../ru/CONFIG.md)).
+[`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md) (Russian version: [`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md)).
 
 ### Environment variables
 
@@ -582,7 +582,7 @@ export CHEMBL_DA__LOG__LEVEL=DEBUG
 ```
 
 Most options also provide short aliases for backwards compatibility. The table lists every supported alias and the canonical key it
- maps to. See [`_ALIAS_OVERRIDES`](../library/config.py#L1569-L1634) and [`_ALIAS_MAP`](../library/config.py#L1637-L1640) for the authoritative
+ maps to. See [`_ALIAS_OVERRIDES`](../../library/config.py#L1569-L1634) and [`_ALIAS_MAP`](../../library/config.py#L1637-L1640) for the authoritative
 source:
 
 | Alias | Equivalent key |
@@ -628,8 +628,8 @@ source:
 | `CHEMBL_DA__IO__CACHE_DIR` | `CHEMBL_DA__LOCAL__IO__CACHE_DIR` |
 | `CHEMBL_DA__IO__EXIST_OK` | `CHEMBL_DA__LOCAL__IO__EXIST_OK` |
 
-See [`docs/en/CONFIG.md`](./CONFIG.md) for a complete overview of all configuration options (Russian version —
-[`docs/ru/CONFIG.md`](../ru/CONFIG.md)).
+See [`docs/reference/en/CONFIG.md`](../../reference/en/CONFIG.md) for a complete overview of all configuration options (Russian version —
+[`docs/reference/ru/CONFIG.md`](../../reference/ru/CONFIG.md)).
 
 ### Schema validation
 
@@ -666,16 +666,16 @@ aliases `--output`/`--out` continue to resolve to the same path but issue a depr
 use `--raw-out` and `--final-out` when the raw snapshot and the cleaned export must be separated explicitly. Raw dumps reindex
 columns alphabetically for deterministic layouts unless `--no-reindex-raw` keeps the API order. The final CSV is normalised by
 default; toggle the boolean pair `--normalize-at-export` / `--no-normalize-at-export` when the export should either undergo the
-clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/en/USAGE.md`](./USAGE.md)
+clean-up stage or remain byte-identical to the raw payload. For additional examples see [`docs/guides/en/USAGE.md`](./USAGE.md)
 (Russian version:
-[`docs/ru/USAGE.md`](../ru/USAGE.md)).
+[`docs/guides/ru/USAGE.md`](../ru/USAGE.md)).
 
 
 ## Output and metadata
 
 Pipelines persist deterministic CSV tables via `library.io.write_csv` and store accompanying `*.meta.yaml` sidecars in
 `~/.local/share/chembl-da/output`. Each sidecar records the Git commit, launch parameters, SHA-256 checksum and row/column statistics. See
-[`docs/en/OUTPUT.md`](./OUTPUT.md) / [`docs/ru/OUTPUT.md`](../ru/OUTPUT.md) for layout details.
+[`docs/reference/en/OUTPUT.md`](../../reference/en/OUTPUT.md) / [`docs/reference/ru/OUTPUT.md`](../../reference/ru/OUTPUT.md) for layout details.
 
 ## Dtype Inspector
 
