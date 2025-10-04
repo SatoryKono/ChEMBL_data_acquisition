@@ -443,6 +443,22 @@ def _normalize_path(path: str) -> str:
     return ".".join(new_parts)
 
 
+_PATH_FALLBACKS: dict[str, str] = {
+    _normalize_path(source): _normalize_path(target)
+    for source, target in {
+        "target.all.column": "target.chembl.column",
+        "target.all.chunk_size": "target.chembl.chunk_size",
+        "target.all.timeout": "target.chembl.timeout",
+        "target.all.limit": "target.chembl.limit",
+        "target.all.offset": "target.chembl.offset",
+        "target.all.data_dir": "target.uniprot.data_dir",
+        "target.all.target_csv": "target.iuphar.target_csv",
+        "target.all.family_csv": "target.iuphar.family_csv",
+        "target.all.uniprot_column": "target.uniprot.column",
+    }.items()
+}
+
+
 _DEFAULT_OVERRIDES: dict[str, str] = {
     key: _normalize_path(value)
     for key, value in {
@@ -456,7 +472,7 @@ _DEFAULT_OVERRIDES: dict[str, str] = {
 }
 
 
-def _get_cfg_value(cfg: Config, path: str) -> Any:
+def _walk_cfg_value(cfg: Config, path: str) -> Any:
     """Return the value in ``cfg`` located at ``path``.
 
     Parameters
@@ -476,6 +492,23 @@ def _get_cfg_value(cfg: Config, path: str) -> Any:
             )
         current = getattr(current, part)
     return current
+
+
+def _get_cfg_value(cfg: Config, path: str) -> Any:
+    """Return the value in ``cfg`` located at ``path`` handling legacy fallbacks."""
+
+    try:
+        return _walk_cfg_value(cfg, path)
+    except AttributeError:
+        fallback = _PATH_FALLBACKS.get(path)
+        if not fallback:
+            raise
+        logger.warning(
+            "config_attribute_fallback",
+            missing_path=path,
+            fallback_path=fallback,
+        )
+        return _walk_cfg_value(cfg, fallback)
 
 
 def apply_config_overrides(
