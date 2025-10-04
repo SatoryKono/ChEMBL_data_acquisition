@@ -55,3 +55,16 @@ When developing additional scenarios, keep the guardrails documented in `tests/c
 - [x] Постобработка и экспорт: корректность форматов/имён/путей
 - [x] Деградационные кейсы: частичные данные, пустые файлы, неверный заголовок
 - [x] Идемпотентность: повторный запуск на тех же входах даёт тот же результат
+
+## Target post-processing validation
+
+`tests/unit/postprocessing/test_target_postprocessing.py` exercises the isoform post-processing helpers with deterministic
+fixtures from `tests/resources/target_postprocessing_input.csv`. The checks provide granular coverage for the
+post-processing stage by verifying that the helpers:
+
+- [x] Нормализация и предобработка (включая кодировки, разделители)
+- [x] Обогащение данными из словарей/справочников (в т.ч. отсутствие соответствий)
+- [x] Правила трансформации и расчета флагов/категорий
+- [x] Обработка пропусков, дублей, конфликтных значений
+- [x] Постобработка и экспорт: корректность форматов/имён/путей
+- [x] Идемпотентность: повторный запуск на тех же входах даёт тот же результат
