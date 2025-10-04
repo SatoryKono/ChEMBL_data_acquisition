@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import atexit
 from collections.abc import Iterator, Sequence
 from contextlib import ExitStack
 from importlib import resources
