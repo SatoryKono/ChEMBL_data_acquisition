@@ -13,12 +13,12 @@ import os
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
 from ..common.log import logger
-from ..config import Config, ConfigError, load_config
+from ..config import Config, ConfigError, ConfigMetadata, load_config
 from ..common.logging_setup import Logger, LoggerConfig
 from ..common.logging_setup import configure_logger as _configure_logger
 from ..version import require_python_version
@@ -521,7 +521,13 @@ def apply_config_overrides(
         for arg, path in {**_DEFAULT_OVERRIDES, **(mapping or {})}.items()
     }
 
+    normalized_cli_paths: dict[str, tuple[str, ...]] = {
+        arg: tuple(value.split(".")) if value else tuple()
+        for arg, value in override_map.items()
+    }
+
     cli_overrides: dict[str, Any] = {}
+    cli_override_sources: dict[tuple[str, ...], str] = {}
     for arg, key in override_map.items():
         if not hasattr(args, arg):
             continue
@@ -533,6 +539,7 @@ def apply_config_overrides(
             default = base_parser.get_default(arg)
         if value != default:
             cli_overrides[key] = value
+            cli_override_sources[tuple(key.split("."))] = arg
 
     try:
         base_path_arg = getattr(args, "base_path", None)
@@ -543,12 +550,15 @@ def apply_config_overrides(
         else:
             config_base_path = Path(base_path_arg)
 
-        cfg = load_config(
+        load_result = load_config(
             config_path,
             cli_overrides=cli_overrides,
             base_path=config_base_path,
             strict=True,
+            include_metadata=True,
+            cli_sources=cli_override_sources,
         )
+        cfg, metadata = cast(tuple[Config, ConfigMetadata], load_result)
     except ConfigError as exc:
         logger.error(
             "config_load_failed",
@@ -558,6 +568,11 @@ def apply_config_overrides(
         raise
     except ValidationError as exc:
         raise ValueError(str(exc)) from exc
+
+    metadata.cli_paths = {
+        arg: path for arg, path in normalized_cli_paths.items() if path
+    }
+    setattr(args, "_config_metadata", metadata)
 
     for arg, key in override_map.items():
         if not hasattr(args, arg):
