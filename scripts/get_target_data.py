@@ -82,6 +82,7 @@ from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
+from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
@@ -150,6 +151,150 @@ DEFAULT_OUTPUT_STEM = "targets"
 RAW_SUFFIX = "_raw"
 NORMALIZED_SUFFIX = "_normalized"
 COMMAND_CHOICES: tuple[str, ...] = ("uniprot", "chembl", "iuphar", "all")
+
+
+class StoreWithSource(argparse.Action):
+    """Store CLI values while tracking their origin."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        overrides = getattr(namespace, "_cli_overrides", None)
+        if overrides is None:
+            overrides = set()
+            setattr(namespace, "_cli_overrides", overrides)
+        overrides.add(self.dest)
+        setattr(namespace, self.dest, values)
+
+
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:  # pragma: no cover - delegated to argparse
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be zero or positive")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:  # pragma: no cover - delegated to argparse
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
+@dataclass
+class ParameterLogEntry:
+    scope: str
+    name: str
+    value: object
+    source: str
+
+
+def _resolve_parameter(
+    namespace: argparse.Namespace,
+    cfg_section: Any,
+    *,
+    dest: str,
+    attr: str,
+    default_value: object,
+    cli_overrides: set[str],
+    scope: str,
+    fallback: tuple[object, str] | None = None,
+) -> ParameterLogEntry:
+    if dest in cli_overrides:
+        value = getattr(namespace, dest)
+        source = "cli"
+    else:
+        current = getattr(cfg_section, attr, default_value)
+        if current != default_value:
+            value = current
+            source = "config"
+        elif fallback is not None:
+            value, source = fallback
+        else:
+            value = default_value
+            source = "default"
+    setattr(namespace, dest, value)
+    if hasattr(cfg_section, attr):
+        setattr(cfg_section, attr, value)
+    return ParameterLogEntry(scope=scope, name=attr, value=value, source=source)
+
+
+def _resolve_target_parameters(
+    command: str, cfg: Config, args: argparse.Namespace
+) -> list[ParameterLogEntry]:
+    cli_overrides: set[str] = getattr(args, "_cli_overrides", set())
+    entries: list[ParameterLogEntry] = []
+
+    def _apply_mode(
+        mode: str,
+        section: Any,
+        *,
+        dest_prefix: str = "",
+        scope_prefix: str = "",
+        fallback_map: dict[str, ParameterLogEntry] | None = None,
+    ) -> None:
+        defaults: ModeDefaults = TARGET_MODE_DEFAULTS[mode]
+        prefix = f"{dest_prefix}_" if dest_prefix else ""
+        scope = scope_prefix or mode
+        for name in ("column", "chunk_size", "timeout", "limit", "offset"):
+            dest = f"{prefix}{name}"
+            fallback = None
+            if fallback_map is not None and name in fallback_map:
+                entry = fallback_map[name]
+                fallback = (entry.value, entry.source)
+            entry = _resolve_parameter(
+                args,
+                section,
+                dest=dest,
+                attr=name,
+                default_value=getattr(defaults, name),
+                cli_overrides=cli_overrides,
+                scope=f"{scope}.{name}" if scope_prefix else scope,
+                fallback=fallback,
+            )
+            entries.append(entry)
+
+    if command in {"chembl", "uniprot", "iuphar"}:
+        section = getattr(cfg.target, command)
+        _apply_mode(command, section)
+    elif command == "all":
+        all_section = cfg.target.all
+        _apply_mode("all", all_section)
+        fallback_lookup = {
+            entry.name: entry for entry in entries if entry.scope == "all"
+        }
+        _apply_mode(
+            "chembl",
+            cfg.target.chembl,
+            dest_prefix="chembl",
+            scope_prefix="all.chembl",
+            fallback_map=fallback_lookup,
+        )
+        _apply_mode(
+            "uniprot",
+            cfg.target.uniprot,
+            dest_prefix="uniprot",
+            scope_prefix="all.uniprot",
+        )
+        _apply_mode(
+            "iuphar",
+            cfg.target.iuphar,
+            dest_prefix="iuphar",
+            scope_prefix="all.iuphar",
+        )
+
+    return entries
+
 
 _RUSSIAN_KEYBOARD_MAP: dict[str, str] = {
     "q": "й",
@@ -836,9 +981,60 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
 
     root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser = argparse.ArgumentParser(
-        description="Target data utilities", parents=[root]
+        description="Target data utilities",
+        parents=[root],
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def _add_common_cli_options(
+        parser_obj: argparse.ArgumentParser,
+        *,
+        defaults: ModeDefaults,
+        column_help: str,
+        column_choices: Sequence[str] | None = None,
+    ) -> None:
+        selection = parser_obj.add_argument_group("Selection")
+        selection.add_argument(
+            "--column",
+            dest="column",
+            action=StoreWithSource,
+            default=defaults.column,
+            choices=column_choices,
+            help=f"{column_help} (default: {defaults.column})",
+        )
+        selection.add_argument(
+            "--limit",
+            dest="limit",
+            action=StoreWithSource,
+            default=None,
+            type=positive_int,
+            help="Maximum number of identifiers to process (omit for no limit)",
+        )
+        selection.add_argument(
+            "--offset",
+            dest="offset",
+            action=StoreWithSource,
+            default=defaults.offset,
+            type=_non_negative_int,
+            help="Number of identifiers to skip before processing",
+        )
+        execution = parser_obj.add_argument_group("Execution")
+        execution.add_argument(
+            "--chunk-size",
+            dest="chunk_size",
+            action=StoreWithSource,
+            default=defaults.chunk_size,
+            type=positive_int,
+            help=f"Identifiers processed per request (default: {defaults.chunk_size})",
+        )
+        execution.add_argument(
+            "--timeout",
+            dest="timeout",
+            action=StoreWithSource,
+            default=defaults.timeout,
+            type=_positive_float,
+            help=f"Timeout in seconds for API calls (default: {defaults.timeout})",
+        )
 
     # ----------------------------
     # UniProt sub-command
@@ -849,32 +1045,23 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Extract information for UniProt accessions",
         aliases=list(COMMAND_KEYBOARD_ALIASES.get("uniprot", ())),
     )
-    uniprot.add_argument(
-        "--column",
-        default="uniprot_id",
-        choices=["uniprot_id", "mapping_uniprot_id"],
-        help="Column in the input CSV containing UniProt accessions",
+    _add_common_cli_options(
+        uniprot,
+        defaults=TARGET_MODE_DEFAULTS["uniprot"],
+        column_help="Column in the input CSV containing UniProt accessions",
+        column_choices=["uniprot_id", "mapping_uniprot_id"],
     )
-    uniprot.add_argument(
+    uniprot_sources = uniprot.add_argument_group("Data sources")
+    uniprot_sources.add_argument(
         "--data-dir",
+        dest="data_dir",
         type=path_argument,
         default=None,
+        action=StoreWithSource,
         help=(
             "Directory containing '<uniprot_id>.json' files "
-            "(default: config resources.uniprot_data_dir)"
+            "(default: config target.uniprot.data_dir)"
         ),
-    )
-    uniprot.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Maximum number of identifiers to process",
-    )
-    uniprot.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
     )
     uniprot.set_defaults(func=run_uniprot)
 
@@ -888,40 +1075,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         conflict_handler="resolve",
         aliases=list(COMMAND_KEYBOARD_ALIASES.get("chembl", ())),
     )
-    # ``--id-cols`` and other export options are inherited from ``shared``.
     chembl.set_defaults(normalize_at_export=True)
-    chembl.add_argument(
-        "--column",
-        default="target_chembl_id",
-        help="Column name in the input CSV containing identifiers",
+    _add_common_cli_options(
+        chembl,
+        defaults=TARGET_MODE_DEFAULTS["chembl"],
+        column_help="Column name in the input CSV containing ChEMBL identifiers",
     )
-    chembl.add_argument(
-        "--chunk-size",
-        type=positive_int,
-        default=5,
-        help="Maximum number of identifiers to request per call",
-    )
-    chembl.add_argument(
-        "--timeout",
-        type=float,
-        default=30.0,
-        help="Timeout in seconds for each HTTP request",
-    )
-    chembl.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Maximum number of identifiers to process",
-    )
-    chembl.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
-    )
-
-    chembl.set_defaults(normalize_at_export=True)
-
     chembl.set_defaults(func=run_chembl)
 
     # ----------------------------
@@ -933,35 +1092,33 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Map UniProt accessions to IUPHAR classifications",
         aliases=list(COMMAND_KEYBOARD_ALIASES.get("iuphar", ())),
     )
-    iuphar.add_argument(
+    _add_common_cli_options(
+        iuphar,
+        defaults=TARGET_MODE_DEFAULTS["iuphar"],
+        column_help="Column in the input CSV containing UniProt accessions",
+    )
+    iuphar_sources = iuphar.add_argument_group("Data sources")
+    iuphar_sources.add_argument(
         "--target-csv",
+        dest="target_csv",
         type=path_argument,
         default=None,
+        action=StoreWithSource,
         help=(
             "Path to the _IUPHAR_target.csv file "
-            "(default: config resources.iuphar_target_csv)"
+            "(default: config target.iuphar.target_csv)"
         ),
     )
-    iuphar.add_argument(
+    iuphar_sources.add_argument(
         "--family-csv",
+        dest="family_csv",
         type=path_argument,
         default=None,
+        action=StoreWithSource,
         help=(
             "Path to the _IUPHAR_family.csv file "
-            "(default: config resources.iuphar_family_csv)"
+            "(default: config target.iuphar.family_csv)"
         ),
-    )
-    iuphar.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Maximum number of rows to process",
-    )
-    iuphar.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
     )
     iuphar.set_defaults(func=run_iuphar)
 
@@ -974,74 +1131,221 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Run ChEMBL, UniProt and IUPHAR pipelines and merge results",
         aliases=list(COMMAND_KEYBOARD_ALIASES.get("all", ())),
     )
-    all_cmd.add_argument(
+    _add_common_cli_options(
+        all_cmd,
+        defaults=TARGET_MODE_DEFAULTS["all"],
+        column_help="Column containing ChEMBL target identifiers",
+    )
+    outputs_group = all_cmd.add_argument_group("Intermediate outputs")
+    outputs_group.add_argument(
         "--chembl-out",
         dest="chembl_out",
         type=path_argument,
         help="Optional path to save intermediate ChEMBL data",
     )
-    all_cmd.add_argument(
+    outputs_group.add_argument(
         "--uniprot-out",
         dest="uniprot_out",
         type=path_argument,
         help="Optional path to save intermediate UniProt data",
     )
-    all_cmd.add_argument(
+    outputs_group.add_argument(
         "--iuphar-out",
         dest="iuphar_out",
         type=path_argument,
         help="Optional path to save intermediate IUPHAR data",
     )
-    all_cmd.add_argument(
+    all_sources = all_cmd.add_argument_group("Data sources")
+    all_sources.add_argument(
         "--data-dir",
+        dest="data_dir",
         type=path_argument,
         default=None,
+        action=StoreWithSource,
         help=(
             "Directory containing '<uniprot_id>.json' files "
-            "(default: config resources.uniprot_data_dir)"
+            "(default: config target.all.data_dir)"
         ),
     )
-    all_cmd.add_argument(
+    all_sources.add_argument(
         "--target-csv",
+        dest="target_csv",
         type=path_argument,
         default=None,
+        action=StoreWithSource,
         help=(
             "Path to the _IUPHAR_target.csv file "
-            "(default: config resources.iuphar_target_csv)"
+            "(default: config target.all.target_csv)"
         ),
     )
-    all_cmd.add_argument(
+    all_sources.add_argument(
         "--family-csv",
+        dest="family_csv",
         type=path_argument,
         default=None,
+        action=StoreWithSource,
         help=(
             "Path to the _IUPHAR_family.csv file "
-            "(default: config resources.iuphar_family_csv)"
+            "(default: config target.all.family_csv)"
         ),
     )
-    all_cmd.add_argument(
-        "--timeout",
-        type=float,
-        default=30.0,
-        help="Timeout in seconds for each HTTP request",
-    )
-    all_cmd.add_argument(
+    merge_group = all_cmd.add_argument_group("Merge behaviour")
+    merge_group.add_argument(
         "--uniprot-column",
+        dest="uniprot_column",
+        action=StoreWithSource,
         default="uniprot_id",
         choices=["uniprot_id", "mapping_uniprot_id"],
-        help="Column from ChEMBL output to use for UniProt processing",
+        help=(
+            "Column from the ChEMBL output used for UniProt processing "
+            "(default: config target.all.uniprot_column)"
+        ),
     )
-    all_cmd.add_argument(
-        "--limit",
-        type=int,
+    overrides_chembl = all_cmd.add_argument_group("ChEMBL overrides")
+    overrides_chembl.add_argument(
+        "--chembl-column",
+        dest="chembl_column",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["chembl"].column,
+        help=(
+            "Override the column used for ChEMBL requests "
+            f"(default: {TARGET_MODE_DEFAULTS['chembl'].column})"
+        ),
+    )
+    overrides_chembl.add_argument(
+        "--chembl-chunk-size",
+        dest="chembl_chunk_size",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["chembl"].chunk_size,
+        type=positive_int,
+        help=(
+            "Override the ChEMBL chunk size "
+            f"(default: {TARGET_MODE_DEFAULTS['chembl'].chunk_size})"
+        ),
+    )
+    overrides_chembl.add_argument(
+        "--chembl-timeout",
+        dest="chembl_timeout",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["chembl"].timeout,
+        type=_positive_float,
+        help=(
+            "Override the ChEMBL request timeout "
+            f"(default: {TARGET_MODE_DEFAULTS['chembl'].timeout})"
+        ),
+    )
+    overrides_chembl.add_argument(
+        "--chembl-limit",
+        dest="chembl_limit",
+        action=StoreWithSource,
         default=None,
-        help="Maximum number of identifiers to process",
+        type=positive_int,
+        help="Override the ChEMBL record limit (omit for no limit)",
     )
-    all_cmd.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
+    overrides_chembl.add_argument(
+        "--chembl-offset",
+        dest="chembl_offset",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["chembl"].offset,
+        type=_non_negative_int,
+        help=(
+            "Override the number of ChEMBL records to skip "
+            f"(default: {TARGET_MODE_DEFAULTS['chembl'].offset})"
+        ),
+    )
+    overrides_uniprot = all_cmd.add_argument_group("UniProt overrides")
+    overrides_uniprot.add_argument(
+        "--uniprot-chunk-size",
+        dest="uniprot_chunk_size",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["uniprot"].chunk_size,
+        type=positive_int,
+        help=(
+            "Override the UniProt chunk size "
+            f"(default: {TARGET_MODE_DEFAULTS['uniprot'].chunk_size})"
+        ),
+    )
+    overrides_uniprot.add_argument(
+        "--uniprot-timeout",
+        dest="uniprot_timeout",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["uniprot"].timeout,
+        type=_positive_float,
+        help=(
+            "Override the UniProt request timeout "
+            f"(default: {TARGET_MODE_DEFAULTS['uniprot'].timeout})"
+        ),
+    )
+    overrides_uniprot.add_argument(
+        "--uniprot-limit",
+        dest="uniprot_limit",
+        action=StoreWithSource,
+        default=None,
+        type=positive_int,
+        help="Override the UniProt record limit (omit for no limit)",
+    )
+    overrides_uniprot.add_argument(
+        "--uniprot-offset",
+        dest="uniprot_offset",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["uniprot"].offset,
+        type=_non_negative_int,
+        help=(
+            "Override the number of UniProt records to skip "
+            f"(default: {TARGET_MODE_DEFAULTS['uniprot'].offset})"
+        ),
+    )
+    overrides_iuphar = all_cmd.add_argument_group("IUPHAR overrides")
+    overrides_iuphar.add_argument(
+        "--iuphar-column",
+        dest="iuphar_column",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["iuphar"].column,
+        help=(
+            "Override the column used for IUPHAR lookups "
+            f"(default: {TARGET_MODE_DEFAULTS['iuphar'].column})"
+        ),
+    )
+    overrides_iuphar.add_argument(
+        "--iuphar-chunk-size",
+        dest="iuphar_chunk_size",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["iuphar"].chunk_size,
+        type=positive_int,
+        help=(
+            "Override the IUPHAR chunk size "
+            f"(default: {TARGET_MODE_DEFAULTS['iuphar'].chunk_size})"
+        ),
+    )
+    overrides_iuphar.add_argument(
+        "--iuphar-timeout",
+        dest="iuphar_timeout",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["iuphar"].timeout,
+        type=_positive_float,
+        help=(
+            "Override the IUPHAR processing timeout "
+            f"(default: {TARGET_MODE_DEFAULTS['iuphar'].timeout})"
+        ),
+    )
+    overrides_iuphar.add_argument(
+        "--iuphar-limit",
+        dest="iuphar_limit",
+        action=StoreWithSource,
+        default=None,
+        type=positive_int,
+        help="Override the IUPHAR record limit (omit for no limit)",
+    )
+    overrides_iuphar.add_argument(
+        "--iuphar-offset",
+        dest="iuphar_offset",
+        action=StoreWithSource,
+        default=TARGET_MODE_DEFAULTS["iuphar"].offset,
+        type=_non_negative_int,
+        help=(
+            "Override the number of IUPHAR records to skip "
+            f"(default: {TARGET_MODE_DEFAULTS['iuphar'].offset})"
+        ),
     )
     all_cmd.set_defaults(func=run_all)
 
@@ -1076,7 +1380,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         a failure code.
     """
     limit = cfg.target.uniprot.limit
-    if limit is not None and limit < 0:
+    if limit is not None and limit < 1:
         logger.error(
             "invalid_limit",
             section="target.uniprot.limit",
@@ -1095,7 +1399,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
         df = df[(df[column].str.strip() != "") & (df[column] != "#N/A")].reset_index(
             drop=True
         )
-        offset = getattr(args, "offset", 0)
+        offset = cfg.target.uniprot.offset
         if offset:
             original_rows = len(df)
             df = df.iloc[offset:].reset_index(drop=True)
@@ -1235,7 +1539,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         CSV artefact failed. All errors are logged with structured context.
     """
     limit = cfg.target.chembl.limit
-    if limit is not None and limit < 0:
+    if limit is not None and limit < 1:
         logger.error(
             "invalid_limit",
             section="target.chembl.limit",
@@ -1255,7 +1559,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
 
-    offset = getattr(args, "offset", 0)
+    offset = cfg.target.chembl.offset
     base_ids_iter: Iterator[str] = ids_iter
     if offset:
         base_ids_iter = islice(base_ids_iter, offset, None)
@@ -1684,7 +1988,7 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
         output could not be written.
     """
     limit = cfg.target.iuphar.limit
-    if limit is not None and limit < 0:
+    if limit is not None and limit < 1:
         logger.error(
             "invalid_limit",
             section="target.iuphar.limit",
@@ -1697,14 +2001,26 @@ def run_iuphar(cfg: Config, args: argparse.Namespace) -> int:
 
     try:
         df_to_process: pd.DataFrame | None = None
-        offset = getattr(args, "offset", 0)
-        if limit is not None or offset:
+        offset = cfg.target.iuphar.offset
+        needs_mutation = (
+            limit is not None
+            or offset
+            or cfg.target.iuphar.column != "uniprot_id"
+        )
+        if needs_mutation:
             df_full = pd.read_csv(
                 args.input_csv,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
                 dtype=str,
-            )
+            ).fillna("")
+            source_column = cfg.target.iuphar.column
+            if source_column not in df_full.columns:
+                raise ValueError(
+                    f"column '{source_column}' not found in {args.input_csv}"
+                )
+            if source_column != "uniprot_id":
+                df_full["uniprot_id"] = df_full[source_column]
             if offset:
                 total_rows = len(df_full)
                 df_full = df_full.iloc[offset:].reset_index(drop=True)
@@ -2729,7 +3045,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     """
 
     limit = cfg.target.all.limit
-    if limit is not None and limit < 0:
+    if limit is not None and limit < 1:
         logger.error(
             "invalid_limit",
             section="target.all.limit",
@@ -2775,7 +3091,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             chembl_out,
             limit=limit,
             chunk_size=cfg.target.all.chunk_size,
-            offset=getattr(args, "offset", 0),
+            offset=cfg.target.all.offset,
             id_cols=key_columns,
         )
         uniprot_df = fetch_uniprot(cfg, chembl_df, uniprot_out)
@@ -2811,6 +3127,17 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
             "command_alias_resolved",
             alias=alias_token,
             command=args.command,
+        )
+
+    parameter_entries = _resolve_target_parameters(args.command, cfg, args)
+    for entry in parameter_entries:
+        logger.info(
+            "cli_parameter",
+            command=args.command,
+            scope=entry.scope,
+            param=entry.name,
+            value=entry.value,
+            source=entry.source,
         )
 
     final_candidate = getattr(args, "final_out", None)
@@ -2884,49 +3211,70 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
 
             limit_value = getattr(args, "limit", None)
-            if limit_value == 0:
-                logger.info("pipeline_skip_limit", limit=limit_value)
-                exit_code = 0
-            else:
-                subparser_map = getattr(parser, "subparsers_map", {})
-                subparser = subparser_map.get(args.command, parser)
-                if limit_value is not None and limit_value < 0:
-                    subparser.error("--limit must be zero or a positive integer")
-                offset_value = getattr(args, "offset", 0)
-                if offset_value < 0:
-                    subparser.error("--offset must be zero or a positive integer")
-                mapping: dict[str, str] = {}
-                if args.command == "uniprot":
-                    mapping = {
-                        "column": "target.uniprot.column",
-                        "data_dir": "target.uniprot.data_dir",
-                        "limit": "target.uniprot.limit",
-                    }
-                elif args.command == "chembl":
-                    mapping = {
-                        "column": "target.chembl.column",
-                        "chunk_size": "target.chembl.chunk_size",
-                        "timeout": "target.chembl.timeout",
-                        "limit": "target.chembl.limit",
-                    }
-                elif args.command == "iuphar":
-                    mapping = {
-                        "target_csv": "target.iuphar.target_csv",
-                        "family_csv": "target.iuphar.family_csv",
-                        "limit": "target.iuphar.limit",
-                    }
-                elif args.command == "all":
-                    mapping = {
-                        "timeout": "target.all.timeout",
-                        "data_dir": "target.all.data_dir",
-                        "target_csv": "target.all.target_csv",
-                        "family_csv": "target.all.family_csv",
-                        "uniprot_column": "target.all.uniprot_column",
-                        "chembl_out": "target.all.chembl_out",
-                        "uniprot_out": "target.all.uniprot_out",
-                        "iuphar_out": "target.all.iuphar_out",
-                        "limit": "target.all.limit",
-                    }
+            subparser_map = getattr(parser, "subparsers_map", {})
+            subparser = subparser_map.get(args.command, parser)
+            if limit_value is not None and limit_value < 1:
+                subparser.error("--limit must be a positive integer")
+            offset_value = getattr(args, "offset", 0)
+            if offset_value < 0:
+                subparser.error("--offset must be zero or a positive integer")
+            mapping: dict[str, str] = {}
+            if args.command == "uniprot":
+                mapping = {
+                    "column": "target.uniprot.column",
+                    "chunk_size": "target.uniprot.chunk_size",
+                    "timeout": "target.uniprot.timeout",
+                    "limit": "target.uniprot.limit",
+                    "offset": "target.uniprot.offset",
+                    "data_dir": "target.uniprot.data_dir",
+                }
+            elif args.command == "chembl":
+                mapping = {
+                    "column": "target.chembl.column",
+                    "chunk_size": "target.chembl.chunk_size",
+                    "timeout": "target.chembl.timeout",
+                    "limit": "target.chembl.limit",
+                    "offset": "target.chembl.offset",
+                }
+            elif args.command == "iuphar":
+                mapping = {
+                    "column": "target.iuphar.column",
+                    "chunk_size": "target.iuphar.chunk_size",
+                    "timeout": "target.iuphar.timeout",
+                    "limit": "target.iuphar.limit",
+                    "offset": "target.iuphar.offset",
+                    "target_csv": "target.iuphar.target_csv",
+                    "family_csv": "target.iuphar.family_csv",
+                }
+            elif args.command == "all":
+                mapping = {
+                    "column": "target.all.column",
+                    "chunk_size": "target.all.chunk_size",
+                    "timeout": "target.all.timeout",
+                    "limit": "target.all.limit",
+                    "offset": "target.all.offset",
+                    "data_dir": "target.all.data_dir",
+                    "target_csv": "target.all.target_csv",
+                    "family_csv": "target.all.family_csv",
+                    "uniprot_column": "target.all.uniprot_column",
+                    "chembl_out": "target.all.chembl_out",
+                    "uniprot_out": "target.all.uniprot_out",
+                    "iuphar_out": "target.all.iuphar_out",
+                    "chembl_column": "target.chembl.column",
+                    "chembl_chunk_size": "target.chembl.chunk_size",
+                    "chembl_timeout": "target.chembl.timeout",
+                    "chembl_limit": "target.chembl.limit",
+                    "chembl_offset": "target.chembl.offset",
+                    "uniprot_chunk_size": "target.uniprot.chunk_size",
+                    "uniprot_timeout": "target.uniprot.timeout",
+                    "uniprot_limit": "target.uniprot.limit",
+                    "uniprot_offset": "target.uniprot.offset",
+                    "iuphar_column": "target.iuphar.column",
+                    "iuphar_chunk_size": "target.iuphar.chunk_size",
+                    "iuphar_timeout": "target.iuphar.timeout",
+                    "iuphar_limit": "target.iuphar.limit",
+                    "iuphar_offset": "target.iuphar.offset",
+                }
                 args_dict = vars(args).copy()
                 output_candidate = args_dict.get("output_csv")
                 if output_candidate in (
