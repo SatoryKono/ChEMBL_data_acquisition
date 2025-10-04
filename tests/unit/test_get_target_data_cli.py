@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from library.config import Config
+from library.cli import parser as cli_parser
+from library.config import Config, ConfigMetadata
 from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS
 from scripts import get_target_data
 
@@ -116,3 +117,43 @@ def test_parser_validation__rejects_zero_chunk_size():
     parser, _ = get_target_data.build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["chembl", "--chunk-size", "0"])
+
+
+@pytest.mark.unit
+def test_apply_config_overrides__missing_config_attribute(monkeypatch, tmp_path):
+    parser, _ = get_target_data.build_parser()
+    args = parser.parse_args(["all"])
+    subparser = parser.subparsers_map["all"]
+    dummy_config = tmp_path / "config.yaml"
+    dummy_config.write_text("{}", encoding="utf-8")
+
+    def fake_load_config(*_args, **_kwargs):
+        cfg = Config()
+        cfg.target.iuphar.__dict__.pop("column", None)
+        metadata = ConfigMetadata(snapshot={}, sources={})
+        return cfg, metadata
+
+    monkeypatch.setattr(cli_parser, "load_config", fake_load_config)
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    def fake_warning(event: str, **kwargs: object) -> None:
+        warnings.append((event, kwargs))
+
+    monkeypatch.setattr(cli_parser.logger, "warning", fake_warning)
+
+    cfg = cli_parser.apply_config_overrides(
+        args,
+        subparser,
+        dummy_config,
+        mapping={"iuphar_column": "target.iuphar.column"},
+        base_parser=parser,
+    )
+
+    assert isinstance(cfg, Config)
+    assert args.iuphar_column == TARGET_MODE_DEFAULTS["iuphar"].column
+    assert warnings
+    event, payload = warnings[0]
+    assert event == "config_attribute_missing"
+    assert payload["argument"] == "iuphar_column"
+    assert payload["path"] == "sources.chembl.pipelines.target.iuphar.column"
+    assert payload["error"]
