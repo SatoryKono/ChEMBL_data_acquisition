@@ -175,6 +175,23 @@ python scripts/get_target_data.py all \
   --chembl-chunk-size 10 --uniprot-chunk-size 200
 ```
 
+#### Windows Command Prompt example
+
+On Windows the shell prompt already shows the current directory
+(`C:\\Users\\<you>\\Documents\\GitHub\\ChEMBL_data_acquisition>`). Type only the
+command after the prompt:
+
+```cmd
+py -3 scripts\get_target_data.py all ^
+  --input data\input\target.csv ^
+  --final-out data\output\targets_20251002.csv ^
+  --limit 10
+```
+
+The `^` line continuations are optional but keep the command readable. The
+`--final-out` option supersedes the deprecated `--output` alias printed by older
+examples.
+
 ## Assay pipeline `get_assay_data`
 
 Options include:

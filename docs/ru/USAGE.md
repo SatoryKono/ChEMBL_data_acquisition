@@ -170,6 +170,22 @@ python scripts/get_target_data.py all \
   --chembl-chunk-size 10 --uniprot-chunk-size 200
 ```
 
+#### Пример для Windows (Command Prompt)
+
+В командной строке Windows приглашение уже содержит путь
+(`C:\\Users\\<вы>\\Documents\\GitHub\\ChEMBL_data_acquisition>`). После него вводите
+только саму команду:
+
+```cmd
+py -3 scripts\get_target_data.py all ^
+  --input data\input\target.csv ^
+  --final-out data\output\targets_20251002.csv ^
+  --limit 10
+```
+
+Символ `^` на конце строк необязателен, но помогает разбить длинную команду.
+Используйте параметр `--final-out` вместо устаревшего алиаса `--output`.
+
 ## Конвейер ассайев `get_assay_data`
 
 | Опция | Значение по умолчанию | Описание |
