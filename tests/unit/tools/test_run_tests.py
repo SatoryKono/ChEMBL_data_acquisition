@@ -1,13 +1,24 @@
-"""Unit tests for :mod:`tools.run_tests`."""
+"""Unit tests for :mod:`tests.run_tests`."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-from tools import run_tests
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_RUN_TESTS_PATH = _PROJECT_ROOT / "tests" / "run_tests.py"
+_SPEC = importlib.util.spec_from_file_location("tests.run_tests", _RUN_TESTS_PATH)
+if _SPEC is None or _SPEC.loader is None:  # pragma: no cover - defensive guard
+    raise RuntimeError(f"Unable to load run_tests module from {_RUN_TESTS_PATH}")
+
+run_tests = importlib.util.module_from_spec(_SPEC)
+sys.modules.setdefault("tests.run_tests", run_tests)
+_SPEC.loader.exec_module(run_tests)
 
 
 def _stub_git_output(_: list[str]) -> str:
