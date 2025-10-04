@@ -85,7 +85,6 @@ from library.integration import uniprot_library as uu
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
-from library.postprocessing import target as target_pp
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
@@ -114,15 +113,18 @@ from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
 
+from library.postprocessing import target as target_pp
+
 try:
     from library.postprocessing.target import process_targets as _process_targets_impl
 except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
-    _process_targets_impl = None
-    for _fallback_name in ("process_targest", "process_target"):  # legacy typo fallback
-        candidate = getattr(target_pp, _fallback_name, None)
-        if callable(candidate):
-            _process_targets_impl = candidate
-            break
+    _process_targets_impl = getattr(target_pp, "process_targets", None)
+    if _process_targets_impl is None:
+        for _fallback_name in ("process_targest", "process_target"):
+            candidate = getattr(target_pp, _fallback_name, None)
+            if callable(candidate):
+                _process_targets_impl = candidate
+                break
     if _process_targets_impl is None:  # pragma: no cover - defensive guard
         raise _process_targets_exc
 else:  # pragma: no cover - compatibility bridge
@@ -3140,7 +3142,7 @@ def validate_and_write(
     before_dedup = len(final_df)
     final_df = final_df.drop_duplicates()
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
-    io.write_csv(
+    final_csv_path = io.write_csv(
         final_df,
         normalized_output,
         cfg=cfg,
@@ -3160,15 +3162,17 @@ def validate_and_write(
         chunk_value = getattr(chembl_cfg, "chunk_size", 0) if chembl_cfg is not None else 0
         if chunk_value:
             http_requests = int(math.ceil(max(input_rows, 0) / chunk_value))
-    _postprocess_isoform_export(
-        normalized_output,
-        cfg=cfg,
-        context=IsoformPostprocessContext(
-            args=postprocess_context.args if postprocess_context else None,
-            http_requests=http_requests,
-        ),
-        ambiguous_classifications=ambiguous_count,
+    isoform_context = IsoformPostprocessContext(
+        args=postprocess_context.args if postprocess_context else None,
+        http_requests=http_requests,
     )
+    if exit_code == 0:
+        _postprocess_isoform_export(
+            final_csv_path,
+            cfg=cfg,
+            context=isoform_context,
+            ambiguous_classifications=ambiguous_count,
+        )
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
