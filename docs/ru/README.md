@@ -63,7 +63,7 @@ flowchart TD
 | Быстрый старт | [`../en/guides/QUICK_START.md`](../en/guides/QUICK_START.md) | [`guides/QUICK_START.md`](./guides/QUICK_START.md) |
 | Использование CLI | [`../en/USAGE.md`](../en/USAGE.md) | [`USAGE.md`](./USAGE.md) |
 | Конфигурация | [`../en/CONFIG.md`](../en/CONFIG.md) | [`CONFIG.md`](./CONFIG.md) |
-| Выходные данные и валидация | [`../en/OUTPUT.md`](../en/OUTPUT.md) | [`OUTPUT.md`](./OUTPUT.md) |
+| Выходные данные и валидация | [`../en/OUTPUT.md`](../en/OUTPUT.md), [`../OUTPUT_TARGETS_EN.md`](../OUTPUT_TARGETS_EN.md) | [`OUTPUT.md`](./OUTPUT.md), [`../OUTPUT_TARGETS_RU.md`](../OUTPUT_TARGETS_RU.md) |
 | Контроль качества | [`../en/QA_PROCESS.md`](../en/QA_PROCESS.md) | [`QA_PROCESS.md`](./QA_PROCESS.md) |
 | Архитектура | [`../en/architecture/ARCHITECTURE.md`](../en/architecture/ARCHITECTURE.md) | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) |
 | Модель данных | [`../en/architecture/DATA_MODEL.md`](../en/architecture/DATA_MODEL.md) | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) |

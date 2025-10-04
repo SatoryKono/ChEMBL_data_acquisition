@@ -74,6 +74,11 @@ Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
 and table-quality reports under the same directory. Refer to the
 [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
+The target stage additionally materialises the organism-normalised table as
+`organism.output.target_<YYYYMMDD>.csv` (override with `--final-out`). Detailed
+post-processing steps, lineage classification and multifunctional flag handling
+are described in [`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md).
+
 ## Documentation
 
 All guides are provided in English and Russian. The structure is mirrored across

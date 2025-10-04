@@ -63,7 +63,7 @@ below to navigate the canonical English sources:
 | Quick start | [`guides/QUICK_START.md`](./guides/QUICK_START.md) | [`../ru/guides/QUICK_START.md`](../ru/guides/QUICK_START.md) |
 | CLI usage | [`USAGE.md`](./USAGE.md) | [`../ru/USAGE.md`](../ru/USAGE.md) |
 | Configuration | [`CONFIG.md`](./CONFIG.md) | [`../ru/CONFIG.md`](../ru/CONFIG.md) |
-| Outputs & validation | [`OUTPUT.md`](./OUTPUT.md) | [`../ru/OUTPUT.md`](../ru/OUTPUT.md) |
+| Outputs & validation | [`OUTPUT.md`](./OUTPUT.md), [`../OUTPUT_TARGETS_EN.md`](../OUTPUT_TARGETS_EN.md) | [`../ru/OUTPUT.md`](../ru/OUTPUT.md), [`../OUTPUT_TARGETS_RU.md`](../OUTPUT_TARGETS_RU.md) |
 | Quality controls | [`QA_PROCESS.md`](./QA_PROCESS.md) | [`../ru/QA_PROCESS.md`](../ru/QA_PROCESS.md) |
 | Architecture | [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md) | [`../ru/architecture/ARCHITECTURE.md`](../ru/architecture/ARCHITECTURE.md) |
 | Data model | [`architecture/DATA_MODEL.md`](./architecture/DATA_MODEL.md) | [`../ru/architecture/DATA_MODEL.md`](../ru/architecture/DATA_MODEL.md) |
