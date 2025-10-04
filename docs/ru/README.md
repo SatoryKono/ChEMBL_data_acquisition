@@ -55,6 +55,44 @@ CLI `get-target-data` предлагает четыре режима получ�
 
 Подробные примеры доступны в [`docs/ru/USAGE.md`](./USAGE.md), а соответствующие ключи конфигурации описаны в [`docs/ru/reference/CONFIG.md`](./reference/CONFIG.md).
 
+## Пайплайн документов
+
+Запускайте документный конвейер через единый вход `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. Значение `--mode` определяет, какие стадии выполняются, при этом общие флаги CLI остаются едиными и описаны в руководстве по использованию.
+
+| Значение `--mode` | Назначение | Пространственные флаги |
+|-------------------|------------|------------------------|
+| `chembl` | Выгружает метаданные документов из ChEMBL. | `--chembl-chunk-size`, `--chembl-timeout` (либо общие `--chunk-size`, `--timeout`). |
+| `pubmed` | Обогащает данные через PubMed, Semantic Scholar, OpenAlex и CrossRef. | `--pubmed-sleep`, `--pubmed-workers`, `--pubmed-batch-size`, `--openalex-rps`, `--crossref-rps`. |
+| `all` | Последовательно выполняет этапы `chembl` и `pubmed`, затем объединяет результаты. | Принимает оба набора пространственных флагов и параметры DOI-фолбэков. |
+
+Примеры:
+
+```bash
+# Только ChEMBL
+python scripts/get_document_data.py --mode chembl \
+    --input data/input/document.csv \
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# PubMed и партнёрские сервисы
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
+    --config config/config.yaml \
+    --openalex-rps 3 --crossref-rps 3
+
+# Полный прогон с ручными DOI
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --config config/config.yaml \
+    --fallback-doi-enabled \
+    --fallback-doi-path data/input/document_fallback.csv \
+    --fallback-doi-overwrite
+```
+
+На выходе формируется детерминированный CSV, `<имя>.meta.yaml`, отчёты `<имя>_quality_report_table.csv`, `<имя>_data_correlation_report_table.csv` и файл `<имя>.quality.json` со статистикой по DOI.
+
 ## Полная документация
 
 Для получения подробной информации об использовании, конфигурации и форматах вывода, пожалуйста, обратитесь к полной документации:

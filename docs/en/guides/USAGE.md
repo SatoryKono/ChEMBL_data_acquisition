@@ -61,29 +61,96 @@ write to the canonical destination without relying on deprecated aliases.
 `--limit 0` skips execution, `--dry-run` prints scheduled steps without touching
 the filesystem.
 
-## Document pipeline (`get-document-data`)
+## Document pipeline (`python scripts/get_document_data.py`)
 
-Sub-commands:
+Run the document workflow via the single entry point `python scripts/get_document_data.py --mode <chembl|pubmed|all>`. The `--mode`
+flag replaces the legacy positional sub-commands while keeping the common CLI
+arguments consistent with the other pipelines.
 
-| Mode | Description | Key options |
-|------|-------------|-------------|
-| `chembl` | Retrieve metadata from the ChEMBL API. | `--column`, `--chunk-size`, `--timeout`, `--limit`, `--offset`. |
-| `pubmed` | Enrich with PubMed, Semantic Scholar, OpenAlex, and CrossRef. | `--column`, `--sleep`, `--workers`, `--batch-size`, `--limit`, `--offset`, `--openalex-rps`, `--crossref-rps`, `--fallback-doi-*`. |
-| `all` | Run ChEMBL, merge external services, and export the consolidated table. | Same options as `pubmed` plus `--fallback-doi-*` for DOI overrides. |
+### Quick reference
 
-Typical command:
+| `--mode` | Purpose | Default column | Namespaced flags |
+|----------|---------|----------------|------------------|
+| `chembl` | Retrieve document metadata from the ChEMBL API. | `document_chembl_id` | `--chembl-chunk-size`, `--chembl-timeout` (aliases: `--chunk-size`, `--timeout`). |
+| `pubmed` | Enrich with PubMed, Semantic Scholar, OpenAlex, and CrossRef. | `PMID` | `--pubmed-sleep`, `--pubmed-workers`, `--pubmed-batch-size`, `--openalex-rps`, `--crossref-rps`. |
+| `all` | Execute the ChEMBL and PubMed stages sequentially, then merge the payloads. | `document_chembl_id` | Accepts both namespaces plus fallback DOI options. |
+
+### Help excerpt
 
 ```
-get-document-data all \
+$ python scripts/get_document_data.py --mode all --help
+...
+  --chembl-chunk-size CHEMBL_CHUNK_SIZE, --chunk-size CHEMBL_CHUNK_SIZE
+                        Maximum identifiers per ChEMBL request
+  --pubmed-sleep PUBMED_SLEEP, --sleep PUBMED_SLEEP
+                        Seconds to sleep between PubMed requests
+  --pubmed-workers PUBMED_WORKERS, --workers PUBMED_WORKERS
+                        Number of concurrent PubMed requests
+  --pubmed-batch-size PUBMED_BATCH_SIZE, --batch-size PUBMED_BATCH_SIZE
+                        Maximum PMIDs per PubMed request
+  --chembl-timeout CHEMBL_TIMEOUT, --timeout CHEMBL_TIMEOUT
+                        Timeout in seconds for each ChEMBL HTTP request
+  --openalex-rps OPENALEX_RPS
+                        Requests per second limit for OpenAlex
+  --crossref-rps CROSSREF_RPS
+                        Requests per second limit for CrossRef
+
+Fallback DOI overrides:
+  --fallback-doi-enabled
+                        Enable lookup of DOI overrides from a CSV file
+  --fallback-doi-path FALLBACK_DOI_PATH
+                        CSV file containing DOI overrides keyed by PMID
+  --fallback-doi-col-pmid FALLBACK_DOI_COL_PMID
+                        Column containing PubMed identifiers in the fallback CSV
+  --fallback-doi-col-doi FALLBACK_DOI_COL_DOI
+                        Column containing DOI values in the fallback CSV
+  --fallback-doi-delimiter FALLBACK_DOI_DELIMITER
+                        Delimiter used when reading the fallback CSV (default: io.csv_sep)
+  --fallback-doi-encoding FALLBACK_DOI_ENCODING
+                        Encoding used for the fallback CSV (default: io.csv_encoding)
+  --fallback-doi-overwrite
+                        Allow replacing existing DOIs with fallback values
+```
+
+### Fallback DOI flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--fallback-doi-enabled` | Disabled | Activate reading overrides from a CSV file. |
+| `--fallback-doi-path` | _required when enabled_ | Path to the CSV containing PMID → DOI rows. |
+| `--fallback-doi-col-pmid` | `PMID` | Column storing PubMed identifiers inside the fallback CSV. |
+| `--fallback-doi-col-doi` | `DOI` | Column storing DOI values inside the fallback CSV. |
+| `--fallback-doi-delimiter` | `local.io.csv_sep` (defaults to `,`) | CSV delimiter applied when parsing overrides. |
+| `--fallback-doi-encoding` | `local.io.csv_encoding` (defaults to `utf-8-sig`) | Encoding used for the fallback CSV. |
+| `--fallback-doi-overwrite` | Disabled | Permit replacing existing DOIs with fallback values. |
+
+### Example invocations
+
+```bash
+# ChEMBL-only export
+python scripts/get_document_data.py --mode chembl \
     --input data/input/document.csv \
-    --final-out output/documents_$(date +%Y%m%d).csv \
+    --final-out output/documents_chembl.csv \
+    --config config/config.yaml
+
+# PubMed enrichment with throttled partner APIs
+python scripts/get_document_data.py --mode pubmed \
+    --input data/input/document.csv \
+    --final-out output/documents_pubmed.csv \
     --config config/config.yaml \
-    --limit 500 --log-level INFO
+    --openalex-rps 3 --crossref-rps 3
+
+# Full merge with manual DOI corrections
+python scripts/get_document_data.py --mode all \
+    --input data/input/document.csv \
+    --final-out output/documents_full.csv \
+    --config config/config.yaml \
+    --fallback-doi-enabled \
+    --fallback-doi-path data/input/document_fallback.csv \
+    --fallback-doi-overwrite
 ```
 
-The pipeline writes a deterministic CSV, `<name>.meta.yaml`,
-`<name>_quality_report_table.csv`, `<name>_data_correlation_report_table.csv`,
-and `<name>.quality.json` with DOI coverage statistics.
+The pipeline writes a deterministic CSV, `<name>.meta.yaml`, `<name>_quality_report_table.csv`, `<name>_data_correlation_report_table.csv`, and `<name>.quality.json` containing DOI coverage metrics.
 
 ## Target pipeline (`get-target-data`)
 
