@@ -136,7 +136,7 @@ def _transform_reaction_ec_numbers(value: Any) -> list[str]:
 def compute_multifunctional(source: pd.DataFrame) -> pd.DataFrame:
     """Replicate the ``multifunctional`` helper from the M script."""
 
-    trimmed = source.drop(columns=list(_COLUMNS_TO_REMOVE))
+    trimmed = source.drop(columns=list(_COLUMNS_TO_REMOVE), errors="ignore")
     result = trimmed.copy()
     result["reaction_ec_numbers"] = result["reaction_ec_numbers"].map(
         _transform_reaction_ec_numbers
