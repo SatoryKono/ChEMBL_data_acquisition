@@ -26,10 +26,12 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import sys
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
+from dataclasses import dataclass, field
 from itertools import chain, islice
 import tempfile
 from pathlib import Path
@@ -38,7 +40,7 @@ import heapq
 from threading import Lock, local
 
 from numbers import Integral, Real
-from typing import Any, cast, TypeVar
+from typing import Any, Hashable, cast, TypeVar
 
 
 import pandas as pd
@@ -140,6 +142,57 @@ DOCUMENT_FRAME_CONCAT_STRIDE = 16
 T = TypeVar("T")
 
 
+@dataclass
+class FallbackDoiMetrics:
+    """Track statistics collected while applying fallback DOI mappings."""
+
+    csv_records: int = 0
+    total_candidates: int = 0
+    matched_pmids: set[str] = field(default_factory=set)
+    applied: int = 0
+    conflicts: int = 0
+    samples: list[dict[str, object]] = field(default_factory=list)
+
+    def mark_csv_records(self, count: int) -> None:
+        self.csv_records = max(count, 0)
+
+    def mark_total_candidates(self, count: int) -> None:
+        self.total_candidates = max(count, 0)
+
+    def record_match(self, pmid: str) -> None:
+        self.matched_pmids.add(pmid)
+
+    def record_conflict(self) -> None:
+        self.conflicts += 1
+
+    def record_application(self, sample: dict[str, object]) -> None:
+        self.applied += 1
+        if len(self.samples) < 5:
+            self.samples.append(sample)
+
+    def as_log_kwargs(self) -> dict[str, object]:
+        matched = len(self.matched_pmids)
+        missing = max(self.total_candidates - matched, 0)
+        return {
+            "csv_records": self.csv_records,
+            "matched_pmids": matched,
+            "applied": self.applied,
+            "conflicts": self.conflicts,
+            "missing": missing,
+            "samples": self.samples,
+        }
+
+
+@dataclass
+class FallbackDoiState:
+    """Hold runtime information about fallback DOI configuration."""
+
+    path: Path
+    mapping: dict[str, str]
+    metrics: FallbackDoiMetrics
+    overwrite: bool
+
+
 def limit_iterable(
     iterable: Iterable[T],
     limit: int,
@@ -236,6 +289,7 @@ def _build_fallback_doi_map(
     *,
     pmid_column: str,
     doi_column: str,
+    metrics: FallbackDoiMetrics | None = None,
 ) -> dict[str, str]:
     """Return a mapping of PubMed identifiers to DOI overrides."""
 
@@ -246,6 +300,9 @@ def _build_fallback_doi_map(
             if column not in frame.columns
         ]
         raise ValueError(f"missing columns in fallback DOI file: {', '.join(missing)}")
+
+    if metrics is not None:
+        metrics.mark_csv_records(len(frame.index))
 
     mapping: dict[str, str] = {}
     for pmid_value, doi_value in frame[[pmid_column, doi_column]].itertuples(
@@ -262,7 +319,101 @@ def _build_fallback_doi_map(
         if not pmid or not doi:
             continue
         mapping[pmid] = doi
+    if metrics is not None:
+        metrics.mark_total_candidates(len(mapping))
     return mapping
+
+
+def _collect_doi_sources(frame: pd.DataFrame, index: Hashable) -> list[str]:
+    """Return human readable labels describing DOI origins for ``frame`` row."""
+
+    columns_to_sources = (
+        ("PubMed.DOI", "pubmed"),
+        ("scholar.DOI", "semantic_scholar"),
+        ("OpenAlex.DOI", "openalex"),
+        ("crossref.DOI", "crossref"),
+        ("ChEMBL.doi", "chembl"),
+        ("doi", "canonical"),
+    )
+    sources: list[str] = []
+    seen: set[str] = set()
+    for column, label in columns_to_sources:
+        if column not in frame.columns:
+            continue
+        value = frame.at[index, column]
+        if not normalise_doi(value):
+            continue
+        if label in seen:
+            continue
+        sources.append(label)
+        seen.add(label)
+    return sources
+
+
+def _apply_fallback_doi(
+    frame: pd.DataFrame,
+    *,
+    fallback_map: Mapping[str, str] | None,
+    overwrite: bool,
+    metrics: FallbackDoiMetrics | None = None,
+    pmid_column: str = "PubMed.PMID",
+) -> pd.DataFrame:
+    """Apply fallback DOI mapping to ``frame`` and update ``metrics``."""
+
+    if not fallback_map or pmid_column not in frame.columns:
+        return frame
+
+    pmid_series = (
+        frame[pmid_column]
+        .astype("string")
+        .fillna("")
+        .str.strip()
+    )
+    fallback_series = pmid_series.map(fallback_map).fillna("")
+    if not (fallback_series != "").any():
+        return frame
+
+    canonical_columns = [col for col in ("doi", "ChEMBL.doi") if col in frame.columns]
+    if not canonical_columns:
+        return frame
+
+    for idx, fallback_doi in fallback_series.items():
+        if not fallback_doi:
+            continue
+        pmid = pmid_series.at[idx]
+        if not pmid:
+            continue
+        if metrics is not None:
+            metrics.record_match(pmid)
+        sources = _collect_doi_sources(frame, idx)
+        existing_doi = ""
+        for column in canonical_columns:
+            current = normalise_doi(frame.at[idx, column])
+            if current:
+                existing_doi = current
+                break
+        conflict = bool(existing_doi and existing_doi != fallback_doi)
+        if conflict and metrics is not None:
+            metrics.record_conflict()
+        if existing_doi and not overwrite:
+            continue
+        if existing_doi == fallback_doi:
+            continue
+        for column in canonical_columns:
+            frame.at[idx, column] = fallback_doi
+        if "doi_normalised" in frame.columns:
+            frame.at[idx, "doi_normalised"] = fallback_doi
+        if metrics is not None:
+            metrics.record_application(
+                {
+                    "pmid": pmid,
+                    "fallback_doi": fallback_doi,
+                    "previous_doi": existing_doi,
+                    "sources": sources,
+                    "action": "overwrite" if existing_doi else "fill",
+                }
+            )
+    return frame
 
 
 def _concat_frames_incrementally(
@@ -1646,6 +1797,8 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    fallback_enabled = getattr(args, "fallback_doi_enabled", False)
+    fallback_path_arg = getattr(args, "fallback_doi_path", None)
     logger.info(
         "document_pubmed_start",
         input=str(args.input_csv),
@@ -1655,7 +1808,9 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         workers=getattr(args, "workers", pubmed_defaults.workers),
         batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
         sleep=getattr(args, "sleep", pubmed_defaults.sleep),
-        fallback_doi=bool(getattr(args, "fallback_doi_csv", None)),
+        fallback_doi_enabled=fallback_enabled,
+        fallback_doi_overwrite=getattr(args, "fallback_doi_overwrite", False),
+        fallback_doi_path=str(fallback_path_arg) if fallback_path_arg else None,
     )
     try:
         pmids_iter = io.read_ids(
@@ -1682,32 +1837,58 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         pmids = pmids_limited
         limit_counter = get_limit_count
 
-    fallback_doi_map: Mapping[str, str] | None = None
-    fallback_csv = getattr(args, "fallback_doi_csv", None)
-    if fallback_csv:
+    fallback_state: FallbackDoiState | None = None
+    if fallback_enabled:
+        fallback_path = fallback_path_arg
+        if fallback_path is None:
+            logger.error(
+                "fallback_doi_invalid",
+                error="fallback DOI path is required when enabled",
+                path="",
+            )
+            return 1
+        delimiter = (
+            getattr(args, "fallback_doi_delimiter", None) or cfg.io.csv_sep
+        )
+        encoding = (
+            getattr(args, "fallback_doi_encoding", None) or cfg.io.csv_encoding
+        )
+        metrics = FallbackDoiMetrics()
         try:
-            fallback_frame = io.read_csv(fallback_csv, cfg=cfg.io)
-        except (FileNotFoundError, ValueError) as exc:
+            fallback_frame = pd.read_csv(
+                fallback_path,
+                sep=delimiter,
+                encoding=encoding,
+            )
+        except (FileNotFoundError, pd.errors.ParserError, UnicodeError, OSError) as exc:
             logger.error(
                 "fallback_doi_read_failed",
                 error=str(exc),
-                path=str(fallback_csv),
+                path=str(fallback_path),
+                delimiter=delimiter,
+                encoding=encoding,
             )
             return 1
         try:
             fallback_map = _build_fallback_doi_map(
                 fallback_frame,
-                pmid_column=getattr(args, "fallback_doi_pmid_column", "PMID"),
-                doi_column=getattr(args, "fallback_doi_value_column", "DOI"),
+                pmid_column=getattr(args, "fallback_doi_col_pmid", "PMID"),
+                doi_column=getattr(args, "fallback_doi_col_doi", "DOI"),
+                metrics=metrics,
             )
         except ValueError as exc:
             logger.error(
                 "fallback_doi_invalid",
                 error=str(exc),
-                path=str(fallback_csv),
+                path=str(fallback_path),
             )
             return 1
-        fallback_doi_map = fallback_map or None
+        fallback_state = FallbackDoiState(
+            path=Path(fallback_path),
+            mapping=fallback_map,
+            metrics=metrics,
+            overwrite=getattr(args, "fallback_doi_overwrite", False),
+        )
 
     try:
         frame_iter = fetch_pubmed_records(
@@ -1720,10 +1901,28 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             crossref_cfg=cfg.crossref,
             max_workers=getattr(args, "workers", pubmed_defaults.workers),
             batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
-            fallback_doi_map=fallback_doi_map,
+            fallback_doi_map=(
+                fallback_state.mapping if fallback_state else None
+            ),
             return_generator=True,
         )
         output = output_path
+        if fallback_state is not None:
+            fallback_state.metrics.mark_total_candidates(
+                len(fallback_state.mapping)
+            )
+
+            def _iter_with_fallback() -> Iterator[pd.DataFrame]:
+                for frame in frame_iter:
+                    yield _apply_fallback_doi(
+                        frame,
+                        fallback_map=fallback_state.mapping,
+                        overwrite=fallback_state.overwrite,
+                        metrics=fallback_state.metrics,
+                    )
+
+            frame_iter = _iter_with_fallback()
+
         normalised_frames = (normalize_documents(frame) for frame in frame_iter)
         exit_code = _finalise_export(
             normalised_frames,
@@ -1740,6 +1939,14 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             output=str(output_path),
         )
         return 1
+    if fallback_state is not None:
+        logger.info(
+            "fallback_doi_metrics",
+            pipeline="pubmed",
+            path=str(fallback_state.path),
+            overwrite=fallback_state.overwrite,
+            **fallback_state.metrics.as_log_kwargs(),
+        )
     if limit_counter is not None:
         logger.info("process_limit", limit=limit_counter())
     if exit_code == 0:
@@ -1926,24 +2133,83 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         limit_counter = get_limit_count
 
     iterator = iter(ids_source)
-    sample_size = getattr(args, "chunk_size", all_defaults.chunk_size)
+    sample_size = getattr(args, "chembl_chunk_size", all_defaults.chunk_size)
     sample_ids = list(islice(iterator, sample_size))
     ids_for_fetch = chain(sample_ids, iterator)
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    fallback_enabled = getattr(args, "fallback_doi_enabled", False)
+    fallback_path_arg = getattr(args, "fallback_doi_path", None)
     logger.info(
         "document_all_start",
         input=str(args.input_csv),
         output=str(output_path),
         limit=limit,
         offset=offset,
-        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
-        workers=getattr(args, "workers", all_defaults.workers),
-        batch_size=getattr(args, "batch_size", all_defaults.batch_size),
-        sleep=getattr(args, "sleep", all_defaults.sleep),
-        timeout=getattr(args, "timeout", all_defaults.timeout),
+        chembl_chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
+        pubmed_workers=getattr(args, "pubmed_workers", all_defaults.workers),
+        pubmed_batch_size=getattr(args, "pubmed_batch_size", all_defaults.batch_size),
+        pubmed_sleep=getattr(args, "pubmed_sleep", all_defaults.sleep),
+        chembl_timeout=getattr(args, "chembl_timeout", all_defaults.timeout),
+        fallback_doi_enabled=fallback_enabled,
+        fallback_doi_overwrite=getattr(args, "fallback_doi_overwrite", False),
+        fallback_doi_path=str(fallback_path_arg) if fallback_path_arg else None,
     )
+
+    fallback_state: FallbackDoiState | None = None
+    if fallback_enabled:
+        fallback_path = fallback_path_arg
+        if fallback_path is None:
+            logger.error(
+                "fallback_doi_invalid",
+                error="fallback DOI path is required when enabled",
+                path="",
+            )
+            return 1
+        delimiter = (
+            getattr(args, "fallback_doi_delimiter", None) or cfg.io.csv_sep
+        )
+        encoding = (
+            getattr(args, "fallback_doi_encoding", None) or cfg.io.csv_encoding
+        )
+        metrics = FallbackDoiMetrics()
+        try:
+            fallback_frame = pd.read_csv(
+                fallback_path,
+                sep=delimiter,
+                encoding=encoding,
+            )
+        except (FileNotFoundError, pd.errors.ParserError, UnicodeError, OSError) as exc:
+            logger.error(
+                "fallback_doi_read_failed",
+                error=str(exc),
+                path=str(fallback_path),
+                delimiter=delimiter,
+                encoding=encoding,
+            )
+            return 1
+        try:
+            fallback_map = _build_fallback_doi_map(
+                fallback_frame,
+                pmid_column=getattr(args, "fallback_doi_col_pmid", "PMID"),
+                doi_column=getattr(args, "fallback_doi_col_doi", "DOI"),
+                metrics=metrics,
+            )
+        except ValueError as exc:
+            logger.error(
+                "fallback_doi_invalid",
+                error=str(exc),
+                path=str(fallback_path),
+            )
+            return 1
+        fallback_state = FallbackDoiState(
+            path=Path(fallback_path),
+            mapping=fallback_map,
+            metrics=metrics,
+            overwrite=getattr(args, "fallback_doi_overwrite", False),
+        )
+        fallback_state.metrics.mark_total_candidates(len(fallback_state.mapping))
 
     try:
         with ChemblClient(
@@ -1953,8 +2219,12 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 ids_for_fetch,
                 cfg=cfg.api,
                 client=client,
-                chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
-                timeout=getattr(args, "timeout", all_defaults.timeout),
+                chunk_size=getattr(
+                    args, "chembl_chunk_size", all_defaults.chunk_size
+                ),
+                timeout=getattr(
+                    args, "chembl_timeout", all_defaults.timeout
+                ),
             )
     except (requests.RequestException, ValueError) as exc:
         logger.error(
@@ -1962,7 +2232,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             ids=sample_ids,
             error=str(exc),
             output=str(output_path),
-            chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+            chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
         )
         return 1
     if limit_counter is not None:
@@ -1970,6 +2240,14 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     output = output_path
     if "doi" in doc_df.columns:
         doc_df["doi"] = doc_df["doi"].map(normalise_doi)
+    if fallback_state is not None:
+        doc_df = _apply_fallback_doi(
+            doc_df,
+            fallback_map=fallback_state.mapping,
+            overwrite=fallback_state.overwrite,
+            metrics=fallback_state.metrics,
+            pmid_column="pubmed_id",
+        )
     if doc_df.empty or "pubmed_id" not in doc_df:
         processed = dp.postprocess_documents(doc_df)
         extra_cols = [c for c in doc_df.columns if c not in processed.columns]
@@ -1986,8 +2264,18 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+            chunk_size=getattr(
+                args, "chembl_chunk_size", all_defaults.chunk_size
+            ),
         )
+        if fallback_state is not None:
+            logger.info(
+                "fallback_doi_metrics",
+                pipeline="all",
+                path=str(fallback_state.path),
+                overwrite=fallback_state.overwrite,
+                **fallback_state.metrics.as_log_kwargs(),
+            )
         if exit_code == 0:
             logger.info("document_all_done", output=str(output_path))
         else:
@@ -2010,25 +2298,29 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             if len(masked_pmids) != len(masked_dois):
                 raise ValueError("mismatched DOI fallback map lengths")
             doi_fallback_map = {
-                str(pmid): str(doi)
+                str(pmid): normalise_doi(doi)
                 for pmid, doi in zip(masked_pmids, masked_dois, strict=True)
             }
+    if fallback_state is not None and fallback_state.mapping:
+        combined_map = dict(doi_fallback_map)
+        combined_map.update(fallback_state.mapping)
+        doi_fallback_map = combined_map
     pmids = pubmed_ids.dropna().astype(str).tolist()
-    pubmed_batch_size = getattr(args, "batch_size", all_defaults.batch_size)
+    pubmed_batch_size = getattr(args, "pubmed_batch_size", all_defaults.batch_size)
     if pubmed_batch_size is None or pubmed_batch_size <= 0:
         pubmed_batch_size = all_defaults.batch_size
-    merge_chunk_size = getattr(args, "chunk_size", all_defaults.chunk_size)
+    merge_chunk_size = getattr(args, "chembl_chunk_size", all_defaults.chunk_size)
     if merge_chunk_size is None or merge_chunk_size <= 0:
         merge_chunk_size = all_defaults.chunk_size
 
     pubmed_frames = fetch_pubmed_records(
         pmids,
         cfg,
-        sleep=getattr(args, "sleep", all_defaults.sleep),
+        sleep=getattr(args, "pubmed_sleep", all_defaults.sleep),
         semantic_scholar_cfg=cfg.semantic_scholar,
         openalex_cfg=cfg.openalex,
         crossref_cfg=cfg.crossref,
-        max_workers=getattr(args, "workers", all_defaults.workers),
+        max_workers=getattr(args, "pubmed_workers", all_defaults.workers),
         batch_size=pubmed_batch_size,
         pubmed_cfg=cfg.pubmed,
         fallback_doi_map=doi_fallback_map or None,
@@ -2080,8 +2372,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg,
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
-        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+        chunk_size=getattr(args, "chembl_chunk_size", all_defaults.chunk_size),
     )
+    if fallback_state is not None:
+        logger.info(
+            "fallback_doi_metrics",
+            pipeline="all",
+            path=str(fallback_state.path),
+            overwrite=fallback_state.overwrite,
+            **fallback_state.metrics.as_log_kwargs(),
+        )
     if exit_code == 0:
         logger.info("document_all_done", output=str(output_path))
     else:
@@ -2176,21 +2476,42 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         default=None,
         help="Requests per second limit for CrossRef",
     )
-    pubmed.add_argument(
-        "--fallback-doi-csv",
+    pubmed_fallback = pubmed.add_argument_group("Fallback DOI overrides")
+    pubmed_fallback.add_argument(
+        "--fallback-doi-enabled",
+        action="store_true",
+        help="Enable lookup of DOI overrides from a CSV file",
+    )
+    pubmed_fallback.add_argument(
+        "--fallback-doi-path",
         type=path_argument,
         default=None,
-        help="Optional CSV file providing PMID to DOI overrides",
+        help="CSV file containing DOI overrides keyed by PMID",
     )
-    pubmed.add_argument(
-        "--fallback-doi-pmid-column",
+    pubmed_fallback.add_argument(
+        "--fallback-doi-col-pmid",
         default="PMID",
-        help="Column containing PubMed identifiers in fallback CSV",
+        help="Column containing PubMed identifiers in the fallback CSV",
     )
-    pubmed.add_argument(
-        "--fallback-doi-value-column",
+    pubmed_fallback.add_argument(
+        "--fallback-doi-col-doi",
         default="DOI",
-        help="Column containing DOI values in fallback CSV",
+        help="Column containing DOI values in the fallback CSV",
+    )
+    pubmed_fallback.add_argument(
+        "--fallback-doi-delimiter",
+        default=None,
+        help="Delimiter used when reading the fallback CSV (default: io.csv_sep)",
+    )
+    pubmed_fallback.add_argument(
+        "--fallback-doi-encoding",
+        default=None,
+        help="Encoding used for the fallback CSV (default: io.csv_encoding)",
+    )
+    pubmed_fallback.add_argument(
+        "--fallback-doi-overwrite",
+        action="store_true",
+        help="Allow replacing existing DOIs with fallback values",
     )
     pubmed.set_defaults(func=run_pubmed)
 
@@ -2239,31 +2560,44 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         help="Column in the input CSV",
     )
     all_cmd.add_argument(
+        "--chembl-chunk-size",
         "--chunk-size",
+        dest="chembl_chunk_size",
         type=positive_int,
         default=5,
-        help="Maximum IDs per request",
+        help="Maximum identifiers per ChEMBL request",
     )
     all_cmd.add_argument(
+        "--pubmed-sleep",
         "--sleep",
+        dest="pubmed_sleep",
         type=float,
         default=5.0,
         help="Seconds to sleep between PubMed requests",
     )
     all_cmd.add_argument(
-        "--workers", type=int, default=1, help="Number of concurrent PubMed requests"
+        "--pubmed-workers",
+        "--workers",
+        dest="pubmed_workers",
+        type=int,
+        default=1,
+        help="Number of concurrent PubMed requests",
     )
     all_cmd.add_argument(
+        "--pubmed-batch-size",
         "--batch-size",
+        dest="pubmed_batch_size",
         type=positive_int,
         default=50,
         help="Maximum PMIDs per PubMed request",
     )
     all_cmd.add_argument(
+        "--chembl-timeout",
         "--timeout",
+        dest="chembl_timeout",
         type=float,
         default=30.0,
-        help="Timeout in seconds for each HTTP request",
+        help="Timeout in seconds for each ChEMBL HTTP request",
     )
     all_cmd.add_argument(
         "--limit",
@@ -2290,6 +2624,43 @@ def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
         type=float,
         default=None,
         help="Requests per second limit for CrossRef",
+    )
+    all_fallback = all_cmd.add_argument_group("Fallback DOI overrides")
+    all_fallback.add_argument(
+        "--fallback-doi-enabled",
+        action="store_true",
+        help="Enable lookup of DOI overrides from a CSV file",
+    )
+    all_fallback.add_argument(
+        "--fallback-doi-path",
+        type=path_argument,
+        default=None,
+        help="CSV file containing DOI overrides keyed by PMID",
+    )
+    all_fallback.add_argument(
+        "--fallback-doi-col-pmid",
+        default="PMID",
+        help="Column containing PubMed identifiers in the fallback CSV",
+    )
+    all_fallback.add_argument(
+        "--fallback-doi-col-doi",
+        default="DOI",
+        help="Column containing DOI values in the fallback CSV",
+    )
+    all_fallback.add_argument(
+        "--fallback-doi-delimiter",
+        default=None,
+        help="Delimiter used when reading the fallback CSV (default: io.csv_sep)",
+    )
+    all_fallback.add_argument(
+        "--fallback-doi-encoding",
+        default=None,
+        help="Encoding used for the fallback CSV (default: io.csv_encoding)",
+    )
+    all_fallback.add_argument(
+        "--fallback-doi-overwrite",
+        action="store_true",
+        help="Allow replacing existing DOIs with fallback values",
     )
     all_cmd.set_defaults(func=run_all)
 
@@ -2341,6 +2712,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
         subparser.error("--offset must be zero or a positive integer")
+    if args.command in {"pubmed", "all"}:
+        fallback_enabled_cli = getattr(args, "fallback_doi_enabled", False)
+        if fallback_enabled_cli:
+            fallback_path_cli = getattr(args, "fallback_doi_path", None)
+            if fallback_path_cli is None:
+                subparser.error(
+                    "--fallback-doi-path is required when fallback DOI overrides are enabled"
+                )
+            fallback_path = (
+                fallback_path_cli
+                if isinstance(fallback_path_cli, Path)
+                else Path(str(fallback_path_cli))
+            )
+            if not fallback_path.exists():
+                subparser.error("--fallback-doi-path must point to an existing file")
+            if not fallback_path.is_file():
+                subparser.error("--fallback-doi-path must be a file")
+            if not os.access(fallback_path, os.R_OK):
+                subparser.error("--fallback-doi-path must be readable")
+            delimiter_cli = getattr(args, "fallback_doi_delimiter", None)
+            if delimiter_cli is not None:
+                delimiter_text = str(delimiter_cli)
+                if not delimiter_text:
+                    subparser.error("--fallback-doi-delimiter must not be empty")
+                if len(delimiter_text) > 1:
+                    subparser.error("--fallback-doi-delimiter must be a single character")
+            encoding_cli = getattr(args, "fallback_doi_encoding", None)
+            if encoding_cli is not None and not str(encoding_cli).strip():
+                subparser.error("--fallback-doi-encoding must not be empty")
+            for attr_name in ("fallback_doi_col_pmid", "fallback_doi_col_doi"):
+                attr_value = getattr(args, attr_name, None)
+                if attr_value is None or not str(attr_value).strip():
+                    option = attr_name.replace("_", "-")
+                    subparser.error(f"--{option} must not be empty")
     mapping = {
         "column": f"document.{args.command}.column",
         "limit": f"document.{args.command}.limit",
@@ -2363,11 +2768,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "all":
         mapping.update(
             {
-                "chunk_size": "document.all.chunk_size",
-                "sleep": "document.all.sleep",
-                "workers": "document.all.workers",
-                "batch_size": "document.all.batch_size",
-                "timeout": "document.all.timeout",
+                "chembl_chunk_size": "document.all.chunk_size",
+                "pubmed_sleep": "document.all.sleep",
+                "pubmed_workers": "document.all.workers",
+                "pubmed_batch_size": "document.all.batch_size",
+                "chembl_timeout": "document.all.timeout",
             }
         )
     mapping |= {
