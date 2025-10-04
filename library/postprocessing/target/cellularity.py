@@ -13,6 +13,8 @@ import pandas as pd
 
 from .helpers import first_element_text, normalize_text
 
+ADD_CELLULARITY_SMART_FIELD_NAME = "AddCellularitySmart "
+
 FetchLineageCallable = Callable[[Any, str | None], Sequence[str]]
 
 
@@ -31,6 +33,7 @@ class Cellularity:
         "euglenozoa",
         "dinoflagellata",
         "alveolata",
+        "euglenozoa",
         "bacillariophyta",
         "parabasalia",
         "metamonada",
@@ -54,6 +57,7 @@ class Cellularity:
         "onychophora",
         "bryozoa",
         "brachiopoda",
+        "echinodermata",
         "hemichordata",
         "rotifera",
         "nemertea",
@@ -79,7 +83,9 @@ class Cellularity:
         "chytridiomycota",
     )
 
-    add_cellularity_smart_field: str = field(init=False, default="AddCellularitySmart ")
+    add_cellularity_smart_field: str = field(
+        init=False, default=ADD_CELLULARITY_SMART_FIELD_NAME
+    )
 
     def __post_init__(self) -> None:
         if self.fetcher is None:
@@ -255,4 +261,8 @@ def add_cellularity_smart(
     return result
 
 
-__all__ = ["Cellularity", "add_cellularity_smart"]
+__all__ = [
+    "Cellularity",
+    "add_cellularity_smart",
+    "ADD_CELLULARITY_SMART_FIELD_NAME",
+]
