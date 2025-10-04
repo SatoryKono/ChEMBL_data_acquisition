@@ -83,6 +83,7 @@ from library.integration import uniprot_library as uu
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
+from library.postprocessing import target as target_pp
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli_utils import PipelineError, run_cli_command, run_pipeline
@@ -1459,6 +1460,7 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
             key_cols=["uniprot_id"],
         )
+        target_pp.process_targets(str(csv_path), verbose=True)
         rows_dropped = max(rows_total - rows_kept, 0)
         stats: Stats = {
             "rows_total": rows_total,
@@ -1840,8 +1842,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             )
             if final_output != raw_output:
                 shutil.copy2(raw_path, final_output)
-                return final_output
-            return raw_path
+                final_path = final_output
+            else:
+                final_path = raw_path
+            target_pp.process_targets(str(final_path), verbose=True)
+            return final_path
 
         frames: list[pd.DataFrame] = []
         for chunk in chunks:
@@ -1897,6 +1902,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
+        target_pp.process_targets(str(final_path), verbose=True)
         return final_path
 
     failure_path = normalized_output.with_name(
@@ -2995,6 +3001,7 @@ def validate_and_write(
         col_order=TARGETS_COLUMN_ORDER,
         key_cols=key_columns or None,
     )
+    target_pp.process_targets(str(normalized_output), verbose=True)
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
