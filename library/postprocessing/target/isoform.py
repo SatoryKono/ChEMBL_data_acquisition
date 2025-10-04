@@ -313,7 +313,25 @@ class _TransformationResult:
 def _transform(frame: pd.DataFrame) -> _TransformationResult:
     """Apply the isoform expansion stages mirroring the Power Query steps."""
 
-    projected = _project_source_columns(frame)
+    if frame.empty:
+        empty_result = pd.DataFrame(columns=list(_OUTPUT_COLUMNS))
+        return _TransformationResult(
+            result=empty_result.copy(),
+            combined=empty_result.copy(),
+            dedup_stage1=empty_result.copy(),
+            sorted_stage=empty_result.copy(),
+            dedup_stage2=empty_result.copy(),
+        )
+
+    resolved = _resolve_source_columns(frame)
+    aligned = frame.copy()
+    for canonical, source in resolved.items():
+        if source in aligned.columns:
+            aligned[canonical] = aligned[source].astype(object)
+        else:  # pragma: no cover - defensive guard for mutated inputs
+            aligned[canonical] = _empty_like(aligned.index)
+
+    projected = _project_source_columns(aligned)
     if projected.empty:
         empty_result = pd.DataFrame(columns=list(_OUTPUT_COLUMNS))
         return _TransformationResult(
@@ -323,7 +341,6 @@ def _transform(frame: pd.DataFrame) -> _TransformationResult:
             sorted_stage=empty_result.copy(),
             dedup_stage2=empty_result.copy(),
         )
-    _resolve_source_columns(frame)
     projected = projected.loc[:, list(_SOURCE_COLUMNS)].copy()
 
     projected["isoform_synonyms"] = projected["isoform_synonyms"].map(
