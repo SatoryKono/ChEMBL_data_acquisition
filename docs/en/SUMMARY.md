@@ -9,7 +9,7 @@ same filenames inside `../ru/`.
 - [Usage and CLI reference](./USAGE.md)
 - [Configuration reference](./CONFIG.md)
 - [Output specification](./OUTPUT.md)
-- [Target isoform post-processing](../OUTPUT_TARGETS_EN.md)
+- [Target organism and isoform post-processing](../OUTPUT_TARGETS_EN.md)
 - [Quality assurance process](./QA_PROCESS.md)
 
 ## Architecture
