@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
+from types import SimpleNamespace
+from typing import Callable, Iterable
 
 import pandas as pd
 import pytest
+import requests
 
 from library.config import Config
+from library import cli_utils
 from scripts import (
     get_activity_data,
     get_assay_data,
@@ -59,6 +63,109 @@ def _patch_logger(monkeypatch: pytest.MonkeyPatch, module: object) -> _MemoryLog
     logger = _MemoryLogger()
     monkeypatch.setattr(module, "logger", logger)
     return logger
+
+
+class _DummyChemblClient:
+    """Minimal context manager used to stub :class:`ChemblClient`."""
+
+    def __init__(self, *args, **kwargs) -> None:  # pragma: no cover - interface compatibility
+        pass
+
+    def __enter__(self) -> "_DummyChemblClient":  # pragma: no cover - trivial helper
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # pragma: no cover - trivial helper
+        return False
+
+
+@pytest.fixture()
+def activity_resource_dir(snapshot_resource: Path) -> Path:
+    return snapshot_resource / "activity_pipeline"
+
+
+def _configure_activity_cfg(cfg: Config) -> None:
+    cfg.activity.limit = None
+    cfg.activity.offset = 0
+    cfg.activity.dry_run = False
+    cfg.activity.batch_size = 5
+    cfg.activity.workers = 1
+    cfg.system.doc_quality.enable = False
+    cfg.activity_enrichment.action_type.enabled = False
+    cfg.activity_enrichment.action_type.log_missing = False
+    cfg.activity_enrichment.activity_properties.enabled = False
+
+
+def _install_activity_writer(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, pd.DataFrame, str]]:
+    written: list[tuple[Path, pd.DataFrame, str]] = []
+
+    def _writer(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        *,
+        key_cols: Iterable[str] | None,
+        col_order: Iterable[str] | None,
+        chunksize: int,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8",
+        cfg=None,
+        **_: object,
+    ) -> Path:
+        frames = [chunk.copy() for chunk in chunks]
+        if frames:
+            result = pd.concat(frames, ignore_index=True)
+        else:
+            result = pd.DataFrame(columns=list(col_order or []))
+        if col_order:
+            order = [str(col) for col in col_order]
+            result = result.reindex(columns=order, fill_value=pd.NA)
+        destination_path = Path(destination)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(destination_path, index=False, sep=sep, encoding=encoding)
+        written.append((destination_path, result, sep))
+        return destination_path
+
+    monkeypatch.setattr(get_activity_data, "write_csv_chunks_deterministic", _writer)
+    return written
+
+
+def _patch_activity_cli(monkeypatch: pytest.MonkeyPatch, cfg: Config) -> None:
+    def fake_apply_config_overrides(
+        args,
+        parser,
+        config_path,
+        mapping=None,
+        *,
+        base_parser=None,
+    ) -> Config:
+        args._config_metadata = None
+        if hasattr(args, "output_csv") and args.output_csv is not None:
+            args.output_csv = Path(args.output_csv)
+        cfg.activity.batch_size = getattr(args, "batch_size", cfg.activity.batch_size)
+        cfg.activity.limit = getattr(args, "limit", cfg.activity.limit)
+        cfg.activity.offset = getattr(args, "offset", cfg.activity.offset)
+        cfg.activity.dry_run = getattr(args, "dry_run", cfg.activity.dry_run)
+        cfg.activity.timeout = getattr(args, "timeout", cfg.activity.timeout)
+        workers = getattr(args, "workers", None)
+        if workers is not None:
+            cfg.activity.workers = workers
+        return cfg
+
+    monkeypatch.setattr(cli_utils, "apply_config_overrides", fake_apply_config_overrides)
+    monkeypatch.setattr(cli_utils, "ensure_dirs", lambda _cfg: None)
+
+    def fake_configure_logger(log_cfg):
+        return get_activity_data.logger
+
+    monkeypatch.setattr(cli_utils.cli, "configure_logger", fake_configure_logger)
+    monkeypatch.setattr(get_activity_data.cli, "configure_logger", fake_configure_logger)
+    monkeypatch.setattr(get_activity_data, "configure_logger", fake_configure_logger)
+
+    @contextmanager
+    def fake_setup_cli_logging(script_name, log_cfg, date_str=None, **_kwargs):
+        yield SimpleNamespace(log_cfg=log_cfg, console_stream=None)
+
+    monkeypatch.setattr(get_activity_data, "setup_cli_logging", fake_setup_cli_logging)
 
 @pytest.mark.e2e
 def test_get_testitem_run_success(
@@ -182,6 +289,189 @@ def test_get_testitem_run_skip_existing(
     assert call_counter["called"] == 0
     events = [event for _, event, _ in logger_stub.events]
     assert "pipeline_skip_existing" in events
+
+
+@pytest.mark.e2e
+def test_get_activity_cli__retry_and_idempotent(
+    tmp_path: Path,
+    activity_resource_dir: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+    input_csv = tmp_path / "activities_input.csv"
+    input_csv.write_text(
+        (activity_resource_dir / "ids_happy.csv").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "out" / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    attempts = {"count": 0}
+
+    def _fake_get_activities(chunk_ids, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] % 2 == 1:
+            raise requests.RequestException("temporary failure")
+        identifiers = [str(item) for item in chunk_ids]
+        mask = chunk_df["activity_id"].astype(str).isin(identifiers)
+        return chunk_df.loc[mask].reset_index(drop=True)
+
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+    monkeypatch.setattr(get_activity_data, "sleep", lambda *_args, **_kwargs: None)
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    args = ["--input", str(input_csv), "--output", str(output_csv)]
+
+    first_exit = get_activity_data.main(args)
+    assert first_exit == 0
+    assert output_csv.exists()
+    first_content = output_csv.read_text(encoding="utf-8")
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_fetch_retry" in events
+    assert "activity_pipeline_done" in events
+    assert not any(event == "activity_pipeline_failed" for event in events)
+    assert attempts["count"] >= 2
+    assert len(written) == 1
+    assert list(written[0][1]["activity_id"]) == ["ACT1", "ACT2", "ACT3"]
+
+    logger_stub.events.clear()
+    written.clear()
+    attempts["count"] = 0
+
+    second_exit = get_activity_data.main(args)
+    assert second_exit == 0
+    second_content = output_csv.read_text(encoding="utf-8")
+    assert second_content == first_content
+    done_events = [event for _, event, _ in logger_stub.events]
+    assert done_events.count("activity_pipeline_done") >= 1
+    assert not any(event == "activity_pipeline_failed" for event in done_events)
+
+
+@pytest.mark.e2e
+def test_get_activity_cli__workers_and_offset(
+    tmp_path: Path,
+    activity_resource_dir: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+    input_csv = tmp_path / "activities_input.csv"
+    input_csv.write_text(
+        (activity_resource_dir / "ids_happy.csv").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "out" / "activities.csv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    def _fake_get_activities(chunk_ids, **_kwargs):
+        identifiers = [str(item) for item in chunk_ids]
+        mask = chunk_df["activity_id"].astype(str).isin(identifiers)
+        return chunk_df.loc[mask].reset_index(drop=True)
+
+    captured: dict[str, int] = {}
+
+    def _fake_prepare_chunked_pipeline(*, fetch_config, fetch_chunk, csv_writer):
+        captured["workers"] = fetch_config.workers
+        captured["chunk_size"] = fetch_config.chunk_size
+
+        def _fetcher():
+            for chunk_ids in fetch_config.chunker(fetch_config.ids, fetch_config.chunk_size):
+                yield fetch_chunk(list(chunk_ids))
+
+        def _writer(chunks, destination, col_order, key_cols):
+            return csv_writer.writer(
+                chunks,
+                destination,
+                col_order=col_order,
+                key_cols=key_cols,
+            )
+
+        return _fetcher, _writer
+
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+    monkeypatch.setattr(
+        get_activity_data,
+        "prepare_chunked_pipeline",
+        _fake_prepare_chunked_pipeline,
+    )
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    args = [
+        "--input",
+        str(input_csv),
+        "--output",
+        str(output_csv),
+        "--workers",
+        "2",
+        "--offset",
+        "1",
+        "--batch-size",
+        "2",
+    ]
+
+    exit_code = get_activity_data.main(args)
+
+    assert exit_code == 0
+    assert captured["workers"] == 2
+    assert output_csv.exists()
+    assert len(written) == 1
+    written_df = written[0][1]
+    assert written_df["activity_id"].tolist() == ["ACT2", "ACT3"]
+    events = [event for _, event, _ in logger_stub.events]
+    assert "process_offset" in events
+    assert "activity_pipeline_done" in events
+
+
+@pytest.mark.e2e
+def test_get_activity_cli__non_csv_output_path(
+    tmp_path: Path,
+    activity_resource_dir: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_activity_cfg(cfg)
+    cfg.io.csv_sep = "\t"
+    input_csv = tmp_path / "activities_input.csv"
+    input_csv.write_text(
+        (activity_resource_dir / "ids_happy.csv").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    output_csv = tmp_path / "out" / "activities.tsv"
+    chunk_df = pd.read_csv(activity_resource_dir / "chunk_happy.csv")
+
+    def _fake_get_activities(chunk_ids, **_kwargs):
+        identifiers = [str(item) for item in chunk_ids]
+        mask = chunk_df["activity_id"].astype(str).isin(identifiers)
+        return chunk_df.loc[mask].reset_index(drop=True)
+
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fake_get_activities)
+
+    written = _install_activity_writer(monkeypatch)
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+    _patch_activity_cli(monkeypatch, cfg)
+
+    exit_code = get_activity_data.main(
+        ["--input", str(input_csv), "--output", str(output_csv)]
+    )
+
+    assert exit_code == 0
+    assert output_csv.exists()
+    content = output_csv.read_text(encoding="utf-8")
+    assert "\t" in content.splitlines()[1]
+    assert len(written) == 1
+    assert written[0][2] == "\t"
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_pipeline_done" in events
 
 
 @pytest.mark.e2e
@@ -679,3 +969,169 @@ def test_get_activity_run_failure(
     assert rc == 1
     events = [event for _, event, _ in logger_stub.events]
     assert "activity_pipeline_failed" in events
+
+
+@pytest.mark.e2e
+def test_get_activity_run_retry_and_idempotent(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "activities.csv"
+    input_csv.write_text("activity_id\nACT1\n", encoding="utf-8")
+    output_csv = tmp_path / "out" / "activities.csv"
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+
+    cfg.activity.dry_run = False
+    cfg.activity.limit = None
+    cfg.activity.batch_size = 3
+    cfg.activity.workers = 1
+    cfg.system.doc_quality.enable = False
+    cfg.activity_enrichment.action_type.enabled = False
+    cfg.activity_enrichment.action_type.log_missing = False
+    cfg.activity_enrichment.activity_properties.enabled = False
+
+    frame = pd.DataFrame(
+        [
+            {
+                "activity_id": "ACT1",
+                "molecule_chembl_id": "CHEMBL1",
+                "assay_chembl_id": "ASSAY1",
+                "standard_value": 5.0,
+            }
+        ]
+    )
+
+    call_counter = {"count": 0}
+
+    def _fetch_with_retry(chunk_ids: list[str], **_: object) -> pd.DataFrame:
+        call_counter["count"] += 1
+        if call_counter["count"] == 1:
+            raise requests.RequestException("temporary failure")
+        return frame.copy()
+
+    monkeypatch.setattr(get_activity_data.cl, "get_activities", _fetch_with_retry)
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+
+    written: list[Path] = []
+
+    def _writer_stub(
+        chunks: Iterable[pd.DataFrame],
+        destination: Path,
+        *,
+        key_cols: Iterable[str] | None,
+        col_order: Iterable[str] | None,
+        chunksize: int,
+        sort_chunksize: int | None = None,
+        sep: str = ",",
+        encoding: str = "utf-8",
+        cfg=None,
+        **_: object,
+    ) -> Path:
+        frames = list(chunks)
+        result = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(destination, index=False, sep=sep, encoding=encoding)
+        written.append(destination)
+        return destination
+
+    monkeypatch.setattr(get_activity_data, "write_csv_chunks_deterministic", _writer_stub)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=output_csv,
+        skip_existing=False,
+        force=False,
+    )
+
+    rc = get_activity_data.run(cfg, args)
+
+    assert rc == 0
+    assert call_counter["count"] == 2
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_fetch_retry" in events
+    assert "activity_pipeline_done" in events
+    assert output_csv in written
+
+    args.skip_existing = True
+    rc_second = get_activity_data.run(cfg, args)
+
+    assert rc_second == 0
+    events_second = [event for _, event, _ in logger_stub.events]
+    assert "pipeline_skip_existing" in events_second
+
+
+@pytest.mark.e2e
+def test_get_activity_run_workers_offset_and_non_csv(
+    tmp_path: Path,
+    cfg: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "activities.csv"
+    input_csv.write_text("activity_id\nACT1\nACT2\n", encoding="utf-8")
+    output_csv = tmp_path / "out" / "activities.tsv"
+    logger_stub = _patch_logger(monkeypatch, get_activity_data)
+
+    cfg.activity.dry_run = False
+    cfg.activity.limit = None
+    cfg.activity.batch_size = 2
+    cfg.activity.workers = 3
+    cfg.system.doc_quality.enable = False
+    cfg.activity_enrichment.action_type.enabled = False
+    cfg.activity_enrichment.action_type.log_missing = False
+    cfg.activity_enrichment.activity_properties.enabled = False
+    cfg.io.csv_sep = "\t"
+
+    monkeypatch.setattr(
+        get_activity_data.io,
+        "read_ids",
+        lambda *_args, **_kwargs: iter(["ACT0", "ACT1", "ACT2"]),
+    )
+
+    captured: dict[str, int] = {}
+
+    def _prepare_stub(*, fetch_config, fetch_chunk, csv_writer):
+        captured["workers"] = fetch_config.workers
+
+        def _fetcher() -> Iterable[pd.DataFrame]:
+            yield pd.DataFrame(
+                [
+                    {
+                        "activity_id": "ACT2",
+                        "molecule_chembl_id": "CHEMBL2",
+                        "assay_chembl_id": "ASSAY2",
+                        "standard_value": 7.0,
+                    }
+                ]
+            )
+
+        def _writer(chunks: Iterable[pd.DataFrame], destination: Path, col_order, key_cols):
+            frames = list(chunks)
+            result = pd.concat(frames, ignore_index=True)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            result.to_csv(destination, index=False, sep=cfg.io.csv_sep)
+            return destination
+
+        return _fetcher, _writer
+
+    monkeypatch.setattr(get_activity_data, "prepare_chunked_pipeline", _prepare_stub)
+    monkeypatch.setattr(get_activity_data, "ChemblClient", _DummyChemblClient)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        output_csv=output_csv,
+        skip_existing=False,
+        force=False,
+        offset=1,
+        workers=cfg.activity.workers,
+    )
+
+    rc = get_activity_data.run(cfg, args)
+
+    assert rc == 0
+    events = [event for _, event, _ in logger_stub.events]
+    assert "activity_pipeline_done" in events
+    assert any(event_name == "process_offset" for _, event_name, _ in logger_stub.events)
+    assert captured["workers"] == max(1, cfg.activity.workers)
+    assert output_csv.exists()

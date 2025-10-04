@@ -1,0 +1,5 @@
+activity_id,molecule_chembl_id,assay_chembl_id,standard_value,standard_units,standard_type,relation,activity_comment
+ACT1,CHEMBL1,ASSAY1,"5.500",nM,IC50,=,valid primary record
+ACT1,CHEMBL1,ASSAY1,-3.000,nM,IC50,=,negative measurement duplicate
+ACT2,CHEMBL2,ASSAY2,not-a-number,nM,IC50,=,non numeric value
+ACT3,CHEMBL3,ASSAY3,12.100,nM,IC50,=,trailing record
