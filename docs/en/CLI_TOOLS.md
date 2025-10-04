@@ -1,31 +1,24 @@
 # Utility CLI modules
 
-> **Languages:** English · [Русский](../../ru/devel/CLI_TOOLS.md)
+> **Languages:** English · [Русский](../ru/CLI_TOOLS.md)
 
-The lightweight helper commands previously exposed as loose modules under
-`scripts/` now live in the `library.utils.cli_tools` package so that they can be
-invoked with `python -m <module>`. The relocation keeps the distribution tidy
-while preserving direct module execution for ad-hoc debugging.
+Helper commands live under `library.utils.cli_tools` and can be executed with
+`python -m`. This keeps the distribution tidy while preserving module execution
+for debugging.
 
-| Module | Typical command | Purpose |
+| Module | Example command | Purpose |
 |--------|-----------------|---------|
-| `library.utils.cli_tools.check_determinism` | `python -m library.utils.cli_tools.check_determinism` | Validate that deterministic CSV writing still produces matching hashes. |
-| `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Stream input CSV files in chunks while preserving deterministic ordering. |
-| `library.utils.cli_tools.csv_utils_main` | `python -m library.utils.cli_tools.csv_utils_main --input data.csv --final-out clean.csv` | Re-serialise arbitrary CSV files with deterministic ordering. |
-| `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO` | Inspect pandas dtypes emitted by the core `get_*_data` pipelines. |
-| `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10` | Emit synthetic activity rows to verify logging and CLI wiring. |
-| `library.utils.cli_tools.get_document_type` | `python -m library.utils.cli_tools.get_document_type --input docs.csv` | Classify document rows with the bundled heuristics for unit tests. |
-| `library.utils.cli_tools.get_input_initialisation` | `python -m library.utils.cli_tools.get_input_initialisation --same-doc path.xlsx --all-doc path.xlsx` | Combine Excel workbooks that initialise input pairs for downstream QA. |
-| `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv --final-out mapped.csv` | Map ChEMBL identifiers to UniProt accessions using batch configuration. |
-| `library.utils.cli_tools.mapper_main` | `python -m library.utils.cli_tools.mapper_main --input ids.csv --final-out mapped.csv` | Lightweight interactive mapper for quick lookups and diagnostics. |
-| `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Run the cached target pipeline harness to refresh stored artefacts and exercise staging flags (`--raw-out`, `--raw-format`, `--id-cols`, `--no-reindex-raw`, `--normalize-at-export` / `--no-normalize-at-export`). |
-| `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Generate column-level quality reports for arbitrary CSV datasets with optional sampling and column filters. |
+| `library.utils.cli_tools.check_determinism` | `python -m library.utils.cli_tools.check_determinism --baseline out1 --candidate out2` | Compare CSV hashes between runs. |
+| `library.utils.cli_tools.chunk_io_main` | `python -m library.utils.cli_tools.chunk_io_main --input data.csv --final-out copy.csv` | Stream CSV files in deterministic order. |
+| `library.utils.cli_tools.csv_utils_main` | `python -m library.utils.cli_tools.csv_utils_main --input data.csv --final-out clean.csv` | Re-serialise CSVs with consistent ordering. |
+| `library.utils.cli_tools.dtype_inspector_main` | `python -m library.utils.cli_tools.dtype_inspector_main --log-level INFO` | Inspect pandas dtypes emitted by pipelines. |
+| `library.utils.cli_tools.get_activities` | `python -m library.utils.cli_tools.get_activities --limit 10` | Generate synthetic activity rows. |
+| `library.utils.cli_tools.get_document_type` | `python -m library.utils.cli_tools.get_document_type --input docs.csv` | Classify document rows with bundled heuristics. |
+| `library.utils.cli_tools.get_input_initialisation` | `python -m library.utils.cli_tools.get_input_initialisation --same-doc a.xlsx --all-doc b.xlsx` | Merge Excel workbooks into canonical CSV. |
+| `library.utils.cli_tools.mapper_batch_main` | `python -m library.utils.cli_tools.mapper_batch_main --input ids.csv --final-out mapped.csv` | Batch mapping from ChEMBL IDs to UniProt accessions. |
+| `library.utils.cli_tools.mapper_main` | `python -m library.utils.cli_tools.mapper_main --input ids.csv --final-out mapped.csv` | Interactive mapper for diagnostics. |
+| `library.utils.cli_tools.pipeline_targets_main` | `python -m library.utils.cli_tools.pipeline_targets_main --input targets.csv` | Re-run target pipeline harness with cached data. |
+| `library.utils.cli_tools.table_quality_main` | `python -m library.utils.cli_tools.table_quality_main --input data.csv --table-name data` | Produce column-level quality reports. |
 
-Both mapping CLIs honour the [`io.na_markers`](CONFIG.md#io) list when filtering
-placeholder identifiers and use [`io.keep_na_markers`](CONFIG.md#io) to decide
-whether to keep those placeholders in the mapping input.
-
-All modules continue to expose a `main` function so they can still be wired into
-`pyproject.toml` entry points. When invoking them programmatically, import the
-module from `library.utils.cli_tools` and call `main(argv)` to reuse the command
-line interfaces in tests.
+Both mapping CLIs honour `io.na_markers` and `io.keep_na_markers` from
+[`CONFIG.md`](./CONFIG.md). Each module exposes a `main(argv)` function for reuse in tests.

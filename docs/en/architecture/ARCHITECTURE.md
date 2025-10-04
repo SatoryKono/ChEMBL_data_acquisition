@@ -1,126 +1,74 @@
 # Architecture overview
 
-This reference maps the shared architecture behind the ChEMBL data acquisition utilities. It complements the per-pipeline walkthroughs documented in [ETL data flow](./ETL_DATA_FLOW_EN.md).
-
-## System context
-
 ```mermaid
 flowchart LR
-  subgraph Inputs
-    A[Identifier CSV/TSV files]
-    B[Configuration files]\n(config.yaml, CLI flags)
-    C[Environment variables]
-  end
-  subgraph Orchestration
-    D[Console entry points\n(get-*/pipeline CLI)]
-    E[scripts.get_* modules]
-  end
-  subgraph Core Pipeline Layer
-    F[library.pipelines.*\n(pipeline orchestrators)]
-    G[library.io\n(streaming loaders)]
-    H[library.clients\n(API clients)]
-    I[library.integration\n(local resources)]
-    J[library.postprocessing]
-    K[library.validation\n& schemas]
-    L[library.table_quality]
-    M[library.metadata]
-  end
-  subgraph Outputs
-    N[Deterministic CSV exports]
-    O[Metadata YAML]
-    P[Quality diagnostics\n(.quality.json, CSV)]
-    Q[Raw snapshots\n(optional)]
-  end
-  Inputs --> D
-  D --> E --> F
-  F --> G
-  F --> H
-  F --> I
-  F --> J
-  F --> K
-  F --> L
-  F --> M
-  G --> F
-  H -->|Fetches| External[(ChEMBL, PubMed, UniProt, PubChem, OpenAlex, Semantic Scholar, CrossRef APIs)]
-  I -->|Reads| Local[(Cached CSV/Parquet resources\n& lookup tables)]
-  F --> N
-  F --> O
-  F --> P
-  F --> Q
+    subgraph CLI
+        A1[get-document-data]
+        A2[get-target-data]
+        A3[get-assay-data]
+        A4[get-testitem-data]
+        A5[get-activity-data]
+        A0[get-data orchestrator]
+    end
+    subgraph Library
+        B1[library/clients]
+        B2[library/pipelines]
+        B3[library/qa]
+        B4[library/utils]
+    end
+    subgraph Resources
+        C1[config/config.yaml]
+        C2[config/dictionary]
+    end
+
+    A0 --> A1 & A2 & A3 & A4 & A5
+    A1 & A2 & A3 & A4 & A5 --> B2
+    B2 --> B1
+    B2 --> B3
+    B2 --> B4
+    B2 --> C1
+    B2 --> C2
 ```
 
-Key points:
+The orchestrator initialises shared configuration, logging and rate limiting,
+then invokes each CLI module in order. Pipelines import reusable components from
+`library/`:
 
-* **Console entry points** expose each pipeline as a standalone CLI and forward arguments to the corresponding `scripts.get_*` module.
-* **Pipeline orchestrators** in `library.pipelines` coordinate chunked IO, API calls, post-processing, validation, and exports.
-* **Streaming loaders** under `library.io` abstract chunked reading/writing so pipelines stay memory-light while providing deterministic output ordering.
-* **Clients and integrations** encapsulate access to remote APIs and local knowledge bases, enforcing retry policies, throttling, and caching.
-* **Post-processing modules** apply domain-specific transformations that prepare records for validation and export.
-* **Validation and quality checks** ensure schema compliance and produce artefacts consumed by downstream QA tooling.
+- `library/clients` — HTTP clients with retry and throttling logic for ChEMBL,
+  UniProt, PubMed, OpenAlex, CrossRef, PubChem.
+- `library/pipelines` — Fetching, transformation and export logic for each
+  entity. Subpackages (`document`, `target`, `assay`, `testitem`, `activity`)
+  expose orchestration primitives reused by the scripts.
+- `library/utils` — CLI helpers, deterministic CSV I/O, configuration loaders,
+  logging bootstrap and file system utilities.
+- `library/qa` & `library/table_quality.py` — Schema validation, quality
+  profiling and metadata writers.
 
-## Dependency relationships
+External services are accessed via token-bucket rate limiters configured by
+`sources.*` blocks. All network calls are wrapped with retry logic defined in
+`system.retry`.
 
-The following diagram highlights the internal dependencies shared by the major pipelines. Each pipeline reuses the same helper layers, ensuring consistent behaviour and easier cross-pipeline updates.
+## Component responsibilities
 
-```mermaid
-graph TD
-  subgraph Shared helpers
-    IO[library.io]
-    Clients[library.clients]
-    Integrations[library.integration]
-    Post[library.postprocessing]
-    Validation[library.validation & schemas]
-    Metadata[library.metadata]
-    Quality[library.table_quality]
-  end
+| Component | Responsibilities |
+|-----------|-----------------|
+| CLI scripts (`scripts/`) | Parse arguments, resolve paths, invoke pipeline orchestration functions. |
+| Pipelines (`library/pipelines/*`) | Load inputs, perform API calls, merge results, validate schemas, produce exports. |
+| QA (`library/qa`, `library/table_quality.py`) | Run Pandera validations, compute quality metrics, emit warnings. |
+| Post-processing (`library/postprocessing`) | Column ordering, metadata generation, deterministic sorting. |
+| Config (`library/config.py`) | Load YAML files, environment overrides, enforce types and defaults. |
 
-  Activity[scripts.get_activity_data\n& library.pipelines.activity] --> IO
-  Activity --> Clients
-  Activity --> Post
-  Activity --> Validation
-  Activity --> Metadata
-  Activity --> Quality
+## Execution model
 
-  Assay[scripts.get_assay_data\n& library.pipelines.assay] --> IO
-  Assay --> Clients
-  Assay --> Post
-  Assay --> Validation
-  Assay --> Metadata
-  Assay --> Quality
+1. CLI resolves configuration via `library.config.load_config` and prints
+   provenance when `--print-config` is supplied.
+2. Input CSV is read with deterministic options (encoding from config, fallback
+   separators, explicit NA markers).
+3. Pipelines fetch remote data via clients using shared rate limiters and retry
+   policies.
+4. Intermediate frames are validated, transformed and sorted before being written
+   to disk.
+5. Sidecars and quality reports are generated in the same directory as the CSV.
 
-  Document[scripts.get_document_data\n& library.pipelines.document] --> IO
-  Document --> Clients
-  Document --> Integrations
-  Document --> Post
-  Document --> Validation
-  Document --> Metadata
-  Document --> Quality
-
-  Target[scripts.get_target_data\n& library.pipelines.target] --> IO
-  Target --> Clients
-  Target --> Integrations
-  Target --> Post
-  Target --> Validation
-  Target --> Metadata
-  Target --> Quality
-
-  Testitem[scripts.get_testitem_data\n& library.testitem_pipeline] --> IO
-  Testitem --> Clients
-  Testitem --> Integrations
-  Testitem --> Post
-  Testitem --> Validation
-  Testitem --> Metadata
-  Testitem --> Quality
-```
-
-*Pipelines marked `library.pipelines.*` share orchestrator scaffolding that normalises API payloads, enriches records, and hands the results off to exporters. The `library.testitem_pipeline` package follows the same conventions while living outside `library.pipelines` for historical reasons.*
-
-## How pipelines collaborate
-
-For a cross-pipeline view of identifiers and downstream consumers, refer to the [Cross-pipeline relationships](./ETL_DATA_FLOW_EN.md#cross-pipeline-relationships) section. That narrative explains how assay, activity, document, target, and test item exports reinforce each other via shared IDs.
-
-## Design implications for contributors
-
-* Implement new pipelines by composing the existing helper layers rather than building standalone scripts. Doing so guarantees deterministic exports, consistent metadata, and QA artefacts.
-* When adjusting dependencies (for example, adding a new client or post-processing helper), document the change in this diagram so reviewers can quickly assess blast radius.
-* Shared helpers are safe extension points: implement new API adapters under `library.clients`, new local file mappers under `library.integration`, and new validators under `library.validation` to keep orchestration modules slim.
+See [`ETL_PROCESS.md`](./ETL_PROCESS.md) for a detailed step-by-step breakdown and
+[`DATA_MODEL.md`](./DATA_MODEL.md) for the analytical star schema.

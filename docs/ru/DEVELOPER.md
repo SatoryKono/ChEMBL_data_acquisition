@@ -1,38 +1,17 @@
 # Индекс документации для разработчиков
 
-Ресурсы для разработчиков сгруппированы по темам. Добавьте каталоги в закладки или используйте приведенные ниже ссылки.
-
-## English
-
-### Development
-- [Contribution guide](../en/development/CONTRIBUTING.md)
-- [QA process](../en/development/QA_PROCESS.md)
-
-### Reference
-- [Configuration matrix](../en/reference/CONFIG.md)
-- [CLI helper reference](../en/reference/CLI_TOOLS.md)
-- [Data schema](../en/reference/DATA_SCHEMA.md)
-
-### Architecture
-- [Architecture overview](../en/architecture/ARCHITECTURE.md)
-- [ETL process report](../en/architecture/ETL_PROCESS.md)
-- [ETL data flow](../en/architecture/ETL_DATA_FLOW.md)
-
-## Русский
-
-### Разработка
-- [Руководство по контрибуции](./development/CONTRIBUTING.md)
-- [QA-процесс](./development/QA_PROCESS.md)
-
-### Справочники
-- [Матрица настроек](./reference/CONFIG.md)
-- [Справочник по CLI](./reference/CLI_TOOLS.md)
-- [Схема данных](./reference/DATA_SCHEMA.md)
-
-### Архитектура
+- [Руководство разработчика](./development/README.md)
+- [Настройка окружения](./development/LOCAL_SETUP.md)
+- [Политика тестирования](./development/TESTING.md)
+- [CI/CD](./development/CI_CD.md)
+- [Чек-лист релиза](./development/RELEASE.md)
+- [Справочные наборы данных](./reference/DICTIONARIES.md)
+- [Глоссарий](./reference/TERMINOLOGY.md)
+- [Сопоставление схем](./reference/SCHEMA_CROSSWALKS.md)
 - [Обзор архитектуры](./architecture/ARCHITECTURE.md)
-- [Описание ETL-процесса](./architecture/ETL_PROCESS.md)
-- [Поток данных ETL](./architecture/ETL_DATA_FLOW.md)
+- [ETL-процесс](./architecture/ETL_PROCESS.md)
+- [Потоки данных](./architecture/ETL_DATA_FLOW.md)
+- [Модель данных](./architecture/DATA_MODEL.md)
+- [Зависимости QA](./architecture/QC_DEPENDENCIES.md)
 
-
-Общий [индекс документации](../index.md) содержит руководства пользователя наряду с этими справочниками для разработчиков.
+Англоязычные версии находятся в `../en/` и имеют те же имена файлов.
