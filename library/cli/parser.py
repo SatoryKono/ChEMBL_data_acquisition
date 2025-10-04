@@ -590,20 +590,17 @@ def apply_config_overrides(
         ):
             default = base_parser.get_default(arg)
         if getattr(args, arg) == default:
-            if not key:
-                continue
             try:
-                value = _get_cfg_value(cfg, key)
-            except AttributeError:
-                if key not in missing_cfg_paths:
-                    logger.warning(
-                        "config_missing_attribute",
-                        argument=arg,
-                        path=key,
-                    )
-                    missing_cfg_paths.add(key)
+                config_value = _get_cfg_value(cfg, key)
+            except AttributeError as exc:
+                logger.warning(
+                    "config_attribute_missing",
+                    argument=arg,
+                    path=key,
+                    error=str(exc),
+                )
                 continue
-            setattr(args, arg, value)
+            setattr(args, arg, config_value)
 
     return cfg
 
