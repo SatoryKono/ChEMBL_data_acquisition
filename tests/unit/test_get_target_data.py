@@ -1,0 +1,222 @@
+"""Unit tests for :mod:`scripts.get_target_data`."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Iterable
+
+import pandas as pd
+import pytest
+
+from library.config import Config
+from scripts import get_target_data
+
+
+class _MemoryLogger:
+    """Capture structured log events emitted by the target pipeline."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict[str, object]]] = []
+
+    def info(self, event: str, **payload: object) -> None:
+        self.events.append(("info", event, dict(payload)))
+
+    def warning(self, event: str, **payload: object) -> None:
+        self.events.append(("warning", event, dict(payload)))
+
+    def error(self, event: str, **payload: object) -> None:
+        self.events.append(("error", event, dict(payload)))
+
+
+@pytest.fixture()
+def logger_stub(monkeypatch: pytest.MonkeyPatch) -> _MemoryLogger:
+    logger = _MemoryLogger()
+    monkeypatch.setattr(get_target_data, "logger", logger)
+    return logger
+
+
+@pytest.mark.parametrize(
+    "latin, cyrillic",
+    list(get_target_data._RUSSIAN_KEYBOARD_MAP.items())[:10],
+)
+def test_translate_keyboard_layout__single_characters(latin: str, cyrillic: str) -> None:
+    assert get_target_data._translate_keyboard_layout(latin) == cyrillic
+    assert get_target_data._translate_keyboard_layout(latin.upper()) == cyrillic.upper()
+
+
+@pytest.mark.parametrize("text", ["Hello", "Test-Value", "123", "aA" ])
+def test_translate_keyboard_layout__composite_strings(text: str) -> None:
+    translated = get_target_data._translate_keyboard_layout(text)
+    assert len(translated) == len(text)
+    for original, result in zip(text, translated):
+        lower = original.lower()
+        mapped = get_target_data._RUSSIAN_KEYBOARD_MAP.get(lower, lower)
+        expected = mapped.upper() if original.isupper() else mapped
+        assert result == expected
+
+
+@pytest.mark.parametrize("command", ["fetch", "all", "run"])
+def test_keyboard_aliases__cases(command: str) -> None:
+    aliases = get_target_data._keyboard_aliases(command)
+    translated = get_target_data._translate_keyboard_layout(command)
+    expected_variants = {translated, translated.capitalize(), translated.upper()}
+    expected_variants.discard(command)
+    assert set(aliases) == expected_variants
+
+
+@pytest.mark.parametrize(
+    "value, tokens",
+    [
+        ("P12345", ["P12345"]),
+        ("P12345|Q67890", ["P12345", "Q67890"]),
+        (" |P99999| ", ["P99999"]),
+    ],
+)
+def test_split_uniprot_tokens__cases(value: str, tokens: list[str]) -> None:
+    assert list(get_target_data._split_uniprot_tokens(value)) == tokens
+
+
+def test_collect_uniprot_candidate_columns__orders_columns(cfg: Config) -> None:
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            cfg.target.all.uniprot_column: ["P12345"],
+            "mapping_uniprot_id": ["Q99999"],
+            "extra_accession": ["E11111"],
+            "uniprot_secondary": ["S22222"],
+        }
+    )
+
+    ordered = get_target_data._collect_uniprot_candidate_columns(frame, cfg)
+
+    assert ordered[0] == cfg.target.all.uniprot_column
+    assert "mapping_uniprot_id" in ordered
+    assert any("accession" in column for column in ordered)
+
+
+def test_ensure_merge_column_present__uses_alias(cfg: Config, logger_stub: _MemoryLogger) -> None:
+    cfg.target.all.uniprot_column = "canonical_uniprot"
+    frame = pd.DataFrame(
+        {
+            "target_chembl_id": ["CHEMBL1"],
+            "mapping_uniprot_id": ["P12345"],
+        }
+    )
+
+    result = get_target_data._ensure_merge_column_present(frame, cfg.target.all.uniprot_column, cfg)
+
+    assert "canonical_uniprot" in result.columns
+    assert result.loc[0, "canonical_uniprot"] == "P12345"
+    assert any(event == "uniprot_merge_column_alias" for _, event, _ in logger_stub.events)
+
+
+def test_ensure_merge_column_present__raises(cfg: Config, logger_stub: _MemoryLogger) -> None:
+    cfg.target.all.uniprot_column = "canonical_uniprot"
+    frame = pd.DataFrame({"target_chembl_id": ["CHEMBL1"]})
+
+    with pytest.raises(get_target_data.PipelineError):
+        get_target_data._ensure_merge_column_present(frame, cfg.target.all.uniprot_column, cfg)
+
+    assert any(event == "missing_uniprot_column" for _, event, _ in logger_stub.events)
+
+
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        (("P12345", "Q67890"), "P12345|Q67890"),
+        (("", "Q67890"), "Q67890"),
+        ((None, ""), ""),
+        (("A", None, "B"), "A|B"),
+    ],
+)
+def test_pipe_merge__cases(values: Iterable[str | None], expected: str) -> None:
+    assert get_target_data._pipe_merge(list(values)) == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("P12345", "P12345"),
+        ("P12345|Q67890", "P12345"),
+        (None, ""),
+        (" ", " "),
+    ],
+)
+def test_first_token__cases(value: str | None, expected: str) -> None:
+    assert get_target_data._first_token(value) == expected
+
+
+def test_limited_ids__respects_limit() -> None:
+    source = iter(["A", "B", "C"])
+
+    limited = list(get_target_data._limited_ids(source, 2))
+
+    assert limited == ["A", "B"]
+
+
+def test_run__skip_existing(
+    cfg: Config,
+    tmp_path: Path,
+    logger_stub: _MemoryLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id\n1\n", encoding="utf-8")
+    final_out = tmp_path / "targets.csv"
+    final_out.write_text("existing", encoding="utf-8")
+
+    called = False
+
+    def fake_run(cfg: Config, args: argparse.Namespace) -> int:
+        nonlocal called
+        called = True
+        return 0
+
+    monkeypatch.setattr(get_target_data, "run_all", fake_run)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=None,
+        raw_format="csv",
+        no_reindex_raw=False,
+        skip_existing=True,
+        force=False,
+        command="all",
+        func=fake_run,
+    )
+
+    exit_code = get_target_data.run(cfg, args)
+
+    assert exit_code == 0
+    assert not called
+    assert ("info", "pipeline_skip_existing", {"output": str(final_out)}) in logger_stub.events
+
+
+def test_run__delegates_to_handler(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_csv = tmp_path / "input.csv"
+    input_csv.write_text("id\n1\n", encoding="utf-8")
+    final_out = tmp_path / "targets.csv"
+
+    monkeypatch.setattr(get_target_data, "run_all", lambda *_: 4)
+
+    args = argparse.Namespace(
+        input_csv=input_csv,
+        final_out=final_out,
+        raw_out=None,
+        raw_format="csv",
+        no_reindex_raw=False,
+        skip_existing=False,
+        force=False,
+        command="all",
+        func=get_target_data.run_all,
+    )
+
+    exit_code = get_target_data.run(cfg, args)
+
+    assert exit_code == 4
