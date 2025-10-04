@@ -9,7 +9,7 @@
           "type": "string"
         },
         "batch_size": {
-          "default": 5,
+          "default": 100,
           "minimum": 1,
           "title": "Batch Size",
           "type": "integer"
@@ -729,10 +729,10 @@
           "title": "Column",
           "type": "string"
         },
-        "batch_size": {
+        "chunk_size": {
           "default": 5,
           "minimum": 1,
-          "title": "Batch Size",
+          "title": "Chunk Size",
           "type": "integer"
         },
         "sleep": {
@@ -748,9 +748,8 @@
           "type": "integer"
         },
         "batch_size": {
-          "default": 1000,
+          "default": 50,
           "minimum": 1,
-          "maximum": 1000,
           "title": "Batch Size",
           "type": "integer"
         },
@@ -758,6 +757,36 @@
           "default": 30.0,
           "minimum": 0,
           "title": "Timeout",
+          "type": "number"
+        },
+        "chembl_batch_size": {
+          "default": 5,
+          "minimum": 1,
+          "title": "Chembl Batch Size",
+          "type": "integer"
+        },
+        "chembl_sleep": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Chembl Sleep",
+          "type": "number"
+        },
+        "chembl_workers": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Chembl Workers",
+          "type": "integer"
+        },
+        "pubmed_chunk_size": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Pubmed Chunk Size",
+          "type": "integer"
+        },
+        "pubmed_timeout": {
+          "default": 10.0,
+          "minimum": 0,
+          "title": "Pubmed Timeout",
           "type": "number"
         },
         "limit": {
@@ -772,75 +801,6 @@
           ],
           "default": null,
           "title": "Limit"
-        },
-        "offset": {
-          "default": 0,
-          "minimum": 0,
-          "title": "Offset",
-          "type": "integer"
-        },
-        "fields": {
-          "default": [
-            "molecule_chembl_id",
-            "parent_molecule_chembl_id",
-            "pref_name",
-            "max_phase",
-            "molecule_type",
-            "first_approval",
-            "oral",
-            "parenteral",
-            "topical",
-            "black_box_warning",
-            "structure_type",
-            "molecule_structures.canonical_smiles",
-            "molecule_structures.standard_inchi",
-            "molecule_structures.standard_inchi_key",
-            "pubchem_cid",
-            "pubchem_iupac_name",
-            "pubchem_molecular_formula",
-            "pubchem_isomeric_smiles",
-            "pubchem_canonical_smiles",
-            "pubchem_inchi",
-            "pubchem_inchikey"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "title": "Fields",
-          "type": "array"
-        },
-        "request_limit": {
-          "default": 1000,
-          "minimum": 1,
-          "maximum": 1000,
-          "title": "Request Limit",
-          "type": "integer"
-        },
-        "retries": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Retries"
-        },
-        "backoff_factor": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Backoff Factor"
         }
       },
       "title": "DocumentAllCfg",
@@ -882,6 +842,24 @@
           "title": "Timeout",
           "type": "number"
         },
+        "batch_size": {
+          "default": 5,
+          "minimum": 1,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "sleep": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Sleep",
+          "type": "number"
+        },
+        "workers": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Workers",
+          "type": "integer"
+        },
         "limit": {
           "anyOf": [
             {
@@ -920,10 +898,22 @@
           "type": "integer"
         },
         "batch_size": {
-          "default": 5,
+          "default": 100,
           "minimum": 1,
           "title": "Batch Size",
           "type": "integer"
+        },
+        "chunk_size": {
+          "default": 100,
+          "minimum": 1,
+          "title": "Chunk Size",
+          "type": "integer"
+        },
+        "timeout": {
+          "default": 10.0,
+          "minimum": 0,
+          "title": "Timeout",
+          "type": "number"
         },
         "limit": {
           "anyOf": [

@@ -44,6 +44,11 @@ from .common.rate_limiter import configure_limiter_cache
 from .common.log import logger
 from .common.rate_limiter import configure_limiter_cache
 from .utils.config import ConfigLoaderError, load_yaml_config
+from .cli.document_defaults import (
+    ALL_DEFAULTS,
+    CHEMBL_DEFAULTS,
+    PUBMED_DEFAULTS,
+)
 
 
 def _annotation_is_path(annotation: Any) -> bool:
@@ -1080,28 +1085,38 @@ class TestitemMoleculeEnrichmentCfg(_BoolModel):
 
 
 class DocumentPubmedCfg(_BaseModel):
-    column: str = "PMID"
-    sleep: float = Field(5.0, ge=0)
-    workers: int = Field(1, ge=1)
-    batch_size: int = Field(100, ge=1)
-    limit: int | None = Field(default=None, ge=0)
+    column: str = PUBMED_DEFAULTS.column
+    sleep: float = Field(PUBMED_DEFAULTS.sleep, ge=0)
+    workers: int = Field(PUBMED_DEFAULTS.workers, ge=1)
+    batch_size: int = Field(PUBMED_DEFAULTS.batch_size, ge=1)
+    chunk_size: int = Field(PUBMED_DEFAULTS.chunk_size, ge=1)
+    timeout: float = Field(PUBMED_DEFAULTS.timeout, ge=0)
+    limit: int | None = Field(default=PUBMED_DEFAULTS.limit, ge=0)
 
 
 class DocumentChemblCfg(_BaseModel):
-    column: str = "document_chembl_id"
-    chunk_size: int = Field(5, ge=1)
-    timeout: float = Field(30.0, ge=0)
-    limit: int | None = Field(default=None, ge=0)
+    column: str = CHEMBL_DEFAULTS.column
+    chunk_size: int = Field(CHEMBL_DEFAULTS.chunk_size, ge=1)
+    timeout: float = Field(CHEMBL_DEFAULTS.timeout, ge=0)
+    batch_size: int = Field(CHEMBL_DEFAULTS.batch_size, ge=1)
+    sleep: float = Field(CHEMBL_DEFAULTS.sleep, ge=0)
+    workers: int = Field(CHEMBL_DEFAULTS.workers, ge=1)
+    limit: int | None = Field(default=CHEMBL_DEFAULTS.limit, ge=0)
 
 
 class DocumentAllCfg(_BaseModel):
-    column: str = "document_chembl_id"
-    chunk_size: int = Field(5, ge=1)
-    sleep: float = Field(5.0, ge=0)
-    workers: int = Field(1, ge=1)
-    batch_size: int = Field(50, ge=1)
-    timeout: float = Field(30.0, ge=0)
-    limit: int | None = Field(default=None, ge=0)
+    column: str = ALL_DEFAULTS.column
+    chunk_size: int = Field(ALL_DEFAULTS.chunk_size, ge=1)
+    sleep: float = Field(ALL_DEFAULTS.sleep, ge=0)
+    workers: int = Field(ALL_DEFAULTS.workers, ge=1)
+    batch_size: int = Field(ALL_DEFAULTS.batch_size, ge=1)
+    timeout: float = Field(ALL_DEFAULTS.timeout, ge=0)
+    chembl_batch_size: int = Field(ALL_DEFAULTS.chembl_batch_size, ge=1)
+    chembl_sleep: float = Field(ALL_DEFAULTS.chembl_sleep, ge=0)
+    chembl_workers: int = Field(ALL_DEFAULTS.chembl_workers, ge=1)
+    pubmed_chunk_size: int = Field(ALL_DEFAULTS.pubmed_chunk_size, ge=1)
+    pubmed_timeout: float = Field(ALL_DEFAULTS.pubmed_timeout, ge=0)
+    limit: int | None = Field(default=ALL_DEFAULTS.limit, ge=0)
 
 
 class DocumentCfg(_BaseModel):

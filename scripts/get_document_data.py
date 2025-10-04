@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import sys
+import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, contextmanager, AbstractContextManager
@@ -98,6 +99,12 @@ from library.cli import (
     positive_int,
     prepare_io_paths,
 )
+from library.cli.document_defaults import (
+    ALL_DEFAULTS,
+    CHEMBL_DEFAULTS,
+    MODE_DEFAULTS,
+    PUBMED_DEFAULTS,
+)
 from library.cli.utils import run_cli_command
 from library.config import (
     Config,
@@ -138,6 +145,21 @@ DOCUMENT_FRAME_CONCAT_STRIDE = 16
 
 
 T = TypeVar("T")
+
+
+def _cli_value(
+    args: argparse.Namespace,
+    *names: str,
+    default: T,
+) -> T:
+    """Return the first CLI attribute from ``names`` present on ``args``."""
+
+    for name in names:
+        if hasattr(args, name):
+            value = getattr(args, name)
+            if value is not argparse.SUPPRESS:
+                return cast(T, value)
+    return default
 
 
 def limit_iterable(
@@ -1643,6 +1665,43 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         )
         return 1
     offset = getattr(args, "offset", 0)
+    batch_size = _cli_value(
+        args,
+        "batch_size",
+        default=pubmed_defaults.batch_size,
+    )
+    if batch_size is None or batch_size <= 0:
+        batch_size = pubmed_defaults.batch_size
+    sleep_value = _cli_value(
+        args,
+        "sleep",
+        default=pubmed_defaults.sleep,
+    )
+    if sleep_value is None or sleep_value < 0:
+        sleep_value = pubmed_defaults.sleep
+    workers = _cli_value(
+        args,
+        "workers",
+        default=pubmed_defaults.workers,
+    )
+    if workers is None or workers <= 0:
+        workers = pubmed_defaults.workers
+    chunk_size = _cli_value(
+        args,
+        "pubmed_chunk_size",
+        "chunk_size",
+        default=pubmed_defaults.chunk_size,
+    )
+    if chunk_size is None or chunk_size <= 0:
+        chunk_size = pubmed_defaults.chunk_size
+    pubmed_timeout = _cli_value(
+        args,
+        "pubmed_timeout",
+        default=pubmed_defaults.timeout,
+    )
+    if pubmed_timeout is None or pubmed_timeout < 0:
+        pubmed_timeout = pubmed_defaults.timeout
+    cfg.pubmed.timeout_read = pubmed_timeout
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
@@ -1652,9 +1711,11 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         output=str(output_path),
         limit=limit,
         offset=offset,
-        workers=getattr(args, "workers", pubmed_defaults.workers),
-        batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
-        sleep=getattr(args, "sleep", pubmed_defaults.sleep),
+        workers=workers,
+        batch_size=batch_size,
+        sleep=sleep_value,
+        chunk_size=chunk_size,
+        timeout=pubmed_timeout,
         fallback_doi=bool(getattr(args, "fallback_doi_csv", None)),
     )
     try:
@@ -1713,13 +1774,13 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
         frame_iter = fetch_pubmed_records(
             pmids,
             cfg,
-            sleep=getattr(args, "sleep", pubmed_defaults.sleep),
+            sleep=sleep_value,
             pubmed_cfg=cfg.pubmed,
             semantic_scholar_cfg=cfg.semantic_scholar,
             openalex_cfg=cfg.openalex,
             crossref_cfg=cfg.crossref,
-            max_workers=getattr(args, "workers", pubmed_defaults.workers),
-            batch_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
+            max_workers=workers,
+            batch_size=batch_size,
             fallback_doi_map=fallback_doi_map,
             return_generator=True,
         )
@@ -1731,7 +1792,7 @@ def run_pubmed(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=getattr(args, "batch_size", pubmed_defaults.batch_size),
+            chunk_size=chunk_size,
         )
     except (FileNotFoundError, ValueError, OSError) as exc:
         logger.error(
@@ -1777,6 +1838,44 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         logger.error("invalid_limit", section="document.chembl", limit=limit)
         return 1
     offset = getattr(args, "offset", 0)
+    chunk_size = _cli_value(
+        args,
+        "chunk_size",
+        default=chembl_defaults.chunk_size,
+    )
+    if chunk_size is None or chunk_size <= 0:
+        chunk_size = chembl_defaults.chunk_size
+    timeout = _cli_value(
+        args,
+        "timeout",
+        default=chembl_defaults.timeout,
+    )
+    if timeout is None or timeout < 0:
+        timeout = chembl_defaults.timeout
+    chembl_batch_size = _cli_value(
+        args,
+        "chembl_batch_size",
+        "batch_size",
+        default=chembl_defaults.batch_size,
+    )
+    if chembl_batch_size is None or chembl_batch_size <= 0:
+        chembl_batch_size = chembl_defaults.batch_size
+    chembl_sleep = _cli_value(
+        args,
+        "chembl_sleep",
+        "sleep",
+        default=chembl_defaults.sleep,
+    )
+    if chembl_sleep is None or chembl_sleep < 0:
+        chembl_sleep = chembl_defaults.sleep
+    chembl_workers = _cli_value(
+        args,
+        "chembl_workers",
+        "workers",
+        default=chembl_defaults.workers,
+    )
+    if chembl_workers is None or chembl_workers <= 0:
+        chembl_workers = chembl_defaults.workers
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
@@ -1786,8 +1885,11 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         output=str(output_path),
         limit=limit,
         offset=offset,
-        chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
-        timeout=getattr(args, "timeout", chembl_defaults.timeout),
+        chunk_size=chunk_size,
+        timeout=timeout,
+        batch_size=chembl_batch_size,
+        sleep=chembl_sleep,
+        workers=chembl_workers,
     )
 
     # Configure session for ChEMBL requests
@@ -1825,21 +1927,34 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             ids = limited_ids
             logger.info("process_limit", limit=len(limited_ids))
 
+        frames: list[pd.DataFrame] = []
         try:
-            df = cl.get_documents(
-                ids,
-                cfg=cfg.api,
-                client=client,
-                chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
-                timeout=getattr(args, "timeout", chembl_defaults.timeout),
-            )
+            for batch in _chunked(ids, chembl_batch_size):
+                if not batch:
+                    continue
+                frame = cl.get_documents(
+                    batch,
+                    cfg=cfg.api,
+                    client=client,
+                    chunk_size=chunk_size,
+                    timeout=timeout,
+                )
+                if not frame.empty:
+                    frames.append(frame)
+                if chembl_sleep:
+                    time.sleep(chembl_sleep)
         except (requests.RequestException, ValueError) as exc:
             logger.error(
                 "chembl_documents_fetch_failed",
                 error=str(exc),
-                chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+                chunk_size=chunk_size,
+                batch_size=chembl_batch_size,
             )
             return 1
+        if frames:
+            df = pd.concat(frames, ignore_index=True)
+        else:
+            df = pd.DataFrame(columns=DOCUMENT_SCHEMA_COLUMNS)
         if "doi" in df.columns:
             df["doi"] = df["doi"].map(normalise_doi)
         output = output_path
@@ -1850,7 +1965,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=getattr(args, "chunk_size", chembl_defaults.chunk_size),
+            chunk_size=chunk_size,
         )
         if exit_code == 0:
             logger.info("document_chembl_done", output=str(output_path))
@@ -1897,6 +2012,78 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     if (rate_cfg.global_rps or 0) > 0:
         global_limiter = get_global_limiter(rate_cfg.global_rps, rate_cfg.global_burst)
 
+    chembl_chunk_size = _cli_value(
+        args,
+        "chunk_size",
+        default=all_defaults.chunk_size,
+    )
+    if chembl_chunk_size is None or chembl_chunk_size <= 0:
+        chembl_chunk_size = all_defaults.chunk_size
+    chembl_timeout = _cli_value(
+        args,
+        "timeout",
+        default=all_defaults.timeout,
+    )
+    if chembl_timeout is None or chembl_timeout < 0:
+        chembl_timeout = all_defaults.timeout
+    chembl_batch_size = _cli_value(
+        args,
+        "chembl_batch_size",
+        default=all_defaults.chembl_batch_size,
+    )
+    if chembl_batch_size is None or chembl_batch_size <= 0:
+        chembl_batch_size = all_defaults.chembl_batch_size
+    chembl_sleep = _cli_value(
+        args,
+        "chembl_sleep",
+        default=all_defaults.chembl_sleep,
+    )
+    if chembl_sleep is None or chembl_sleep < 0:
+        chembl_sleep = all_defaults.chembl_sleep
+    chembl_workers = _cli_value(
+        args,
+        "chembl_workers",
+        default=all_defaults.chembl_workers,
+    )
+    if chembl_workers is None or chembl_workers <= 0:
+        chembl_workers = all_defaults.chembl_workers
+    pubmed_batch_size = _cli_value(
+        args,
+        "batch_size",
+        default=all_defaults.batch_size,
+    )
+    if pubmed_batch_size is None or pubmed_batch_size <= 0:
+        pubmed_batch_size = all_defaults.batch_size
+    pubmed_sleep = _cli_value(
+        args,
+        "sleep",
+        default=all_defaults.sleep,
+    )
+    if pubmed_sleep is None or pubmed_sleep < 0:
+        pubmed_sleep = all_defaults.sleep
+    pubmed_workers = _cli_value(
+        args,
+        "workers",
+        default=all_defaults.workers,
+    )
+    if pubmed_workers is None or pubmed_workers <= 0:
+        pubmed_workers = all_defaults.workers
+    pubmed_chunk_size = _cli_value(
+        args,
+        "pubmed_chunk_size",
+        default=all_defaults.pubmed_chunk_size,
+    )
+    if pubmed_chunk_size is None or pubmed_chunk_size <= 0:
+        pubmed_chunk_size = all_defaults.pubmed_chunk_size
+    pubmed_timeout = _cli_value(
+        args,
+        "pubmed_timeout",
+        default=all_defaults.pubmed_timeout,
+    )
+    if pubmed_timeout is None or pubmed_timeout < 0:
+        pubmed_timeout = all_defaults.pubmed_timeout
+    cfg.pubmed.timeout_read = pubmed_timeout
+
     try:
         ids_iter = io.read_ids(
             args.input_csv,
@@ -1926,7 +2113,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         limit_counter = get_limit_count
 
     iterator = iter(ids_source)
-    sample_size = getattr(args, "chunk_size", all_defaults.chunk_size)
+    sample_size = chembl_batch_size
     sample_ids = list(islice(iterator, sample_size))
     ids_for_fetch = chain(sample_ids, iterator)
     output_path = Path(
@@ -1938,31 +2125,49 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         output=str(output_path),
         limit=limit,
         offset=offset,
-        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
-        workers=getattr(args, "workers", all_defaults.workers),
-        batch_size=getattr(args, "batch_size", all_defaults.batch_size),
-        sleep=getattr(args, "sleep", all_defaults.sleep),
-        timeout=getattr(args, "timeout", all_defaults.timeout),
+        chunk_size=chembl_chunk_size,
+        workers=pubmed_workers,
+        batch_size=pubmed_batch_size,
+        sleep=pubmed_sleep,
+        timeout=chembl_timeout,
+        chembl_batch_size=chembl_batch_size,
+        chembl_sleep=chembl_sleep,
+        chembl_workers=chembl_workers,
+        pubmed_chunk_size=pubmed_chunk_size,
+        pubmed_timeout=pubmed_timeout,
     )
 
     try:
         with ChemblClient(
             cfg.api, cfg.retry, cfg.chembl, global_limiter=global_limiter
         ) as client:
-            doc_df = cl.get_documents(
-                ids_for_fetch,
-                cfg=cfg.api,
-                client=client,
-                chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
-                timeout=getattr(args, "timeout", all_defaults.timeout),
-            )
+            frames: list[pd.DataFrame] = []
+            for batch in _chunked(ids_for_fetch, chembl_batch_size):
+                if not batch:
+                    continue
+                frame = cl.get_documents(
+                    batch,
+                    cfg=cfg.api,
+                    client=client,
+                    chunk_size=chembl_chunk_size,
+                    timeout=chembl_timeout,
+                )
+                if not frame.empty:
+                    frames.append(frame)
+                if chembl_sleep:
+                    time.sleep(chembl_sleep)
+            if frames:
+                doc_df = pd.concat(frames, ignore_index=True)
+            else:
+                doc_df = pd.DataFrame(columns=DOCUMENT_SCHEMA_COLUMNS)
     except (requests.RequestException, ValueError) as exc:
         logger.error(
             "chembl_documents_fetch_failed",
             ids=sample_ids,
             error=str(exc),
             output=str(output_path),
-            chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+            chunk_size=chembl_chunk_size,
+            batch_size=chembl_batch_size,
         )
         return 1
     if limit_counter is not None:
@@ -1986,7 +2191,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             cfg,
             input_csv=Path(args.input_csv),
             key_columns=["document_chembl_id"],
-            chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+            chunk_size=chembl_chunk_size,
         )
         if exit_code == 0:
             logger.info("document_all_done", output=str(output_path))
@@ -2017,9 +2222,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
     pubmed_batch_size = getattr(args, "batch_size", all_defaults.batch_size)
     if pubmed_batch_size is None or pubmed_batch_size <= 0:
         pubmed_batch_size = all_defaults.batch_size
-    merge_chunk_size = getattr(args, "chunk_size", all_defaults.chunk_size)
-    if merge_chunk_size is None or merge_chunk_size <= 0:
-        merge_chunk_size = all_defaults.chunk_size
+    merge_chunk_size = pubmed_chunk_size
 
     pubmed_frames = fetch_pubmed_records(
         pmids,
@@ -2043,8 +2246,8 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
                 pubmed_frames,
                 tmp_path,
                 key_cols=["PubMed.PMID"],
-                chunksize=pubmed_batch_size,
-                merge_chunksize=pubmed_batch_size,
+                chunksize=pubmed_chunk_size,
+                merge_chunksize=pubmed_chunk_size,
                 sep=cfg.io.csv_sep,
                 encoding=cfg.io.csv_encoding,
                 cfg=cfg,
@@ -2080,7 +2283,7 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         cfg,
         input_csv=Path(args.input_csv),
         key_columns=["document_chembl_id"],
-        chunk_size=getattr(args, "chunk_size", all_defaults.chunk_size),
+        chunk_size=chembl_chunk_size,
     )
     if exit_code == 0:
         logger.info("document_all_done", output=str(output_path))
@@ -2103,6 +2306,9 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
     timeout_value = getattr(args, "timeout", None)
     if timeout_value is not None:
         cfg.api.timeout_read = timeout_value
+    pubmed_timeout_value = getattr(args, "pubmed_timeout", None)
+    if pubmed_timeout_value is not None:
+        cfg.pubmed.timeout_read = pubmed_timeout_value
     if args.skip_existing and output_path.exists() and not args.force:
         logger.info("pipeline_skip_existing", output=str(output_path))
         return 0
@@ -2117,187 +2323,135 @@ def run(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def build_parser() -> tuple[argparse.ArgumentParser, LoggerConfig]:
-    """Create the argument parser for document utilities.
+    """Create the argument parser for document utilities."""
 
-    Returns
-    -------
-    tuple[argparse.ArgumentParser, LoggerConfig]
-        Parser populated with all sub-commands and default logging
-        configuration used by :func:`main`.
-    """
-    root, shared, log_cfg = build_root_parser()
+    root, _, log_cfg = build_root_parser()
     root.set_defaults(input_csv=Path(DEFAULT_INPUT_NAME))
     parser = argparse.ArgumentParser(
-        description="Document data utilities", parents=[root]
+        description="Document data utilities",
+        parents=[root],
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="command", required=True)
 
-    pubmed = sub.add_parser(
-        "pubmed", parents=[shared], help="Fetch data from PubMed and related APIs"
+    common = parser.add_argument_group("Common options")
+    common.add_argument(
+        "--mode",
+        choices=tuple(MODE_DEFAULTS.keys()),
+        required=True,
+        help="Pipeline to execute: 'chembl', 'pubmed' or 'all'.",
     )
-    pubmed.add_argument(
-        "--column", default="PMID", help="Column name containing identifiers"
+    common.add_argument(
+        "--column",
+        default=PUBMED_DEFAULTS.column,
+        help=(
+            "Column containing identifiers (default: PMID for PubMed, "
+            "document_chembl_id for ChEMBL and all)."
+        ),
     )
-    pubmed.add_argument(
-        "--sleep", type=float, default=5.0, help="Seconds to sleep between requests"
-    )
-    pubmed.add_argument(
-        "--workers", type=int, default=1, help="Number of concurrent requests"
-    )
-    pubmed.add_argument(
-        "--batch-size",
-        type=positive_int,
-        default=100,
-        help="Maximum PMIDs per PubMed request",
-    )
-    pubmed.add_argument(
+    common.add_argument(
         "--limit",
         type=int,
         default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
+        help="Maximum number of identifiers to process; use 0 to skip processing.",
     )
-    pubmed.add_argument(
+    common.add_argument(
         "--offset",
         type=int,
         default=0,
-        help="Number of identifiers to skip before processing",
+        help="Number of identifiers to skip before processing.",
     )
-    pubmed.add_argument(
+
+    pubmed_group = parser.add_argument_group("PubMed options")
+    pubmed_group.add_argument(
+        "--batch-size",
+        type=positive_int,
+        default=PUBMED_DEFAULTS.batch_size,
+        help="Maximum PMIDs per PubMed request.",
+    )
+    pubmed_group.add_argument(
+        "--sleep",
+        type=float,
+        default=PUBMED_DEFAULTS.sleep,
+        help="Seconds to sleep between PubMed requests.",
+    )
+    pubmed_group.add_argument(
+        "--workers",
+        type=int,
+        default=PUBMED_DEFAULTS.workers,
+        help="Number of concurrent PubMed worker threads.",
+    )
+    pubmed_group.add_argument(
+        "--pubmed-chunk-size",
+        type=positive_int,
+        default=PUBMED_DEFAULTS.chunk_size,
+        help="Rows per chunk when writing PubMed outputs.",
+    )
+    pubmed_group.add_argument(
+        "--pubmed-timeout",
+        type=float,
+        default=PUBMED_DEFAULTS.timeout,
+        help="Read timeout in seconds for PubMed requests.",
+    )
+    pubmed_group.add_argument(
         "--openalex-rps",
         type=float,
         default=None,
-        help="Requests per second limit for OpenAlex",
+        help="Requests per second limit for OpenAlex.",
     )
-    pubmed.add_argument(
+    pubmed_group.add_argument(
         "--crossref-rps",
         type=float,
         default=None,
-        help="Requests per second limit for CrossRef",
+        help="Requests per second limit for CrossRef.",
     )
-    pubmed.add_argument(
+    pubmed_group.add_argument(
         "--fallback-doi-csv",
         type=path_argument,
         default=None,
-        help="Optional CSV file providing PMID to DOI overrides",
+        help="Optional CSV file providing PMID to DOI overrides.",
     )
-    pubmed.add_argument(
+    pubmed_group.add_argument(
         "--fallback-doi-pmid-column",
         default="PMID",
-        help="Column containing PubMed identifiers in fallback CSV",
+        help="Column containing PubMed identifiers in fallback CSV.",
     )
-    pubmed.add_argument(
+    pubmed_group.add_argument(
         "--fallback-doi-value-column",
         default="DOI",
-        help="Column containing DOI values in fallback CSV",
+        help="Column containing DOI values in fallback CSV.",
     )
-    pubmed.set_defaults(func=run_pubmed)
 
-    chembl = sub.add_parser(
-        "chembl", parents=[shared], help="Fetch document information from ChEMBL"
-    )
-    chembl.add_argument(
-        "--column",
-        default="document_chembl_id",
-        help="Column name containing identifiers",
-    )
-    chembl.add_argument(
+    chembl_group = parser.add_argument_group("ChEMBL options")
+    chembl_group.add_argument(
         "--chunk-size",
         type=positive_int,
-        default=5,
-        help="Maximum number of IDs per request",
+        default=CHEMBL_DEFAULTS.chunk_size,
+        help="Maximum ChEMBL identifiers per request.",
     )
-    chembl.add_argument(
+    chembl_group.add_argument(
         "--timeout",
         type=float,
-        default=30.0,
-        help="Timeout in seconds for each HTTP request",
+        default=CHEMBL_DEFAULTS.timeout,
+        help="Read timeout in seconds for ChEMBL requests.",
     )
-    chembl.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
-    )
-    chembl.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
-    )
-    chembl.set_defaults(func=run_chembl)
-
-    all_cmd = sub.add_parser(
-        "all", parents=[shared], help="Run both ChEMBL and PubMed pipelines"
-    )
-    all_cmd.add_argument(
-        "--column",
-        default="document_chembl_id",
-        help="Column in the input CSV",
-    )
-    all_cmd.add_argument(
-        "--chunk-size",
+    chembl_group.add_argument(
+        "--chembl-batch-size",
         type=positive_int,
-        default=5,
-        help="Maximum IDs per request",
+        default=CHEMBL_DEFAULTS.batch_size,
+        help="Number of ChEMBL identifiers processed per batch.",
     )
-    all_cmd.add_argument(
-        "--sleep",
+    chembl_group.add_argument(
+        "--chembl-sleep",
         type=float,
-        default=5.0,
-        help="Seconds to sleep between PubMed requests",
+        default=CHEMBL_DEFAULTS.sleep,
+        help="Seconds to sleep between ChEMBL batches.",
     )
-    all_cmd.add_argument(
-        "--workers", type=int, default=1, help="Number of concurrent PubMed requests"
-    )
-    all_cmd.add_argument(
-        "--batch-size",
-        type=positive_int,
-        default=50,
-        help="Maximum PMIDs per PubMed request",
-    )
-    all_cmd.add_argument(
-        "--timeout",
-        type=float,
-        default=30.0,
-        help="Timeout in seconds for each HTTP request",
-    )
-    all_cmd.add_argument(
-        "--limit",
+    chembl_group.add_argument(
+        "--chembl-workers",
         type=int,
-        default=None,
-        help=(
-            "Maximum number of identifiers to process; use 0 to skip processing"
-        ),
+        default=CHEMBL_DEFAULTS.workers,
+        help="Reserved worker count for future parallel ChEMBL fetching.",
     )
-    all_cmd.add_argument(
-        "--offset",
-        type=int,
-        default=0,
-        help="Number of identifiers to skip before processing",
-    )
-    all_cmd.add_argument(
-        "--openalex-rps",
-        type=float,
-        default=None,
-        help="Requests per second limit for OpenAlex",
-    )
-    all_cmd.add_argument(
-        "--crossref-rps",
-        type=float,
-        default=None,
-        help="Requests per second limit for CrossRef",
-    )
-    all_cmd.set_defaults(func=run_all)
-
-    parser.subparsers_map = {  # type: ignore[attr-defined]
-        "pubmed": pubmed,
-        "chembl": chembl,
-        "all": all_cmd,
-    }
 
     return parser, log_cfg
 
@@ -2334,33 +2488,54 @@ def main(argv: Sequence[str] | None = None) -> int:
     if limit_value == 0:
         logger.info("pipeline_skip_limit", limit=limit_value)
         return 0
-    subparser_map = getattr(parser, "subparsers_map", {})
-    subparser = subparser_map.get(args.command, parser)
     if limit_value is not None and limit_value < 0:
-        subparser.error("--limit must be zero or a positive integer")
+        parser.error("--limit must be zero or a positive integer")
     offset_value = getattr(args, "offset", 0)
     if offset_value < 0:
-        subparser.error("--offset must be zero or a positive integer")
-    mapping = {
-        "column": f"document.{args.command}.column",
-        "limit": f"document.{args.command}.limit",
+        parser.error("--offset must be zero or a positive integer")
+
+    mode = getattr(args, "mode", None)
+    handlers = {
+        "pubmed": run_pubmed,
+        "chembl": run_chembl,
+        "all": run_all,
     }
-    if args.command == "pubmed":
+    func = handlers.get(mode)
+    if func is None:
+        parser.error(f"unsupported mode: {mode!r}")
+    args.func = func
+    args.command = mode
+
+    mapping: dict[str, str] = {
+        "column": f"document.{mode}.column",
+        "limit": f"document.{mode}.limit",
+    }
+    if mode == "pubmed":
         mapping.update(
             {
                 "sleep": "document.pubmed.sleep",
                 "workers": "document.pubmed.workers",
                 "batch_size": "document.pubmed.batch_size",
+                "chunk_size": "document.pubmed.chunk_size",
+                "pubmed_chunk_size": "document.pubmed.chunk_size",
+                "pubmed_timeout": "document.pubmed.timeout",
+                "timeout": "document.pubmed.timeout",
             }
         )
-    elif args.command == "chembl":
+    elif mode == "chembl":
         mapping.update(
             {
                 "chunk_size": "document.chembl.chunk_size",
                 "timeout": "document.chembl.timeout",
+                "batch_size": "document.chembl.batch_size",
+                "chembl_batch_size": "document.chembl.batch_size",
+                "sleep": "document.chembl.sleep",
+                "chembl_sleep": "document.chembl.sleep",
+                "workers": "document.chembl.workers",
+                "chembl_workers": "document.chembl.workers",
             }
         )
-    elif args.command == "all":
+    elif mode == "all":
         mapping.update(
             {
                 "chunk_size": "document.all.chunk_size",
@@ -2368,6 +2543,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "workers": "document.all.workers",
                 "batch_size": "document.all.batch_size",
                 "timeout": "document.all.timeout",
+                "chembl_batch_size": "document.all.chembl_batch_size",
+                "chembl_sleep": "document.all.chembl_sleep",
+                "chembl_workers": "document.all.chembl_workers",
+                "pubmed_chunk_size": "document.all.pubmed_chunk_size",
+                "pubmed_timeout": "document.all.pubmed_timeout",
             }
         )
     mapping |= {
@@ -2376,8 +2556,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     return run_cli_command(
         args=args,
-        parser=subparser,
-        base_parser=parser,
+        parser=parser,
+        base_parser=None,
         log_cfg=log_cfg,
         mapping=mapping,
         run=run,
