@@ -7,7 +7,11 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
+from library.config import Config
+from library.common.csv_utils import write_csv_deterministic
+from library.pipelines.target import postprocessing as target_postprocessing
 from library.postprocessing import target
+from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDER
 
 
 @pytest.mark.unit
@@ -217,6 +221,62 @@ def test_process_targets__accepts_normalized_targets_file(
     result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
     expected_frame = pd.read_csv(expected, dtype=str, keep_default_na=False)
     pdt.assert_frame_equal(result, expected_frame)
+
+
+@pytest.mark.unit
+def test_finalise_targets__exports_power_query_column(
+    tmp_path: Path, cfg: Config, snapshot_resource: Path
+) -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_T1",
+                "uniprotkb_Id": "P12345",
+                "genus": "Homo",
+                "lineage_superkingdom": "Eukaryota",
+                "lineage_phylum": "Chordata",
+                "lineage_class": "Mammalia",
+                "superkingdom": "Eukaryota",
+                "pref_name": "Target One",
+                "type": "Legacy",
+            },
+            {
+                "target_chembl_id": "CHEMBL_T2",
+                "uniprotkb_Id": "Q99999",
+                "genus": "Candida",
+                "lineage_superkingdom": "Eukaryota",
+                "lineage_phylum": "Ascomycota",
+                "lineage_class": "Saccharomycetes",
+                "superkingdom": "Eukaryota",
+                "pref_name": "Target Two",
+                "type": "Legacy",
+            },
+        ]
+    )
+
+    result = target_postprocessing.finalise_targets(frame)
+    assert CELLULARITY_COLUMN_NAME in result.columns
+
+    output_path = tmp_path / "targets_final.csv"
+    write_csv_deterministic(
+        result,
+        output_path,
+        col_order=TARGETS_COLUMN_ORDER,
+        key_cols=["target_chembl_id"],
+        sep=cfg.io.csv_sep,
+        encoding=cfg.io.csv_encoding,
+    )
+
+    expected_path = snapshot_resource / "target_final_expected.csv"
+    actual_bytes = output_path.read_bytes()
+    expected_bytes = expected_path.read_bytes()
+    assert actual_bytes == expected_bytes
+
+    actual_frame = pd.read_csv(output_path, dtype=str, encoding=cfg.io.csv_encoding)
+    expected_frame = pd.read_csv(
+        expected_path, dtype=str, encoding=cfg.io.csv_encoding
+    )
+    pdt.assert_frame_equal(actual_frame, expected_frame)
 
 
 @pytest.mark.unit
