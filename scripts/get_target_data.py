@@ -306,6 +306,24 @@ def _postprocess_organism_export(
     return organism_path
 
 
+def _postprocess_target_exports(
+    source: Path,
+    *,
+    cfg: Config,
+    context: IsoformPostprocessContext | None = None,
+    ambiguous_classifications: int | None = None,
+) -> None:
+    """Run all target post-processing helpers for ``source`` export."""
+
+    _postprocess_organism_export(source, cfg=cfg)
+    _postprocess_isoform_export(
+        source,
+        cfg=cfg,
+        context=context,
+        ambiguous_classifications=ambiguous_classifications,
+    )
+
+
 def _resolve_parameter(
     namespace: argparse.Namespace,
     cfg_section: Any,
@@ -1566,8 +1584,9 @@ def run_uniprot(cfg: Config, args: argparse.Namespace) -> int:
             encoding=cfg.io.csv_encoding,
             key_cols=["uniprot_id"],
         )
-        _postprocess_isoform_export(
-            Path(csv_path),
+        export_path = Path(csv_path)
+        _postprocess_target_exports(
+            export_path,
             cfg=cfg,
             context=IsoformPostprocessContext(args=args),
         )
@@ -1809,7 +1828,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 )
                 return 1
 
-        _postprocess_isoform_export(
+        _postprocess_target_exports(
             destination,
             cfg=cfg,
             context=IsoformPostprocessContext(
@@ -1966,7 +1985,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 final_path = final_output
             else:
                 final_path = raw_path
-            _postprocess_isoform_export(
+            _postprocess_target_exports(
                 final_path,
                 cfg=cfg,
                 context=IsoformPostprocessContext(
@@ -2030,7 +2049,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
-        _postprocess_isoform_export(
+        _postprocess_target_exports(
             final_path,
             cfg=cfg,
             context=IsoformPostprocessContext(
@@ -3153,8 +3172,7 @@ def validate_and_write(
         http_requests=http_requests,
     )
     if exit_code == 0:
-        _postprocess_organism_export(final_csv_path, cfg=cfg)
-        _postprocess_isoform_export(
+        _postprocess_target_exports(
             final_csv_path,
             cfg=cfg,
             context=isoform_context,
