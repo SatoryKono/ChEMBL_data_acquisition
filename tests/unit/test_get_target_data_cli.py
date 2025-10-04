@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from library.config import Config
+from library.pipelines.target.defaults import TARGET_MODE_DEFAULTS
 from scripts import get_target_data
 
 
@@ -72,6 +73,17 @@ def test_resolve_target_parameters__all_global_fallback():
     assert cfg.target.all.chunk_size == 9
     assert cfg.target.chembl.chunk_size == 9
     assert cfg.target.chembl.limit == 4
+
+
+@pytest.mark.unit
+def test_target_iuphar_defaults__align_with_cli() -> None:
+    cfg = Config()
+    defaults = TARGET_MODE_DEFAULTS["iuphar"]
+
+    assert cfg.target.iuphar.column == defaults.column
+    assert cfg.target.iuphar.chunk_size == defaults.chunk_size
+    assert cfg.target.iuphar.timeout == pytest.approx(defaults.timeout)
+    assert cfg.target.iuphar.offset == defaults.offset
 
 
 @pytest.mark.unit
