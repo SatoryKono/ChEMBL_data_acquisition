@@ -104,17 +104,12 @@ sources:
         uniprot:
           column: "uniprot_id"
           data_dir: "config/dictionary/_target/_uniprot"
-          chunk_size: 100
-          timeout: 30.0
           limit: null
-          offset: 0
-          data_dir: "../config/dictionary/_target/_uniprot"
         chembl:
           column: "target_chembl_id"  # Column containing ChEMBL target identifiers
           chunk_size: 5
           timeout: 30.0
           limit: null
-          offset: 0
         iuphar:
           target_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
           family_csv: "config/dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
