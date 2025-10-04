@@ -12,6 +12,7 @@ from .parser import (
     prepare_io_paths,
     path_argument,
     positive_int,
+    ConfigMetadata,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "prepare_io_paths",
     "path_argument",
     "positive_int",
+    "ConfigMetadata",
 ]

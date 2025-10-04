@@ -39,6 +39,7 @@ from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
 from library.cli import (
     LoggerConfig,
+    ConfigMetadata,
 )
 from library.cli import build_parser as base_parser
 from library.cli_utils import run_cli_command, run_pipeline
@@ -60,6 +61,39 @@ __all__ = ["ap", "main", "run", "run_chembl"]
 
 DEFAULT_INPUT_NAME = "assay.csv"
 DEFAULT_OUTPUT_STEM = "assays"
+
+_OPTION_UNSET = object()
+
+
+def _option(
+    metadata: ConfigMetadata | None,
+    *,
+    argument: str | None = None,
+    path: str | None = None,
+    value: object = _OPTION_UNSET,
+    default_source: str = "unknown",
+    default_detail: str | None = None,
+) -> dict[str, object]:
+    if metadata is not None:
+        if value is _OPTION_UNSET:
+            return metadata.option(
+                argument=argument,
+                path=path,
+                default_source=default_source,
+                default_detail=default_detail,
+            )
+        return metadata.option(
+            argument=argument,
+            path=path,
+            value=value,
+            default_source=default_source,
+            default_detail=default_detail,
+        )
+    actual = None if value is _OPTION_UNSET else value
+    entry: dict[str, object] = {"value": actual, "source": default_source}
+    if default_detail is not None:
+        entry["detail"] = default_detail
+    return entry
 
 
 def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
@@ -103,14 +137,42 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
     output_path = Path(
         args.output_csv or io.default_output_path(args.input_csv, cfg.io)
     )
+    metadata_obj = getattr(args, "_config_metadata", None)
+    if not isinstance(metadata_obj, ConfigMetadata):
+        metadata_obj = None
+    output_source = "cli" if getattr(args, "output_csv", None) else "derived"
     logger.info(
         "assay_pipeline_start",
-        input=str(args.input_csv),
-        output=str(output_path),
-        limit=limit,
-        offset=offset,
-        batch_size=cfg.assay.batch_size,
-        timeout=cfg.assay.timeout,
+        input=_option(metadata_obj, value=str(args.input_csv), default_source="cli"),
+        output=_option(
+            metadata_obj,
+            value=str(output_path),
+            default_source=output_source,
+        ),
+        limit=_option(
+            metadata_obj,
+            argument="limit",
+            path="sources.chembl.pipelines.assay.limit",
+            value=limit,
+        ),
+        offset=_option(
+            metadata_obj,
+            argument="offset",
+            path="sources.chembl.pipelines.assay.offset",
+            value=offset,
+        ),
+        batch_size=_option(
+            metadata_obj,
+            argument="batch_size",
+            path="sources.chembl.pipelines.assay.batch_size",
+            value=cfg.assay.batch_size,
+        ),
+        timeout=_option(
+            metadata_obj,
+            argument="timeout",
+            path="sources.chembl.pipelines.assay.timeout",
+            value=cfg.assay.timeout,
+        ),
     )
     if offset:
         ids_iter = islice(ids_iter, offset, None)
