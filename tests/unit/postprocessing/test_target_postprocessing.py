@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -95,7 +96,23 @@ def test_read_csv__raises_last_unicode_error(monkeypatch: pytest.MonkeyPatch, tm
 
 
 @pytest.mark.unit
-def test_process_targets__produces_expected_csv_structure(tmp_path: Path):
+def test_process_targets__matches_expected_resource_snapshot(
+    tmp_path: Path, snapshot_resource: Path
+):
+    source = snapshot_resource / "target_postprocessing_input.csv"
+    expected = snapshot_resource / "target_postprocessing_expected.csv"
+    working_copy = tmp_path / source.name
+    shutil.copy(source, working_copy)
+
+    output_path = target.process_targets(working_copy)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
+    expected_frame = pd.read_csv(expected, dtype=str, keep_default_na=False)
+
+    pd.testing.assert_frame_equal(result, expected_frame)
+
+
+@pytest.mark.unit
+def test_process_targets__expands_single_isoform_into_tokens(tmp_path: Path):
     input_path = tmp_path / "targets.csv"
     frame = pd.DataFrame(
         [
@@ -110,7 +127,7 @@ def test_process_targets__produces_expected_csv_structure(tmp_path: Path):
     frame.to_csv(input_path, index=False, encoding="utf-8")
 
     output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
 
     assert list(result.columns) == [
         "target_chembl_id",
@@ -167,7 +184,7 @@ def test_process_targets__filters_rows_without_terms(tmp_path: Path):
     frame.to_csv(input_path, index=False, encoding="utf-8")
 
     output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
 
     assert result.empty
     assert list(result.columns) == [
@@ -201,7 +218,7 @@ def test_process_targets__drops_duplicate_rows(tmp_path: Path):
     frame.to_csv(input_path, index=False, encoding="utf-8")
 
     output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
 
     assert result.to_dict(orient="records") == [
         {
@@ -222,12 +239,48 @@ def test_process_targets__drops_duplicate_rows(tmp_path: Path):
 
 
 @pytest.mark.unit
-def test_process_targets__sorts_output_rows(tmp_path: Path):
+def test_process_targets__normalises_placeholder_isoform_identifiers(tmp_path: Path):
     input_path = tmp_path / "targets.csv"
     frame = pd.DataFrame(
         [
             {
                 "target_chembl_id": "CHEMBL_T4",
+                "isoform_ids": "N/A",
+                "isoform_names": "Theta",
+                "isoform_synonyms": "Theta",
+            }
+        ]
+    )
+    frame.to_csv(input_path, index=False, encoding="utf-8")
+
+    output_path = target.process_targets(input_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
+
+    assert result.to_dict(orient="records") == [
+        {
+            "target_chembl_id": "CHEMBL_T4",
+            "isoform_id": "",
+            "isoform_name": "Theta",
+            "term": "Theta",
+            "token": "theta",
+        },
+        {
+            "target_chembl_id": "CHEMBL_T4",
+            "isoform_id": "",
+            "isoform_name": "Theta",
+            "term": "theta",
+            "token": "theta",
+        },
+    ]
+
+
+@pytest.mark.unit
+def test_process_targets__sorts_output_rows(tmp_path: Path):
+    input_path = tmp_path / "targets.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_T5",
                 "isoform_ids": "ENSP0005|ENSP0004",
                 "isoform_names": "Beta|Alpha",
                 "isoform_synonyms": "Beta Alt:Beta|Alpha Alt:Alpha",
@@ -237,7 +290,7 @@ def test_process_targets__sorts_output_rows(tmp_path: Path):
     frame.to_csv(input_path, index=False, encoding="utf-8")
 
     output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
 
     assert result["isoform_name"].tolist() == [
         "Alpha",
@@ -257,7 +310,7 @@ def test_process_targets__writes_to_custom_output_dir(tmp_path: Path):
     frame = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T5",
+                "target_chembl_id": "CHEMBL_T6",
                 "isoform_ids": "ENSP0006",
                 "isoform_names": "Delta",
                 "isoform_synonyms": "Delta",
@@ -270,6 +323,7 @@ def test_process_targets__writes_to_custom_output_dir(tmp_path: Path):
     output_path = target.process_targets(input_path, output_dir=destination)
 
     assert output_path.parent == destination
+    assert output_path.name == "isoform.output.targets.csv"
     assert output_path.exists()
 
 
@@ -280,7 +334,7 @@ def test_process_targets__supports_custom_separator(tmp_path: Path):
     frame = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T6",
+                "target_chembl_id": "CHEMBL_T7",
                 "isoform_ids": "ENSP0007",
                 "isoform_names": "Epsilon",
                 "isoform_synonyms": "Epsilon",
@@ -291,7 +345,7 @@ def test_process_targets__supports_custom_separator(tmp_path: Path):
     input_path.write_text(buffer.getvalue(), encoding="utf-8")
 
     output_path = target.process_targets(input_path, sep=";")
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
 
     assert result["isoform_name"].tolist() == ["Epsilon", "Epsilon"]
 
@@ -302,7 +356,7 @@ def test_process_targets__handles_isoform_mismatch_lists(tmp_path: Path):
     frame = pd.DataFrame(
         [
             {
-                "target_chembl_id": "CHEMBL_T7",
+                "target_chembl_id": "CHEMBL_T8",
                 "isoform_ids": "ENSP0008|ENSP0009",
                 "isoform_names": "Zeta|",
                 "isoform_synonyms": "Zeta Alt:Zeta|",
@@ -312,35 +366,58 @@ def test_process_targets__handles_isoform_mismatch_lists(tmp_path: Path):
     frame.to_csv(input_path, index=False, encoding="utf-8")
 
     output_path = target.process_targets(input_path)
-    result = pd.read_csv(output_path)
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
 
     assert result.to_dict(orient="records") == [
         {
-            "target_chembl_id": "CHEMBL_T7",
+            "target_chembl_id": "CHEMBL_T8",
             "isoform_id": "ENSP0008",
             "isoform_name": "Zeta",
             "term": "Zeta",
             "token": "zeta",
         },
         {
-            "target_chembl_id": "CHEMBL_T7",
+            "target_chembl_id": "CHEMBL_T8",
             "isoform_id": "ENSP0008",
             "isoform_name": "Zeta",
             "term": "zeta",
             "token": "zeta",
         },
         {
-            "target_chembl_id": "CHEMBL_T7",
+            "target_chembl_id": "CHEMBL_T8",
             "isoform_id": "ENSP0008",
             "isoform_name": "Zeta",
             "term": "zeta alt",
             "token": "alt",
         },
         {
-            "target_chembl_id": "CHEMBL_T7",
+            "target_chembl_id": "CHEMBL_T8",
             "isoform_id": "ENSP0008",
             "isoform_name": "Zeta",
             "term": "zeta alt",
             "token": "zeta",
         },
     ]
+
+
+@pytest.mark.unit
+def test_process_targets__idempotent_for_repeated_runs(tmp_path: Path):
+    input_path = tmp_path / "targets.csv"
+    frame = pd.DataFrame(
+        [
+            {
+                "target_chembl_id": "CHEMBL_T9",
+                "isoform_ids": "ENSP0010",
+                "isoform_names": "Eta",
+                "isoform_synonyms": "Eta",
+            }
+        ]
+    )
+    frame.to_csv(input_path, index=False, encoding="utf-8")
+
+    first_output = target.process_targets(input_path)
+    first_content = first_output.read_text(encoding="utf-8")
+
+    second_output = target.process_targets(input_path)
+    assert second_output == first_output
+    assert second_output.read_text(encoding="utf-8") == first_content

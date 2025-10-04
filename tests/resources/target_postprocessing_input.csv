@@ -1,0 +1,4 @@
+target_chembl_id,isoform_ids,isoform_names,isoform_synonyms
+CHEMBL_T1,ENSP0001|ENSP0002,Alpha|Beta,Alpha Variant:Alpha|Beta Alt:NA
+CHEMBL_T2,NA,,Gamma Alt:None
+CHEMBL_T3,ENSP0003,Delta,Delta:delta

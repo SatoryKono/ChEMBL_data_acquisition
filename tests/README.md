@@ -11,7 +11,7 @@ Shared fixtures live in `tests/conftest.py`. They configure a deterministic envi
 
 ## Post-processing helper coverage
 
-`tests/postprocessing/test_target_postprocessing.py` provides deterministic unit tests for the target isoform post-processing helpers. The scenarios cover CSV decoding fallbacks, normalisation rules, synonym tokenisation, duplicate elimination and the structure of the exported tables, ensuring the Power Query parity logic stays regression-free.
+`tests/unit/postprocessing/test_target_postprocessing.py` provides deterministic unit tests for the target isoform post-processing helpers. The scenarios cover CSV decoding fallbacks, normalisation rules, synonym tokenisation, duplicate elimination and the structure of the exported tables, ensuring the Power Query parity logic stays regression-free. The snapshot fixtures in `tests/resources/target_postprocessing_*.csv` capture the multi-isoform expansion and are consumed by the tests to guarantee stable outputs.
 
 ## Integration enrichment checklist
 

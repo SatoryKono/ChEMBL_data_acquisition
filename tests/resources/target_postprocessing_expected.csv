@@ -1,0 +1,12 @@
+target_chembl_id,isoform_id,isoform_name,term,token
+CHEMBL_T1,ENSP0001,Alpha,Alpha,alpha
+CHEMBL_T1,ENSP0001,Alpha,alpha,alpha
+CHEMBL_T1,ENSP0001,Alpha,alpha variant,alpha
+CHEMBL_T1,ENSP0001,Alpha,alpha variant,variant
+CHEMBL_T1,ENSP0002,Beta,Beta,beta
+CHEMBL_T1,ENSP0002,Beta,beta alt,alt
+CHEMBL_T1,ENSP0002,Beta,beta alt,beta
+CHEMBL_T2,,,gamma alt,alt
+CHEMBL_T2,,,gamma alt,gamma
+CHEMBL_T3,ENSP0003,Delta,Delta,delta
+CHEMBL_T3,ENSP0003,Delta,delta,delta
