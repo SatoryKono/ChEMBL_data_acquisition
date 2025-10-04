@@ -199,6 +199,56 @@ def test_run__skip_existing(
     assert ("info", "pipeline_skip_existing", {"output": str(final_out)}) in logger_stub.events
 
 
+def test_run_uniprot__invokes_target_postprocess(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg.system.doc_quality.enable = False
+    input_csv = tmp_path / "uniprot_ids.csv"
+    input_csv.write_text("uniprot_id\nP12345\n", encoding="utf-8")
+    output_csv = tmp_path / "output.target_20250101.csv"
+
+    monkeypatch.setattr(get_target_data.uu, "init_session", lambda *_, **__: None)
+
+    def _fake_process(**kwargs: object) -> None:
+        assert kwargs["output_csv"] == str(output_csv)
+        Path(kwargs["output_csv"]).write_text(
+            "uniprot_id\nP12345\n", encoding=cfg.io.csv_encoding
+        )
+
+    monkeypatch.setattr(get_target_data.uu, "process", _fake_process)
+
+    recorded: dict[str, object] = {}
+
+    def _fake_postprocess(
+        path: Path,
+        *,
+        cfg: Config,
+        context: get_target_data.IsoformPostprocessContext | None = None,
+        ambiguous_classifications: int | None = None,
+    ) -> None:
+        recorded["path"] = Path(path)
+        recorded["context"] = context
+        recorded["ambiguous"] = ambiguous_classifications
+
+    monkeypatch.setattr(
+        get_target_data,
+        "_postprocess_target_exports",
+        _fake_postprocess,
+    )
+
+    args = argparse.Namespace(input_csv=input_csv, output_csv=output_csv)
+
+    exit_code = get_target_data.run_uniprot(cfg, args)
+
+    assert exit_code == 0
+    assert recorded["path"] == output_csv
+    assert isinstance(recorded["context"], get_target_data.IsoformPostprocessContext)
+    assert recorded["context"].args is args
+    assert recorded["ambiguous"] is None
+
+
 def test_run__delegates_to_handler(
     cfg: Config,
     tmp_path: Path,
@@ -277,3 +327,37 @@ def test_postprocess_organism_export__failure(
         "target_organism_postprocess_failed",
         {"path": str(source), "error": "boom"},
     ) in logger_stub.events
+
+
+def test_postprocess_target_exports__chains_helpers(
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "output.target_20250101.csv"
+    source.write_text("target_chembl_id\nCHEMBL1\n", encoding="utf-8")
+
+    call_order: list[str] = []
+
+    def _fake_organism(path: Path, *, cfg: Config) -> Path:
+        assert Path(path) == source
+        call_order.append("organism")
+        return source
+
+    def _fake_isoform(
+        path: Path,
+        *,
+        cfg: Config,
+        context: get_target_data.IsoformPostprocessContext | None = None,
+        ambiguous_classifications: int | None = None,
+    ) -> Path | None:
+        assert Path(path) == source
+        call_order.append("isoform")
+        return source
+
+    monkeypatch.setattr(get_target_data, "_postprocess_organism_export", _fake_organism)
+    monkeypatch.setattr(get_target_data, "_postprocess_isoform_export", _fake_isoform)
+
+    get_target_data._postprocess_target_exports(source, cfg=cfg)
+
+    assert call_order == ["organism", "isoform"]
