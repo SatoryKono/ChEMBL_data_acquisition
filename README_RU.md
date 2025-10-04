@@ -69,8 +69,9 @@ python scripts/get_data.py \
 
 Каждый пайплайн сохраняет детерминированный CSV, файл метаданных
 `<имя>.meta.yaml` и отчёты качества в том же каталоге. Таргет-пайплайн также
-создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv` и
-`isoform.output.target_<stamp>.csv`, которые подробно описаны в
+создаёт вспомогательные таблицы `organism.output.target_<stamp>.csv`,
+`isoform.output.target_<stamp>.csv` и `names.output.target_<stamp>.csv`,
+которые подробно описаны в
 [`docs/OUTPUT_TARGETS_RU.md`](./docs/OUTPUT_TARGETS_RU.md) и
 [`docs/OUTPUT_TARGETS_EN.md`](./docs/OUTPUT_TARGETS_EN.md). Полную спецификацию
 см. в [`docs/ru/OUTPUT.md`](./docs/ru/OUTPUT.md).

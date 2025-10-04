@@ -1,4 +1,4 @@
-# Target pipeline output: organism and isoform post-processing
+# Target pipeline output: organism, isoform, and names post-processing
 
 This addendum complements the [Output specification](./en/OUTPUT.md) and
 describes the auxiliary artefacts created after `scripts/get_target_data.py`
@@ -7,7 +7,7 @@ available in [`OUTPUT_TARGETS_RU.md`](./OUTPUT_TARGETS_RU.md).
 
 ## Artefact overview
 
-Running the target pipeline with the default writer produces three deterministic
+Running the target pipeline with the default writer produces four deterministic
 CSV artefacts under the chosen output directory:
 
 - `targets_<YYYYMMDD>.csv` — the main table described in
@@ -16,6 +16,8 @@ CSV artefacts under the chosen output directory:
   activity pipeline and QA checks (detailed below).
 - `isoform.output.target_<YYYYMMDD>.csv` — per-isoform token expansion used for
   synonym coverage analysis.
+- `names.output.target_<YYYYMMDD>.csv` — flattened component/name catalogue used
+  to reconcile legacy exports and ChEMBL component groupings.
 
 The `<YYYYMMDD>` suffix is inherited from the CLI `--date` argument or the
 automatic stamp derived from the execution date.
@@ -196,3 +198,76 @@ ID_UP,Q33333,CHEMBL3,a
 
 The helper is idempotent, locale independent, and produces byte-identical
 outputs when rerun on the same input CSV.
+
+## Post-processing `names.*`
+
+`names.output.target_<stamp>.csv` materialises a compact view of the component
+and nomenclature fields that ChEMBL historically exposed via multiple nested
+tables. The helper keeps the nomenclature feed stable for downstream matching
+against assay and activity exports while eliminating redundant columns.
+
+### Input and output
+
+- **Input:** the canonical `targets_<stamp>.csv` produced by
+  `scripts/get_target_data.py` (either from `--output-dir` or from
+  `--final-out`). Optional dictionary overrides referenced in the configuration
+  are honoured when present to keep sort orders deterministic.
+- **Output:** `names.output.target_<stamp>.csv` written next to the main export
+  (or under `--final-out`). The file is encoded as UTF-8 with Unix line endings
+  and sorted by `target_chembl_id`, `active_component_type`, `active_component`
+  (descending), `component_id`, and the normalised `component_name`.
+
+### Schema adjustments
+
+The transformation keeps just the columns required by the consumer lookups:
+
+```
+target_chembl_id,component_id,component_name,component_synonyms,
+component_accession,active_component,active_component_type
+```
+
+- Columns that only served for debugging in the canonical export—such as
+  `component_description`, `component_synonym_ids`, `component_type_raw`,
+  `component_sequence`, and the intermediate `_source_*` markers—are dropped.
+- Empty strings are normalised to `-` for text columns, while boolean
+  `active_component` values are cast to the pandas nullable `boolean` dtype.
+- Null `component_synonyms` become empty pipe-delimited strings to keep the file
+  compatible with legacy Power Query automations.
+
+### Derived fields
+
+`active_component_type` blends the raw component type with the activation flag
+so that downstream joins do not need to re-open the main targets export:
+
+```
+if active_component is True:
+    active_component_type = (component_type or "unknown").lower()
+elif active_component is False:
+    active_component_type = "inactive"
+else:
+    active_component_type = "unassigned"
+```
+
+The resulting value is stored in lowercase ASCII and is never left empty.
+
+### Logging summary
+
+The CLI logger records a single `target_names_postprocess` event with
+aggregated counters:
+
+- `input_rows` — rows read from the canonical export.
+- `dropped_components` — components removed due to missing IDs or names.
+- `null_synonyms` — rows where the synonym list had to be defaulted.
+- `written_rows` — final row count after deduplication.
+
+These metrics surface in the structured logs and the pipeline metadata YAML.
+
+### Determinism
+
+- Sorting uses `mergesort` for stability and a fixed tie-breaker order as noted
+  above.
+- The helper never touches the source file in place: it copies, reshapes, and
+  writes to a brand new file, ensuring that repeated executions over the same
+  input yield byte-identical `names.output.target_<stamp>.csv` artefacts.
+- The output schema and default values are covered by regression tests to guard
+  against accidental column drift.
