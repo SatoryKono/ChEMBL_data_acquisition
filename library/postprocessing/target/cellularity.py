@@ -196,7 +196,7 @@ class Cellularity:
                 return "multicellular"
             if self._has_any(names, self.unicell_phyla):
                 return "unicellular"
-            if "fungi" in names or self._has_any(names, self.fungi_phyla):
+            if "fungi" in names:
                 return "multicellular"
             if self._has_any(names, self.mostly_multicell_phyla):
                 return "multicellular"
