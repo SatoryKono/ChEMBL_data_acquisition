@@ -71,6 +71,8 @@ def test_keyboard_aliases__cases(command: str) -> None:
         ("P12345", ["P12345"]),
         ("P12345|Q67890", ["P12345", "Q67890"]),
         (" |P99999| ", ["P99999"]),
+        ("-", []),
+        ("P12345-2|-|Q99999", ["P12345-2", "Q99999"]),
     ],
 )
 def test_split_uniprot_tokens__cases(value: str, tokens: list[str]) -> None:
