@@ -469,6 +469,11 @@ def _get_cfg_value(cfg: Config, path: str) -> Any:
 
     current: Any = cfg
     for part in path.split("."):
+        if not hasattr(current, part):
+            raise AttributeError(
+                f"{type(current).__name__!r} object has no attribute {part!r} "
+                f"while resolving configuration path '{path}'"
+            )
         current = getattr(current, part)
     return current
 
@@ -583,7 +588,16 @@ def apply_config_overrides(
         ):
             default = base_parser.get_default(arg)
         if getattr(args, arg) == default:
-            setattr(args, arg, _get_cfg_value(cfg, key))
+            try:
+                value = _get_cfg_value(cfg, key)
+            except AttributeError:
+                logger.warning(
+                    "config_attribute_missing",
+                    argument=arg,
+                    path=key,
+                )
+                continue
+            setattr(args, arg, value)
 
     return cfg
 
