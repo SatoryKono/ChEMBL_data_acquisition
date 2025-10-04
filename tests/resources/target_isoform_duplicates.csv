@@ -1,0 +1,4 @@
+target_chembl_id,uniprot_id_primary,isoform_ids,isoform_names,isoform_synonyms
+CHEMBLD,Q44444,ID_DUP,Dup,Duplicate
+CHEMBLD,Q44444,ID_DUP,,Duplicate
+CHEMBLD,Q44445,ID_DUP,,Duplicate

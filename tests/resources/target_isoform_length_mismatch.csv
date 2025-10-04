@@ -1,0 +1,4 @@
+target_chembl_id,uniprot_id_primary,isoform_ids,isoform_names,isoform_synonyms
+CHEMBL10,U00010,ID1|ID2,Name1|Name2|Name3,Syn1|Syn2
+CHEMBL11,U00011,ID3,Name4|Name5,Syn3|Syn4|Syn5
+CHEMBL12,U00012,,Name6,Syn6|Syn7

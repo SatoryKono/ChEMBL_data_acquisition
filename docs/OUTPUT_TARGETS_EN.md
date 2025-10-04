@@ -14,7 +14,7 @@ CSV artefacts under the chosen output directory:
   [`OUTPUT.md`](./en/OUTPUT.md#target-export-targets).
 - `organism.output.target_<YYYYMMDD>.csv` — organism level helpers used by the
   activity pipeline and QA checks (detailed below).
-- `isoform.output.targets_<YYYYMMDD>.csv` — per-isoform token expansion used for
+- `isoform.output.target_<YYYYMMDD>.csv` — per-isoform token expansion used for
   synonym coverage analysis.
 
 The `<YYYYMMDD>` suffix is inherited from the CLI `--date` argument or the
@@ -109,37 +109,58 @@ artefacts.
 
 ## Isoform token expansion
 
-The isoform helper retains the semantics previously documented for
-`isoform.output.*`. The stage reads the canonical targets CSV, cleans the
-`isoform_*` columns, expands synonyms into tokens, removes duplicates on
-(`target_chembl_id`, `isoform_id`, `term`, `token`), and emits a deterministic
-CSV for downstream QA tooling.
+`isoform.output.target_<stamp>.csv` reproduces the Power Query workbook that was
+previously used to sanity-check isoform coverage. The pipeline performs the
+following deterministic stages:
 
-The input snapshot and invariants remain unchanged from earlier revisions. An
-end-to-end example is included below for completeness.
+1. **Project required columns** — only `isoform_synonyms`, `isoform_names`,
+   `isoform_ids`, `uniprot_id_primary`, and `target_chembl_id` are loaded.
+2. **Normalise case** — `isoform_synonyms` and `isoform_names` are converted to
+   lowercase text. Isoform identifiers keep their original case.
+3. **Split pipe-separated lists** — the three isoform columns are split on `|`,
+   whitespace is trimmed, and empty tokens are discarded.
+4. **Align values by index** — `MakeTriples` pads the name/id/synonym lists with
+   `null` so that each position forms a `{name, id, synonym}` record.
+5. **Tokenise synonyms** — every synonym is split on `:` and each token is
+   expanded into the variants `[token, token without "pde", token without
+   "pld"]`, with duplicates removed while preserving order.
+6. **Build name and synonym tables** — trimmed isoform names feed the first
+   table (filtering out `""`, `"n/a"`, and `"none"`), while the expanded
+   synonym tokens form the second table.
+7. **Union and deduplicate** — the two tables are concatenated and then deduped
+   in three passes: (a) on
+   (`id`, `name`, `target_chembl_id`, `uniprot_id_primary`), (b) sorted with
+   `mergesort` by (`uniprot_id_primary`, `id`) and deduped on (`id`,
+   `target_chembl_id`, `name`), and (c) a final dedupe on (`id`, `name`). The
+   stable sort guarantees deterministic survivors.
+8. **Emit artefact** — the resulting columns are ordered as
+   `["id", "uniprot_id_primary", "target_chembl_id", "name"]` and written as a
+   UTF-8 CSV without BOM.
+
+Example input snapshot (from `output.target_20250101.csv`):
 
 ```
-target_chembl_id,isoform_ids,isoform_names,isoform_synonyms
-CHEMBL1824,ENSP00000350283,Nav1.7,"Nav1.7:SCN9A isoform 3"
-CHEMBL1824,ENSP00000350284,"Nav1.7 isoform 2","Nav1.7 splice variant:SCN9A-2"
-CHEMBL6130,,"",""
-CHEMBL240,ENSP00000456012,ALK2,"Activin receptor-like kinase 2:ACVR1"
-CHEMBL259,ENSP00000263253,FGFR4,"FGFR-4 isoform:Fibroblast growth factor receptor-4"
+target_chembl_id,uniprot_id_primary,isoform_ids,isoform_names,isoform_synonyms
+CHEMBL1,Q11111,ENSP0001|ENSP0002,Alpha|Beta,Alpha Alt|PDE3A:Alpha
+CHEMBL2,Q22222,,Gamma|N/A|none,Gamma:Variant|n/a|none
+CHEMBL3,Q33333,ID_UP|id_low,Theta|Lambda,PLDA:Variant
 ```
 
+Corresponding `isoform.output.target_20250101.csv` (first rows):
+
 ```
-target_chembl_id,isoform_id,isoform_name,term,token
-CHEMBL1824,ENSP00000350283,Nav1.7,Nav1.7,7
-CHEMBL1824,ENSP00000350283,Nav1.7,Nav1.7,nav1
-CHEMBL1824,ENSP00000350283,Nav1.7,nav1.7,7
-CHEMBL1824,ENSP00000350283,Nav1.7,nav1.7,nav1
-CHEMBL1824,ENSP00000350283,Nav1.7,scn9a isoform 3,3
-CHEMBL1824,ENSP00000350283,Nav1.7,scn9a isoform 3,isoform
-CHEMBL1824,ENSP00000350283,Nav1.7,scn9a isoform 3,scn9a
-CHEMBL1824,ENSP00000350284,Nav1.7 isoform 2,Nav1.7 isoform 2,2
-CHEMBL1824,ENSP00000350284,Nav1.7 isoform 2,Nav1.7 isoform 2,7
-CHEMBL1824,ENSP00000350284,Nav1.7 isoform 2,Nav1.7 isoform 2,isoform
+id,uniprot_id_primary,target_chembl_id,name
+ENSP0001,Q11111,CHEMBL1,alpha
+ENSP0001,Q11111,CHEMBL1,alpha alt
+ENSP0002,Q11111,CHEMBL1,beta
+ENSP0002,Q11111,CHEMBL1,pde3a
+ENSP0002,Q11111,CHEMBL1,3a
+,Q22222,CHEMBL2,gamma
+,Q22222,CHEMBL2,variant
+ID_UP,Q33333,CHEMBL3,theta
+ID_UP,Q33333,CHEMBL3,plda
+ID_UP,Q33333,CHEMBL3,a
 ```
 
-The transformation is deterministic, locale independent, and requires no
-network connectivity.
+The helper is idempotent, locale independent, and produces byte-identical
+outputs when rerun on the same input CSV.

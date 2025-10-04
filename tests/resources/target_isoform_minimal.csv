@@ -1,0 +1,4 @@
+target_chembl_id,uniprot_id_primary,isoform_ids,isoform_names,isoform_synonyms
+CHEMBL1,Q11111,ENSP0001|ENSP0002,Alpha|Beta,Alpha Alt|PDE3A:Alpha
+CHEMBL2,Q22222,,Gamma|N/A|none,Gamma:Variant|n/a|none
+CHEMBL3,Q33333,ID_UP|id_low,Theta|Lambda,PLDA:Variant

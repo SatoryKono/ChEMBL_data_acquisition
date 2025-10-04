@@ -19,7 +19,6 @@ import shutil
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-import inspect
 import math
 from functools import partial
 from itertools import islice
@@ -112,28 +111,6 @@ from library.table_quality import analyze_table_quality
 from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
-
-
-try:
-    from library.postprocessing.target import process_targets as _process_targets_impl
-except ImportError as _process_targets_exc:  # pragma: no cover - compatibility
-    _process_targets_impl = None
-    for _fallback_name in ("process_targest", "process_target"):  # legacy typo fallback
-        candidate = getattr(target_pp, _fallback_name, None)
-        if callable(candidate):
-            _process_targets_impl = candidate
-            break
-    if _process_targets_impl is None:  # pragma: no cover - defensive guard
-        raise _process_targets_exc
-else:  # pragma: no cover - compatibility bridge
-    setattr(target_pp, "process_targets", _process_targets_impl)
-
-try:
-    _TARGET_PROCESS_SIGNATURE = inspect.signature(_process_targets_impl)
-except (TypeError, ValueError):  # pragma: no cover - unexpected callable
-    _TARGET_PROCESS_PARAMETERS: set[str] = set()
-else:
-    _TARGET_PROCESS_PARAMETERS = set(_TARGET_PROCESS_SIGNATURE.parameters)
 
 
 @contextmanager
@@ -257,47 +234,8 @@ def _postprocess_isoform_export(
 ) -> Path | None:
     """Invoke the isoform post-processing helper with CLI/config overrides."""
 
-    if _process_targets_impl is None:
-        return None
-
-    kwargs: dict[str, Any] = {}
-    if "sep" in _TARGET_PROCESS_PARAMETERS:
-        kwargs["sep"] = cfg.io.csv_sep
-
-    args = context.args if context else None
-    isoform_output_dir: Path | None = None
-    if args is not None:
-        for attr in ("isoform_out", "isoform_output_dir"):
-            candidate = getattr(args, attr, None)
-            if candidate not in (None, argparse.SUPPRESS):
-                isoform_output_dir = Path(candidate)
-                break
-    if isoform_output_dir is not None and "output_dir" in _TARGET_PROCESS_PARAMETERS:
-        kwargs["output_dir"] = isoform_output_dir
-
-    verbose_flag: bool | None = None
-    if args is not None:
-        verbose_flag = _bool_from_cli(getattr(args, "verbose", None))
-    if verbose_flag is None:
-        log_cfg = getattr(cfg.system, "log", None)
-        level_value = getattr(log_cfg, "level", "") if log_cfg is not None else ""
-        if isinstance(level_value, str) and level_value:
-            verbose_flag = level_value.upper() == "DEBUG"
-    if verbose_flag is not None and "verbose" in _TARGET_PROCESS_PARAMETERS:
-        kwargs["verbose"] = verbose_flag
-
-    offline_flag: bool | None = None
-    if args is not None:
-        offline_flag = _bool_from_cli(getattr(args, "offline", None))
-    if offline_flag is None:
-        offline_flag = _bool_from_cli(getattr(cfg, "offline", None))
-    if offline_flag is None:
-        offline_flag = _bool_from_cli(getattr(cfg.system, "offline", None))
-    if offline_flag is not None and "offline" in _TARGET_PROCESS_PARAMETERS:
-        kwargs["offline"] = offline_flag
-
     try:
-        isoform_path = Path(_process_targets_impl(str(source), **kwargs))
+        isoform_path = Path(target_pp.process_targets(str(source), verbose=True))
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.exception(
             "target_isoform_postprocess_failed",
