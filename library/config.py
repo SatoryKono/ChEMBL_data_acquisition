@@ -101,16 +101,21 @@ def _absolutise_path_value(value: Any, base_dir: Path) -> Any:
 
     if value is None:
         return value
-    if isinstance(value, str):
-        path = Path(value)
-        if path.is_absolute():
-            return value
-        return str((base_dir / path).resolve())
-    if isinstance(value, os.PathLike):
-        path = Path(value)
+    base_dir = base_dir.resolve()
+
+    def _resolve(path: Path) -> Path:
         if path.is_absolute():
             return path
+        if base_dir.name and path.parts and path.parts[0] == base_dir.name:
+            return (base_dir.parent / path).resolve()
         return (base_dir / path).resolve()
+
+    if isinstance(value, str):
+        resolved = _resolve(Path(value))
+        return str(resolved)
+    if isinstance(value, os.PathLike):
+        resolved = _resolve(Path(value))
+        return resolved
     return value
 
 
