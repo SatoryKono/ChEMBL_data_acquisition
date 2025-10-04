@@ -4,14 +4,59 @@ import importlib.util
 import sys
 import types
 from pathlib import Path
+
+import importlib.util
+import sys
+import types
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pandas.testing as pdt
 import pytest
 
+import library
 from library.config import Config
 from library.pipelines.target import cellularity, helpers, multifunctional
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load_postprocessing_cellularity_module():
+    module = sys.modules.get("library.postprocessing.target.cellularity")
+    if module is not None:
+        return module
+
+    post_pkg = sys.modules.get("library.postprocessing")
+    if post_pkg is None:
+        post_pkg = types.ModuleType("library.postprocessing")
+        post_pkg.__path__ = [str(REPO_ROOT / "library" / "postprocessing")]
+        sys.modules["library.postprocessing"] = post_pkg
+        setattr(library, "postprocessing", post_pkg)
+
+    target_pkg = sys.modules.get("library.postprocessing.target")
+    if target_pkg is None:
+        target_pkg = types.ModuleType("library.postprocessing.target")
+        target_pkg.__path__ = [
+            str(REPO_ROOT / "library" / "postprocessing" / "target")
+        ]
+        sys.modules["library.postprocessing.target"] = target_pkg
+    if not hasattr(sys.modules["library.postprocessing"], "target"):
+        setattr(sys.modules["library.postprocessing"], "target", target_pkg)
+
+    spec = importlib.util.spec_from_file_location(
+        "library.postprocessing.target.cellularity",
+        REPO_ROOT / "library" / "postprocessing" / "target" / "cellularity.py",
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("Unable to load postprocessing cellularity module")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+postprocessing_cellularity = _load_postprocessing_cellularity_module()
 from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDER
 
 INPUT_FILE = "target_postprocess_power_query_input.csv"
@@ -138,6 +183,34 @@ def test_add_cellularity_smart__fills_column(snapshot_resource: Path) -> None:
         cellularity.DEFAULT_RULES.label_unicellular(),
         cellularity.DEFAULT_RULES.label_viral(),
     ]
+
+
+@pytest.mark.unit
+def test_add_cellularity_smart__missing_tax_ids_skip_fetch() -> None:
+    calls: list[tuple[object, object | None]] = []
+
+    def _stub_fetcher(tax_id: object, email: str | None) -> list[str]:
+        calls.append((tax_id, email))
+        return ["unexpected"]
+
+    frame = pd.DataFrame(
+        {
+            "tax_id": pd.Series([pd.NA, np.nan], dtype="object"),
+            "lineage_superkingdom": [pd.NA, pd.NA],
+            "lineage_phylum": [pd.NA, pd.NA],
+        }
+    )
+
+    enriched = postprocessing_cellularity.add_cellularity_smart(
+        frame,
+        tax_id_column="tax_id",
+        superkingdom_column="lineage_superkingdom",
+        phylum_column="lineage_phylum",
+        fetcher=_stub_fetcher,
+    )
+
+    assert calls == []
+    assert enriched["cellularity"].tolist() == ["ambiguous", "ambiguous"]
 
 
 @pytest.mark.unit

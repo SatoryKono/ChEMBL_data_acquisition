@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
+import numpy as np
 import pandas as pd
 
 from .helpers import first_element_text, normalize_text
@@ -110,7 +111,31 @@ class Cellularity:
         return "ambiguous"
 
     def get_lineage_names(self, tax_id: Any, email: str | None = None) -> list[str]:
-        if tax_id is None or (isinstance(tax_id, float) and pd.isna(tax_id)):
+        try:
+            missing_value = pd.isna(tax_id)
+        except (TypeError, ValueError):
+            missing_value = False
+
+        if tax_id is None:
+            return []
+
+        if isinstance(missing_value, (bool, np.bool_)) and missing_value:
+            return []
+
+        if getattr(missing_value, "all", None) is not None:
+            try:
+                all_missing = missing_value.all()
+            except TypeError:
+                all_missing = False
+            if isinstance(all_missing, (bool, np.bool_)) and all_missing:
+                return []
+            if all_missing is pd.NA:
+                return []
+
+        if tax_id is pd.NA:
+            return []
+
+        if isinstance(tax_id, (float, np.floating)) and pd.isna(tax_id):
             return []
         values = list(self.fetcher(tax_id, email))  # type: ignore[arg-type]
         return values
