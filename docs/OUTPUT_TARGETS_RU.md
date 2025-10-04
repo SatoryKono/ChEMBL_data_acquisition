@@ -132,6 +132,35 @@ CHEMBL1922,Viral,true,false,-,-,0000012999,-,-
 8. **Запись** — результат сортируется в колонках `["id", "uniprot_id_primary",
    "target_chembl_id", "name"]` и сохраняется в UTF-8 без BOM.
 
+### Запуск из Python
+
+Воспроизвести справочник можно напрямую из Python:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from library.postprocessing.target import process_targets
+
+latest = Path("data/output/output.target_20250101.csv")
+process_targets(latest, verbose=True)
+PY
+```
+
+Если путь не указан явно, `process_targets` найдёт последний `output.target_*.csv`
+в каталоге `data/output`, повторяя поведение Power Query.
+
+### Детерминизм и совместимость
+
+- Реализация один-в-один повторяет Power Query (M): каждая стадия (проекция,
+  нормализация, токенизация, объединение и три `Distinct`) покрыта регрессионными
+  тестами.
+- Перед вторым `Distinct` применяется стабильная сортировка `mergesort`, поэтому
+  при коллизиях идентификаторов всегда выживает один и тот же ряд.
+- CSV сохраняется в UTF-8 с переводами строк `\n` и фиксированным порядком
+  колонок `id`, `uniprot_id_primary`, `target_chembl_id`, `name`.
+- Поддерживаются Python 3.11+ и pandas ≥ 2.0, что совпадает с основным
+  стеком пайплайна.
+
 Пример (источник `output.target_20250101.csv`):
 
 ```

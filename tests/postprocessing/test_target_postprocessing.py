@@ -19,6 +19,7 @@ import pytest
 import library
 from library.config import Config
 from library.pipelines.target import cellularity, helpers, multifunctional
+from library.postprocessing.target import isoform
  
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -284,3 +285,201 @@ def test_get_lineage_names__numeric_tax_id_returns_lineage() -> None:
 
     assert result == lineage
     assert calls == [(9606, None)]
+
+
+@pytest.mark.unit
+def test_isoform_split_pipes__trims_and_discards_empty() -> None:
+    assert isoform._split_pipes("") == []
+    assert isoform._split_pipes("a|b") == ["a", "b"]
+    assert isoform._split_pipes(" a | | b ") == ["a", "b"]
+
+
+@pytest.mark.unit
+def test_isoform_make_triples__pads_shorter_lists() -> None:
+    triples = isoform._make_triples(
+        ["name1", "name2"],
+        ["id1"],
+        ["syn1", "syn2", "syn3"],
+    )
+
+    assert triples == [
+        {"name": "name1", "id": "id1", "synonym": "syn1"},
+        {"name": "name2", "id": None, "synonym": "syn2"},
+        {"name": None, "id": None, "synonym": "syn3"},
+    ]
+
+
+@pytest.mark.unit
+def test_isoform_normalisation__only_names_and_synonyms_lowercased() -> None:
+    frame = pd.DataFrame(
+        {
+            "isoform_synonyms": ["Alpha|Beta"],
+            "isoform_names": ["Alpha|Beta"],
+            "isoform_ids": ["EnSp0001|ensp0002"],
+            "uniprot_id_primary": ["Q10000"],
+            "target_chembl_id": ["CHEMBL100"],
+        }
+    )
+
+    transform = isoform._transform(frame)
+
+    assert all(name == name.lower() for name in transform.result["name"])
+    assert "EnSp0001" in transform.result["id"].tolist()
+    assert "ensp0002" in transform.result["id"].tolist()
+
+
+@pytest.mark.unit
+def test_isoform_tokenise_synonym__pde3a_alpha() -> None:
+    tokens = isoform._tokenize_synonym("PDE3A:alpha")
+
+    assert tokens == ["pde3a", "3a", "alpha"]
+
+
+@pytest.mark.unit
+def test_isoform_name_filter__drops_empty_and_na(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_minimal.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+
+    assert "" not in transform.result["name"].tolist()
+    assert "n/a" not in transform.result["name"].tolist()
+    assert "none" not in transform.result["name"].tolist()
+
+
+@pytest.mark.unit
+def test_isoform_synonym_tokens__preserve_identifier(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_minimal.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+    synonyms = transform.result[transform.result["name"].isin(["pde3a", "3a", "alpha"])]
+
+    assert synonyms[synonyms["name"] == "pde3a"]["id"].tolist() == ["ENSP0002"]
+    assert synonyms[synonyms["name"] == "3a"]["id"].tolist() == ["ENSP0002"]
+    alpha_ids = synonyms[synonyms["name"] == "alpha"]["id"].tolist()
+    assert "ENSP0002" in alpha_ids
+
+
+@pytest.mark.unit
+def test_isoform_stage1_dedup__matches_table_distinct(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_duplicates.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+
+    expected = transform.combined.drop_duplicates(
+        subset=["id", "name", "target_chembl_id", "uniprot_id_primary"],
+        keep="first",
+    ).reset_index(drop=True)
+
+    pdt.assert_frame_equal(transform.dedup_stage1.reset_index(drop=True), expected)
+
+
+@pytest.mark.unit
+def test_isoform_sorted_stage__uses_mergesort(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_duplicates.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+
+    expected = transform.dedup_stage1.sort_values(
+        by=["uniprot_id_primary", "id"],
+        kind="mergesort",
+        na_position="first",
+    ).reset_index(drop=True)
+
+    pdt.assert_frame_equal(transform.sorted_stage.reset_index(drop=True), expected)
+
+
+@pytest.mark.unit
+def test_isoform_stage2_dedup__matches_drop_duplicates(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_duplicates.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+
+    expected = transform.sorted_stage.drop_duplicates(
+        subset=["id", "target_chembl_id", "name"],
+        keep="first",
+    ).reset_index(drop=True)
+
+    pdt.assert_frame_equal(transform.dedup_stage2.reset_index(drop=True), expected)
+
+
+@pytest.mark.unit
+def test_isoform_final_dedup__matches_last_distinct(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_duplicates.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+
+    expected = transform.dedup_stage2.drop_duplicates(
+        subset=["id", "name"],
+        keep="first",
+    ).reset_index(drop=True)
+
+    pdt.assert_frame_equal(transform.result.reset_index(drop=True), expected)
+
+
+@pytest.mark.unit
+def test_isoform_output_columns__match_spec(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_minimal.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+
+    assert list(transform.result.columns) == list(isoform._OUTPUT_COLUMNS)
+
+
+@pytest.mark.unit
+def test_isoform_make_triples_fixture__pads_missing_values(snapshot_resource: Path) -> None:
+    frame = pd.read_csv(
+        snapshot_resource / "target_isoform_length_mismatch.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    transform = isoform._transform(frame)
+    rows = transform.combined[transform.combined["target_chembl_id"] == "CHEMBL11"]
+
+    name5_row = rows[rows["name"] == "name5"]
+    assert not name5_row.empty
+    assert name5_row["id"].apply(lambda value: pd.isna(value) or value == "").all()
+
+    syn5_row = rows[rows["name"] == "syn5"]
+    assert not syn5_row.empty
+    assert syn5_row["id"].apply(lambda value: pd.isna(value) or value == "").all()
+
+
+@pytest.mark.unit
+def test_isoform_process_targets__writes_isoform_prefix(tmp_path: Path, snapshot_resource: Path) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    input_path = tmp_path / "output.target_20250101.csv"
+    input_path.write_bytes(source.read_bytes())
+
+    output_path = isoform.process_targets(str(input_path), verbose=False)
+
+    assert output_path.name == "isoform.output.target_20250101.csv"
+    assert output_path.parent == input_path.parent
