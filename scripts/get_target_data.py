@@ -20,6 +20,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
+import inspect
 from functools import partial
 from itertools import islice
 from pathlib import Path
