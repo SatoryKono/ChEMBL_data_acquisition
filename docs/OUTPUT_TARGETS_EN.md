@@ -137,6 +137,38 @@ following deterministic stages:
    `["id", "uniprot_id_primary", "target_chembl_id", "name"]` and written as a
    UTF-8 CSV without BOM.
 
+### Running the helper
+
+Invoke the helper directly to regenerate the isoform table from any canonical
+target export:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from library.postprocessing.target import process_targets
+
+latest = Path("data/output/output.target_20250101.csv")
+process_targets(latest, verbose=True)
+PY
+```
+
+The script discovers the output path automatically when `process_targets` is
+called without arguments, mirroring the behaviour of the original Power Query
+workbook.
+
+### Determinism and compatibility
+
+- The Python implementation mirrors the Power Query (M) workbook used by the
+  data team. Each transformation stage (projection, normalisation, tokenisation,
+  union, and deduplication) has regression tests that assert byte-identical
+  results.
+- Stable `mergesort` ordering is enforced before the second deduplication pass,
+  guaranteeing deterministic survivors when identifiers collide.
+- Outputs are encoded as UTF-8 with Unix newlines and preserve the canonical
+  column order `id`, `uniprot_id_primary`, `target_chembl_id`, `name`.
+- The helper is compatible with Python 3.11+ and pandas ≥ 2.0, matching the
+  baseline versions used across the pipeline.
+
 Example input snapshot (from `output.target_20250101.csv`):
 
 ```
