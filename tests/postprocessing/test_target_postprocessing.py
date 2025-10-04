@@ -194,3 +194,39 @@ def test_process_targets__auto_discovers_latest_input(tmp_path: Path, snapshot_r
         target._DEFAULT_SEARCH_DIR = original_search_dir
 
     assert output_path.name == "isoform.output.target_20250101.csv"
+
+
+@pytest.mark.unit
+def test_process_targets__accepts_normalized_targets_file(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    source = snapshot_resource / "target_isoform_minimal.csv"
+    expected = snapshot_resource / "target_isoform_minimal_expected.csv"
+    working = tmp_path / "targets_20250101_normalized.csv"
+    shutil.copy(source, working)
+
+    output_path = target.process_targets(str(working), verbose=False)
+
+    assert output_path.name == "isoform.targets_20250101_normalized.csv"
+    result = pd.read_csv(output_path, dtype=str, keep_default_na=False)
+    expected_frame = pd.read_csv(expected, dtype=str, keep_default_na=False)
+    pdt.assert_frame_equal(result, expected_frame)
+
+
+@pytest.mark.unit
+def test_process_targets__auto_discovers_latest_input_targets_prefix(
+    tmp_path: Path, snapshot_resource: Path
+) -> None:
+    first = tmp_path / "targets_20240101_normalized.csv"
+    shutil.copy(snapshot_resource / "target_isoform_minimal.csv", first)
+    newer = tmp_path / "targets_20250101_normalized.csv"
+    shutil.copy(snapshot_resource / "target_isoform_minimal.csv", newer)
+
+    original_search_dir = target._DEFAULT_SEARCH_DIR
+    target._DEFAULT_SEARCH_DIR = tmp_path
+    try:
+        output_path = target.process_targets(verbose=False)
+    finally:
+        target._DEFAULT_SEARCH_DIR = original_search_dir
+
+    assert output_path.name == "isoform.targets_20250101_normalized.csv"
