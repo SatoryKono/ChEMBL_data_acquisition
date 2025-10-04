@@ -157,6 +157,30 @@ def _normalize_column_name(column: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _to_text(column).lower())
 
 
+def _candidate_source_names(canonical: str) -> Tuple[str, ...]:
+    """Return the ordered list of accepted names for ``canonical``."""
+
+    seen: List[str] = []
+    for name in (
+        (canonical,)
+        + _SOURCE_COLUMN_ALIASES.get(canonical, ())
+        + _SOURCE_FALLBACKS.get(canonical, ())
+    ):
+        if name not in seen:
+            seen.append(name)
+    return tuple(seen)
+
+
+def _format_alias_hint(canonical: str) -> str:
+    """Return a human-readable description of accepted names."""
+
+    candidates = _candidate_source_names(canonical)
+    if len(candidates) == 1:
+        return canonical
+    aliases = ", ".join(candidates[1:])
+    return f"{canonical} (aliases: {aliases})"
+
+
 def _resolve_source_columns(frame: pd.DataFrame) -> Dict[str, str]:
     """Resolve the source column names accounting for legacy aliases."""
 
@@ -169,24 +193,19 @@ def _resolve_source_columns(frame: pd.DataFrame) -> Dict[str, str]:
 
     for canonical in _SOURCE_COLUMNS:
         match: Optional[str] = None
-        if canonical in frame.columns:
-            match = canonical
-        else:
-            for alias in _SOURCE_COLUMN_ALIASES.get(canonical, ()):  # pragma: no branch - small tuple
-                if alias in frame.columns:
-                    match = alias
-                    break
+        candidates = _candidate_source_names(canonical)
+
+        for candidate in candidates:  # pragma: no branch - small tuple
+            if candidate in frame.columns:
+                match = candidate
+                break
 
         if match is None:
-            candidate_norms = {_normalize_column_name(canonical)}
-            candidate_norms.update(
-                _normalize_column_name(alias)
-                for alias in _SOURCE_COLUMN_ALIASES.get(canonical, ())
-            )
+            candidate_norms = {_normalize_column_name(name) for name in candidates}
             for norm in candidate_norms:
-                candidates = normalized_lookup.get(norm)
-                if candidates:
-                    match = sorted(candidates)[0]
+                candidates_from_norm = normalized_lookup.get(norm)
+                if candidates_from_norm:
+                    match = sorted(candidates_from_norm)[0]
                     break
 
         if match is None:
@@ -195,10 +214,7 @@ def _resolve_source_columns(frame: pd.DataFrame) -> Dict[str, str]:
             resolved[canonical] = match
 
     if missing:
-        alias_hints = ", ".join(
-            f"{name} (aliases: {', '.join((name,) + _SOURCE_COLUMN_ALIASES.get(name, ()))})"
-            for name in missing
-        )
+        alias_hints = ", ".join(_format_alias_hint(name) for name in missing)
         available = ", ".join(frame.columns)
         raise KeyError(
             "Required columns missing from isoform export: "
@@ -307,9 +323,8 @@ def _transform(frame: pd.DataFrame) -> _TransformationResult:
             sorted_stage=empty_result.copy(),
             dedup_stage2=empty_result.copy(),
         )
-    column_map = _resolve_source_columns(frame)
-    projected = frame.loc[:, [column_map[column] for column in _SOURCE_COLUMNS]].copy()
-    projected = projected.rename(columns={column_map[column]: column for column in _SOURCE_COLUMNS})
+    _resolve_source_columns(frame)
+    projected = projected.loc[:, list(_SOURCE_COLUMNS)].copy()
 
     projected["isoform_synonyms"] = projected["isoform_synonyms"].map(
         lambda value: _to_text(value).lower()
