@@ -3,14 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-from pathlib import Path
-
-import pandas as pd
 import pandas.testing as pdt
 import pytest
 
 from library.config import Config
 from library.pipelines.target import cellularity, helpers, multifunctional
+from library.postprocessing.target.cellularity import Cellularity
 from library.schemas.targets import CELLULARITY_COLUMN_NAME, TARGETS_COLUMN_ORDER
 
 INPUT_FILE = "target_postprocess_power_query_input.csv"
@@ -127,3 +125,28 @@ def test_append_multifunctional_flag__detects_keywords(snapshot_resource: Path) 
     assert "multifunctional_enzyme" in result.columns
     assert result["multifunctional_enzyme"].dtype == "boolean"
     assert result["multifunctional_enzyme"].tolist() == [True, False, False]
+
+
+@pytest.mark.unit
+def test_classify_by_fetch__trailing_whitespace_lineage_remains_ambiguous() -> None:
+    lineage = [
+        "Viruses ",
+        "Duplodnaviria ",
+        "Herpesvirales ",
+        "Herpesviridae ",
+        "Varicellovirus ",
+        "Human alphaherpesvirus 3 ",
+    ]
+
+    def _mock_fetcher(tax_id: object, email: str | None) -> list[str]:
+        assert tax_id == "10335"
+        return list(lineage)
+
+    classifier = Cellularity(fetcher=_mock_fetcher)
+
+    names = classifier.get_lineage_names("10335")
+    assert names[-1].endswith(" ")
+
+    result = classifier.classify_by_fetch("10335")
+
+    assert result == "ambiguous"
