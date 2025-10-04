@@ -469,6 +469,11 @@ def _get_cfg_value(cfg: Config, path: str) -> Any:
 
     current: Any = cfg
     for part in path.split("."):
+        if not hasattr(current, part):
+            raise AttributeError(
+                f"{type(current).__name__!r} object has no attribute {part!r} "
+                f"while resolving configuration path '{path}'"
+            )
         current = getattr(current, part)
     return current
 
