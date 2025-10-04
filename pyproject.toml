@@ -78,7 +78,8 @@ include = [
   "library",
   "library.*",
   "config",
-  "dictionary",
+  "config.dictionary",
+  "config.dictionary.*",
   "scripts",
   "scripts.*",
 ]
@@ -88,7 +89,7 @@ include = [
   "config.yaml",
   "dictionary/_testitem/molecule_hierarchy.csv",
 ]
-"dictionary" = ["**/*"]
+"config.dictionary" = ["**/*"]
 "library" = ["py.typed"]
 "library.qa" = ["document_schema_crosswalk.yaml"]
 
