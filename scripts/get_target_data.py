@@ -478,7 +478,7 @@ def _split_uniprot_tokens(value: str) -> Iterator[str]:
 
     for token in value.split("|"):
         token = token.strip()
-        if token:
+        if token and any(char.isalnum() for char in token):
             yield token
 
 
