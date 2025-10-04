@@ -25,6 +25,7 @@ def _build_stub_pipeline(
     transform: Callable[[pd.DataFrame, get_data.Logger], pd.DataFrame],
     *,
     accept_subcommand: bool = False,
+    accept_mode: bool = False,
 ) -> PipelineFunc:
     """Return a stub ``main`` function emulating a pipeline step."""
 
@@ -32,6 +33,8 @@ def _build_stub_pipeline(
         parser = argparse.ArgumentParser(prog=f"get_data_{name}_stub")
         if accept_subcommand:
             parser.add_argument("subcommand", nargs="?", default=None)
+        if accept_mode:
+            parser.add_argument("--mode", required=True)
         parser.add_argument("--config", required=True)
         parser.add_argument("--input", required=True)
         parser.add_argument("--final-out", required=True)
@@ -198,9 +201,10 @@ def test_get_data_end_to_end__miniature_pipeline(
                 "document_chembl_id",
                 ["document_chembl_id", "title", "pubmed_id"],
                 _documents_transform,
-                accept_subcommand=True,
+                accept_mode=True,
             ),
-            "all",
+            None,
+            extra_args=("--mode", "all"),
         ),
         get_data.PipelineStep(
             "target",

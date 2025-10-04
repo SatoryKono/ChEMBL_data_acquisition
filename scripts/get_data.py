@@ -120,6 +120,7 @@ class PipelineStep:
     name: str
     main: Callable[[Sequence[str] | None], int]
     subcommand: str | None
+    extra_args: tuple[str, ...] = ()
     output_flag: str = "--final-out"
     supports_dry_run: bool = False
 
@@ -143,6 +144,8 @@ class PipelineStep:
             args.append("--skip-existing")
         if cfg.dry_run and self.supports_dry_run:
             args.append("--dry-run")
+        if self.extra_args:
+            args = [*self.extra_args, *args]
         if self.subcommand is not None:
             return [self.subcommand, *args]
         return args
@@ -159,7 +162,12 @@ class PipelineStep:
 
 
 _PIPELINE_STEPS: tuple[PipelineStep, ...] = (
-    PipelineStep("document", get_document_data.main, "all"),
+    PipelineStep(
+        "document",
+        get_document_data.main,
+        None,
+        extra_args=("--mode", "all"),
+    ),
     PipelineStep(
         "target",
         get_target_data.main,
