@@ -28,7 +28,10 @@ _DEFAULT_SEARCH_DIR = Path("data/output")
 _INPUT_NAME_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"output\.target_\d{8}\.csv\Z"), "output.target_<YYYYMMDD>.csv"),
     (re.compile(r"output\.targets_\d{8}\.csv\Z"), "output.targets_<YYYYMMDD>.csv"),
-    (re.compile(r"targets_\d{8}(?:_normalized)?\.csv\Z"), "targets_<YYYYMMDD>[_normalized].csv"),
+    (
+        re.compile(r"targets_\d{8}(?:_[A-Za-z0-9]+)*(?:_normalized)?\.csv\Z"),
+        "targets_<YYYYMMDD>[<_suffixes>][_normalized].csv",
+    ),
 )
 
 
