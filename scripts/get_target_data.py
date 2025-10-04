@@ -103,6 +103,7 @@ from library.config import (
 from library.common.csv_utils import write_csv_deterministic
 from library.common.log import logger
 from library.metadata import Stats, file_sha256, write_meta_yaml
+from library.postprocessing import target as target_pp
 from library.pipelines.common import add_pipeline_metadata
 from library import SidecarErrors
 from library.table_quality import analyze_table_quality
@@ -121,6 +122,15 @@ def _override_cli_meta_writer() -> Iterator[None]:
         yield
     finally:
         cli_utils_module.write_meta_yaml = original_cli_write_meta
+
+
+def _run_target_postprocessing(path: Path | str) -> None:
+    """Execute the target isoform post-processing on ``path`` when applicable."""
+
+    final_path = Path(path)
+    if final_path.suffix.lower() != ".csv":
+        return
+    target_pp.process_targets(str(final_path), verbose=True)
 
 
 def _run_pipeline_with_meta(**kwargs: object) -> int:
@@ -1838,10 +1848,12 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 col_order=column_order,
                 chunksize=cfg.io.csv_chunksize,
             )
+            final_path = raw_path
             if final_output != raw_output:
                 shutil.copy2(raw_path, final_output)
-                return final_output
-            return raw_path
+                final_path = final_output
+            _run_target_postprocessing(final_path)
+            return final_path
 
         frames: list[pd.DataFrame] = []
         for chunk in chunks:
@@ -1897,6 +1909,7 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
                 key_cols=resolved_keys or None,
                 col_order=TARGETS_COLUMN_ORDER,
             )
+        _run_target_postprocessing(final_path)
         return final_path
 
     failure_path = normalized_output.with_name(
@@ -2986,7 +2999,7 @@ def validate_and_write(
     before_dedup = len(final_df)
     final_df = final_df.drop_duplicates()
     logger.info("deduplicated_rows", dropped=before_dedup - len(final_df))
-    io.write_csv(
+    final_path = io.write_csv(
         final_df,
         normalized_output,
         cfg=cfg,
@@ -2995,6 +3008,7 @@ def validate_and_write(
         col_order=TARGETS_COLUMN_ORDER,
         key_cols=key_columns or None,
     )
+    _run_target_postprocessing(final_path)
     if final_df.empty:
         logger.info(
             "quality_report_skipped",
