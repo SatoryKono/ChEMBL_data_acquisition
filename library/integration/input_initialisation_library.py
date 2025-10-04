@@ -504,10 +504,15 @@ def process_activity_table(
             if legacy_path.exists():
                 targets_path = legacy_path
             else:
+                expected_locations = [
+                    Path(dictionary_dir) / "targets_type.csv",
+                    Path(dictionary_dir) / "_target" / "targets_type.csv",
+                ]
                 msg = (
                     "targets_type.csv not found in the provided dictionary directory. "
-                    "Expected at either 'dictionary/targets_type.csv' or "
-                    "'dictionary/_target/targets_type.csv'."
+                    "Expected at either "
+                    + " or ".join(f"'{path}'" for path in expected_locations)
+                    + "."
                 )
                 raise FileNotFoundError(msg)
 

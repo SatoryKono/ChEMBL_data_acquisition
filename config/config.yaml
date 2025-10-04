@@ -103,6 +103,7 @@ sources:
       target:
         uniprot:
           column: "uniprot_id"
+          data_dir: "dictionary/_target/_uniprot"
           chunk_size: 100
           timeout: 30.0
           limit: null
@@ -115,18 +116,13 @@ sources:
           limit: null
           offset: 0
         iuphar:
-          column: "uniprot_id"
-          chunk_size: 100
-          timeout: 30.0
+          target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+          family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           limit: null
-          offset: 0
-          target_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
-          family_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
         all:
-          column: "target_chembl_id"
-          data_dir: "../dictionary/_target/_uniprot"
-          target_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
-          family_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
+          data_dir: "dictionary/_target/_uniprot"
+          target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"
+          family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"
           chunk_size: 5
           timeout: 30.0
           uniprot_column: mapping_uniprot_id  # Column containing primary UniProt accession used for merges
@@ -216,11 +212,11 @@ sources:
 
 local:
   resources:
-    dictionary_dir: "../dictionary"  # Directory with supplementary lookup tables
-    iuphar_target_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
-    iuphar_family_csv: "../dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
-    uniprot_data_dir: "../dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
-    targets_type_csv: "../dictionary/_target/targets_type.csv"  # Target type mapping table
+    dictionary_dir: "dictionary"  # Directory with supplementary lookup tables
+    iuphar_target_csv: "dictionary/_target/_IUPHAR/_IUPHAR_target.csv"  # IUPHAR target mapping file
+    iuphar_family_csv: "dictionary/_target/_IUPHAR/_IUPHAR_family.csv"  # IUPHAR family mapping file
+    uniprot_data_dir: "dictionary/_target/_uniprot"  # Directory containing cached UniProt JSON files
+    targets_type_csv: "dictionary/_target/targets_type.csv"  # Target type mapping table
   io:
     output_dir: "$CHEMBL_DA_BASE_PATH/output"  # Directory for generated datasets
     cache_dir: "~/.cache/chembl-da"  # Directory for cached HTTP responses (env: CHEMBL_DA_CACHE_DIR)
@@ -304,7 +300,7 @@ activity_enrichment:
 testitem_molecule_enrichment:
   enable: true
   sources:
-    molecule_catalog_path: "../dictionary/_testitem/molecule_catalog.csv"
+    molecule_catalog_path: "dictionary/_testitem/molecule_catalog.csv"
     molecule_hierarchy_path: "dictionary/_testitem/molecule_hierarchy.csv"
   output:
     salt_as_null_when_absent: true

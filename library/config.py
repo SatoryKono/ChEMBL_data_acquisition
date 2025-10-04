@@ -13,7 +13,6 @@ aliases are supported; see ``_ALIAS_MAP`` for the full list.
 
 from __future__ import annotations
 
-import atexit
 import logging
 import os
 import re
@@ -40,6 +39,8 @@ from pydantic_core import ErrorDetails
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from config import DICTIONARY_DIR
 
 from .common.log import logger
 from .common.rate_limiter import configure_limiter_cache
@@ -306,10 +307,7 @@ def _build_snapshot(
 def _dictionary_resource(*parts: str) -> Path:
     """Return a filesystem path for a bundled dictionary resource."""
 
-    traversable = resources.files("dictionary")
-    for part in parts:
-        traversable = traversable.joinpath(part)
-    return Path(_RESOURCE_STACK.enter_context(resources.as_file(traversable)))
+    return DICTIONARY_DIR.joinpath(*parts)
 
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
@@ -486,8 +484,8 @@ class MoleculeCatalogCfg(_BaseModel):
     endpoint: str = "molecule"
     child_field: str = "molecule_chembl_id"
     parent_field: str = "parent_molecule_chembl_id"
-    hierarchy_lookup_path: Path | None = Path(
-        "config/dictionary/_testitem/molecule_hierarchy.csv"
+    hierarchy_lookup_path: Path | None = (
+        DICTIONARY_DIR / "_testitem" / "molecule_hierarchy.csv"
     )
     hierarchy_lookup_encoding: str = "utf-8-sig"
     hierarchy_lookup_delimiter: str = ","
@@ -1131,9 +1129,11 @@ class TestitemCfg(_BaseModel):
 
 
 class TestitemMoleculeEnrichmentSourcesCfg(_BaseModel):
-    molecule_catalog_path: Path = Path("dictionary/molecule_catalog.csv")
-    molecule_hierarchy_path: Path = Path(
-        "config/dictionary/_testitem/molecule_hierarchy.csv"
+    molecule_catalog_path: Path = (
+        DICTIONARY_DIR / "_testitem" / "molecule_catalog.csv"
+    )
+    molecule_hierarchy_path: Path = (
+        DICTIONARY_DIR / "_testitem" / "molecule_hierarchy.csv"
     )
 
 
@@ -1220,11 +1220,8 @@ class DocumentCfg(_BaseModel):
 
 class TargetUniprotCfg(_BaseModel):
     column: str = "uniprot_id"
-    chunk_size: int = Field(100, ge=1)
-    timeout: float = Field(30.0, gt=0)
-    limit: int | None = Field(default=None, ge=1)
-    offset: int = Field(0, ge=0)
-    data_dir: Path = Path("dictionary/_target/_uniprot")
+    data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetChemblCfg(_BaseModel):
@@ -1244,20 +1241,23 @@ class TargetChemblCfg(_BaseModel):
 
 
 class TargetIupharCfg(_BaseModel):
-    column: str = "uniprot_id"
-    chunk_size: int = Field(100, ge=1)
-    timeout: float = Field(30.0, gt=0)
-    limit: int | None = Field(default=None, ge=1)
-    offset: int = Field(0, ge=0)
-    target_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_target.csv")
-    family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
+    target_csv: Path = (
+        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
+    )
+    family_csv: Path = (
+        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
+    )
+    limit: int | None = Field(default=None, ge=0)
 
 
 class TargetAllCfg(_BaseModel):
-    column: str = "target_chembl_id"
-    data_dir: Path = Path("dictionary/_target/_uniprot")
-    target_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_target.csv")
-    family_csv: Path = Path("dictionary/_target/_IUPHAR/_IUPHAR_family.csv")
+    data_dir: Path = DICTIONARY_DIR / "_target" / "_uniprot"
+    target_csv: Path = (
+        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_target.csv"
+    )
+    family_csv: Path = (
+        DICTIONARY_DIR / "_target" / "_IUPHAR" / "_IUPHAR_family.csv"
+    )
     chunk_size: int = Field(5, ge=1)
     timeout: float = Field(30.0, gt=0)
     uniprot_column: str = "uniprot_id"
