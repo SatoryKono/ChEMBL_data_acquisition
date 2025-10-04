@@ -48,7 +48,9 @@ Key traits:
 - Pipelines accept CSV identifiers via `--input` or an input directory resolved
   by `get-data`.
 - Every pipeline writes deterministic CSV outputs, `<name>.meta.yaml` metadata,
-  `<name>_quality_report_table.csv` and JSON quality summaries.
+  `<name>_quality_report_table.csv` and JSON quality summaries. Target runs also
+  emit deterministic isoform expansions named `isoform.output.<stem>.csv` as
+  described in [`OUTPUT_TARGETS`](./OUTPUT.md#target-export-targets).
 - Schema validation happens before and after enrichment; failures emit structured
   logs and optional fatal errors based on configuration.
 
