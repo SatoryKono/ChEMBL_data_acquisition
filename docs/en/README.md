@@ -49,9 +49,9 @@ Key traits:
   by `get-data`.
 - Every pipeline writes deterministic CSV outputs, `<name>.meta.yaml` metadata,
   `<name>_quality_report_table.csv` and JSON quality summaries. Target runs also
-  emit helper exports named `organism.output.target_<stamp>.csv` and
-  `isoform.output.target_<stamp>.csv` described in
-  [`OUTPUT_TARGETS_EN.md`](../OUTPUT_TARGETS_EN.md).
+  emit helper exports named `organism.output.target_<stamp>.csv`,
+  `isoform.output.target_<stamp>.csv`, and `names.output.target_<stamp>.csv`
+  described in [`OUTPUT_TARGETS_EN.md`](../OUTPUT_TARGETS_EN.md).
 - Schema validation happens before and after enrichment; failures emit structured
   logs and optional fatal errors based on configuration.
 
