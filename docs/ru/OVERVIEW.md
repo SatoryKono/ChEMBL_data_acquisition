@@ -64,8 +64,8 @@
 | `get-activities` | `library.utils.cli_tools.get_activities:main` | Генерирует синтетические активности для смоук-тестов. |
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Сравнивает хэши CSV между запусками. |
 
-Подробные сценарии приведены в [`docs/USAGE_RU.md`](./USAGE_RU.md) и английской
-версии [`docs/USAGE_EN.md`](./USAGE_EN.md).
+Подробные сценарии приведены в [`USAGE.md`](./USAGE.md) и английской
+версии [`../en/USAGE.md`](../en/USAGE.md).
 
 ## Требования и установка
 
@@ -97,7 +97,7 @@ pre-commit install
 ```
 
 При установке из wheel конфигурация копируется в пользовательские каталоги,
-перечисленные в [`docs/CONFIG_RU.md`](./CONFIG_RU.md); консольные команды
+перечисленные в [`CONFIG.md`](./CONFIG.md); консольные команды
 регистрируются автоматически.
 
 ## Быстрый старт
@@ -106,11 +106,11 @@ pre-commit install
    (например, `document.csv`, `target.csv`, `assay.csv`, `activity.csv`,
    `testitem.csv`) или выгрузите свежие списки из своей системы. Расширенный
    набор примеров лежит в `data/input/full`. Пайплайны ожидают по одному ID в
-   строке; имена колонок перечислены в [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md).
+   строке; имена колонок перечислены в [`DATA_SCHEMA.md`](./DATA_SCHEMA.md).
 2. **Проверьте конфигурацию.** Скопируйте `config/config.yaml`, если нужно
    переопределить лимиты API, каталоги вывода или стадийные флаги. Паттерн
    переменных окружения — `CHEMBL_DA__РАЗДЕЛ__КЛЮЧ`. Полное описание — в
-   [`docs/CONFIG_RU.md`](./CONFIG_RU.md).
+   [`CONFIG.md`](./CONFIG.md).
 3. **Запустите пайплайн.**
 
    ```bash
@@ -124,7 +124,7 @@ pre-commit install
    Для смоук-теста добавьте `--limit 10`. Таргет-пайплайн поддерживает
    стадийные опции `--raw-out` и `--raw-format parquet` для «сырых» снимков.
 4. **Изучите артефакты.** Рядом с CSV появится `<имя>.meta.yaml`, отчёты качества
-   и (для документов) JSON-резюме. Форматы описаны в [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md).
+   и (для документов) JSON-резюме. Форматы описаны в [`OUTPUT.md`](./OUTPUT.md).
 
 ## Тестирование и контроль качества
 
@@ -138,26 +138,26 @@ pytest --cov=library --cov=scripts --cov-report=term-missing
 check-determinism --log-level DEBUG
 ```
 
-QA-плейбук (`docs/QA_PROCESS_RU.md` / `docs/QA_PROCESS_EN.md`) описывает ворота
+QA-плейбук (`QA_PROCESS.md` / `../en/QA_PROCESS.md`) описывает ворота
 качества, смоук-проверки и критерии приёмки. Проверки детерминизма полагаются на
 YAML-метаданные, поэтому держите их в Git для удобного сравнения запусков.
 
 ## Дополнительные материалы
 
-- [`docs/USAGE_RU.md`](./USAGE_RU.md) / [`docs/USAGE_EN.md`](./USAGE_EN.md) —
+- [`USAGE.md`](./USAGE.md) / [`../en/USAGE.md`](../en/USAGE.md) —
   флаги CLI, подкоманды и типовые сценарии.
-- [`docs/CONFIG_RU.md`](./CONFIG_RU.md) / [`docs/CONFIG_EN.md`](./CONFIG_EN.md) —
+- [`CONFIG.md`](./CONFIG.md) / [`../en/CONFIG.md`](../en/CONFIG.md) —
   источники конфигурации и пути вывода.
-- [`docs/OUTPUT_RU.md`](./OUTPUT_RU.md) / [`docs/OUTPUT_EN.md`](./OUTPUT_EN.md) —
+- [`OUTPUT.md`](./OUTPUT.md) / [`../en/OUTPUT.md`](../en/OUTPUT.md) —
   структура артефактов и работа с «сырыми» снимками.
-- [`docs/DATA_SCHEMA_RU.md`](./DATA_SCHEMA_RU.md) /
-  [`docs/DATA_SCHEMA_EN.md`](./DATA_SCHEMA_EN.md) — описание колонок и схем
+- [`DATA_SCHEMA.md`](./DATA_SCHEMA.md) /
+  [`../en/DATA_SCHEMA.md`](../en/DATA_SCHEMA.md) — описание колонок и схем
   валидации.
-- [`docs/ETL_PROCESS_RU.md`](./ETL_PROCESS_RU.md) /
-  [`docs/ETL_PROCESS_EN.md`](./ETL_PROCESS_EN.md) — поток данных end-to-end.
-- [`docs/CLI_TOOLS_RU.md`](./CLI_TOOLS_RU.md) /
-  [`docs/CLI_TOOLS_EN.md`](./CLI_TOOLS_EN.md) — справочник по вспомогательным
+- [`ETL_PROCESS.md`](./ETL_PROCESS.md) /
+  [`../en/ETL_PROCESS.md`](../en/ETL_PROCESS.md) — поток данных end-to-end.
+- [`CLI_TOOLS.md`](./CLI_TOOLS.md) /
+  [`../en/CLI_TOOLS.md`](../en/CLI_TOOLS.md) — справочник по вспомогательным
   утилитам.
 
-Диаграммы архитектуры смотрите в [`docs/ARCHITECTURE_RU.md`](./ARCHITECTURE_RU.md)
-и английской версии [`docs/ARCHITECTURE_EN.md`](./ARCHITECTURE_EN.md).
+Диаграммы архитектуры смотрите в [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md)
+и английской версии [`../en/architecture/ARCHITECTURE.md`](../en/architecture/ARCHITECTURE.md).

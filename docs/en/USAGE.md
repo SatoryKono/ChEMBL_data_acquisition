@@ -214,20 +214,33 @@ python scripts/get_assay_data.py \
 
 ## Activity pipeline `get_activity_data`
 
-Extends the assay options with parallel execution and dry-run controls:
+Extends the assay options with parallel execution and dry-run controls. In
+addition to the shared flags the command accepts:
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--column` | `activity_chembl_id` | Column containing activity identifiers. |
 | `--batch-size` | `50` | Number of identifiers per request. |
+| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--limit`, `--offset` | `None`, `0` | Range selection; negative values are rejected. |
 | `--workers` | `1` | Worker threads fetching activities. |
 | `--dry-run` | `False` | Validate inputs without contacting ChEMBL or writing files. |
 
 ## Test item pipeline `get_testitem_data`
 
 Focuses on ChEMBL + PubChem enrichment. The CLI mirrors the assay pipeline with
-`--column` defaulting to `molecule_chembl_id` and additional retry/back-off logic
-configurable via YAML.
+`--column` defaulting to `molecule_chembl_id`. The most frequently adjusted
+flags are:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--column` | `molecule_chembl_id` | Identifier column in the input CSV. |
+| `--batch-size` | `1000` | Identifiers fetched per request. |
+| `--timeout` | `30.0` | HTTP timeout per request. |
+| `--limit`, `--offset` | `None`, `0` | Range selection. |
+
+Retry, back-off and PubChem enrichment settings are sourced from the YAML
+configuration (`testitem` section).
 
 ## Utility commands
 

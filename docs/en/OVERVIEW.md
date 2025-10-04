@@ -63,8 +63,8 @@ same arguments as their `python -m …` equivalents.
 | `get-activities` | `library.utils.cli_tools.get_activities:main` | Emit synthetic activity rows for smoke tests. |
 | `check-determinism` | `library.utils.cli_tools.check_determinism:main` | Compare CSV hashes across runs. |
 
-The dedicated reference [`docs/en/user/USAGE.md`](./USAGE.md) (and
-[`docs/ru/user/USAGE.md`](../../ru/user/USAGE.md)) covers arguments, sub-commands, and advanced
+The dedicated reference [`USAGE.md`](./USAGE.md) (and
+[`../ru/USAGE.md`](../ru/USAGE.md)) covers arguments, sub-commands, and advanced
 usage scenarios in depth.
 
 ## Requirements and installation
@@ -98,17 +98,17 @@ pre-commit install
 
 Wheel users can install with `pip install chembl-data-acquisition` once a release
 is published; console scripts and the packaged configuration are placed in the
-platform-specific user directories listed in [`docs/en/devel/CONFIG.md`](../devel/CONFIG.md).
+platform-specific user directories listed in [`CONFIG.md`](./CONFIG.md).
 
 ## Quick start
 
 1. **Prepare identifier lists.** Use the templates in `data/input` or export
    fresh ID lists from your warehouse. Each pipeline expects one identifier per
-   row; see [`docs/en/devel/DATA_SCHEMA.md`](../devel/DATA_SCHEMA.md) for column names.
+   row; see [`DATA_SCHEMA.md`](./DATA_SCHEMA.md) for column names.
 2. **Review configuration.** Copy `config/config.yaml` if you need to override
    API limits, output directories, or staging flags. Environment variable
    overrides follow the `CHEMBL_DA__SECTION__KEY` pattern. Details live in
-   [`docs/en/devel/CONFIG.md`](../devel/CONFIG.md).
+   [`CONFIG.md`](./CONFIG.md).
 3. **Run a pipeline.**
 
    ```bash
@@ -123,7 +123,7 @@ platform-specific user directories listed in [`docs/en/devel/CONFIG.md`](../deve
    switches such as `--raw-out` and `--raw-format parquet` for raw snapshots.
 4. **Inspect artefacts.** Every CSV is accompanied by `<name>.meta.yaml`,
    quality reports, and (for documents) JSON summaries. See
-   [`docs/en/user/OUTPUT.md`](./OUTPUT.md) for formats and retention guidance.
+   [`OUTPUT.md`](./OUTPUT.md) for formats and retention guidance.
 
 ## Testing and quality gates
 
@@ -138,26 +138,26 @@ python -m library.utils.cli_tools.check_determinism --log-level DEBUG \
     --input out/latest.csv --previous out/previous.csv
 ```
 
-The QA playbook (`docs/en/qa/QA_PROCESS.md` / `docs/ru/qa/QA_PROCESS.md`) documents
+The QA playbook (`QA_PROCESS.md` / `../ru/QA_PROCESS.md`) documents
 release gates, smoke checks, and acceptance criteria. Determinism checks rely on
 YAML sidecars, so keep them under version control when comparing runs.
 
 ## Related documentation
 
-- [`docs/en/user/USAGE.md`](./USAGE.md) / [`docs/ru/user/USAGE.md`](../../ru/user/USAGE.md) – CLI
+- [`USAGE.md`](./USAGE.md) / [`../ru/USAGE.md`](../ru/USAGE.md) – CLI
   options, sub-commands, and execution recipes.
-- [`docs/en/devel/CONFIG.md`](../devel/CONFIG.md) / [`docs/ru/devel/CONFIG.md`](../../ru/devel/CONFIG.md) –
+- [`CONFIG.md`](./CONFIG.md) / [`../ru/CONFIG.md`](../ru/CONFIG.md) –
   configuration sources, environment variables, and staged output locations.
-- [`docs/en/user/OUTPUT.md`](./OUTPUT.md) / [`docs/ru/user/OUTPUT.md`](../../ru/user/OUTPUT.md) –
+- [`OUTPUT.md`](./OUTPUT.md) / [`../ru/OUTPUT.md`](../ru/OUTPUT.md) –
   artefact layout, metadata sidecars, and raw snapshot handling.
-- [`docs/en/devel/DATA_SCHEMA.md`](../devel/DATA_SCHEMA.md) /
-  [`docs/ru/devel/DATA_SCHEMA.md`](../../ru/devel/DATA_SCHEMA.md) – column definitions and
+- [`DATA_SCHEMA.md`](./DATA_SCHEMA.md) /
+  [`../ru/DATA_SCHEMA.md`](../ru/DATA_SCHEMA.md) – column definitions and
   validation schemas.
-- [`docs/en/qa/ETL_PROCESS.md`](../qa/ETL_PROCESS.md) /
-  [`docs/ru/qa/ETL_PROCESS.md`](../../ru/qa/ETL_PROCESS.md) – end-to-end data flow.
-- [`docs/en/devel/CLI_TOOLS.md`](../devel/CLI_TOOLS.md) /
-  [`docs/ru/devel/CLI_TOOLS.md`](../../ru/devel/CLI_TOOLS.md) – helper utilities for QA and
+- [`ETL_PROCESS.md`](./ETL_PROCESS.md) /
+  [`../ru/ETL_PROCESS.md`](../ru/ETL_PROCESS.md) – end-to-end data flow.
+- [`CLI_TOOLS.md`](./CLI_TOOLS.md) /
+  [`../ru/CLI_TOOLS.md`](../ru/CLI_TOOLS.md) – helper utilities for QA and
   diagnostics.
 
-For architecture diagrams consult [`docs/en/devel/ARCHITECTURE.md`](../devel/ARCHITECTURE.md)
-and its Russian counterpart (`docs/ru/devel/ARCHITECTURE.md`).
+For architecture diagrams consult [`architecture/ARCHITECTURE.md`](./architecture/ARCHITECTURE.md)
+and its Russian counterpart (`../ru/architecture/ARCHITECTURE.md`).
