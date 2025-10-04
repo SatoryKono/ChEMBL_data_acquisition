@@ -82,6 +82,7 @@ from library.integration import iuphar_library as ii
 from library.integration import uniprot_library as uu
 from library.pipelines.target import protein_classification as pc
 from library.pipelines.target import postprocessing as tp
+from library.postprocessing import target as target_pp
 from library.pipelines.target.defaults import ModeDefaults, TARGET_MODE_DEFAULTS
 from library.clients import ChemblClient
 from library.common.rate_limiter import get_global_limiter
@@ -3106,6 +3107,16 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
             raw_format=raw_format,
             reindex_raw=reindex_raw,
         )
+        if exit_code == 0:
+            try:
+                target_pp.process_targets(str(final_output), verbose=True)
+            except Exception as exc:
+                logger.error(
+                    "isoform_postprocessing_failed",
+                    error=str(exc),
+                    input=str(final_output),
+                )
+                return 1
         return exit_code
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         logger.error(
