@@ -1,0 +1,4 @@
+target_chembl_id,uniprot_id_primary,organism,taxon_id,lineage_superkingdom,lineage_phylum,lineage_class,cellularity,multifunctional_enzyme
+CHEMBL1,P12345,Homo sapiens,9606,eukaryota,chordata,chordata,multicellular,True
+CHEMBL2,Q8XYZ1,Influenza A virus,11320,viruses,negarnaviricota,negarnaviricota,acellular (virus),False
+CHEMBL3,A0A000,Escherichia coli,562,bacteria,proteobacteria,proteobacteria,unicellular,False

@@ -12,6 +12,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import sys
 
 import pandas as pd
 import re
@@ -45,6 +46,17 @@ def _supported_patterns_text() -> str:
     """Return a human-readable list of accepted filename templates."""
 
     return ", ".join(description for _, description in _INPUT_NAME_RULES)
+
+
+def _current_default_search_dir() -> Path:
+    """Return the current default search directory with package overrides."""
+
+    package = sys.modules.get("library.postprocessing.target")
+    if package is not None and hasattr(package, "_DEFAULT_SEARCH_DIR"):
+        override = getattr(package, "_DEFAULT_SEARCH_DIR")
+        if override is not None:
+            return Path(override)
+    return _DEFAULT_SEARCH_DIR
 
 # Columns projected from the aggregated target table before isoform expansion.
 _SOURCE_COLUMNS: tuple[str, ...] = (
@@ -257,7 +269,7 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
                     "No supported target exports found under "
                     f"{candidate} (expected patterns: {_supported_patterns_text()})"
                 )
-            return max(matches, key=lambda path: path.stat().st_mtime)
+            return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
         if not candidate.exists():
             raise FileNotFoundError(candidate)
         if not _matches_expected_input_name(candidate.name):
@@ -267,7 +279,7 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
             )
         return candidate
 
-    search_dir = _DEFAULT_SEARCH_DIR
+    search_dir = _current_default_search_dir()
     if not search_dir.exists():
         raise FileNotFoundError(
             "No input CSV supplied and default search directory does not exist"
@@ -282,7 +294,7 @@ def _resolve_input_path(input_csv: str | Path | None) -> Path:
             "No supported target exports found under "
             f"{search_dir} (expected patterns: {_supported_patterns_text()})"
         )
-    return max(matches, key=lambda path: path.stat().st_mtime)
+    return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
 
 
 def _resolve_output_path(input_path: Path, output_csv: str | None) -> Path:
@@ -358,4 +370,10 @@ __all__ = [
     "_syn_expand",
     "_tokenize_synonym",
     "_transform",
+    "_matches_expected_input_name",
+    "_DEFAULT_SEARCH_DIR",
+    "_DEFAULT_ENCODINGS",
+    "_INPUT_NAME_RULES",
+    "_SOURCE_COLUMNS",
+    "_OUTPUT_COLUMNS",
 ]
