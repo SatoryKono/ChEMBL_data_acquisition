@@ -5,6 +5,7 @@ import sys
 import types
 from pathlib import Path
 
+
 import importlib.util
 import sys
 import types
@@ -18,6 +19,7 @@ import pytest
 import library
 from library.config import Config
 from library.pipelines.target import cellularity, helpers, multifunctional
+ 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -226,6 +228,28 @@ def test_append_multifunctional_flag__detects_keywords(snapshot_resource: Path) 
 
 
 @pytest.mark.unit
+def test_classify_by_fetch__trailing_whitespace_lineage_remains_ambiguous() -> None:
+    lineage = [
+        "Viruses ",
+        "Duplodnaviria ",
+        "Herpesvirales ",
+        "Herpesviridae ",
+        "Varicellovirus ",
+        "Human alphaherpesvirus 3 ",
+    ]
+
+    def _mock_fetcher(tax_id: object, email: str | None) -> list[str]:
+        assert tax_id == "10335"
+        return list(lineage)
+
+    classifier = Cellularity(fetcher=_mock_fetcher)
+
+    names = classifier.get_lineage_names("10335")
+    assert names[-1].endswith(" ")
+
+    result = classifier.classify_by_fetch("10335")
+
+    assert result == "ambiguous"
 def test_classify_by_fetch__trailing_spaces_remain_ambiguous() -> None:
     lineage = [
         "Cellular organisms",
