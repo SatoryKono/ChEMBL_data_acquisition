@@ -30,7 +30,7 @@ the canonical entry point into the wider documentation set.
   metadata helpers.
 * `library/schemas/` – `pandera` validation schemas and normalisers that keep column
   ordering, data types and canonical values consistent across exports.
-* `dictionary/` & `data/` – local lookup tables, cached API responses and input
+* `config/dictionary/` & `data/` – local lookup tables, cached API responses and input
   workbooks consumed by the pipelines.
 * `docs/` – the reference documentation you are reading.
 * `tests/` – unit and integration coverage for configuration overrides,

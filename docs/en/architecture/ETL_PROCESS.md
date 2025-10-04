@@ -13,7 +13,7 @@ The pipeline is orchestrated through the shared configuration file `config/confi
 | **UniProt REST API** | `uniprot_library.process` retrieves JSON entries while observing RPS thresholds and reusing prepared accession CSVs; the `target all` mode wraps calls and caches results. The underlying client keeps a shared, thread-safe session so worker threads can fetch concurrently. | Full UniProt cards: names, taxonomy, sequences, secondary accessions, and related cross-references. |
 | **IUPHAR and local CSV files** | `fetch_iuphar` reads local classifiers and, when needed, invokes REST services; `target_postprocessing` merges the reference data with ChEMBL and UniProt extracts. | IUPHAR classifications, families, HGNC identifiers, and predicted protein classes. |
 | **PubChem PUG REST** | The `add_pubchem_data` function initializes a PubChem session, then issues rate-limited requests for unique SMILES via the `pubchem` configuration. | CID, IUPAC names, formulas, InChI, and SMILES used to enrich test items. |
-| **Local dictionaries and prepared CSV/Excel files** | `io.read_ids` and entity modules load files from `dictionary/` and `data/` as input identifier lists or reference tables, reducing external calls. | Restrictive ID lists, target-type dictionaries, and initialization Excel workbooks. |
+| **Local dictionaries and prepared CSV/Excel files** | `io.read_ids` and entity modules load files from `config/dictionary/` and `data/` as input identifier lists or reference tables, reducing external calls. | Restrictive ID lists, target-type dictionaries, and initialization Excel workbooks. |
 
 ## Data Transformation
 
@@ -95,7 +95,7 @@ Each script produces a bundle of artifacts: a primary CSV with deterministic row
 * **`scripts/`** — CLI wrappers dedicated to entity acquisition (documents, assays, activities, test items, targets), covering input reading, client calls, normalization, validation, and export; quality reporting and dictionary utilities reside in `library/utils/cli_tools`.
 * **`library/`** — Core business logic: API clients, post-processing (documents, targets, assays), normalization, validation, logging, CSV operations, and sidecar handling.
 * **`library/schemas/`** — `pandera` schemas and normalization routines for every entity.
-* **`dictionary/` and `data/`** — Local dictionaries, UniProt/IUPHAR caches, and input CSV/Excel files for launching pipelines.
+* **`config/dictionary/` and `data/`** — Local dictionaries, UniProt/IUPHAR caches, and input CSV/Excel files for launching pipelines.
 * **`docs/`** — Documentation for configuration, execution, and outputs; this report extends it with an end-to-end ETL description.
 
 The report covers the entire cycle—from data sources through normalization, post-processing, and export—highlighting quality controls and entity relationships. It equips newcomers to quickly understand, extend, or troubleshoot existing pipelines without compromising data integrity.
