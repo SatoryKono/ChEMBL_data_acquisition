@@ -71,7 +71,10 @@ python scripts/get_data.py \
 ```
 
 Each pipeline writes a deterministic CSV, a `<name>.meta.yaml` metadata sidecar
-and table-quality reports under the same directory. Refer to the
+and table-quality reports under the same directory. The target pipeline also
+generates an organism-level supplement (`organism.output.target_*.csv`) with
+cellularity and multifunctional enzyme flags derived from the post-processing
+step described in `docs/OUTPUT_TARGETS_EN.md`. Refer to the
 [output reference](./docs/en/OUTPUT.md) for the complete specification.
 
 ## Documentation

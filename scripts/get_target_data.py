@@ -110,6 +110,11 @@ from library.validation import ValidationResult
 from library.schemas import TargetsSchema, normalize_targets
 from library.schemas.targets import TARGETS_COLUMN_ORDER
 
+try:
+    from library.postprocessing import target as target_pp
+except ImportError:  # pragma: no cover - compatibility with legacy module name
+    import library.postprocessing.targe as target_pp  # type: ignore[no-redef]
+
 
 @contextmanager
 def _override_cli_meta_writer() -> Iterator[None]:
@@ -1965,6 +1970,9 @@ def run_chembl(cfg: Config, args: argparse.Namespace) -> int:
         "chembl_placeholder_replacements",
         total=placeholder_replacements,
     )
+
+    if exit_code == 0:
+        target_pp.process_targets(str(final_output), verbose=True)
 
     return exit_code
 
