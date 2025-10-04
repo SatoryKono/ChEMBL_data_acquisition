@@ -38,6 +38,7 @@ from library.config import Config, ConfigError, ensure_dirs, print_config
 from library.io.paths import default_output_path
 from library.io.readers import read_ids
 from library.io.writers import write_csv
+from library.postprocessing import target as target_pp
 from library.common.log import logger
 from library.pipelines.common import pipeline_metadata
 from library.pipelines.target.pipeline import run_pipeline
@@ -561,6 +562,8 @@ def run(cfg: Config, options: PipelineConfig) -> int:
             id_cols=id_cols,
             normalize=normalize,
         )
+    if final_path.suffix.lower() == ".csv":
+        target_pp.process_targets(str(final_path), verbose=True)
     logger.info("write_done", extra={"path": str(final_path)})
     return 0
 
