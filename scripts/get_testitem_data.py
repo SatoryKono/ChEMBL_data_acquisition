@@ -128,9 +128,9 @@ _pubchem_resolution_key = pipeline_pubchem._pubchem_resolution_key
 _load_pubchem_cid_cache = pipeline_pubchem._load_pubchem_cid_cache
 resolve_pubchem_cid = pipeline_pubchem.resolve_pubchem_cid
 
- 
+configure_logger = cli.configure_logger
 
- 
+
 def _resolve_catalog_load_source(
     before: tuple[bool, float | None], after: tuple[bool, float | None]
 ) -> str:
