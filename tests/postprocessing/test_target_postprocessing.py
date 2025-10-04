@@ -267,3 +267,20 @@ def test_classify_by_fetch__trailing_spaces_remain_ambiguous() -> None:
 
     assert result == "ambiguous"
     assert classifier.get_lineage_names("9606") == lineage
+
+
+@pytest.mark.unit
+def test_get_lineage_names__numeric_tax_id_returns_lineage() -> None:
+    lineage = ["Cellular organisms", "Eukaryota", "Chordata", "Homo sapiens"]
+    calls: list[tuple[Any, str | None]] = []
+
+    def _fetcher(tax_id: Any, email: str | None) -> list[str]:
+        calls.append((tax_id, email))
+        return list(lineage)
+
+    classifier = Cellularity(fetcher=_fetcher)
+
+    result = classifier.get_lineage_names(9606)
+
+    assert result == lineage
+    assert calls == [(9606, None)]

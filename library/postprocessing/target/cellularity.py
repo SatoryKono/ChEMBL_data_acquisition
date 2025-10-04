@@ -111,15 +111,16 @@ class Cellularity:
         return "ambiguous"
 
     def get_lineage_names(self, tax_id: Any, email: str | None = None) -> list[str]:
+        missing_value: Any = False
         try:
             if bool(pd.isna(tax_id)):
                 return []
+            missing_value = pd.isna(tax_id)
         except (TypeError, ValueError):
             # ``pd.isna`` may return array-like objects for non-scalar inputs;
             # those should simply fall back to the fetcher.
-            pass
             missing_value = pd.isna(tax_id)
-        except (TypeError, ValueError):
+        except Exception:
             missing_value = False
 
         if tax_id is None:
