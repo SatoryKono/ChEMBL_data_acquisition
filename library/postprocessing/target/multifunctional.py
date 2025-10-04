@@ -136,7 +136,16 @@ def _transform_reaction_ec_numbers(value: Any) -> list[str]:
 def compute_multifunctional(source: pd.DataFrame) -> pd.DataFrame:
     """Replicate the ``multifunctional`` helper from the M script."""
 
-    trimmed = source.drop(columns=list(_COLUMNS_TO_REMOVE), errors="ignore")
+    # Some datasets omit metadata fields such as ``target_type``.  We therefore
+    # trim only the columns that actually exist instead of relying on
+    # ``errors="ignore"`` which has proved brittle across pandas versions.
+    removable_columns = [
+        column for column in _COLUMNS_TO_REMOVE if column in source.columns
+    ]
+    if removable_columns:
+        trimmed = source.drop(columns=removable_columns)
+    else:
+        trimmed = source.copy()
     result = trimmed.copy()
     result["reaction_ec_numbers"] = result["reaction_ec_numbers"].map(
         _transform_reaction_ec_numbers
