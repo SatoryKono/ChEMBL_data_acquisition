@@ -1,0 +1,3 @@
+activity_id,assay_chembl_id,molecule_chembl_id,standard_value,standard_units,standard_value_numeric,is_valid
+A1,CHEMBLA1,CHEMBLM1,10,nM,10.0,True
+A3,CHEMBLA2,CHEMBLM2,,nM,,False

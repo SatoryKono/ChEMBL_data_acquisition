@@ -1,0 +1,3 @@
+target_chembl_id,target_name,organism,name_upper
+CHEMBLT1,Target 1,Homo sapiens,TARGET 1
+CHEMBLT2,Target 2,Mus musculus,TARGET 2

@@ -31,7 +31,10 @@ config/**/secrets*.yaml
  
 logs/*
 !logs/.gitkeep
- 
+reports/*
+!reports/test_report.json
+!reports/test_summary.md
+
 dictionary/_activity/pairs.csv
 /logs
 data/logs/get_target_data_20251003.log

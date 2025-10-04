@@ -1,0 +1,3 @@
+molecule_chembl_id,preferred_name,normalized_name,is_named
+CHEMBLM1,Compound 1,compound 1,True
+CHEMBLM2,,,False

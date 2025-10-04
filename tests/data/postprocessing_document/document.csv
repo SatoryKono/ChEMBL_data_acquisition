@@ -1,4 +1,0 @@
-document_chembl_id,abstract,authors,classification,document_contains_external_links,DOI,first_page,is_experimental_doc,issue,journal,last_page,month,postcodes,pubmed_id,title,volume,year
-DOC1,,Author A,1.0,True,10.1000/j.test.1,101,False,2,Journal. Of Testing ,110,7,,1111,Article One,10,2020
-DOC2,,Author B,0.0,False,10.2000/chembl,200,True,1,Science,210,8,,2222,Article Two,3,2019
-DOC3,,Author C,,True,10.3000/ok,50,False,3,Nature,60,0,,3333,Article Three,7,2018

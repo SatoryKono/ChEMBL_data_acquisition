@@ -1,0 +1,4 @@
+molecule_chembl_id,natural_product,prodrug,polymer_flag
+CHEMBL1,yes,0,False
+CHEMBL10,1,1,0
+CHEMBL30,no,yes,True

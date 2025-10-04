@@ -17,6 +17,7 @@ All documentation is maintained in synchronized English and Russian variants.
 - **Flexible Configuration:** Configure via YAML files, environment variables, and CLI arguments.
 - **Quality Gates:** Built-in schema validation, deterministic CSV writing, static analysis, and unit tests to ensure data quality and reproducibility.
 
+
 ## Quick Start
 
 1.  **Create a virtual environment and install dependencies:**

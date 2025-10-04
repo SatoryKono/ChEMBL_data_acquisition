@@ -5,16 +5,18 @@ services, pipelines or policies so other guides can simply link here instead of 
 
 ## 1. Environment
 
-1. Install the pinned dependencies:
+1. Bootstrap the virtual environment and development extras:
    ```bash
-   pip install -r requirements-lock.txt
+   make init
    ```
-2. Optionally add the editable package for local entry points:
+2. Export deterministic defaults that the smoke suite and reporting wrapper rely on:
    ```bash
-   pip install -e .
+   export CHEMBL_DA_BASE_PATH=$(pwd)/tests/data
+   export PYTHONHASHSEED=${PYTHONHASHSEED:-0}
+   export PYTHONPATH=.
    ```
-3. Export `PYTHONPATH=.` so helper scripts and deterministic writers resolve package imports consistently.
-4. Ensure required optional dependencies (``responses``, ``hypothesis``, ``psutil``, ``pytest-benchmark``) are available when you
+   These values mirror the CI configuration and make the log/report locations reproducible.
+3. Ensure required optional dependencies (``responses``, ``hypothesis``, ``psutil``, ``pytest-benchmark``) are available when you
    expect those test suites to run; otherwise they will be skipped.
 
 ## 2. Static analysis and formatting
@@ -33,12 +35,12 @@ mypy --strict
    ```bash
    pytest --maxfail=1 --durations=10
    ```
-2. Full suite, keeping warnings visible for triage.
-   Use quiet mode (`-q`) for routine certification runs.
-   Switch to verbose (`-vv`) output when you need detailed failure context:
+2. Generate the aggregated reports (JSON + Markdown + logs) for certification runs:
    ```bash
-   pytest -q --disable-warnings
+   make test-report
    ```
+   The command wraps `python -m scripts.run_test_suite`, executes the entire suite, and stores artifacts under `reports/`.
+3. When iterating locally you can still run vanilla `pytest` with `-q` or `-vv` depending on the desired verbosity.
 
 ## 4. Determinism and CLI smoke checks
 
@@ -52,12 +54,19 @@ mypy --strict
        --final-out /tmp/activities.csv --limit 10 --dry-run --log-level INFO
    ```
    Replace the script with other pipelines as needed to cover recent changes.
+3. The pytest suite enforces an offline sandbox via `tests/conftest.py`. Any real HTTP request attempts will raise immediately, so fix fixtures instead of trying to reach external services.
 
 ## 5. Reporting
 
-Record the command output (pass/fail status, failure counts, timestamps) in the audit trail — typically `docs/code_review.md` —
-whenever you re-certify the repository. When sharing summaries, link back to this living document instead of copying the
-checklist.
+The reporting helper writes three artifacts by default:
+
+- `reports/test_report.json` – machine-readable per-test metadata. Each record describes the node identifier, outcome, cumulative duration, failure/skip message, and the location of the combined log file.
+- `reports/test_summary.md` – human-friendly digest with high-level counts and enumerations of failed/skipped tests.
+- `reports/logs/<suite>.log` – aggregated log captured from the pytest session.
+
+Refer to `tests/README.md` for a detailed field-by-field explanation and an example Markdown payload.
+
+Record the command output (pass/fail status, failure counts, timestamps) in the audit trail — typically `docs/code_review.md` — whenever you re-certify the repository. When sharing summaries, link back to this living document instead of copying the checklist.
 
 ## 6. Document post-processing QA
 
